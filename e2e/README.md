@@ -30,6 +30,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16 (ronda 52) | `e2e/r52-html-e2e.mjs` | ~50 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
+| Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -206,6 +207,21 @@ hasta abajo y en tableta las columnas miden lo mismo. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh51c-e2e.mjs   # PART=release,adjuntos,flotante,panel
+```
+
+## Enlaces de un HTML a sí mismo, binarios con BOM y borrador sin red (caza de bugs 52)
+
+En un HTML de Documentación, un enlace al propio documento por su nombre («indice.html#abajo» dentro de indice.html, o
+«./INDICE.HTML») se desplaza dentro del marco (antes abría una pestaña nueva con el mismo documento en cada clic); un enlace
+sin ruta («», «?v=2#abajo») es el propio documento y no sale desactivado; «a%20%20b.html» encuentra «a b.html» (los espacios
+seguidos se juntan al subir) y un nombre con tildes descompuestas (NFD, el de macOS) encuentra el suyo. Un binario que
+empieza por FF FE o FE FF (el BOM de UTF-16) se sube como fichero para descargar y no como texto, el UTF-16 de verdad se
+sigue viendo y un HTML con `<meta charset="unicode">` sin BOM se ve con sus tildes. Y archivar o borrar desde el detalle
+sin red con la descripción a medio escribir: la tarjeta vuelve y, al abrirla otra vez, lo escrito sigue ahí y se puede
+guardar (antes se perdía). Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh52-e2e.mjs   # PART=enlaces,binario,borrador
 ```
 
 ## Arrastrar una selección

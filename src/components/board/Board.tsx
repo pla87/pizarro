@@ -944,6 +944,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setColumns,
       openTask: (id) => {
         prefetchTaskDetail(id);
+        // Un borrador guardado de ESTA tarea (archivar o borrar desde el detalle lo cierra al momento; si falla, sin red,
+        // lo escrito y sin guardar queda en el borrador): se recupera al volver a abrirla, como al recargar la página.
+        const edit = readDraft<EditTaskDraft>(draftKey("edit", data.currentUserId, project.id));
+        setEditDraft(edit && edit.taskId === id && (edit.title !== undefined || edit.description !== undefined) ? edit : null);
         setOpenTaskId(id);
       },
       openNewTask: (columnId, evergreen, files) => setNewTask({ columnId, evergreen, files }),

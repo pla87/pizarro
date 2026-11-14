@@ -169,6 +169,24 @@ test("looksLikeText: Latin-1/Windows-1252 y UTF-16 con BOM son texto; un binario
   assert.equal(confirmDocumentKind("TEXT", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00, 0x01])), "OTHER");
 });
 
+test("looksLikeText: un binario que empieza por FF FE o FE FF no pasa por UTF-16 (caza de bugs 52)", () => {
+  // Antes bastaba el BOM: casi cualquier binario con esos dos bytes delante se veía como texto (caracteres chinos).
+  const noise = (n: number, seed: number) => Buffer.from(Array.from({ length: n }, (_, i) => (Math.imul(i + 1, 2654435761) ^ seed) >>> 13 & 0xff));
+  let passed = 0;
+  for (let k = 0; k < 200; k++) {
+    if (looksLikeText(Buffer.concat([Buffer.from([0xff, 0xfe]), noise(400, k)]))) passed++;
+    if (looksLikeText(Buffer.concat([Buffer.from([0xfe, 0xff]), noise(400, k + 999)]))) passed++;
+  }
+  assert.equal(passed, 0);
+  // Un sustituto suelto: no es UTF-16 válido.
+  assert.equal(looksLikeText(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("abc", "utf16le"), Buffer.from([0x00, 0xd8]), Buffer.from("def", "utf16le")])), false);
+  // El texto de verdad sigue pasando: tildes, chino, emojis (pares sustitutos) y un par cortado justo en el límite de la muestra.
+  assert.equal(looksLikeText(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Camión 你好 😀\r\n", "utf16le")])), true);
+  const longText = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("x".repeat(32 * 1024 - 2) + "😀😀", "utf16le")]);
+  assert.equal(longText.length > 64 * 1024, true);
+  assert.equal(looksLikeText(longText), true);
+});
+
 test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
   const utf16le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<p>Camión ñandú</p>", "utf16le")]);
   assert.equal(decodeDocumentText(utf16le, "HTML"), "<p>Camión ñandú</p>");
@@ -186,6 +204,9 @@ test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="utf-8"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   // UTF-16 declarado sin BOM, y codificaciones «replacement» o desconocidas: se ignoran (nunca lanza).
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="utf-16"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  // Otras etiquetas de UTF-16 («unicode», «ucs-2», las de Word): igual, como hace el navegador (antes salían caracteres chinos).
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="unicode"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  assert.equal(decodeDocumentText(Buffer.from('<meta http-equiv="Content-Type" content="text/html; charset=ucs-2"><p>ñ</p>'), "HTML").endsWith("<p>ñ</p>"), true);
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="iso-2022-kr"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="inventada"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
   // Alias de UTF-16 («unicode», «ucs-2», «csunicode», «unicodefffe»: así escribía Word el HTML «Unicode») sin BOM: como el
@@ -202,7 +223,7 @@ test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
 
 test("classifyHtmlLink: enlaces entre documentos de la misma Documentación", () => {
   const docs = [{ id: "d2", name: "Tema 2.html" }, { id: "d1", name: "tema1.html" }, { id: "d3", name: "TEMA1.HTML" }];
-  assert.deepEqual(classifyHtmlLink("#apartado", docs), { type: "internal" });
+  assert.deepEqual(classifyHtmlLink("#apartado", docs), { type: "internal", hash: "#apartado" });
   assert.deepEqual(classifyHtmlLink("https://example.com/tema1.html", docs), { type: "external" });
   assert.deepEqual(classifyHtmlLink("//example.com/x.html", docs), { type: "external" });
   assert.deepEqual(classifyHtmlLink("mailto:a@example.com", docs), { type: "external" });
@@ -213,9 +234,26 @@ test("classifyHtmlLink: enlaces entre documentos de la misma Documentación", ()
   assert.deepEqual(classifyHtmlLink("tema 2.html#a", docs), { type: "document", id: "d2", hash: "#a" });
   assert.deepEqual(classifyHtmlLink("tema1.html#", docs), { type: "document", id: "d1", hash: "" });
   assert.deepEqual(classifyHtmlLink("tema9.html", docs), { type: "missing" });
-  assert.deepEqual(classifyHtmlLink("", docs), { type: "missing" });
+  // Sin ruta («», «?x»): el propio documento, como en el navegador (antes salía desactivado como «no está»).
+  assert.deepEqual(classifyHtmlLink("", docs), { type: "internal", hash: "" });
+  assert.deepEqual(classifyHtmlLink("?v=2#fin", docs), { type: "internal", hash: "#fin" });
   assert.deepEqual(classifyHtmlLink("carpeta/", docs), { type: "missing" });
   assert.deepEqual(classifyHtmlLink("tema1.html%", docs), { type: "missing" });
   // Sin documentos en el proyecto (o solo de otro): nada se resuelve.
   assert.deepEqual(classifyHtmlLink("tema1.html", []), { type: "missing" });
+});
+
+test("classifyHtmlLink: el propio documento por su nombre y nombres arreglados al subir (caza de bugs 52)", () => {
+  const docs = [{ id: "d1", name: "índice.html" }, { id: "d2", name: "a b.html" }, { id: "d3", name: "Informe_ 2026.html" }, { id: "d4", name: "lección.html" }];
+  // El índice de un documento que se enlaza a sí mismo por su nombre: se queda en el marco (antes, otra pestaña por clic).
+  assert.deepEqual(classifyHtmlLink("índice.html#tema-2", docs, "d1"), { type: "internal", hash: "#tema-2" });
+  assert.deepEqual(classifyHtmlLink("./%C3%8Dndice.HTML", docs, "d1"), { type: "internal", hash: "" });
+  // …pero desde otro documento sigue abriéndolo aparte.
+  assert.deepEqual(classifyHtmlLink("índice.html#tema-2", docs, "d2"), { type: "document", id: "d1", hash: "#tema-2" });
+  // Espacios seguidos (al subir quedan en uno), «:» (pasa a «_») y tildes descompuestas (NFD, nombres de macOS).
+  assert.deepEqual(classifyHtmlLink("a%20%20b.html", docs), { type: "document", id: "d2", hash: "" });
+  assert.deepEqual(classifyHtmlLink("Informe%3A%202026.html", docs), { type: "document", id: "d3", hash: "" });
+  assert.deepEqual(classifyHtmlLink("lección.html".normalize("NFD"), docs), { type: "document", id: "d4", hash: "" });
+  assert.deepEqual(classifyHtmlLink(encodeURIComponent("lección.html".normalize("NFD")), docs), { type: "document", id: "d4", hash: "" });
+  assert.deepEqual(classifyHtmlLink("%20.html", docs), { type: "missing" });
 });
