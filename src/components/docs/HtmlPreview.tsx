@@ -21,7 +21,7 @@ const URL_ATTRS = ["href", "src", "action", "formaction", "xlink:href"];
  * Los relativos a otro fichero se resuelven contra los documentos de la MISMA Documentación (classifyHtmlLink): si existe,
  * el enlace pasa a ser la dirección del visor de la app para ese documento; si no, queda desactivado con su title.
  */
-function htmlPreviewDocument(html: string, links: { projectId: string; docs: readonly { id: string; name: string }[]; missingTitle: string }): string {
+function htmlPreviewDocument(html: string, links: { projectId: string; docs: readonly { id: string; name: string }[]; selfId?: string; missingTitle: string }): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   // Todos los <link>: las hojas de estilo externas ya las bloquea la CSP, pero dns-prefetch, preconnect, prefetch,
   // prerender o modulepreload pueden tocar la red (o resolver un nombre) antes de que se aplique o fuera de ella y avisar a
@@ -38,7 +38,7 @@ function htmlPreviewDocument(html: string, links: { projectId: string; docs: rea
       const attr = el.hasAttribute("href") ? "href" : el.hasAttribute("xlink:href") ? "xlink:href" : null;
       if (!attr) continue;
       const href = el.getAttribute(attr)!.trim();
-      const link = classifyHtmlLink(href, links.docs);
+      const link = classifyHtmlLink(href, links.docs, links.selfId);
       if (link.type === "document") {
         // Otro documento de ESTA Documentación (la lista solo trae los del proyecto): se abre en el visor de la app, en otra
         // pestaña, sin que el marco gane ningún permiso (no puede avisar al padre sin scripts). La dirección la construye la
@@ -55,8 +55,9 @@ function htmlPreviewDocument(html: string, links: { projectId: string; docs: rea
       } else if (link.type === "internal") {
         // Internos (índice, notas): en el propio marco. La dirección base de un `srcdoc` es la de la página de la app,
         // así que «#tema» llevaba al marco la página de la app (que no se deja enmarcar: quedaba un error). Con
-        // «about:srcdoc#tema» solo se desplaza dentro del documento.
-        el.setAttribute(attr, `about:srcdoc${href}`);
+        // «about:srcdoc#tema» solo se desplaza dentro del documento. También el propio documento por su nombre
+        // («guia.html#tema» dentro de guia.html) o sin ruta («», «?x»): antes abría otra pestaña o salía desactivado.
+        el.setAttribute(attr, `about:srcdoc${link.hash || "#"}`);
         el.setAttribute("target", "_self");
       }
       el.setAttribute("rel", "noopener noreferrer");
@@ -85,10 +86,10 @@ function htmlPreviewDocument(html: string, links: { projectId: string; docs: rea
  * ni ejecuta scripts ni puede leer cookies, almacenamiento o páginas de la app), con el HTML en `srcdoc` (el servidor
  * nunca lo sirve como HTML) y una CSP propia sin red. Solo se permite abrir enlaces en otra pestaña.
  */
-export function HtmlPreview({ html, title, projectId, docs, fromLink }: { html: string; title: string; projectId: string; docs: readonly { id: string; name: string }[]; fromLink?: boolean }) {
+export function HtmlPreview({ html, title, projectId, docs, selfId, fromLink }: { html: string; title: string; projectId: string; docs: readonly { id: string; name: string }[]; selfId?: string; fromLink?: boolean }) {
   const t = useT();
   const missingTitle = t("Enlace a otro archivo que no está en la Documentación");
-  const srcDoc = useMemo(() => htmlPreviewDocument(html, { projectId, docs, missingTitle }), [html, projectId, docs, missingTitle]);
+  const srcDoc = useMemo(() => htmlPreviewDocument(html, { projectId, docs, selfId, missingTitle }), [html, projectId, docs, selfId, missingTitle]);
   const frame = useRef<HTMLIFrameElement>(null);
   // Una sola vez por documento: llevar el marco a «about:srcdoc#apartado» lo recarga (y volvería a disparar «load»).
   const scrolled = useRef(false);

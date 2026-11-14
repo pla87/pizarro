@@ -59,7 +59,7 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
-import { draftKey, readCommentDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
+import { draftKey, readCommentDraft, readDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
@@ -103,6 +103,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const onClose = () => {
     discardDraft();
     close();
+  };
+  /**
+   * Tras archivar o borrar (el diálogo ya se cerró al pulsar): el borrador se quita solo si sigue siendo el de esta tarea.
+   * Con la red lenta, entretanto se puede haber abierto otra y su borrador ocupa ya el mismo sitio.
+   */
+  const discardOwnDraft = () => {
+    if (readDraft<EditTaskDraft>(draftKey("edit", board.currentUserId, board.project.id))?.taskId === task.id) discardDraft();
   };
   // Subtarea nueva a medio escribir (la comunica la lista de subtareas): cerrar con ella pide confirmación.
   const subtaskDraftPending = useRef<(() => boolean) | null>(null);
@@ -675,7 +682,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
       return;
     }
-    discardDraft();
+    discardOwnDraft();
     toast(t("Tarea borrada"));
   };
 
@@ -691,7 +698,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return;
     }
     res.data.spawned.forEach(board.upsertTask);
-    discardDraft();
+    discardOwnDraft();
     toast(t("Tarea archivada"));
   };
 

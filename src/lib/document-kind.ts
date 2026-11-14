@@ -81,9 +81,22 @@ export function looksLikeText(buf: Uint8Array): boolean {
   const sample = buf.subarray(0, 64 * 1024);
   const bom = bomOf(sample);
   if (bom === "utf-16le" || bom === "utf-16be") {
-    // La muestra se corta en un par de bytes y, tras decodificar, no debe haber controles.
-    const even = sample.subarray(0, sample.length - (sample.length % 2));
-    return plainText(new TextDecoder(bom).decode(even));
+    // La muestra se corta en un par de bytes (y, si el fichero sigue, sin dejar medio par sustituto al final). Debe ser
+    // UTF-16 válido (un binario que empieza por FF FE casi nunca lo es: tiene sustitutos sueltos) y sin controles.
+    let end = sample.length - (sample.length % 2);
+    if (buf.length > end && end >= 2) {
+      const last = bom === "utf-16le" ? sample[end - 2]! | (sample[end - 1]! << 8) : (sample[end - 2]! << 8) | sample[end - 1]!;
+      if (last >= 0xd800 && last <= 0xdbff) end -= 2;
+    }
+    let text: string;
+    try {
+      text = new TextDecoder(bom, { fatal: true }).decode(sample.subarray(0, end));
+    } catch {
+      return false;
+    }
+    // Y, como en Windows-1252, casi sin caracteres de uso privado ni «no caracteres» (en un binario abundan).
+    const odd = text.match(/[\ue000-\uf8ff\ufdd0-\ufdef\ufffe\uffff]/g)?.length ?? 0;
+    return plainText(text) && odd * 100 <= text.length;
   }
   if (sample.includes(0)) return false;
   if (validUtf8(sample)) return true;
@@ -115,10 +128,12 @@ export function decodeDocumentText(buf: Uint8Array, kind: DocumentKindName = "TE
   if (bom) return new TextDecoder(bom).decode(buf).replace(/^﻿/, "");
   if (kind === "HTML") {
     const label = declaredCharset(buf);
-    if (label && !label.startsWith("utf-16") && label !== "utf-8" && label !== "utf8") {
+    if (label) {
       try {
         const dec = new TextDecoder(label);
-        if (dec.encoding !== "replacement") return dec.decode(buf);
+        // Como el navegador: un `<meta>` que dice UTF-16 («utf-16», pero también «unicode», «ucs-2»…) sin BOM no puede
+        // serlo (el meta se ha leído byte a byte); UTF-8 y lo que el navegador no conoce siguen el camino normal.
+        if (dec.encoding !== "replacement" && dec.encoding !== "utf-8" && !dec.encoding.startsWith("utf-16")) return dec.decode(buf);
       } catch { /* etiqueta desconocida: se sigue */ }
     }
   }

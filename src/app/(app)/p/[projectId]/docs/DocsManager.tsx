@@ -489,7 +489,7 @@ function DocPreview({ doc, name, src, projectId, docs, fromLink }: { doc: Docume
     return (
       <div className="space-y-2">
         <p className="text-xs text-slate-500">{t("Vista previa sin scripts ni contenido externo (imágenes, estilos o fuentes de otros sitios). Descárgalo para verlo completo.")}</p>
-        <HtmlPreview html={loaded.text} title={name} projectId={projectId} docs={docs} fromLink={fromLink} />
+        <HtmlPreview html={loaded.text} title={name} projectId={projectId} docs={docs} selfId={doc.id} fromLink={fromLink} />
       </div>
     );
   }
