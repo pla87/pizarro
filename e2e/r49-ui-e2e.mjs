@@ -1,5 +1,6 @@
-// Ronda 49 (interfaz): indicador de carga de las páginas de proyecto (el contorno del logo, solo si la carga pasa de
-// ~200 ms, con «Cargando…» para el lector de pantalla y quieto con movimiento reducido) y la pestaña «Adjuntos y
+// Ronda 49 (interfaz): indicador de carga de las páginas de proyecto (desde la ronda 51, un esqueleto con la forma de cada
+// página: en el tablero, cuatro columnas con su cabecera; solo si la carga pasa de ~200 ms, con «Cargando…» para el lector
+// de pantalla y sin brillo con movimiento reducido; más casos en r51-ui-e2e.mjs) y la pestaña «Adjuntos y
 // límites» de Ajustes del proyecto (botones de limpieza desactivados y tarjeta atenuada cuando no harían nada; notas «i»).
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r49-ui-e2e.mjs      # PART=load,storage
@@ -78,27 +79,34 @@ if (only.includes("load")) {
   await sleep(700);
   const r = await page.evaluate(() => {
     const el = document.querySelector("[data-project-loading]");
-    const svg = el?.querySelector("svg");
     const main = document.querySelector("main");
     const box = el?.getBoundingClientRect();
     const mb = main.getBoundingClientRect();
+    const cols = [...(el?.querySelectorAll("[data-skeleton-column]") ?? [])].filter((c) => c.checkVisibility());
+    const bone = el?.querySelector(".sk");
     return {
-      paths: svg?.querySelectorAll("path").length ?? 0,
-      opacity: svg ? Number(getComputedStyle(svg).opacity) : 0,
-      anim: svg ? getComputedStyle(svg.querySelector("path")).animationName : "",
+      kind: el?.getAttribute("data-project-loading") ?? null,
+      columns: cols.length,
+      // Cabecera de cada columna: título, contador, «+» y menú.
+      heads: cols.map((c) => c.firstElementChild.querySelectorAll(".sk").length),
+      header: !!el?.querySelector("[data-skeleton-header]")?.checkVisibility(),
+      opacity: el ? Number(getComputedStyle(el).opacity) : 0,
+      anim: bone ? getComputedStyle(bone).animationName : "",
       status: el?.querySelector("[role=status]")?.textContent ?? "",
-      columns: document.querySelectorAll(".animate-pulse").length,
-      // Ocupa el hueco de la página (sin saltos): centrado en <main> y de su mismo ancho.
+      logo: el?.querySelectorAll("svg").length ?? -1,
+      // Ocupa el hueco de la página (sin saltos): de ancho el de <main> y dentro de él.
       fills: !!box && Math.abs(box.width - mb.width) < 2 && box.top >= mb.top - 1 && box.bottom <= mb.bottom + 1,
-      centered: !!box && !!svg && Math.abs((svg.getBoundingClientRect().left + svg.getBoundingClientRect().width / 2) - (mb.left + mb.width / 2)) < 2,
     };
   });
-  L.eq("LOAD: es el contorno del logo (marco y tres columnas)", r.paths, 4);
+  L.eq("LOAD: es el esqueleto del tablero", r.kind, "board");
+  L.eq("LOAD: con cuatro columnas", r.columns, 4);
+  L.eq("LOAD: cada columna con la forma de su cabecera (título, contador, «+» y menú)", r.heads, [4, 4, 4, 4]);
+  L.check("LOAD: y la cabecera del tablero (nombre, buscador y botones)", r.header);
   L.check("LOAD: visible pasados los 200 ms", r.opacity > 0.9, r.opacity);
-  L.eq("LOAD: el trazo se anima", r.anim, "project-loader-draw");
+  L.eq("LOAD: los huesos llevan el brillo", r.anim, "project-skeleton-shine");
   L.eq("LOAD: el lector de pantalla tiene «Cargando…»", r.status, "Cargando…");
-  L.eq("LOAD: ya no hay columnas grises de esqueleto", r.columns, 0);
-  L.check("LOAD: ocupa el hueco de la página, centrado", r.fills && r.centered, JSON.stringify(r));
+  L.eq("LOAD: ya no es el contorno del logo", r.logo, 0);
+  L.check("LOAD: ocupa el hueco de la página", r.fills, JSON.stringify(r));
   const sideNow = await sidebar.boundingBox();
   L.check("LOAD: la barra lateral sigue en su sitio", !!sideNow && Math.abs(sideNow.x - sideBox.x) < 1 && Math.abs(sideNow.width - sideBox.width) < 1, JSON.stringify([sideBox, sideNow]));
   L.check("LOAD: la barra lateral muestra ya el proyecto nuevo", (await sidebar.innerText()).includes("R49 carga"));
@@ -109,25 +117,26 @@ if (only.includes("load")) {
   L.check("LOAD: al llegar el tablero, el indicador desaparece", w.gone !== null && (await loader.count()) === 0);
   await page.unroute(isProjectPage);
 
-  // Releases del mismo proyecto: también con el indicador (la barra lateral no cambia).
+  // Releases del mismo proyecto: su propio esqueleto (la barra lateral no cambia).
   await slowClick(page, page.locator(`a[href="/p/${ID}/releases"]`).filter({ visible: true }).first(), 2000);
   L.check("LOAD: Releases con respuesta lenta también lo muestra", await loader.waitFor({ timeout: 3000 }).then(() => true, () => false));
+  L.eq("LOAD: el de Releases", await loader.getAttribute("data-project-loading").catch(() => null), "releases");
   await page.waitForURL(/\/releases/, { timeout: 10000 });
   await loader.waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
   await page.unroute(isProjectPage);
 
-  // Movimiento reducido: el logo quieto y tenue (en Documentación, aún sin visitar: sin caché del enrutador).
+  // Movimiento reducido: sin brillo (en Documentación, aún sin visitar: sin caché del enrutador).
   await page.emulateMedia({ reducedMotion: "reduce" });
   await slowClick(page, page.locator(`a[href="/p/${ID}/docs"]`).filter({ visible: true }).first(), 2000);
   await loader.waitFor({ timeout: 3000 }).catch(() => {});
   await sleep(500);
   const still = await page.evaluate(() => {
-    const svg = document.querySelector("[data-project-loading] svg");
-    const path = svg?.querySelector("path");
-    return svg ? { opacity: Number(getComputedStyle(svg).opacity), anim: getComputedStyle(path).animationName, offset: getComputedStyle(path).strokeDashoffset } : null;
+    const el = document.querySelector("[data-project-loading]");
+    const bone = el?.querySelector(".sk");
+    return el && bone ? { kind: el.getAttribute("data-project-loading"), opacity: Number(getComputedStyle(el).opacity), anim: getComputedStyle(bone).animationName, image: getComputedStyle(bone).backgroundImage } : null;
   });
-  L.check("LOAD: con movimiento reducido, quieto (sin animación del trazo) y entero", !!still && still.anim === "none" && parseFloat(still.offset) === 0, JSON.stringify(still));
-  L.check("LOAD: con movimiento reducido, tenue", !!still && still.opacity > 0.3 && still.opacity < 0.7, JSON.stringify(still));
+  L.check("LOAD: con movimiento reducido, el esqueleto de Documentación sin brillo", !!still && still.kind === "docs" && still.anim === "none" && still.image === "none", JSON.stringify(still));
+  L.check("LOAD: con movimiento reducido, visible igualmente pasados los 200 ms", !!still && still.opacity > 0.9, JSON.stringify(still));
   await page.waitForURL(/\/docs/, { timeout: 10000 });
   await loader.waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
   await page.unroute(isProjectPage);

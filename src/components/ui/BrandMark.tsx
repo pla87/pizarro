@@ -1,4 +1,4 @@
-/** Logo de Pizarro con los colores del tema de color del usuario (el favicon sigue siendo /icon.svg). */
+/** Logo de Pizarro con los colores del tema de color del usuario (el favicon y el icono de la app van en el color de la instalación: app-icon-core.ts). */
 export function BrandMark({ size }: { size: number }) {
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden className="shrink-0">

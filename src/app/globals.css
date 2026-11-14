@@ -480,55 +480,61 @@ body {
 }
 
 /*
- * Carga de una página de proyecto (ProjectLoading.tsx): el contorno del logo se dibuja y se borra en bucle.
- * Invisible los primeros 200 ms (las cargas rápidas no parpadean). Con movimiento reducido: quieto y tenue.
+ * Esqueletos de carga de las páginas de proyecto (ProjectLoading.tsx). Invisibles los primeros 200 ms (las cargas
+ * rápidas no parpadean). Cada hueso (.sk) lleva un brillo suave que cruza la pantalla de izquierda a derecha: el
+ * degradado va fijo a la ventana (background-attachment: fixed), así que todos los huesos brillan a la vez como una sola
+ * onda. Los colores salen de la escala neutra del tema de color (slate-*), y .sk-brand, del color principal. Con
+ * movimiento reducido: sin brillo y sin fundido.
  */
-@keyframes project-loader-in {
+@keyframes project-skeleton-in {
   to {
     opacity: 1;
   }
 }
-@keyframes project-loader-draw {
+@keyframes project-skeleton-shine {
   0% {
-    stroke-dashoffset: 1;
+    background-position: -45vw 0;
   }
-  45%,
-  65% {
-    stroke-dashoffset: 0;
-  }
+  75%,
   100% {
-    stroke-dashoffset: -1;
+    background-position: 110vw 0;
   }
 }
-.project-loader {
+.project-skeleton {
+  --sk-base: var(--color-slate-200);
+  --sk-shine: color-mix(in srgb, var(--color-slate-50) 85%, transparent);
   opacity: 0;
-  animation: project-loader-in 250ms ease-out 200ms forwards;
-}
-.project-loader path {
-  stroke-dasharray: 1 1;
-  stroke-dashoffset: 1;
-  animation: project-loader-draw 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-.project-loader path:nth-child(2) {
-  animation-delay: 0.12s;
-}
-.project-loader path:nth-child(3) {
-  animation-delay: 0.24s;
-}
-.project-loader path:nth-child(4) {
-  animation-delay: 0.36s;
-}
-@keyframes project-loader-in-still {
-  to {
-    opacity: 0.5;
+  animation: project-skeleton-in 300ms ease-out 200ms forwards;
+  @variant dark {
+    --sk-base: var(--color-slate-800);
+    --sk-shine: color-mix(in srgb, var(--color-slate-700) 80%, transparent);
   }
+}
+.project-skeleton .sk {
+  background-color: var(--sk-base);
+  /* Horizontal: con un ángulo, el degradado de una caja fija tan alta como la ventana no llegaba a transparente en los bordes. */
+  background-image: linear-gradient(90deg, transparent, var(--sk-shine), transparent);
+  background-size: 45vw 100%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  animation: project-skeleton-shine 2s ease-in-out infinite;
+}
+.project-skeleton .sk-brand {
+  --sk-base: color-mix(in srgb, var(--color-brand-600) 22%, transparent);
+  @variant dark {
+    --sk-base: color-mix(in srgb, var(--color-brand-500) 30%, transparent);
+  }
+}
+/* Las tarjetas se desvanecen hacia abajo: sugieren que hay más sin dibujar un final. */
+.project-skeleton .sk-fade {
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 95%);
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-loader {
-    animation: project-loader-in-still 1ms linear 200ms forwards;
+  .project-skeleton {
+    animation: project-skeleton-in 1ms linear 200ms forwards;
   }
-  .project-loader path {
+  .project-skeleton .sk {
     animation: none;
-    stroke-dashoffset: 0;
+    background-image: none;
   }
 }

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { COMMENT_LIMIT_MAX, COMMENT_LIMIT_MIN, getMaxCommentsPerTask, setMaxCommentsPerTask } from "@/lib/app-settings";
+import { getAppIcon, setAppIcon } from "@/lib/app-icon";
+import { APP_ICON_ACCENTS } from "@/lib/app-icon-core";
 import { saveInstanceSettings } from "@/lib/instance";
 import { requireAdmin } from "@/lib/session";
 
@@ -36,5 +38,22 @@ export async function saveInstallationSettings(input: { orgName: string; locale:
     // Nombre en los títulos, idioma de las pantallas sin sesión y zona de las fechas: cambia lo ya pintado.
     revalidatePath("/", "layout");
     return after;
+  });
+}
+
+/**
+ * Administración → Ajustes → «Icono de la app»: color del icono de esta instalación (pestaña, pantalla de inicio y app
+ * instalada), para distinguirla de otra instalación de Pizarro en el mismo móvil.
+ */
+export async function saveAppIcon(accent: string) {
+  return runAction({ name: "settings.saveAppIcon", args: [accent] }, async () => {
+    await requireAdmin();
+    const next = z.enum(APP_ICON_ACCENTS, { error: "Color no válido." }).parse(accent);
+    const prev = await getAppIcon();
+    await setAppIcon(next);
+    describeAction("Cambió el color del icono de la app de {from} a {to}", { from: prev, to: next });
+    // El favicon y el apple-touch-icon van en el <head> de todas las páginas.
+    revalidatePath("/", "layout");
+    return { accent: next };
   });
 }

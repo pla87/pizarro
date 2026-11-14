@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeUser } from "./helpers";
-import { saveInstallationSettings } from "../../src/actions/settings";
+import { saveAppIcon, saveInstallationSettings } from "../../src/actions/settings";
+import { APP_ICON_KEY, getAppIcon } from "../../src/lib/app-icon";
 import { getLocale } from "../../src/i18n/server";
 import { getInstanceSettings, invalidateInstance } from "../../src/lib/instance";
 import { appTimeZone } from "../../src/lib/format";
@@ -76,5 +77,29 @@ describe("ajustes de la instalación", () => {
     await loginAs(member);
     expectFail(await saveInstallationSettings({ orgName: "Otra", locale: "en", timeZone: "UTC" }), FORBIDDEN);
     assert.equal((await getInstanceSettings()).orgName, "");
+  });
+
+  test("color del icono de la app: lo cambia un administrador, se ve al momento y queda en el registro", async () => {
+    await cleanup();
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    assert.equal(await getAppIcon(), "blue");
+    assert.deepEqual(expectOk(await saveAppIcon("forest")), { accent: "forest" });
+    assert.equal(await getAppIcon(), "forest");
+    expectFail(await saveAppIcon("rojo"), /Color no válido/);
+    assert.equal(await getAppIcon(), "forest");
+    await flushLogs();
+    const log = await db.appLog.findFirst({ where: { action: "settings.saveAppIcon", userId: admin.id, message: { startsWith: "Cambió" } }, orderBy: { createdAt: "desc" } });
+    assert.equal(log?.message, "Cambió el color del icono de la app de blue a forest");
+    // Un valor guardado que ya no existe (o estropeado) vuelve al azul.
+    await db.appState.update({ where: { key: APP_ICON_KEY }, data: { value: "morado" } });
+    assert.equal(await getAppIcon(Date.now() + 60_000), "blue"); // pasada la memoria de 30 s
+  });
+
+  test("color del icono de la app: solo administradores", async () => {
+    await cleanup();
+    await loginAs(await makeUser());
+    expectFail(await saveAppIcon("sienna"), FORBIDDEN);
+    assert.equal(await db.appState.findUnique({ where: { key: APP_ICON_KEY } }), null);
   });
 });
