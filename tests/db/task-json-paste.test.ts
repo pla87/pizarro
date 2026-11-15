@@ -78,6 +78,26 @@ describe("getTaskJson", () => {
     await loginAs(await makeUser());
     expectFail(await getTaskJson(source.id), NOT_FOUND);
   });
+
+  test("el email del responsable solo se copia para él mismo o para un administrador; sin él, se pega por el nombre", async () => {
+    const { user, f, source, target } = await fullFixture();
+    const mate = await makeUser({ name: "Compa Curioso" });
+    await assign(f, mate);
+    const copied = async () => JSON.parse(expectOk(await getTaskJson(source.id))).assignee;
+    // Otro miembro del proyecto: ve el nombre (como en el tablero), no el email, que no aparece en ninguna parte del texto.
+    await loginAs(mate);
+    const text = expectOk(await getTaskJson(source.id));
+    assert.deepEqual(JSON.parse(text).assignee, { name: "Ana Copia" });
+    assert.ok(!text.includes(user.email) && !text.includes("@example.test"));
+    // Lo copiado así se pega igualmente: el responsable se encuentra por su nombre.
+    expectOk(await paste(target.id, text));
+    assert.equal((await state(target.id)).assigneeId, user.id);
+    // El propio responsable y un administrador sí lo llevan.
+    await loginAs(user);
+    assert.deepEqual(await copied(), { name: "Ana Copia", email: user.email });
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    assert.deepEqual(await copied(), { name: "Ana Copia", email: user.email });
+  });
 });
 
 describe("pasteTaskJson", () => {
