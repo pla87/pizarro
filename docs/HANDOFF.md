@@ -20,6 +20,8 @@ Railway. Se está preparando para venderse como producto.
 - **Versión actual:** la de `package.json` y el primer bloque de `changelog.json`.
 - **Cómo funciona todo:** `docs/MANUAL.md` (y `MANUAL.pdf`, generado). Instalación: `docs/INSTALL.md`. Prueba en un
   VPS: `docs/PRUEBA-VPS.md`.
+- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `PRUEBAS.pdf`, en la
+  raíz, generado desde `docs/PRUEBAS.md` con `node scripts/build-manual-pdf.mjs pruebas` (con `CHROME_PATH` si hace falta).
 
 ## 2. Cómo trabaja el propietario (protocolo de cada ronda)
 
