@@ -29,7 +29,7 @@ export interface AiPlanTask {
   links?: { title: string; url: string }[];
   /**
    * Adjuntos con su enlace de descarga en la app (absoluto) y, si el plan va con su ZIP, su ruta dentro de él
-   * (`adjuntos/03-titulo/plano.webp`, ver planAttachmentPaths).
+   * (`adjuntos/03-titulo/plano.webp`, o `attachments/…` en un plan en inglés; ver planAttachmentPaths).
    */
   attachments?: { id?: string; name: string; url: string; path?: string }[];
   /** Tarea fija («Siempre en el plan»): entra en todos los planes. */
@@ -51,14 +51,23 @@ export interface AiPlanInput {
   origin?: string | null;
 }
 
-/** Carpeta raíz del ZIP de adjuntos del plan: dentro, una carpeta por tarea («adjuntos/03-titulo-de-la-tarea»). */
-export const AI_PLAN_ZIP_ROOT = "adjuntos";
-/** Forma de la carpeta de una tarea en el ZIP (el servidor solo admite esta). */
-export const AI_PLAN_ZIP_FOLDER = /^adjuntos\/\d{2,4}-[a-z0-9-]{0,40}$/;
+/** Idioma del plan: decide el nombre de la carpeta raíz del ZIP y el de una tarea sin letras en el título. */
+export type AiPlanLocale = "es" | "en";
+/**
+ * Carpeta raíz del ZIP de adjuntos del plan, en el idioma del plan: dentro, una carpeta por tarea
+ * («adjuntos/03-titulo-de-la-tarea», «attachments/03-task-title»).
+ */
+export const AI_PLAN_ZIP_ROOTS: Record<AiPlanLocale, string> = { es: "adjuntos", en: "attachments" };
+/** Nombre de la carpeta de una tarea cuyo título no deja ninguna letra ni cifra («03-tarea», «03-task»). */
+const FOLDER_FALLBACK: Record<AiPlanLocale, string> = { es: "tarea", en: "task" };
+/** Forma de la carpeta de una tarea en el ZIP (el servidor solo admite esta, con una de las dos raíces). */
+export const AI_PLAN_ZIP_FOLDER = /^(?:adjuntos|attachments)\/\d{2,4}-[a-z0-9-]{0,40}$/;
+/** Raíz de una carpeta de tarea ya validada con AI_PLAN_ZIP_FOLDER («adjuntos» o «attachments»). */
+export const aiPlanZipRoot = (folder: string) => folder.slice(0, folder.indexOf("/"));
 
 /** Parte de un título apta para el nombre de una carpeta: minúsculas, sin tildes, guiones entre palabras. */
-function folderSlug(title: string): string {
-  return mentionsToPlain(title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || "tarea";
+function folderSlug(title: string, locale: AiPlanLocale): string {
+  return mentionsToPlain(title).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "") || FOLDER_FALLBACK[locale];
 }
 
 /**
@@ -67,14 +76,15 @@ function folderSlug(title: string): string {
  * nombres coinciden en la misma tarea, el segundo lleva «-2»). Devuelve la carpeta y las rutas por tarea (solo las que
  * tienen adjuntos) y la ruta de cada adjunto por su id (las imágenes pegadas en una descripción apuntan a él). El
  * servidor recalcula los nombres con las mismas funciones (src/app/api/projects/[projectId]/release-attachments/route.ts).
+ * `locale`: idioma del plan; en inglés la raíz es `attachments/` y una tarea sin letras, `03-task`.
  */
-export function planAttachmentPaths(tasks: { id: string; title: string; attachments: { id: string; originalName: string; isImage?: boolean }[] }[]) {
+export function planAttachmentPaths(tasks: { id: string; title: string; attachments: { id: string; originalName: string; isImage?: boolean }[] }[], locale: AiPlanLocale = "es") {
   const width = Math.max(2, String(tasks.length).length);
   const byTask = new Map<string, { folder: string; files: { id: string; path: string }[] }>();
   const byAttachment = new Map<string, string>();
   tasks.forEach((task, i) => {
     if (!task.attachments.length) return;
-    const folder = `${AI_PLAN_ZIP_ROOT}/${String(i + 1).padStart(width, "0")}-${folderSlug(task.title)}`;
+    const folder = `${AI_PLAN_ZIP_ROOTS[locale]}/${String(i + 1).padStart(width, "0")}-${folderSlug(task.title, locale)}`;
     const names = plainAttachmentFileNames(task.attachments);
     const files = task.attachments.map((a, k) => ({ id: a.id, path: `${folder}/${names[k]!}` }));
     for (const f of files) byAttachment.set(f.id, f.path);
@@ -129,7 +139,7 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Add or update tests for what you change and run them before you consider a task done.",
       "- Do nothing irreversible (deleting data, destructive migrations, deploying or publishing) without confirmation.",
       "- Links to Pizarro (tasks and attachments) only open with a signed-in session: if you need one and cannot open it, ask for it.",
-      "- The tasks' attachments (drawings, screenshots, documents) come in the \"adjuntos/…\" ZIP that goes with this plan: unzip it next to this file. Each task cites the path of its own (e.g. `adjuntos/03-task-title/drawing.webp`) and the images in the descriptions point to that same path. Images are converted to WebP.",
+      "- The tasks' attachments (drawings, screenshots, documents) come in the \"attachments/…\" ZIP that goes with this plan: unzip it next to this file. Each task cites the path of its own (e.g. `attachments/03-task-title/drawing.webp`) and the images in the descriptions point to that same path. Images are converted to WebP.",
     ].join("\n"),
     footerName: "Delivery (built-in)",
     footer: [

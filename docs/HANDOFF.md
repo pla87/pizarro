@@ -331,8 +331,11 @@ Cómo se revisa cada PR:
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
-- A partir del 17-nov-2026 se pueden quitar las huellas de deshacer antiguas (las de `fingerprintOps` sin el prefijo
-  `v2:`, en `src/lib/undo.ts`): para entonces ya no quedarán entradas de deshacer guardadas con ellas.
+- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:`. El anterior (sin
+  prefijo) se quitó con su compatibilidad; una entrada que aún lo traiga (copia de seguridad antigua restaurada) se
+  descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
+  `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
+  el formato, prefijo nuevo y el mismo trato para el anterior.
 
 **Ideas pospuestas por decisión del propietario:**
 

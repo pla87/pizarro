@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Smartphone } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { saveAppIcon } from "@/actions/settings";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
@@ -14,8 +14,12 @@ import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, type AppIconAcc
 /**
  * «Icono de la app»: el color del icono de esta instalación (pestaña del navegador, pantalla de inicio del móvil y app
  * instalada) y el nombre que lleva debajo. Sirve para distinguir dos instalaciones de Pizarro en el mismo móvil (p. ej.
- * la del trabajo y la personal). Se guarda al elegirlo.
+ * la del trabajo y la personal). Se guarda al elegirlo: con un clic, en el acto; con las flechas, cuando se deja de pulsar
+ * (KEYBOARD_SAVE_DELAY_MS), para no guardar cada color por el que se pasa.
  */
+/** Con las flechas, el color se guarda tras este rato sin más cambios (la vista previa cambia al momento). */
+const KEYBOARD_SAVE_DELAY_MS = 300;
+
 export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconAccent; orgName: string }) {
   const t = useT();
   const toast = useToast();
@@ -23,25 +27,73 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
   const [accent, setAccent] = useState(initial);
   const { shortName } = appNames(orgName);
 
-  // Con las flechas se pasa por varios colores seguidos: cada uno se guarda (Next manda las acciones de una en una, gana el
-  // último) y, si falla, solo el último vuelve al color que había guardado.
+  // Con las flechas se pasa por varios colores seguidos: la vista previa cambia con cada uno, pero solo se guarda el último,
+  // cuando pasan KEYBOARD_SAVE_DELAY_MS sin más cambios (antes se guardaba cada uno: una acción y una línea del registro por
+  // color). Lo pendiente se guarda igualmente si el foco sale del grupo, se oculta o se cierra la página, o se navega a otra.
+  /** Último color que el servidor confirmó. */
   const saved = useRef(initial);
+  /** Último color enviado (aún sin respuesta, o el confirmado): no se vuelve a enviar el mismo. */
+  const sent = useRef(initial);
+  /** Color elegido con el teclado que espera a enviarse. */
+  const pending = useRef<AppIconAccent | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(0);
-  const choose = (value: AppIconAccent) => {
-    if (value === accent) return;
-    setAccent(value);
+  const save = useCallback((value: AppIconAccent) => {
+    if (value === sent.current) return;
+    sent.current = value;
     const mine = ++latest.current;
+    // Next manda las acciones de una en una: gana la última y, si falla, solo ella vuelve al color que había guardado.
     start(async () => {
       const res = await saveAppIcon(value);
       if (res.ok) saved.current = value;
       if (!res.ok) {
-        if (mine === latest.current) setAccent(saved.current);
+        if (mine === latest.current) {
+          sent.current = saved.current;
+          // Si entretanto se eligió otro con las flechas (aún sin enviar), ese sigue su curso.
+          if (pending.current === null) setAccent(saved.current);
+        }
         return toast(res.error, "error");
       }
       if (mine === latest.current) toast(t("Color del icono guardado."), "success");
     });
+  }, [start, t, toast]);
+  /** Envía ya lo que esté esperando (si lo hay). */
+  const flush = useCallback(() => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+    const value = pending.current;
+    pending.current = null;
+    if (value !== null) save(value);
+  }, [save]);
+  const choose = (value: AppIconAccent, how: "click" | "keyboard") => {
+    if (value === accent && pending.current === null) return;
+    setAccent(value);
+    pending.current = value;
+    if (how === "click") return flush();
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, KEYBOARD_SAVE_DELAY_MS);
   };
-  const group = useRadioGroup(APP_ICON_ACCENTS.length, APP_ICON_ACCENTS.indexOf(accent), (i) => choose(APP_ICON_ACCENTS[i]!));
+  const group = useRadioGroup(APP_ICON_ACCENTS.length, APP_ICON_ACCENTS.indexOf(accent), (i) => choose(APP_ICON_ACCENTS[i]!, "keyboard"));
+  // La última versión de `flush`, para el efecto de abajo (que solo debe montarse y desmontarse una vez).
+  const flushRef = useRef(flush);
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
+  useEffect(() => {
+    const now = () => flushRef.current();
+    const hidden = () => {
+      if (document.visibilityState === "hidden") now();
+    };
+    // Al cerrar o recargar la pestaña y al cambiar de pestaña o de app (en el móvil no siempre hay «pagehide»).
+    window.addEventListener("pagehide", now);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pagehide", now);
+      document.removeEventListener("visibilitychange", hidden);
+      // Al navegar a otra pantalla de la app.
+      now();
+    };
+  }, []);
 
   return (
     <section id="icono-app" className="card space-y-4 p-5" data-app-icon-settings>
@@ -56,13 +108,21 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
           {t("Con el nombre de la organización debajo: «{name}».", { name: shortName })}
         </p>
       </div>
-      <div {...group.groupProps} aria-label={t("Color del icono de la app")} className="flex flex-wrap gap-3">
+      <div
+        {...group.groupProps}
+        aria-label={t("Color del icono de la app")}
+        className="flex flex-wrap gap-3"
+        // El foco sale del grupo (Tab, un clic fuera, otra ventana): lo elegido con las flechas se guarda ya.
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) flush();
+        }}
+      >
         {APP_ICON_ACCENTS.map((value, i) => (
           <button
             key={value}
             type="button"
             {...group.radioProps(i)}
-            onClick={() => choose(value)}
+            onClick={() => choose(value, "click")}
             data-app-icon={value}
             className={cn(
               "flex w-20 flex-col items-center gap-1.5 rounded-xl p-2 text-xs transition-colors",

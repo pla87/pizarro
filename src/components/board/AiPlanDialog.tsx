@@ -140,8 +140,9 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
     const labelName = new Map(board.labels.map((l) => [l.id, l.name]));
     const index = new Map(selectedTasks.map((x, i) => [x.id, i + 1]));
     const fields = board.project.taskFields;
-    // Adjuntos: su ruta dentro del ZIP «adjuntos/NN-titulo/…» (el texto la cita; el servidor recalcula los mismos nombres).
-    const paths = planAttachmentPaths(selectedTasks.map((x) => ({ id: x.id, title: x.title, attachments: details.get(x.id)?.attachments ?? [] })));
+    // Adjuntos: su ruta dentro del ZIP «adjuntos/NN-titulo/…» («attachments/…» con la app en inglés, como el resto del plan;
+    // el texto la cita y el servidor recalcula los mismos nombres).
+    const paths = planAttachmentPaths(selectedTasks.map((x) => ({ id: x.id, title: x.title, attachments: details.get(x.id)?.attachments ?? [] })), locale === "en" ? "en" : "es");
     const withFiles = selectedTasks.filter((x) => paths.byTask.has(x.id));
     // Como en la release, el ZIP admite 200 tareas con adjuntos; con más no se ofrece y el texto solo lleva los enlaces a Pizarro.
     const zipOk = withFiles.length <= RELEASE_MAX_ATTACHMENT_TASKS;

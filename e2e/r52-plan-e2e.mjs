@@ -2,6 +2,8 @@
 //  - zip: «Descargar adjuntos» en el paso 2 del plan (ZIP «adjuntos/NN-titulo/…» con los adjuntos de las tareas, mismo
 //    formato y topes que el de la release); el texto cita cada adjunto por su ruta dentro del ZIP (también la imagen pegada
 //    en la descripción) y su enlace a Pizarro; solo el .md va a Documentación; la ruta del ZIP de la release sigue igual.
+//  - en: con la app en inglés, la carpeta raíz del ZIP y las rutas del texto son «attachments/NN-title/…» (una tarea sin
+//    letras, «NN-task»); el servidor admite las dos raíces, con la misma forma estricta, y no deja mezclarlas.
 //  - ritmo: las tareas fijas «cada dos» cuentan los planes guardados en SU columna (guardar en una no adelanta a las demás),
 //    mientras la versión del documento (_vN) sigue siendo del proyecto.
 //  - vacias: «Publicar programa», «Exportar a calendario», «Resumen para el cliente», «Ver lista», «Resumen de presupuesto»
@@ -10,7 +12,7 @@
 //  - salir: con el texto del paso 2 cambiado, un enlace del pie («tus plantillas») pide confirmar como cerrar; sin cambios
 //    navega directo. En el plan y en la release.
 // Misma base y servidor que board-e2e.mjs (el servidor y este script comparten UPLOAD_DIR; por defecto ../uploads):
-//   cd e2e && BASE=http://localhost:3272 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,ritmo,vacias,salir
+//   cd e2e && BASE=http://localhost:3272 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,en,ritmo,vacias,salir
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -18,7 +20,7 @@ import path from "node:path";
 import * as L from "./qa/lib.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "zip,ritmo,vacias,salir").split(",");
+const only = (process.env.PART || "zip,en,ritmo,vacias,salir").split(",");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "r52-plan-"));
 const UPLOADS = path.resolve(process.env.UPLOAD_DIR || path.join(import.meta.dirname, "..", "uploads"));
 fs.mkdirSync(UPLOADS, { recursive: true });
@@ -77,7 +79,7 @@ async function toStep2(dlg, n) {
   await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
   await sleep(300);
 }
-const planText = (dlg) => dlg.getByRole("textbox", { name: "Texto del plan de trabajo" }).inputValue();
+const planText = (dlg) => dlg.getByRole("textbox", { name: /Texto del plan de trabajo|Work plan text/ }).inputValue();
 const appToday = (page) => page.evaluate(() => new Intl.DateTimeFormat("en-CA", { timeZone: document.documentElement.dataset.tz || undefined }).format(new Date()));
 const docs = () => L.q(`SELECT id,name,kind,"mimeType" FROM "ProjectDocument" WHERE "projectId"=$1 AND "deletedAt" IS NULL ORDER BY "createdAt"`, [PID]);
 const checkedRows = (dlg) => dlg.locator("ul li").evaluateAll((els) => els.map((li) => [li.innerText.split("\n")[0].trim(), li.querySelector("input").checked]));
@@ -152,6 +154,63 @@ if (only.includes("zip")) {
   L.eq("ZIP: Documentación recibe solo el Markdown del plan", (await docs()).map((d) => [d.name, d.kind]), [[`Plan de trabajo – ${today}_v1.md`, "MARKDOWN"]]);
   L.assertNoErrors("ZIP", [s]);
   await s.ctx.close();
+}
+
+// --- ZIP de adjuntos de un plan en inglés --------------------------------------------------------------------------------------
+if (only.includes("en")) {
+  L.scenario("en: el ZIP de un plan en inglés usa «attachments/» y el texto cita esas rutas");
+  await seed([
+    ["r52_t1", "r52_a", "Fix the login", "Fails like this: ![shot](/api/attachments/r52img1)", false],
+    ["r52_t2", "r52_a", "¿¡!?", "", false],
+  ]);
+  await attach("r52img1", "r52_t1", "Final plan.png", true, IMG);
+  await attach("r52doc1", "r52_t2", "notes.txt", false, DOC);
+  await L.q(`UPDATE "User" SET locale='EN' WHERE id=$1`, [adm.id]);
+  try {
+    const s = await L.session();
+    const { page } = s;
+    await page.goto(`${L.BASE}/p/${PID}`);
+    await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
+    await L.liveOpen(page);
+    await sleep(500);
+    await L.colLoc(page, "Plan A").getByRole("button", { name: "Generate work plan" }).click();
+    const dlg = planDialog(page);
+    await dlg.locator("[data-plan-step=select]").waitFor({ timeout: 10000 });
+    await sleep(1200);
+    await dlg.getByRole("button", { name: /Generate with 2 task/ }).click();
+    await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
+    await sleep(300);
+    const text = await planText(dlg);
+    const f1 = "attachments/01-fix-the-login";
+    L.check("EN: el texto cita la imagen por su ruta «attachments/…»", text.includes(`\`${f1}/Final_plan.webp\` ([Final plan.png in Pizarro](<${L.BASE}/api/attachments/r52img1>))`), text.slice(text.indexOf("### 1.")));
+    L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("`attachments/02-task/notes.txt`"), text.slice(text.indexOf("### 2.")));
+    L.check("EN: la imagen de la descripción apunta a la misma ruta", text.includes(`![shot](${f1}/Final_plan.webp)`));
+    L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
+    L.check("EN: la cabecera de serie también, con su ejemplo", text.includes('come in the "attachments/…" ZIP that goes with this plan') && text.includes("`attachments/03-task-title/drawing.webp`"));
+    L.check("EN: en el plan en inglés no queda ninguna ruta «adjuntos/»", !text.includes("adjuntos"), text);
+    const btn = dlg.getByRole("button", { name: "Download attachments (2)" });
+    const today = await appToday(page);
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), btn.click()]);
+    const zip = path.join(TMP, "plan-en.zip");
+    await dl.saveAs(zip);
+    L.eq("EN: nombre del fichero en inglés", dl.suggestedFilename(), `plan-${today}-v1-Web_r52-attachments.zip`);
+    L.eq("EN: el ZIP contiene exactamente las rutas citadas, bajo «attachments/»", unzipList(zip), [`${f1}/Final_plan.webp`, "attachments/02-task/notes.txt"]);
+    L.check("EN: el contenido es el del adjunto", execFileSync("unzip", ["-p", zip, `${f1}/Final_plan.webp`]).equals(IMG));
+
+    // El servidor admite las dos raíces (un plan en español abierto en otra pestaña sigue valiendo), igual de estricto con ambas.
+    const post = async (items) => (await page.request.post(`${L.BASE}/api/projects/${PID}/release-attachments?plan=1`, { data: { items }, headers: { origin: L.BASE } })).status();
+    L.eq("EN: carpeta «attachments/NN-…» aceptada (200)", await post([{ taskId: "r52_t1", folder: "attachments/01-x" }, { taskId: "r52_t2", folder: "attachments/02-task" }]), 200);
+    L.eq("EN: carpeta «adjuntos/NN-…» aceptada (200)", await post([{ taskId: "r52_t1", folder: "adjuntos/01-x" }, { taskId: "r52_t2", folder: "adjuntos/02-tarea" }]), 200);
+    L.eq("EN: mezclar las dos raíces en un ZIP se rechaza (400)", await post([{ taskId: "r52_t1", folder: "attachments/01-x" }, { taskId: "r52_t2", folder: "adjuntos/02-x" }]), 400);
+    for (const bad of ["attachments/../x", "attachments/x", "attachments/01-x/y", "attachments/01-X", "Attachments/01-x", "files/01-x", "attachments/00001-x", "/attachments/01-x"]) {
+      L.eq(`EN: «${bad}» se rechaza (400)`, await post([{ taskId: "r52_t1", folder: bad }]), 400);
+    }
+    L.eq("EN: una tarea que no es del proyecto, 404", await post([{ taskId: "no_existe", folder: "attachments/01-x" }]), 404);
+    L.assertNoErrors("EN", [s]);
+    await s.ctx.close();
+  } finally {
+    await L.q(`UPDATE "User" SET locale='ES' WHERE id=$1`, [adm.id]);
+  }
 }
 
 // --- Ritmo por columna -------------------------------------------------------------------------------------------------------

@@ -216,6 +216,18 @@ test("decodeDocumentText: BOM, charset declarado, UTF-8 y Windows-1252", () => {
     assert.equal(decodeDocumentText(Buffer.from(`<meta http-equiv=Content-Type content="text/html; charset=${label}"><p>Año ✓</p>`), "HTML").endsWith("<p>Año ✓</p>"), true, label);
   }
   assert.equal(decodeDocumentText(Buffer.from('<meta charset="unicode-1-1-utf-8"><p>ñ</p>', "latin1"), "HTML").endsWith("<p>ñ</p>"), true);
+  // UTF-8 de verdad con un meta Latin-1 / Windows-1252 / Latin-9 mal puesto: gana el contenido (antes salía «AÃ±o»).
+  for (const label of ["iso-8859-1", "ISO-8859-1", "latin1", "windows-1252", "cp1252", "us-ascii", "iso-8859-15"]) {
+    assert.equal(decodeDocumentText(Buffer.from(`<meta charset="${label}"><p>Año ✓ €</p>`), "HTML").endsWith("<p>Año ✓ €</p>"), true, label);
+    assert.equal(decodeDocumentText(Buffer.from(`<meta http-equiv="Content-Type" content="text/html; charset=${label}"><p>ñ</p>`), "HTML").endsWith("<p>ñ</p>"), true, label);
+  }
+  // Si NO es UTF-8 válido, manda el meta, como siempre (una «ñ» Latin-1 suelta basta para que no lo sea).
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="iso-8859-1"><p>Año Ã±</p>', "latin1"), "HTML").endsWith("<p>Año Ã±</p>"), true);
+  assert.equal(decodeDocumentText(Buffer.concat([Buffer.from('<meta charset="iso-8859-15"><p>ñ '), Buffer.from([0xa4]), Buffer.from("</p>")]), "HTML").endsWith("<p>Ã± €</p>"), true);
+  // Solo ASCII: no hay nada que decidir (el resultado es el mismo con cualquiera de las dos).
+  assert.equal(decodeDocumentText(Buffer.from('<meta charset="windows-1252"><p>abc</p>'), "HTML"), '<meta charset="windows-1252"><p>abc</p>');
+  // Las demás codificaciones declaradas se respetan aunque los bytes también fueran UTF-8 válido («Я»» en Windows-1251 es DF BB).
+  assert.equal(decodeDocumentText(Buffer.concat([Buffer.from('<meta charset="windows-1251"><p>'), Buffer.from([0xdf, 0xbb]), Buffer.from("</p>")]), "HTML").endsWith("<p>Я»</p>"), true);
   // En texto y Markdown no se mira el meta.
   assert.equal(decodeDocumentText(Buffer.from("<meta charset=shift_jis>ñ", "latin1"), "TEXT"), "<meta charset=shift_jis>ñ");
   assert.equal(decodeDocumentText(new Uint8Array(0), "HTML"), "");

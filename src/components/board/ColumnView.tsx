@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type RefObject } from "react";
+import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Users, Wallet, type LucideIcon } from "lucide-react";
@@ -20,6 +20,7 @@ import { Modal } from "../ui/Modal";
 import { AiPlanDialog } from "./AiPlanDialog";
 import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
+import { columnGateSnapshot } from "./columnGate";
 import { ChecklistDialog } from "./ChecklistDialog";
 import { ProgramDialog } from "./ProgramDialog";
 import { useBoard, useSelectedCount, useTasks } from "./context";
@@ -293,15 +294,21 @@ function BudgetTotal({ columnId }: { columnId: string }) {
  * no solo en que las haya: la lista muestra las subtareas (sin ninguna queda vacía) y el .ics solo lleva las tareas con
  * fecha límite (sin ninguna, un calendario sin eventos). Se desactivan también en ese caso, con su motivo. Devuelve el motivo
  * por el que la acción no se puede usar, o null si se puede.
+ *
+ * Se suscribe al almacén de tareas con una instantánea que es el motivo (columnGateSnapshot): el botón solo se redibuja
+ * cuando cambia el motivo de SU columna, no con cada cambio de cualquier tarea del tablero (como hacía con useTasks).
  */
 function useGate(column: BoardColumn, cardCount: number): string | null {
   const t = useT();
-  const tasks = useTasks();
-  if (cardCount === 0) return t("No hay tarjetas en esta columna");
-  const mine = tasks.filter((x) => x.columnId === column.id);
-  if (column.role === "AGENDA" && !mine.some((x) => x.dueDate)) return t("Ninguna tarjeta tiene fecha límite");
-  if (column.role === "CHECKLIST" && !mine.some((x) => x.subtaskTotal > 0)) return t("Ninguna tarjeta tiene subtareas");
-  return null;
+  const { stores } = useBoard();
+  const snapshot = columnGateSnapshot(stores.tasks, column.id, column.role, cardCount);
+  const gate = useSyncExternalStore(stores.tasks.subscribe, snapshot, snapshot);
+  switch (gate) {
+    case "empty": return t("No hay tarjetas en esta columna");
+    case "noDueDate": return t("Ninguna tarjeta tiene fecha límite");
+    case "noSubtasks": return t("Ninguna tarjeta tiene subtareas");
+    default: return null;
+  }
 }
 
 function GatedActionButton({ column, cardCount, icon, label, onClick }: { column: BoardColumn; cardCount: number; icon: LucideIcon; label: string; onClick: () => void }) {
