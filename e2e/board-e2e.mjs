@@ -711,9 +711,11 @@ if (only.includes("det")) {
 
   // Título hasta el micrófono: el aviso «Guardado» flota sin reservar ancho.
   const title = d.locator("textarea[aria-label='Título']").first();
+  // A su derecha van el menú «Más opciones de la tarea» (copiar y pegar como JSON) y la X.
+  const more = d.getByRole("button", { name: "Más opciones de la tarea" }).first();
   const close = d.getByRole("button", { name: "Cerrar" }).first();
-  const [tb, xb] = [await title.boundingBox(), await close.boundingBox()];
-  L.check("R43C4: la caja del título llega hasta la X (sin hueco para «Guardado»)", xb.x - (tb.x + tb.width) <= 12, `hueco ${Math.round(xb.x - (tb.x + tb.width))} px`);
+  const [tb, xb, cb] = [await title.boundingBox(), await more.boundingBox(), await close.boundingBox()];
+  L.check("R43C4: la caja del título llega hasta los botones de la cabecera (sin hueco para «Guardado»)", xb.x - (tb.x + tb.width) <= 12 && cb.x - (xb.x + xb.width) <= 12, `hueco ${Math.round(xb.x - (tb.x + tb.width))} px`);
   await title.click();
   await p.keyboard.press("End");
   await p.keyboard.type(" editado");

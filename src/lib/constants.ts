@@ -121,6 +121,8 @@ export const MAX_TITLE = 210;
 export const MAX_TITLE_UNITS = MAX_TITLE * 4;
 /** Subtareas por tarea como máximo. */
 export const MAX_SUBTASKS = 100;
+/** Etiquetas por tarea. */
+export const MAX_TASK_LABELS = 20;
 export const MAX_DESCRIPTION = 20_000;
 export const MAX_TEMPLATE = 20_000;
 export const MAX_RELEASE_CONTENT = 200_000;

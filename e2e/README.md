@@ -41,6 +41,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 79 | ~1,5 min |
+| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V fuera y dentro de un campo, deshacer, JSON inválido o de una IA, menú, sin permiso del portapapeles, móvil e inglés (ronda 53) | `e2e/r53-json-e2e.mjs` | 75 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -536,4 +537,22 @@ servidor recién arrancado.
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48b-e2e.mjs
+```
+
+## Copiar y pegar una tarea como JSON (ronda 53)
+
+Con el detalle de una tarea abierto, Ctrl+C sin texto seleccionado copia la tarea entera como JSON (formato
+«pizarro.task», `src/lib/task-json.ts`; la suite lee el portapapeles con los permisos `clipboard-read` y
+`clipboard-write` de Playwright) y el indicador de la cabecera dice «Tarea copiada»; con texto seleccionado (en el título
+o en la página) copia ese texto. Ctrl+V fuera de un campo de texto escribe esa tarea en la que está abierta (título,
+descripción, fecha, responsable, campos opcionales, enlace, columna, etiquetas, subtareas y dependencia), con una sola
+entrada de deshacer: Ctrl+Z la devuelve entera, Ctrl+Mayús+Z la vuelve a pegar y «Cancelar» también la descarta. Dentro
+de un campo (título, descripción) el JSON se pega como texto y, con la descripción sin guardar, pegar la tarea pregunta
+antes. Un JSON de tarea roto avisa, otro texto u otro JSON no hacen nada, y uno escrito por una IA (claves en español,
+bloque ```json, fecha ISO, etiqueta nueva, tipo que no existe, campo no activado) se aplica en lo que se puede y avisa
+del resto. El menú «Más opciones de la tarea» (con el teclado, sin permiso para leer el portapapeles: cuadro para pegar
+el JSON a mano, y en el móvil) y los textos en inglés. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r53-json-e2e.mjs   # PART=copiar,pegar,texto,invalido,menu,ingles
 ```
