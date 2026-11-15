@@ -402,7 +402,23 @@ const clearable = (v: unknown): string | null | undefined => {
 /** Quita el bloque de código de Markdown (```json … ```) con el que una IA suele envolver el JSON. */
 function stripFence(s: string): string {
   const m = /^```[a-zA-Z0-9]*[ \t]*\r?\n([\s\S]*?)\r?\n?```$/.exec(s);
-  return m ? m[1]!.trim() : s;
+  if (m) return m[1]!.trim();
+  if (s.startsWith("{") || s.startsWith("[")) return s;
+  // Texto alrededor («Aquí tienes: ```json … ``` Espero que…»): el primer bloque de código cuyo contenido empieza por { o [.
+  // Se buscan las vallas con indexOf (lineal) y como mucho unas pocas, para no gastar CPU con textos raros.
+  let from = 0;
+  for (let i = 0; i < 8; i++) {
+    const open = s.indexOf("```", from);
+    if (open < 0) break;
+    const nl = s.indexOf("\n", open + 3);
+    if (nl < 0) break;
+    const close = s.indexOf("```", nl + 1);
+    if (close < 0) break;
+    const inner = s.slice(nl + 1, close).trim();
+    if (/^[a-zA-Z0-9]*[ \t\r]*$/.test(s.slice(open + 3, nl)) && (inner.startsWith("{") || inner.startsWith("["))) return inner;
+    from = close + 3;
+  }
+  return s;
 }
 
 /**

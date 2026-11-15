@@ -1392,7 +1392,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             }}
           >
             <label className="block text-sm" htmlFor={manualPasteId}>{t("El navegador no deja leer el portapapeles. Pega aquí el JSON de la tarea:")}</label>
-            <textarea id={manualPasteId} className="input h-48 w-full font-mono text-xs" value={manualPaste} onChange={(e) => setManualPaste(e.target.value)} autoFocus spellCheck={false} placeholder={'{ "format": "pizarro.task", … }'} />
+            <textarea id={manualPasteId} className="input h-48 w-full font-mono text-xs" value={manualPaste} onChange={(e) => setManualPaste(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && manualPaste.trim()) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} autoFocus spellCheck={false} placeholder={'{ "format": "pizarro.task", … }'} />
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setManualPaste(null)}>{t("Cancelar")}</button>
               <button type="submit" className="btn-primary" disabled={!manualPaste.trim()}>{t("Pegar tarea")}</button>

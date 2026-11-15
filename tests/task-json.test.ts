@@ -166,3 +166,11 @@ test("textos patológicos: se leen en poco tiempo y sin lanzar (responsable, imp
   assert.deepEqual((parseTaskJson(of({ dependsOn: [null] })) as { task: object }).task, { title: "x", dependsOn: null });
   assert.deepEqual((parseTaskJson(of({ dependsOn: [] })) as { task: object }).task, { title: "x", dependsOn: null });
 });
+
+test("JSON de una IA con texto alrededor del bloque de código", () => {
+  const r = parseTaskJson('Aquí tienes la tarea:\n\n```json\n{"format":"pizarro.task","version":1,"title":"Desde la IA"}\n```\n\nEspero que te sirva.');
+  assert.equal(r.kind, "task");
+  if (r.kind === "task") assert.equal(r.task.title, "Desde la IA");
+  assert.equal(parseTaskJson("Hola\n```js\nconsole.log(1)\n```").kind, "none");
+  assert.equal(parseTaskJson("```".repeat(5000)).kind, "none");
+});
