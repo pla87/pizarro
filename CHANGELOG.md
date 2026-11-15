@@ -2,6 +2,35 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.56.0 — 2026-11-16 00:46
+
+Copiar y pegar tareas como JSON, ZIP del plan en inglés, codificaciones más listas, icono con flechas y adiós al formato antiguo de deshacer
+
+### Nuevas funcionalidades
+
+- En el detalle de una tarea, Ctrl+C sin texto seleccionado copia la tarea entera como JSON y Ctrl+V fuera de un campo de texto pega un JSON de tarea sobre ella (también desde el menú ⋯ «Copiar tarea (JSON)» y «Pegar tarea»), con «Tarea copiada» y «Tarea pegada». Sirve para pasar tareas entre proyectos o pedirle a una IA que rellene una.
+- PRUEBAS.pdf: lista de lo que hay que probar en una instalación real (Google, WhatsApp, Telegram, email, Stripe, Railway…).
+
+### Mejoras
+
+- El ZIP de adjuntos del plan de trabajo usa la carpeta attachments/ cuando el plan se genera en inglés.
+- Un HTML en UTF-8 que declara otra codificación (iso-8859-1) se ve bien.
+- Cambiar el color del icono de la app con las flechas guarda el color en el que te detienes.
+- Al pegar una tarea se entiende el JSON que devuelve una IA con texto alrededor, y el cuadro de pegado manual admite Ctrl+Enter.
+
+### Correcciones
+
+- Al deshacer el borrado de varias tareas vuelven también los bloqueos entre ellas, aunque se rehaga y se deshaga varias veces.
+- Ctrl+C con una imagen seleccionada copia la imagen, no la tarea; Ctrl+V con el foco en una casilla o en la fecha pega la tarea.
+- En la vista previa de un HTML, ir a un #apartado al abrirlo desde otro documento es fiable.
+
+### Cambios técnicos / DB
+
+- Se retira el formato antiguo de las huellas de deshacer: una acción guardada con él avisa y se descarta sin cambiar nada.
+- El email de la persona responsable solo va en el JSON copiado si la tarea es tuya o eres administrador.
+- Pegar un JSON enorme o malicioso ya no puede ocupar el servidor.
+- Los botones de las columnas Agenda y Lista ya no se redibujan con cada cambio, y los iconos de la raíz responden 304 (ETag).
+
 ## v1.55.0 — 2026-11-14 20:28
 
 Adjuntos en el plan de trabajo para IA, HTML enlazados y en Latin-1 o UTF-16, archivar y borrar al instante, botones de columnas vacías y flechas en los grupos de opciones
