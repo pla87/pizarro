@@ -116,6 +116,8 @@ export const server: Record<string, string> = {
   "No hay nada que rehacer.": "There is nothing to redo.",
   "Esa acción ya se ha rehecho.": "That action has already been redone.",
   "Otra persona ha cambiado esto después de deshacerlo: no se puede rehacer.": "Someone else changed this after it was undone: it can't be redone.",
+  "Esta acción se guardó con una versión anterior de Pizarro: ya no se puede deshacer.": "This action was saved by an earlier version of Pizarro: it can no longer be undone.",
+  "Esta acción se guardó con una versión anterior de Pizarro: ya no se puede rehacer.": "This action was saved by an earlier version of Pizarro: it can no longer be redone.",
   "Otra persona ha cambiado esto después de rehacerlo: no se puede deshacer.": "Someone else changed this after it was redone: it can't be undone.",
   "No hay ninguna columna con el rol «En producción». Asígnalo en el menú de una columna o elige archivar.": "No column has the “In production” role. Assign it in a column's menu or choose to archive.",
   "Mientras tanto se ha desplegado la release {prev}: vuelve a generar el texto para que los códigos lleven R{number}.": "Release {prev} was deployed in the meantime: regenerate the text so the codes use R{number}.",

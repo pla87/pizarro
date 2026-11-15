@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { addComment, archiveTasks, createTask, deleteAttachment, deleteSubtask, deleteTaskLink, editComment, moveTask, restoreTask, updateSubtask, updateTask } from "../../src/actions/tasks";
-import { redoChecked, undoChecked, undoLast } from "../../src/actions/undo";
-import { fingerprintOps, type UndoOp } from "../../src/lib/undo";
+import { redoChecked, redoLast, undoChecked, undoLast } from "../../src/actions/undo";
+import { fingerprintOps, isObsoleteFingerprint } from "../../src/lib/undo";
 
 async function team() {
   const me = await makeUser({ name: "Yo Mismo" });
@@ -243,36 +243,71 @@ describe("la huella delata cambios ajenos sin historial", () => {
     }
   });
 
-  test("las huellas de antes de la versión 2 (sin prefijo, con la descripción entera) siguen valiendo y se ponen al día", async () => {
+  test("una huella del formato antiguo (sin prefijo) ya no se compara: la entrada se descarta sin aplicar nada, ni confirmando", async () => {
+    const OBSOLETE_REDO = /versión anterior de Pizarro: ya no se puede rehacer/;
+    const OBSOLETE_UNDO = /versión anterior de Pizarro: ya no se puede deshacer/;
+    /** Como la guardaba la versión anterior: un sha256 en hexadecimal, sin «v2:». */
+    const makeObsolete = async (id: string) => {
+      const e = await db.undoEntry.findUniqueOrThrow({ where: { id } });
+      assert.ok(e.fingerprint?.startsWith("v2:"));
+      const old = e.fingerprint!.slice(3);
+      assert.match(old, /^[0-9a-f]{64}$/);
+      assert.equal(isObsoleteFingerprint(old), true);
+      await db.undoEntry.update({ where: { id }, data: { fingerprint: old } });
+    };
+    const title = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).title;
+    assert.equal(isObsoleteFingerprint(null), false);
+    assert.equal(isObsoleteFingerprint(await fingerprintOps("p", [])), false);
+
+    // Rehacer (botón y Ctrl+Y, redoChecked): sin cambios de nadie, la entrada antigua no se aplica ni se pregunta.
     const { f, task } = await rich();
     const other = await makeTask(f, { title: "Otra" });
     expectOk(await updateTask(task.id, { title: "Mío" }));
     expectOk(await updateTask(other.id, { title: "Otra mía" }));
     expectOk(await undoChecked(f.project.id));
     expectOk(await undoChecked(f.project.id));
-    // Como si se hubieran guardado con la versión anterior: la huella de entonces (fingerprintOps la calcula así con `stored` sin prefijo).
-    const entries = await db.undoEntry.findMany({ where: { kind: "REDO", projectId: f.project.id } });
-    for (const e of entries) {
-      const legacy = await fingerprintOps(f.project.id, e.ops as unknown as UndoOp[], "antigua");
-      assert.ok(!legacy.startsWith("v2:"));
-      await db.undoEntry.update({ where: { id: e.id }, data: { fingerprint: legacy } });
-    }
-    // Se rehace la de «task» (la última que se deshizo); la de «other», que sigue intacta, pasa a la huella nueva.
-    assert.equal(expectOk(await redoChecked(f.project.id)).conflict, undefined);
-    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Mío");
-    const left = await db.undoEntry.findFirstOrThrow({ where: { kind: "REDO", projectId: f.project.id } });
-    assert.ok(left.fingerprint?.startsWith("v2:"));
-    // Y sigue delatando un cambio ajeno.
-    await db.task.update({ where: { id: other.id }, data: { description: "ajena" } });
-    assert.equal(expectOk(await redoChecked(f.project.id)).conflict?.message, GENERIC_REDO);
+    const before = await title(task.id);
+    const redos = await db.undoEntry.findMany({ where: { kind: "REDO", projectId: f.project.id }, orderBy: { createdAt: "desc" } });
+    assert.equal(redos.length, 2);
+    for (const e of redos) await makeObsolete(e.id);
+    const top = (await db.undoEntry.findFirstOrThrow({ where: { kind: "REDO", projectId: f.project.id, taskId: task.id } })).id;
+    // Confirmar («Rehacer igualmente») tampoco la aplica.
+    expectFail(await redoChecked(f.project.id, null, top), OBSOLETE_REDO);
+    assert.equal(await title(task.id), before);
+    assert.equal(await db.undoEntry.count({ where: { id: top } }), 0, "se descarta para no bloquear la pila");
+    // La otra (también antigua) sigue en la pila sin tocar y falla igual cuando le llega el turno; redoLast, lo mismo.
+    assert.equal(await db.undoEntry.count({ where: { kind: "REDO", projectId: f.project.id } }), 1);
+    expectFail(await redoLast(f.project.id), OBSOLETE_REDO);
+    assert.equal(await title(other.id), "Otra");
+    assert.equal(await db.undoEntry.count({ where: { kind: "REDO", projectId: f.project.id } }), 0);
+    // No ha quedado ninguna entrada contraria (no se aplicó nada que deshacer).
+    assert.equal(await db.undoEntry.count({ where: { projectId: f.project.id, fingerprint: { not: null } } }), 0);
 
-    // Una antigua con un cambio ajeno en la descripción también se delata.
+    // Deshacer una entrada que dejó un rehacer (lleva huella): igual.
     const x = await rich();
     expectOk(await updateTask(x.task.id, { title: "Mío" }));
     expectOk(await undoChecked(x.f.project.id));
-    const e = await db.undoEntry.findFirstOrThrow({ where: { kind: "REDO", projectId: x.f.project.id } });
-    await db.undoEntry.update({ where: { id: e.id }, data: { fingerprint: await fingerprintOps(x.f.project.id, e.ops as unknown as UndoOp[], "antigua") } });
-    await db.task.update({ where: { id: x.task.id }, data: { description: `${"a".repeat(14_999)}b` } });
-    assert.equal(expectOk(await redoChecked(x.f.project.id)).conflict?.message, GENERIC_REDO);
+    expectOk(await redoChecked(x.f.project.id));
+    const undoEntry = await db.undoEntry.findFirstOrThrow({ where: { kind: "UNDO", projectId: x.f.project.id, fingerprint: { not: null } } });
+    await makeObsolete(undoEntry.id);
+    expectFail(await undoChecked(x.f.project.id), OBSOLETE_UNDO);
+    assert.equal(await title(x.task.id), "Mío");
+    assert.equal(await db.undoEntry.count({ where: { id: undoEntry.id } }), 0);
+
+    // Una entrada actual junto a una antigua: la actual se aplica con normalidad y la antigua no se «pone al día».
+    const y = await rich();
+    const second = await makeTask(y.f, { title: "Segunda" });
+    expectOk(await updateTask(second.id, { title: "Segunda mía" }));
+    expectOk(await updateTask(y.task.id, { title: "Mío" }));
+    expectOk(await undoChecked(y.f.project.id));
+    expectOk(await undoChecked(y.f.project.id));
+    const oldOne = await db.undoEntry.findFirstOrThrow({ where: { kind: "REDO", projectId: y.f.project.id, taskId: y.task.id } });
+    await makeObsolete(oldOne.id);
+    // Con la tarea abierta el contexto es esa tarea: se rehace la de «second» (actual).
+    assert.equal(expectOk(await redoChecked(y.f.project.id, second.id)).conflict, undefined);
+    assert.equal(await title(second.id), "Segunda mía");
+    assert.equal(isObsoleteFingerprint((await db.undoEntry.findUniqueOrThrow({ where: { id: oldOne.id } })).fingerprint), true);
+    expectFail(await redoChecked(y.f.project.id, y.task.id), OBSOLETE_REDO);
+    assert.notEqual(await title(y.task.id), "Mío");
   });
 });

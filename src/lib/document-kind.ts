@@ -117,15 +117,30 @@ function declaredCharset(buf: Uint8Array): string | null {
   return m ? m[1]!.toLowerCase() : null;
 }
 
+/** ¿Hay algún byte fuera de ASCII? */
+function hasNonAscii(b: Uint8Array): boolean {
+  for (let i = 0; i < b.length; i++) if (b[i]! >= 0x80) return true;
+  return false;
+}
+
+/** Codificaciones de 8 bits latinas cuya etiqueta se ignora si el contenido es UTF-8 válido (ver decodeDocumentText). */
+const LATIN_8BIT = new Set(["windows-1252", "iso-8859-15"]);
+
 /**
  * Texto de un documento de Documentación para mostrarlo (el fichero guardado no se toca; la descarga lo entrega tal cual).
  * Orden: BOM (UTF-8, UTF-16 LE/BE); en HTML, la codificación declarada en los primeros bytes (menos UTF-16, que sin BOM no
  * puede ser, y las que el navegador no conoce); UTF-8 si es válido; y si no, Windows-1252 (que incluye Latin-1). Nunca
  * lanza. El saneado del HTML se aplica después, sobre el texto ya decodificado.
+ *
+ * Excepción al orden: un HTML que declara Latin-1, Windows-1252 o Latin-9 pero cuyo contenido es UTF-8 válido con algún
+ * byte fuera de ASCII se lee como UTF-8. Es casi siempre un `<meta>` mal puesto (una plantilla antigua guardada en UTF-8):
+ * en un texto latino de verdad, cada letra acentuada tendría que ir seguida justo de los símbolos que forman una secuencia
+ * UTF-8 («Ã±», «â€œ»), y basta una «ñ» suelta para que deje de ser UTF-8 válido. Si no es UTF-8 válido, manda el `<meta>`.
+ * Con las demás codificaciones (cirílico, japonés…) la coincidencia es menos improbable y se respeta siempre la etiqueta.
  */
 export function decodeDocumentText(buf: Uint8Array, kind: DocumentKindName = "TEXT"): string {
   const bom = bomOf(buf);
-  if (bom) return new TextDecoder(bom).decode(buf).replace(/^﻿/, "");
+  if (bom) return new TextDecoder(bom).decode(buf).replace(/^\ufeff/, "");
   if (kind === "HTML") {
     const label = declaredCharset(buf);
     if (label) {
@@ -134,7 +149,8 @@ export function decodeDocumentText(buf: Uint8Array, kind: DocumentKindName = "TE
         // (que sin BOM no puede ser: el navegador lo toma como UTF-8) y «unicode-1-1-utf-8» es UTF-8 (lo decide el paso
         // siguiente, que cae a Windows-1252 si no es válido).
         const dec = new TextDecoder(label);
-        if (dec.encoding !== "replacement" && dec.encoding !== "utf-8" && !dec.encoding.startsWith("utf-16")) return dec.decode(buf);
+        const mislabelled = LATIN_8BIT.has(dec.encoding) && hasNonAscii(buf) && validUtf8(buf);
+        if (!mislabelled && dec.encoding !== "replacement" && dec.encoding !== "utf-8" && !dec.encoding.startsWith("utf-16")) return dec.decode(buf);
       } catch { /* etiqueta desconocida: se sigue */ }
     }
   }

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import sharp from "sharp";
 import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon, shortAppName } from "../src/lib/app-icon-core";
 import { webManifest } from "../src/lib/web-manifest";
-import { rootIconResponse } from "../src/lib/app-icon-render";
+import { etagMatches, rootIconEtag, rootIconResponse } from "../src/lib/app-icon-render";
 import { GET } from "../src/app/app-icon/[accent]/[file]/route";
 
 const get = (accent: string, file: string) => GET(new Request(`http://localhost/app-icon/${accent}/${file}`), { params: Promise.resolve({ accent, file }) });
@@ -112,6 +112,56 @@ test("iconos de la raíz: del color elegido, con caché corta (no inmutables) y 
   assert.equal(png.length, bytes.readUInt32LE(14));
   assert.equal((await pixel(Buffer.from(png), 16, 16 + 4)).color.length, 7);
   assert.equal((await pixel(Buffer.from(png), 3, 16)).color, "#6848a0");
+});
+
+test("iconos de la raíz: ETag (color + revisión + tamaño), 304 con If-None-Match y .ico en caché", async () => {
+  const req = (inm?: string) => ({ headers: new Headers(inm ? { "If-None-Match": inm } : {}) });
+  // Un ETag distinto por color, fichero (tamaño y forma) y formato; con la revisión del dibujo dentro.
+  const tags = new Set<string>();
+  for (const accent of APP_ICON_ACCENTS) {
+    for (const file of Object.keys(APP_ICON_FILES) as (keyof typeof APP_ICON_FILES)[]) tags.add(rootIconEtag(accent, file));
+    tags.add(rootIconEtag(accent, "icon-32.png", true));
+  }
+  assert.equal(tags.size, APP_ICON_ACCENTS.length * (Object.keys(APP_ICON_FILES).length + 1));
+  assert.equal(rootIconEtag("forest", "icon-192.png"), `"forest-r${APP_ICON_REV}-rounded-192"`);
+  assert.equal(rootIconEtag("eva", "icon-32.png", true), `"eva-r${APP_ICON_REV}-rounded-32-ico"`);
+  assert.equal(rootIconEtag("mono", "icon.svg"), `"mono-r${APP_ICON_REV}-rounded-svg"`);
+  for (const tag of tags) assert.match(tag, /^"[a-z0-9-]+"$/);
+
+  for (const [file, ico] of [["icon.svg", false], ["icon-192.png", false], ["apple-touch-icon.png", false], ["icon-32.png", true]] as const) {
+    const full = await rootIconResponse("forest", file, ico, req());
+    const etag = full.headers.get("etag")!;
+    assert.equal(etag, rootIconEtag("forest", file, ico));
+    assert.equal(full.status, 200);
+    assert.ok((await full.arrayBuffer()).byteLength > 0);
+    // Misma etiqueta: 304 sin cuerpo, con el ETag y la misma caché (el navegador renueva su copia).
+    const same = await rootIconResponse("forest", file, ico, req(etag));
+    assert.equal(same.status, 304);
+    assert.equal((await same.arrayBuffer()).byteLength, 0);
+    assert.equal(same.headers.get("etag"), etag);
+    assert.match(same.headers.get("cache-control") ?? "", /max-age=300, must-revalidate/);
+    assert.equal(same.headers.get("content-type"), null);
+    // Débil, en una lista o «*»: también vale.
+    for (const inm of [`W/${etag}`, `"otra", ${etag}`, "*"]) assert.equal((await rootIconResponse("forest", file, ico, req(inm))).status, 304, inm);
+    // Otro color (se cambió en Administración) u otra etiqueta: el icono entero, con su ETag nuevo.
+    const changed = await rootIconResponse("sienna", file, ico, req(etag));
+    assert.equal(changed.status, 200);
+    assert.notEqual(changed.headers.get("etag"), etag);
+    assert.equal((await rootIconResponse("forest", file, ico, req('"forest"'))).status, 200);
+  }
+  // Sin petición (llamadas antiguas): respuesta completa.
+  assert.equal((await rootIconResponse("forest", "icon.svg")).status, 200);
+  assert.equal(etagMatches(null, '"a"'), false);
+  assert.equal(etagMatches("", '"a"'), false);
+  assert.equal(etagMatches('"a"', '"a"'), true);
+  assert.equal(etagMatches('"ab"', '"a"'), false);
+
+  // El .ico se arma una vez por color: dos respuestas, los mismos bytes, y válidos.
+  const a = Buffer.from(await (await rootIconResponse("mustard", "icon-32.png", true)).arrayBuffer());
+  const b = Buffer.from(await (await rootIconResponse("mustard", "icon-32.png", true, req('"x"'))).arrayBuffer());
+  assert.equal(Buffer.compare(a, b), 0);
+  assert.deepEqual([a.readUInt16LE(2), a[6], a[7], a.readUInt32LE(14)], [1, 32, 32, a.length - 22]);
+  assert.equal((await pixel(a.subarray(22), 3, 16)).color, "#9a7209");
 });
 
 test("manifiesto: iconos, color y nombre de la instalación", () => {

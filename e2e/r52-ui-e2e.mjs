@@ -176,8 +176,47 @@ if (only.includes("flechas")) {
     const section = p.locator("[data-app-icon-settings]");
     await section.waitFor({ timeout: 15000 });
     const icons = section.locator("[role=radiogroup]");
+    const t0 = new Date();
     await exercise("icono de la app", icons, (loc) => loc.getAttribute("data-app-icon"), ["blue", "forest", "sienna", "mustard", "mono", "eva"]);
-    await L.eqEventually("icono de la app: lo elegido con el teclado se guarda (BD)", async () => (await L.q(`SELECT value FROM "AppState" WHERE key='instance.appIcon'`))[0]?.value, "blue", { timeout: 10000 });
+    // Con las flechas solo se guarda el color en el que se para (~300 ms sin cambios), no cada uno por el que se pasa. El
+    // recorrido de arriba acaba en el azul, que es el que ya había: no queda nada que guardar.
+    const savedIcon = async () => (await L.q(`SELECT value FROM "AppState" WHERE key='instance.appIcon'`))[0]?.value ?? null;
+    // Cada guardado deja una línea en el registro (se escribe por tandas, unos segundos después): se comprueban todas al final.
+    const iconSaves = async () => (await L.q(`SELECT message FROM "AppLog" WHERE action='settings.saveAppIcon' AND "createdAt" > $1 ORDER BY "createdAt"`, [t0])).map((r) => r.message.replace(/^.* de (\w+) a (\w+)$/, "$1>$2"));
+    await sleep(1200);
+    L.eq("icono de la app: el recorrido con flechas que vuelve al color guardado no guarda nada", await savedIcon(), null);
+    // Tres flechas seguidas: la vista previa va con cada una y se guarda una sola vez, el último.
+    await checkedOf(icons).focus();
+    for (let i = 0; i < 3; i++) {
+      await p.keyboard.press("ArrowRight");
+      await sleep(60);
+    }
+    L.eq("icono de la app: la vista previa cambia al momento (mostaza marcada)", await checkedOf(icons).getAttribute("data-app-icon"), "mustard");
+    L.eq("icono de la app: … y todavía no se ha guardado nada", await savedIcon(), null);
+    await L.eqEventually("icono de la app: al parar se guarda el último (BD)", savedIcon, "mustard", { timeout: 10000 });
+    await p.getByText("Color del icono guardado.").first().waitFor({ timeout: 8000 });
+    // Tab justo después de una flecha: el foco sale del grupo y lo pendiente se guarda sin esperar.
+    await checkedOf(icons).focus();
+    await p.keyboard.press("ArrowRight");
+    await p.keyboard.press("Tab");
+    await L.eqEventually("icono de la app: al salir del grupo con un cambio pendiente se guarda", savedIcon, "mono", { timeout: 10000 });
+    // Navegar a otra pantalla justo después de una flecha: también.
+    await checkedOf(icons).focus();
+    await p.keyboard.press("ArrowRight");
+    await p.locator('a[href="/"], a[href^="/p/"]').first().evaluate((a) => a.click());
+    await L.eqEventually("icono de la app: al navegar a otra pantalla con un cambio pendiente se guarda", savedIcon, "eva", { timeout: 10000 });
+    await p.goto(`${L.BASE}/admin/settings`);
+    await section.waitFor({ timeout: 15000 });
+    L.eq("icono de la app: al volver sigue el último elegido", await checkedOf(icons).getAttribute("data-app-icon"), "eva");
+    // Un clic guarda en el acto, y volver con las flechas al color guardado no guarda otra vez.
+    await icons.locator("[data-app-icon=blue]").click();
+    await L.eqEventually("icono de la app: un clic guarda en el acto", savedIcon, "blue", { timeout: 10000 });
+    await p.keyboard.press("ArrowRight");
+    await p.keyboard.press("ArrowLeft");
+    await sleep(1200);
+    L.eq("icono de la app: ida y vuelta con flechas al color guardado, sigue el azul", await savedIcon(), "blue");
+    // En total, cuatro guardados: uno por cada parada (no uno por flecha, que habrían sido más de veinte).
+    await L.eqEventually("icono de la app: un solo guardado por parada (registro)", iconSaves, ["blue>mustard", "mustard>mono", "mono>eva", "eva>blue"], { timeout: 12000 });
     // Tab: entra una sola vez al grupo y sale al siguiente control.
     await checkedOf(icons).focus();
     await p.keyboard.press("Tab");
@@ -236,8 +275,20 @@ if (only.includes("iconos")) {
       L.check(`raíz: ${path} sin sesión y con caché corta (no inmutable)`, res.status === 200 && !/immutable/.test(cc) && /max-age=\d{1,4}\b/.test(cc) && !res.headers.get("set-cookie"), `${res.status} ${cc}`);
     }
     L.eq("raíz: /favicon.ico es un .ico", (await get("/favicon.ico")).headers.get("content-type"), "image/x-icon");
+    // ETag (color + revisión del dibujo + tamaño): con If-None-Match, 304 sin cuerpo; al cambiar el color, otro ETag y el icono entero.
+    const etags = {};
+    for (const path of ["/favicon.ico", "/apple-touch-icon.png", "/icon.png", "/icon.svg"]) {
+      const etag = (etags[path] = (await get(path)).headers.get("etag"));
+      L.check(`raíz: ${path} lleva ETag con el color`, /^"forest-r\d+-[a-z]+-(\d+|svg)(-ico)?"$/.test(etag ?? ""), String(etag));
+      const again = await fetch(`${L.BASE}${path}`, { headers: { "If-None-Match": etag } });
+      L.eq(`raíz: ${path} con If-None-Match responde 304 sin cuerpo y con el mismo ETag`, [again.status, (await again.arrayBuffer()).byteLength, again.headers.get("etag")], [304, 0, etag]);
+      L.eq(`raíz: ${path} con otro ETag responde 200`, (await fetch(`${L.BASE}${path}`, { headers: { "If-None-Match": '"otro"' } })).status, 200);
+    }
+    L.eq("raíz: un ETag distinto por dirección", new Set(Object.values(etags)).size, 4);
     await setIcon(null);
     await L.eqEventually("raíz: de vuelta al azul, /apple-touch-icon.png en azul", async () => (await pixel(`/apple-touch-icon.png?x=${Date.now()}`)).color, "#4f46e5", { timeout: 40000, step: 2000 });
+    const stale = await fetch(`${L.BASE}/favicon.ico`, { headers: { "If-None-Match": etags["/favicon.ico"] } });
+    L.check("raíz: cambiado el color, el ETag anterior ya no vale (200 con el nuevo)", stale.status === 200 && /^"blue-/.test(stale.headers.get("etag") ?? ""), `${stale.status} ${stale.headers.get("etag")}`);
 
     // Nombre corto: el largo del manifiesto («Org · Pizarro») no cambia; el corto cabe bajo el icono.
     const manifest = async () => (await get("/manifest.webmanifest")).json();

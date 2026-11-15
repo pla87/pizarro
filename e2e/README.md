@@ -27,7 +27,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/bh50b-e2e.mjs` | 39 | ~30 s |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/bh51b-e2e.mjs` | 34 | ~20 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/bh50a-e2e.mjs` | 22 | ~20 s |
-| Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16 (ronda 52) | `e2e/r52-html-e2e.mjs` | ~50 | ~1 min |
+| Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, y UTF-8 con un `<meta>` de 8 bits mal puesto (ronda 52) | `e2e/r52-html-e2e.mjs` | 52 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/bh51a-e2e.mjs` | 27 | ~40 s |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/bh51c-e2e.mjs` | 55 | ~35 s |
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
@@ -40,14 +40,14 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
-| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 79 | ~1,5 min |
+| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 102 | ~1,5 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V fuera y dentro de un campo, deshacer, JSON inválido o de una IA, menú, sin permiso del portapapeles, móvil e inglés (ronda 53) | `e2e/r53-json-e2e.mjs` | 75 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/r50-curso-e2e.mjs` | 57 | ~40 s |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
-| Plan de trabajo: ZIP de adjuntos, ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 79 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 101 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
@@ -317,9 +317,11 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-ui-e2e.mjs   #
 - `columna`: dos cambios de columna seguidos desde el detalle con respuestas lentas: la tarjeta queda en la última (turnos por
   tarjeta, como Alt+flechas).
 - `flechas`: «Icono de la app» (Administración) y «Tema de color» (Mi perfil): una sola parada de Tab, flechas en las cuatro
-  direcciones (eligen y guardan), vuelta de extremo a extremo, Inicio y Fin; también el selector de idioma.
+  direcciones (eligen y guardan), vuelta de extremo a extremo, Inicio y Fin; también el selector de idioma. En el icono, con
+  las flechas se guarda una sola vez al parar (~300 ms), o antes si el foco sale del grupo o se navega a otra pantalla; un
+  clic guarda en el acto (se cuenta por las líneas `settings.saveAppIcon` del registro, que tarda unos segundos en escribirse).
 - `iconos`: `/favicon.ico`, `/apple-touch-icon.png`, `/icon.png` y `/icon.svg` en el color de la instalación (azul sin
-  ajuste), con caché corta; nombre corto del manifiesto y título de iPhone de 12 caracteres como mucho. La caché de ajustes
+  ajuste), con caché corta, ETag y 304 con `If-None-Match`; nombre corto del manifiesto y título de iPhone de 12 caracteres como mucho. La caché de ajustes
   del servidor dura 30 s, así que esta parte puede tardar unos segundos en cada cambio.
 
 Restaura lo que toca (rol, tema, icono y nombre de la organización). Misma base y servidor:
@@ -426,7 +428,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-plan-e2e.mjs  
 ## Plan de trabajo: adjuntos, ritmo por columna, columnas vacías y enlaces del pie (ronda 52)
 
 El paso 2 del plan ofrece «Descargar adjuntos (n)»: un ZIP con los adjuntos de las tareas del plan, en una carpeta por tarea
-(`adjuntos/03-titulo-de-la-tarea/plano.webp`), por la misma ruta, con los mismos topes y permisos que el de la release; el
+(`adjuntos/03-titulo-de-la-tarea/plano.webp`; con la app en inglés, `attachments/03-task-title/…`, parte `en`), por la misma ruta, con los mismos topes y permisos que el de la release; el
 texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la descripción) y por su enlace a Pizarro, y a
 Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
 del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Exportar a calendario»,
@@ -436,7 +438,7 @@ un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que 
 (por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,ritmo,vacias,salir
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-plan-e2e.mjs   # PART=zip,en,ritmo,vacias,salir
 ```
 
 ## Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

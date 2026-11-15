@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
-import { AI_PLAN_DEFAULTS, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
+import { AI_PLAN_DEFAULTS, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanZipRoot, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
 import {
   COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, releaseTemplateRows, TEMPLATE_KINDS,
 } from "../src/lib/constants";
@@ -263,7 +263,44 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.equal(aiPlanZipName({ day: "2026-11-23", version: 3, project: "Mi Web" }, 2, 3, "en"), "plan-2026-11-23-v3-Mi_Web-attachments-2of3.zip");
   });
 
-  test("la plantilla de serie explica el ZIP «adjuntos/…» en los dos idiomas", () => {
-    assert.ok(AI_PLAN_DEFAULTS.es.header.includes("«adjuntos/…»") && AI_PLAN_DEFAULTS.en.header.includes("adjuntos/…"));
+  test("la plantilla de serie explica el ZIP en los dos idiomas, cada una con su carpeta", () => {
+    assert.ok(AI_PLAN_DEFAULTS.es.header.includes("«adjuntos/…»") && AI_PLAN_DEFAULTS.es.header.includes("`adjuntos/03-titulo-de-la-tarea/plano.webp`"));
+    assert.ok(AI_PLAN_DEFAULTS.en.header.includes('"attachments/…"') && AI_PLAN_DEFAULTS.en.header.includes("`attachments/03-task-title/drawing.webp`"));
+    assert.ok(!AI_PLAN_DEFAULTS.en.header.includes("adjuntos") && !AI_PLAN_DEFAULTS.es.header.includes("attachments"));
+  });
+
+  test("plan en inglés: la carpeta raíz es «attachments/» y una tarea sin letras, «NN-task»", () => {
+    const { byTask, byAttachment } = planAttachmentPaths(tasks, "en");
+    assert.equal(byTask.get("t1")!.folder, "attachments/01-arreglar-ana-el-login-nandu");
+    assert.equal(byTask.get("t3")!.folder, "attachments/03-task");
+    assert.equal(byAttachment.get("a2"), "attachments/01-arreglar-ana-el-login-nandu/plano_final-2.webp");
+    assert.equal(byAttachment.get("a4"), "attachments/03-task/x.pdf");
+    for (const { folder } of byTask.values()) {
+      assert.ok(AI_PLAN_ZIP_FOLDER.test(folder), folder);
+      assert.equal(aiPlanZipRoot(folder), "attachments");
+    }
+    assert.equal(aiPlanZipRoot("adjuntos/01-x"), "adjuntos");
+    // En español (y sin idioma) sigue como siempre.
+    assert.deepEqual(planAttachmentPaths(tasks, "es"), planAttachmentPaths(tasks));
+    // El texto del plan en inglés cita esas rutas y explica el ZIP con el mismo nombre de carpeta; ni rastro de «adjuntos/».
+    const md = buildAiPlanMarkdown({
+      header: AI_PLAN_DEFAULTS.en.header, footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com",
+      tasks: [{
+        id: "t1", title: "Fix", description: "See ![shot](/api/attachments/a1)",
+        attachments: [{ id: "a1", name: "Plano final.png", url: "https://pz.example.com/api/attachments/a1", path: byAttachment.get("a1") }],
+      }],
+    }, makeT("en"));
+    assert.ok(md.includes("- **Attachments:** 1 file(s) in the “attachments/…” ZIP that goes with this plan"), md);
+    assert.ok(md.includes("  - `attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp` ([Plano final.png in Pizarro](<https://pz.example.com/api/attachments/a1>))"));
+    assert.ok(md.includes("![shot](attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
+    assert.ok(!md.includes("adjuntos/"), md);
+  });
+
+  test("el servidor admite las dos raíces con la misma forma estricta", () => {
+    for (const ok of ["adjuntos/01-x", "attachments/01-x", "attachments/0001-", "attachments/03-task", "adjuntos/03-tarea", `attachments/12-${"a".repeat(40)}`]) assert.ok(AI_PLAN_ZIP_FOLDER.test(ok), ok);
+    for (const bad of [
+      "attachments/x", "attachments/1-x", "attachments/00001-x", "attachments/../x", "attachments/01-x/y", "attachments/01-X", "attachments/01-x.", "attachments/01-ñ",
+      `attachments/01-${"a".repeat(41)}`, "Attachments/01-x", "attachment/01-x", "anexos/01-x", "/attachments/01-x", "attachments//01-x", "attachments/01-x\n", " attachments/01-x", "adjuntos/attachments/01-x", "attachments",
+    ]) assert.ok(!AI_PLAN_ZIP_FOLDER.test(bad), bad);
   });
 });
