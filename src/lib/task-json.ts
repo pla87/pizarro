@@ -13,6 +13,7 @@
 //     "column": "En progreso",           nombre de una columna del proyecto
 //     "labels": ["cliente", "urgente"],  nombres; las que no existan se crean (máx. 20 por tarea)
 //     "assignee": { "name": "Ana", "email": "ana@example.com" },   o null; se busca por email y, si no, por nombre
+//                                        (al copiar, el email solo va si eres tú o eres admin)
 //     "dueDate": "2026-12-01",           AAAA-MM-DD (o fecha ISO completa), o null
 //     "recurrence": { "rule": "weekly", "day": 2 },   none | daily | weekly (day 1-7, lunes = 1) | monthly (day 1-31)
 //     "color": "#ef4444",                color de la tarjeta (de la paleta) o null
@@ -42,6 +43,14 @@ const TASK_JSON_FORMAT = "pizarro.task";
 const TASK_JSON_VERSION = 1;
 /** Tamaño máximo del texto que se intenta leer como tarea (una descripción llena y 100 subtareas caben de sobra). */
 export const TASK_JSON_MAX_CHARS = 200_000;
+/**
+ * Largo máximo de un valor corto escrito como texto (responsable, importe, horas): con más no se intenta entender. Las
+ * expresiones regulares que los leen tardan un tiempo cuadrático con textos patológicos (200 000 espacios seguidos), y el
+ * servidor interpreta lo que le manda cualquier persona con sesión.
+ */
+const SHORT_TEXT_MAX = 500;
+/** Etiquetas distintas que se leen como mucho (por tarea caben 20; el resto se ignora sin recorrerlo). */
+export const TASK_JSON_MAX_LABELS = 500;
 
 const PRIORITY_OUT: Record<TaskPriorityValue, string> = { BAJA: "low", MEDIA: "medium", ALTA: "high", URGENTE: "urgent" };
 const GOOGLE_KIND_OUT: Record<GoogleFileKind, string> = { GOOGLE_DOC: "doc", GOOGLE_SHEET: "sheet", GOOGLE_SLIDES: "slides" };
@@ -59,7 +68,8 @@ export interface TaskJsonSource {
   type: string | null;
   column: string | null;
   labels: string[];
-  assignee: { name: string; email: string } | null;
+  /** `email`: solo si quien copia puede verlo (ver getTaskJson). */
+  assignee: { name: string; email?: string } | null;
   dueDate: string | null;
   recurrence: RecurrenceRule;
   recurrenceDay: number | null;
@@ -228,7 +238,7 @@ function bool(v: unknown): boolean | undefined {
 function decimal(v: unknown): string | null | undefined {
   if (v === null) return null;
   if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? String(Math.round(v * 100) / 100) : undefined;
-  if (typeof v !== "string") return undefined;
+  if (typeof v !== "string" || v.length > SHORT_TEXT_MAX) return undefined;
   const s = v.trim().replace(/\s*(€|eur|h|horas?|hours?)$/i, "").replace(",", ".");
   if (s === "") return null;
   return /^\d+(\.\d+)?$/.test(s) ? s : undefined;
@@ -282,9 +292,14 @@ function labels(v: unknown): string[] | undefined {
   const list = typeof v === "string" ? v.split(/[,;\n]/) : Array.isArray(v) ? v : undefined;
   if (!list) return undefined;
   const out: string[] = [];
+  // Sin repetidas (sin mirar mayúsculas), con un conjunto: comparar cada una con todas las anteriores es cuadrático.
+  const seen = new Set<string>();
   for (const item of list) {
+    if (out.length >= TASK_JSON_MAX_LABELS) break;
     const name = (isObject(item) ? text(pick(item, ["name", "nombre", "label", "etiqueta", "title"])) : text(item))?.replace(/\s+/g, " ").trim().replace(/^#/, "");
-    if (name && !out.some((x) => x.toLowerCase() === name.toLowerCase())) out.push(name);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push(name);
   }
   return out;
 }
@@ -292,6 +307,7 @@ function labels(v: unknown): string[] | undefined {
 function assignee(v: unknown): TaskJsonInput["assignee"] | undefined {
   if (v === null) return null;
   if (typeof v === "string") {
+    if (v.length > SHORT_TEXT_MAX) return undefined;
     const s = v.trim();
     if (s === "") return null;
     // «Ana <ana@example.com>», un email suelto o un nombre.
@@ -330,7 +346,12 @@ function subtasks(v: unknown): TaskJsonInput["subtasks"] | undefined {
 
 function dependsOn(v: unknown): TaskJsonInput["dependsOn"] | undefined {
   if (v === null || v === false) return null;
-  if (Array.isArray(v)) return v.length ? dependsOn(v[0]) : null;
+  // Una lista: vale su primer elemento (una lista dentro de otra no se sigue: no hay recursión que agotar).
+  if (Array.isArray(v)) {
+    if (!v.length) return null;
+    v = v[0];
+    if (v === null || v === false) return null;
+  }
   if (typeof v === "string") return v.trim() ? { title: v.trim() } : null;
   if (!isObject(v)) return undefined;
   const id = text(pick(v, ["id", "taskid"]))?.trim();
@@ -353,9 +374,11 @@ function googleDocs(v: unknown): TaskJsonInput["googleDocs"] | undefined {
   if (v === null) return [];
   if (!Array.isArray(v)) return undefined;
   const out: NonNullable<TaskJsonInput["googleDocs"]> = [];
+  const seen = new Set<string>();
   for (const item of v) {
     const url = (isObject(item) ? text(pick(item, ["url", "link", "enlace", "href"])) : text(item))?.trim();
-    if (!url || !GOOGLE_FILE_URL_RE.test(url) || out.some((d) => d.url === url)) continue;
+    if (!url || !GOOGLE_FILE_URL_RE.test(url) || seen.has(url)) continue;
+    seen.add(url);
     const rawKind = isObject(item) ? text(pick(item, ["kind", "type", "tipo"])) : undefined;
     const kind = (rawKind && (GOOGLE_KIND_IN[foldKey(rawKind)] ?? (GOOGLE_FILE_KINDS as readonly string[]).find((k) => k === rawKind.toUpperCase()) as GoogleFileKind | undefined)) || googleKindOfUrl(url);
     const title = (isObject(item) ? text(pick(item, ["title", "titulo", "name", "nombre"])) : undefined)?.trim() || url;

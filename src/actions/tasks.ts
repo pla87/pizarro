@@ -1787,7 +1787,12 @@ export async function deleteTaskLink(linkId: string) {
 
 // --- Copiar y pegar una tarea como JSON (formato en lib/task-json.ts) ----------------
 
-/** La tarea como JSON (texto listo para el portapapeles): solo lo que ve quien la copia, con nombres en vez de ids. */
+/**
+ * La tarea como JSON (texto listo para el portapapeles): solo lo que ve quien la copia, con nombres en vez de ids. El
+ * email del responsable solo va si quien copia ya lo conoce (es él mismo, o un administrador, que ve los emails en
+ * Administración → Usuarios): el resto de la app no enseña a un miembro el email de otra persona, y este JSON está pensado
+ * para dárselo a una IA de fuera. Sin email, al pegar se busca al responsable por su nombre.
+ */
 export async function getTaskJson(taskId: string) {
   return runAction({ name: "tasks.getTaskJson", args: [taskId] }, async (): Promise<string> => {
     const user = await requireUser();
@@ -1800,7 +1805,7 @@ export async function getTaskJson(taskId: string) {
         project: { select: { name: true, taskFields: true } },
         kind: { select: { id: true, name: true } },
         column: { select: { name: true } },
-        assignee: { select: { name: true, email: true } },
+        assignee: { select: { id: true, name: true, email: true } },
         createdBy: { select: { name: true } },
         deliverable: { select: { name: true } },
         blockedBy: { select: { title: true } },
@@ -1828,7 +1833,7 @@ export async function getTaskJson(taskId: string) {
       type: localizeGeneralKind(task.kind, await getLocale()).name,
       column: task.column.name,
       labels: task.labels.map((l) => l.label.name).sort((a, b) => a.localeCompare(b, "es")),
-      assignee: task.assignee ? { name: task.assignee.name, email: task.assignee.email } : null,
+      assignee: task.assignee ? { name: task.assignee.name, ...(user.role === "ADMIN" || task.assignee.id === user.id ? { email: task.assignee.email } : {}) } : null,
       dueDate: dateToIso(task.dueDate),
       recurrence: task.recurrence,
       recurrenceDay: task.recurrenceDay,

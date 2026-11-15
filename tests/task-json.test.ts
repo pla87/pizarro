@@ -1,7 +1,7 @@
 // Formato «pizarro.task» (lib/task-json.ts): lo que se copia se vuelve a leer igual, y se entiende lo que escribe una IA.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTaskJson, parseDayLoose, parseTaskJson, stringifyTaskJson, TASK_JSON_MAX_CHARS, type TaskJsonSource } from "../src/lib/task-json";
+import { buildTaskJson, parseDayLoose, parseTaskJson, stringifyTaskJson, TASK_JSON_MAX_CHARS, TASK_JSON_MAX_LABELS, type TaskJsonSource } from "../src/lib/task-json";
 
 const source: TaskJsonSource = {
   id: "t1", project: "Web", url: "https://pizarro.example.com/p/p1?task=t1", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Ana",
@@ -124,4 +124,40 @@ test("fechas: AAAA-MM-DD, ISO completa, DD/MM/AAAA; null y vacío la quitan", ()
     ["2026-12-01", "2026-01-05", "2026-12-01", "2026-12-01", "2026-12-01", "2026-12-01", null, null],
   );
   for (const bad of ["2026-13-01", "2026-02-30", "12/2026", "mañana", 20261201, {}]) assert.equal(parseDayLoose(bad), undefined, String(bad));
+});
+
+// El servidor interpreta el texto que le manda cualquier persona con sesión: ningún JSON de hasta 200 000 caracteres
+// puede tenerlo ocupado varios segundos (expresiones regulares o comparaciones cuadráticas) ni hacerle lanzar.
+test("textos patológicos: se leen en poco tiempo y sin lanzar (responsable, importes, miles de etiquetas, listas anidadas)", () => {
+  const quick = (name: string, raw: string): ReturnType<typeof parseTaskJson> => {
+    assert.ok(raw.length <= TASK_JSON_MAX_CHARS, `${name}: cabe en el tope`);
+    const t0 = performance.now();
+    const out = parseTaskJson(raw);
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1500, `${name}: ${Math.round(ms)} ms`);
+    return out;
+  };
+  const N = 190_000;
+  const of = (o: object) => JSON.stringify({ title: "x", ...o });
+  // Valores cortos desmesurados: no se intentan entender (se anotan como problema) y el resto se lee.
+  for (const [field, value] of [
+    ["assignee", `a${" ".repeat(N)}b`], ["assignee", "@".repeat(N)], ["cost", `1${" ".repeat(N)}x`], ["estimatedHours", `1${" ".repeat(N)}x`], ["actualHours", `1${" ".repeat(N)}x`],
+  ] as const) {
+    assert.deepEqual(quick(field, of({ [field]: value })), { kind: "task", task: { title: "x" }, problems: [field] }, field);
+  }
+  // Miles de etiquetas distintas: se leen las primeras (por tarea solo caben 20) sin comparar todas con todas.
+  const many = Array.from({ length: 30_000 }, (_, i) => i.toString(36));
+  for (const labels of [many, many.join(",")]) {
+    const out = quick("labels", of({ labels }));
+    assert.ok(out.kind === "task" && out.task.labels!.length === TASK_JSON_MAX_LABELS && out.task.labels![0] === "0" && out.problems.length === 0);
+  }
+  assert.deepEqual((parseTaskJson(of({ labels: ["Rojo", "rojo", "#ROJO", "azul"] })) as { task: { labels: string[] } }).task.labels, ["Rojo", "azul"], "sin repetidas");
+  const docs = quick("googleDocs", of({ googleDocs: Array.from({ length: 6000 }, (_, i) => `https://docs.google.com/d/${i % 3000}`) }));
+  assert.ok(docs.kind === "task" && docs.task.googleDocs!.length === 3000);
+  // Listas dentro de listas: «dependsOn» toma el primer elemento, sin recursión (90 000 niveles agotaban la pila).
+  const nested = quick("dependsOn anidado", `{"title":"x","dependsOn":${"[".repeat(90_000)}"y"${"]".repeat(90_000)}}`);
+  assert.deepEqual(nested, { kind: "task", task: { title: "x" }, problems: ["dependsOn"] });
+  assert.deepEqual((parseTaskJson(of({ dependsOn: ["Otra"] })) as { task: object }).task, { title: "x", dependsOn: { title: "Otra" } });
+  assert.deepEqual((parseTaskJson(of({ dependsOn: [null] })) as { task: object }).task, { title: "x", dependsOn: null });
+  assert.deepEqual((parseTaskJson(of({ dependsOn: [] })) as { task: object }).task, { title: "x", dependsOn: null });
 });
