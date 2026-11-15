@@ -30,7 +30,7 @@ const DOCS = {
   },
 };
 const docName = process.argv[2] ?? "manual";
-const doc = DOCS[docName];
+const doc = Object.hasOwn(DOCS, docName) ? DOCS[docName] : undefined;
 if (!doc) {
   console.error(`Documento desconocido: ${docName}. Opciones: ${Object.keys(DOCS).join(", ")}.`);
   process.exit(1);

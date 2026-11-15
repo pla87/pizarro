@@ -31,7 +31,7 @@ export function eventIsFor(dialog: Element | null | undefined, target: EventTarg
 
 /** Ctrl+C (⌘C en Mac) sin más modificadores. */
 export function isCopyKey(e: KeyboardEvent): boolean {
-  return (e.ctrlKey || e.metaKey) && !(e.ctrlKey && e.metaKey) && !e.altKey && !e.shiftKey && !e.repeat && (e.key === "c" || e.key === "C");
+  return (e.ctrlKey || e.metaKey) && !(e.ctrlKey && e.metaKey) && !e.altKey && !e.shiftKey && !e.repeat && (e.key === "c" || e.key === "C" || e.code === "KeyC");
 }
 
 /**
