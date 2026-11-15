@@ -118,6 +118,11 @@ test("lo que no es una tarea no se toca; lo que quiere serlo y no se puede leer 
   assert.deepEqual(parseTaskJson('{"__proto__":{"title":"x"},"constructor":1,"title":"Seguro"}'), { kind: "task", task: { title: "Seguro" }, problems: [] });
 });
 
+test("el título queda en una línea: saltos de línea y tabuladores pasan a ser un espacio", () => {
+  const parsed = parseTaskJson(JSON.stringify({ format: "pizarro.task", title: "  Uno\tdos  \r\n  tres\n\ncuatro  cinco " }));
+  assert.deepEqual(parsed, { kind: "task", task: { title: "Uno dos tres cuatro  cinco" }, problems: [] });
+});
+
 test("fechas: AAAA-MM-DD, ISO completa, DD/MM/AAAA; null y vacío la quitan", () => {
   assert.deepEqual(
     ["2026-12-01", "2026-1-5", "2026-12-01T23:59:59Z", "2026-12-01 10:00", "01/12/2026", "1.12.2026", "", null].map(parseDayLoose),

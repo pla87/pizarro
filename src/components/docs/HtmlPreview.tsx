@@ -107,10 +107,15 @@ export function HtmlPreview({ html, title, projectId, docs, selfId, fromLink }: 
       // Al llegar por un enlace «otro.html#apartado»: el padre (que sí puede navegar su marco) lleva el marco al apartado.
       onLoad={() => {
         const anchor = fromLink && !scrolled.current ? window.location.hash : "";
-        if (/^#[^\s]+$/.test(anchor)) {
-          scrolled.current = true;
+        if (!/^#[^\s]+$/.test(anchor)) return;
+        scrolled.current = true;
+        // Dos fotogramas después, no en el propio «load»: el marco recién insertado puede dar «load» antes de que la página
+        // lo haya medido (y hasta antes de cargar el srcdoc, por su documento vacío inicial); el documento que nace de esta
+        // navegación buscaría el apartado con el marco a 0 px de ancho (cada palabra en una línea) y se quedaría arriba o
+        // muy por debajo del apartado. Con el marco ya pintado, el documento nuevo nace con su tamaño.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
           try { frame.current?.contentWindow?.location.replace(`about:srcdoc${anchor}`); } catch { /* sin apartado: se queda arriba */ }
-        }
+        }));
       }}
       className="h-[70vh] w-full rounded border border-slate-200 bg-white dark:border-slate-700"
     />

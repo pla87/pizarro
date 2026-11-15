@@ -2,10 +2,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
-import { addComment, archiveTask, createTask, deleteComment, deleteTask, moveTask, updateTask } from "../../src/actions/tasks";
+import { addComment, archiveTask, createTask, deleteComment, deleteTask, deleteTasks, moveTask, updateTask } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { removeProjectMember } from "../../src/actions/projects";
-import { taskUpdateData } from "../../src/lib/undo";
+import { applyUndo, snapshotTasks, taskUpdateData } from "../../src/lib/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -492,6 +492,65 @@ describe("rehacer", () => {
     await db.task.delete({ where: { id: task.id } });
     expectFail(await redoLast(f.project.id), BLOCKED_REDO);
     assert.equal(await db.task.count({ where: { id: task.id } }), 0);
+  });
+});
+
+describe("bloqueos entre tareas que vuelven juntas", () => {
+  const blockerOf = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id }, select: { blockedById: true } })).blockedById;
+
+  test("borrar varias con una que bloquea a otra: deshacer, rehacer y volver a deshacer conserva el bloqueo", async () => {
+    const { f } = await setup();
+    // En los dos órdenes de creación: la que bloquea antes y después de la bloqueada.
+    const a = await makeTask(f, { title: "Bloquea", position: 1000 });
+    const b = await makeTask(f, { title: "Bloqueada", position: 2000 });
+    const c = await makeTask(f, { title: "Bloqueada antes", position: 3000 });
+    const d = await makeTask(f, { title: "Bloquea después", position: 4000 });
+    const outside = await makeTask(f, { title: "Fuera", position: 5000 });
+    await db.task.update({ where: { id: b.id }, data: { blockedById: a.id } });
+    await db.task.update({ where: { id: c.id }, data: { blockedById: d.id } });
+    await db.task.update({ where: { id: outside.id }, data: { blockedById: a.id } });
+    const ids = [a.id, b.id, c.id, d.id];
+    const check = async () => {
+      assert.equal(await blockerOf(b.id), a.id);
+      assert.equal(await blockerOf(c.id), d.id);
+      assert.equal(await blockerOf(outside.id), a.id);
+    };
+    expectOk(await deleteTasks(ids));
+    assert.equal(await blockerOf(outside.id), null);
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    await check();
+    expectOk(await redoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { id: { in: ids } } }), 0);
+    // La entrada de este segundo deshacer sale de mirrorOps: solo trae las tareas, sin operaciones de bloqueo.
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    await check();
+    expectOk(await redoLast(f.project.id));
+    expectOk(await undoLast(f.project.id));
+    await check();
+  });
+
+  test("task.restore en cualquier orden: la bloqueada espera a que vuelva la que la bloquea", async () => {
+    const { f } = await setup();
+    for (const batch of [true, false]) {
+      const tasks = [];
+      for (let i = 0; i < 6; i++) tasks.push(await makeTask(f, { title: `O${i}`, position: (i + 1) * 1000 }));
+      const [a, b, c] = tasks as [typeof tasks[0], typeof tasks[0], typeof tasks[0]];
+      // Cadena c → b → a, y un ciclo imposible de restaurar entero no debe aparecer.
+      await db.task.update({ where: { id: b.id }, data: { blockedById: a.id } });
+      await db.task.update({ where: { id: c.id }, data: { blockedById: b.id } });
+      const ids = tasks.map((t) => t.id);
+      const ops = await snapshotTasks(ids);
+      // snapshotTasks devuelve las tareas en el orden pedido (determinista).
+      assert.deepEqual(ops.map((op) => (op.t === "task.restore" ? op.snap.task.id : "")), ids);
+      for (const order of [ops, [...ops].reverse()]) {
+        await db.task.deleteMany({ where: { id: { in: ids } } });
+        assert.equal(await applyUndo(f.project.id, order, { batch, keepFiles: true }), 0);
+        assert.equal(await blockerOf(b.id), a.id);
+        assert.equal(await blockerOf(c.id), b.id);
+        assert.equal(await blockerOf(a.id), null);
+      }
+      await db.task.deleteMany({ where: { id: { in: ids } } });
+    }
   });
 });
 

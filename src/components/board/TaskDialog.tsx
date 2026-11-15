@@ -34,9 +34,9 @@ import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
-import { isTextTarget, pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
+import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
 import { parseTaskJson } from "@/lib/task-json";
-import { copyTextLater, eventIsFor, hasTextSelection, isCopyKey, readClipboardText } from "./taskClipboard";
+import { acceptsPastedText, copyTextLater, eventIsFor, hasTextSelection, isCopyKey, readClipboardText } from "./taskClipboard";
 import { isSessionExpiredMessage, useToast } from "../ui/Toast";
 import { isOfflineMessage, loadWhenOnline } from "@/lib/connection";
 import { actionThrowMessage } from "@/lib/stale-action";
@@ -912,7 +912,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // Ctrl+V / ⌘V fuera de un campo de texto: si lo copiado es una tarea en JSON, se escribe en esta. En un campo de
     // texto (o con archivos, o con cualquier otro texto) el pegado sigue su curso.
     const onPaste = (e: ClipboardEvent) => {
-      if (e.defaultPrevented || pasteClaimed(e) || isTextTarget(e.target) || !eventIsFor(dialog(), e.target) || pastedFiles(e).length) return;
+      if (e.defaultPrevented || pasteClaimed(e) || acceptsPastedText(e.target) || !eventIsFor(dialog(), e.target) || pastedFiles(e).length) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       if (parseTaskJson(text).kind === "none") return;
       e.preventDefault();
