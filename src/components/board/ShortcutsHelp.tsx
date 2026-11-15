@@ -45,6 +45,8 @@ const GROUPS: { title: string; items: { keys: string; label: string }[] }[] = [
       { keys: "Alt+A", label: "Archivar la tarea" },
       { keys: "Ctrl+Enter", label: "Crear la tarea, guardar la descripción o enviar el comentario" },
       { keys: "Ctrl+V", label: "Adjuntar la imagen o los archivos del portapapeles" },
+      { keys: "Ctrl+C", label: "Copiar la tarea como JSON (sin texto seleccionado)" },
+      { keys: "Ctrl+V", label: "Pegar una tarea en JSON sobre esta (fuera de un campo de texto)" },
       { keys: "Alt+F10", label: "Ir a la barra de formato de la descripción (flechas para moverse, Esc para volver)" },
       { keys: "Ctrl+B", label: "Negrita (editor con barra)" },
       { keys: "Ctrl+I", label: "Cursiva (editor con barra)" },

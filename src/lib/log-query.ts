@@ -31,6 +31,7 @@ export const READ_ACTIONS = [
   "tasks.getRecentComments",
   "tasks.getArchivedTasks",
   "tasks.getTaskHistory",
+  "tasks.getTaskJson",
   "tasks.getProjectFormData",
   "columnViews.getColumnChecklist",
   "columnViews.getPendingSubtasks",
