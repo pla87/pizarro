@@ -449,7 +449,8 @@ export function parseTaskJson(raw: string): TaskJsonParse {
     if (!field || seen.has(field) || value === undefined) continue;
     seen.add(field);
     switch (field) {
-      case "title": put("title", typeof value === "string" && value.trim() ? value.trim() : undefined); break;
+      // En una línea, como lo deja el campo del título (un salto de línea o un tabulador pasan a ser un espacio).
+      case "title": put("title", typeof value === "string" && value.trim() ? value.replace(/[ \t]*[\r\n\t]+\s*/g, " ").trim() : undefined); break;
       case "description": put("description", value === null ? "" : Array.isArray(value) && value.every((x) => typeof x === "string") ? value.join("\n") : typeof value === "string" ? value : undefined); break;
       // Sin tipo o sin columna no se puede dejar una tarea: null se ignora.
       case "type": if (value !== null) put("type", named(value)); break;

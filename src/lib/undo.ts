@@ -172,6 +172,9 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
       releases: { select: { id: true } },
     },
   });
+  // En el orden pedido: findMany sin orderBy las devuelve en el orden físico de la tabla, que cambia de una vez a otra.
+  const order = new Map(ids.map((id, i) => [id, i]));
+  rows.sort((x, y) => (order.get(x.id) ?? 0) - (order.get(y.id) ?? 0));
   return rows.map((r) => ({
     t: "task.restore" as const,
     snap: {
@@ -728,6 +731,37 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
   const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
 
+  // Bloqueos entre tareas que vuelven en esta misma entrada: si la bloqueada se recrea antes que la que la bloquea
+  // (el orden de las operaciones no lo garantiza: la entrada de un rehacer deshecho solo trae las tareas), su bloqueo
+  // espera aquí y se pone en cuanto vuelve la otra, con las mismas comprobaciones.
+  const returningIds = new Set(ops.flatMap((op) => (op.t === "task.restore" ? [op.snap.task.id] : [])));
+  const awaitingBlocker = new Map<string, string[]>();
+  const linkAwaiting = async (blockerIds: string[]): Promise<void> => {
+    for (const blockerId of blockerIds) {
+      const waiting = awaitingBlocker.get(blockerId);
+      if (!waiting) continue;
+      awaitingBlocker.delete(blockerId);
+      for (const id of waiting) {
+        try {
+          await db.$transaction(async (tx) => {
+            await lockBlocking(tx, projectId);
+            if (!(await blockProblem(id, blockerId, projectId, tx))) await tx.task.updateMany({ where: { id, projectId, blockedById: null }, data: { blockedById: blockerId } });
+          });
+        } catch (err) {
+          console.error("[undo] bloqueo pendiente", err);
+        }
+      }
+    }
+  };
+  /** Una operación posterior fija el bloqueo de la tarea: ya no espera a nadie. */
+  const blockSettled = (id: string): void => {
+    for (const [blockerId, waiting] of awaitingBlocker) {
+      const rest = waiting.filter((x) => x !== id);
+      if (rest.length) awaitingBlocker.set(blockerId, rest);
+      else awaitingBlocker.delete(blockerId);
+    }
+  };
+
   /** Una operación suelta; devuelve 1 si no se pudo aplicar. */
   const applyOne = async (op: UndoOp): Promise<number> => {
     let miss = 0;
@@ -737,6 +771,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const exists = await db.task.count({ where: { id: op.id, projectId } });
           if (!exists) { miss++; break; }
           const data = { ...op.data };
+          if ("blockedById" in data && awaitingBlocker.size) blockSettled(op.id);
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
@@ -788,6 +823,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           // Se crea sin bloqueo y se enlaza después (la que bloquea puede ser otra tarea que vuelve en esta misma entrada).
           const blockedById = t.blockedById ?? null;
+          let linked = false;
           await db.$transaction(async (tx) => {
             if (blockedById) await lockBlocking(tx, projectId);
             await tx.task.create({
@@ -802,9 +838,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             await tx.taskAttachment.createMany({ data: s.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) })) });
             await tx.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) });
             await tx.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } });
-            if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+            if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) {
+              await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+              linked = true;
+            }
           });
           placed.push(t.id);
+          if (blockedById && !linked && returningIds.has(blockedById)) awaitingBlocker.set(blockedById, [...(awaitingBlocker.get(blockedById) ?? []), t.id]);
+          if (awaitingBlocker.size) await linkAwaiting([t.id]);
           break;
         }
         case "subtask.set": {
@@ -975,6 +1016,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
     for (const op of run) {
       if (!presentIds.has(op.id)) { s++; continue; }
       const data = { ...op.data };
+      if ("blockedById" in data && awaitingBlocker.size) blockSettled(op.id);
       if (data.columnId) data.columnId = columnIds.has(data.columnId) ? data.columnId : await (first ??= firstColumn());
       if (data.kindId && !kindOk.has(data.kindId)) delete data.kindId;
       if (data.deliverableId && !deliverableOk.has(data.deliverableId)) data.deliverableId = null;
@@ -1087,6 +1129,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         for (const x of ok) if (x.releaseTaskIds.length) await tx.releaseTask.updateMany({ where: { id: { in: x.releaseTaskIds } }, data: { taskId: x.task.id } });
       });
       placed.push(...ok.map((x) => x.task.id));
+      if (awaitingBlocker.size) await linkAwaiting(ok.map((x) => x.task.id));
     } catch (err) {
       console.error("[undo] lote task.restore: se repite una a una", err);
       s += await oneByOne(rows.map((r) => r.op));

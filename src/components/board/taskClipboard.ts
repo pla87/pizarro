@@ -13,7 +13,31 @@ export function hasTextSelection(): boolean {
     }
   }
   const sel = window.getSelection();
-  return !!sel && !sel.isCollapsed && sel.toString().length > 0;
+  if (!sel || sel.isCollapsed) return false;
+  if (sel.toString().length > 0) return true;
+  // Sin texto pero con contenido: una imagen sola (seleccionada en la descripción, al leerla o al editarla), una tabla
+  // vacía, una línea… también se copian como siempre.
+  for (let i = 0; i < sel.rangeCount; i++) {
+    if (sel.getRangeAt(i).cloneContents().querySelector(SELECTABLE_CONTENT)) return true;
+  }
+  return false;
+}
+
+/** Contenido sin texto que se puede seleccionar y copiar. */
+const SELECTABLE_CONTENT = "img, picture, video, audio, canvas, svg, table, hr";
+
+/** Tipos de <input> en los que se escribe (y se pega) texto; los demás (casilla, fecha, color, archivo…) no lo admiten. */
+const TYPING_INPUT_TYPES: ReadonlySet<string> = new Set(["text", "search", "url", "tel", "email", "password", "number"]);
+
+/**
+ * ¿El pegado va a una caja donde se escribe texto (campo, área de texto o editor)? Ahí el JSON de una tarea se pega como
+ * texto. Una casilla de subtarea, la fecha o un selector de color también son <input>, pero no admiten texto pegado: con
+ * el foco en ellos, Ctrl+V es «fuera de un campo de texto» y pega la tarea.
+ */
+export function acceptsPastedText(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target.closest("input, textarea, [contenteditable=true], [contenteditable='']") : null;
+  if (!el) return false;
+  return el instanceof HTMLInputElement ? TYPING_INPUT_TYPES.has(el.type) : true;
 }
 
 /**

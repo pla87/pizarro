@@ -169,7 +169,10 @@ if (only.includes("codificacion")) {
   };
   await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
   for (const [name, body] of Object.entries(files)) await upload(page, p.id, name, body);
-  const kinds = Object.fromEntries((await L.q(`SELECT name,kind FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id])).map((d) => [d.name, d.kind]));
+  // En el orden en que se subieron (L.eq compara el JSON): sin ORDER BY, PostgreSQL las devuelve en el orden físico de la
+  // tabla, que tras el DELETE de arriba no siempre es el de inserción.
+  const kindOf = new Map((await L.q(`SELECT name,kind FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id])).map((d) => [d.name, d.kind]));
+  const kinds = Object.fromEntries([...Object.keys(files).filter((name) => kindOf.has(name)), ...[...kindOf.keys()].filter((name) => !(name in files))].map((name) => [name, kindOf.get(name)]));
   L.eq("COD: tipos de los ficheros subidos", kinds, { "latin1.html": "HTML", "win1252.htm": "HTML", "metalatin.html": "HTML", "utf8metalatin.html": "HTML", "utf8metawin.htm": "HTML", "utf16le.html": "HTML", "utf16be.html": "HTML", "utf8bom.html": "HTML", "nota.txt": "TEXT", "guia.md": "MARKDOWN", "utf16.txt": "TEXT", "roto.html": "OTHER" });
   const frame = page.frameLocator("iframe[data-testid=doc-html]");
   for (const name of ["latin1.html", "win1252.htm", "metalatin.html", "utf8metalatin.html", "utf8metawin.htm", "utf16le.html", "utf16be.html", "utf8bom.html"]) {
