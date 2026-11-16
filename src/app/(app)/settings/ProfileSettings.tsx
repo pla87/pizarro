@@ -21,6 +21,7 @@ import { ProfileTabs } from "./ProfileTabs";
 import type { ProfileTab } from "./profile-tabs";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 import { useActionTransition } from "@/components/useActionTransition";
+import { actionThrowResult } from "@/lib/stale-action";
 
 const USER_TEMPLATE_ACTIONS = { create: createReleaseTemplate, update: updateReleaseTemplate, move: moveReleaseTemplate, remove: deleteReleaseTemplate };
 
@@ -211,6 +212,7 @@ export function ProfileSettings(props: Props) {
 const LOCALE_OPTIONS = [["ES", "Español"], ["EN", "English"]] as const;
 
 function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const [locale, setLocale] = useState(initial);
@@ -220,7 +222,7 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
     setLocale(value);
     // El diccionario de inglés se descarga aparte: ya en marcha mientras se guarda, el cambio de idioma es inmediato.
     if (value === "EN") preloadEnglish().catch(() => {}); // sin red se carga al aplicar el idioma
-    const res = await updateLocale(value);
+    const res = await updateLocale(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setLocale(previous);
       return toast(res.error, "error");
@@ -256,7 +258,7 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
   const choose = async (value: EditorModeValue) => {
     const previous = mode;
     setMode(value);
-    const res = await updateEditorMode(value);
+    const res = await updateEditorMode(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setMode(previous);
       return toast(res.error, "error");
@@ -391,7 +393,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
   const [style, setStyle] = useState(initial);
   const choose = async (value: CardStyleValue) => {
     setStyle(value);
-    const res = await updateCardStyle(value);
+    const res = await updateCardStyle(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setStyle(initial);
       return toast(res.error, "error");
@@ -403,7 +405,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
     const previous = theme;
     setTheme(value);
     applyTheme(value);
-    const res = await updateTheme(value);
+    const res = await updateTheme(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setTheme(previous);
       applyTheme(previous);
@@ -416,7 +418,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
     const previous = accent;
     setAccent(value);
     applyAccent(value);
-    const res = await updateAccent(value);
+    const res = await updateAccent(value).catch((e) => actionThrowResult(e, t));
     if (!res.ok) {
       setAccent(previous);
       applyAccent(previous);

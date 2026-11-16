@@ -309,4 +309,6 @@ export const cuentas: Record<string, string> = {
   "La cuenta está desactivada: actívala antes de reenviar la invitación.": "The account is deactivated: activate it before resending the invitation.",
   "Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».": "This person has already signed in: use “Force password change”.",
   "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Ajustes.": "The invitation could not be sent. Check email sending in Administration → Settings.",
+  // Quitar el rol de administrador
+  "Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.": "Cards assigned to them in team projects they do not work on will be unassigned.",
 };

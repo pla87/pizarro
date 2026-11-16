@@ -343,6 +343,29 @@ describe("asignación de usuarios a proyectos", () => {
     expectFail(await getTaskDetail(task.id), NOT_FOUND);
   });
 
+  test("quitar el rol de administrador desasigna sus tarjetas de los proyectos que deja de ver", async () => {
+    const { updateUser } = await import("../../src/actions/users");
+    const boss = await makeUser({ role: "ADMIN" });
+    const demoted = await makeUser({ role: "ADMIN" });
+    const picked = await makeProject({ members: [] });
+    const unpicked = await makeProject({ members: [] });
+    const priv = await makeProject({ visibility: "PRIVATE", owner: demoted });
+    await db.adminProjectPick.create({ data: { projectId: picked.project.id, userId: demoted.id } });
+    const [kept, dropped, privTask, otherTask] = [await makeTask(picked), await makeTask(unpicked), await makeTask(priv), await makeTask(unpicked)];
+    await db.task.updateMany({ where: { id: { in: [kept.id, dropped.id, privTask.id] } }, data: { assigneeId: demoted.id } });
+    await db.task.update({ where: { id: otherTask.id }, data: { assigneeId: boss.id } });
+    await asUser(boss, async () => {
+      expectOk(await updateUser(demoted.id, { name: demoted.name, email: demoted.email, role: "MEMBER", active: true }));
+    });
+    const assignee = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id }, select: { assigneeId: true } })).assigneeId;
+    // Sigue en el que había elegido (ahora como miembro) y en su privado; del otro de equipo sale y su tarjeta queda libre.
+    assert.equal(await assignee(kept.id), demoted.id);
+    assert.equal(await assignee(privTask.id), demoted.id);
+    assert.equal(await assignee(dropped.id), null);
+    assert.equal(await assignee(otherTask.id), boss.id);
+    assert.ok(await db.projectMember.findUnique({ where: { projectId_userId: { projectId: picked.project.id, userId: demoted.id } } }));
+  });
+
   test("setMyProjectPicks: solo admins, solo proyectos de equipo", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const user = await makeUser();

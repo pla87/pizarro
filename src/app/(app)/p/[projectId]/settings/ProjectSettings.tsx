@@ -35,6 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
+import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   isAdmin: boolean;
@@ -534,7 +535,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
           aria-label={t("Borrar {name}", { name: label.name })}
           onClick={async () => {
             if (!(await confirm({ title: t("Borrar etiqueta"), message: t("¿Borrar la etiqueta «{name}»? Se quitará de todas las tarjetas.", { name: label.name }), confirmLabel: t("Borrar"), danger: true }))) return;
-            const res = await deleteLabel(label.id);
+            const res = await deleteLabel(label.id).catch((e) => actionThrowResult(e, t));
             if (!res.ok) return toast(res.error, "error");
             onDeleted();
           }}
@@ -552,7 +553,7 @@ function LabelRow({ label, onSaved, onDeleted }: { label: LabelOption; onSaved: 
         <button
           className="btn-primary py-1.5"
           onClick={async () => {
-            const res = await updateLabel(label.id, { name, color: color ?? PALETTE[0] });
+            const res = await updateLabel(label.id, { name, color: color ?? PALETTE[0] }).catch((e) => actionThrowResult(e, t));
             if (!res.ok) return toast(res.error, "error");
             onSaved({ id: label.id, name: name.trim(), color: color ?? PALETTE[0] });
             setEditing(false);
@@ -576,7 +577,7 @@ function NewLabel({ projectId, onCreated }: { projectId: string; onCreated: (l: 
       className="mt-4 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800"
       onSubmit={async (e) => {
         e.preventDefault();
-        const res = await createLabel(projectId, { name, color: color ?? PALETTE[0] });
+        const res = await createLabel(projectId, { name, color: color ?? PALETTE[0] }).catch((e) => actionThrowResult(e, t));
         if (!res.ok) return toast(res.error, "error");
         onCreated(res.data);
         setName("");
@@ -657,7 +658,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
               aria-label={t("Borrar {name}", { name: d.name })}
               onClick={async () => {
                 if (!(await confirm({ title: t("Borrar entregable"), message: t("¿Borrar el entregable «{name}»? Sus tarjetas se conservan, sin entregable.", { name: d.name }), confirmLabel: t("Borrar"), danger: true }))) return;
-                const res = await deleteDeliverable(d.id);
+                const res = await deleteDeliverable(d.id).catch((e) => actionThrowResult(e, t));
                 if (!res.ok) return toast(res.error, "error");
                 setRows((r) => r.filter((x) => x.id !== d.id));
                 router.refresh();

@@ -105,7 +105,8 @@ export function TitleField({ value, onChange, onCommit, users }: {
             onCommit(next);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Con un método de entrada (IME) abierto, Enter confirma la composición: no guarda.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
               e.preventDefault();
               e.currentTarget.blur();
             }

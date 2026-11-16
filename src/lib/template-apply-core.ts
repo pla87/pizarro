@@ -14,6 +14,7 @@
 // pueden repetirse, así que una plantilla con un rol nuevo funciona sin tocar este módulo.
 import { hasEvergreenTasks, isUniqueColumnRole, MAX_LABELS_PER_PROJECT, MAX_RELEASE_TEMPLATES_PER_KIND } from "./constants";
 import { normalizeTaskFields, type TaskFieldKey } from "./task-fields";
+import { ellipsize } from "./graphemes";
 
 /** Máximo de columnas y de tipos propios de un proyecto (los mismos topes que crear columnas y tipos a mano). */
 const MAX_PROJECT_COLUMNS = 30;
@@ -425,7 +426,7 @@ export function summarizePlan(plan: AddPlan | ReplacePlan, project: ProjectShape
 /** Como mucho SUMMARY_NAMES nombres (cada uno recortado) y «…» si hay más: los títulos de tareas pueden ser muchos y largos. */
 const SUMMARY_NAMES = 10;
 function someNames(names: string[]): string[] {
-  const cut = names.slice(0, SUMMARY_NAMES).map((n) => (n.length > 60 ? `${n.slice(0, 59)}…` : n));
+  const cut = names.slice(0, SUMMARY_NAMES).map((n) => ellipsize(n, 60));
   return names.length > SUMMARY_NAMES ? [...cut, "…"] : cut;
 }
 

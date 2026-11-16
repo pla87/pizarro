@@ -1,6 +1,8 @@
 // Almacenamiento de los borradores locales (localStorage, `pz-draft-*`), sin React: lo usan drafts.ts (tareas nuevas
 // y en edición) y la caja de comentarios. Cada entrada guarda { at, value } y caduca a los 7 días (los comentarios, al día).
 
+import { cutText } from "@/lib/graphemes";
+
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Borra todos los borradores locales (`pz-draft-*`); las preferencias de filtros del tablero se conservan. */
@@ -83,7 +85,7 @@ export function readCommentDraft(userId: string, taskId: string): CommentDraft |
 export function saveCommentDraft(userId: string, taskId: string, draft: CommentDraft | null): void {
   const key = commentDraftKey(userId, taskId);
   if (!draft || !draft.text.trim()) return clearDraft(key);
-  const replyTo = draft.replyTo ? { id: draft.replyTo.id, authorName: draft.replyTo.authorName, body: draft.replyTo.body.slice(0, 200) } : null;
+  const replyTo = draft.replyTo ? { id: draft.replyTo.id, authorName: draft.replyTo.authorName, body: cutText(draft.replyTo.body, 200) } : null;
   writeDraft(key, { text: draft.text, replyTo });
 }
 

@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, sizedZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict } from "@/lib/release-zip";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
 import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
@@ -35,12 +35,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
 
   // Tope del proyecto (su valor actual): cada paquete se arma en memoria hasta ese tamaño.
   const maxMb = release.project.releaseZipMaxMb;
-  const entries: ZipEntry[] = [];
-  for (const a of release.attachments) {
-    const size = await releaseAttachmentFileSize(a.id);
-    // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
-    if (size !== null) entries.push({ id: a.id, name: a.fileName, size, read: () => readReleaseAttachmentFile(a.id) });
-  }
+  // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
+  const entries = await sizedZipEntries(
+    release.attachments.map((a) => ({ id: a.id, name: a.fileName, read: () => readReleaseAttachmentFile(a.id) })),
+    (c) => releaseAttachmentFileSize(c.id),
+  );
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   const packages = planZipEntries(entries, maxMb);
   if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb, entries), { headers: { "Cache-Control": "private, no-store" } });

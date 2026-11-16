@@ -89,7 +89,7 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && valid && n !== saved && !pending) save();
+              if (e.key === "Enter" && !e.nativeEvent.isComposing && valid && n !== saved && !pending) save();
             }}
           />
           <button className="btn-primary py-1.5" onClick={save} disabled={pending || !valid || n === saved}>

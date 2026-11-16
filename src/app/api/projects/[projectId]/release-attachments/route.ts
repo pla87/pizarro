@@ -7,7 +7,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { AI_PLAN_ZIP_FOLDER, aiPlanZipRoot } from "@/lib/ai-plan";
 import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, buildZipPart, planZipEntries, sizedZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -75,17 +75,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Cada paquete se arma en memoria hasta el tope del proyecto; si no cabe todo, salen varios.
   const { releaseZipMaxMb } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { releaseZipMaxMb: true } });
 
-  const entries: ZipEntry[] = [];
+  const candidates: (Omit<ZipEntry, "size"> & { file: string })[] = [];
   for (const item of items) {
     const attachments = byId.get(item.taskId)!.attachments;
     const names = item.folder !== undefined ? plainAttachmentFileNames(attachments).map((n) => `${item.folder}/${n}`) : attachmentFileNames(item.code!, attachments);
     for (const [i, a] of attachments.entries()) {
       const file = attachmentPath(a.id, a.isImage ? "full" : "file");
-      const size = await stat(file).then((st) => st.size, () => null);
-      // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
-      if (size !== null) entries.push({ id: a.id, name: names[i]!, size, read: () => readFile(file) });
+      candidates.push({ id: a.id, name: names[i]!, file, read: () => readFile(file) });
     }
   }
+  // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
+  const entries = await sizedZipEntries(candidates, (c) => stat(c.file).then((st) => st.size, () => null));
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   const packages = planZipEntries(entries, releaseZipMaxMb);
   if (mode.kind === "plan") return Response.json(zipPlanBody(packages, releaseZipMaxMb, entries), { headers: { "Cache-Control": "private, no-store" } });
