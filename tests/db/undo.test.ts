@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { addComment, archiveTask, createTask, deleteComment, deleteTask, deleteTasks, moveTask, updateTask } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, redoLast, undoChecked, undoLast } from "../../src/actions/undo";
 import { removeProjectMember } from "../../src/actions/projects";
 import { applyUndo, snapshotTasks, taskUpdateData } from "../../src/lib/undo";
 
@@ -551,6 +551,123 @@ describe("bloqueos entre tareas que vuelven juntas", () => {
       }
       await db.task.deleteMany({ where: { id: { in: ids } } });
     }
+  });
+});
+
+describe("dependencias que otra persona puso en una tarea que se quita al deshacer", () => {
+  const blockerOf = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id }, select: { blockedById: true } })).blockedById;
+  async function pair() {
+    const u1 = await makeUser({ name: "Persona Uno" });
+    const u2 = await makeUser({ name: "Persona Dos" });
+    const f = await makeProject({ members: [u1, u2] });
+    const y = await makeTask(f, { title: "Y", position: 5000 });
+    return { u1, u2, f, y };
+  }
+  /** U1 crea X, U2 hace que Y dependa de X y U1 deshace la creación (X se borra y Y pierde la dependencia). */
+  async function createDependUndo() {
+    const p = await pair();
+    await loginAs(p.u1);
+    const x = expectOk(await createTask({ projectId: p.f.project.id, columnId: p.f.columns.todo, title: "X", kindId: p.f.kindId }));
+    await loginAs(p.u2);
+    expectOk(await updateTask(p.y.id, { blockedById: x.id }));
+    await loginAs(p.u1);
+    expectOk(await undoLast(p.f.project.id));
+    assert.equal(await db.task.count({ where: { id: x.id } }), 0);
+    assert.equal(await blockerOf(p.y.id), null);
+    return { ...p, x };
+  }
+
+  test("U1 crea X, U2 hace que Y dependa de X, U1 deshace y rehace: Y vuelve a depender de X (también en cadena)", async () => {
+    const { f, x, y } = await createDependUndo();
+    const redo = expectOk(await redoChecked(f.project.id));
+    assert.equal(redo.conflict, undefined);
+    assert.equal(redo.applied?.skipped, 0);
+    assert.equal(await db.task.count({ where: { id: x.id } }), 1);
+    assert.equal(await blockerOf(y.id), x.id);
+    // Deshacer y rehacer otra vez: las entradas que salen de mirrorOps siguen llevando la dependencia.
+    assert.equal(expectOk(await undoChecked(f.project.id)).conflict, undefined);
+    assert.equal(await blockerOf(y.id), null);
+    assert.equal(expectOk(await redoChecked(f.project.id)).conflict, undefined);
+    assert.equal(await blockerOf(y.id), x.id);
+  });
+
+  test("si entretanto Y pasó a depender de otra, rehacer lo delata (huella) y, aunque se confirme, no lo pisa", async () => {
+    for (const confirm of [false, true]) {
+      const { u1, u2, f, x, y } = await createDependUndo();
+      const z = await makeTask(f, { title: "Z" });
+      await loginAs(u2);
+      expectOk(await updateTask(y.id, { blockedById: z.id }));
+      await loginAs(u1);
+      if (!confirm) {
+        // Sin confirmar: la huella de la entrada de rehacer cubre el bloqueo de Y y la entrada se descarta.
+        expectFail(await redoLast(f.project.id), /Otra persona ha cambiado esto después de deshacerlo/);
+        assert.equal(await db.task.count({ where: { id: x.id } }), 0);
+      } else {
+        const res = expectOk(await redoChecked(f.project.id));
+        assert.match(res.conflict?.message ?? "", /Persona Dos cambió/);
+        expectOk(await redoChecked(f.project.id, null, res.conflict!.entryId));
+        assert.equal(await db.task.count({ where: { id: x.id } }), 1);
+      }
+      assert.equal(await blockerOf(y.id), z.id);
+    }
+  });
+
+  test("si volver a depender de X cerraría un ciclo, X vuelve y Y se queda sin dependencia", async () => {
+    const p = await pair();
+    const w = await makeTask(p.f, { title: "W" });
+    await loginAs(p.u1);
+    const x = expectOk(await createTask({ projectId: p.f.project.id, columnId: p.f.columns.todo, title: "X", kindId: p.f.kindId }));
+    expectOk(await updateTask(x.id, { blockedById: w.id }));
+    await loginAs(p.u2);
+    expectOk(await updateTask(p.y.id, { blockedById: x.id }));
+    await loginAs(p.u1);
+    expectOk(await undoLast(p.f.project.id)); // el bloqueo de X por W
+    expectOk(await undoLast(p.f.project.id)); // la creación de X
+    // Rehacer la creación primero: después, W pasa a depender de Y (X no existe: no hay ciclo).
+    expectOk(await redoLast(p.f.project.id));
+    assert.equal(await blockerOf(p.y.id), x.id);
+    expectOk(await undoLast(p.f.project.id));
+    await loginAs(p.u2);
+    expectOk(await updateTask(w.id, { blockedById: p.y.id }));
+    await loginAs(p.u1);
+    // W no está en la entrada (su cambio no cuenta como conflicto). X vuelve sin bloqueo (aún no se ha rehecho el de W);
+    // Y → X no cierra ciclo todavía: Y vuelve a depender de X.
+    expectOk(await redoLast(p.f.project.id));
+    assert.equal(await blockerOf(p.y.id), x.id);
+    // Rehacer «X depende de W» cerraría X → W → Y → X: no se pone.
+    expectOk(await redoLast(p.f.project.id));
+    assert.equal(await blockerOf(x.id), null);
+    // Y al revés: X ya depende de W (vuelve en su instantánea) y Y → X cerraría el ciclo.
+    await db.task.update({ where: { id: x.id }, data: { blockedById: w.id } });
+    await db.task.update({ where: { id: w.id }, data: { blockedById: null } });
+    await db.task.update({ where: { id: p.y.id }, data: { blockedById: x.id } });
+    expectOk(await deleteTask(x.id));
+    assert.equal(await blockerOf(p.y.id), null);
+    await db.task.update({ where: { id: w.id }, data: { blockedById: p.y.id } });
+    const res = expectOk(await undoLast(p.f.project.id));
+    assert.equal(res.skipped, 0);
+    assert.equal(await blockerOf(x.id), w.id);
+    assert.equal(await blockerOf(p.y.id), null, "Y → X cerraría Y → X → W → Y");
+  });
+
+  test("borrar X con Ctrl+Z: si Y pasó a depender de otra, deshacer no lo pisa; si no, se lo devuelve", async () => {
+    const { u1, u2, f, y } = await pair();
+    const x = await makeTask(f, { title: "X" });
+    const z = await makeTask(f, { title: "Z" });
+    const v = await makeTask(f, { title: "V" });
+    await db.task.update({ where: { id: y.id }, data: { blockedById: x.id } });
+    await db.task.update({ where: { id: v.id }, data: { blockedById: x.id } });
+    await loginAs(u1);
+    expectOk(await deleteTask(x.id));
+    await loginAs(u2);
+    expectOk(await updateTask(y.id, { blockedById: z.id }));
+    await loginAs(u1);
+    const res = expectOk(await undoChecked(f.project.id));
+    assert.ok(res.conflict, "el cambio de U2 en Y se pregunta");
+    expectOk(await undoChecked(f.project.id, null, res.conflict.entryId));
+    assert.equal(await db.task.count({ where: { id: x.id } }), 1);
+    assert.equal(await blockerOf(y.id), z.id);
+    assert.equal(await blockerOf(v.id), x.id);
   });
 });
 

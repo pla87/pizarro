@@ -1,14 +1,15 @@
 import "server-only";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
-import { isUniqueColumnRole } from "./constants";
+import { isUniqueColumnRole, MAX_LABELS_PER_PROJECT } from "./constants";
 import { excerpt } from "./mentions";
 import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
-import { assertTaskCapacity } from "./caps";
+import { assertTaskCapacity, lockProject } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
 import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
@@ -70,6 +71,8 @@ type AttachmentRow = {
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
+/** Etiqueta del proyecto (para devolverla al rehacer lo que la creó). */
+type LabelRow = { id: string; projectId: string; name: string; color: string };
 type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
@@ -84,7 +87,11 @@ export interface TaskSnapshot {
 }
 
 export type UndoOp =
-  | { t: "task.set"; id: string; data: TaskData; labelIds?: string[] }
+  /**
+   * `relink`: devuelve el bloqueo (`data.blockedById`) que perdió la tarea al borrarse la que la bloqueaba (SetNull),
+   * solo si sigue sin bloqueo: si entretanto alguien le puso otro, no se pisa (ver dependentLinkOps).
+   */
+  | { t: "task.set"; id: string; data: TaskData; labelIds?: string[]; relink?: true }
   | { t: "task.remove"; id: string }
   | { t: "task.restore"; snap: TaskSnapshot }
   | { t: "subtask.set"; id: string; data: { title?: string; done?: boolean; position?: number } }
@@ -101,10 +108,21 @@ export type UndoOp =
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
   | { t: "link.restore"; row: LinkRow }
-  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null } }
+  /**
+   * `costOff`: la acción que se deshace activó el campo Coste al dar a esta columna el rol «Presupuesto»; al devolverle su
+   * rol anterior se vuelve a desactivar, si ya no queda ninguna columna de presupuesto en el proyecto.
+   */
+  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null }; costOff?: true }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
-  | { t: "release.remove"; id: string };
+  | { t: "release.remove"; id: string }
+  /**
+   * Etiqueta que creó la acción (pegar o importar tareas en JSON): al deshacer se borra si ya no la usa ninguna tarea (si
+   * otra persona la ha puesto entretanto, se queda). `taskId`: la tarea en la que se pegó (para «Cancelar» del detalle).
+   * Al deshacer va después de las operaciones de tarea (se anota antes que ellas), y rehacer la devuelve antes que ellas.
+   */
+  | { t: "label.remove"; id: string; taskId?: string }
+  | { t: "label.restore"; row: LabelRow };
 
 /** Anota operaciones inversas de la acción en curso (se guardan solo si la acción termina bien). */
 export function addUndo(...ops: UndoOp[]): void {
@@ -196,6 +214,17 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
   }));
 }
 
+/**
+ * Tareas que dependen de alguna de `ids` (blockedById) sin estar entre ellas: al borrar esas, la base de datos les quita
+ * el bloqueo (SetNull). Devuelve las operaciones que se lo vuelven a poner cuando vuelvan (`relink`). Van ANTES de las
+ * que recrean las tareas borradas (se aplican en orden inverso). Una sola consulta.
+ */
+export async function dependentLinkOps(ids: string[]): Promise<Extract<UndoOp, { t: "task.set" }>[]> {
+  if (!ids.length) return [];
+  const rows = await db.task.findMany({ where: { blockedById: { in: ids }, id: { notIn: ids } }, select: { id: true, blockedById: true }, orderBy: { id: "asc" } });
+  return rows.map((r) => ({ t: "task.set" as const, id: r.id, data: { blockedById: r.blockedById }, relink: true as const }));
+}
+
 export type UndoKind = "UNDO" | "REDO";
 
 type SubtaskKey = "title" | "done" | "position";
@@ -224,6 +253,8 @@ export interface TouchedTask {
   linksDeleted: Map<string, Deleted<LinkRow>>;
   /** Tareas que nacieron en la misma acción que movió esta (la siguiente aparición de una recurrente). */
   spawned: Set<string>;
+  /** Etiquetas que creó un pegado en JSON sobre esta tarea (se borran al cancelar si ya no las usa nadie). */
+  labelsCreated: Set<string>;
 }
 
 function noteDeleted<R extends { id: string }>(map: Map<string, Deleted<R>>, row: R, kind: UndoKind): void {
@@ -239,7 +270,7 @@ function noteDeleted<R extends { id: string }>(map: Map<string, Deleted<R>>, row
 export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId: string): TouchedTask {
   const out: TouchedTask = {
     fields: new Set(), labels: false, subtaskFields: new Map(), subtaskBefore: new Map(), subtasksCreated: new Set(), subtasksDeleted: new Map(),
-    attachmentsCreated: new Set(), attachmentsDeleted: new Map(), linksCreated: new Set(), linksDeleted: new Map(), spawned: new Set(),
+    attachmentsCreated: new Set(), attachmentsDeleted: new Map(), linksCreated: new Set(), linksDeleted: new Map(), spawned: new Set(), labelsCreated: new Set(),
   };
   for (const e of entries) {
     const ops = e.ops as UndoOp[];
@@ -273,6 +304,7 @@ export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId:
         case "attachment.restore": if (op.row.taskId === taskId) noteDeleted(out.attachmentsDeleted, op.row, e.kind); break;
         case "link.remove": out.linksCreated.add(op.id); break;
         case "link.restore": if (op.row.taskId === taskId) noteDeleted(out.linksDeleted, op.row, e.kind); break;
+        case "label.remove": if (op.taskId === taskId && e.kind === "UNDO") out.labelsCreated.add(op.id); break;
         default: break;
       }
     }
@@ -449,9 +481,16 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
   const inProject = { task: { projectId } };
   const sets = new Map<string, { fields: TaskField[]; withLabels: boolean; slots: { id: string; slot: UndoOp[] }[] }>();
   const removes: { id: string; slot: UndoOp[] }[] = [];
+  // Etiquetas: las que vuelven (label.restore) se aplican antes que nada (van al final: se aplica de la última a la
+  // primera) y las que se quitan (label.remove), después de todo (van al principio), cuando ya no las usa ninguna tarea.
+  const labelsFirst: UndoOp[] = [];
+  const labelsLast: UndoOp[] = [];
   for (const op of ops) {
     switch (op.t) {
       case "task.set": {
+        // Devolver un bloqueo perdido no necesita contraria: la acompaña siempre la tarea que vuelve (task.restore), cuya
+        // contraria la borra y le quita el bloqueo otra vez; al recrearla de nuevo, task.remove vuelve a capturarlo.
+        if (op.relink) break;
         const fields = Object.keys(op.data).join(",");
         if (!once(`task.set:${op.id}:${fields}:${!!op.labelIds}`)) break;
         const slot: UndoOp[] = [];
@@ -531,7 +570,9 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       case "column.set": {
         if (!once(`column.set:${op.id}`)) break;
         const c = await db.column.findFirst({ where: { id: op.id, projectId } });
-        if (c) push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])) });
+        // Si al aplicarla la columna pasa a «Presupuesto» y eso activa el campo Coste, la contraria lo vuelve a desactivar.
+        const costOff = c && op.data.role === "BUDGET" && c.role !== "BUDGET" && !(await db.project.count({ where: { id: projectId, taskFields: { has: "cost" } } }));
+        if (c) push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])), ...(costOff ? { costOff: true as const } : {}) });
         break;
       }
       case "column.remove": {
@@ -543,6 +584,14 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         if (once(`column:${op.row.id}`)) push({ t: "column.remove", id: op.row.id });
         break;
       case "release.remove":
+        break;
+      case "label.remove": {
+        const l = once(`label:${op.id}`) && (await db.label.findFirst({ where: { id: op.id, projectId }, select: { id: true, projectId: true, name: true, color: true } }));
+        if (l) labelsLast.push({ t: "label.restore", row: l });
+        break;
+      }
+      case "label.restore":
+        if (once(`label:${op.row.id}`)) labelsFirst.push({ t: "label.remove", id: op.row.id });
         break;
     }
   }
@@ -557,19 +606,37 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         if (op) x.slot.push(op);
       }
     }
-    const snaps = new Map((await snapshotTasks(removes.map((x) => x.id).filter((id) => present.has(id)))).map((op) => [(op as TaskRestoreOp).snap.task.id, op]));
+    const removedIds = removes.map((x) => x.id).filter((id) => present.has(id));
+    const snaps = new Map((await snapshotTasks(removedIds)).map((op) => [(op as TaskRestoreOp).snap.task.id, op]));
+    // Las que dependen de una tarea que se va a quitar (p. ej. otra persona hizo que dependiera de la que se creó): el
+    // borrado les quita el bloqueo, así que su contraria se lo devuelve tras recrearla (antes en la lista, después al aplicar).
+    const links = new Map<string, UndoOp[]>();
+    for (const op of await dependentLinkOps(removedIds)) {
+      if (!once(`relink:${op.id}`)) continue;
+      const blocker = op.data.blockedById!;
+      links.set(blocker, [...(links.get(blocker) ?? []), op]);
+    }
     for (const x of removes) {
       const op = snaps.get(x.id);
-      if (op) x.slot.push(op);
+      if (op) x.slot.push(...(links.get(x.id) ?? []), op);
     }
   }
-  return out.flat();
+  return [...labelsFirst, ...out.flat(), ...labelsLast];
 }
 
 /** Una columna de presupuesto exige el campo Coste: si al deshacer vuelve una, se reactiva. */
 async function ensureCostField(projectId: string): Promise<void> {
   const p = await db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } });
-  if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: [...p.taskFields, "cost"] } });
+  if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...p.taskFields, "cost"]) } });
+}
+
+/** Lo contrario de ensureCostField: quita el campo Coste si ya no queda ninguna columna de presupuesto. */
+async function dropCostField(projectId: string): Promise<void> {
+  const [p, budgets] = await Promise.all([
+    db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } }),
+    db.column.count({ where: { projectId, role: "BUDGET" } }),
+  ]);
+  if (p && !budgets && p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: p.taskFields.filter((f) => f !== "cost") } });
 }
 
 /**
@@ -770,6 +837,17 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         case "task.set": {
           const exists = await db.task.count({ where: { id: op.id, projectId } });
           if (!exists) { miss++; break; }
+          if (op.relink) {
+            // Solo si sigue sin bloqueo (no pisa uno puesto después) y la que bloqueaba está en el proyecto sin cerrar un ciclo.
+            const blockerId = op.data.blockedById;
+            if (blockerId) {
+              await db.$transaction(async (tx) => {
+                await lockBlocking(tx, projectId);
+                if (!(await blockProblem(op.id, blockerId, projectId, tx))) await tx.task.updateMany({ where: { id: op.id, projectId, blockedById: null }, data: { blockedById: blockerId } });
+              });
+            }
+            break;
+          }
           const data = { ...op.data };
           if ("blockedById" in data && awaitingBlocker.size) blockSettled(op.id);
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
@@ -945,6 +1023,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           ]);
           if (!count) miss++;
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
+          else if (op.costOff) await dropCostField(projectId);
           break;
         }
         case "column.remove": {
@@ -972,6 +1051,25 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"] } });
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
+          break;
+        }
+        case "label.remove":
+          // Solo si ya no la usa ninguna tarea; si alguien la ha puesto en otra, se queda (no cuenta como fallo).
+          await db.label.deleteMany({ where: { id: op.id, projectId, tasks: { none: {} } } });
+          break;
+        case "label.restore": {
+          // Bajo el bloqueo del proyecto, como al crear etiquetas (assertLabelCapacity): si sigue existiendo (otra persona
+          // la usó y por eso deshacer no la borró), no hay nada que hacer y no es un fallo. Si el proyecto ya tiene el
+          // máximo de etiquetas, o entretanto se creó otra con el mismo nombre, no vuelve: las tareas que la llevaban se
+          // quedan sin ella (cuenta como parte que no se pudo aplicar).
+          const done = await db.$transaction(async (tx) => {
+            await lockProject(tx, projectId);
+            if (await tx.label.count({ where: { id: op.row.id, projectId } })) return true;
+            if ((await tx.label.count({ where: { projectId } })) >= MAX_LABELS_PER_PROJECT) return false;
+            const { count } = await tx.label.createMany({ data: [{ ...op.row, projectId }], skipDuplicates: true });
+            return count > 0;
+          });
+          if (!done) miss++;
           break;
         }
         case "release.remove": {
@@ -1176,14 +1274,21 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
  * no cambia con subtareas, comentarios o etiquetas, por eso se incluyen sus filas en la huella.
  *
  * Todas llevan el prefijo de su formato (FP_V2). Una huella guardada con otro formato no se puede comparar con el estado
- * actual: la entrada se rechaza sin aplicar nada (isObsoleteFingerprint).
+ * actual: la entrada se rechaza sin aplicar nada (isObsoleteFingerprint). `like`: la huella guardada con la que se va a
+ * comparar (ver fingerprintsOf).
  */
-export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<string> {
-  return (await fingerprintsOf(projectId, [{ ops }]))[0]!;
+export async function fingerprintOps(projectId: string, ops: UndoOp[], like?: string | null): Promise<string> {
+  return (await fingerprintsOf(projectId, [{ ops, like }]))[0]!;
 }
 
 /** Prefijo de las huellas: la descripción cuenta por su hash (sha256 en SQL), no por su texto. */
 const FP_V2 = "v2:";
+/**
+ * Huellas v2 que también cubren el bloqueo de cada tarea (`blockedById`). Siguen siendo v2 (empiezan por FP_V2): una
+ * guardada antes, sin la «b:», se compara con la huella calculada como entonces, sin el bloqueo (`like` en fingerprintsOf).
+ */
+const FP_V2_BLOCK = `${FP_V2}b:`;
+const withoutBlock = (fingerprint: string | null | undefined): boolean => !!fingerprint && !fingerprint.startsWith(FP_V2_BLOCK);
 
 /**
  * ¿Es una huella de un formato que ya no se calcula? Las de antes de la versión 2 no llevaban prefijo (y cubrían la
@@ -1202,6 +1307,7 @@ function fingerprintSubjects(ops: UndoOp[]) {
   const taskIds = new Set<string>();
   const columnIds = new Set<string>();
   const releaseIds = new Set<string>();
+  const labelIds = new Set<string>();
   const lookups: { model: FpModel; id: string }[] = [];
   for (const op of ops) {
     switch (op.t) {
@@ -1216,16 +1322,18 @@ function fingerprintSubjects(ops: UndoOp[]) {
       case "column.set": case "column.remove": columnIds.add(op.id); break;
       case "column.restore": columnIds.add(op.row.id); break;
       case "release.remove": releaseIds.add(op.id); break;
+      case "label.remove": labelIds.add(op.id); break;
+      case "label.restore": labelIds.add(op.row.id); break;
     }
   }
-  return { taskIds, columnIds, releaseIds, lookups };
+  return { taskIds, columnIds, releaseIds, labelIds, lookups };
 }
 
 /** Lo que se lee de cada tarea, menos la descripción (va aparte, por su hash). Contenido, no la hora de escritura. */
 const FP_TASK_SELECT = {
   id: true, title: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
   dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
+  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true, blockedById: true,
   labels: { select: { labelId: true }, orderBy: { labelId: "asc" } },
   subtasks: { select: { id: true, title: true, done: true, position: true }, orderBy: { id: "asc" } },
   comments: { select: { id: true, editedAt: true, deletedAt: true }, orderBy: { id: "asc" } },
@@ -1244,8 +1352,10 @@ function chunks<T>(items: T[]): T[][] {
  * lee una vez aunque la cubran varias entradas, por lotes (`id IN (…)`) y una consulta detrás de otra, sin saturar el
  * pool. Cada huella sale igual que si se calculara sola (fingerprintOps). La descripción entra por su sha256,
  * calculado en PostgreSQL: un cambio en ella cambia la huella igual que antes, sin traer 20 KB por tarjeta.
+ * `like`: la huella guardada con la que se va a comparar; si es de antes de cubrir el bloqueo (sin FP_V2_BLOCK), esa
+ * se calcula como entonces. Sin `like`, siempre la actual.
  */
-export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[] }[]): Promise<string[]> {
+export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; like?: string | null }[]): Promise<string[]> {
   const subjects = items.map((it) => fingerprintSubjects(it.ops));
   // Filas hijas: su tarea entra en la huella; las que ya no existen se anotan como ausentes.
   const byModel = new Map<FpModel, Set<string>>();
@@ -1271,12 +1381,18 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[] }
   const current = new Set<string>();
   for (const s of subjects) for (const id of s.taskIds) current.add(id);
   const tasks = new Map<string, string>();
+  const tasksWithoutBlock = new Map<string, string>();
   for (const part of chunks([...current])) {
     const rows = await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_TASK_SELECT });
     const hashes = await db.$queryRaw<{ id: string; d: string }[]>`
       SELECT "id", encode(sha256(convert_to("description", 'UTF8')), 'hex') AS "d" FROM "Task" WHERE "id" = ANY(${part}::text[]) AND "projectId" = ${projectId}`;
     const hashById = new Map(hashes.map((h) => [h.id, h.d]));
-    for (const r of rows) tasks.set(r.id, JSON.stringify({ ...r, description: hashById.get(r.id) ?? null }));
+    for (const r of rows) {
+      const description = hashById.get(r.id) ?? null;
+      tasks.set(r.id, JSON.stringify({ ...r, description }));
+      const { blockedById: _blockedById, ...rest } = r;
+      tasksWithoutBlock.set(r.id, JSON.stringify({ ...rest, description }));
+    }
   }
   const columnIds = [...new Set(subjects.flatMap((s) => [...s.columnIds]))];
   const cols = new Map<string, string>();
@@ -1284,13 +1400,19 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[] }
   const releaseIds = [...new Set(subjects.flatMap((s) => [...s.releaseIds]))];
   const rels = new Set<string>();
   for (const part of chunks(releaseIds)) for (const r of await db.release.findMany({ where: { id: { in: part }, projectId }, select: { id: true } })) rels.add(r.id);
+  const labelIds = [...new Set(subjects.flatMap((s) => [...s.labelIds]))];
+  const labels = new Map<string, string>();
+  for (const part of chunks(labelIds)) for (const l of await db.label.findMany({ where: { id: { in: part }, projectId }, select: { id: true, name: true, color: true } })) labels.set(l.id, JSON.stringify(l));
 
   return subjects.map((s, i) => {
     const out = lines[i]!;
-    for (const id of s.taskIds) out.push(`task:${id}:${tasks.get(id) ?? '"absent"'}`);
+    const old = withoutBlock(items[i]!.like);
+    const taskLines = old ? tasksWithoutBlock : tasks;
+    for (const id of s.taskIds) out.push(`task:${id}:${taskLines.get(id) ?? '"absent"'}`);
     for (const id of s.columnIds) out.push(`column:${id}:${cols.get(id) ?? '"absent"'}`);
     for (const id of s.releaseIds) out.push(`release:${id}:${rels.has(id) ? "present" : "absent"}`);
+    for (const id of s.labelIds) out.push(`label:${id}:${labels.get(id) ?? '"absent"'}`);
     const hash = createHash("sha256").update(out.sort().join("\n")).digest("hex");
-    return `${FP_V2}${hash}`;
+    return `${old ? FP_V2 : FP_V2_BLOCK}${hash}`;
   });
 }

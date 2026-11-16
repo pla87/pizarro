@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { actionThrowResult } from "@/lib/stale-action";
 
 type Role = "ADMIN" | "MEMBER";
 type UserLocale = "ES" | "EN";
@@ -54,7 +55,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
       danger: true,
     });
     if (!ok) return;
-    const res = await unlinkGoogle(u.id);
+    const res = await unlinkGoogle(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google desvinculado: se han cerrado sus sesiones"));
     router.refresh();
@@ -64,7 +65,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
   const resend = async (u: UserRow) => {
     setResending(u.id);
     try {
-      const res = await resendInvite(u.id);
+      const res = await resendInvite(u.id).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       toast(t("Invitación reenviada a {email}: el enlace anterior ya no vale", { email: u.email }));
       router.refresh();
@@ -74,7 +75,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
   };
 
   const allow = async (u: UserRow) => {
-    const res = await allowGoogleRelink(u.id);
+    const res = await allowGoogleRelink(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google permitido: podrá volver a vincularse al entrar con Google"));
     router.refresh();
@@ -209,6 +210,9 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
             <option value="MEMBER">{t("Miembro")}</option>
             <option value="ADMIN">{t("Administrador")}</option>
           </select>
+          {user?.role === "ADMIN" && role === "MEMBER" && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t("Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.")}</p>
+          )}
         </div>
         {!user && (
           <div>

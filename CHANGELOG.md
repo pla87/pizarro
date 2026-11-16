@@ -2,6 +2,40 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.57.0 — 2026-11-16 18:48
+
+Importar y exportar tareas en JSON, responsable sin email, dependencias que vuelven al rehacer y caza de bugs
+
+### Nuevas funcionalidades
+
+- Importar tareas en el tablero: botón «Importar» junto a «Varias tareas» para traer muchas tareas a la vez desde un JSON (pegado, del portapapeles, de un fichero .json o .txt o arrastrado), con vista previa, columna de destino y un solo deshacer. Acepta el fichero de Exportar, listas y varios JSON seguidos, como los que devuelve una IA.
+- Exportar tareas: al marcar tarjetas, el botón pasa a «Exportar (N)» (también en la barra de selección) y las descarga en un .json o las copia, listas para volver a importarlas aquí, en otro proyecto o en otra instalación.
+- Botones discretos «Copiar tarea» e «Importar tarea» (desde el portapapeles o un fichero) en el detalle de la tarea y en «Nueva tarea», que rellena el formulario con la tarea importada.
+
+### Mejoras
+
+- Ctrl+V sobre una tarea abierta solo la sustituye si lo copiado es exactamente una tarea en JSON; con cualquier otra cosa se pega como siempre.
+- Del responsable se copia su identificador y su nombre, nunca su email; quien importa es siempre el creador de las tareas nuevas, y una dependencia hacia otro proyecto se ignora.
+- Deshacer un pegado o una importación borra también las etiquetas que creó, si nadie más las usa.
+- El color del icono de la app elegido con las flechas se guarda aunque cierres o recargues la pestaña justo después.
+- Las descargas ZIP con muchos adjuntos se preparan antes.
+
+### Correcciones
+
+- Al rehacer la creación (o deshacer el borrado) de una tarea, las tareas que otra persona hizo depender de ella recuperan la dependencia.
+- Deshacer el rol «Presupuesto» vuelve a desactivar el campo Coste que había activado.
+- Al quitar el rol de administrador, sus tarjetas en proyectos de equipo que ya no ve quedan sin asignar.
+- Con un método de entrada (japonés, chino…), Enter ya no guarda el título ni elige un bloqueo a medio escribir.
+- Los avisos, emails y mensajes de Telegram y WhatsApp ya no cortan un emoji por la mitad.
+- Borrar etiquetas o entregables, las acciones de Google e invitación en Usuarios y las preferencias del perfil avisan «Sin conexión» cuando no hay red.
+
+### Cambios técnicos / DB
+
+- La importación de tareas va por una ruta propia con su tope (5 millones de caracteres), no por una acción de servidor de 1 MB.
+- Un JSON con miles de etiquetas no válidas ya no puede ocupar el servidor, y rehacer no supera el tope de 50 etiquetas.
+- Los identificadores que llegan del navegador solo admiten letras, cifras, «_» y «-»: uno con caracteres raros es «no encontrado», no un error inesperado.
+- Huellas de deshacer que cubren las dependencias, compatibles con las ya guardadas, y prueba que ata el dibujo del icono a su revisión.
+
 ## v1.56.0 — 2026-11-16 00:46
 
 Copiar y pegar tareas como JSON, ZIP del plan en inglés, codificaciones más listas, icono con flechas y adiós al formato antiguo de deshacer

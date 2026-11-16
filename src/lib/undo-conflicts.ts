@@ -84,7 +84,7 @@ export async function findUndoConflicts(
   const added = { comments: comments.length, attachments: attachments.length, links: links.length };
   const affected = all.length;
   if (hit.size) return { names, tasks: hit.size, affected, added, generic: false };
-  if (entry.fingerprint && (await fingerprintOps(projectId, ops)) !== entry.fingerprint) {
+  if (entry.fingerprint && (await fingerprintOps(projectId, ops, entry.fingerprint)) !== entry.fingerprint) {
     return { names: [], tasks: 0, affected, added, generic: true };
   }
   return null;

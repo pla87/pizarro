@@ -1,6 +1,71 @@
 {
   "versions": [
     {
+      "version": "1.57.0",
+      "date": "2026-11-16",
+      "releasedAt": "2026-11-16T18:48:22+01:00",
+      "summary": "Importar y exportar tareas en JSON, responsable sin email, dependencias que vuelven al rehacer y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Importar tareas en el tablero: botón «Importar» junto a «Varias tareas» para traer muchas tareas a la vez desde un JSON (pegado, del portapapeles, de un fichero .json o .txt o arrastrado), con vista previa, columna de destino y un solo deshacer. Acepta el fichero de Exportar, listas y varios JSON seguidos, como los que devuelve una IA.",
+          "Exportar tareas: al marcar tarjetas, el botón pasa a «Exportar (N)» (también en la barra de selección) y las descarga en un .json o las copia, listas para volver a importarlas aquí, en otro proyecto o en otra instalación.",
+          "Botones discretos «Copiar tarea» e «Importar tarea» (desde el portapapeles o un fichero) en el detalle de la tarea y en «Nueva tarea», que rellena el formulario con la tarea importada."
+        ],
+        "mejoras": [
+          "Ctrl+V sobre una tarea abierta solo la sustituye si lo copiado es exactamente una tarea en JSON; con cualquier otra cosa se pega como siempre.",
+          "Del responsable se copia su identificador y su nombre, nunca su email; quien importa es siempre el creador de las tareas nuevas, y una dependencia hacia otro proyecto se ignora.",
+          "Deshacer un pegado o una importación borra también las etiquetas que creó, si nadie más las usa.",
+          "El color del icono de la app elegido con las flechas se guarda aunque cierres o recargues la pestaña justo después.",
+          "Las descargas ZIP con muchos adjuntos se preparan antes."
+        ],
+        "correcciones": [
+          "Al rehacer la creación (o deshacer el borrado) de una tarea, las tareas que otra persona hizo depender de ella recuperan la dependencia.",
+          "Deshacer el rol «Presupuesto» vuelve a desactivar el campo Coste que había activado.",
+          "Al quitar el rol de administrador, sus tarjetas en proyectos de equipo que ya no ve quedan sin asignar.",
+          "Con un método de entrada (japonés, chino…), Enter ya no guarda el título ni elige un bloqueo a medio escribir.",
+          "Los avisos, emails y mensajes de Telegram y WhatsApp ya no cortan un emoji por la mitad.",
+          "Borrar etiquetas o entregables, las acciones de Google e invitación en Usuarios y las preferencias del perfil avisan «Sin conexión» cuando no hay red."
+        ],
+        "tecnicos": [
+          "La importación de tareas va por una ruta propia con su tope (5 millones de caracteres), no por una acción de servidor de 1 MB.",
+          "Un JSON con miles de etiquetas no válidas ya no puede ocupar el servidor, y rehacer no supera el tope de 50 etiquetas.",
+          "Los identificadores que llegan del navegador solo admiten letras, cifras, «_» y «-»: uno con caracteres raros es «no encontrado», no un error inesperado.",
+          "Huellas de deshacer que cubren las dependencias, compatibles con las ya guardadas, y prueba que ata el dibujo del icono a su revisión."
+        ]
+      },
+      "en": {
+        "summary": "Import and export tasks as JSON, assignee without email, dependencies restored on redo and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Import tasks on the board: an «Import» button next to «Several tasks» brings in many tasks at once from JSON (pasted, from the clipboard, from a .json or .txt file or dropped), with a preview, a target column and a single undo. It accepts Export's file, lists and several JSON objects in a row, like an AI's answer.",
+            "Export tasks: with cards ticked, the button becomes «Export (N)» (also in the selection bar) and downloads them as .json or copies them, ready to import here, in another project or on another installation.",
+            "Discreet «Copy task» and «Import task» buttons (from the clipboard or a file) in the task detail and in «New task», which fills the form with the imported task."
+          ],
+          "mejoras": [
+            "Ctrl+V on an open task only replaces it if the clipboard holds exactly one task as JSON; anything else pastes as usual.",
+            "The assignee is copied as their id and name, never their email; whoever imports is always the creator of the new tasks, and a dependency on another project is ignored.",
+            "Undoing a paste or an import also deletes the labels it created, if nothing else uses them.",
+            "The app icon colour chosen with the arrow keys is saved even if you close or reload the tab right after.",
+            "ZIP downloads with many attachments are prepared faster."
+          ],
+          "correcciones": [
+            "When redoing the creation (or undoing the deletion) of a task, tasks someone else made depend on it get the dependency back.",
+            "Undoing the «Budget» role turns the Cost field it enabled off again.",
+            "When the admin role is removed, their cards in team projects they no longer see become unassigned.",
+            "With an input method editor (Japanese, Chinese…), Enter no longer saves a half-typed title or picks a blocker.",
+            "Notices, emails and Telegram and WhatsApp messages no longer cut an emoji in half.",
+            "Deleting labels or deliverables, the Google and invitation actions in Users and profile preferences show «Offline» when there is no connection."
+          ],
+          "tecnicos": [
+            "Task import goes through its own route with its own limit (5 million characters), not a 1 MB server action.",
+            "A JSON with thousands of invalid labels can no longer tie up the server, and redo no longer exceeds the 50-label limit.",
+            "IDs coming from the browser only accept letters, digits, «_» and «-»: one with odd characters is «not found», not an unexpected error.",
+            "Undo fingerprints now cover dependencies, compatible with the ones already stored, and a test ties the icon drawing to its revision."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.56.0",
       "date": "2026-11-16",
       "releasedAt": "2026-11-16T00:46:24+01:00",

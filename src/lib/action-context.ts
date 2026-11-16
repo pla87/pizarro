@@ -76,11 +76,16 @@ export function noteProject(projectId: string | null | undefined, isPrivate?: bo
   if (isPrivate && store.projectId === projectId) store.projectIsPrivate = true;
 }
 
-/** Anota un cambio en el historial de la tarea (con varias llamadas, solo cuentan las explícitas). */
-export function recordTaskEvent(taskId: string, code: string, label: Label): void {
+/**
+ * Anota un cambio en el historial de la tarea (con varias llamadas, solo cuentan las explícitas). `first`: delante de los
+ * ya anotados (la línea que resume una acción que se decide al final, p. ej. «Pegó el contenido de una tarea en JSON»).
+ */
+export function recordTaskEvent(taskId: string, code: string, label: Label, first = false): void {
   const store = actionContext.getStore();
   if (!store) return;
-  (store.events ??= []).push({ taskId, code, label });
+  const events = (store.events ??= []);
+  if (first) events.unshift({ taskId, code, label });
+  else events.push({ taskId, code, label });
 }
 
 /** La acción no deja rastro en el historial (p. ej. reordenar sin cambiar de columna). */

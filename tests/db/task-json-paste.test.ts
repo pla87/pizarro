@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
-import { getTaskJson, pasteTaskJson } from "../../src/actions/tasks";
+import { getTaskJson, pasteTaskJson, restoreTaskSnapshot, type TaskEditSnapshot } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
 
 const day = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
@@ -53,20 +53,20 @@ async function fullFixture() {
 }
 
 describe("getTaskJson", () => {
-  test("copia toda la tarea con nombres, enlaces absolutos y sin ids internos de otras cosas", async () => {
-    const { user, f, source } = await fullFixture();
+  test("copia toda la tarea con nombres, enlaces absolutos, el id del responsable y de la dependencia (sin email)", async () => {
+    const { user, f, source, blocker } = await fullFixture();
     await loginAs(user);
     const text = expectOk(await getTaskJson(source.id));
     const json = JSON.parse(text);
     const att = await db.taskAttachment.findFirstOrThrow({ where: { taskId: source.id } });
     assert.deepEqual({ ...json, info: { ...json.info, createdAt: "", updatedAt: "" } }, {
       format: "pizarro.task", version: 1, title: "Preparar la demo", description: "Texto **Markdown**", type: "Especial", column: "En curso", labels: ["rojo", "verde"],
-      assignee: { name: "Ana Copia", email: user.email }, dueDate: "2026-12-01", startDate: "2026-11-20", priority: "high", client: "Acme", cost: 120.5, costPaid: true,
+      assignee: { id: user.id, name: "Ana Copia" }, dueDate: "2026-12-01", startDate: "2026-11-20", priority: "high", client: "Acme", cost: 120.5, costPaid: true,
       estimatedHours: 8, actualHours: 2.5, recurrence: { rule: "weekly", day: 2 }, color: "#ef4444", deliverable: "Entrega 1", link: "https://example.com/x",
-      subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: "Contratar la sala",
+      subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: { id: blocker.id, title: "Contratar la sala" },
       googleDocs: [{ kind: "sheet", title: "Presupuesto", url: "https://docs.google.com/spreadsheets/d/abc/edit" }],
       attachments: [{ name: "captura.png", url: `http://localhost:3000/api/attachments/${att.id}` }],
-      info: { id: source.id, project: f.project.name, url: `http://localhost:3000/p/${f.project.id}?task=${source.id}`, createdAt: "", updatedAt: "", createdBy: "Ana Copia" },
+      info: { id: source.id, project: f.project.name, projectId: f.project.id, url: `http://localhost:3000/p/${f.project.id}?task=${source.id}`, createdAt: "", updatedAt: "", createdBy: "Ana Copia" },
     });
     // Copiar no cambia nada ni deja entrada de deshacer ni historial.
     assert.equal(await undoCount(f.project.id), 0);
@@ -79,24 +79,39 @@ describe("getTaskJson", () => {
     expectFail(await getTaskJson(source.id), NOT_FOUND);
   });
 
-  test("el email del responsable solo se copia para él mismo o para un administrador; sin él, se pega por el nombre", async () => {
+  test("el email del responsable no se copia nunca (ni para él ni para un administrador): va su id, y se pega por el id", async () => {
     const { user, f, source, target } = await fullFixture();
     const mate = await makeUser({ name: "Compa Curioso" });
     await assign(f, mate);
-    const copied = async () => JSON.parse(expectOk(await getTaskJson(source.id))).assignee;
-    // Otro miembro del proyecto: ve el nombre (como en el tablero), no el email, que no aparece en ninguna parte del texto.
+    for (const who of [mate, user, await makeUser({ role: "ADMIN" })]) {
+      await loginAs(who);
+      const text = expectOk(await getTaskJson(source.id));
+      assert.deepEqual(JSON.parse(text).assignee, { id: user.id, name: "Ana Copia" });
+      assert.ok(!text.includes(user.email) && !text.includes("@example"), "ningún email en el texto");
+    }
+    // Se pega por el id, aunque el nombre haya cambiado entretanto.
     await loginAs(mate);
     const text = expectOk(await getTaskJson(source.id));
-    assert.deepEqual(JSON.parse(text).assignee, { name: "Ana Copia" });
-    assert.ok(!text.includes(user.email) && !text.includes("@example.test"));
-    // Lo copiado así se pega igualmente: el responsable se encuentra por su nombre.
+    await db.user.update({ where: { id: user.id }, data: { name: "Ana Renombrada" } });
     expectOk(await paste(target.id, text));
     assert.equal((await state(target.id)).assigneeId, user.id);
-    // El propio responsable y un administrador sí lo llevan.
-    await loginAs(user);
-    assert.deepEqual(await copied(), { name: "Ana Copia", email: user.email });
+  });
+
+  test("responsable por email (JSON escrito a mano): solo si quien pega es administrador o es su propio email", async () => {
+    const { user, f, target } = await fullFixture();
+    const mate = await makeUser({ name: "Compa Curioso" });
+    await assign(f, mate);
+    // Un miembro no puede averiguar a quién pertenece un email: el de otra persona no se acepta…
+    await loginAs(mate);
+    assert.deepEqual(expectOk(await paste(target.id, { format: "pizarro.task", assignee: user.email })).skipped, [`responsable «${user.email.slice(0, 40)}${user.email.length > 40 ? "…" : ""}» (sin acceso al proyecto)`]);
+    assert.equal((await state(target.id)).assigneeId, null);
+    // …el suyo sí…
+    expectOk(await paste(target.id, { format: "pizarro.task", assignee: mate.email.toUpperCase() }));
+    assert.equal((await state(target.id)).assigneeId, mate.id);
+    // …y un administrador puede usar cualquiera.
     await loginAs(await makeUser({ role: "ADMIN" }));
-    assert.deepEqual(await copied(), { name: "Ana Copia", email: user.email });
+    assert.deepEqual(expectOk(await paste(target.id, { format: "pizarro.task", assignee: { email: user.email } })).skipped, []);
+    assert.equal((await state(target.id)).assigneeId, user.id);
   });
 });
 
@@ -158,10 +173,14 @@ describe("pasteTaskJson", () => {
     );
     assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 3, "se crea solo la etiqueta que faltaba");
     assert.equal(await undoCount(f.project.id), 1);
-    // Deshacer devuelve la tarea (columna incluida); la etiqueta creada se queda en el proyecto, sin usar.
+    // Deshacer devuelve la tarea (columna incluida) y borra la etiqueta que creó el pegado (nadie más la usa).
     expectOk(await undoLast(f.project.id, target.id));
     const back = await state(target.id);
     assert.deepEqual([back.title, back.columnId, back.labels, back.subtasks.map((x) => x.title)], ["Destino", f.columns.todo, [], ["vieja 1", "vieja 2", "vieja 3"]]);
+    assert.deepEqual((await db.label.findMany({ where: { projectId: f.project.id }, orderBy: { name: "asc" } })).map((l) => l.name), ["rojo", "verde"]);
+    // Rehacer la vuelve a crear y a poner.
+    expectOk(await redoLast(f.project.id, target.id));
+    assert.deepEqual((await state(target.id)).labels, ["nueva etiqueta", "rojo"]);
   });
 
   test("permisos: sin acceso a la tarea no se pega nada, y el JSON no alcanza nada de otros proyectos", async () => {
@@ -209,7 +228,7 @@ describe("pasteTaskJson", () => {
       labels: ["e1", "nueva 1", "nueva 2", "nueva 3", "z".repeat(41)],
     }));
     assert.deepEqual(res.skipped, [
-      "descripción (demasiado larga)", "etiqueta «nueva 3» (no se ha podido crear)", `etiqueta «${"z".repeat(40)}…» (no se ha podido crear)`, "subtareas (máximo 100 por tarea)",
+      "descripción (demasiado larga)", "etiqueta «nueva 3» (no se ha podido crear)", `etiqueta «${"z".repeat(39)}…» (no se ha podido crear)`, "subtareas (máximo 100 por tarea)",
     ]);
     const s = await state(task.id);
     assert.equal(s.title.length, 210, "el título se recorta, como al escribirlo");
@@ -305,5 +324,107 @@ describe("pasteTaskJson", () => {
     assert.deepEqual([s.title, s.labels, s.subtasks.length], ["Cambiado por otra persona", [], 3]);
     assert.equal(await db.label.count({ where: { projectId: f.project.id } }), labelsBefore, "la etiqueta creada para el pegado no se queda");
     assert.equal(await undoCount(f.project.id), 0);
+  });
+});
+
+describe("pasteTaskJson: dependencias de otro proyecto, etiquetas al deshacer, topes y errores claros", () => {
+  test("un pegado que no cambia nada no deja línea en el historial ni entrada de deshacer", async () => {
+    const { user, f, source } = await fullFixture();
+    await loginAs(user);
+    const text = expectOk(await getTaskJson(source.id));
+    const events = await db.taskEvent.count({ where: { taskId: source.id } });
+    const res = expectOk(await pasteTaskJson(source.id, text));
+    assert.equal(res.changed, false);
+    assert.deepEqual(res.skipped, []);
+    assert.equal(await db.taskEvent.count({ where: { taskId: source.id } }), events);
+    assert.equal(await undoCount(f.project.id), 0);
+    // Con un cambio, sí.
+    expectOk(await paste(source.id, { format: "pizarro.task", title: "Otro título" }));
+    const lines = await db.taskEvent.findMany({ where: { taskId: source.id } });
+    assert.ok(lines.some((e) => e.label.includes("Pegó el contenido de una tarea en JSON")));
+    assert.equal(await undoCount(f.project.id), 1);
+  });
+
+  test("errores claros: más de 5000 subtareas, varias tareas, un campo que no se entiende", async () => {
+    const { user, target } = await fullFixture();
+    await loginAs(user);
+    expectFail(await paste(target.id, { format: "pizarro.task", subtasks: Array.from({ length: 5001 }, (_, i) => `s${i}`) }), /trae 5001 subtareas y se leen como mucho 5000/);
+    const two = JSON.stringify({ format: "pizarro.task", title: "Una" }) + "\n" + JSON.stringify({ format: "pizarro.task", title: "Dos" });
+    expectFail(await pasteTaskJson(target.id, two), /Hay 2 tareas\. Para importar varias, usa «Importar» en el tablero\./);
+    expectFail(await paste(target.id, { format: "pizarro.task", type: "x".repeat(600) }), /«tipo» es demasiado largo o no se entiende/);
+    assert.equal((await state(target.id)).title, "Destino");
+  });
+
+  test("la importación explícita es tolerante: un solo JSON con texto alrededor se pega", async () => {
+    const { user, target } = await fullFixture();
+    await loginAs(user);
+    const text = "Aquí tienes la tarea:\n\n```json\n" + JSON.stringify({ title: "Desde una IA", dueDate: "2027-02-01" }) + "\n```\n¿Algo más?";
+    expectOk(await pasteTaskJson(target.id, text));
+    const s = await state(target.id);
+    assert.deepEqual([s.title, s.dueDate], ["Desde una IA", "2027-02-01"]);
+  });
+
+  test("dependencia: de otro proyecto (según info) se ignora sin avisar; sin info, por título entre las activas y después las archivadas", async () => {
+    const { user, f, source, target, blocker } = await fullFixture();
+    await loginAs(user);
+    const json = JSON.parse(expectOk(await getTaskJson(source.id)));
+    // El mismo JSON, como si viniera de otro proyecto: la dependencia no se toca y no se avisa.
+    const foreign = { ...json, info: { ...json.info, projectId: "otroproyecto", url: "https://pizarro.example.com/p/otroproyecto?task=x" } };
+    const res = expectOk(await paste(target.id, foreign));
+    assert.deepEqual(res.skipped, []);
+    assert.equal((await state(target.id)).blockedById, null);
+    // Solo el enlace (sin projectId) también dice de qué proyecto viene.
+    const viaUrl = { format: "pizarro.task", dependsOn: { id: blocker.id, title: "Contratar la sala" }, info: { url: "https://pizarro.example.com/p/otro?task=x" } };
+    assert.deepEqual(expectOk(await paste(target.id, viaUrl)).skipped, []);
+    assert.equal((await state(target.id)).blockedById, null);
+    // Del mismo proyecto: por id.
+    expectOk(await paste(target.id, { format: "pizarro.task", dependsOn: { id: blocker.id, title: "otro título" }, info: { projectId: f.project.id } }));
+    assert.equal((await state(target.id)).blockedById, blocker.id);
+    // Sin info (JSON de una IA): por título. Con una activa y una archivada del mismo título, la activa.
+    const old = await makeTask(f, { title: "Repetida en archivo" });
+    await db.task.update({ where: { id: old.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
+    const alive = await makeTask(f, { title: "Repetida en archivo" });
+    expectOk(await paste(target.id, { format: "pizarro.task", dependsOn: "repetida EN archivo" }));
+    assert.equal((await state(target.id)).blockedById, alive.id);
+    // Si solo hay archivada con ese título, la archivada.
+    const gone = await makeTask(f, { title: "Solo archivada" });
+    await db.task.update({ where: { id: gone.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo } });
+    expectOk(await paste(target.id, { format: "pizarro.task", dependsOn: "solo archivada" }));
+    assert.equal((await state(target.id)).blockedById, gone.id);
+  });
+
+  test("Cancelar del detalle tras pegar borra las etiquetas que creó el pegado (si nadie más las usa); deshacer Cancelar las devuelve", async () => {
+    const { user, f, target } = await fullFixture();
+    await loginAs(user);
+    const t0 = await db.task.findUniqueOrThrow({ where: { id: target.id }, include: { labels: true, subtasks: { orderBy: { position: "asc" } } } });
+    const snap: TaskEditSnapshot = {
+      openedAt: new Date(Date.now() - 1000).toISOString(),
+      title: t0.title, description: t0.description, kindId: t0.kindId, color: t0.color as never, linkUrl: t0.linkUrl, assigneeId: t0.assigneeId,
+      labelIds: t0.labels.map((l) => l.labelId), dueDate: null, deliverableId: t0.deliverableId, evergreen: t0.evergreen, recurrence: t0.recurrence,
+      recurrenceDay: t0.recurrenceDay, columnId: t0.columnId, position: t0.position,
+      subtasks: t0.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done, position: s.position })), attachmentIds: [], links: [],
+    };
+    expectOk(await paste(target.id, { format: "pizarro.task", labels: ["rojo", "solo del pegado", "compartida"] }));
+    // «compartida» la pone también otra tarea: no se borra.
+    const other = await makeTask(f, { title: "Otra" });
+    const shared = await db.label.findFirstOrThrow({ where: { projectId: f.project.id, name: "compartida" } });
+    await db.taskLabel.create({ data: { taskId: other.id, labelId: shared.id } });
+    expectOk(await restoreTaskSnapshot(target.id, snap, null));
+    const names = async () => (await db.label.findMany({ where: { projectId: f.project.id }, orderBy: { name: "asc" } })).map((l) => l.name);
+    assert.deepEqual(await names(), ["compartida", "rojo", "verde"]);
+    assert.deepEqual((await state(target.id)).labels, []);
+    // Deshacer «Cancelar» devuelve la etiqueta y la vuelve a poner.
+    expectOk(await undoLast(f.project.id, target.id));
+    assert.deepEqual(await names(), ["compartida", "rojo", "solo del pegado", "verde"]);
+    assert.deepEqual((await state(target.id)).labels, ["compartida", "rojo", "solo del pegado"]);
+  });
+
+  test("documentos de Google: dos pegados a la vez no pasan del tope de 100 por tarea", async () => {
+    const { user, target } = await fullFixture();
+    await loginAs(user);
+    const docs = (from: number) => Array.from({ length: 70 }, (_, i) => ({ kind: "doc", title: `D${from + i}`, url: `https://docs.google.com/document/d/x${from + i}/edit` }));
+    const [a, b] = await Promise.all([paste(target.id, { format: "pizarro.task", googleDocs: docs(0) }), paste(target.id, { format: "pizarro.task", googleDocs: docs(100) })]);
+    assert.equal(await db.taskLink.count({ where: { taskId: target.id } }), 100);
+    assert.ok([...expectOk(a).skipped, ...expectOk(b).skipped].includes("documentos de Google (máximo 100 por tarea)"));
   });
 });

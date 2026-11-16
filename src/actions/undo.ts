@@ -136,8 +136,9 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   try {
     siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
     prints = await fingerprintsOf(pid, [
-      ...(entry.fingerprint ? [{ ops }] : []),
-      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[] })),
+      // Cada una en el formato de la que tiene guardada (las de antes de cubrir el bloqueo, como entonces).
+      ...(entry.fingerprint ? [{ ops, like: entry.fingerprint }] : []),
+      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[], like: s.fingerprint })),
     ]);
   } catch (err) {
     await restore();
@@ -175,7 +176,7 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   // Después de aplicar: la huella de la entrada contraria y la nueva de las intactas, otra vez con una sola lectura.
   // Se recalculan todas (no solo las que comparten tareas con esta): aplicar también puede mover otras filas
   // (renumerar una columna, quitar la marca de fija, llevar tareas de una columna borrada a otra). Solo se escriben
-  // las que han cambiado.
+  // las que han cambiado (también las guardadas en el formato anterior, que pasan al actual).
   const after = await fingerprintsOf(pid, [...(saveCounter ? [{ ops: counter }] : []), ...intact.map((s) => ({ ops: s.ops as unknown as UndoOp[] }))]);
   if (saveCounter) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, after.shift()!, history);
   const changed = intact.flatMap((s, i) => (after[i] !== s.fingerprint ? [Prisma.sql`(${s.id}::text, ${after[i]!}::text)`] : []));

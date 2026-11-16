@@ -49,7 +49,8 @@ const nextConfig: NextConfig = {
   // lo carga (solo importa sus tipos); el PDF se genera en un worker con su propio paquete, dist/pdf-worker.mjs (postbuild).
   serverExternalPackages: ["sharp", "bcryptjs"],
   experimental: {
-    // Las imágenes van por /api/tasks/[id]/attachments; las acciones solo mueven JSON.
+    // Las imágenes van por /api/tasks/[id]/attachments y la importación de tareas en JSON por
+    // /api/projects/[id]/import-tasks (hasta 5 MB); las acciones solo mueven JSON pequeño.
     serverActions: { bodySizeLimit: "1mb" },
     // Next guarda en memoria el cuerpo de cada petición (no GET) que pasa por src/proxy.ts, hasta este tope, antes de que
     // llegue a la ruta (lo que pase de ahí se descarta). Por el proxy solo pasan acciones (1 MB) y JSON pequeños: las

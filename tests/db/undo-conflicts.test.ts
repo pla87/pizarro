@@ -177,6 +177,11 @@ describe("la huella delata cambios ajenos sin historial", () => {
     ["un carácter en medio de la descripción (15 KB)", (id) => db.task.update({ where: { id }, data: { description: `${"a".repeat(7_500)}b${"a".repeat(7_499)}` } })],
     ["el título de una subtarea", (id) => db.subtask.updateMany({ where: { taskId: id, title: "s1" }, data: { title: "s1 de otra" } })],
     ["marcar una subtarea", (id) => db.subtask.updateMany({ where: { taskId: id, title: "s2" }, data: { done: true } })],
+    ["hacer que dependa de otra tarea", async (id) => {
+      const t = await db.task.findUniqueOrThrow({ where: { id } });
+      const other = await db.task.create({ data: { projectId: t.projectId, columnId: t.columnId, kindId: t.kindId, title: "Otra", position: 1 } });
+      await db.task.update({ where: { id }, data: { blockedById: other.id } });
+    }],
     ["una subtarea nueva", (id) => db.subtask.create({ data: { taskId: id, title: "s3", position: 9000 } })],
     ["un comentario nuevo", (id) => db.taskComment.create({ data: { taskId: id, authorId: null, body: "ajeno" } })],
     ["editar un comentario", (id) => db.taskComment.updateMany({ where: { taskId: id }, data: { body: "editado", editedAt: new Date() } })],
@@ -195,6 +200,23 @@ describe("la huella delata cambios ajenos sin historial", () => {
     assert.equal(expectOk(await redoChecked(f.project.id)).conflict, undefined);
     assert.equal(expectOk(await undoChecked(f.project.id)).conflict, undefined);
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Con todo");
+  });
+
+  test("una huella v2 guardada antes de cubrir el bloqueo (sin «b:») se sigue comparando como entonces", async () => {
+    const { f, task } = await rich();
+    expectOk(await updateTask(task.id, { title: "Mío" }));
+    expectOk(await undoChecked(f.project.id));
+    const redo = await db.undoEntry.findFirstOrThrow({ where: { kind: "REDO", projectId: f.project.id } });
+    assert.ok(redo.fingerprint?.startsWith("v2:b:"));
+    // Como la guardaba la versión anterior: v2 sin el bloqueo de las tareas.
+    const legacy = await fingerprintOps(f.project.id, redo.ops as never, "v2:");
+    assert.match(legacy, /^v2:[0-9a-f]{64}$/);
+    assert.equal(isObsoleteFingerprint(legacy), false);
+    await db.undoEntry.update({ where: { id: redo.id }, data: { fingerprint: legacy } });
+    assert.equal(expectOk(await redoChecked(f.project.id)).conflict, undefined);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Mío");
+    // La nueva entrada de deshacer ya lleva el formato actual.
+    assert.ok((await db.undoEntry.findFirstOrThrow({ where: { kind: "UNDO", projectId: f.project.id, fingerprint: { not: null } } })).fingerprint?.startsWith("v2:b:"));
   });
 
   for (const [what, change] of foreign) {
@@ -250,7 +272,7 @@ describe("la huella delata cambios ajenos sin historial", () => {
     const makeObsolete = async (id: string) => {
       const e = await db.undoEntry.findUniqueOrThrow({ where: { id } });
       assert.ok(e.fingerprint?.startsWith("v2:"));
-      const old = e.fingerprint!.slice(3);
+      const old = e.fingerprint!.replace(/^v2:(b:)?/, "");
       assert.match(old, /^[0-9a-f]{64}$/);
       assert.equal(isObsoleteFingerprint(old), true);
       await db.undoEntry.update({ where: { id }, data: { fingerprint: old } });

@@ -11,6 +11,7 @@ import {
 } from "./messaging-core";
 import { rateLimit } from "./rate-limit";
 import { isShuttingDown, onShutdown, trackInFlight } from "./shutdown";
+import { cutText } from "./graphemes";
 
 // Bot de Telegram (Bot API, https://core.telegram.org/bots/api). Pizarro solo usa sendMessage para los avisos y recibe
 // tres cosas del bot: «/start <código>» (enlaza el chat con la persona que pulsó «Conectar Telegram»), «/stop»
@@ -384,7 +385,7 @@ export async function handleTelegramUpdate(u: TelegramUpdate, cfg?: MessagingCon
     if (!rateLimit(`telegram:link:${chatId}`, 10, 10 * 60_000)) return;
     const user = await consumeTelegramLinkCode(code);
     if (!user) return reply(token, chatId, t("Este enlace ha caducado o ya se ha usado. Vuelve a pulsar «Conectar Telegram» en Pizarro, en Mi perfil → Avisos."));
-    const label = (msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? "")).slice(0, 64);
+    const label = cutText(msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name ?? ""), 64);
     const now = new Date();
     await db.userChannel.upsert({
       where: { userId_channel: { userId: user.id, channel: "TELEGRAM" } },

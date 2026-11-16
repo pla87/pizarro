@@ -114,7 +114,8 @@ export const config = {
   // proyectos (cientos de MB, en flujo), los adjuntos de tareas y los documentos del proyecto (hasta 100 MB). Cada una
   // comprueba por sí misma el origen, la sesión (también la contraseña pendiente de cambiar) y los permisos antes de leer
   // el cuerpo, y lo lee con su propio tope; de este proxy no necesitan nada (son API: sin CSP ni renovación de cookie,
-  // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405.
+  // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405. Igual la importación
+  // de tareas en JSON (import-tasks, hasta 5 millones de caracteres: más que el tope de este proxy).
   // El webhook del bot de Telegram tampoco pasa: lo llama Telegram, sin sesión; se protege con su secreto y lee con tope.
-  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|icons/|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/projects/[^/]+/import-tasks$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|icons/|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
 };

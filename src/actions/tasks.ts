@@ -5,20 +5,20 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { forgetAttachments, forgetTaskAttachments } from "@/lib/attachment-cache";
 import { runAction } from "@/lib/action";
-import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, projectUsersWhere, visibleProjectsWhere } from "@/lib/access";
+import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { EVERGREEN_COLUMN_ROLES, isWhite, MAX_DESCRIPTION, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS, PALETTE } from "@/lib/constants";
+import { EVERGREEN_COLUMN_ROLES, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, needOwnRefresh, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
-import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
+import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
-import { assertLabelCapacity, assertLabelCreateRate, assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
+import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { assertColumnRoom } from "@/lib/column-capacity";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
 import { requireUser, type CurrentUser } from "@/lib/session";
@@ -30,14 +30,14 @@ import { createDriveFile } from "@/lib/google";
 import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "@/lib/google-files";
 import { shareRule } from "@/lib/google-share";
 import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "@/lib/mentions";
-import { ACCENTED, foldedContains, normalizeSearch, UNACCENTED } from "@/lib/search-accents";
+import { ACCENTED, foldedContains, UNACCENTED } from "@/lib/search-accents";
 import { dropPendingDueChanges, queueDueChange } from "@/lib/due-notices";
 import { assignedBatchExcerpt } from "@/lib/notification-text";
 import { commentNoticesWhere, followTask, notifyMentions, notifyTask, taskFollowerIds } from "@/lib/notify";
 import { isFollowing } from "@/lib/followers";
 import { loadTaskHistory } from "@/lib/task-events";
-import { localizeGeneralKind, localizeGeneralKinds } from "@/lib/kinds-localize";
-import { normalizeTaskFields, startAfterDue } from "@/lib/task-fields";
+import { localizeGeneralKinds } from "@/lib/kinds-localize";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { assertFieldsEnabled, assertStartBeforeDue, enabledTaskFields, fieldData, fieldKeyOf, onlyChangedFields, patchedFieldKeys, pickTaskFields, taskFieldSchema, taskFieldShape } from "@/lib/task-field-input";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import { textConflicts, type TextSince } from "@/lib/text-version";
@@ -47,8 +47,8 @@ import { intlLocale } from "@/i18n/core";
 import { copyTaskAttachments, type AttachmentCopyResult } from "@/lib/attachment-copy";
 import { remapAttachmentRefs } from "@/lib/attachment-refs";
 import { mbNumber, quotaError } from "@/lib/quota-message";
-import { buildTaskJson, GOOGLE_FILE_URL_RE, parseTaskJson, stringifyTaskJson, TASK_JSON_MAX_CHARS, type TaskJsonField } from "@/lib/task-json";
-import { appUrl } from "@/lib/mail";
+import { parseTasksText, stringifyTaskJson, TASK_JSON_MAX_CHARS } from "@/lib/task-json";
+import { checkPastedTask, foldName, fromOtherProject, MAX_TASK_DOCS, PASTE_FIELD_NAME, pastedDocs, quoteName, TaskJsonResolver, taskJsonObjects } from "@/lib/task-json-resolve";
 
 async function assertColumnInProject(columnId: string, projectId: string) {
   const ok = await db.column.count({ where: { id: columnId, projectId } });
@@ -945,23 +945,15 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
     return { items, nextCursor };
   });
 }
-/**
- * Al borrar tareas, el servidor quita solo el bloqueo de las que dependían de ellas (SetNull). Para poder devolverlo al
- * deshacer se guarda el bloqueo actual de esas tareas y de las borradas que se bloqueaban entre sí (se aplica después de
- * recrearlas, porque las operaciones de deshacer van en orden inverso).
- */
-async function blockLinkOps(ids: string[]): Promise<UndoOp[]> {
-  const dependents = await db.task.findMany({ where: { blockedById: { in: ids } }, select: { id: true } });
-  return captureTasks(dependents.map((t) => t.id), ["blockedById"]);
-}
 
 export async function deleteTask(taskId: string) {
   return runAction({ name: "tasks.deleteTask", args: [taskId] }, async () => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     describeAction("Borró la tarea «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
-    // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts).
-    addUndo(...(await blockLinkOps([taskId])), ...(await snapshotTasks([taskId])));
+    // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts). La base de datos quita el
+    // bloqueo de las que dependían de ella (SetNull): dependentLinkOps se lo devuelve al deshacer, si siguen sin otro.
+    addUndo(...(await dependentLinkOps([taskId])), ...(await snapshotTasks([taskId])));
     await db.task.delete({ where: { id: taskId } });
     forgetTaskAttachments([taskId]);
   });
@@ -979,7 +971,7 @@ export async function deleteTasks(taskIds: string[]) {
     // Todas deben ser del mismo proyecto: el deshacer se guarda por proyecto.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
-    addUndo(...(await blockLinkOps(ids)), ...(await snapshotTasks(ids)));
+    addUndo(...(await dependentLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
@@ -1460,7 +1452,9 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     // Deshacer: primero los campos (con sus valores actuales y las etiquetas), luego lo de las filas hijas.
     const touchedKeys = editsText ? [...fieldKeys, "contentUpdatedAt", "contentUpdatedById"] as TaskField[] : fieldKeys;
     addUndo(taskSetOp(task, touchedKeys, labelsChanged ? labels : undefined), ...undo);
-    await db.$transaction(async (tx) => {
+    // Etiquetas que creó un pegado en JSON en el rato y que, con las etiquetas devueltas, ya no usa ninguna tarea: se borran.
+    const createdHere = labelsChanged ? [...mine.labelsCreated].filter((l) => !wantedLabels.includes(l)) : [];
+    const removedLabels = await db.$transaction(async (tx) => {
       if (typeof fields.blockedById === "string") {
         // Misma regla que updateTask: comprobación y escritura bajo el candado de bloqueos del proyecto.
         // Si entretanto otra petición lo hizo imposible, ese campo se deja como está (como hace la comprobación previa).
@@ -1487,7 +1481,16 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
       }
       // Sus ficheros se conservan: la instantánea de la entrada de deshacer los retiene.
       if (spawned.length) await tx.task.deleteMany({ where: { id: { in: spawned }, projectId, recurrenceFromId: id } });
+      if (!createdHere.length) return [];
+      const unused = await tx.label.findMany({ where: { id: { in: createdHere }, projectId, tasks: { none: {} } }, select: { id: true, projectId: true, name: true, color: true } });
+      if (unused.length) await tx.label.deleteMany({ where: { id: { in: unused.map((l) => l.id) }, tasks: { none: {} } } });
+      return unused;
     });
+    // Deshacer «Cancelar» las devuelve antes que las etiquetas de la tarea (van al final: se aplica de la última a la primera).
+    if (removedLabels.length) {
+      addUndo(...removedLabels.map((row) => ({ t: "label.restore" as const, row })));
+      needOwnRefresh();
+    }
     forgetAttachments([...attDelete, ...spawnedAtts]);
     if (fields.columnId !== undefined) await resolvePositionTies([id]);
     describeAction("Canceló los cambios en «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id });
@@ -1788,288 +1791,116 @@ export async function deleteTaskLink(linkId: string) {
 // --- Copiar y pegar una tarea como JSON (formato en lib/task-json.ts) ----------------
 
 /**
- * La tarea como JSON (texto listo para el portapapeles): solo lo que ve quien la copia, con nombres en vez de ids. El
- * email del responsable solo va si quien copia ya lo conoce (es él mismo, o un administrador, que ve los emails en
- * Administración → Usuarios): el resto de la app no enseña a un miembro el email de otra persona, y este JSON está pensado
- * para dárselo a una IA de fuera. Sin email, al pegar se busca al responsable por su nombre.
+ * La tarea como JSON (texto listo para el portapapeles): solo lo que ve quien la copia, con nombres en vez de ids. Del
+ * responsable van su id y su nombre, nunca su email (ver la cabecera de lib/task-json.ts): al pegar se busca por id y,
+ * en otra instalación, por nombre.
  */
 export async function getTaskJson(taskId: string) {
   return runAction({ name: "tasks.getTaskJson", args: [taskId] }, async (): Promise<string> => {
     const user = await requireUser();
     const id = v.id.parse(taskId);
-    const task = await db.task.findFirst({
-      where: { id, project: visibleProjectsWhere(user) },
-      select: {
-        id: true, projectId: true, title: true, description: true, color: true, linkUrl: true, dueDate: true, createdAt: true, updatedAt: true,
-        recurrence: true, recurrenceDay: true, cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-        project: { select: { name: true, taskFields: true } },
-        kind: { select: { id: true, name: true } },
-        column: { select: { name: true } },
-        assignee: { select: { id: true, name: true, email: true } },
-        createdBy: { select: { name: true } },
-        deliverable: { select: { name: true } },
-        blockedBy: { select: { title: true } },
-        labels: { select: { label: { select: { name: true } } } },
-        subtasks: { orderBy: { position: "asc" }, select: { title: true, done: true } },
-        links: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { kind: true, title: true, url: true } },
-        attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true } },
-      },
-    });
-    if (!task) throw notFound();
-    noteProject(task.projectId);
+    const [row] = await taskJsonObjects({ id, project: visibleProjectsWhere(user) }, await getLocale());
+    if (!row) throw notFound();
+    noteProject(row.projectId);
     noteTask(id);
-    const base = appUrl();
-    const dec = (d: { toFixed(n: number): string } | null) => (d === null ? null : d.toFixed(2));
-    describeAction(`Copió la tarea «${mentionsToPlain(task.title)}» como JSON`, { taskId: id });
-    return stringifyTaskJson(buildTaskJson({
-      id: task.id,
-      project: task.project.name,
-      url: `${base}/p/${task.projectId}?task=${task.id}`,
-      createdAt: task.createdAt.toISOString(),
-      updatedAt: task.updatedAt.toISOString(),
-      createdBy: task.createdBy?.name ?? null,
-      title: task.title,
-      description: task.description,
-      type: localizeGeneralKind(task.kind, await getLocale()).name,
-      column: task.column.name,
-      labels: task.labels.map((l) => l.label.name).sort((a, b) => a.localeCompare(b, "es")),
-      assignee: task.assignee ? { name: task.assignee.name, ...(user.role === "ADMIN" || task.assignee.id === user.id ? { email: task.assignee.email } : {}) } : null,
-      dueDate: dateToIso(task.dueDate),
-      recurrence: task.recurrence,
-      recurrenceDay: task.recurrenceDay,
-      color: task.color,
-      deliverable: task.deliverable?.name ?? null,
-      link: task.linkUrl,
-      subtasks: task.subtasks.map((s) => ({ text: s.title, done: s.done })),
-      dependsOn: task.blockedBy ? mentionsToPlain(task.blockedBy.title) : null,
-      googleDocs: task.links.map((l) => ({ kind: l.kind, title: l.title, url: l.url })),
-      attachments: task.attachments.map((a) => ({ name: a.originalName, url: `${base}/api/attachments/${a.id}` })),
-      enabledFields: normalizeTaskFields(task.project.taskFields),
-      startDate: dateToIso(task.startDate),
-      priority: task.priority,
-      client: task.client,
-      cost: dec(task.cost),
-      costPaid: task.costPaid,
-      estimatedHours: dec(task.estimatedHours),
-      actualHours: dec(task.actualHours),
-    }));
+    describeAction(`Copió la tarea «${mentionsToPlain(row.title)}» como JSON`, { taskId: id });
+    return stringifyTaskJson(row.json);
   });
 }
 
-/** Cotas de lo que llega ya normalizado por parseTaskJson (las reglas finas de cada campo se aplican después, una a una). */
-const pastedTaskSchema = z.object({
-  title: z.string().max(10_000).optional(),
-  description: z.string().max(TASK_JSON_MAX_CHARS).optional(),
-  type: z.string().max(500).optional(),
-  column: z.string().max(500).optional(),
-  labels: z.array(z.string().max(500)).max(500).optional(),
-  assignee: z.object({ name: z.string().max(500).optional(), email: z.string().max(500).optional() }).nullable().optional(),
-  dueDate: z.string().max(40).nullable().optional(),
-  startDate: z.string().max(40).nullable().optional(),
-  priority: v.taskPriority.optional(),
-  client: z.string().max(5000).nullable().optional(),
-  cost: z.string().max(60).nullable().optional(),
-  costPaid: z.boolean().optional(),
-  estimatedHours: z.string().max(60).nullable().optional(),
-  actualHours: z.string().max(60).nullable().optional(),
-  recurrence: z.object({ rule: z.enum(RECURRENCES), day: z.number().int().min(1).max(31).nullable().optional() }).optional(),
-  color: z.string().max(40).nullable().optional(),
-  deliverable: z.string().max(500).nullable().optional(),
-  link: z.string().max(10_000).nullable().optional(),
-  subtasks: z.array(z.object({ text: z.string().max(10_000), done: z.boolean() })).max(5000).optional(),
-  dependsOn: z.object({ id: z.string().max(100).optional(), title: z.string().max(10_000).optional() }).nullable().optional(),
-  googleDocs: z.array(z.object({ kind: z.enum(GOOGLE_FILE_KINDS), title: z.string().max(10_000), url: z.string().max(10_000) })).max(500).optional(),
-}).strict();
+/** Campos de la tarjeta que puede escribir un pegado (los de updateTask). */
+type PastePatch = z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>;
 
-/** Documentos de Google enlazados por tarea al pegar (los creados con @docs no tienen otro tope que el ritmo). */
-const MAX_PASTED_LINKS = 100;
-
-/** Etiqueta del JSON que no se puede crear (nombre demasiado largo): se omite y se avisa. */
-class LabelSkip extends Error {}
-
-/** Comparación de nombres sin mayúsculas, tildes ni espacios repetidos. */
-const foldName = (s: string) => normalizeSearch(s).replace(/\s+/g, " ").trim();
-
-/** Nombre (clave de traducción) de cada campo del formato, para los avisos de lo que no se pudo aplicar. */
-const PASTE_FIELD_NAME: Record<TaskJsonField, string> = {
-  title: "título", description: "descripción", type: "tipo", column: "columna", labels: "etiquetas", assignee: "responsable", dueDate: "fecha límite",
-  startDate: "fecha de inicio", priority: "prioridad", client: "cliente", cost: "coste", costPaid: "pago", estimatedHours: "horas estimadas",
-  actualHours: "horas reales", recurrence: "repetición", color: "color", deliverable: "entregable", link: "enlace", subtasks: "subtareas",
-  dependsOn: "dependencia", googleDocs: "documentos de Google",
-};
+/**
+ * Quita del pegado lo que no cambia nada (mismo valor que ya tiene la tarea): así un pegado repetido no deja entrada de
+ * deshacer ni línea en el historial.
+ */
+function dropUnchanged(patch: PastePatch, task: Prisma.TaskGetPayload<{ select: typeof TASK_UNDO_SELECT }>, labelsNow: string[] | null): void {
+  if (patch.title !== undefined && clampTitle(patch.title.trim()).value === task.title) delete patch.title;
+  if (patch.description !== undefined && patch.description === task.description) delete patch.description;
+  if (patch.color !== undefined && patch.color === task.color) delete patch.color;
+  if (patch.linkUrl !== undefined && patch.linkUrl === task.linkUrl) delete patch.linkUrl;
+  if (patch.dueDate !== undefined && patch.dueDate === dateToIso(task.dueDate)) delete patch.dueDate;
+  if (patch.kindId !== undefined && patch.kindId === task.kindId) delete patch.kindId;
+  if (patch.assigneeId !== undefined && patch.assigneeId === task.assigneeId) delete patch.assigneeId;
+  if (patch.deliverableId !== undefined && patch.deliverableId === task.deliverableId) delete patch.deliverableId;
+  if (patch.blockedById !== undefined && patch.blockedById === task.blockedById) delete patch.blockedById;
+  if (patch.recurrence !== undefined && patch.recurrence === task.recurrence && (patch.recurrenceDay === undefined || patch.recurrenceDay === task.recurrenceDay)) {
+    delete patch.recurrence;
+    delete patch.recurrenceDay;
+  }
+  const optional = pickTaskFields(patch as z.infer<typeof taskFieldSchema>);
+  const changedOptional = onlyChangedFields(task, optional);
+  for (const k of patchedFieldKeys(optional)) if (!(k in changedOptional)) delete (patch as Record<string, unknown>)[k];
+  if (patch.labelIds && labelsNow) {
+    const want = new Set(patch.labelIds);
+    if (want.size === labelsNow.length && labelsNow.every((l) => want.has(l))) delete patch.labelIds;
+  }
+}
 
 /**
  * Pegar una tarea en JSON (formato «pizarro.task», ver lib/task-json.ts) sobre la tarea abierta: escribe los campos que
  * trae el JSON (los que no trae no se tocan) en UNA acción, con una sola entrada de deshacer. `text` es el texto del
- * portapapeles tal cual: se interpreta y valida aquí; nada de lo que diga se usa sin comprobarlo contra el proyecto de la
- * tarea (tipo, columna, etiquetas, responsable, entregable y dependencia se buscan por nombre SOLO en ese proyecto; los
- * ids y el proyecto del JSON se ignoran). Reglas de siempre: acceso a la tarea, no archivada, longitudes, 20 etiquetas y
- * 100 subtareas por tarea, campos opcionales activos, responsable con acceso, columna con sitio, tope y ritmo de
- * etiquetas nuevas, conflicto de texto (`since`, como updateTask). Lo que no se puede aplicar no detiene el pegado: se
- * devuelve en `skipped` (textos breves, ya traducidos). Los adjuntos no se tocan.
+ * portapapeles (o del fichero) tal cual: se interpreta y valida aquí; nada de lo que diga se usa sin comprobarlo contra el
+ * proyecto de la tarea (tipo, columna, etiquetas, responsable, entregable y dependencia se buscan SOLO en ese proyecto;
+ * ver TaskJsonResolver). Si el texto trae varias tareas, no se pega ninguna (eso es «Importar» del tablero). Reglas de
+ * siempre: acceso a la tarea, no archivada, longitudes, 20 etiquetas y 100 subtareas por tarea, campos opcionales activos,
+ * responsable con acceso, columna con sitio, tope y ritmo de etiquetas nuevas, conflicto de texto (`since`, como
+ * updateTask). Lo que no se puede aplicar no detiene el pegado: se devuelve en `skipped` (textos breves, ya traducidos).
+ * Los adjuntos no se tocan. Deshacer también borra las etiquetas que creó el pegado, si ya no las usa nadie. Si no cambia
+ * nada (`changed: false`), no deja entrada de deshacer ni línea en el historial.
  */
 export async function pasteTaskJson(taskId: string, text: string, since?: string | null | TextSince) {
   // El texto no va al registro (puede ser largo y lo que cambia ya queda en el historial de la tarea).
-  return runAction({ name: "tasks.pasteTaskJson", args: [taskId] }, async (): Promise<{ task: BoardTask; skipped: string[]; spawned: BoardTask[] }> => {
+  return runAction({ name: "tasks.pasteTaskJson", args: [taskId] }, async (): Promise<{ task: BoardTask; skipped: string[]; spawned: BoardTask[]; changed: boolean }> => {
     const user = await requireUser();
     const id = v.id.parse(taskId);
     const raw = z.string().max(TASK_JSON_MAX_CHARS, "El JSON de la tarea es demasiado largo.").parse(text);
-    const task = await loadTaskWithAccess(user, id, { archivedAt: true, title: true, dueDate: true, startDate: true, blockedById: true });
+    const task = await loadTaskWithAccess(user, id, TASK_UNDO_SELECT);
     assertNotArchivedRow(task);
     const { projectId } = task;
     if (!rateLimit(`paste-task:${user.id}`, 30, 60_000)) throw new AppError("Demasiados pegados seguidos. Espera un momento.");
-    const parsed = parseTaskJson(raw);
-    if (parsed.kind !== "task") throw new AppError("El JSON de la tarea no es válido.");
-    const json = pastedTaskSchema.parse(parsed.task);
     const [t, locale] = await Promise.all([getT(), getLocale()]);
-    const skipped: string[] = parsed.problems.map((f) => t(PASTE_FIELD_NAME[f]));
+    const read = parseTasksText(raw);
+    if (read.tasks.length > 1 || read.tooMany) throw new AppError(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }));
+    const one = read.tasks[0];
+    if (!one) throw new AppError("El JSON de la tarea no es válido.");
+    const checked = checkPastedTask(one.task, t);
+    if (!checked.ok) throw new AppError(checked.error);
+    const json = checked.data;
+    const skipped: string[] = one.problems.map((f) => t(PASTE_FIELD_NAME[f]));
     const skip = (what: string) => {
       if (!skipped.includes(what)) skipped.push(what);
     };
-    // Un nombre del JSON dentro de un aviso: corto y sin saltos de línea.
-    const q = (s: string) => (s.length > 40 ? `${s.slice(0, 40)}…` : s).replace(/\s+/g, " ");
-    const patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema> = {};
-
-    if (json.title !== undefined) patch.title = json.title;
-    if (json.description !== undefined) {
-      if (json.description.length > MAX_DESCRIPTION) skip(t("descripción (demasiado larga)"));
-      else patch.description = json.description;
-    }
-    if (json.color !== undefined) {
-      const c = v.color.safeParse(json.color);
-      if (c.success) patch.color = c.data;
-      else skip(t("color"));
-    }
-    if (json.link !== undefined) {
-      const l = json.link === null ? null : v.linkUrl.safeParse(json.link);
-      if (l === null) patch.linkUrl = null;
-      else if (l.success) patch.linkUrl = l.data;
-      else skip(t("enlace"));
-    }
-    if (json.dueDate !== undefined) {
-      const d = v.dayIso.safeParse(json.dueDate);
-      if (d.success) patch.dueDate = d.data;
-      else skip(t("fecha límite"));
-    }
-    if (json.recurrence !== undefined) {
-      patch.recurrence = json.recurrence.rule;
-      if (json.recurrence.day !== undefined) patch.recurrenceDay = json.recurrence.day;
-    }
-    if (json.type !== undefined) {
-      const kinds = await listKinds(projectId);
-      const want = foldName(json.type);
-      const kind = kinds.find((k) => foldName(localizeGeneralKind(k, locale).name) === want) ?? kinds.find((k) => foldName(k.name) === want);
-      if (kind) patch.kindId = kind.id;
-      else skip(t("tipo «{name}» (no existe)", { name: q(json.type) }));
-    }
-    if (json.assignee !== undefined) {
-      if (json.assignee === null) patch.assigneeId = null;
-      else {
-        const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { isPrivate: true } });
-        const people = await db.user.findMany({ where: { active: true, ...projectUsersWhere(project, projectId) }, select: { id: true, name: true, email: true } });
-        const email = json.assignee.email?.trim().toLowerCase();
-        const name = json.assignee.name ? foldName(json.assignee.name) : "";
-        const byName = name ? people.filter((p) => foldName(p.name) === name) : [];
-        const who = (email ? people.find((p) => p.email.toLowerCase() === email) : undefined) ?? (byName.length === 1 ? byName[0] : undefined);
-        if (who) patch.assigneeId = who.id;
-        else skip(t("responsable «{name}» (sin acceso al proyecto)", { name: q(json.assignee.name ?? json.assignee.email ?? "") }));
-      }
-    }
-    if (json.deliverable !== undefined) {
-      if (json.deliverable === null) patch.deliverableId = null;
-      else {
-        const want = foldName(json.deliverable);
-        const found = (await db.deliverable.findMany({ where: { projectId }, select: { id: true, name: true } })).find((d) => foldName(d.name) === want);
-        if (found) patch.deliverableId = found.id;
-        else skip(t("entregable «{name}» (no existe)", { name: q(json.deliverable) }));
-      }
-    }
-    if (json.dependsOn !== undefined) {
+    const r = new TaskJsonResolver(user, projectId, t, locale);
+    const patch: PastePatch = { ...(await r.fields(json, skip, { dueDate: dateToIso(task.dueDate), startDate: dateToIso(task.startDate) })) };
+    // Dependencia: de otro proyecto (según `info`) se ignora sin avisar; si no, por id y después por título.
+    if (json.dependsOn !== undefined && !fromOtherProject(json, projectId)) {
       if (json.dependsOn === null) patch.blockedById = null;
       else {
-        const { id: depId, title: depTitle } = json.dependsOn;
-        const byId = depId && v.id.safeParse(depId).success ? await db.task.findFirst({ where: { id: depId, projectId }, select: { id: true } }) : null;
-        let blocker = byId?.id ?? null;
-        if (!blocker && depTitle) {
-          const want = foldName(depTitle);
-          const same = (await db.task.findMany({ where: { projectId, id: { not: id } }, select: { id: true, title: true, archivedAt: true } }))
-            .filter((x) => foldName(mentionsToPlain(x.title)) === want);
-          // Varias con el mismo título: vale si solo una está activa.
-          const active = same.filter((x) => !x.archivedAt);
-          blocker = active.length === 1 ? active[0]!.id : same.length === 1 ? same[0]!.id : null;
-        }
+        const [blocker] = await r.blockers([{ ...json.dependsOn, exclude: id }]);
         if (blocker && !(await blockProblem(id, blocker, projectId))) patch.blockedById = blocker;
-        else skip(t("dependencia «{name}»", { name: q(depTitle ?? depId ?? "") }));
-      }
-    }
-    // Campos opcionales: solo los que el proyecto tiene activados, con las mismas reglas que al editarlos.
-    const enabled = await enabledTaskFields(projectId);
-    const optional = [
-      ["startDate", v.dayIso], ["priority", v.taskPriority], ["client", v.taskClient], ["cost", v.taskCost], ["costPaid", z.boolean()],
-      ["estimatedHours", v.taskHours], ["actualHours", v.taskHours],
-    ] as const;
-    for (const [key, schema] of optional) {
-      if (json[key] === undefined) continue;
-      if (!enabled.includes(fieldKeyOf(key))) {
-        skip(t("{field} (campo no activado)", { field: t(PASTE_FIELD_NAME[key]) }));
-        continue;
-      }
-      const r = schema.safeParse(json[key]);
-      if (r.success) (patch as Record<string, unknown>)[key] = r.data;
-      else skip(t(PASTE_FIELD_NAME[key]));
-    }
-    if (enabled.includes("startDate") && (patch.startDate !== undefined || patch.dueDate !== undefined)) {
-      const start = patch.startDate !== undefined ? patch.startDate : dateToIso(task.startDate);
-      const due = patch.dueDate !== undefined ? patch.dueDate : dateToIso(task.dueDate);
-      if (startAfterDue(start, due)) {
-        // Se conserva la fecha límite pegada; la de inicio que no encaja no se escribe (o, si era la guardada, se quita).
-        if (patch.startDate) delete patch.startDate;
-        else patch.startDate = null;
-        skip(t("fecha de inicio (posterior a la fecha límite)"));
+        else skip(t("dependencia «{name}»", { name: quoteName(json.dependsOn.title ?? json.dependsOn.id ?? "") }));
       }
     }
     // Etiquetas: las que existen (sin mirar mayúsculas ni tildes) y, las que no, se crean si caben (tope del proyecto y ritmo).
-    const createdLabels: string[] = [];
+    let createdLabels: string[] = [];
     if (json.labels !== undefined) {
-      const existing = await db.label.findMany({ where: { projectId }, select: { id: true, name: true } });
-      const ids: string[] = [];
-      let names = json.labels;
-      if (names.length > MAX_TASK_LABELS) {
-        names = names.slice(0, MAX_TASK_LABELS);
-        skip(t("etiquetas (máximo {max} por tarea)", { max: MAX_TASK_LABELS }));
-      }
-      const colors = PALETTE.filter((c) => !isWhite(c));
-      for (const name of names) {
-        const found = existing.find((l) => foldName(l.name) === foldName(name));
-        if (found) {
-          if (!ids.includes(found.id)) ids.push(found.id);
-          continue;
-        }
-        const clean = v.name.max(40).safeParse(name);
-        try {
-          if (!clean.success) throw new LabelSkip();
-          assertLabelCreateRate(user.id);
-          const label = await db.$transaction(async (tx) => {
-            await assertLabelCapacity(tx, projectId);
-            return tx.label.create({ data: { projectId, name: clean.data, color: colors[(existing.length + createdLabels.length) % colors.length]! }, select: { id: true, name: true } });
-          });
-          existing.push(label);
-          createdLabels.push(label.id);
-          ids.push(label.id);
-        } catch (err) {
-          // Tope de 50 etiquetas, ritmo, nombre de más de 40 caracteres u otra pestaña que la creó a la vez: se omite.
-          if (!(err instanceof LabelSkip) && !(err instanceof AppError) && !(err && typeof err === "object" && "code" in err)) throw err;
-          skip(t("etiqueta «{name}» (no se ha podido crear)", { name: q(name) }));
-        }
-      }
-      patch.labelIds = ids;
+      const names = r.labelNames(json.labels, skip);
+      const { ids, created } = await r.ensureLabels(names, () => skip);
+      createdLabels = created;
+      patch.labelIds = [...new Set(names.flatMap((n) => ids.get(foldName(n)) ?? []))];
     }
-
-    recordTaskEvent(id, "update", { k: "Pegó el contenido de una tarea en JSON" });
+    const labelsNow = patch.labelIds ? (await db.taskLabel.findMany({ where: { taskId: id }, select: { labelId: true } })).map((l) => l.labelId) : null;
+    dropUnchanged(patch, task, labelsNow);
+    let changed = false;
+    // Deshacer: las etiquetas creadas se borran después de devolver las de la tarea (se anotan antes; se aplica al revés).
+    if (createdLabels.length) addUndo(...createdLabels.map((labelId) => ({ t: "label.remove" as const, id: labelId, taskId: id })));
     // Campos de la tarjeta: todo o nada (si el texto cambió entretanto, 409 y no se escribe nada).
     if (Object.keys(patch).length) {
       try {
         await applyTaskUpdate(user, id, patch, since);
+        changed = true;
       } catch (err) {
         // Las etiquetas recién creadas no se quedan sin uso si el pegado no llega a hacerse.
         if (createdLabels.length) await db.label.deleteMany({ where: { id: { in: createdLabels }, projectId, tasks: { none: {} } } }).catch(() => undefined);
@@ -2092,21 +1923,17 @@ export async function pasteTaskJson(taskId: string, text: string, since?: string
     };
     let spawned: BoardTask[] = [];
     if (json.column !== undefined) {
-      const want = foldName(json.column);
-      const column = (await db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } })).find((c) => foldName(c.name) === want);
-      if (!column) skip(t("columna «{name}» (no existe)", { name: q(json.column) }));
-      else if (column.id !== task.columnId) {
+      const column = await r.columnId(json.column);
+      if (!column) skip(t("columna «{name}» (no existe)", { name: quoteName(json.column) }));
+      else if (column !== task.columnId) {
         await soft(t("columna"), async () => {
-          spawned = (await applyTaskMove(user, id, column.id, null, null)).spawned;
+          spawned = (await applyTaskMove(user, id, column, null, null)).spawned;
+          changed = true;
         });
       }
     }
     if (json.subtasks !== undefined) {
-      let wanted = json.subtasks.map((s) => ({ title: clampTitle(s.text, MAX_TITLE, MAX_TITLE).value.trim(), done: s.done })).filter((s) => s.title);
-      if (wanted.length > MAX_SUBTASKS) {
-        wanted = wanted.slice(0, MAX_SUBTASKS);
-        skip(t("subtareas (máximo {max} por tarea)", { max: MAX_SUBTASKS }));
-      }
+      const wanted = r.subtasks(json.subtasks, skip);
       await soft(t("subtareas"), async () => {
         if (!rateLimit(`subtask:${user.id}`, 60, 60_000)) throw new AppError("Demasiadas subtareas seguidas. Espera un momento.");
         const ops = await db.$transaction(async (tx) => {
@@ -2123,26 +1950,35 @@ export async function pasteTaskJson(taskId: string, text: string, since?: string
         if (!ops) return;
         addUndo(...ops);
         recordTaskEvent(id, "subtask", { k: "Sustituyó las subtareas por las pegadas ({subs})", p: { subs: subtasksN(wanted.length) } });
+        changed = true;
       });
     }
     if (json.googleDocs?.length) {
-      const docs = json.googleDocs;
+      const fresh = pastedDocs(json.googleDocs);
       await soft(t("documentos de Google"), async () => {
-        const have = await db.taskLink.findMany({ where: { taskId: id }, select: { url: true } });
-        const fresh = docs.filter((d) => GOOGLE_FILE_URL_RE.test(d.url) && d.url.length <= 2000 && !have.some((h) => h.url === d.url));
-        const room = Math.max(0, MAX_PASTED_LINKS - have.length);
-        if (fresh.length > room) skip(t("documentos de Google (máximo {max} por tarea)", { max: MAX_PASTED_LINKS }));
-        const add = fresh.slice(0, room);
-        if (!add.length) return;
-        const created = await db.taskLink.createManyAndReturn({
-          data: add.map((d) => ({ taskId: id, kind: d.kind, title: d.title.replace(/\s+/g, " ").trim().slice(0, 300) || d.url.slice(0, 300), url: d.url, createdById: user.id })),
-          select: { id: true },
+        // Con la fila de la tarea bloqueada: dos pegados a la vez no pasan del tope de documentos por tarea.
+        const res = await db.$transaction(async (tx) => {
+          await lockTaskRow(tx, id);
+          const have = new Set((await tx.taskLink.findMany({ where: { taskId: id }, select: { url: true } })).map((h) => h.url));
+          const missing = fresh.filter((d) => !have.has(d.url));
+          const room = Math.max(0, MAX_TASK_DOCS - have.size);
+          const add = missing.slice(0, room);
+          const created = add.length
+            ? await tx.taskLink.createManyAndReturn({ data: add.map((d) => ({ taskId: id, kind: d.kind, title: d.title, url: d.url, createdById: user.id })), select: { id: true } })
+            : [];
+          return { created, over: missing.length > room };
         });
-        addUndo(...created.map((l) => ({ t: "link.remove" as const, id: l.id })));
-        recordTaskEvent(id, "other", { k: "Enlazó documentos de Google pegados ({n})", p: { n: created.length } });
+        if (res.over) skip(t("documentos de Google (máximo {max} por tarea)", { max: MAX_TASK_DOCS }));
+        if (!res.created.length) return;
+        addUndo(...res.created.map((l) => ({ t: "link.remove" as const, id: l.id })));
+        recordTaskEvent(id, "other", { k: "Enlazó documentos de Google pegados ({n})", p: { n: res.created.length } });
+        changed = true;
       });
     }
-    describeAction("Pegó una tarea en JSON sobre «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id, fields: Object.keys(json), skipped: skipped.length });
-    return { task: await loadBoardTask(id), skipped, spawned };
+    // En el historial, delante de los cambios que detalla; si no cambió nada, ni eso.
+    if (changed) recordTaskEvent(id, "update", { k: "Pegó el contenido de una tarea en JSON" }, true);
+    else skipTaskEvents();
+    describeAction("Pegó una tarea en JSON sobre «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id, fields: Object.keys(json), skipped: skipped.length, changed });
+    return { task: await loadBoardTask(id), skipped, spawned, changed };
   });
 }

@@ -206,6 +206,12 @@ Guardas que conviene conocer:
   guardado» o el aviso que toque (en un aviso emergente o, con `onError`, en el formulario) en vez de la pantalla «Algo ha
   fallado». Una llamada suelta (`await accion()` fuera de una transición) lleva `.catch((e) => actionThrowResult(e, t))`;
   `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/r49-infra-e2e.mjs`.
+- Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
+  `parseTasksText` lineal, `strictJsonFormat` para Ctrl+V), resolución de nombres común a pegar e importar en
+  `src/lib/task-json-resolve.ts`, importación en `src/lib/task-import.ts` servida por la ruta
+  `POST /api/projects/[projectId]/import-tasks` (fuera del proxy, con su propio tope: las acciones de servidor admiten
+  1 MB, `next.config.ts`). Ningún `route.ts` importa `src/actions` (`tests/route-handlers.test.ts`): Next reenviaba las
+  llamadas a la acción a la ruta. Deshacer usa `label.remove`/`label.restore` para las etiquetas creadas.
 - Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
   `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
   una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.
@@ -343,21 +349,25 @@ Cómo se revisa cada PR:
   descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
   el formato, prefijo nuevo y el mismo trato para el anterior.
+  Ampliación compatible: las huellas `v2:b:` cubren también el bloqueo de cada tarea (`blockedById`). Siguen siendo v2;
+  una `v2:` sin «b:» guardada antes se compara calculándola como entonces (parámetro `like` de `fingerprintsOf`) y pasa
+  al formato nuevo cuando se reescribe. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
+  borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
+  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.56.0):**
+**Preguntas abiertas al propietario (tras la v1.57.0):**
 
-- Copiar tarea como JSON: el email de la persona responsable solo se incluye si la tarea es de quien copia o si es
-  administrador (privacidad); confirmar si lo quiere siempre.
-- Bloqueo de terceros al rehacer una creación deshecha (U1 crea X, U2 hace que Y dependa de X, U1 deshace y rehace: Y
-  pierde la dependencia): `mirrorOps` no captura los dependientes de un `task.remove` y la huella de conflictos no
-  cubre `blockedById`. Arreglo de coste medio.
-- Pegar una tarea con etiquetas nuevas y luego «Cancelar» o Ctrl+Z: las etiquetas creadas quedan en el proyecto sin uso.
-- `dependsOn` al pegar entre proyectos se resuelve por título dentro del proyecto destino (puede enlazar con una tarea
-  homónima sin relación).
-- Opcionales de la revisión de la ronda 53 (coste bajo, beneficio pequeño): dependencia por título sin cargar las
-  archivadas, responsable por email al pegar solo para administradores, mensajes más claros con más de 5000 subtareas,
-  tope de 100 documentos de Google con bloqueo, no anotar en el historial un pegado sin cambios, guardar el color del
-  icono con `sendBeacon` al cerrar la pestaña, prueba que ate el dibujo del icono a `APP_ICON_REV`.
+- Exportar un proyecto (`.pizarro.zip`, `src/lib/project-export/export.ts`) incluye el email de todas las personas que
+  aparecen en él aunque exporte un miembro que no es administrador. Propuesta: emails ajenos solo si exporta un
+  administrador (contra: al reimportar como proyecto de equipo, esas personas quedarían sin emparejar).
+- Calendario suscrito (`.ics`): se rehace entero en cada consulta aunque acabe en 304. Propuesta: ETag barato previo o
+  caché de 60 s por enlace (ahorro pequeño con pocos suscriptores).
+- `/api/health`: pública, sin límite de ritmo, una consulta a la base en cada llamada. Propuesta: guardar el resultado
+  2-5 s en memoria (riesgo real bajo).
+- Importar tareas no avisa a las personas mencionadas en el texto (deliberado, para no llenar de avisos al reimportar;
+  sí avisa a cada responsable). Confirmar.
+- «Nueva tarea» no tiene etiquetas, color, enlace, dependencia ni documentos: al importar una tarea en ella se avisa de
+  que esos campos se añaden después en el detalle. ¿Añadirlos al formulario?
 
 **Ideas pospuestas por decisión del propietario:**
 

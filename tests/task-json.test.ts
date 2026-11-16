@@ -1,13 +1,19 @@
 // Formato «pizarro.task» (lib/task-json.ts): lo que se copia se vuelve a leer igual, y se entiende lo que escribe una IA.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTaskJson, parseDayLoose, parseTaskJson, stringifyTaskJson, TASK_JSON_MAX_CHARS, TASK_JSON_MAX_LABELS, type TaskJsonSource } from "../src/lib/task-json";
+import {
+  buildTaskJson, buildTasksJson, parseDayLoose, parseTaskJson, parseTasksText, strictJsonFormat, stringifyTaskJson, TASK_JSON_MAX_CHARS, TASK_JSON_MAX_LABELS, TASKS_JSON_MAX,
+  TASKS_TEXT_MAX_CHARS, tasksExportFileName, type TaskJsonSource, actionTextFits,
+} from "../src/lib/task-json";
+import { importPreview } from "../src/lib/task-json-form";
+import { esT } from "../src/i18n/shared";
+import { assertFast } from "./timing";
 
 const source: TaskJsonSource = {
-  id: "t1", project: "Web", url: "https://pizarro.example.com/p/p1?task=t1", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Ana",
+  info: { id: "t1", project: "Web", projectId: "p1", url: "https://pizarro.example.com/p/p1?task=t1", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Ana" },
   title: "Preparar la demo", description: "Texto **Markdown**\n\n- uno\n- dos", type: "Funcionalidad", column: "En progreso", labels: ["cliente", "urgente"],
-  assignee: { name: "Ana Pérez", email: "ana@example.com" }, dueDate: "2026-12-01", recurrence: "WEEKLY", recurrenceDay: 2, color: "#ef4444", deliverable: "Entrega 1",
-  link: "https://example.com/x", subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: "Contratar la sala",
+  assignee: { id: "u1", name: "Ana Pérez" }, dueDate: "2026-12-01", recurrence: "WEEKLY", recurrenceDay: 2, color: "#ef4444", deliverable: "Entrega 1",
+  link: "https://example.com/x", subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: { id: "t0", title: "Contratar la sala" },
   googleDocs: [{ kind: "GOOGLE_SHEET", title: "Presupuesto", url: "https://docs.google.com/spreadsheets/d/abc/edit" }],
   attachments: [{ name: "captura.png", url: "https://pizarro.example.com/api/attachments/a1" }],
   enabledFields: ["cost", "hours", "priority", "client", "startDate"],
@@ -21,7 +27,11 @@ test("copiar: marcador, versión, claves en orden estable y solo los campos opci
     "estimatedHours", "actualHours", "recurrence", "color", "deliverable", "link", "subtasks", "dependsOn", "googleDocs", "attachments", "info",
   ]);
   assert.deepEqual([json.format, json.version, json.priority, json.cost, json.estimatedHours, json.recurrence], ["pizarro.task", 1, "high", 120.5, 8, { rule: "weekly", day: 2 }]);
-  assert.deepEqual(json.info, { id: "t1", project: "Web", url: "https://pizarro.example.com/p/p1?task=t1", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Ana" });
+  assert.deepEqual(json.info, { id: "t1", project: "Web", projectId: "p1", url: "https://pizarro.example.com/p/p1?task=t1", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Ana" });
+  assert.deepEqual([json.assignee, json.dependsOn], [{ id: "u1", name: "Ana Pérez" }, { id: "t0", title: "Contratar la sala" }]);
+  // Sin `info` ni lo que solo tiene una tarea guardada (formulario de «Nueva tarea»), esas claves no se escriben.
+  const draft = buildTaskJson({ ...source, info: undefined, labels: undefined, color: undefined, link: undefined, dependsOn: undefined, googleDocs: undefined, attachments: undefined });
+  for (const k of ["info", "labels", "color", "link", "dependsOn", "googleDocs", "attachments"]) assert.ok(!(k in draft), k);
   const plain = buildTaskJson({ ...source, enabledFields: ["priority"], priority: null, recurrence: "NONE", recurrenceDay: null });
   for (const k of ["cost", "costPaid", "estimatedHours", "actualHours", "client", "startDate"]) assert.ok(!(k in plain), k);
   assert.deepEqual([plain.priority, plain.recurrence], [null, { rule: "none" }]);
@@ -30,17 +40,18 @@ test("copiar: marcador, versión, claves en orden estable y solo los campos opci
   assert.match(stringifyTaskJson(json), /^\{\n {2}"format": "pizarro\.task",\n {2}"version": 1,\n {2}"title": "Preparar la demo",/);
 });
 
-test("ida y vuelta: lo copiado se lee con los mismos valores; adjuntos e info no se leen", () => {
+test("ida y vuelta: lo copiado se lee con los mismos valores; adjuntos no se leen e info solo como referencia", () => {
   const parsed = parseTaskJson(stringifyTaskJson(buildTaskJson(source)));
   assert.equal(parsed.kind, "task");
   if (parsed.kind !== "task") return;
   assert.deepEqual(parsed.problems, []);
   assert.deepEqual(parsed.task, {
     title: "Preparar la demo", description: "Texto **Markdown**\n\n- uno\n- dos", type: "Funcionalidad", column: "En progreso", labels: ["cliente", "urgente"],
-    assignee: { name: "Ana Pérez", email: "ana@example.com" }, dueDate: "2026-12-01", startDate: "2026-11-20", priority: "ALTA", client: "Acme", cost: "120.5", costPaid: true,
+    assignee: { id: "u1", name: "Ana Pérez" }, dueDate: "2026-12-01", startDate: "2026-11-20", priority: "ALTA", client: "Acme", cost: "120.5", costPaid: true,
     estimatedHours: "8", actualHours: "2.5", recurrence: { rule: "WEEKLY", day: 2 }, color: "#ef4444", deliverable: "Entrega 1", link: "https://example.com/x",
-    subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: { title: "Contratar la sala" },
+    subtasks: [{ text: "Guion", done: true }, { text: "Ensayo", done: false }], dependsOn: { id: "t0", title: "Contratar la sala" },
     googleDocs: [{ kind: "GOOGLE_SHEET", title: "Presupuesto", url: "https://docs.google.com/spreadsheets/d/abc/edit" }],
+    info: { id: "t1", projectId: "p1" },
   });
   // Una tarea vacía también va y vuelve: null vacía los campos, las listas quedan vacías.
   const empty = parseTaskJson(stringifyTaskJson(buildTaskJson({ ...source, description: "", labels: [], assignee: null, dueDate: null, recurrence: "NONE", recurrenceDay: null, color: null, deliverable: null, link: null, subtasks: [], dependsOn: null, googleDocs: [], attachments: [], enabledFields: [] })));
@@ -48,7 +59,7 @@ test("ida y vuelta: lo copiado se lee con los mismos valores; adjuntos e info no
   if (empty.kind !== "task") return;
   assert.deepEqual(empty.task, {
     title: "Preparar la demo", description: "", type: "Funcionalidad", column: "En progreso", labels: [], assignee: null, dueDate: null, recurrence: { rule: "NONE" }, color: null,
-    deliverable: null, link: null, subtasks: [], dependsOn: null, googleDocs: [],
+    deliverable: null, link: null, subtasks: [], dependsOn: null, googleDocs: [], info: { id: "t1", projectId: "p1" },
   });
 });
 
@@ -173,4 +184,132 @@ test("JSON de una IA con texto alrededor del bloque de código", () => {
   if (r.kind === "task") assert.equal(r.task.title, "Desde la IA");
   assert.equal(parseTaskJson("Hola\n```js\nconsole.log(1)\n```").kind, "none");
   assert.equal(parseTaskJson("```".repeat(5000)).kind, "none");
+});
+
+// --- Varias tareas (importar y exportar) y Ctrl+V estricto ---
+
+test("info: el proyecto de origen sale de projectId o, si no, del enlace; el responsable también por id", () => {
+  const viaUrl = parseTaskJson(JSON.stringify({ format: "pizarro.task", title: "x", info: { id: "t9", url: "https://pizarro.example.com/p/abc_123?task=t9" } }));
+  assert.ok(viaUrl.kind === "task");
+  if (viaUrl.kind === "task") assert.deepEqual(viaUrl.task.info, { id: "t9", projectId: "abc_123" });
+  const who = parseTaskJson('{"title":"x","assignee":{"id":"u7","name":"Ana"}}');
+  assert.ok(who.kind === "task" && who.task.assignee?.id === "u7" && who.task.assignee.name === "Ana");
+  assert.deepEqual((parseTaskJson('{"title":"x","info":{"createdBy":"Ana"}}') as { task: object }).task, { title: "x" }, "info sin id ni proyecto no se guarda");
+});
+
+test("varias tareas: envoltorio, lista, líneas sueltas, bloques ```json y texto alrededor", () => {
+  const exported = JSON.stringify(buildTasksJson({ id: "p1", name: "Web" }, [buildTaskJson(source), { ...buildTaskJson(source), title: "Otra", info: undefined }], "2026-11-16T10:00:00.000Z"), null, 2);
+  const a = parseTasksText(exported);
+  assert.deepEqual([a.total, a.tasks.length, a.failed.length, a.tooMany, a.tooLong], [2, 2, 0, false, false]);
+  assert.deepEqual(a.project, { name: "Web", id: "p1" });
+  assert.deepEqual(a.tasks.map((x) => [x.n, x.task.title, x.task.info]), [[1, "Preparar la demo", { id: "t1", projectId: "p1" }], [2, "Otra", { projectId: "p1" }]]);
+  // Lo exportado se lee igual que cada tarea por separado.
+  assert.deepEqual(a.tasks[0]!.task, (parseTaskJson(stringifyTaskJson(buildTaskJson(source))) as { task: object }).task);
+
+  const mixed = [
+    "Aquí tienes las tareas que pediste:",
+    "",
+    "```json",
+    '[{"title":"Uno"},{"título":"Dos","fecha_limite":"01/02/2027"}]',
+    "```",
+    "Y una más, suelta:",
+    '{"format":"pizarro.task","title":"Tres"}',
+    "",
+    '{"title":"Cuatro"} {"title":"Cinco"}',
+    "- [x] esto es una lista de Markdown, no JSON",
+    '{"title": "rota", }',
+    '{"format":"pizarro.task","descripcion":5}',
+    '{"otra":"cosa"}',
+    "¿Te sirve? {saludos}",
+  ].join("\n");
+  const b = parseTasksText(mixed);
+  assert.deepEqual(b.tasks.map((x) => x.task.title), ["Uno", "Dos", "Tres", "Cuatro", "Cinco"]);
+  assert.equal(b.tasks[1]!.task.dueDate, "2027-02-01");
+  assert.deepEqual(b.failed.map((f) => f.reason).sort(), ["empty", "json", "notTask"]);
+  assert.equal(b.total, 8);
+
+  // Una sola tarea (lo que lee el detalle de la tarea) y nada.
+  assert.equal(parseTasksText('{"format":"pizarro.task","dueDate":"2026-01-05"}').tasks.length, 1);
+  assert.deepEqual(parseTasksText("hola, sin JSON"), { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false });
+});
+
+test("varias tareas: topes de cantidad y de tamaño", () => {
+  const many = JSON.stringify(Array.from({ length: TASKS_JSON_MAX + 20 }, (_, i) => ({ title: `T${i}` })));
+  const r = parseTasksText(many);
+  assert.deepEqual([r.total, r.tooMany, r.tasks.length], [TASKS_JSON_MAX + 20, true, TASKS_JSON_MAX]);
+  assert.equal(parseTasksText("x".repeat(TASKS_TEXT_MAX_CHARS + 1)).tooLong, true);
+});
+
+// El servidor vuelve a leer el texto de importar (hasta 5 MB de cualquiera con sesión): nada cuadrático.
+test("varias tareas, textos patológicos: tiempo lineal y sin lanzar", () => {
+  const N = 4_000_000;
+  const cases: [string, string][] = [
+    ["llaves sin cerrar", "{".repeat(N)],
+    ["corchetes abiertos y cerrados", "[".repeat(N / 2) + "]".repeat(N / 2)],
+    ["comillas sin cerrar", `{"title":"${"a".repeat(N)}`],
+    ["muchas llaves vacías", "{}".repeat(N / 2)],
+    ["texto con llaves sueltas", "a { b } c ".repeat(N / 10)],
+    ["vallas de código", "```json\n".repeat(N / 8)],
+    ["muchas listas pequeñas", "[x] ".repeat(N / 4)],
+    ["escapes", `{"title":"${"\\\\".repeat(N / 2)}"}`],
+  ];
+  for (const [name, text] of cases) {
+    assert.ok(text.length <= TASKS_TEXT_MAX_CHARS, name);
+    assertFast(3000, () => parseTasksText(text), name);
+  }
+  // Muchas tareas pequeñas seguidas: se cuentan todas, se leen las primeras 500.
+  const lots = '{"title":"t"}\n'.repeat(300_000);
+  const r = assertFast(3000, () => parseTasksText(lots), "300 000 tareas seguidas");
+  assert.ok(r.tooMany && r.tasks.length === TASKS_JSON_MAX);
+});
+
+test("Ctrl+V estricto: solo un objeto JSON con su marcador, sin nada alrededor", () => {
+  const one = stringifyTaskJson(buildTaskJson(source));
+  assert.equal(strictJsonFormat(one), "pizarro.task");
+  assert.equal(strictJsonFormat(`﻿ \n${one}\n\t `), "pizarro.task", "espacios y BOM alrededor sí");
+  assert.equal(strictJsonFormat('{"format":"pizarro.tasks","version":1,"tasks":[]}'), "pizarro.tasks");
+  for (const text of [
+    "```json\n" + one + "\n```", `Aquí tienes: ${one}`, `${one}\nGracias`, `[${one}]`, `${one}\n${one}`, '{"title":"Sin marcador"}', '{"format":"PIZARRO.TASK","title":"x"}',
+    '{"format":"pizarro.task","title":"sin cerrar"', '{"format":"pizarro.tasks"}', "hola", "", '{"formato":"pizarro.task","title":"x"}',
+    JSON.stringify({ format: "pizarro.task", description: "a".repeat(TASK_JSON_MAX_CHARS) }),
+  ]) {
+    assert.equal(strictJsonFormat(text), null, text.slice(0, 60));
+  }
+});
+
+test("nombre del fichero de exportar: seguro y con la fecha", () => {
+  assert.equal(tasksExportFileName("tareas", "Mi Proyecto: Año 2026 / Fase ½", "2026-11-16"), "tareas-mi-proyecto-ano-2026-fase-2026-11-16.json");
+  assert.equal(tasksExportFileName("tasks", "../../etc/passwd", "2026-11-16"), "tasks-etc-passwd-2026-11-16.json");
+  assert.equal(tasksExportFileName("tareas", "日本語", "2026-11-16"), "tareas-proyecto-2026-11-16.json");
+  assert.ok(tasksExportFileName("tareas", "x".repeat(500), "2026-11-16").length < 90);
+});
+
+test("el projectId de un envoltorio «pizarro.tasks» vale solo para sus tareas, no para las sueltas ni para otro envoltorio", () => {
+  const wrap = (projectId: string, title: string) => JSON.stringify({ format: "pizarro.tasks", version: 1, project: projectId, projectId, tasks: [{ title }] });
+  const text = ['{"title":"Suelta antes"}', wrap("p1", "De p1"), '{"title":"Suelta después"}', wrap("p2", "De p2"), '[{"title":"En lista"}]'].join("\n");
+  const r = parseTasksText(text);
+  assert.deepEqual(r.tasks.map((x) => [x.task.title, x.task.info?.projectId ?? null]), [
+    ["Suelta antes", null], ["De p1", "p1"], ["Suelta después", null], ["De p2", "p2"], ["En lista", null],
+  ]);
+  // El resumen del proyecto, el del primer envoltorio.
+  assert.deepEqual(r.project, { name: "p1", id: "p1" });
+});
+
+test("actionTextFits: lo que cabe en una acción de servidor (1 MB) medido en JSON y UTF-8", () => {
+  assert.equal(actionTextFits("x".repeat(TASK_JSON_MAX_CHARS)), true);
+  assert.equal(actionTextFits("ñ".repeat(TASK_JSON_MAX_CHARS)), true);
+  assert.equal(actionTextFits("🙂".repeat(TASK_JSON_MAX_CHARS / 2)), true);
+  // Sustitutos sueltos o caracteres de control: 6 bytes cada uno al escribirlos en JSON.
+  assert.equal(actionTextFits("\ud800".repeat(TASK_JSON_MAX_CHARS)), false);
+  assert.equal(actionTextFits("\u0001".repeat(TASK_JSON_MAX_CHARS)), false);
+  assert.equal(actionTextFits("x".repeat(1_000_000)), false);
+});
+
+test("los nombres de los avisos de la vista previa se recortan sin partir emojis", () => {
+  const name = `${"a".repeat(39)}👨‍👩‍👧 y más`;
+  const { notices } = importPreview({ column: name }, { columns: [], kinds: [] }, null, esT);
+  // Con slice(0, 40) quedaba medio emoji (un sustituto suelto); ahora el emoji entero o nada.
+  assert.equal(notices[0], `columna «${"a".repeat(39)}…» (no existe)`);
+  const short = importPreview({ column: `${"a".repeat(30)}👨‍👩‍👧${"b".repeat(20)}` }, { columns: [], kinds: [] }, null, esT).notices[0]!;
+  assert.equal(short, `columna «${"a".repeat(30)}👨‍👩‍👧b…» (no existe)`);
 });

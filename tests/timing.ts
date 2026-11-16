@@ -23,3 +23,19 @@ export function assertFast<R>(maxMs: number, fn: (i: number) => R, label = "tard
   assert.ok(ms < maxMs, `${label} ${Math.round(ms)} ms (máximo ${maxMs}, la mejor de tres)`);
   return out;
 }
+
+/**
+ * Como `assertFast`, para una función asíncrona (p. ej. una acción con base de datos): la mejor de tres medidas, parando en
+ * cuanto una queda por debajo del tope. `fn(i)` recibe el número de intento, por si cada uno necesita datos propios.
+ */
+export async function assertFastAsync<R>(maxMs: number, fn: (i: number) => Promise<R>, label = "tardó"): Promise<R> {
+  let out!: R;
+  let best = Infinity;
+  for (let i = 0; i < 3 && best >= maxMs; i++) {
+    const t0 = performance.now();
+    out = await fn(i);
+    best = Math.min(best, performance.now() - t0);
+  }
+  assert.ok(best < maxMs, `${label} ${Math.round(best)} ms (máximo ${maxMs}, la mejor de tres)`);
+  return out;
+}

@@ -31,6 +31,7 @@ import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
 import type { ProjectExportData } from "./types";
+import { cutText } from "../graphemes";
 
 export interface ImportUser {
   id: string;
@@ -109,15 +110,15 @@ export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise
 
 /** Nombre libre entre los proyectos visibles para quien importa: el del archivo y, si ya existe, con «(importado)». */
 export async function freeProjectName(user: ImportUser, wanted: string, suffix: string): Promise<string> {
-  const base = (wanted.trim() || "Proyecto").slice(0, 80);
+  const base = cutText(wanted.trim() || "Proyecto", 80);
   const taken = async (name: string) => (await db.project.count({ where: { name, ...visibleProjectsWhere(user as never) } })) > 0;
   if (!(await taken(base))) return base;
   for (let n = 1; n < 100; n++) {
     const tail = ` ${suffix}${n > 1 ? ` ${n}` : ""}`;
-    const name = `${base.slice(0, 80 - tail.length).trimEnd()}${tail}`;
+    const name = `${cutText(base, 80 - tail.length).trimEnd()}${tail}`;
     if (!(await taken(name))) return name;
   }
-  return `${base.slice(0, 60)} ${randomBytes(3).toString("hex")}`;
+  return `${cutText(base, 60)} ${randomBytes(3).toString("hex")}`;
 }
 
 /**
@@ -285,7 +286,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         let fileName = safeFileName(a.fileName, "adjunto");
         for (let n = 2; usedNames.has(fileName); n++) {
           const tail = ` (${n})`;
-          fileName = `${safeFileName(a.fileName, "adjunto").slice(0, MAX_FILE_NAME - tail.length)}${tail}`;
+          fileName = `${cutText(safeFileName(a.fileName, "adjunto"), MAX_FILE_NAME - tail.length)}${tail}`;
         }
         usedNames.add(fileName);
         releaseAttachmentRows.push({ id, releaseId: releaseIds.get(r.ref)!, fileName, size: buf.length, isImage: a.isImage, position: a.position, createdAt: date(a.createdAt) });

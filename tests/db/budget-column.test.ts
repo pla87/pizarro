@@ -58,6 +58,40 @@ describe("columna Presupuesto", () => {
     assert.ok((await fieldsOf(f.project.id)).includes("cost"));
   });
 
+  test("deshacer el rol Presupuesto desactiva el Coste que activó (y rehacer y deshacer otra vez, igual)", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    await db.project.update({ where: { id: f.project.id }, data: { taskFields: ["priority"] } });
+    await loginAs(member);
+    expectOk(await setColumnRole(f.columns.todo, "BUDGET"));
+    assert.deepEqual(await fieldsOf(f.project.id), ["cost", "priority"]);
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "NONE");
+    assert.deepEqual(await fieldsOf(f.project.id), ["priority"]);
+    expectOk(await redoLast(f.project.id));
+    assert.deepEqual(await fieldsOf(f.project.id), ["cost", "priority"]);
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await fieldsOf(f.project.id), ["priority"]);
+  });
+
+  test("deshacer el rol Presupuesto no quita el Coste si ya estaba activo o si queda otra columna de presupuesto", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    await db.project.update({ where: { id: f.project.id }, data: { taskFields: ["cost"] } });
+    await loginAs(admin);
+    expectOk(await setColumnRole(f.columns.todo, "BUDGET"));
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await fieldsOf(f.project.id), ["cost"]);
+
+    await db.project.update({ where: { id: f.project.id }, data: { taskFields: [] } });
+    expectOk(await setColumnRole(f.columns.todo, "BUDGET"));
+    // Otra persona da después el rol a otra columna: al deshacer el primero, el Coste se queda.
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "BUDGET" } });
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "NONE");
+    assert.deepEqual(await fieldsOf(f.project.id), ["cost"]);
+  });
+
   test("quien no gestiona el proyecto no puede cambiar los campos", async () => {
     const member = await makeUser();
     const f = await makeProject({ members: [member] });

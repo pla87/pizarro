@@ -11,7 +11,7 @@ import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
-import { capTitle, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
+import { capTitle, freeProjectName, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
@@ -1018,4 +1018,16 @@ describe("importar: endurecimiento (ronda 15)", () => {
     assert.ok(data.kinds.every((k) => k.createdAt));
     assert.ok(data.tasks.some((x) => x.followers.some((fo) => fo.createdAt)));
   });
+});
+
+test("freeProjectName: el nombre largo con emojis se recorta sin partir ninguno, también con «(importado)»", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const importer = asImporter(admin);
+  // 79 + 4: el emoji del borde no cabe entero en 80.
+  assert.equal(await freeProjectName(importer, `${"n".repeat(79)}😀😀`, "(importado)"), "n".repeat(79));
+  // 67 + 6×2 = 79 unidades: entra entero; si ya existe, con « (importado)» caben 68 y el emoji del borde se queda fuera.
+  const wanted = `${"m".repeat(67)}${"😀".repeat(6)}`;
+  const f = await makeProject({ members: [] });
+  await db.project.update({ where: { id: f.project.id }, data: { name: wanted } });
+  assert.equal(await freeProjectName(importer, wanted, "(importado)"), `${"m".repeat(67)} (importado)`);
 });

@@ -12,6 +12,8 @@ import type { T } from "../i18n/core";
 const TASK_EVENT_RETENTION_DAYS = 365;
 /** Máximo de eventos que se devuelven al abrir el historial. */
 const TASK_HISTORY_LIMIT = 200;
+/** Líneas de historial que guarda una acción como mucho (importar 500 tareas deja una en cada una). */
+const EVENTS_PER_ACTION = 500;
 
 /** Acciones con etiqueta que no merecen una línea de historial. */
 const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast", "undo.redoLast"]);
@@ -44,7 +46,7 @@ export async function saveTaskEvents(name: string, ctx: ActionContext, projectId
     if (!events.length) return [];
     // Solo tareas que siguen existiendo (borrar una tarea borra su historial).
     const alive = new Set((await db.task.findMany({ where: { id: { in: [...new Set(events.map((e) => e.taskId))] }, projectId }, select: { id: true } })).map((t) => t.id));
-    const data = events.filter((e) => alive.has(e.taskId)).slice(0, 100).map((e) => ({
+    const data = events.filter((e) => alive.has(e.taskId)).slice(0, EVENTS_PER_ACTION).map((e) => ({
       taskId: e.taskId,
       projectId,
       userId: user?.id ?? null,
