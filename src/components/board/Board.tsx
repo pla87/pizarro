@@ -50,6 +50,8 @@ import { ListView } from "./ListView";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
 import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
+import { TransferButton } from "./TaskTransfer";
+import { strictJsonFormat } from "@/lib/task-json";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
@@ -88,11 +90,13 @@ const loadNewTaskDialog = () => import("./NewTaskDialog");
 const loadReleaseDialog = () => import("./ReleaseDialog");
 const loadBulkTaskDialog = () => import("./BulkTaskDialog");
 const loadArchivedDialog = () => import("./ArchivedDialog");
+const loadImportTasksDialog = () => import("./ImportTasksDialog");
 const TaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadTaskDialog).then((m) => m.TaskDialog)));
 const NewTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadNewTaskDialog).then((m) => m.NewTaskDialog)));
 const ReleaseDialog = ownSuspense(dynamic(() => importWhenOnline(loadReleaseDialog).then((m) => m.ReleaseDialog)));
 const BulkTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadBulkTaskDialog).then((m) => m.BulkTaskDialog)));
 const ArchivedDialog = ownSuspense(dynamic(() => importWhenOnline(loadArchivedDialog).then((m) => m.ArchivedDialog)));
+const ImportTasksDialog = ownSuspense(dynamic(() => importWhenOnline(loadImportTasksDialog).then((m) => m.ImportTasksDialog)));
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
@@ -271,6 +275,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [editDraft, setEditDraft] = useState<EditTaskDraft | null>(null);
   const [secondNew, setSecondNew] = useState<{ columnId?: string } | null>(null);
   const [bulk, setBulk] = useState<{ columnId?: string } | null>(null);
+  // «Importar tareas» (JSON): con el texto ya puesto si se abrió con Ctrl+V en el tablero.
+  const [importing, setImporting] = useState<{ text: string } | null>(null);
   // «Varias tareas» en el hueco del segundo diálogo (a la derecha, con selector de proyecto).
   const [secondBulk, setSecondBulk] = useState(false);
   const [release, setRelease] = useState<{ taskIds: string[]; preselected: string[] } | null>(null);
@@ -345,7 +351,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      for (const load of [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, () => import("@/components/ui/RichTextEditor")]) {
+      for (const load of [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog, () => import("@/components/ui/RichTextEditor")]) {
         load().catch(() => {});
       }
     });
@@ -778,7 +784,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
   const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id ?? sortedColumns[0]?.id;
 
-  // Pegar una imagen en el tablero (sin diálogo abierto) crea una tarea con ella.
+  // Pegar una imagen en el tablero (sin diálogo abierto) crea una tarea con ella. Pegar EXACTAMENTE una tarea o varias en
+  // JSON (con su marcador «pizarro.task» / «pizarro.tasks», sin nada alrededor) abre «Importar tareas» con el texto.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (pasteClaimed(e) || document.querySelector("[role=dialog]") || isTextTarget(e.target)) return;
@@ -787,6 +794,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       if (files.length) {
         claimPaste(e);
         void recoverEmptyImages(files).then((list) => setNewTask({ files: list }));
+        return;
+      }
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (text && strictJsonFormat(text)) {
+        claimPaste(e);
+        e.preventDefault();
+        setImporting({ text });
       }
     };
     document.addEventListener("paste", onPaste);
@@ -1521,6 +1535,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
             <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
           </button>
+          <TransferButton onImport={() => setImporting({ text: "" })} />
           <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
             <PlusStack size={16} /> <span className={HEADER_LABEL}>{t("Varias tareas")}</span>
           </button>
@@ -1717,7 +1732,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         {secondBulk && <BulkTaskDialog side={primaryOpen ? "right" : "center"} pickProject onClose={() => setSecondBulk(false)} />}
         {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
         {(archivedOpen || wantsArchived) && <ArchivedDialog onClose={closeArchived} />}
-        {bulk && <BulkTaskDialog initialColumnId={bulk.columnId} onClose={() => setBulk(null)} />}
+        {bulk && (
+          <BulkTaskDialog
+            initialColumnId={bulk.columnId}
+            onClose={() => setBulk(null)}
+            onImport={(text) => {
+              setBulk(null);
+              setImporting({ text });
+            }}
+          />
+        )}
+        {importing && <ImportTasksDialog initialText={importing.text} onClose={() => setImporting(null)} />}
         {release && (
           <ReleaseDialog
             tasks={release.taskIds.map((id) => taskById.get(id)).filter((t): t is BoardTask => !!t)}

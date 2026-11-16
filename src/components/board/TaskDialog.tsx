@@ -1,7 +1,7 @@
 "use client";
 
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
-import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileCode, FileSpreadsheet, FileText, FileVideo, ClipboardCopy, ClipboardPaste, GripVertical, ImagePlus, Loader2, MoreHorizontal, Pencil, Plus, Presentation, Trash2, TriangleAlert, X } from "lucide-react";
+import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileCode, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Presentation, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -29,14 +29,14 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { Menu, MenuItem } from "../ui/Menu";
 import { applyKindTemplate } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
-import { parseTaskJson } from "@/lib/task-json";
-import { acceptsPastedText, copyTextLater, eventIsFor, hasTextSelection, isCopyKey, readClipboardText } from "./taskClipboard";
+import { parseTasksText, strictJsonFormat } from "@/lib/task-json";
+import { acceptsPastedText, copyTextLater, eventIsFor, hasTextSelection, isCopyKey } from "./taskClipboard";
+import { TaskJsonButtons } from "./TaskJsonButtons";
 import { isSessionExpiredMessage, useToast } from "../ui/Toast";
 import { isOfflineMessage, loadWhenOnline } from "@/lib/connection";
 import { actionThrowMessage } from "@/lib/stale-action";
@@ -841,13 +841,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
   const pasting = useRef(false);
   /**
-   * Escribe en esta tarea el JSON de tarea de `text` (lo valida y aplica el servidor). `quiet`: si el texto no es una tarea
-   * no dice nada (Ctrl+V con cualquier otra cosa en el portapapeles). `true` si se pegó.
+   * Escribe en esta tarea la tarea en JSON de `text` (lo vuelve a leer, valida y aplica el servidor): Ctrl+V con una tarea
+   * exacta en el portapapeles, o «Importar tarea» (portapapeles, fichero o pegada a mano), que acepta también el JSON con
+   * texto alrededor. Varias tareas no: eso es «Importar» del tablero. `true` si se pegó.
    */
-  const pasteTask = async (text: string, quiet = false): Promise<boolean> => {
-    const parsed = parseTaskJson(text);
-    if (parsed.kind !== "task") {
-      if (parsed.kind === "invalid" || !quiet) toast(parsed.kind === "invalid" ? t("El JSON de la tarea no es válido.") : t("El portapapeles no contiene una tarea en JSON."), "error");
+  const pasteTask = async (text: string): Promise<boolean> => {
+    const read = parseTasksText(text);
+    if (read.tasks.length > 1 || read.tooMany) {
+      toast(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }), "error");
+      return false;
+    }
+    const one = read.tasks[0];
+    if (!one) {
+      toast(read.total || read.tooLong ? t("El JSON de la tarea no es válido.") : t("No hay ninguna tarea en JSON."), "error");
       return false;
     }
     if (pasting.current) return false;
@@ -863,7 +869,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       }).catch(() => false))) return false;
       // Los guardados de texto en curso terminan antes: así se envía la versión del texto que dejan.
       await textSaves.current.catch(() => undefined);
-      const res = await tracked(pasteTaskJson(task.id, text, parsed.task.title !== undefined || parsed.task.description !== undefined ? textSince() : undefined));
+      const res = await tracked(pasteTaskJson(task.id, text, one.task.title !== undefined || one.task.description !== undefined ? textSince() : undefined));
       if (!res.ok) {
         if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
         if (!isSessionExpiredMessage(res.error, t) && !isOfflineMessage(res.error, t)) await reload();
@@ -874,7 +880,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       res.data.spawned.forEach(board.upsertTask);
       // Descripción, subtareas y documentos se vuelven a leer (y las etiquetas nuevas del proyecto, con el tablero).
       await reload();
-      showNotice(t("Tarea pegada"));
+      showNotice(res.data.changed ? t("Tarea pegada") : t("Sin cambios"));
       const { skipped } = res.data;
       if (skipped.length) {
         const shown = skipped.slice(0, 4).join("; ");
@@ -888,15 +894,6 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       pasting.current = false;
     }
   };
-  // Pegado a mano: cuando el navegador no deja leer el portapapeles (permiso rechazado, móvil), se pega en un cuadro de texto.
-  const [manualPaste, setManualPaste] = useState<string | null>(null);
-  const manualPasteId = useId();
-  /** Menú «Pegar tarea»: lee el portapapeles; si no se puede, abre el cuadro para pegar el JSON a mano. */
-  const pasteFromClipboard = async () => {
-    const text = await readClipboardText();
-    if (text === null) return setManualPaste("");
-    await pasteTask(text);
-  };
   const clipboardRef = useRef({ copyTask, pasteTask });
   useEffect(() => {
     clipboardRef.current = { copyTask, pasteTask };
@@ -909,14 +906,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       e.preventDefault();
       void clipboardRef.current.copyTask();
     };
-    // Ctrl+V / ⌘V fuera de un campo de texto: si lo copiado es una tarea en JSON, se escribe en esta. En un campo de
-    // texto (o con archivos, o con cualquier otro texto) el pegado sigue su curso.
+    // Ctrl+V / ⌘V fuera de un campo de texto: solo si lo copiado es EXACTAMENTE una tarea en JSON (con su marcador, sin
+    // texto alrededor ni varias), se escribe en esta. En un campo de texto, con archivos o con cualquier otro texto, el
+    // pegado sigue su curso sin avisos. Lo tolerante es «Importar tarea».
     const onPaste = (e: ClipboardEvent) => {
       if (e.defaultPrevented || pasteClaimed(e) || acceptsPastedText(e.target) || !eventIsFor(dialog(), e.target) || pastedFiles(e).length) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
-      if (parseTaskJson(text).kind === "none") return;
+      if (strictJsonFormat(text) !== "pizarro.task") return;
       e.preventDefault();
-      void clipboardRef.current.pasteTask(text, true);
+      void clipboardRef.current.pasteTask(text);
     };
     document.addEventListener("keydown", onKey);
     document.addEventListener("paste", onPaste);
@@ -1042,27 +1040,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </span>
           {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
           {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
-          {/* Copiar y pegar la tarea como JSON, para quien no usa el teclado (en el móvil no hay Ctrl+C / Ctrl+V). */}
-          <Menu
-            align="end"
-            label={t("Más opciones de la tarea")}
-            className="relative shrink-0"
-            panelClassName="w-64 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
-            trigger={({ props }) => (
-              <button type="button" className="btn-icon" aria-label={t("Más opciones de la tarea")} title={t("Más opciones de la tarea")} {...props}>
-                <MoreHorizontal size={18} />
-              </button>
-            )}
-          >
-            <MenuItem icon={ClipboardCopy} onClick={() => void copyTask()} title={t("Copia la tarea entera como JSON, para pegarla en otra tarea o dársela a una IA")}>
-              <span className="flex-1">{t("Copiar tarea (JSON)")}</span>
-              {!mobile && <kbd className="text-xs text-slate-400">{sc("Ctrl+C")}</kbd>}
-            </MenuItem>
-            <MenuItem icon={ClipboardPaste} onClick={() => void pasteFromClipboard()} title={t("Escribe en esta tarea el JSON de tarea que haya en el portapapeles")}>
-              <span className="flex-1">{t("Pegar tarea")}</span>
-              {!mobile && <kbd className="text-xs text-slate-400">{sc("Ctrl+V")}</kbd>}
-            </MenuItem>
-          </Menu>
+          {/* Copiar e importar la tarea como JSON (también para quien no usa el teclado: en el móvil no hay Ctrl+C / Ctrl+V). */}
+          <TaskJsonButtons onCopy={() => void copyTask()} onImport={pasteTask} shortcuts={{ copy: !mobile, paste: !mobile }} />
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
           {/* Sin quitar el foco al pulsarla: así el campo en edición sigue abierto mientras se pregunta (si hace falta) y se
               decide entonces si guardarlo o descartarlo, igual que con Escape, clic fuera o atrás. */}
@@ -1380,25 +1359,6 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             {t("Suelta para adjuntar")}
           </div>
         </div>
-      )}
-      {manualPaste !== null && (
-        <Modal open onClose={() => setManualPaste(null)} title={t("Pegar tarea")} size="md">
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const text = manualPaste;
-              void pasteTask(text).then((ok) => ok && setManualPaste(null));
-            }}
-          >
-            <label className="block text-sm" htmlFor={manualPasteId}>{t("El navegador no deja leer el portapapeles. Pega aquí el JSON de la tarea:")}</label>
-            <textarea id={manualPasteId} className="input h-48 w-full font-mono text-xs" value={manualPaste} onChange={(e) => setManualPaste(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && manualPaste.trim()) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} autoFocus spellCheck={false} placeholder={'{ "format": "pizarro.task", … }'} />
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn-secondary" onClick={() => setManualPaste(null)}>{t("Cancelar")}</button>
-              <button type="submit" className="btn-primary" disabled={!manualPaste.trim()}>{t("Pegar tarea")}</button>
-            </div>
-          </form>
-        </Modal>
       )}
       {lightbox !== null && images.length > 0 && (
         <Lightbox

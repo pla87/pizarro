@@ -6,6 +6,7 @@ import { useMemo, useRef, useState } from "react";
 import { createTasks, getProjectFormData } from "@/actions/tasks";
 import type { ProjectFormData } from "@/lib/types";
 import { MAX_BULK_TASKS, parseTaskLinesInfo } from "@/lib/bulk";
+import { parseTasksText } from "@/lib/task-json";
 import { useT } from "@/i18n/client";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { Modal } from "../ui/Modal";
@@ -25,9 +26,11 @@ interface Props {
   side?: "left" | "right" | "center";
   /** Muestra el selector de proyecto (el diálogo abierto al lado de otro): las tareas se crean en el elegido. */
   pickProject?: boolean;
+  /** Abre «Importar tareas» (JSON) en su lugar, con el texto pegado si lo que se pegó era JSON de tareas. */
+  onImport?: (text: string) => void;
 }
 
-export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = false }: Props) {
+export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = false, onImport }: Props) {
   const board = useBoard();
   const toast = useToast();
   const t = useT();
@@ -98,6 +101,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   };
 
   const { lines, limits } = useMemo(() => parseTaskLinesInfo(text), [text]);
+  const looksJson = useMemo(() => !!onImport && /^\s*[[{]/.test(text) && parseTasksText(text).tasks.length > 0, [onImport, text]);
   const tooMany = lines.length > MAX_BULK_TASKS;
   const kindOf = (title: string) => overrides[title] || kindId;
   const missingKind = lines.some((l) => !kindOf(l));
@@ -199,6 +203,12 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
             placeholder={t("Pega aquí la lista")}
             data-autofocus
           />
+          {/* Tareas en JSON (exportadas o de una IA): se importan con todos sus campos, no como una lista de títulos. */}
+          {onImport && (
+            <button type="button" className={cn("mt-1 text-xs underline-offset-2 hover:underline", looksJson ? "font-medium text-brand-700 dark:text-brand-300" : "text-slate-500")} onClick={() => onImport(looksJson ? text : "")} data-bulk-import>
+              {looksJson ? t("Esto parece JSON de tareas: importarlas con todos sus campos") : t("¿Tienes tareas en JSON? Importarlas")}
+            </button>
+          )}
         </div>
 
         {lines.length > 0 && (
