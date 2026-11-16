@@ -357,7 +357,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
             if (link) setText((v) => `${v.trimEnd()} [${link.title.replace(/[\[\]]/g, "")}](${link.url}) `.trimStart());
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing) {
               e.preventDefault();
               send();
             }

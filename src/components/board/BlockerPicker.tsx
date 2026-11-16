@@ -88,7 +88,7 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
                 e.preventDefault();
                 setSearching(false);
                 setQuery("");
-              } else if (e.key === "Enter" && candidates[0]) {
+              } else if (e.key === "Enter" && !e.nativeEvent.isComposing && candidates[0]) {
                 e.preventDefault();
                 pick(candidates[0]);
               }

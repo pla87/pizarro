@@ -367,7 +367,7 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 e.stopPropagation();
                 applyLink();
