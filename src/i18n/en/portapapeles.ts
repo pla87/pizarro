@@ -101,4 +101,10 @@ export const portapapeles: Record<string, string> = {
   "Importó la tarea desde JSON": "Imported the task from JSON",
   "Importó {count} desde JSON": "Imported {count} from JSON",
   "Exportó {count} como JSON": "Exported {count} as JSON",
+  // Importar por la ruta (más de 1 MB), exportar con tope y avisos de etiquetas acotados.
+  "Las tareas elegidas ocupan más de {mb} MB y no se podrían volver a importar: exporta menos de una vez.": "The selected tasks take up more than {mb} MB and couldn't be imported again: export fewer at a time.",
+  "{n} etiquetas más (no se han podido crear)": "{n} more labels (couldn't be created)",
+  "Más opciones de la tarea": "More task options",
+  "Importar desde el portapapeles": "Import from the clipboard",
+  "Importar desde un fichero": "Import from a file",
 };

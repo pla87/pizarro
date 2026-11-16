@@ -5,11 +5,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
-import { isUniqueColumnRole } from "./constants";
+import { isUniqueColumnRole, MAX_LABELS_PER_PROJECT } from "./constants";
 import { excerpt } from "./mentions";
 import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
-import { assertTaskCapacity } from "./caps";
+import { assertTaskCapacity, lockProject } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
 import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
@@ -1058,9 +1058,18 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           await db.label.deleteMany({ where: { id: op.id, projectId, tasks: { none: {} } } });
           break;
         case "label.restore": {
-          // Si entretanto se creó otra con el mismo nombre, no vuelve (las tareas que la llevaban se quedan sin ella).
-          const { count } = await db.label.createMany({ data: [{ ...op.row, projectId }], skipDuplicates: true });
-          if (!count) miss++;
+          // Bajo el bloqueo del proyecto, como al crear etiquetas (assertLabelCapacity): si sigue existiendo (otra persona
+          // la usó y por eso deshacer no la borró), no hay nada que hacer y no es un fallo. Si el proyecto ya tiene el
+          // máximo de etiquetas, o entretanto se creó otra con el mismo nombre, no vuelve: las tareas que la llevaban se
+          // quedan sin ella (cuenta como parte que no se pudo aplicar).
+          const done = await db.$transaction(async (tx) => {
+            await lockProject(tx, projectId);
+            if (await tx.label.count({ where: { id: op.row.id, projectId } })) return true;
+            if ((await tx.label.count({ where: { projectId } })) >= MAX_LABELS_PER_PROJECT) return false;
+            const { count } = await tx.label.createMany({ data: [{ ...op.row, projectId }], skipDuplicates: true });
+            return count > 0;
+          });
+          if (!done) miss++;
           break;
         }
         case "release.remove": {

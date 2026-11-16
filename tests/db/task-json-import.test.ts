@@ -3,8 +3,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import pg from "pg";
-import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
-import { exportTasksJson, importTasks } from "../../src/actions/task-json";
+import { assign, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { exportTasksJson } from "../../src/actions/task-json";
+import { importTasks } from "../../src/lib/task-import";
+import { POST as importRoute } from "../../src/app/api/projects/[projectId]/import-tasks/route";
+import { assertFastAsync } from "../timing";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { TASKS_JSON_MAX } from "../../src/lib/task-json";
 
@@ -244,5 +247,125 @@ describe("importTasks", () => {
     expectOk(await undoLast(f.project.id));
     assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 0);
     assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 0);
+  });
+});
+
+describe("importar más de 1 MB por la ruta, avisos de etiquetas y rehacer con el tope de etiquetas", () => {
+  const post = (projectId: string, body: string, headers: Record<string, string> = {}, query = "") =>
+    importRoute(
+      new Request(`http://localhost/api/projects/${projectId}/import-tasks${query}`, { method: "POST", body, headers: { origin: "http://localhost", host: "localhost", "content-type": "text/plain;charset=UTF-8", ...headers } }),
+      { params: Promise.resolve({ projectId }) },
+    );
+
+  test("la ruta importa un JSON de más de 1 MB (con caracteres de varios bytes) y lo exportado se vuelve a importar", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const g = await makeProject({ members: [user] });
+    await loginAs(user);
+    const tasks = Array.from({ length: 300 }, (_, i) => ({ format: "pizarro.task", title: `Grande ${i} 🙂`, description: `Descripción «${i}» con eñes y €: ${"ñ€🙂 ".repeat(800)}` }));
+    const text = JSON.stringify({ format: "pizarro.tasks", version: 1, tasks }, null, 2);
+    assert.ok(Buffer.byteLength(text) > 2 * 1024 * 1024, `${Buffer.byteLength(text)} bytes`);
+    const res = await post(f.project.id, text);
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { ok: boolean; data: { tasks: { title: string }[] } };
+    assert.equal(body.ok, true);
+    assert.equal(body.data.tasks.length, 300);
+    const back = await db.task.findFirstOrThrow({ where: { projectId: f.project.id, title: "Grande 7 🙂" } });
+    assert.equal(back.description, tasks[7]!.description);
+    // El registro y el deshacer, como con la acción.
+    assert.equal(await undoCount(f.project.id), 1);
+    // Exportar las 300 y volver a importarlas en otro proyecto (columna forzada por la dirección).
+    const ids = (await db.task.findMany({ where: { projectId: f.project.id }, select: { id: true } })).map((t) => t.id);
+    const exported = expectOk(await exportTasksJson(f.project.id, ids));
+    const again = await post(g.project.id, exported.text, {}, `?columnId=${g.columns.doing}`);
+    const reBody = (await again.json()) as { ok: boolean; data: { tasks: { columnId: string }[] } };
+    assert.equal(reBody.ok, true);
+    assert.equal(reBody.data.tasks.length, 300);
+    assert.ok(reBody.data.tasks.every((t) => t.columnId === g.columns.doing));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 0);
+  });
+
+  test("la ruta: otro origen 403, sin sesión 401, demasiado grande 413 (declarado o al leer), errores de la importación con 200 y ok: false", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const other = await makeProject({ members: [] });
+    await loginAs(user);
+    assert.equal((await post(f.project.id, "{}", { origin: "https://example.com" })).status, 403);
+    assert.equal((await post(f.project.id, "x".repeat(10), { "content-length": String(15_000_001) })).status, 413);
+    const tooLong = await post(f.project.id, "x".repeat(5_000_001));
+    assert.equal(tooLong.status, 413);
+    assert.match(((await tooLong.json()) as { error: string }).error, /demasiado largo/);
+    const denied = (await (await post(other.project.id, '{"title":"Ajena"}')).json()) as { ok: boolean; error: string };
+    assert.equal(denied.ok, false);
+    assert.match(denied.error, NOT_FOUND);
+    logout();
+    const anon = await post(f.project.id, '{"title":"Sin sesión"}');
+    assert.equal(anon.status, 401);
+    assert.match(((await anon.json()) as { error: string }).error, /Sesión caducada/);
+    assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 0);
+  });
+
+  test("500 tareas con 20 etiquetas que no se pueden crear: rápido (sin coste cuadrático) y unos pocos avisos por tarea", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const text = JSON.stringify({
+      format: "pizarro.tasks", version: 1,
+      tasks: Array.from({ length: TASKS_JSON_MAX }, (_, i) => ({ title: `T${i}`, labels: Array.from({ length: 20 }, (_, j) => `${"x".repeat(40)}-${i}-${j}`) })),
+    });
+    // Cada intento, en un proyecto nuevo (500 tareas por intento; el tope del proyecto es 1000).
+    const projects = await Promise.all([0, 1, 2].map(() => makeProject({ members: [user] })));
+    // Antes: 30-40 s de CPU sin soltar el hilo (cada etiqueta fallida recorría todas las tareas y sus etiquetas).
+    const res = expectOk(await assertFastAsync(10_000, (i) => importTasks(projects[i]!.project.id, text), "500×20 etiquetas no válidas"));
+    assert.equal(res.tasks.length, TASKS_JSON_MAX);
+    const mine = res.notices.filter((n) => n.title === "T7").map((n) => n.text);
+    assert.equal(mine.length, 4, mine.join(" | "));
+    assert.match(mine[0]!, /^etiqueta «x{39}…» \(no se ha podido crear\)$/);
+    assert.equal(mine[3], "17 etiquetas más (no se han podido crear)");
+  });
+
+  test("rehacer una importación con el proyecto en el tope de 50 etiquetas: no se recrean y las tareas quedan sin ellas", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await importTasks(f.project.id, lines({ title: "Con etiqueta", labels: ["nueva"] })));
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 0);
+    // Mientras tanto, el proyecto llega al tope.
+    await db.label.createMany({ data: Array.from({ length: 50 }, (_, i) => ({ projectId: f.project.id, name: `e${i}`, color: "#ef4444" })) });
+    const redo = expectOk(await redoLast(f.project.id));
+    assert.equal(redo.skipped, 1, "la etiqueta que no vuelve cuenta como parte que no se pudo aplicar");
+    assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 50);
+    const task = await db.task.findFirstOrThrow({ where: { projectId: f.project.id, title: "Con etiqueta" }, include: { labels: true } });
+    assert.equal(task.labels.length, 0);
+  });
+
+  test("rehacer cuando la etiqueta creada siguió existiendo (otra persona la usó): no cuenta como parte que ya no existía", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await importTasks(f.project.id, lines({ title: "Uno", labels: ["compartida"] })));
+    const label = await db.label.findFirstOrThrow({ where: { projectId: f.project.id, name: "compartida" } });
+    const other = await makeTask(f, { title: "De otra persona" });
+    await db.taskLabel.create({ data: { taskId: other.id, labelId: label.id } });
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.label.count({ where: { id: label.id } }), 1);
+    const redo = expectOk(await redoLast(f.project.id));
+    assert.equal(redo.skipped, 0);
+    const uno = await db.task.findFirstOrThrow({ where: { projectId: f.project.id, title: "Uno" }, include: { labels: true } });
+    assert.deepEqual(uno.labels.map((l) => l.labelId), [label.id]);
+  });
+
+  test("exportar: si el JSON no cabe en el tope de la importación, no se exporta (y se avisa)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const big = "a".repeat(19_000);
+    await db.task.createMany({ data: Array.from({ length: 300 }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `Larga ${i}`, description: big, position: (i + 1) * 1000 })) });
+    const ids = (await db.task.findMany({ where: { projectId: f.project.id }, select: { id: true } })).map((t) => t.id);
+    expectFail(await exportTasksJson(f.project.id, ids), /no se podrían volver a importar/);
+    // Con menos, sí.
+    const res = expectOk(await exportTasksJson(f.project.id, ids.slice(0, 100)));
+    assert.ok(res.text.length <= 5_000_000);
   });
 });

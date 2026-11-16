@@ -1,6 +1,7 @@
 // Traducciones al inglés: cuentas y seguridad (acceso, enlaces por email, sesiones, avisos). Clave: texto exacto en español.
 export const cuentas: Record<string, string> = {
   // Administración de usuarios
+  "Quitó el rol de administrador a «{name}»; sin asignar en proyectos que ya no ve: {count}": "Removed the admin role from “{name}”; unassigned in projects they can no longer see: {count}",
   "Tiene que elegir una contraseña nueva al entrar": "They must choose a new password when signing in",
   "Contraseña pendiente": "Password pending",
   "Forzar cambio de contraseña de {name}": "Force password change for {name}",

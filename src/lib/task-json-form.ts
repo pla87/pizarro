@@ -2,6 +2,7 @@
 // rellenar ese formulario con una tarea importada y la vista previa de «Importar» del tablero (a qué columna irá cada
 // tarea y qué no se va a poder aplicar). Puro y sin zod: lo usa el cliente. Lo que se guarda lo vuelve a comprobar el
 // servidor (lib/task-json-resolve.ts) con las mismas reglas de nombres.
+import { ellipsize } from "./graphemes";
 import { normalizeSearch } from "./search-accents";
 import { buildTaskJson, TASK_JSON_FIELD_LABEL as FIELD_LABEL, type TaskJsonField, type TaskJsonInput } from "./task-json";
 import type { FieldsForm } from "./fields-form";
@@ -18,7 +19,7 @@ const findByName = <T extends { name: string }>(list: readonly T[], name: string
 };
 
 /** Un nombre del JSON dentro de un aviso: corto y sin saltos de línea. */
-const quote = (s: string) => (s.length > 40 ? `${s.slice(0, 40)}…` : s).replace(/\s+/g, " ");
+const quote = (s: string) => ellipsize(s.replace(/\s+/g, " "), 40);
 
 /** Lo del proyecto que hace falta para pasar de nombres a ids en el formulario. */
 export interface FormProject {

@@ -1,7 +1,7 @@
 import "server-only";
 // Del JSON de una tarea (lib/task-json.ts, ya leído) a lo que se escribe en un proyecto: nombres → ids (tipo, columna,
 // responsable, entregable, etiquetas, dependencia), con las mismas reglas que al editar a mano. Lo usan pegar sobre una
-// tarea (pasteTaskJson, actions/tasks.ts) e importar varias (importTasks, actions/task-json.ts): un solo sitio para las
+// tarea (pasteTaskJson, actions/tasks.ts) e importar varias (importTasks, lib/task-import.ts): un solo sitio para las
 // reglas y los avisos. Lo que se lee del proyecto se pide una vez por resolutor (TaskJsonResolver) y solo si hace
 // falta: pegar una fecha no lee las etiquetas, e importar 500 tareas no lee los tipos 500 veces.
 // También está aquí el lado de copiar: las tareas como objetos «pizarro.task» (taskJsonObjects, para copiar y exportar).
@@ -14,6 +14,7 @@ import { localizeGeneralKind } from "./kinds-localize";
 import { normalizeSearch } from "./search-accents";
 import { mentionsToPlain } from "./mentions";
 import { clampTitle } from "./title-clamp";
+import { ellipsize } from "./graphemes";
 import { dateToIso } from "./dates";
 import { rateLimit } from "./rate-limit";
 import { isWhite, LABEL_CREATE_PER_MINUTE, MAX_DESCRIPTION, MAX_LABELS_PER_PROJECT, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, PALETTE } from "./constants";
@@ -80,7 +81,7 @@ export function checkPastedTask(task: TaskJsonInput, t: T): { ok: true; data: Pa
 /** Comparación de nombres sin mayúsculas, tildes ni espacios repetidos. */
 export const foldName = (s: string) => normalizeSearch(s).replace(/\s+/g, " ").trim();
 /** Un nombre del JSON dentro de un aviso: corto y sin saltos de línea. */
-export const quoteName = (s: string) => (s.length > 40 ? `${s.slice(0, 40)}…` : s).replace(/\s+/g, " ");
+export const quoteName = (s: string) => ellipsize(s.replace(/\s+/g, " "), 40);
 
 /** Campos de la tarjeta que salen del JSON, ya comprobados y con ids (lo que acepta updateTask / el alta). */
 export interface ResolvedFields {
@@ -306,11 +307,12 @@ export class TaskJsonResolver {
     for (const l of existing) if (!ids.has(foldName(l.name))) ids.set(foldName(l.name), l.id);
     const wanted: { key: string; name: string; clean: string | null }[] = [];
     const seen = new Set<string>();
+    const labelName = v.name.max(40);
     for (const name of names) {
       const key = foldName(name);
       if (ids.has(key) || seen.has(key)) continue;
       seen.add(key);
-      const clean = v.name.max(40).safeParse(name);
+      const clean = labelName.safeParse(name);
       wanted.push({ key, name, clean: clean.success && rateLimit(`create-label:${this.user.id}`, LABEL_CREATE_PER_MINUTE, 60_000) ? clean.data : null });
     }
     const created: string[] = [];

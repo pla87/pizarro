@@ -127,6 +127,43 @@ if (only.includes("importar")) {
     await sleep(600);
     L.eq(`CTRL+V: con ${name} no abre nada`, [await importDialog(page).count(), await page.locator("[role=dialog]").count()], [0, 0]);
   }
+
+  // Más de 1 MB (el tope de las acciones de servidor): va por la ruta /api/projects/[id]/import-tasks, hasta 5 MB.
+  const bigTasks = Array.from({ length: 300 }, (_, i) => ({ format: "pizarro.task", title: `Grande ${String(i).padStart(3, "0")}`, description: `Con eñes, € y 🙂: ${"ñ€🙂 texto ".repeat(450)}` }));
+  const bigText = JSON.stringify({ format: "pizarro.tasks", version: 1, tasks: bigTasks }, null, 2);
+  L.check("GRANDE: el fichero pasa de 2 MB (tope de las acciones: 1 MB; del proxy: 2 MB)", Buffer.byteLength(bigText) > 2 * 1024 * 1024, String(Buffer.byteLength(bigText)));
+  await btn.click();
+  await importDialog(page).waitFor();
+  const loadBig = async () => {
+    const [ch] = await Promise.all([page.waitForEvent("filechooser"), importDialog(page).getByRole("button", { name: "Desde un fichero" }).click()]);
+    await ch.setFiles({ name: "grande.json", mimeType: "application/json", buffer: Buffer.from(bigText) });
+    await L.checkEventually("GRANDE: se detectan las 300", async () => (await importDialog(page).innerText()).includes("300 tareas detectadas"), { timeout: 20000 });
+  };
+  await loadBig();
+  // Sin red: el aviso de siempre y el diálogo sigue abierto con el texto.
+  await page.route("**/import-tasks**", (r) => r.abort("internetdisconnected"));
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.checkEventually("GRANDE: sin red, «Sin conexión: no se ha guardado» y el diálogo sigue abierto", async () => { const a = await alerts(page); return [a.includes("Sin conexión: no se ha guardado") && (await importDialog(page).count()) === 1, a]; });
+  await page.unroute("**/import-tasks**");
+  // Sesión caducada: el aviso con su botón para entrar.
+  await page.route("**/import-tasks**", (r) => r.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ ok: false, error: "Sesión caducada. Vuelve a iniciar sesión." }) }));
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.checkEventually("GRANDE: sin sesión, el aviso de sesión caducada con «Iniciar sesión»", async () => (await page.getByRole("button", { name: "Iniciar sesión" }).count()) > 0);
+  await page.unroute("**/import-tasks**");
+  // Un proxy por delante que corta lo grande (413 sin JSON): el tope, no «Error inesperado».
+  await page.route("**/import-tasks**", (r) => r.fulfill({ status: 413, contentType: "text/html", body: "<h1>413</h1>" }));
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.checkEventually("GRANDE: un 413 de fuera dice el tope", async () => { const a = await alerts(page); return [a.includes("demasiado largo para importarlo (máximo 5 MB)"), a]; });
+  await page.unroute("**/import-tasks**");
+  // De verdad: se importan las 300.
+  await sleep(500);
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.checkEventually("GRANDE: «300 tareas importadas» y se cierra", async () => { const a = await alerts(page); return [(await importDialog(page).count()) === 0 && a.includes("300 tareas importadas"), a]; }, { timeout: 30000 });
+  const bigBack = await L.q(`SELECT title, description FROM "Task" WHERE "projectId"=$1 AND title LIKE 'Grande %' ORDER BY title`, [p0.id]);
+  L.eq("GRANDE: las 300 en la base, con el texto intacto", [bigBack.length, bigBack[7]?.description === bigTasks[7].description], [300, true]);
+  L.eq("GRANDE: un solo deshacer para todas", await U.undoCount("UNDO"), 2);
+  // Los fallos de red y de sesión simulados dejan su rastro en la consola: son los esperados.
+  s.errors.length = 0;
   L.assertNoErrors("importar", [s]);
   await s.ctx.close();
 }

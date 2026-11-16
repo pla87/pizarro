@@ -34,7 +34,7 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
-import { parseTasksText, strictJsonFormat } from "@/lib/task-json";
+import { actionTextFits, parseTasksText, strictJsonFormat, TASK_JSON_MAX_CHARS } from "@/lib/task-json";
 import { acceptsPastedText, copyTextLater, eventIsFor, hasTextSelection, isCopyKey } from "./taskClipboard";
 import { TaskJsonButtons } from "./TaskJsonButtons";
 import { isSessionExpiredMessage, useToast } from "../ui/Toast";
@@ -856,6 +856,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       toast(read.total || read.tooLong ? t("El JSON de la tarea no es válido.") : t("No hay ninguna tarea en JSON."), "error");
       return false;
     }
+    // Pegar va por una acción de servidor (1 MB como mucho): uno más largo se rechaza aquí con el aviso de siempre.
+    if (text.length > TASK_JSON_MAX_CHARS || !actionTextFits(text)) {
+      toast(t("El JSON de la tarea es demasiado largo."), "error");
+      return false;
+    }
     if (pasting.current) return false;
     pasting.current = true;
     try {
@@ -1040,8 +1045,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </span>
           {/* Móvil: el detalle ocupa la pantalla y tapa la cabecera; deshacer y rehacer (de esta tarea) van aquí. */}
           {mobile && <UndoButton projectId={board.project.id} inDialog className="shrink-0" />}
-          {/* Copiar e importar la tarea como JSON (también para quien no usa el teclado: en el móvil no hay Ctrl+C / Ctrl+V). */}
-          <TaskJsonButtons onCopy={() => void copyTask()} onImport={pasteTask} shortcuts={{ copy: !mobile, paste: !mobile }} />
+          {/* Copiar e importar la tarea como JSON (también para quien no usa el teclado: en el móvil no hay Ctrl+C / Ctrl+V).
+              Por debajo de `sm`, juntos en un botón «⋯» para dejar sitio al título. */}
+          <TaskJsonButtons onCopy={() => void copyTask()} onImport={pasteTask} shortcuts={{ copy: !mobile, paste: !mobile }} compactOnMobile />
           {/* Fuera del orden de Tab (Título → descripción directo); Escape también cierra. */}
           {/* Sin quitar el foco al pulsarla: así el campo en edición sigue abierto mientras se pregunta (si hace falta) y se
               decide entonces si guardarlo o descartarlo, igual que con Escape, clic fuera o atrás. */}

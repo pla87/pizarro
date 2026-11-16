@@ -1,7 +1,8 @@
 // Tareas como JSON, para copiarlas y pegarlas, exportarlas e importarlas, o para dárselas a una IA y traer lo que devuelva.
 // Sin dependencias de Node ni de zod: lo usan el navegador (¿lo copiado es una tarea?, vista previa de la importación) y el
-// servidor (que es quien vuelve a leer el texto, valida y aplica: pasteTaskJson en actions/tasks.ts, importTasks y
-// exportTasksJson en actions/task-json.ts, resolución de nombres en lib/task-json-resolve.ts).
+// servidor (que es quien vuelve a leer el texto, valida y aplica: pasteTaskJson en actions/tasks.ts, importTasks en
+// lib/task-import.ts (por la ruta POST /api/projects/[projectId]/import-tasks: más de 1 MB), exportTasksJson en
+// actions/task-json.ts, resolución de nombres en lib/task-json-resolve.ts).
 //
 // Formato «pizarro.task», versión 1 (una tarea). Todas las claves salvo `format` son opcionales al pegar: la que no viene
 // no se toca. Al importar (crear tareas nuevas) hace falta al menos el título.
@@ -44,6 +45,8 @@
 //
 //   { "format": "pizarro.tasks", "version": 1, "project": "Web", "projectId": "…", "exportedAt": "2026-11-16T10:00:00.000Z",
 //     "tasks": [ { objeto pizarro.task }, … ] }          como mucho TASKS_JSON_MAX tareas
+//   y TASKS_TEXT_MAX_CHARS caracteres (5 millones): lo que se exporta siempre se puede volver a importar; si sangrado no
+//   cabe, se exporta sin sangrar, y si ni así, no se exporta. El projectId del envoltorio vale solo para sus tareas.
 //
 // Al leer se es tolerante con lo que escriba una persona o una IA: claves en mayúsculas, con guiones o en español
 // («título», «fecha_limite», «Etiquetas»), fechas ISO completas o DD/MM/AAAA, prioridad en español o en inglés, subtareas
@@ -65,6 +68,18 @@ const TASK_JSON_VERSION = 1;
 export const TASK_JSON_MAX_CHARS = 200_000;
 /** Tamaño máximo del texto que se lee al importar varias tareas (también lo comprueba el servidor). */
 export const TASKS_TEXT_MAX_CHARS = 5_000_000;
+/**
+ * Tope del cuerpo de la importación en bytes (la ruta POST /api/projects/[projectId]/import-tasks, que recibe el texto tal
+ * cual, en UTF-8): cualquier texto de TASKS_TEXT_MAX_CHARS caracteres cabe, porque cada unidad UTF-16 ocupa como mucho 3
+ * bytes (un emoji, 2 unidades y 4 bytes). Lo que cuenta después es el número de caracteres.
+ */
+export const TASKS_TEXT_MAX_BYTES = TASKS_TEXT_MAX_CHARS * 3;
+/**
+ * Lo que puede ocupar en bytes un texto que se manda a una acción de servidor (tope de Next: 1 MB, serverActions.bodySizeLimit
+ * en next.config.ts), con margen para el resto de la petición. Pegar una tarea en el detalle (pasteTaskJson) va por acción:
+ * el navegador lo comprueba antes de enviarlo (actionTextFits) para dar un aviso claro en vez de «Error inesperado».
+ */
+const ACTION_TEXT_MAX_BYTES = 900_000;
 /** Tareas que se exportan o importan de una vez (el mismo tope que las tareas de una release). */
 export const TASKS_JSON_MAX = 500;
 /**
@@ -703,24 +718,25 @@ export function parseTasksText(raw: string): TasksTextParse {
   if (typeof raw !== "string") return out;
   if (raw.length > TASKS_TEXT_MAX_CHARS) return { ...out, tooLong: true };
   const values = jsonValuesIn(raw, TASKS_JSON_MAX);
-  const items: unknown[] = [];
-  let projectId: string | undefined;
+  // Cada elemento con el proyecto de su envoltorio «pizarro.tasks» (si salió de uno): las tareas sueltas de antes o de
+  // después de un envoltorio no lo heredan, y dos envoltorios de proyectos distintos no se mezclan.
+  const items: { value: unknown; projectId?: string }[] = [];
   for (const v of values) {
     if (Array.isArray(v)) {
-      for (const x of v) items.push(x);
+      for (const x of v) items.push({ value: x });
       continue;
     }
     const list = isObject(v) ? wrappedTasks(v) : null;
     if (list && isObject(v)) {
       const name = text(pick(v, ["project", "proyecto"]))?.trim().slice(0, 200);
-      projectId = text(pick(v, ["projectid", "proyectoid"]))?.trim().slice(0, 100) || undefined;
-      out.project = { ...(name ? { name } : {}), ...(projectId ? { id: projectId } : {}) };
-      for (const x of list) items.push(x);
-    } else items.push(v);
+      const projectId = text(pick(v, ["projectid", "proyectoid"]))?.trim().slice(0, 100) || undefined;
+      out.project ??= { ...(name ? { name } : {}), ...(projectId ? { id: projectId } : {}) };
+      for (const x of list) items.push({ value: x, projectId });
+    } else items.push({ value: v });
   }
   out.total = items.length;
   out.tooMany = out.total > TASKS_JSON_MAX;
-  items.slice(0, TASKS_JSON_MAX).forEach((item, i) => {
+  items.slice(0, TASKS_JSON_MAX).forEach(({ value: item, projectId }, i) => {
     if (item === UNREADABLE) return void out.failed.push({ n: i + 1, reason: "json" });
     const r = parseTaskValue(item, projectId);
     if (r.kind === "task") out.tasks.push({ n: i + 1, task: r.task, problems: r.problems });
@@ -748,4 +764,15 @@ export function strictJsonFormat(raw: string): "pizarro.task" | "pizarro.tasks" 
   if (v.format === TASK_JSON_FORMAT) return s.length <= TASK_JSON_MAX_CHARS ? TASK_JSON_FORMAT : null;
   if (v.format === TASKS_JSON_FORMAT && Array.isArray(v.tasks)) return TASKS_JSON_FORMAT;
   return null;
+}
+
+/**
+ * ¿Cabe `text` como argumento de una acción de servidor? Se mide como va en la petición: escrito en JSON (comillas, barras,
+ * saltos de línea y sustitutos sueltos escapados) y en UTF-8. Solo para textos que ya caben en TASK_JSON_MAX_CHARS.
+ */
+export function actionTextFits(text: string): boolean {
+  if (text.length > ACTION_TEXT_MAX_BYTES) return false;
+  // Lo más que puede ocupar cada carácter escrito en JSON es 6 bytes («\u00XX»): si así cabe, no hace falta medir.
+  if (text.length * 6 <= ACTION_TEXT_MAX_BYTES) return true;
+  return new TextEncoder().encode(JSON.stringify(text)).length <= ACTION_TEXT_MAX_BYTES;
 }

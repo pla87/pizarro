@@ -42,8 +42,8 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 109 | ~1,5 min |
-| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 95 | ~1,5 min |
-| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, «Nueva tarea», móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 75 | ~1,5 min |
+| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 97 | ~1,5 min |
+| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea», móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 83 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -556,7 +556,8 @@ exactamente un JSON de tarea con su marcador; un JSON roto, sin marcador, en un 
 una lista o dos seguidas no hacen nada. Dentro de un campo el JSON se pega como texto y, con la descripción sin guardar,
 pegar la tarea pregunta antes. Los botones «Copiar tarea» e «Importar tarea» (desde el portapapeles, tolerante con lo
 que escribe una IA, con aviso si hay varias tareas o ninguna; desde un fichero .txt; con el teclado; sin permiso para
-leer el portapapeles, cuadro para pegarlo a mano; en el móvil, que caben en la cabecera) y los textos en inglés. Misma
+leer el portapapeles, cuadro para pegarlo a mano; en el móvil, juntos en un botón «⋯» «Más opciones de la tarea» que cabe en la
+cabecera y deja sitio al título, también con el teclado) y los textos en inglés. Misma
 base y servidor:
 
 ```sh
@@ -570,7 +571,9 @@ cuadro, «Desde el portapapeles», «Desde un fichero» (.json, .txt) o arrastra
 columna a la que irá cada tarea y sus avisos, las que no se pueden leer y «Columna de destino» (la de cada tarea o una
 para todas). Se importan con un solo deshacer (que borra también las etiquetas creadas), historial en cada tarea,
 dependencias por título dentro del lote y hacia las que ya había, y responsable por id. Ctrl+V en el tablero con un JSON
-de tareas exacto abre el diálogo con el texto (con texto alrededor, no). Con tarjetas marcadas el botón pasa a
+de tareas exacto abre el diálogo con el texto (con texto alrededor, no). Un fichero de más de 2 MB (300 tareas con eñes,
+€ y emojis) se importa por la ruta `/api/projects/[id]/import-tasks` (las acciones admiten 1 MB); sin red, con la sesión
+caducada o con un 413 de un proxy por delante, el aviso de siempre. Con tarjetas marcadas el botón pasa a
 «Exportar (N)»: «Descargar .json» (nombre `tareas-<proyecto>-<fecha>.json`, sin emails) y «Copiar»; lo descargado se
 vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» copia lo escrito, «Importar
 tarea» rellena el formulario (pregunta antes de sustituir y avisa de lo que no admite), desde un fichero y con Ctrl+V

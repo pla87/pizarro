@@ -228,7 +228,7 @@ describe("pasteTaskJson", () => {
       labels: ["e1", "nueva 1", "nueva 2", "nueva 3", "z".repeat(41)],
     }));
     assert.deepEqual(res.skipped, [
-      "descripción (demasiado larga)", "etiqueta «nueva 3» (no se ha podido crear)", `etiqueta «${"z".repeat(40)}…» (no se ha podido crear)`, "subtareas (máximo 100 por tarea)",
+      "descripción (demasiado larga)", "etiqueta «nueva 3» (no se ha podido crear)", `etiqueta «${"z".repeat(39)}…» (no se ha podido crear)`, "subtareas (máximo 100 por tarea)",
     ]);
     const s = await state(task.id);
     assert.equal(s.title.length, 210, "el título se recorta, como al escribirlo");

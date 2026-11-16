@@ -1,12 +1,12 @@
 "use client";
 
 // «Importar tareas» del tablero: pegar el JSON en un cuadro, leerlo del portapapeles o de un fichero (.json, .txt; también
-// arrastrándolo encima), vista previa (título, columna a la que irá y avisos) y crear todas de una vez (importTasks, que
-// vuelve a leer el texto en el servidor). Acepta el JSON que descarga «Exportar», una lista de tareas, varias seguidas o
-// lo que devuelva una IA (ver parseTasksText en lib/task-json.ts).
+// arrastrándolo encima), vista previa (título, columna a la que irá y avisos) y crear todas de una vez (POST a
+// /api/projects/[projectId]/import-tasks, que vuelve a leer el texto en el servidor: lib/task-import.ts). Acepta el JSON
+// que descarga «Exportar», una lista de tareas, varias seguidas o lo que devuelva una IA (ver parseTasksText en
+// lib/task-json.ts).
 import { ClipboardPaste, FileUp, Loader2, TriangleAlert } from "lucide-react";
 import { useDeferredValue, useId, useMemo, useRef, useState } from "react";
-import { importTasks } from "@/actions/task-json";
 import { useT } from "@/i18n/client";
 import { actionThrowResult } from "@/lib/stale-action";
 import { isOfflineMessage } from "@/lib/connection";
@@ -15,6 +15,8 @@ import { importPreview } from "@/lib/task-json-form";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
+import { SESSION_EXPIRED } from "../ui/session-expired";
+import type { ImportTasksData } from "@/lib/task-import";
 import { useBoard } from "./context";
 import { readClipboardText } from "./taskClipboard";
 import { readTasksFile } from "./TaskJsonButtons";
@@ -24,6 +26,24 @@ interface Props {
   /** Texto con el que se abre (Ctrl+V en el tablero con una tarea o varias en JSON). */
   initialText?: string;
   onClose: () => void;
+}
+
+type ImportResult = { ok: true; data: ImportTasksData } | { ok: false; error: string };
+
+/**
+ * Manda el texto a la ruta de importación tal cual (no a una acción de servidor: esas admiten como mucho 1 MB). Devuelve lo
+ * mismo que una acción. Sin red, lanza (como una acción: `board.track` lo convierte en «Sin conexión: no se ha guardado»);
+ * sin sesión, el aviso de sesión caducada (con su botón para entrar); demasiado grande (también si lo corta un proxy por
+ * delante), el tope; cualquier otra respuesta que no sea de la ruta, el error genérico.
+ */
+async function postImport(projectId: string, text: string, columnId: string | null, t: (s: string, v?: Record<string, string | number>) => string): Promise<ImportResult> {
+  const query = columnId ? `?columnId=${encodeURIComponent(columnId)}` : "";
+  const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/import-tasks${query}`, { method: "POST", body: text, headers: { "Content-Type": "text/plain;charset=UTF-8" } });
+  const json: unknown = await res.json().catch(() => null);
+  if (res.status === 401) return { ok: false, error: t(SESSION_EXPIRED) };
+  if (json && typeof json === "object" && "ok" in json && (json.ok === true || typeof (json as { error?: unknown }).error === "string")) return json as ImportResult;
+  if (res.status === 413) return { ok: false, error: t("El texto es demasiado largo para importarlo (máximo {mb} MB).", { mb: TASKS_TEXT_MAX_CHARS / 1_000_000 }) };
+  return { ok: false, error: t("Error inesperado. Inténtalo de nuevo.") };
 }
 
 /** Tareas de la vista previa que se dibujan (el resto se cuenta). */
@@ -62,7 +82,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   const submit = async () => {
     if (busy || !ready.length || read.tooMany || read.tooLong) return;
     setBusy(true);
-    const res = await board.track(importTasks(board.project.id, text, { columnId: forced || null })).catch((e) => actionThrowResult(e, t));
+    const res = await board.track(postImport(board.project.id, text, forced || null, t)).catch((e) => actionThrowResult(e, t));
     setBusy(false);
     if (!res.ok) {
       if (!isOfflineMessage(res.error, t)) toast(res.error, "error");

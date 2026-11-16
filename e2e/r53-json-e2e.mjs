@@ -269,7 +269,7 @@ if (only.includes("menu")) {
   await U.openTask(page, "Origen");
   const copyBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Copiar tarea", exact: true });
   const importBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Importar tarea", exact: true });
-  L.eq("BOTONES: ya no está el menú «Más opciones de la tarea»", await U.dialog(page).getByRole("button", { name: "Más opciones de la tarea" }).count(), 0);
+  L.eq("BOTONES: en escritorio, los dos iconos y no el menú «Más opciones de la tarea» (solo en pantallas estrechas)", await U.dialog(page).getByRole("button", { name: "Más opciones de la tarea" }).count(), 0);
   L.check("BOTONES: «Copiar tarea» e «Importar tarea» con tooltip y su atajo", (await copyBtn(page).getAttribute("title")).includes("Ctrl+C") && !!(await importBtn(page).getAttribute("title")));
   await copyBtn(page).click();
   L.check("BOTONES: «Copiar tarea» copia y lo dice el indicador", await statusShows(page, "Tarea copiada") && (await clip(page)).includes('"title": "Origen"'));
@@ -333,13 +333,17 @@ if (only.includes("menu")) {
   await L.cardLoc(m.page, "Origen").first().tap();
   await U.dialog(m.page).waitFor();
   await sleep(500);
-  for (const [name, btn] of [["Copiar tarea", copyBtn(m.page)], ["Importar tarea", importBtn(m.page)]]) {
-    const box = await btn.boundingBox();
-    L.check(`MÓVIL: «${name}» cabe en la cabecera del detalle`, !!box && box.x >= 0 && box.x + box.width <= 390 && box.width >= 28, JSON.stringify(box));
-  }
-  const titleWidth = await copyBtn(m.page).evaluate((el) => Math.round(el.closest("div.relative")?.firstElementChild?.getBoundingClientRect().width ?? 0));
-  L.check("MÓVIL: el título sigue teniendo sitio", titleWidth >= 120, String(titleWidth));
-  await copyBtn(m.page).tap();
+  // A 390 px «Copiar tarea» e «Importar tarea» van juntos en «⋯» (Más opciones de la tarea): el título tiene sitio.
+  const moreBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Más opciones de la tarea", exact: true });
+  L.eq("MÓVIL: los dos iconos sueltos no se ven", [await copyBtn(m.page).count(), await importBtn(m.page).count()], [0, 0]);
+  const box = await moreBtn(m.page).boundingBox();
+  L.check("MÓVIL: «Más opciones de la tarea» cabe en la cabecera del detalle", !!box && box.x >= 0 && box.x + box.width <= 390 && box.width >= 28, JSON.stringify(box));
+  const titleWidth = await moreBtn(m.page).evaluate((el) => Math.round(el.closest("div.relative.flex")?.firstElementChild?.getBoundingClientRect().width ?? 0));
+  // Con los dos iconos sueltos se quedaba en unos 150 px a 390 (y 120 a 360: dos palabras); con «⋯», unos 190.
+  L.check("MÓVIL: el título tiene sitio (un botón menos en la cabecera)", titleWidth >= 180, String(titleWidth));
+  await moreBtn(m.page).tap();
+  L.eq("MÓVIL: «⋯» tiene copiar e importar (portapapeles y fichero), sin atajos de teclado", (await m.page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Copiar tarea", "Importar desde el portapapeles", "Importar desde un fichero"]);
+  await m.page.getByRole("menuitem", { name: "Copiar tarea" }).tap();
   L.check("MÓVIL: «Copiar tarea» copia", await statusShows(m.page, "Tarea copiada") && (await clip(m.page)).includes('"pizarro.task"'));
   const mjson = await clip(m.page);
   await setClip(m.page, mjson.replace('"title": "Origen"', '"title": "Pegada en el móvil"'));
@@ -348,11 +352,18 @@ if (only.includes("menu")) {
   await L.cardLoc(m.page, "Destino").first().tap();
   await U.dialog(m.page).waitFor();
   await sleep(500);
-  await importBtn(m.page).tap();
-  L.eq("MÓVIL: las opciones no muestran atajos de teclado", (await m.page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Desde el portapapeles", "Desde un fichero"]);
-  await m.page.getByRole("menuitem", { name: /Desde el portapapeles/ }).tap();
-  L.check("MÓVIL: «Desde el portapapeles» pega", await statusShows(m.page, "Tarea pegada"));
+  await moreBtn(m.page).tap();
+  await m.page.getByRole("menuitem", { name: "Importar desde el portapapeles" }).tap();
+  L.check("MÓVIL: «Importar desde el portapapeles» pega", await statusShows(m.page, "Tarea pegada"));
   await L.eqEventually("MÓVIL: … la tarea queda escrita", async () => { const r = await row(ids3.dst); return [r.title, r.due, r.subtasks]; }, ["Pegada en el móvil", "2026-12-01", ["x Guion", "  Ensayo"]]);
+  // Con el teclado (un teclado conectado a la tableta): Enter abre «⋯», las flechas recorren y Escape lo cierra.
+  await moreBtn(m.page).focus();
+  await m.page.keyboard.press("Enter");
+  await m.page.getByRole("menuitem").first().waitFor({ timeout: 4000 });
+  await m.page.keyboard.press("ArrowDown");
+  L.eq("MÓVIL: con el teclado, las flechas recorren las opciones de «⋯»", await m.page.evaluate(() => document.activeElement?.textContent?.trim()), "Importar desde el portapapeles");
+  await m.page.keyboard.press("Escape");
+  await L.checkEventually("MÓVIL: Escape cierra «⋯» y el foco vuelve al botón", async () => (await m.page.getByRole("menuitem").count()) === 0 && (await m.page.evaluate(() => document.activeElement?.getAttribute("aria-label"))) === "Más opciones de la tarea");
   m.errors.length = 0;
   await m.ctx.close();
 }

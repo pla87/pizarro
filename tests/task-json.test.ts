@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildTaskJson, buildTasksJson, parseDayLoose, parseTaskJson, parseTasksText, strictJsonFormat, stringifyTaskJson, TASK_JSON_MAX_CHARS, TASK_JSON_MAX_LABELS, TASKS_JSON_MAX,
-  TASKS_TEXT_MAX_CHARS, tasksExportFileName, type TaskJsonSource,
+  TASKS_TEXT_MAX_CHARS, tasksExportFileName, type TaskJsonSource, actionTextFits,
 } from "../src/lib/task-json";
+import { importPreview } from "../src/lib/task-json-form";
+import { esT } from "../src/i18n/shared";
 import { assertFast } from "./timing";
 
 const source: TaskJsonSource = {
@@ -280,4 +282,34 @@ test("nombre del fichero de exportar: seguro y con la fecha", () => {
   assert.equal(tasksExportFileName("tasks", "../../etc/passwd", "2026-11-16"), "tasks-etc-passwd-2026-11-16.json");
   assert.equal(tasksExportFileName("tareas", "日本語", "2026-11-16"), "tareas-proyecto-2026-11-16.json");
   assert.ok(tasksExportFileName("tareas", "x".repeat(500), "2026-11-16").length < 90);
+});
+
+test("el projectId de un envoltorio «pizarro.tasks» vale solo para sus tareas, no para las sueltas ni para otro envoltorio", () => {
+  const wrap = (projectId: string, title: string) => JSON.stringify({ format: "pizarro.tasks", version: 1, project: projectId, projectId, tasks: [{ title }] });
+  const text = ['{"title":"Suelta antes"}', wrap("p1", "De p1"), '{"title":"Suelta después"}', wrap("p2", "De p2"), '[{"title":"En lista"}]'].join("\n");
+  const r = parseTasksText(text);
+  assert.deepEqual(r.tasks.map((x) => [x.task.title, x.task.info?.projectId ?? null]), [
+    ["Suelta antes", null], ["De p1", "p1"], ["Suelta después", null], ["De p2", "p2"], ["En lista", null],
+  ]);
+  // El resumen del proyecto, el del primer envoltorio.
+  assert.deepEqual(r.project, { name: "p1", id: "p1" });
+});
+
+test("actionTextFits: lo que cabe en una acción de servidor (1 MB) medido en JSON y UTF-8", () => {
+  assert.equal(actionTextFits("x".repeat(TASK_JSON_MAX_CHARS)), true);
+  assert.equal(actionTextFits("ñ".repeat(TASK_JSON_MAX_CHARS)), true);
+  assert.equal(actionTextFits("🙂".repeat(TASK_JSON_MAX_CHARS / 2)), true);
+  // Sustitutos sueltos o caracteres de control: 6 bytes cada uno al escribirlos en JSON.
+  assert.equal(actionTextFits("\ud800".repeat(TASK_JSON_MAX_CHARS)), false);
+  assert.equal(actionTextFits("\u0001".repeat(TASK_JSON_MAX_CHARS)), false);
+  assert.equal(actionTextFits("x".repeat(1_000_000)), false);
+});
+
+test("los nombres de los avisos de la vista previa se recortan sin partir emojis", () => {
+  const name = `${"a".repeat(39)}👨‍👩‍👧 y más`;
+  const { notices } = importPreview({ column: name }, { columns: [], kinds: [] }, null, esT);
+  // Con slice(0, 40) quedaba medio emoji (un sustituto suelto); ahora el emoji entero o nada.
+  assert.equal(notices[0], `columna «${"a".repeat(39)}…» (no existe)`);
+  const short = importPreview({ column: `${"a".repeat(30)}👨‍👩‍👧${"b".repeat(20)}` }, { columns: [], kinds: [] }, null, esT).notices[0]!;
+  assert.equal(short, `columna «${"a".repeat(30)}👨‍👩‍👧b…» (no existe)`);
 });

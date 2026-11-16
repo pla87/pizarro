@@ -6,6 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
+import { tasksN } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
@@ -196,7 +197,7 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     if (data.active !== user.active || data.role !== user.role) revokeUser(user.id);
     // Los tableros abiertos de los proyectos con tarjetas desasignadas se refrescan.
     for (const projectId of unassigned.projectIds) publishChange({ projectId, userId: admin.id, action: "users.updateUser" });
-    if (unassigned.count) describeAction(`Quitó el rol de administrador a «${data.name}»: ${unassigned.count} tarjetas suyas en proyectos que ya no ve quedaron sin asignar`);
+    if (unassigned.count) describeAction("Quitó el rol de administrador a «{name}»; sin asignar en proyectos que ya no ve: {count}", { name: data.name, count: tasksN(unassigned.count) }, { unassigned: unassigned.count });
     revalidatePath("/admin/users");
   });
 }
