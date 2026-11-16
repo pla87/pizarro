@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "1.56.0",
+      "date": "2026-11-16",
+      "releasedAt": "2026-11-16T00:46:24+01:00",
+      "summary": "Copiar y pegar tareas como JSON, ZIP del plan en inglés, codificaciones más listas, icono con flechas y adiós al formato antiguo de deshacer",
+      "changes": {
+        "nuevas": [
+          "En el detalle de una tarea, Ctrl+C sin texto seleccionado copia la tarea entera como JSON y Ctrl+V fuera de un campo de texto pega un JSON de tarea sobre ella (también desde el menú ⋯ «Copiar tarea (JSON)» y «Pegar tarea»), con «Tarea copiada» y «Tarea pegada». Sirve para pasar tareas entre proyectos o pedirle a una IA que rellene una.",
+          "PRUEBAS.pdf: lista de lo que hay que probar en una instalación real (Google, WhatsApp, Telegram, email, Stripe, Railway…)."
+        ],
+        "mejoras": [
+          "El ZIP de adjuntos del plan de trabajo usa la carpeta attachments/ cuando el plan se genera en inglés.",
+          "Un HTML en UTF-8 que declara otra codificación (iso-8859-1) se ve bien.",
+          "Cambiar el color del icono de la app con las flechas guarda el color en el que te detienes.",
+          "Al pegar una tarea se entiende el JSON que devuelve una IA con texto alrededor, y el cuadro de pegado manual admite Ctrl+Enter."
+        ],
+        "correcciones": [
+          "Al deshacer el borrado de varias tareas vuelven también los bloqueos entre ellas, aunque se rehaga y se deshaga varias veces.",
+          "Ctrl+C con una imagen seleccionada copia la imagen, no la tarea; Ctrl+V con el foco en una casilla o en la fecha pega la tarea.",
+          "En la vista previa de un HTML, ir a un #apartado al abrirlo desde otro documento es fiable."
+        ],
+        "tecnicos": [
+          "Se retira el formato antiguo de las huellas de deshacer: una acción guardada con él avisa y se descarta sin cambiar nada.",
+          "El email de la persona responsable solo va en el JSON copiado si la tarea es tuya o eres administrador.",
+          "Pegar un JSON enorme o malicioso ya no puede ocupar el servidor.",
+          "Los botones de las columnas Agenda y Lista ya no se redibujan con cada cambio, y los iconos de la raíz responden 304 (ETag)."
+        ]
+      },
+      "en": {
+        "summary": "Copy and paste tasks as JSON, English folder in the plan ZIP, smarter encodings, icon colour with arrow keys and goodbye to the old undo format",
+        "changes": {
+          "nuevas": [
+            "In a task's detail, Ctrl+C with no text selected copies the whole task as JSON and Ctrl+V outside a text field pastes a task JSON onto it (also from the ⋯ menu «Copy task (JSON)» and «Paste task»), with «Task copied» and «Task pasted». Handy to move tasks between projects or to ask an AI to fill one in.",
+            "PRUEBAS.pdf: a checklist of what must be tested on a real installation (Google, WhatsApp, Telegram, email, Stripe, Railway…)."
+          ],
+          "mejoras": [
+            "The work plan's attachments ZIP uses the attachments/ folder when the plan is generated in English.",
+            "A UTF-8 HTML that declares another encoding (iso-8859-1) now displays correctly.",
+            "Changing the app icon colour with the arrow keys saves the colour you stop on.",
+            "Pasting a task understands the JSON an AI returns with text around it, and the manual paste box accepts Ctrl+Enter."
+          ],
+          "correcciones": [
+            "Undoing the deletion of several tasks also restores the dependencies between them, even after redo and undo again.",
+            "Ctrl+C with an image selected copies the image, not the task; Ctrl+V with focus on a checkbox or the date pastes the task.",
+            "In an HTML preview, jumping to a #section when opened from another document is reliable."
+          ],
+          "tecnicos": [
+            "The old undo fingerprint format is retired: an action saved with it shows a notice and is discarded without changing anything.",
+            "The assignee's email is only included in the copied JSON if the task is yours or you are an admin.",
+            "Pasting a huge or malicious JSON can no longer tie up the server.",
+            "Agenda and List column buttons no longer re-render on every change, and the root icons answer 304 (ETag)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.55.0",
       "date": "2026-11-14",
       "releasedAt": "2026-11-14T20:28:12+01:00",

@@ -13,13 +13,14 @@ Railway. Se está preparando para venderse como producto.
   adapter-pg, PostgreSQL 16, Tailwind 4, TipTap 3, @dnd-kit.
 - **Repositorio:** `github.com/pla87/pizarro` (antes se llamaba `tablon`; algunas herramientas siguen usando ese
   nombre). Rama principal `main`.
-- **Producción:** Railway despliega `main` automáticamente (si un despliegue no llega, en Railway ⌘K →
-  «Deploy Latest Commit»). Dominio propio configurado en `APP_URL`. Las instalaciones de los usuarios en Railway
-  deben seguir la rama `stable` (solo versiones publicadas; la mueve el workflow Release). Si la producción propia
-  también debe recibir solo versiones, cámbiala a `stable` (pasos en el README, «Guía de despliegue en Railway»).
+- **Producción:** la instalación del propietario en Railway despliega desde la rama `stable` (solo versiones
+  publicadas; la mueve el workflow Release al publicar). Fusionar en `main` no despliega nada: hay que publicar la
+  versión (sección 5). Si un despliegue no llega, en Railway ⌘K → «Deploy Latest Commit». Dominio propio en `APP_URL`.
 - **Versión actual:** la de `package.json` y el primer bloque de `changelog.json`.
 - **Cómo funciona todo:** `docs/MANUAL.md` (y `MANUAL.pdf`, generado). Instalación: `docs/INSTALL.md`. Prueba en un
   VPS: `docs/PRUEBA-VPS.md`.
+- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `PRUEBAS.pdf`, en la
+  raíz, generado desde `docs/PRUEBAS.md` con `node scripts/build-manual-pdf.mjs pruebas` (con `CHROME_PATH` si hace falta).
 
 ## 2. Cómo trabaja el propietario (protocolo de cada ronda)
 
@@ -27,8 +28,9 @@ El propietario envía rondas de tareas en español con códigos (`RxxF1` funcion
 mejora, `RxxR1` respuestas a preguntas anteriores), a veces con un ZIP de capturas. Las capturas pueden contener
 datos personales: **nunca se suben al repositorio**. Extrae cada ZIP en una carpeta nueva y temporal.
 
-Cada ronda empieza con «Revisa todo antes de empezar y organiza el orden idóneo. Usa agentes con modelos más
-sencillos cuando sea posible y siempre revisa con el modelo principal lo que han hecho» y termina con «merge a main y
+Cada ronda empieza con «Revisa todo antes de empezar y organiza el orden idóneo» y una indicación de qué modelo usar
+para los agentes (p. ej. «Usa Fable 5.2», o «usa agentes con modelos más sencillos cuando sea posible y revisa siempre
+con el modelo principal lo que han hecho»: entonces revisa tú cada entrega antes de fusionar) y termina con «merge a main y
 commit, actualiza el pdf de cómo funciona todo, prepara un resumen de los cambios y después un listado de lo que
 necesitas que decida junto con próximos pasos sugeridos». Suele incluir «Revisa el código» (arreglar lo evidente y
 preguntar lo opcional) y «Bug hunt».
@@ -90,8 +92,11 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador: las suites QA, tablero, pegado y las de las cazas de bugs 48a, 48b y 48c. Cómo se lanzan, en qué
-orden y cuántas comprobaciones tiene cada una: `e2e/README.md` (las cifras solo se apuntan allí). Si cambias el rol o la
+Pruebas en navegador: todas las suites de `e2e/` (QA, tablero, pegado, las de cada ronda `rNN-*` y las de las cazas de
+bugs `bhNN*`). `scripts/e2e-all.sh` las lanza todas seguidas contra la build de producción, cada una con su servidor
+recién arrancado (base `pz_qa`; instrucciones en su cabecera); `SUITES="board-e2e r53-json-e2e" scripts/e2e-all.sh`
+lanza solo esas. La de instalación va aparte. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md`
+(las cifras solo se apuntan allí). Si cambias el rol o la
 etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
 tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
 instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
@@ -325,14 +330,34 @@ Cómo se revisa cada PR:
 - Modelo de venta decidido: gratis para uso personal y para uso educativo (centros de enseñanza públicos o
   privados, también academias, con su profesorado y alumnado; definición en `LICENSE.md` §2); empresas y profesionales, pago único por servidor con
   actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Todo uso que no sea personal ni educativo paga. Listas de funciones candidatas a licencia profesional y de ideas de otros Kanban: `docs/IDEAS.md`.
-- Pendiente de confirmar por el propietario: primera publicación con *Run workflow* y paquete GHCR público (el propietario prefiere seguir puliendo antes); prueba
-  real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de Railway (pasos en `docs/INSTALL.md`; la sintaxis de
-  variables generadas debe verificarse en Railway).
+- Hecho: las versiones se publican con *Actions → Release → Run workflow* sobre `main` (imagen en GHCR, GitHub Release
+  y rama `stable`); el secreto `STABLE_PUSH_TOKEN` funciona y la instalación del propietario en Railway sigue `stable`.
+- Pendiente de confirmar por el propietario: prueba real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de
+  Railway (pasos en `docs/INSTALL.md`; la sintaxis de variables generadas debe verificarse en Railway); las pruebas en
+  real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
-- A partir del 17-nov-2026 se pueden quitar las huellas de deshacer antiguas (las de `fingerprintOps` sin el prefijo
-  `v2:`, en `src/lib/undo.ts`): para entonces ya no quedarán entradas de deshacer guardadas con ellas.
+- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:`. El anterior (sin
+  prefijo) se quitó con su compatibilidad; una entrada que aún lo traiga (copia de seguridad antigua restaurada) se
+  descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
+  `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
+  el formato, prefijo nuevo y el mismo trato para el anterior.
+
+**Preguntas abiertas al propietario (tras la v1.56.0):**
+
+- Copiar tarea como JSON: el email de la persona responsable solo se incluye si la tarea es de quien copia o si es
+  administrador (privacidad); confirmar si lo quiere siempre.
+- Bloqueo de terceros al rehacer una creación deshecha (U1 crea X, U2 hace que Y dependa de X, U1 deshace y rehace: Y
+  pierde la dependencia): `mirrorOps` no captura los dependientes de un `task.remove` y la huella de conflictos no
+  cubre `blockedById`. Arreglo de coste medio.
+- Pegar una tarea con etiquetas nuevas y luego «Cancelar» o Ctrl+Z: las etiquetas creadas quedan en el proyecto sin uso.
+- `dependsOn` al pegar entre proyectos se resuelve por título dentro del proyecto destino (puede enlazar con una tarea
+  homónima sin relación).
+- Opcionales de la revisión de la ronda 53 (coste bajo, beneficio pequeño): dependencia por título sin cargar las
+  archivadas, responsable por email al pegar solo para administradores, mensajes más claros con más de 5000 subtareas,
+  tope de 100 documentos de Google con bloqueo, no anotar en el historial un pegado sin cambios, guardar el color del
+  icono con `sendBeacon` al cerrar la pestaña, prueba que ate el dibujo del icono a `APP_ICON_REV`.
 
 **Ideas pospuestas por decisión del propietario:**
 

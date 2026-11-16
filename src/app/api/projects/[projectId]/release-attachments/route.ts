@@ -5,7 +5,7 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
-import { AI_PLAN_ZIP_FOLDER } from "@/lib/ai-plan";
+import { AI_PLAN_ZIP_FOLDER, aiPlanZipRoot } from "@/lib/ai-plan";
 import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
 import { acquireZipSlot, buildZipPart, planZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { clientIp, isSameOrigin } from "@/lib/request";
@@ -22,7 +22,7 @@ const bodySchema = z.object({
       z.object({
         taskId: v.id,
         // Release: el código de la tarea (R32F1), que prefija los nombres. Plan de trabajo para IA: la carpeta de la tarea
-        // dentro del ZIP («adjuntos/03-titulo»). Cada elemento lleva uno de los dos.
+        // dentro del ZIP («adjuntos/03-titulo», o «attachments/03-title» si el plan está en inglés). Cada elemento lleva uno de los dos.
         code: z.string().regex(/^(R\d{1,5})?[A-Z]{1,4}\d{1,4}$/).optional(),
         folder: z.string().regex(AI_PLAN_ZIP_FOLDER).optional(),
       }).refine((i) => (i.code === undefined) !== (i.folder === undefined)),
@@ -58,6 +58,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const planZip = items[0]!.folder !== undefined;
   if (items.some((i) => (i.folder !== undefined) !== planZip)) return new Response(t("Datos no válidos"), { status: 400 });
   if (ids.size !== items.length || codes.size !== items.length) return new Response(t("Datos no válidos"), { status: 400 });
+  // Un plan está en un solo idioma: todas sus carpetas cuelgan de la misma raíz («adjuntos/» o «attachments/»), no de las dos.
+  if (planZip && new Set(items.map((i) => aiPlanZipRoot(i.folder!))).size !== 1) return new Response(t("Datos no válidos"), { status: 400 });
 
   const { projectId } = await ctx.params;
   const tasks = await db.task.findMany({

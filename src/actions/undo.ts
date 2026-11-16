@@ -13,7 +13,7 @@ import { getT } from "@/i18n/server";
 import { makeT, type T } from "@/i18n/core";
 import { actionContext } from "@/lib/action-context";
 import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
-import { applyUndo, discardEntries, fingerprintsOf, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
+import { applyUndo, discardEntries, fingerprintsOf, isObsoleteFingerprint, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
 type Result = { label: string; remaining: number; skipped: number; redoable: number };
@@ -85,7 +85,8 @@ async function applyLastChecked(kind: UndoKind, projectId: string, taskId: strin
     if (v.id.parse(confirmEntryId) !== entry.id) throw new AppError("Ha cambiado entretanto lo que se iba a deshacer o rehacer: vuelve a intentarlo.");
     return { applied: await applyEntry(kind, user, pid, entry, { force: true }) };
   }
-  const conflicts = await findUndoConflicts(entry, user.id, pid);
+  // Una entrada con una huella de un formato antiguo no se pregunta: applyEntry la descarta con su aviso.
+  const conflicts = isObsoleteFingerprint(entry.fingerprint) ? null : await findUndoConflicts(entry, user.id, pid);
   if (conflicts) {
     // No se ha aplicado nada: el registro lo dice así, sin historial de tareas ni aviso a las demás pestañas.
     const store = actionContext.getStore();
@@ -104,6 +105,14 @@ type Entry = NonNullable<Awaited<ReturnType<typeof db.undoEntry.findFirst>>>;
 /** Aplica una entrada concreta de la pila (la última o una elegida) y deja la contraria para alternar. */
 async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, entry: Entry, opts: { force?: boolean } = {}): Promise<Result> {
   const undo = kind === "UNDO";
+  // Huella de un formato que ya no se calcula (entradas guardadas por una versión antigua): no se puede saber si lo que
+  // toca ha cambiado, así que no se aplica nunca, tampoco con `force`. Se descarta para no bloquear la pila.
+  if (isObsoleteFingerprint(entry.fingerprint)) {
+    await discardEntries([{ id: entry.id }]);
+    throw new AppError(
+      undo ? "Esta acción se guardó con una versión anterior de Pizarro: ya no se puede deshacer." : "Esta acción se guardó con una versión anterior de Pizarro: ya no se puede rehacer.",
+    );
+  }
   // Se retira primero: dos clics seguidos no aplican dos veces lo mismo.
   const { count } = await db.undoEntry.deleteMany({ where: { id: entry.id } });
   if (!count) throw new AppError(undo ? "Esa acción ya se ha deshecho." : "Esa acción ya se ha rehecho.");
@@ -127,8 +136,8 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   try {
     siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
     prints = await fingerprintsOf(pid, [
-      ...(entry.fingerprint ? [{ ops, stored: entry.fingerprint }] : []),
-      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[], stored: s.fingerprint })),
+      ...(entry.fingerprint ? [{ ops }] : []),
+      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[] })),
     ]);
   } catch (err) {
     await restore();

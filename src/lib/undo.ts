@@ -172,6 +172,9 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
       releases: { select: { id: true } },
     },
   });
+  // En el orden pedido: findMany sin orderBy las devuelve en el orden físico de la tabla, que cambia de una vez a otra.
+  const order = new Map(ids.map((id, i) => [id, i]));
+  rows.sort((x, y) => (order.get(x.id) ?? 0) - (order.get(y.id) ?? 0));
   return rows.map((r) => ({
     t: "task.restore" as const,
     snap: {
@@ -728,6 +731,37 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
   const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
 
+  // Bloqueos entre tareas que vuelven en esta misma entrada: si la bloqueada se recrea antes que la que la bloquea
+  // (el orden de las operaciones no lo garantiza: la entrada de un rehacer deshecho solo trae las tareas), su bloqueo
+  // espera aquí y se pone en cuanto vuelve la otra, con las mismas comprobaciones.
+  const returningIds = new Set(ops.flatMap((op) => (op.t === "task.restore" ? [op.snap.task.id] : [])));
+  const awaitingBlocker = new Map<string, string[]>();
+  const linkAwaiting = async (blockerIds: string[]): Promise<void> => {
+    for (const blockerId of blockerIds) {
+      const waiting = awaitingBlocker.get(blockerId);
+      if (!waiting) continue;
+      awaitingBlocker.delete(blockerId);
+      for (const id of waiting) {
+        try {
+          await db.$transaction(async (tx) => {
+            await lockBlocking(tx, projectId);
+            if (!(await blockProblem(id, blockerId, projectId, tx))) await tx.task.updateMany({ where: { id, projectId, blockedById: null }, data: { blockedById: blockerId } });
+          });
+        } catch (err) {
+          console.error("[undo] bloqueo pendiente", err);
+        }
+      }
+    }
+  };
+  /** Una operación posterior fija el bloqueo de la tarea: ya no espera a nadie. */
+  const blockSettled = (id: string): void => {
+    for (const [blockerId, waiting] of awaitingBlocker) {
+      const rest = waiting.filter((x) => x !== id);
+      if (rest.length) awaitingBlocker.set(blockerId, rest);
+      else awaitingBlocker.delete(blockerId);
+    }
+  };
+
   /** Una operación suelta; devuelve 1 si no se pudo aplicar. */
   const applyOne = async (op: UndoOp): Promise<number> => {
     let miss = 0;
@@ -737,6 +771,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const exists = await db.task.count({ where: { id: op.id, projectId } });
           if (!exists) { miss++; break; }
           const data = { ...op.data };
+          if ("blockedById" in data && awaitingBlocker.size) blockSettled(op.id);
           if (data.columnId) data.columnId = await safeColumn(data.columnId);
           if (data.kindId && !(await db.taskKind.count({ where: { id: data.kindId } }))) delete data.kindId;
           if (data.deliverableId && !(await db.deliverable.count({ where: { id: data.deliverableId } }))) data.deliverableId = null;
@@ -788,6 +823,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const labels = await db.label.findMany({ where: { id: { in: s.labelIds }, projectId }, select: { id: true } });
           // Se crea sin bloqueo y se enlaza después (la que bloquea puede ser otra tarea que vuelve en esta misma entrada).
           const blockedById = t.blockedById ?? null;
+          let linked = false;
           await db.$transaction(async (tx) => {
             if (blockedById) await lockBlocking(tx, projectId);
             await tx.task.create({
@@ -802,9 +838,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             await tx.taskAttachment.createMany({ data: s.attachments.map((a) => ({ ...a, createdById: known(a.createdById), createdAt: new Date(a.createdAt) })) });
             await tx.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) });
             await tx.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } });
-            if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+            if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) {
+              await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+              linked = true;
+            }
           });
           placed.push(t.id);
+          if (blockedById && !linked && returningIds.has(blockedById)) awaitingBlocker.set(blockedById, [...(awaitingBlocker.get(blockedById) ?? []), t.id]);
+          if (awaitingBlocker.size) await linkAwaiting([t.id]);
           break;
         }
         case "subtask.set": {
@@ -975,6 +1016,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
     for (const op of run) {
       if (!presentIds.has(op.id)) { s++; continue; }
       const data = { ...op.data };
+      if ("blockedById" in data && awaitingBlocker.size) blockSettled(op.id);
       if (data.columnId) data.columnId = columnIds.has(data.columnId) ? data.columnId : await (first ??= firstColumn());
       if (data.kindId && !kindOk.has(data.kindId)) delete data.kindId;
       if (data.deliverableId && !deliverableOk.has(data.deliverableId)) data.deliverableId = null;
@@ -1087,6 +1129,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         for (const x of ok) if (x.releaseTaskIds.length) await tx.releaseTask.updateMany({ where: { id: { in: x.releaseTaskIds } }, data: { taskId: x.task.id } });
       });
       placed.push(...ok.map((x) => x.task.id));
+      if (awaitingBlocker.size) await linkAwaiting(ok.map((x) => x.task.id));
     } catch (err) {
       console.error("[undo] lote task.restore: se repite una a una", err);
       s += await oneByOne(rows.map((r) => r.op));
@@ -1132,15 +1175,23 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
  * ha cambiado esas filas entretanto (las acciones propias vacían la pila de rehacer). Task.updatedAt
  * no cambia con subtareas, comentarios o etiquetas, por eso se incluyen sus filas en la huella.
  *
- * `stored`: la huella guardada con la que se va a comparar. Las de antes de la versión 2 (sin prefijo) llevaban la
- * descripción entera; para ellas se calcula igual que entonces, así que siguen valiendo tras actualizar la app.
+ * Todas llevan el prefijo de su formato (FP_V2). Una huella guardada con otro formato no se puede comparar con el estado
+ * actual: la entrada se rechaza sin aplicar nada (isObsoleteFingerprint).
  */
-export async function fingerprintOps(projectId: string, ops: UndoOp[], stored?: string | null): Promise<string> {
-  return (await fingerprintsOf(projectId, [{ ops, stored }]))[0]!;
+export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<string> {
+  return (await fingerprintsOf(projectId, [{ ops }]))[0]!;
 }
 
-/** Prefijo de las huellas actuales: la descripción cuenta por su hash (sha256 en SQL), no por su texto. */
+/** Prefijo de las huellas: la descripción cuenta por su hash (sha256 en SQL), no por su texto. */
 const FP_V2 = "v2:";
+
+/**
+ * ¿Es una huella de un formato que ya no se calcula? Las de antes de la versión 2 no llevaban prefijo (y cubrían la
+ * descripción entera); su compatibilidad se quitó cuando ya habían caducado (las entradas duran 7 días). Si aún aparece
+ * alguna (una copia de seguridad antigua restaurada, una instalación que salta varias versiones), no hay forma de saber si
+ * lo que toca ha cambiado: la entrada se descarta con un «ya no se puede deshacer», nunca se aplica (ni confirmando).
+ */
+export const isObsoleteFingerprint = (fingerprint: string | null | undefined): boolean => !!fingerprint && !fingerprint.startsWith(FP_V2);
 /** Ids por consulta al leer el estado (una entrada puede tocar 500 tareas y se leen varias a la vez). */
 const FP_CHUNK = 1000;
 
@@ -1182,14 +1233,6 @@ const FP_TASK_SELECT = {
   links: { select: { id: true, title: true, url: true }, orderBy: { id: "asc" } },
 } as const satisfies Prisma.TaskSelect;
 
-/** El de las huellas antiguas (sin prefijo), tal cual: con la descripción entera y en este orden (cambia el JSON). */
-const FP_LEGACY_TASK_SELECT = {
-  id: true, title: true, description: true, kindId: true, color: true, linkUrl: true, position: true, columnId: true, assigneeId: true,
-  dueDate: true, deliverableId: true, archivedAt: true, archivedFromColumnId: true, evergreen: true, evergreenEvery: true, recurrence: true, recurrenceDay: true,
-  cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-  labels: FP_TASK_SELECT.labels, subtasks: FP_TASK_SELECT.subtasks, comments: FP_TASK_SELECT.comments, attachments: FP_TASK_SELECT.attachments, links: FP_TASK_SELECT.links,
-} as const satisfies Prisma.TaskSelect;
-
 function chunks<T>(items: T[]): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += FP_CHUNK) out.push(items.slice(i, i + FP_CHUNK));
@@ -1202,8 +1245,8 @@ function chunks<T>(items: T[]): T[][] {
  * pool. Cada huella sale igual que si se calculara sola (fingerprintOps). La descripción entra por su sha256,
  * calculado en PostgreSQL: un cambio en ella cambia la huella igual que antes, sin traer 20 KB por tarjeta.
  */
-export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; stored?: string | null }[]): Promise<string[]> {
-  const subjects = items.map((it) => ({ ...fingerprintSubjects(it.ops), legacy: !!it.stored && !it.stored.startsWith(FP_V2) }));
+export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[] }[]): Promise<string[]> {
+  const subjects = items.map((it) => fingerprintSubjects(it.ops));
   // Filas hijas: su tarea entra en la huella; las que ya no existen se anotan como ausentes.
   const byModel = new Map<FpModel, Set<string>>();
   for (const s of subjects) for (const l of s.lookups) (byModel.get(l.model) ?? byModel.set(l.model, new Set()).get(l.model)!).add(l.id);
@@ -1226,8 +1269,7 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
   });
 
   const current = new Set<string>();
-  const legacy = new Set<string>();
-  for (const s of subjects) for (const id of s.taskIds) (s.legacy ? legacy : current).add(id);
+  for (const s of subjects) for (const id of s.taskIds) current.add(id);
   const tasks = new Map<string, string>();
   for (const part of chunks([...current])) {
     const rows = await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_TASK_SELECT });
@@ -1235,10 +1277,6 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
       SELECT "id", encode(sha256(convert_to("description", 'UTF8')), 'hex') AS "d" FROM "Task" WHERE "id" = ANY(${part}::text[]) AND "projectId" = ${projectId}`;
     const hashById = new Map(hashes.map((h) => [h.id, h.d]));
     for (const r of rows) tasks.set(r.id, JSON.stringify({ ...r, description: hashById.get(r.id) ?? null }));
-  }
-  const legacyTasks = new Map<string, string>();
-  for (const part of chunks([...legacy])) {
-    for (const r of await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_LEGACY_TASK_SELECT })) legacyTasks.set(r.id, JSON.stringify(r));
   }
   const columnIds = [...new Set(subjects.flatMap((s) => [...s.columnIds]))];
   const cols = new Map<string, string>();
@@ -1249,11 +1287,10 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
 
   return subjects.map((s, i) => {
     const out = lines[i]!;
-    const taskLines = s.legacy ? legacyTasks : tasks;
-    for (const id of s.taskIds) out.push(`task:${id}:${taskLines.get(id) ?? '"absent"'}`);
+    for (const id of s.taskIds) out.push(`task:${id}:${tasks.get(id) ?? '"absent"'}`);
     for (const id of s.columnIds) out.push(`column:${id}:${cols.get(id) ?? '"absent"'}`);
     for (const id of s.releaseIds) out.push(`release:${id}:${rels.has(id) ? "present" : "absent"}`);
     const hash = createHash("sha256").update(out.sort().join("\n")).digest("hex");
-    return s.legacy ? hash : `${FP_V2}${hash}`;
+    return `${FP_V2}${hash}`;
   });
 }

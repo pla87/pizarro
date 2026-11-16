@@ -3,18 +3,46 @@
 //
 //   npm run docs:pdf
 //
+// Con el argumento `pruebas` genera PRUEBAS.pdf a partir de docs/PRUEBAS.md (la lista de pruebas en real):
+//
+//   node scripts/build-manual-pdf.mjs pruebas
+//
 // Usa el Chromium indicado en CHROME_PATH o, si no, el que tenga instalado
 // Playwright (`npx playwright install chromium`).
 import { readFileSync } from "node:fs";
 import { marked } from "marked";
 import { chromium } from "playwright-core";
 
-const source = readFileSync("docs/MANUAL.md", "utf8").replace(/^---\n[\s\S]*?\n---\n/, "");
+const DOCS = {
+  manual: {
+    input: "docs/MANUAL.md",
+    output: "MANUAL.pdf",
+    title: "Manual de operaciones",
+    subtitle: "Arquitectura, guía de uso y procesos operativos",
+    sectionBreaks: true,
+  },
+  pruebas: {
+    input: "docs/PRUEBAS.md",
+    output: "PRUEBAS.pdf",
+    title: "Pruebas en real",
+    subtitle: "Lo que hay que comprobar con cuentas y servicios de verdad",
+    sectionBreaks: false,
+  },
+};
+const docName = process.argv[2] ?? "manual";
+const doc = Object.hasOwn(DOCS, docName) ? DOCS[docName] : undefined;
+if (!doc) {
+  console.error(`Documento desconocido: ${docName}. Opciones: ${Object.keys(DOCS).join(", ")}.`);
+  process.exit(1);
+}
+
+const source = readFileSync(doc.input, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "");
 const version = JSON.parse(readFileSync("package.json", "utf8")).version;
-const body = marked.parse(source, { gfm: true });
+// «☐» se dibuja como una casilla para marcar a mano (no depende de que la fuente tenga ese carácter).
+const body = marked.parse(source, { gfm: true }).replaceAll("☐", '<span class="box"></span>');
 
 const html = `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>Pizarro · Manual de operaciones</title>
+<html lang="es"><head><meta charset="utf-8"><title>Pizarro · ${doc.title}</title>
 <style>
   @page { size: A4; margin: 18mm 16mm 20mm; }
   * { box-sizing: border-box; }
@@ -27,7 +55,7 @@ const html = `<!doctype html>
   .cover .meta { margin-top: 40px; font-size: 10pt; color: #64748b; }
   h1 { font-size: 20pt; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid #4f46e5; }
   h2 { font-size: 15pt; color: #312e81; margin: 26px 0 8px; page-break-after: avoid; }
-  h2:not(:first-of-type) { page-break-before: always; }
+  ${doc.sectionBreaks ? "h2:not(:first-of-type) { page-break-before: always; }" : ""}
   h3 { font-size: 12pt; margin: 18px 0 6px; page-break-after: avoid; }
   p, li { orphans: 3; widows: 3; }
   a { color: #4338ca; text-decoration: none; }
@@ -39,14 +67,15 @@ const html = `<!doctype html>
   th { background: #eef2ff; color: #312e81; text-align: left; }
   th, td { border: 1px solid #e2e8f0; padding: 5px 7px; vertical-align: top; }
   blockquote { margin: 10px 0; padding: 6px 12px; border-left: 4px solid #a5b4fc; background: #f8fafc; color: #334155; }
+  .box { display: inline-block; width: 11px; height: 11px; border: 1.2px solid #475569; border-radius: 2px; vertical-align: -1px; }
   hr { border: 0; border-top: 1px solid #e2e8f0; margin: 18px 0; }
 </style></head>
 <body>
   <section class="cover">
     <div class="logo"><span style="height:36px"></span><span style="height:24px;background:#c7d2fe"></span><span style="height:14px;background:#a5b4fc"></span></div>
     <h1>Pizarro</h1>
-    <p>Manual de operaciones</p>
-    <p>Arquitectura, guía de uso y procesos operativos</p>
+    <p>${doc.title}</p>
+    <p>${doc.subtitle}</p>
     <div class="meta">Versión de la aplicación v${version}</div>
   </section>
   ${body}
@@ -56,13 +85,13 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 const page = await browser.newPage();
 await page.setContent(html, { waitUntil: "load" });
 await page.pdf({
-  path: "MANUAL.pdf",
+  path: doc.output,
   format: "A4",
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: `<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 16mm;display:flex;justify-content:space-between;font-family:system-ui,sans-serif"><span>Pizarro · Manual de operaciones · v${version}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+  footerTemplate: `<div style="width:100%;font-size:8px;color:#94a3b8;padding:0 16mm;display:flex;justify-content:space-between;font-family:system-ui,sans-serif"><span>Pizarro · ${doc.title} · v${version}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
   margin: { top: "18mm", bottom: "20mm", left: "16mm", right: "16mm" },
 });
 await browser.close();
-console.log("MANUAL.pdf generado.");
+console.log(`${doc.output} generado.`);

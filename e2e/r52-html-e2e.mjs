@@ -155,6 +155,9 @@ if (only.includes("codificacion")) {
     "latin1.html": Buffer.from(sinMeta("latin1"), "latin1"),
     "win1252.htm": Buffer.from(`<!doctype html><html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252"><title>t</title></head><body><h1>Título win</h1><p id="t">${TXT} \x80 \x93comillas\x94</p></body></html>`, "latin1"),
     "metalatin.html": Buffer.from(`<!doctype html><html><head><meta charset="iso-8859-1"><title>t</title></head><body><h1>Título meta</h1><p id="t">${TXT}</p></body></html>`, "latin1"),
+    // UTF-8 de verdad con un <meta> Latin-1 / Windows-1252 mal puesto: gana el contenido (antes salía «CamiÃ³n»).
+    "utf8metalatin.html": Buffer.from(`<!doctype html><html><head><meta charset="iso-8859-1"><title>t</title></head><body><h1>Título meta mal</h1><p id="t">${TXT} ✓ €</p></body></html>`),
+    "utf8metawin.htm": Buffer.from(`<!doctype html><html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252"><title>t</title></head><body><h1>Título</h1><p id="t">${TXT} ✓ €</p></body></html>`),
     "utf16le.html": Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(sinMeta("utf16le"), "utf16le")]),
     "utf16be.html": Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(sinMeta("utf16be"), "utf16le").swap16()]),
     "utf8bom.html": Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(sinMeta("utf8bom"))]),
@@ -166,15 +169,19 @@ if (only.includes("codificacion")) {
   };
   await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
   for (const [name, body] of Object.entries(files)) await upload(page, p.id, name, body);
-  const kinds = Object.fromEntries((await L.q(`SELECT name,kind FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id])).map((d) => [d.name, d.kind]));
-  L.eq("COD: tipos de los ficheros subidos", kinds, { "latin1.html": "HTML", "win1252.htm": "HTML", "metalatin.html": "HTML", "utf16le.html": "HTML", "utf16be.html": "HTML", "utf8bom.html": "HTML", "nota.txt": "TEXT", "guia.md": "MARKDOWN", "utf16.txt": "TEXT", "roto.html": "OTHER" });
+  // En el orden en que se subieron (L.eq compara el JSON): sin ORDER BY, PostgreSQL las devuelve en el orden físico de la
+  // tabla, que tras el DELETE de arriba no siempre es el de inserción.
+  const kindOf = new Map((await L.q(`SELECT name,kind FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id])).map((d) => [d.name, d.kind]));
+  const kinds = Object.fromEntries([...Object.keys(files).filter((name) => kindOf.has(name)), ...[...kindOf.keys()].filter((name) => !(name in files))].map((name) => [name, kindOf.get(name)]));
+  L.eq("COD: tipos de los ficheros subidos", kinds, { "latin1.html": "HTML", "win1252.htm": "HTML", "metalatin.html": "HTML", "utf8metalatin.html": "HTML", "utf8metawin.htm": "HTML", "utf16le.html": "HTML", "utf16be.html": "HTML", "utf8bom.html": "HTML", "nota.txt": "TEXT", "guia.md": "MARKDOWN", "utf16.txt": "TEXT", "roto.html": "OTHER" });
   const frame = page.frameLocator("iframe[data-testid=doc-html]");
-  for (const name of ["latin1.html", "win1252.htm", "metalatin.html", "utf16le.html", "utf16be.html", "utf8bom.html"]) {
+  for (const name of ["latin1.html", "win1252.htm", "metalatin.html", "utf8metalatin.html", "utf8metawin.htm", "utf16le.html", "utf16be.html", "utf8bom.html"]) {
     const viewer = await openDoc(page, p.id, name);
     await frame.locator("#t").waitFor({ timeout: 10000 });
     const text = await frame.locator("#t").innerText();
     L.check(`COD: ${name}: tildes y ñ bien en la vista previa`, text.startsWith(TXT), text);
     if (name === "win1252.htm") L.check("COD: win1252.htm: euro y comillas tipográficas", text.includes("€ “comillas”"), text);
+    if (name.startsWith("utf8meta")) L.check(`COD: ${name}: UTF-8 con meta de 8 bits mal puesto, se lee como UTF-8 (✓ €)`, text === `${TXT} ✓ €`, text);
     L.check(`COD: ${name}: sin caracteres de sustitución ni BOM`, !/[�﻿]/.test(text) && !/﻿/.test(await viewer.locator("iframe").getAttribute("srcdoc")));
     await page.keyboard.press("Escape");
     await sleep(200);
