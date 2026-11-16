@@ -7,7 +7,13 @@ import { MAX_CLIENT, MAX_COST, MAX_HOURS, TASK_PRIORITIES } from "./task-fields"
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "./upload-size";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
 
-export const id = z.string().min(1).max(40);
+/**
+ * Ids de fila (cuid, `newFileId`, los de importación y los de las pruebas): letras, cifras, `_` y `-`. Un id con otros
+ * caracteres (el nulo, por ejemplo) no existe: se rechaza como «no encontrado» en vez de llegar a PostgreSQL, que con
+ * algunos de ellos falla (22021) y acababa en «Error inesperado» con una entrada de error en los logs.
+ */
+const ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+export const id = z.string().regex(ID_RE, "No encontrado o sin acceso.");
 export const title = z.string().trim().min(1, "El título es obligatorio.").max(MAX_TITLE, "Máximo 210 caracteres.");
 /**
  * Título de tarea: admite menciones @[Nombre](user:ID); el límite de 210 caracteres cuenta el texto visible.
