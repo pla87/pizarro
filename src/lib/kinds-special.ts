@@ -1,5 +1,6 @@
 /** Automatización por tipo de tarea: al elegir el tipo se fija el título y/o se antepone un texto a la descripción. */
 import { esT, type T } from "@/i18n/shared";
+import { cutText } from "./graphemes";
 
 interface KindAutomation {
   titleTemplate: string;
@@ -34,7 +35,7 @@ const sameSubtask = (a: string, b: string) => a.trim().toLowerCase() === b.trim(
 export function parseSubtaskLines(text: string): string[] {
   const out: string[] = [];
   for (const line of text.split(/\r?\n/)) {
-    const title = line.trim().slice(0, MAX_SUBTASK_LEN);
+    const title = cutText(line.trim(), MAX_SUBTASK_LEN).trimEnd();
     if (title && !out.some((x) => sameSubtask(x, title))) out.push(title);
     if (out.length >= MAX_KIND_SUBTASKS) break;
   }

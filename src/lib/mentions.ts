@@ -1,5 +1,6 @@
 // Menciones: se guardan en el texto como @[Nombre](user:ID).
 import { decodeEntities } from "./markdown-entities";
+import { ellipsize } from "./graphemes";
 
 const MENTION_RE = /@\[([^\]\n]{1,80})\]\(user:([a-z0-9]{1,40})\)/gi;
 
@@ -32,7 +33,7 @@ export function mentionsToMarkdown(text: string): string {
  */
 export function excerpt(text: string, max = 180): string {
   const plain = decodeEntities(mentionsToPlain(text)).replace(/\s+/g, " ").trim();
-  return plain.length > max ? plain.slice(0, max - 1) + "…" : plain;
+  return ellipsize(plain, max);
 }
 
 /** Trozos de un texto con menciones: texto suelto o {name, id}. Sirve para pintar las menciones como etiquetas. */

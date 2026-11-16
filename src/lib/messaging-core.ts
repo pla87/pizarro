@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { T } from "../i18n/shared";
 import { isProjectNotice, notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
+import { ellipsize } from "./graphemes";
 
 // Parte pura (sin base de datos ni «server-only») de los avisos por Telegram y WhatsApp: claves de AppState, reglas de
 // precedencia, validación, textos y cuerpos de las peticiones, y clasificación de los errores de las API.
@@ -189,12 +190,11 @@ export interface NoticeMessage {
 }
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
 export function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
-  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: clip(oneLine(m.taskTitle), 120) }) }));
+  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }) }));
 }
 
 /**
@@ -217,8 +217,8 @@ export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string =>
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {
   const body = oneLine(noticeBody(m, t));
-  const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(clip(oneLine(m.projectName), 100))];
-  if (body) lines.push(telegramHtml`<i>${clip(body, 300)}</i>`);
+  const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(ellipsize(oneLine(m.projectName), 100))];
+  if (body) lines.push(telegramHtml`<i>${ellipsize(body, 300)}</i>`);
   lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${noticeLinkLabel(m, t)}</a>`);
   return joinTelegramHtml(lines);
 }
@@ -381,7 +381,7 @@ export function validateWhatsappSettings(input: WhatsappSettingsInput): { ok: tr
 }
 
 /** Texto de una variable de plantilla: Meta no admite saltos de línea, tabuladores ni más de 4 espacios seguidos. */
-const param = (text: string, max = 300) => ({ type: "text", text: clip(oneLine(text), max) || "-" });
+const param = (text: string, max = 300) => ({ type: "text", text: ellipsize(oneLine(text), max) || "-" });
 
 /**
  * Cuerpo de la petición a la Cloud API. Plantilla actual (aviso_pizarro): {{1}} el aviso con la tarea, {{2}} el

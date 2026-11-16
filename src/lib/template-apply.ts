@@ -27,6 +27,7 @@ import {
 import type { Locale } from "@/i18n/shared";
 import { getT } from "@/i18n/server";
 import type { ColumnRole } from "@/generated/prisma/client";
+import { cutText } from "./graphemes";
 
 type Tx = Prisma.TransactionClient;
 type Client = Tx | typeof db;
@@ -153,7 +154,7 @@ export async function applyTemplateToProject(opts: {
       await addCommon(tx, projectId, plan, snap);
       // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
       await assertProgramColumnsFit(tx, projectId, shape.columns);
-      const data = { userId: opts.userId, templateName: opts.templateName.slice(0, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
+      const data = { userId: opts.userId, templateName: cutText(opts.templateName, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
       await tx.projectTemplateChange.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
       return { ...result, addedLabels: plan.addLabels.length };
     } catch (err) {

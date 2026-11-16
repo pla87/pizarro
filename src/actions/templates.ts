@@ -13,6 +13,7 @@ import { requireAdmin } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import * as v from "@/lib/validation";
 import { getLocale, getT } from "@/i18n/server";
+import { cutText } from "@/lib/graphemes";
 
 const MAX_TEMPLATES = 50;
 
@@ -103,7 +104,7 @@ export async function templateFromProject(projectId: string) {
     // En el idioma de quien la crea (es el nombre propuesto en el formulario).
     const t = await getT();
     return {
-      name: t("Plantilla de {name}", { name: project.name }).slice(0, 80),
+      name: cutText(t("Plantilla de {name}", { name: project.name }), 80),
       description: "",
       columns: project.columns.slice(0, 20),
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),

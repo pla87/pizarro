@@ -18,6 +18,7 @@ import { purgeExpiredCommentDrafts, readCommentDraft, saveCommentDraft, type Com
 import { REMOTE_CHANGE_EVENT, touchesComments, type RemoteChange } from "./remoteChange";
 import { actionThrowResult } from "@/lib/stale-action";
 import { isBefore, mergeComments, refreshCursor, type CommentCursor } from "./comment-list";
+import { cutText } from "@/lib/graphemes";
 
 /** Igual que en el servidor (tasks.ts): el texto guardado, con las menciones completas. */
 const MAX_COMMENT = 10_000;
@@ -335,7 +336,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
           <div className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-xs text-brand-700 dark:bg-brand-500/10 dark:text-brand-100">
             <Reply size={13} className="shrink-0" />
             <span className="min-w-0 flex-1 truncate">
-              {t("Respondiendo a {name}", { name: replyTo.authorName ?? t("Usuario eliminado") })}: {mentionsToPlain(replyTo.body).replace(/\s+/g, " ").slice(0, 80)}
+              {t("Respondiendo a {name}", { name: replyTo.authorName ?? t("Usuario eliminado") })}: {cutText(mentionsToPlain(replyTo.body).replace(/\s+/g, " "), 80)}
             </span>
             <button type="button" className="shrink-0 hover:text-red-600" onClick={() => setReplyTo(null)} aria-label={t("Cancelar respuesta")}>
               <X size={14} />

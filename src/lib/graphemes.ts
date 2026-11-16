@@ -39,3 +39,22 @@ export function initialsOf(name: string, pick: "firstLast" | "firstTwo"): string
   const first = graphemes(name.trim()).next();
   return first.done ? "?" : first.value;
 }
+
+/**
+ * Corta el texto a como mucho `max` unidades UTF-16 (las que cuentan `length` y los topes de la BD) sin partir un
+ * carácter visible: ni la mitad de un emoji (par sustituto suelto, que se ve como «�») ni una bandera o una familia.
+ */
+export function cutText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let out = "";
+  for (const g of graphemes(text)) {
+    if (out.length + g.length > max) break;
+    out += g;
+  }
+  return out;
+}
+
+/** Como `cutText`, pero si hay que cortar deja sitio para «…» al final (el resultado no pasa de `max` unidades). */
+export function ellipsize(text: string, max: number): string {
+  return text.length > max ? `${cutText(text, max - 1)}…` : text;
+}
