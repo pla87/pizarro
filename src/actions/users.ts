@@ -23,6 +23,7 @@ import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
 import { getInstanceSettings } from "@/lib/instance";
 import { revokeUser } from "@/lib/revoke";
+import { publishChange } from "@/lib/realtime";
 
 const createSchema = z.object({
   name: v.name,
@@ -141,6 +142,7 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     // Al cambiar de rol, la asignación a proyectos de equipo se traduce: un admin la lleva en AdminProjectPick
     // y el resto en ProjectMember, así no se pierde ni se gana acceso por el cambio.
     const roleSwitch: ((tx: Prisma.TransactionClient) => Promise<unknown>)[] = [];
+    const unassigned = { count: 0, projectIds: [] as string[] };
     if (data.role !== user.role) {
       const teamOnly = { project: { isPrivate: false } };
       if (data.role === "ADMIN") {
@@ -154,6 +156,15 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
         roleSwitch.push(
           (tx) => tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
           (tx) => tx.adminProjectPick.deleteMany({ where: { userId: user.id } }),
+          // Como al quitar a alguien de un proyecto (removeProjectMember): las tarjetas que tenga asignadas en proyectos
+          // que deja de ver (de equipo que no había elegido; y, por si acaso, privados de los que no es miembro) quedan sin asignar.
+          async (tx) => {
+            const where = { assigneeId: user.id, project: { members: { none: { userId: user.id } } } };
+            const affected = await tx.task.findMany({ where, distinct: ["projectId"], select: { projectId: true } });
+            if (affected.length === 0) return;
+            unassigned.count = (await tx.task.updateMany({ where, data: { assigneeId: null } })).count;
+            unassigned.projectIds = affected.map((a) => a.projectId);
+          },
         );
       }
     }
@@ -183,6 +194,9 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     }
     // Cualquier canal en vivo (SSE, presencia) del usuario se corta si se ha desactivado o ha cambiado de rol.
     if (data.active !== user.active || data.role !== user.role) revokeUser(user.id);
+    // Los tableros abiertos de los proyectos con tarjetas desasignadas se refrescan.
+    for (const projectId of unassigned.projectIds) publishChange({ projectId, userId: admin.id, action: "users.updateUser" });
+    if (unassigned.count) describeAction(`Quitó el rol de administrador a «${data.name}»: ${unassigned.count} tarjetas suyas en proyectos que ya no ve quedaron sin asignar`);
     revalidatePath("/admin/users");
   });
 }

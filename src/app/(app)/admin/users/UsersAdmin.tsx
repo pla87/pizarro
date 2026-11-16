@@ -209,6 +209,9 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
             <option value="MEMBER">{t("Miembro")}</option>
             <option value="ADMIN">{t("Administrador")}</option>
           </select>
+          {user?.role === "ADMIN" && role === "MEMBER" && (
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{t("Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.")}</p>
+          )}
         </div>
         {!user && (
           <div>
