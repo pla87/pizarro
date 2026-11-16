@@ -12,7 +12,7 @@ import { EVERGREEN_COLUMN_ROLES, isWhite, MAX_DESCRIPTION, MAX_SUBTASKS, MAX_TAS
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, needOwnRefresh, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
-import { addUndo, captureTasks, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
+import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -945,23 +945,15 @@ export async function getArchivedTasks(projectId: string, opts: { query?: string
     return { items, nextCursor };
   });
 }
-/**
- * Al borrar tareas, el servidor quita solo el bloqueo de las que dependían de ellas (SetNull). Para poder devolverlo al
- * deshacer se guarda el bloqueo actual de esas tareas y de las borradas que se bloqueaban entre sí (se aplica después de
- * recrearlas, porque las operaciones de deshacer van en orden inverso).
- */
-async function blockLinkOps(ids: string[]): Promise<UndoOp[]> {
-  const dependents = await db.task.findMany({ where: { blockedById: { in: ids } }, select: { id: true } });
-  return captureTasks(dependents.map((t) => t.id), ["blockedById"]);
-}
 
 export async function deleteTask(taskId: string) {
   return runAction({ name: "tasks.deleteTask", args: [taskId] }, async () => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
     describeAction("Borró la tarea «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
-    // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts).
-    addUndo(...(await blockLinkOps([taskId])), ...(await snapshotTasks([taskId])));
+    // Los ficheros de sus adjuntos se conservan mientras se pueda deshacer (ver undo.ts). La base de datos quita el
+    // bloqueo de las que dependían de ella (SetNull): dependentLinkOps se lo devuelve al deshacer, si siguen sin otro.
+    addUndo(...(await dependentLinkOps([taskId])), ...(await snapshotTasks([taskId])));
     await db.task.delete({ where: { id: taskId } });
     forgetTaskAttachments([taskId]);
   });
@@ -979,7 +971,7 @@ export async function deleteTasks(taskIds: string[]) {
     // Todas deben ser del mismo proyecto: el deshacer se guarda por proyecto.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
-    addUndo(...(await blockLinkOps(ids)), ...(await snapshotTasks(ids)));
+    addUndo(...(await dependentLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });

@@ -343,6 +343,11 @@ Cómo se revisa cada PR:
   descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
   el formato, prefijo nuevo y el mismo trato para el anterior.
+  Ampliación compatible: las huellas `v2:b:` cubren también el bloqueo de cada tarea (`blockedById`). Siguen siendo v2;
+  una `v2:` sin «b:» guardada antes se compara calculándola como entonces (parámetro `like` de `fingerprintsOf`) y pasa
+  al formato nuevo cuando se reescribe. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
+  borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
+  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
 **Preguntas abiertas al propietario (tras la v1.56.0):**
 
