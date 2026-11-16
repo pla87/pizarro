@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeTaskFields } from "@/lib/task-fields";
 import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
@@ -105,7 +106,11 @@ export type UndoOp =
   | { t: "attachment.restore"; row: AttachmentRow }
   | { t: "link.remove"; id: string }
   | { t: "link.restore"; row: LinkRow }
-  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null } }
+  /**
+   * `costOff`: la acción que se deshace activó el campo Coste al dar a esta columna el rol «Presupuesto»; al devolverle su
+   * rol anterior se vuelve a desactivar, si ya no queda ninguna columna de presupuesto en el proyecto.
+   */
+  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null }; costOff?: true }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
   | { t: "release.remove"; id: string };
@@ -549,7 +554,9 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       case "column.set": {
         if (!once(`column.set:${op.id}`)) break;
         const c = await db.column.findFirst({ where: { id: op.id, projectId } });
-        if (c) push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])) });
+        // Si al aplicarla la columna pasa a «Presupuesto» y eso activa el campo Coste, la contraria lo vuelve a desactivar.
+        const costOff = c && op.data.role === "BUDGET" && c.role !== "BUDGET" && !(await db.project.count({ where: { id: projectId, taskFields: { has: "cost" } } }));
+        if (c) push({ t: "column.set", id: op.id, data: Object.fromEntries(Object.keys(op.data).map((k) => [k, c[k as keyof typeof c]])), ...(costOff ? { costOff: true as const } : {}) });
         break;
       }
       case "column.remove": {
@@ -596,7 +603,16 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
 /** Una columna de presupuesto exige el campo Coste: si al deshacer vuelve una, se reactiva. */
 async function ensureCostField(projectId: string): Promise<void> {
   const p = await db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } });
-  if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: [...p.taskFields, "cost"] } });
+  if (p && !p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...p.taskFields, "cost"]) } });
+}
+
+/** Lo contrario de ensureCostField: quita el campo Coste si ya no queda ninguna columna de presupuesto. */
+async function dropCostField(projectId: string): Promise<void> {
+  const [p, budgets] = await Promise.all([
+    db.project.findUnique({ where: { id: projectId }, select: { taskFields: true } }),
+    db.column.count({ where: { projectId, role: "BUDGET" } }),
+  ]);
+  if (p && !budgets && p.taskFields.includes("cost")) await db.project.update({ where: { id: projectId }, data: { taskFields: p.taskFields.filter((f) => f !== "cost") } });
 }
 
 /**
@@ -983,6 +999,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           ]);
           if (!count) miss++;
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
+          else if (op.costOff) await dropCostField(projectId);
           break;
         }
         case "column.remove": {

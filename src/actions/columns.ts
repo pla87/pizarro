@@ -88,15 +88,16 @@ export async function setColumnRole(columnId: string, role: string) {
         select: { id: true },
       }),
     ]);
+    // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba (y el deshacer lo
+    // vuelve a desactivar: `costOff`).
+    const project = value === "BUDGET" && column.role !== "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
+    const enablesCost = project !== null && !project.taskFields.includes("cost");
     addUndo(
-      { t: "column.set", id: column.id, data: { role: column.role, ...(clearWaiting ? { waitingDays: column.waitingDays } : {}), ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}) } },
+      { t: "column.set", id: column.id, data: { role: column.role, ...(clearWaiting ? { waitingDays: column.waitingDays } : {}), ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}) }, ...(enablesCost ? { costOff: true as const } : {}) },
       ...holders.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: value } })),
       ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])),
     );
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
-    // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba.
-    const project = value === "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
-    const enablesCost = project !== null && !project.taskFields.includes("cost");
     await db.$transaction(async (tx) => {
       // «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones; con más tareas no se le da el rol (con la
       // columna bloqueada, para que nadie meta tareas a la vez: column-capacity.ts).
