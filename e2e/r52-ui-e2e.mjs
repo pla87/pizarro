@@ -1,9 +1,10 @@
 // Ronda 52 (interfaz): archivar y borrar desde el detalle de una tarea al instante (el diálogo se cierra y la tarjeta
 // desaparece sin esperar al servidor; con fallo o sin red, vuelve y avisa; el deshacer sigue igual), cambiar la columna
 // desde el detalle dos veces seguidas (turnos por tarjeta: la respuesta lenta del primero no la descoloca), flechas en los
-// grupos de opciones («Icono de la app» y «Tema de color»: una sola parada de Tab, flechas, Inicio y Fin), iconos fijos de
-// la raíz (/favicon.ico, /apple-touch-icon.png, /icon.png, /icon.svg) en el color de la instalación y nombre corto bajo el
-// icono. Para lo optimista, las acciones del servidor tardan 3 s (red lenta) o se quita la red (setOffline).
+// grupos de opciones («Icono de la app» y «Tema de color»: una sola parada de Tab, flechas, Inicio y Fin; el color
+// pendiente al recargar llega con sendBeacon), iconos fijos de la raíz (/favicon.ico, /apple-touch-icon.png, /icon.png,
+// /icon.svg) en el color de la instalación y nombre corto bajo el icono. Para lo optimista, las acciones del servidor
+// tardan 3 s (red lenta) o se quita la red (setOffline).
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r52-ui-e2e.mjs      # PART=optimista,columna,flechas,iconos
 import * as L from "./qa/lib.mjs";
@@ -217,6 +218,31 @@ if (only.includes("flechas")) {
     L.eq("icono de la app: ida y vuelta con flechas al color guardado, sigue el azul", await savedIcon(), "blue");
     // En total, cuatro guardados: uno por cada parada (no uno por flecha, que habrían sido más de veinte).
     await L.eqEventually("icono de la app: un solo guardado por parada (registro)", iconSaves, ["blue>mustard", "mustard>mono", "mono>eva", "eva>blue"], { timeout: 12000 });
+    // Recargar (o cerrar) la pestaña justo después de una flecha: la acción no llegaría, va con sendBeacon a /api/admin/app-icon.
+    const t1 = new Date();
+    await checkedOf(icons).focus();
+    await p.keyboard.press("ArrowRight");
+    await p.reload();
+    await L.eqEventually("icono de la app: al recargar con un cambio pendiente se guarda (sendBeacon)", savedIcon, "forest", { timeout: 10000 });
+    // La página recargada puede pedirse antes de que llegue el beacon: se mira otra vez, ya guardado.
+    await p.reload();
+    await section.waitFor({ timeout: 15000 });
+    L.eq("icono de la app: tras recargar sale el guardado", await checkedOf(icons).getAttribute("data-app-icon"), "forest");
+    await L.eqEventually(
+      "icono de la app: el guardado por sendBeacon queda en el registro como settings.saveAppIcon",
+      async () => (await L.q(`SELECT message FROM "AppLog" WHERE action='settings.saveAppIcon' AND "createdAt" > $1`, [t1])).map((r) => r.message.replace(/^.* de (\w+) a (\w+)$/, "$1>$2")),
+      ["blue>forest"],
+      { timeout: 12000 },
+    );
+    // La ruta: otro origen (CSRF) o un color fuera de la lista no guardan nada.
+    const beacon = (body, origin = L.BASE) => p.request.post(`${L.BASE}/api/admin/app-icon`, { data: body, headers: { "Content-Type": "text/plain;charset=UTF-8", Origin: origin } }).then((r) => r.status());
+    L.eq("ruta del icono: otro origen → 403", await beacon(JSON.stringify({ accent: "eva" }), "https://evil.example.com"), 403);
+    L.eq("ruta del icono: color no válido → 400", await beacon(JSON.stringify({ accent: "red" })), 400);
+    L.eq("ruta del icono: … y sigue el guardado", await savedIcon(), "forest");
+    // Se vuelve al azul desde la app (borrar la fila no basta: el servidor recuerda el color unos segundos y la parte
+    // «iconos» espera el azul de serie).
+    await icons.locator("[data-app-icon=blue]").click();
+    await L.eqEventually("icono de la app: vuelta al azul", savedIcon, "blue", { timeout: 10000 });
     // Tab: entra una sola vez al grupo y sale al siguiente control.
     await checkedOf(icons).focus();
     await p.keyboard.press("Tab");

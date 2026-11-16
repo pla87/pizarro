@@ -18,7 +18,8 @@ export const APP_ICON_LABEL: Record<AppIconAccent, string> = {
 
 /**
  * Revisión del dibujo: va en la dirección de cada icono (`?v=`). Súbela si cambias el dibujo o los colores, para que
- * navegadores y móviles no sigan con el de su caché (los iconos se sirven como inmutables).
+ * navegadores y móviles no sigan con el de su caché (los iconos se sirven como inmutables). La huella del dibujo de esta
+ * revisión está en tests/app-icon.test.ts (APP_ICON_FINGERPRINT): esa prueba falla si cambia el dibujo y no la revisión.
  */
 export const APP_ICON_REV = "1";
 

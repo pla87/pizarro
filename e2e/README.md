@@ -41,7 +41,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
-| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 102 | ~1,5 min |
+| Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 109 | ~1,5 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V fuera y dentro de un campo, deshacer, JSON inválido o de una IA, menú, sin permiso del portapapeles, móvil e inglés (ronda 53) | `e2e/r53-json-e2e.mjs` | 75 | ~1 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |

@@ -1,6 +1,7 @@
 // Icono de la app en el color de la instalación (Administración → Ajustes → «Icono de la app»): el dibujo, la ruta que lo
 // sirve (PNG generados con sharp, caché inmutable), el manifiesto y el nombre bajo el icono.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import sharp from "sharp";
 import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon, shortAppName } from "../src/lib/app-icon-core";
@@ -23,6 +24,29 @@ test("tema guardado: solo los seis temas de «Mi perfil»", () => {
   assert.equal(parseAppIcon("forest"), "forest");
   assert.equal(parseAppIcon(" EVA "), "eva");
   for (const bad of [null, undefined, "", "red", "../blue", "blue/"]) assert.equal(parseAppIcon(bad), null, String(bad));
+});
+
+/**
+ * Huella del dibujo de la revisión APP_ICON_REV: sha256 del SVG de cada tema y forma. Los iconos se sirven como inmutables
+ * con `?v=APP_ICON_REV`, así que un dibujo nuevo con la misma revisión no llegaría a quien ya tiene el viejo en caché.
+ * Si cambias el dibujo o los colores, sube APP_ICON_REV y pon aquí la revisión nueva y la huella que muestre el fallo.
+ */
+const APP_ICON_FINGERPRINT = { rev: "1", sha256: "083d4bf535da9cfbc1abe247908dfa6ed19a64f55dfe1be4afa5d0dc6beceda4" };
+
+test("dibujo: la huella va atada a APP_ICON_REV", () => {
+  const h = createHash("sha256");
+  for (const accent of APP_ICON_ACCENTS) for (const shape of ["rounded", "square", "maskable"] as const) h.update(`${accent}/${shape}\n${appIconSvg(accent, shape)}\n`);
+  const sha256 = h.digest("hex");
+  assert.equal(
+    APP_ICON_REV,
+    APP_ICON_FINGERPRINT.rev,
+    `has subido APP_ICON_REV: actualiza la huella en este fichero (APP_ICON_FINGERPRINT = { rev: "${APP_ICON_REV}", sha256: "${sha256}" })`,
+  );
+  assert.equal(
+    sha256,
+    APP_ICON_FINGERPRINT.sha256,
+    `has cambiado el dibujo del icono: sube APP_ICON_REV y actualiza la huella en este fichero (sha256 nueva: ${sha256})`,
+  );
 });
 
 test("dibujo: el azul es el icono de siempre; las formas a sangre no tienen esquinas", () => {
