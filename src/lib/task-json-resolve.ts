@@ -7,15 +7,14 @@ import "server-only";
 // También está aquí el lado de copiar: las tareas como objetos «pizarro.task» (taskJsonObjects, para copiar y exportar).
 import { z } from "zod";
 import { db } from "./db";
-import { AppError } from "./errors";
 import { lockProject } from "./caps";
-import { listKinds, appTimeZone } from "./board";
+import { listKinds } from "./board";
 import { projectUsersWhere } from "./access";
 import { localizeGeneralKind } from "./kinds-localize";
 import { normalizeSearch } from "./search-accents";
 import { mentionsToPlain } from "./mentions";
 import { clampTitle } from "./title-clamp";
-import { dateToIso, todayIso } from "./dates";
+import { dateToIso } from "./dates";
 import { rateLimit } from "./rate-limit";
 import { isWhite, LABEL_CREATE_PER_MINUTE, MAX_DESCRIPTION, MAX_LABELS_PER_PROJECT, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, PALETTE } from "./constants";
 import { normalizeTaskFields, startAfterDue, type TaskFieldKey } from "./task-fields";
@@ -398,9 +397,6 @@ export function pastedDocs(docs: NonNullable<PastedTask["googleDocs"]>): { kind:
 /** Documentos de Google enlazados por tarea al pegar o importar (los creados con @docs no tienen otro tope que el ritmo). */
 export const MAX_TASK_DOCS = 100;
 
-/** Hoy en la zona de la aplicación (para la repetición de una tarea nueva). */
-export const appToday = () => todayIso(appTimeZone());
-
 const JSON_TASK_SELECT = {
   id: true, projectId: true, title: true, description: true, color: true, linkUrl: true, dueDate: true, createdAt: true, updatedAt: true,
   recurrence: true, recurrenceDay: true, cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
@@ -467,5 +463,3 @@ export async function taskJsonObjects(where: Prisma.TaskWhereInput, locale: Loca
   }));
 }
 
-/** Error de lectura del JSON pegado (para quien llama desde una acción). */
-export const invalidTaskJson = () => new AppError("El JSON de la tarea no es válido.");

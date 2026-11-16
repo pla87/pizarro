@@ -42,7 +42,8 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones, iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 102 | ~1,5 min |
-| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V fuera y dentro de un campo, deshacer, JSON inválido o de una IA, menú, sin permiso del portapapeles, móvil e inglés (ronda 53) | `e2e/r53-json-e2e.mjs` | 75 | ~1 min |
+| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 95 | ~1,5 min |
+| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, «Nueva tarea», móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 75 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -542,20 +543,40 @@ servidor recién arrancado.
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh48b-e2e.mjs
 ```
 
-## Copiar y pegar una tarea como JSON (ronda 53)
+## Copiar y pegar una tarea como JSON (rondas 53 y 54)
 
 Con el detalle de una tarea abierto, Ctrl+C sin texto seleccionado copia la tarea entera como JSON (formato
-«pizarro.task», `src/lib/task-json.ts`; la suite lee el portapapeles con los permisos `clipboard-read` y
-`clipboard-write` de Playwright) y el indicador de la cabecera dice «Tarea copiada»; con texto seleccionado (en el título
-o en la página) copia ese texto. Ctrl+V fuera de un campo de texto escribe esa tarea en la que está abierta (título,
-descripción, fecha, responsable, campos opcionales, enlace, columna, etiquetas, subtareas y dependencia), con una sola
-entrada de deshacer: Ctrl+Z la devuelve entera, Ctrl+Mayús+Z la vuelve a pegar y «Cancelar» también la descarta. Dentro
-de un campo (título, descripción) el JSON se pega como texto y, con la descripción sin guardar, pegar la tarea pregunta
-antes. Un JSON de tarea roto avisa, otro texto u otro JSON no hacen nada, y uno escrito por una IA (claves en español,
-bloque ```json, fecha ISO, etiqueta nueva, tipo que no existe, campo no activado) se aplica en lo que se puede y avisa
-del resto. El menú «Más opciones de la tarea» (con el teclado, sin permiso para leer el portapapeles: cuadro para pegar
-el JSON a mano, y en el móvil) y los textos en inglés. Misma base y servidor:
+«pizarro.task», `src/lib/task-json.ts`; del responsable van su id y su nombre, nunca el email; la suite lee el
+portapapeles con los permisos `clipboard-read` y `clipboard-write` de Playwright) y el indicador de la cabecera dice
+«Tarea copiada»; con texto seleccionado (en el título o en la página) copia ese texto. Ctrl+V fuera de un campo de texto
+escribe en la tarea abierta la del portapapeles (título, descripción, fecha, responsable, campos opcionales, enlace,
+columna, etiquetas, subtareas y dependencia), con una sola entrada de deshacer: Ctrl+Z la devuelve entera (y borra la
+etiqueta que creó), Ctrl+Mayús+Z la vuelve a pegar y «Cancelar» también la descarta. Ctrl+V es estricto: solo con
+exactamente un JSON de tarea con su marcador; un JSON roto, sin marcador, en un bloque ```json, con texto alrededor, en
+una lista o dos seguidas no hacen nada. Dentro de un campo el JSON se pega como texto y, con la descripción sin guardar,
+pegar la tarea pregunta antes. Los botones «Copiar tarea» e «Importar tarea» (desde el portapapeles, tolerante con lo
+que escribe una IA, con aviso si hay varias tareas o ninguna; desde un fichero .txt; con el teclado; sin permiso para
+leer el portapapeles, cuadro para pegarlo a mano; en el móvil, que caben en la cabecera) y los textos en inglés. Misma
+base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r53-json-e2e.mjs   # PART=copiar,pegar,texto,invalido,menu,ingles
+```
+
+## Importar y exportar tareas en JSON (ronda 54)
+
+En la cabecera del tablero, junto a «Varias tareas», «Importar» abre el diálogo de importar (cargado aparte): pegar en el
+cuadro, «Desde el portapapeles», «Desde un fichero» (.json, .txt) o arrastrar el fichero encima; vista previa con la
+columna a la que irá cada tarea y sus avisos, las que no se pueden leer y «Columna de destino» (la de cada tarea o una
+para todas). Se importan con un solo deshacer (que borra también las etiquetas creadas), historial en cada tarea,
+dependencias por título dentro del lote y hacia las que ya había, y responsable por id. Ctrl+V en el tablero con un JSON
+de tareas exacto abre el diálogo con el texto (con texto alrededor, no). Con tarjetas marcadas el botón pasa a
+«Exportar (N)»: «Descargar .json» (nombre `tareas-<proyecto>-<fecha>.json`, sin emails) y «Copiar»; lo descargado se
+vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» copia lo escrito, «Importar
+tarea» rellena el formulario (pregunta antes de sustituir y avisa de lo que no admite), desde un fichero y con Ctrl+V
+estricto fuera de un campo. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
+cabe, la barra de selección tiene «Exportar». En inglés y en modo oscuro. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,movil,ingles,oscuro
 ```

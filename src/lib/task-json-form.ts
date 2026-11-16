@@ -30,7 +30,7 @@ export interface FormProject {
 }
 
 /** Lo que hay escrito en «Nueva tarea» (ids, como en el formulario). */
-export interface NewTaskForm {
+interface NewTaskForm {
   title: string;
   kindId: string;
   description: string;

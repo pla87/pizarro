@@ -5,6 +5,7 @@
 // para pegarlo a mano. Lo que se hace con el texto lo decide quien los usa (`onImport`).
 import { ClipboardCopy, ClipboardPaste, FileUp, Import } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import { TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
 import { Menu, MenuItem } from "../ui/Menu";
@@ -83,20 +84,24 @@ export function TaskJsonButtons({ onCopy, onImport, shortcuts = {}, className }:
           {t("Desde un fichero")}
         </MenuItem>
       </Menu>
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".json,.txt,application/json,text/plain"
-        className="sr-only"
-        tabIndex={-1}
-        aria-hidden
-        data-task-json="file"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = "";
-          if (file) void readTasksFile(file, (m) => toast(m, "error"), t).then((text) => text !== null && onImport(text));
-        }}
-      />
+      {/* Fuera del diálogo (en el <body>): no es un campo de la tarea y así no se confunde con el de los adjuntos. */}
+      {typeof document !== "undefined" && createPortal(
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,.txt,application/json,text/plain"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          data-task-json="file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void readTasksFile(file, (m) => toast(m, "error"), t).then((text) => text !== null && onImport(text));
+          }}
+        />,
+        document.body,
+      )}
       {manual !== null && (
         <Modal open onClose={() => setManual(null)} title={importLabel} size="md">
           <form

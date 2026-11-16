@@ -70,7 +70,7 @@ interface ImportItem {
 }
 
 /** Avisos de una tarea importada (lo que no se pudo aplicar) o motivo de una que no se importó. */
-export interface ImportNotice {
+interface ImportNotice {
   n: number;
   title: string | null;
   text: string;

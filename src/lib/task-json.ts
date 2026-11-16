@@ -573,7 +573,7 @@ function parseTaskValue(data: unknown, fallbackProjectId?: string): TaskJsonPars
 }
 
 /** Por qué no se pudo leer una de las tareas de un texto con varias (texto en TASK_READ_FAILURE). */
-export type TaskReadFailure = "json" | "notTask" | "empty";
+type TaskReadFailure = "json" | "notTask" | "empty";
 /** Texto (en español, clave de traducción) de cada motivo. */
 export const TASK_READ_FAILURE: Record<TaskReadFailure, string> = {
   json: "no es un JSON válido",
@@ -581,7 +581,7 @@ export const TASK_READ_FAILURE: Record<TaskReadFailure, string> = {
   empty: "no trae ningún dato de la tarea que se entienda",
 };
 
-export interface TasksTextParse {
+interface TasksTextParse {
   /** Tareas leídas, en el orden del texto. `n`: su posición (desde 1) entre todos los objetos encontrados. */
   tasks: { n: number; task: TaskJsonInput; problems: TaskJsonField[] }[];
   /** Objetos que parecían tareas y no se pudieron leer. */
@@ -639,16 +639,17 @@ function startsLikeJson(s: string, open: number): boolean {
  * el resto (texto con llaves o «[x]») se salta. Coste lineal: cada carácter se recorre una vez, salvo unos pocos
  * reintentos si hay una llave sin cerrar (UNBALANCED_RETRIES). `limit`: valores (más fallidos) que bastan.
  */
-function jsonValuesIn(s: string, limit: number): { values: unknown[]; bad: number } {
+function jsonValuesIn(s: string, limit: number): unknown[] {
+  // Los trozos que no se pueden leer van como UNREADABLE, en su sitio: así cada tarea conserva su número en el texto.
   const values: unknown[] = [];
-  let bad = 0;
   let retries = 0;
+  let unclosed = false;
   let i = 0;
   // Siguiente «{» y siguiente «[»: se vuelven a buscar solo cuando ya han quedado atrás (buscar siempre las dos desde `i`
   // recorrería el resto del texto en cada vuelta si una de ellas no aparece: cuadrático).
   let brace = -2;
   let bracket = -2;
-  while (i < s.length && values.length + bad <= limit) {
+  while (i < s.length && values.length <= limit) {
     if (brace !== -1 && brace < i) brace = s.indexOf("{", i);
     if (bracket !== -1 && bracket < i) bracket = s.indexOf("[", i);
     const open = brace < 0 ? bracket : bracket < 0 ? brace : Math.min(brace, bracket);
@@ -661,11 +662,10 @@ function jsonValuesIn(s: string, limit: number): { values: unknown[]; bad: numbe
     }
     const end = closingOf(s, open);
     if (end < 0) {
-      // Sin cierre: quizá la llave era del texto y la tarea viene después. Unos pocos intentos y se deja.
-      if (++retries > UNBALANCED_RETRIES) {
-        if (s.indexOf('":', open) >= 0) bad++;
-        break;
-      }
+      // Sin cierre: quizá la llave era del texto y la tarea viene después. Unos pocos intentos y se deja. Si al final no
+      // sale nada y lo que no se cerraba parecía JSON (un objeto con claves, cortado), cuenta como uno que no se pudo leer.
+      unclosed ||= s.indexOf('":', open) >= 0;
+      if (++retries > UNBALANCED_RETRIES) break;
       i = open + 1;
       continue;
     }
@@ -673,12 +673,16 @@ function jsonValuesIn(s: string, limit: number): { values: unknown[]; bad: numbe
     try {
       values.push(JSON.parse(slice));
     } catch {
-      if (slice.includes('":') || slice.includes('" :')) bad++;
+      if (slice.includes('":') || slice.includes('" :')) values.push(UNREADABLE);
     }
     i = end;
   }
-  return { values, bad };
+  if (unclosed && !values.length) values.push(UNREADABLE);
+  return values;
 }
+
+/** Marca de un trozo con pinta de JSON que no se pudo leer (ver jsonValuesIn). */
+const UNREADABLE = Symbol("unreadable");
 
 /** Lista de tareas del envoltorio «pizarro.tasks» (o de un objeto con una lista `tasks` y sin título propio); si no, null. */
 function wrappedTasks(v: Record<string, unknown>): unknown[] | null {
@@ -698,7 +702,7 @@ export function parseTasksText(raw: string): TasksTextParse {
   const out: TasksTextParse = { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false };
   if (typeof raw !== "string") return out;
   if (raw.length > TASKS_TEXT_MAX_CHARS) return { ...out, tooLong: true };
-  const { values, bad } = jsonValuesIn(raw, TASKS_JSON_MAX);
+  const values = jsonValuesIn(raw, TASKS_JSON_MAX);
   const items: unknown[] = [];
   let projectId: string | undefined;
   for (const v of values) {
@@ -714,14 +718,14 @@ export function parseTasksText(raw: string): TasksTextParse {
       for (const x of list) items.push(x);
     } else items.push(v);
   }
-  out.total = items.length + bad;
+  out.total = items.length;
   out.tooMany = out.total > TASKS_JSON_MAX;
   items.slice(0, TASKS_JSON_MAX).forEach((item, i) => {
+    if (item === UNREADABLE) return void out.failed.push({ n: i + 1, reason: "json" });
     const r = parseTaskValue(item, projectId);
     if (r.kind === "task") out.tasks.push({ n: i + 1, task: r.task, problems: r.problems });
     else out.failed.push({ n: i + 1, reason: r.kind === "invalid" ? "empty" : "notTask" });
   });
-  for (let k = 0; k < bad && items.length + k < TASKS_JSON_MAX; k++) out.failed.push({ n: items.length + k + 1, reason: "json" });
   return out;
 }
 
