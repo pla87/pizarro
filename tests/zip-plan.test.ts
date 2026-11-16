@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { partSuffix, planPackages, type PlanItem } from "../src/lib/zip-plan";
 import { zipPlanToken } from "../src/lib/zip-token";
-import { acquireZipSlot, zipBodyStream, zipRequestMode, zipVersionConflict } from "../src/lib/release-zip";
+import { acquireZipSlot, sizedZipEntries, zipBodyStream, zipRequestMode, zipVersionConflict } from "../src/lib/release-zip";
 
 const items = (...sizes: number[]): PlanItem[] => sizes.map((size, index) => ({ index, size }));
 
@@ -152,5 +152,24 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
     const got = Buffer.from(await new Response(zipBodyStream(zip, release)).arrayBuffer());
     assert.ok(got.equals(zip));
     assert.equal(held("zs-4"), false);
+  });
+});
+
+describe("sizedZipEntries", () => {
+  test("consulta los tamaños en paralelo (como mucho 16 a la vez), conserva el orden y omite los ausentes", async () => {
+    const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, read: async () => new Uint8Array() }));
+    let active = 0;
+    let peak = 0;
+    const entries = await sizedZipEntries(candidates, async (c) => {
+      active++;
+      peak = Math.max(peak, active);
+      const n = Number(c.id.slice(1));
+      // Terminan en otro orden que el de salida.
+      await new Promise((r) => setTimeout(r, (50 - n) % 7));
+      active--;
+      return n % 10 === 3 ? null : n * 10;
+    });
+    assert.equal(peak, 16);
+    assert.deepEqual(entries.map((e) => [e.id, e.name, e.size]), candidates.filter((_, i) => i % 10 !== 3).map((c) => [c.id, c.name, Number(c.id.slice(1)) * 10]));
   });
 });

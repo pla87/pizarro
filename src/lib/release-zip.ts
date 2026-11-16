@@ -2,6 +2,7 @@ import "server-only";
 import { buildZip } from "./zip";
 import { zipPlanToken } from "./zip-token";
 import { planPackages, zipEntryOverhead, type ZipPackage } from "./zip-plan";
+import { runQueue } from "./upload-queue";
 
 /** Un fichero que puede ir en un ZIP de release: su tamaño ya está comprobado en disco. */
 export interface ZipEntry {
@@ -10,6 +11,24 @@ export interface ZipEntry {
   name: string;
   size: number;
   read: () => Promise<Uint8Array>;
+}
+
+/** Consultas de tamaño en disco a la vez al preparar un ZIP (antes, una tras otra: cientos de adjuntos tardaban). */
+const ZIP_STAT_CONCURRENCY = 16;
+
+/**
+ * Entradas del ZIP con su tamaño en disco, en el mismo orden que `candidates`. `size` devuelve null si el fichero ya
+ * no está: se omite en lugar de romper toda la descarga. Las consultas van en paralelo, como mucho 16 a la vez.
+ */
+export async function sizedZipEntries<C extends Omit<ZipEntry, "size">>(candidates: readonly C[], size: (c: C) => Promise<number | null>): Promise<ZipEntry[]> {
+  const sizes = await runQueue(candidates, size, { concurrency: ZIP_STAT_CONCURRENCY });
+  const entries: ZipEntry[] = [];
+  for (const [i, r] of sizes.entries()) {
+    if (r.status === "rejected") throw r.reason;
+    const { id, name, read } = candidates[i]!;
+    if (r.value !== null) entries.push({ id, name, size: r.value, read });
+  }
+  return entries;
 }
 
 /** Reparto de las entradas en paquetes de como mucho `maxMb` MB (un fichero mayor va solo y marcado). */
