@@ -5,8 +5,7 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { COMMENT_LIMIT_MAX, COMMENT_LIMIT_MIN, getMaxCommentsPerTask, setMaxCommentsPerTask } from "@/lib/app-settings";
-import { getAppIcon, setAppIcon } from "@/lib/app-icon";
-import { APP_ICON_ACCENTS } from "@/lib/app-icon-core";
+import { changeAppIcon } from "@/lib/app-icon-save";
 import { saveInstanceSettings } from "@/lib/instance";
 import { requireAdmin } from "@/lib/session";
 
@@ -46,14 +45,6 @@ export async function saveInstallationSettings(input: { orgName: string; locale:
  * instalada), para distinguirla de otra instalación de Pizarro en el mismo móvil.
  */
 export async function saveAppIcon(accent: string) {
-  return runAction({ name: "settings.saveAppIcon", args: [accent] }, async () => {
-    await requireAdmin();
-    const next = z.enum(APP_ICON_ACCENTS, { error: "Color no válido." }).parse(accent);
-    const prev = await getAppIcon();
-    await setAppIcon(next);
-    describeAction("Cambió el color del icono de la app de {from} a {to}", { from: prev, to: next });
-    // El favicon y el apple-touch-icon van en el <head> de todas las páginas.
-    revalidatePath("/", "layout");
-    return { accent: next };
-  });
+  // La misma función que usa el guardado con sendBeacon al cerrar la pestaña (/api/admin/app-icon).
+  return runAction({ name: "settings.saveAppIcon", args: [accent] }, () => changeAppIcon(accent));
 }

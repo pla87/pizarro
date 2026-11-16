@@ -19,6 +19,8 @@ import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, type AppIconAcc
  */
 /** Con las flechas, el color se guarda tras este rato sin más cambios (la vista previa cambia al momento). */
 const KEYBOARD_SAVE_DELAY_MS = 300;
+/** Ruta que recibe el color pendiente al cerrar u ocultar la pestaña (con navigator.sendBeacon). */
+const APP_ICON_BEACON_URL = "/api/admin/app-icon";
 
 export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconAccent; orgName: string }) {
   const t = useT();
@@ -29,7 +31,8 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
 
   // Con las flechas se pasa por varios colores seguidos: la vista previa cambia con cada uno, pero solo se guarda el último,
   // cuando pasan KEYBOARD_SAVE_DELAY_MS sin más cambios (antes se guardaba cada uno: una acción y una línea del registro por
-  // color). Lo pendiente se guarda igualmente si el foco sale del grupo, se oculta o se cierra la página, o se navega a otra.
+  // color). Lo pendiente se guarda igualmente si el foco sale del grupo o se navega a otra pantalla, y si la página se oculta
+  // o se cierra (entonces con sendBeacon: ver flushBeacon).
   /** Último color que el servidor confirmó. */
   const saved = useRef(initial);
   /** Último color enviado (aún sin respuesta, o el confirmado): no se vuelve a enviar el mismo. */
@@ -65,6 +68,24 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
     pending.current = null;
     if (value !== null) save(value);
   }, [save]);
+  /**
+   * La pestaña se cierra, se recarga o se oculta con un color pendiente: una acción de servidor no llegaría (el navegador
+   * corta sus peticiones al descargar la página), así que va con navigator.sendBeacon a /api/admin/app-icon, que sí se
+   * entrega después de cerrar. Sin sendBeacon (o si el navegador no lo acepta), como siempre.
+   */
+  const flushBeacon = useCallback(() => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+    const value = pending.current;
+    pending.current = null;
+    if (value === null || value === sent.current) return;
+    const queued = typeof navigator.sendBeacon === "function" && navigator.sendBeacon(APP_ICON_BEACON_URL, JSON.stringify({ accent: value }));
+    if (!queued) return save(value);
+    // Sin respuesta que esperar: se da por guardado, y una acción anterior aún en curso que falle ya no lo deshace.
+    sent.current = value;
+    saved.current = value;
+    latest.current++;
+  }, [save]);
   const choose = (value: AppIconAccent, how: "click" | "keyboard") => {
     if (value === accent && pending.current === null) return;
     setAccent(value);
@@ -76,19 +97,22 @@ export function AppIconSettingsSection({ initial, orgName }: { initial: AppIconA
   const group = useRadioGroup(APP_ICON_ACCENTS.length, APP_ICON_ACCENTS.indexOf(accent), (i) => choose(APP_ICON_ACCENTS[i]!, "keyboard"));
   // La última versión de `flush`, para el efecto de abajo (que solo debe montarse y desmontarse una vez).
   const flushRef = useRef(flush);
+  const flushBeaconRef = useRef(flushBeacon);
   useEffect(() => {
     flushRef.current = flush;
-  }, [flush]);
+    flushBeaconRef.current = flushBeacon;
+  }, [flush, flushBeacon]);
   useEffect(() => {
     const now = () => flushRef.current();
+    const leaving = () => flushBeaconRef.current();
     const hidden = () => {
-      if (document.visibilityState === "hidden") now();
+      if (document.visibilityState === "hidden") leaving();
     };
     // Al cerrar o recargar la pestaña y al cambiar de pestaña o de app (en el móvil no siempre hay «pagehide»).
-    window.addEventListener("pagehide", now);
+    window.addEventListener("pagehide", leaving);
     document.addEventListener("visibilitychange", hidden);
     return () => {
-      window.removeEventListener("pagehide", now);
+      window.removeEventListener("pagehide", leaving);
       document.removeEventListener("visibilitychange", hidden);
       // Al navegar a otra pantalla de la app.
       now();
