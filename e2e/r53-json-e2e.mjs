@@ -1,9 +1,11 @@
-// Ronda 53: copiar y pegar una tarea como JSON desde el detalle. Ctrl+C sin texto seleccionado copia la tarea entera
-// (formato «pizarro.task», src/lib/task-json.ts) y con texto seleccionado copia ese texto, como siempre; Ctrl+V fuera de un
-// campo de texto escribe en la tarea abierta el JSON de tarea del portapapeles (en una sola operación que se deshace con
-// Ctrl+Z) y dentro de un campo pega texto normal; un JSON roto avisa y otro texto no hace nada; las opciones «Copiar
-// tarea (JSON)» y «Pegar tarea» del menú del detalle (también con el teclado, en el móvil y cuando el navegador no deja
-// leer el portapapeles); y en inglés. Misma base y servidor que board-e2e.mjs:
+// Ronda 53 (y 54): copiar y pegar una tarea como JSON desde el detalle. Ctrl+C sin texto seleccionado copia la tarea
+// entera (formato «pizarro.task», src/lib/task-json.ts; del responsable, su id y su nombre, nunca el email) y con texto
+// seleccionado copia ese texto, como siempre; Ctrl+V fuera de un campo de texto escribe en la tarea abierta la tarea del
+// portapapeles (en una sola operación que se deshace con Ctrl+Z) SOLO si el portapapeles es exactamente un JSON de tarea
+// (con su marcador, sin texto alrededor ni varias): cualquier otra cosa sigue el pegado normal sin avisos; dentro de un
+// campo pega texto normal; los botones discretos «Copiar tarea» e «Importar tarea» (desde el portapapeles, tolerante con
+// lo que escribe una IA, o desde un fichero; también con el teclado, en el móvil y cuando el navegador no deja leer el
+// portapapeles); y en inglés. Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r53-json-e2e.mjs      # PART=copiar,pegar,texto,invalido,menu,ingles
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
@@ -74,10 +76,11 @@ if (only.includes("copiar") || only.includes("pegar")) {
   try { json = JSON.parse(copied); } catch { /* se comprueba abajo */ }
   L.eq("COPIAR: el portapapeles tiene la tarea en JSON, con marcador y versión", [json.format, json.version, json.title], ["pizarro.task", 1, "Origen"]);
   L.eq("COPIAR: descripción (Markdown), tipo y columna por nombre", [json.description, json.type, json.column], ["Texto **importante** de la tarea.", "Funcionalidad", COL.doing]);
-  L.eq("COPIAR: etiquetas, responsable (nombre y email) y fecha límite", [json.labels, json.assignee, json.dueDate], [["cliente", "urgente"], { name: me.name, email: me.email }, "2026-12-01"]);
+  L.eq("COPIAR: etiquetas, responsable (id y nombre, sin email) y fecha límite", [json.labels, json.assignee, json.dueDate], [["cliente", "urgente"], { id: me.id, name: me.name }, "2026-12-01"]);
+  L.check("COPIAR: ningún email en el texto copiado (tampoco el de quien copia)", !copied.includes(me.email) && !copied.includes("@example.com"));
   L.eq("COPIAR: los campos opcionales activos del proyecto (y solo esos)", [json.priority, json.client, "cost" in json, "startDate" in json], ["high", "Acme", false, false]);
-  L.eq("COPIAR: subtareas, dependencia, enlace y repetición", [json.subtasks, json.dependsOn, json.link, json.recurrence], [[{ text: "Guion", done: true }, { text: "Ensayo", done: false }], "Otra", "https://example.com/origen", { rule: "none" }]);
-  L.check("COPIAR: datos de solo lectura (id, proyecto y URL absoluta de la tarea)", json.info?.id === ids.src && json.info?.project === p0.name && /^https?:\/\/[^/]+\/p\/.+\?task=/.test(json.info?.url ?? "") && json.info.url.endsWith(`/p/${p0.id}?task=${ids.src}`), JSON.stringify(json.info));
+  L.eq("COPIAR: subtareas, dependencia (id y título), enlace y repetición", [json.subtasks, json.dependsOn, json.link, json.recurrence], [[{ text: "Guion", done: true }, { text: "Ensayo", done: false }], { id: ids.other, title: "Otra" }, "https://example.com/origen", { rule: "none" }]);
+  L.check("COPIAR: datos de solo lectura (id, proyecto, id del proyecto y URL absoluta de la tarea)", json.info?.id === ids.src && json.info?.project === p0.name && json.info?.projectId === p0.id && /^https?:\/\/[^/]+\/p\/.+\?task=/.test(json.info?.url ?? "") && json.info.url.endsWith(`/p/${p0.id}?task=${ids.src}`), JSON.stringify(json.info));
   L.check("COPIAR: legible (sangrado) y sin ids internos de etiquetas, tipo o columna", copied.startsWith('{\n  "format": "pizarro.task",') && !/r53l0|kind_funcionalidad/.test(copied));
   L.eq("COPIAR: copiar no deja entrada de deshacer ni historial", [await U.undoCount("UNDO"), (await L.events("Origen")).length], [0, 0]);
 
@@ -205,61 +208,95 @@ if (only.includes("invalido")) {
   const { page } = s;
   await U.openTask(page, "Destino");
   await blur(page);
-  await setClip(page, '{"format":"pizarro.task","title":"sin cerrar"');
-  await page.keyboard.press("Control+v");
-  await L.checkEventually("INVÁLIDO: un JSON de tarea roto avisa «El JSON de la tarea no es válido.»", async () => (await alerts(page)).includes("El JSON de la tarea no es válido."));
-  L.eq("INVÁLIDO: … y no cambia nada ni deja entrada de deshacer", [await row(ids.dst), await U.undoCount("UNDO")], [EMPTY, 0]);
-  await sleep(6200); // el aviso de error se va solo
-  for (const [name, text] of [["un texto cualquiera", "hola, esto no es JSON"], ["otro JSON", '{"a":1,"b":[2,3]}'], ["un JSON de otro formato", '{"format":"otra.cosa","title":"x"}']]) {
+  // Ctrl+V es estricto: solo una tarea en JSON exacta. Un JSON roto, varias tareas, una lista, un bloque ```json o texto
+  // alrededor siguen el pegado normal, sin avisos ni cambios.
+  const one = '{"format":"pizarro.task","title":"No debe aplicarse","dueDate":"2030-01-01"}';
+  for (const [name, text] of [
+    ["un JSON de tarea roto", '{"format":"pizarro.task","title":"sin cerrar"'], ["un texto cualquiera", "hola, esto no es JSON"], ["otro JSON", '{"a":1,"b":[2,3]}'],
+    ["un JSON de otro formato", '{"format":"otra.cosa","title":"x"}'], ["una tarea sin marcador", '{"title":"Sin marcador","dueDate":"2030-01-01"}'],
+    ["una tarea dentro de un bloque ```json", "```json\n" + one + "\n```"], ["una tarea con texto alrededor", `Aquí la tienes: ${one} ¿Te sirve?`],
+    ["una lista con una tarea", `[${one}]`], ["dos tareas seguidas", `${one}\n${one}`],
+  ]) {
     await setClip(page, text);
     await page.keyboard.press("Control+v");
     await sleep(700);
-    L.eq(`OTRO: ${name} fuera de un campo no hace nada (ni aviso ni cambio)`, [await alerts(page), (await row(ids.dst)).title, (await status(page).innerText()).trim() === "Tarea pegada"], ["", "Destino", false]);
+    L.eq(`ESTRICTO: ${name} con Ctrl+V fuera de un campo no hace nada (ni aviso ni cambio)`, [await alerts(page), (await row(ids.dst)).title, (await status(page).innerText()).trim() === "Tarea pegada"], ["", "Destino", false]);
   }
-  // JSON de una IA con variaciones: se aplica lo que se puede y se avisa de lo demás.
-  await setClip(page, "```json\n" + JSON.stringify({ Título: "Escrita por una IA", Tipo: "No existe", Estado: "en PROGRESO", Etiquetas: ["URGENTE", "nueva"], fecha_limite: "2027-03-04T09:00:00Z", Prioridad: "urgente", coste: 10, Subtareas: ["[x] Hecha", "Pendiente"] }, null, 2) + "\n```");
+  L.eq("ESTRICTO: … y no deja entrada de deshacer", await U.undoCount("UNDO"), 0);
+  // Espacios y saltos de línea alrededor sí valen (es la misma tarea exacta).
+  await setClip(page, `\n   ${'{"format":"pizarro.task","dueDate":"2030-01-02"}'}  \n`);
   await page.keyboard.press("Control+v");
-  L.check("IA: se pega («Tarea pegada»)", await statusShows(page, "Tarea pegada"));
+  L.check("ESTRICTO: con espacios alrededor, sí se pega", await statusShows(page, "Tarea pegada"));
+  await L.eqEventually("ESTRICTO: … la fecha queda escrita", async () => (await row(ids.dst)).due, "2030-01-02");
+  await U.undoKey(page, "Control+z");
+  await L.eqEventually("ESTRICTO: Ctrl+Z la quita", async () => (await row(ids.dst)).due, null);
+  const importBtn = U.dialog(page).getByRole("button", { name: "Importar tarea" });
+  const fromClipboard = async () => {
+    await importBtn.click();
+    await page.getByRole("menuitem", { name: /Desde el portapapeles/ }).click();
+  };
+  // «Importar tarea → Desde el portapapeles» sí es tolerante, y sí avisa de lo que no puede leer.
+  await setClip(page, '{"format":"pizarro.task","title":"sin cerrar"');
+  await fromClipboard();
+  await L.checkEventually("IMPORTAR: un JSON de tarea roto avisa «El JSON de la tarea no es válido.»", async () => (await alerts(page)).includes("El JSON de la tarea no es válido."));
+  await sleep(6200); // el aviso de error se va solo
+  await setClip(page, `${one}\n${one}`);
+  await fromClipboard();
+  await L.checkEventually("IMPORTAR: con dos tareas avisa que se importan desde el tablero", async () => (await alerts(page)).includes("Hay 2 tareas. Para importar varias, usa «Importar» en el tablero."));
+  L.eq("IMPORTAR: … y no cambia nada", [await row(ids.dst), await U.undoCount("UNDO")], [EMPTY, 0]);
+  await sleep(6200);
+  // JSON de una IA con variaciones: se aplica lo que se puede y se avisa de lo demás.
+  await setClip(page, "Claro, aquí tienes la tarea:\n\n```json\n" + JSON.stringify({ Título: "Escrita por una IA", Tipo: "No existe", Estado: "en PROGRESO", Etiquetas: ["URGENTE", "nueva"], fecha_limite: "2027-03-04T09:00:00Z", Prioridad: "urgente", coste: 10, Subtareas: ["[x] Hecha", "Pendiente"] }, null, 2) + "\n```\n¿Algo más?");
+  await fromClipboard();
+  L.check("IA: «Importar tarea» la pega con el texto alrededor («Tarea pegada»)", await statusShows(page, "Tarea pegada"));
   await L.checkEventually("IA: avisa en breve de lo que no se pudo aplicar (tipo inexistente, campo no activado)", async () => { const a = await alerts(page); return [a.includes("Tarea pegada, salvo:") && a.includes("tipo «No existe» (no existe)") && a.includes("coste (campo no activado)"), a]; });
   await L.eqEventually("IA: claves en español, fecha ISO, columna y etiqueta sin mirar mayúsculas, etiqueta nueva creada", async () => { const r = await row(ids.dst); return [r.title, r.due, r.col, r.priority, r.labels, r.subtasks]; }, ["Escrita por una IA", "2027-03-04", COL.doing, "URGENTE", ["nueva", "urgente"], ["x Hecha", "  Pendiente"]]);
   await L.checkEventually("IA: la etiqueta nueva ya sale en el detalle", async () => (await U.dialog(page).innerText()).includes("nueva"));
   await U.undoKey(page, "Control+z");
   await L.eqEventually("IA: Ctrl+Z lo deshace entero", () => row(ids.dst), EMPTY);
+  L.eq("IA: … y borra la etiqueta que creó el pegado («nueva»)", (await L.q(`SELECT name FROM "Label" WHERE "projectId"=$1 ORDER BY name`, [p0.id])).map((r) => r.name), ["cliente", "urgente"]);
   s.errors.length = 0;
   await s.ctx.close();
 }
 
-// --- Menú del detalle: teclado, navegador que no deja leer el portapapeles y móvil -----------------------------------------
+// --- Botones del detalle: teclado, fichero, navegador que no deja leer el portapapeles y móvil ------------------------------
 if (only.includes("menu")) {
-  L.scenario("menu: «Copiar tarea (JSON)» y «Pegar tarea» sin atajos, con el teclado, sin permiso y en el móvil");
+  L.scenario("menu: «Copiar tarea» e «Importar tarea» sin atajos, con el teclado, desde un fichero, sin permiso y en el móvil");
   const ids = await seed();
   const s = await withClipboard();
   const { page } = s;
   await setClip(page, "antes");
   await U.openTask(page, "Origen");
-  const more = (pg) => U.dialog(pg).getByRole("button", { name: "Más opciones de la tarea" });
-  // Con el teclado: el botón se alcanza con Tab, Enter abre el menú y las flechas eligen.
-  await more(page).focus();
-  await page.keyboard.press("Enter");
-  const items = page.getByRole("menuitem");
-  await items.first().waitFor({ timeout: 4000 });
-  L.eq("MENÚ: opciones «Copiar tarea (JSON)» y «Pegar tarea», con su atajo", (await items.allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Copiar tarea (JSON) Ctrl+C", "Pegar tarea Ctrl+V"]);
-  L.eq("MENÚ: al abrirlo con el teclado, el foco va a la primera opción", await page.evaluate(() => document.activeElement?.textContent?.includes("Copiar tarea")), true);
-  await page.keyboard.press("Enter");
-  L.check("MENÚ: «Copiar tarea (JSON)» copia y lo dice el indicador", await statusShows(page, "Tarea copiada") && (await clip(page)).includes('"title": "Origen"'));
+  const copyBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Copiar tarea", exact: true });
+  const importBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Importar tarea", exact: true });
+  L.eq("BOTONES: ya no está el menú «Más opciones de la tarea»", await U.dialog(page).getByRole("button", { name: "Más opciones de la tarea" }).count(), 0);
+  L.check("BOTONES: «Copiar tarea» e «Importar tarea» con tooltip y su atajo", (await copyBtn(page).getAttribute("title")).includes("Ctrl+C") && !!(await importBtn(page).getAttribute("title")));
+  await copyBtn(page).click();
+  L.check("BOTONES: «Copiar tarea» copia y lo dice el indicador", await statusShows(page, "Tarea copiada") && (await clip(page)).includes('"title": "Origen"'));
   const json = await clip(page);
   await U.closeDialog(page);
   await setClip(page, json.replace('"title": "Origen"', '"title": "Destino pegado"'));
   await U.openTask(page, "Destino");
-  await more(page).click();
-  await page.getByRole("menuitem", { name: /Pegar tarea/ }).click();
-  L.check("MENÚ: «Pegar tarea» pega lo del portapapeles", await statusShows(page, "Tarea pegada"));
-  await L.eqEventually("MENÚ: … con todos sus campos", async () => { const r = await row(ids.dst); return [r.title, r.due, r.col, r.subtasks]; }, ["Destino pegado", "2026-12-01", COL.doing, ["x Guion", "  Ensayo"]]);
-  // Desde el menú, un portapapeles sin tarea sí avisa (con Ctrl+V no, para no estorbar al pegado normal).
+  // Con el teclado: el botón se alcanza con el foco, Enter abre el menú y las flechas eligen.
+  await importBtn(page).focus();
+  await page.keyboard.press("Enter");
+  const items = page.getByRole("menuitem");
+  await items.first().waitFor({ timeout: 4000 });
+  L.eq("IMPORTAR: opciones «Desde el portapapeles» (con su atajo) y «Desde un fichero»", (await items.allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Desde el portapapeles Ctrl+V", "Desde un fichero"]);
+  L.eq("IMPORTAR: al abrirlo con el teclado, el foco va a la primera opción", await page.evaluate(() => document.activeElement?.textContent?.includes("Desde el portapapeles")), true);
+  await page.keyboard.press("Enter");
+  L.check("IMPORTAR: «Desde el portapapeles» pega lo del portapapeles", await statusShows(page, "Tarea pegada"));
+  await L.eqEventually("IMPORTAR: … con todos sus campos", async () => { const r = await row(ids.dst); return [r.title, r.due, r.col, r.subtasks]; }, ["Destino pegado", "2026-12-01", COL.doing, ["x Guion", "  Ensayo"]]);
+  // Desde el portapapeles, un texto sin tarea sí avisa (con Ctrl+V no, para no estorbar al pegado normal).
   await setClip(page, "nada que ver");
-  await more(page).click();
-  await page.getByRole("menuitem", { name: /Pegar tarea/ }).click();
-  await L.checkEventually("MENÚ: «Pegar tarea» sin una tarea en el portapapeles lo dice", async () => (await alerts(page)).includes("El portapapeles no contiene una tarea en JSON."));
+  await importBtn(page).click();
+  await page.getByRole("menuitem", { name: /Desde el portapapeles/ }).click();
+  await L.checkEventually("IMPORTAR: sin una tarea en el portapapeles lo dice", async () => (await alerts(page)).includes("No hay ninguna tarea en JSON."));
+  // Desde un fichero (.json o .txt).
+  await importBtn(page).click();
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("menuitem", { name: /Desde un fichero/ }).click()]);
+  await chooser.setFiles({ name: "tarea.txt", mimeType: "text/plain", buffer: Buffer.from('Tarea:\n{"title":"Desde un fichero","dueDate":"2027-07-08"}\n') });
+  await L.eqEventually("FICHERO: la tarea del fichero .txt se pega", async () => { const r = await row(ids.dst); return [r.title, r.due]; }, ["Desde un fichero", "2027-07-08"]);
   // La ayuda de atajos recoge las dos combinaciones.
   await U.closeDialog(page);
   await blur(page);
@@ -274,21 +311,21 @@ if (only.includes("menu")) {
   const ids2 = await L.q(`SELECT id FROM "Task" WHERE title='Destino'`);
   const denied = await L.session({ init: () => { try { Object.defineProperty(navigator.clipboard, "readText", { configurable: true, value: () => Promise.reject(new DOMException("denied", "NotAllowedError")) }); } catch { /* sin API */ } } });
   await U.openTask(denied.page, "Destino");
-  await more(denied.page).click();
-  await denied.page.getByRole("menuitem", { name: /Pegar tarea/ }).click();
+  await importBtn(denied.page).click();
+  await denied.page.getByRole("menuitem", { name: /Desde el portapapeles/ }).click();
   const manual = denied.page.locator("[role=dialog]").last();
   L.check("PERMISO: sin permiso para leer el portapapeles, se abre un cuadro para pegar el JSON a mano", await manual.getByText("El navegador no deja leer el portapapeles").waitFor({ timeout: 4000 }).then(() => true, () => false));
   await manual.locator("textarea").fill("esto no es una tarea");
-  await manual.getByRole("button", { name: "Pegar tarea" }).click();
-  await L.checkEventually("PERMISO: un texto que no es una tarea avisa y el cuadro sigue abierto", async () => (await alerts(denied.page)).includes("El portapapeles no contiene una tarea en JSON.") && (await manual.locator("textarea").count()) === 1);
+  await manual.getByRole("button", { name: "Importar", exact: true }).click();
+  await L.checkEventually("PERMISO: un texto que no es una tarea avisa y el cuadro sigue abierto", async () => (await alerts(denied.page)).includes("No hay ninguna tarea en JSON.") && (await manual.locator("textarea").count()) === 1);
   await manual.locator("textarea").fill('{"format":"pizarro.task","title":"Pegada a mano","dueDate":"2027-05-06"}');
-  await manual.getByRole("button", { name: "Pegar tarea" }).click();
+  await manual.getByRole("button", { name: "Importar", exact: true }).click();
   await L.eqEventually("PERMISO: el JSON pegado a mano se aplica", async () => { const r = await row(ids2[0].id); return [r.title, r.due]; }, ["Pegada a mano", "2027-05-06"]);
   await L.checkEventually("PERMISO: … y el cuadro se cierra", async () => (await denied.page.locator("[role=dialog] textarea.font-mono").count()) === 0);
   denied.errors.length = 0;
   await denied.ctx.close();
 
-  // Móvil: sin teclado, con las opciones del menú.
+  // Móvil: sin teclado, con los botones.
   const ids3 = await seed();
   // En el móvil se ve una columna cada vez: las dos tareas, en la primera.
   await L.q(`UPDATE "Task" SET "columnId"=(SELECT "columnId" FROM "Task" WHERE id=$2), position=9000 WHERE id=$1`, [ids3.src, ids3.dst]);
@@ -296,12 +333,14 @@ if (only.includes("menu")) {
   await L.cardLoc(m.page, "Origen").first().tap();
   await U.dialog(m.page).waitFor();
   await sleep(500);
-  const box = await more(m.page).boundingBox();
-  L.check("MÓVIL: el botón del menú cabe en la cabecera del detalle", !!box && box.x >= 0 && box.x + box.width <= 390 && box.width >= 28, JSON.stringify(box));
-  await more(m.page).tap();
-  L.eq("MÓVIL: las opciones no muestran atajos de teclado", (await m.page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Copiar tarea (JSON)", "Pegar tarea"]);
-  await m.page.getByRole("menuitem", { name: /Copiar tarea/ }).tap();
-  L.check("MÓVIL: «Copiar tarea (JSON)» copia", await statusShows(m.page, "Tarea copiada") && (await clip(m.page)).includes('"pizarro.task"'));
+  for (const [name, btn] of [["Copiar tarea", copyBtn(m.page)], ["Importar tarea", importBtn(m.page)]]) {
+    const box = await btn.boundingBox();
+    L.check(`MÓVIL: «${name}» cabe en la cabecera del detalle`, !!box && box.x >= 0 && box.x + box.width <= 390 && box.width >= 28, JSON.stringify(box));
+  }
+  const titleWidth = await copyBtn(m.page).evaluate((el) => Math.round(el.closest("div.relative")?.firstElementChild?.getBoundingClientRect().width ?? 0));
+  L.check("MÓVIL: el título sigue teniendo sitio", titleWidth >= 120, String(titleWidth));
+  await copyBtn(m.page).tap();
+  L.check("MÓVIL: «Copiar tarea» copia", await statusShows(m.page, "Tarea copiada") && (await clip(m.page)).includes('"pizarro.task"'));
   const mjson = await clip(m.page);
   await setClip(m.page, mjson.replace('"title": "Origen"', '"title": "Pegada en el móvil"'));
   await U.dialog(m.page).getByRole("button", { name: "Cerrar" }).first().tap();
@@ -309,9 +348,10 @@ if (only.includes("menu")) {
   await L.cardLoc(m.page, "Destino").first().tap();
   await U.dialog(m.page).waitFor();
   await sleep(500);
-  await more(m.page).tap();
-  await m.page.getByRole("menuitem", { name: /Pegar tarea/ }).tap();
-  L.check("MÓVIL: «Pegar tarea» pega", await statusShows(m.page, "Tarea pegada"));
+  await importBtn(m.page).tap();
+  L.eq("MÓVIL: las opciones no muestran atajos de teclado", (await m.page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Desde el portapapeles", "Desde un fichero"]);
+  await m.page.getByRole("menuitem", { name: /Desde el portapapeles/ }).tap();
+  L.check("MÓVIL: «Desde el portapapeles» pega", await statusShows(m.page, "Tarea pegada"));
   await L.eqEventually("MÓVIL: … la tarea queda escrita", async () => { const r = await row(ids3.dst); return [r.title, r.due, r.subtasks]; }, ["Pegada en el móvil", "2026-12-01", ["x Guion", "  Ensayo"]]);
   m.errors.length = 0;
   await m.ctx.close();
@@ -342,8 +382,9 @@ if (only.includes("ingles")) {
   L.check("EN: el indicador dice «Task copied»", await statusShows(page, "Task copied"));
   const json = JSON.parse((await clip(page)) || "{}");
   L.eq("EN: el tipo de serie va con el nombre que se ve en inglés; las claves no cambian", [json.format, json.type, json.priority], ["pizarro.task", "Feature", "high"]);
-  await U.dialog(page).getByRole("button", { name: "More task options" }).click();
-  L.eq("EN: el menú en inglés", (await page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Copy task (JSON) Ctrl+C", "Paste task Ctrl+V"]);
+  L.eq("EN: los botones en inglés", [await U.dialog(page).getByRole("button", { name: "Copy task", exact: true }).count(), await U.dialog(page).getByRole("button", { name: "Import task", exact: true }).count()], [1, 1]);
+  await U.dialog(page).getByRole("button", { name: "Import task", exact: true }).click();
+  L.eq("EN: el menú en inglés", (await page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["From the clipboard Ctrl+V", "From a file"]);
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await U.dialog(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
@@ -358,9 +399,14 @@ if (only.includes("ingles")) {
   await L.checkEventually("EN: lo que no se aplica se avisa en inglés", async () => { const a = await alerts(page); return [a.includes("Task pasted, except:") && a.includes("cost (field not enabled)"), a]; });
   await sleep(6200);
   await setClip(page, '{"format":"pizarro.task","title":"broken"');
-  await blur(page);
-  await page.keyboard.press("Control+v");
+  await U.dialog(page).getByRole("button", { name: "Import task", exact: true }).click();
+  await page.getByRole("menuitem", { name: /From the clipboard/ }).click();
   await L.checkEventually("EN: el JSON inválido se avisa en inglés", async () => (await alerts(page)).includes("The task JSON is not valid."));
+  await sleep(6200);
+  await setClip(page, '{"format":"pizarro.task","title":"a"}\n{"format":"pizarro.task","title":"b"}');
+  await U.dialog(page).getByRole("button", { name: "Import task", exact: true }).click();
+  await page.getByRole("menuitem", { name: /From the clipboard/ }).click();
+  await L.checkEventually("EN: varias tareas se avisan en inglés", async () => (await alerts(page)).includes("There are 2 tasks. To import several, use “Import” on the board."));
   L.check("EN: sin errores de página", errors.length === 0, errors.slice(0, 2).join(" | "));
   await ctx.close();
   await L.q(`UPDATE "User" SET locale='ES' WHERE id=$1`, [me.id]);

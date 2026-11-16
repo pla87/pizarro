@@ -71,6 +71,8 @@ type AttachmentRow = {
   width: number | null; height: number | null; size: number; createdById: string | null; createdAt: string;
 };
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
+/** Etiqueta del proyecto (para devolverla al rehacer lo que la creó). */
+type LabelRow = { id: string; projectId: string; name: string; color: string };
 type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
@@ -113,7 +115,14 @@ export type UndoOp =
   | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null }; costOff?: true }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
-  | { t: "release.remove"; id: string };
+  | { t: "release.remove"; id: string }
+  /**
+   * Etiqueta que creó la acción (pegar o importar tareas en JSON): al deshacer se borra si ya no la usa ninguna tarea (si
+   * otra persona la ha puesto entretanto, se queda). `taskId`: la tarea en la que se pegó (para «Cancelar» del detalle).
+   * Al deshacer va después de las operaciones de tarea (se anota antes que ellas), y rehacer la devuelve antes que ellas.
+   */
+  | { t: "label.remove"; id: string; taskId?: string }
+  | { t: "label.restore"; row: LabelRow };
 
 /** Anota operaciones inversas de la acción en curso (se guardan solo si la acción termina bien). */
 export function addUndo(...ops: UndoOp[]): void {
@@ -244,6 +253,8 @@ export interface TouchedTask {
   linksDeleted: Map<string, Deleted<LinkRow>>;
   /** Tareas que nacieron en la misma acción que movió esta (la siguiente aparición de una recurrente). */
   spawned: Set<string>;
+  /** Etiquetas que creó un pegado en JSON sobre esta tarea (se borran al cancelar si ya no las usa nadie). */
+  labelsCreated: Set<string>;
 }
 
 function noteDeleted<R extends { id: string }>(map: Map<string, Deleted<R>>, row: R, kind: UndoKind): void {
@@ -259,7 +270,7 @@ function noteDeleted<R extends { id: string }>(map: Map<string, Deleted<R>>, row
 export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId: string): TouchedTask {
   const out: TouchedTask = {
     fields: new Set(), labels: false, subtaskFields: new Map(), subtaskBefore: new Map(), subtasksCreated: new Set(), subtasksDeleted: new Map(),
-    attachmentsCreated: new Set(), attachmentsDeleted: new Map(), linksCreated: new Set(), linksDeleted: new Map(), spawned: new Set(),
+    attachmentsCreated: new Set(), attachmentsDeleted: new Map(), linksCreated: new Set(), linksDeleted: new Map(), spawned: new Set(), labelsCreated: new Set(),
   };
   for (const e of entries) {
     const ops = e.ops as UndoOp[];
@@ -293,6 +304,7 @@ export function touchedTask(entries: { kind: UndoKind; ops: unknown }[], taskId:
         case "attachment.restore": if (op.row.taskId === taskId) noteDeleted(out.attachmentsDeleted, op.row, e.kind); break;
         case "link.remove": out.linksCreated.add(op.id); break;
         case "link.restore": if (op.row.taskId === taskId) noteDeleted(out.linksDeleted, op.row, e.kind); break;
+        case "label.remove": if (op.taskId === taskId && e.kind === "UNDO") out.labelsCreated.add(op.id); break;
         default: break;
       }
     }
@@ -469,6 +481,10 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
   const inProject = { task: { projectId } };
   const sets = new Map<string, { fields: TaskField[]; withLabels: boolean; slots: { id: string; slot: UndoOp[] }[] }>();
   const removes: { id: string; slot: UndoOp[] }[] = [];
+  // Etiquetas: las que vuelven (label.restore) se aplican antes que nada (van al final: se aplica de la última a la
+  // primera) y las que se quitan (label.remove), después de todo (van al principio), cuando ya no las usa ninguna tarea.
+  const labelsFirst: UndoOp[] = [];
+  const labelsLast: UndoOp[] = [];
   for (const op of ops) {
     switch (op.t) {
       case "task.set": {
@@ -569,6 +585,14 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
         break;
       case "release.remove":
         break;
+      case "label.remove": {
+        const l = once(`label:${op.id}`) && (await db.label.findFirst({ where: { id: op.id, projectId }, select: { id: true, projectId: true, name: true, color: true } }));
+        if (l) labelsLast.push({ t: "label.restore", row: l });
+        break;
+      }
+      case "label.restore":
+        if (once(`label:${op.row.id}`)) labelsFirst.push({ t: "label.remove", id: op.row.id });
+        break;
     }
   }
   const taskIds = [...new Set([...[...sets.values()].flatMap((g) => g.slots.map((x) => x.id)), ...removes.map((x) => x.id)])];
@@ -597,7 +621,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       if (op) x.slot.push(...(links.get(x.id) ?? []), op);
     }
   }
-  return out.flat();
+  return [...labelsFirst, ...out.flat(), ...labelsLast];
 }
 
 /** Una columna de presupuesto exige el campo Coste: si al deshacer vuelve una, se reactiva. */
@@ -1029,6 +1053,16 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           columnIds.add(op.row.id);
           break;
         }
+        case "label.remove":
+          // Solo si ya no la usa ninguna tarea; si alguien la ha puesto en otra, se queda (no cuenta como fallo).
+          await db.label.deleteMany({ where: { id: op.id, projectId, tasks: { none: {} } } });
+          break;
+        case "label.restore": {
+          // Si entretanto se creó otra con el mismo nombre, no vuelve (las tareas que la llevaban se quedan sin ella).
+          const { count } = await db.label.createMany({ data: [{ ...op.row, projectId }], skipDuplicates: true });
+          if (!count) miss++;
+          break;
+        }
         case "release.remove": {
           const atts = await db.releaseAttachment.findMany({ where: { releaseId: op.id }, select: { id: true } });
           const { count } = await db.release.deleteMany({ where: { id: op.id, projectId } });
@@ -1264,6 +1298,7 @@ function fingerprintSubjects(ops: UndoOp[]) {
   const taskIds = new Set<string>();
   const columnIds = new Set<string>();
   const releaseIds = new Set<string>();
+  const labelIds = new Set<string>();
   const lookups: { model: FpModel; id: string }[] = [];
   for (const op of ops) {
     switch (op.t) {
@@ -1278,9 +1313,11 @@ function fingerprintSubjects(ops: UndoOp[]) {
       case "column.set": case "column.remove": columnIds.add(op.id); break;
       case "column.restore": columnIds.add(op.row.id); break;
       case "release.remove": releaseIds.add(op.id); break;
+      case "label.remove": labelIds.add(op.id); break;
+      case "label.restore": labelIds.add(op.row.id); break;
     }
   }
-  return { taskIds, columnIds, releaseIds, lookups };
+  return { taskIds, columnIds, releaseIds, labelIds, lookups };
 }
 
 /** Lo que se lee de cada tarea, menos la descripción (va aparte, por su hash). Contenido, no la hora de escritura. */
@@ -1354,6 +1391,9 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
   const releaseIds = [...new Set(subjects.flatMap((s) => [...s.releaseIds]))];
   const rels = new Set<string>();
   for (const part of chunks(releaseIds)) for (const r of await db.release.findMany({ where: { id: { in: part }, projectId }, select: { id: true } })) rels.add(r.id);
+  const labelIds = [...new Set(subjects.flatMap((s) => [...s.labelIds]))];
+  const labels = new Map<string, string>();
+  for (const part of chunks(labelIds)) for (const l of await db.label.findMany({ where: { id: { in: part }, projectId }, select: { id: true, name: true, color: true } })) labels.set(l.id, JSON.stringify(l));
 
   return subjects.map((s, i) => {
     const out = lines[i]!;
@@ -1362,6 +1402,7 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
     for (const id of s.taskIds) out.push(`task:${id}:${taskLines.get(id) ?? '"absent"'}`);
     for (const id of s.columnIds) out.push(`column:${id}:${cols.get(id) ?? '"absent"'}`);
     for (const id of s.releaseIds) out.push(`release:${id}:${rels.has(id) ? "present" : "absent"}`);
+    for (const id of s.labelIds) out.push(`label:${id}:${labels.get(id) ?? '"absent"'}`);
     const hash = createHash("sha256").update(out.sort().join("\n")).digest("hex");
     return `${old ? FP_V2 : FP_V2_BLOCK}${hash}`;
   });

@@ -23,7 +23,12 @@ import { fieldsForDraft, fieldsFromDraft } from "@/lib/fields-form";
 import { DescriptionField } from "../ui/DescriptionField";
 import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
-import { usePasteFiles } from "../ui/pasteFiles";
+import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
+import { copyText } from "../ui/clipboard";
+import { parseTasksText, strictJsonFormat, stringifyTaskJson } from "@/lib/task-json";
+import { fillNewTaskForm, newTaskFormJson, type FormProject } from "@/lib/task-json-form";
+import { acceptsPastedText, eventIsFor } from "./taskClipboard";
+import { TaskJsonButtons } from "./TaskJsonButtons";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
 import { hasEvergreenTasks, MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
 import { TypeSelector } from "./TaskDialog";
@@ -375,8 +380,82 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (!elsewhere && alive.current) board.revealTask(task.id);
   };
 
+  // --- La tarea en JSON (lib/task-json.ts): copiar lo que hay en el formulario e importar una tarea en él ---
+  const formProject = useMemo<FormProject>(
+    () => ({ kinds: form.kinds, columns: form.columns, users: form.users, deliverables: form.deliverables, enabledFields: form.project.taskFields }),
+    [form],
+  );
+  /** Copia lo escrito como JSON de tarea (sin `info`: aún no es una tarea guardada). */
+  const copyForm = async () => {
+    const pending = subtaskDraft.trim().slice(0, 200);
+    const json = newTaskFormJson(
+      { title, kindId, description, columnId, assigneeId, dueDate, deliverableId, recurrence, recurrenceDay, subtasks: pending ? [...subtasks, pending] : subtasks, fields: fieldsForm },
+      formProject,
+    );
+    if (await copyText(stringifyTaskJson(json))) toast(t("Tarea copiada"));
+    else toast(t("No se ha podido copiar al portapapeles."), "error");
+  };
+  /**
+   * Rellena el formulario con la tarea en JSON de `text` (una sola; varias se importan desde el tablero). Si ya hay algo
+   * escrito, pregunta antes de sustituirlo. Lo que el formulario no admite se avisa. `true` si se importó.
+   */
+  const importForm = async (text: string): Promise<boolean> => {
+    const read = parseTasksText(text);
+    if (read.tasks.length > 1 || read.tooMany) {
+      toast(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }), "error");
+      return false;
+    }
+    const one = read.tasks[0];
+    if (!one) {
+      toast(read.total || read.tooLong ? t("El JSON de la tarea no es válido.") : t("No hay ninguna tarea en JSON."), "error");
+      return false;
+    }
+    if (loading || busyRef.current) return false;
+    const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
+    if (dirty && !(await confirm({ title: t("Sustituir lo escrito"), message: t("La nueva tarea ya tiene contenido. ¿Sustituirlo por la tarea importada?"), confirmLabel: t("Sustituir"), danger: true }).catch(() => false))) return false;
+    const { form: fill, notices } = fillNewTaskForm(one.task, one.problems, formProject, MAX_NEW_SUBTASKS, t);
+    setTitle(fill.title ?? "");
+    setDescription(fill.description ?? "");
+    setSubtaskItems((fill.subtasks ?? []).map(subtaskItem));
+    setSubtaskDraft("");
+    if (fill.kindId) setKindId(fill.kindId);
+    if (fill.columnId) setColumnId(fill.columnId);
+    if (fill.assigneeId !== undefined) setAssigneeId(fill.assigneeId);
+    if (fill.deliverableId !== undefined) setDeliverableId(fill.deliverableId);
+    if (fill.dueDate !== undefined) setDueDate(fill.dueDate);
+    if (fill.recurrence) {
+      setRecurrence(fill.recurrence);
+      dayPicked.current = fill.recurrenceDay !== null && fill.recurrenceDay !== undefined;
+      setRecurrenceDay(fill.recurrenceDay ?? defaultRecurrenceDay(fill.recurrence, fill.dueDate ?? (dueDate || null), board.today));
+    }
+    if (fill.fields) setFieldsForm((f) => ({ ...f, ...fill.fields }));
+    if (notices.length) {
+      const shown = notices.slice(0, 4).join("; ");
+      toast(t("Tarea importada, salvo: {list}", { list: notices.length > 4 ? t("{list} y {n} más", { list: shown, n: notices.length - 4 }) : shown }), "error");
+    } else toast(t("Tarea importada"));
+    return true;
+  };
+  const importRef = useRef(importForm);
+  useEffect(() => {
+    importRef.current = importForm;
+  });
+
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
   const formRef = useRef<HTMLFormElement>(null);
+  // Ctrl+V / ⌘V fuera de un campo de texto con EXACTAMENTE una tarea en JSON en el portapapeles: rellena el formulario.
+  // Con cualquier otra cosa (o en un campo, o con archivos) el pegado sigue su curso.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const dialog = formRef.current?.closest("[role=dialog]");
+      if (e.defaultPrevented || pasteClaimed(e) || acceptsPastedText(e.target) || !eventIsFor(dialog, e.target) || pastedFiles(e).length) return;
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (strictJsonFormat(text) !== "pizarro.task") return;
+      e.preventDefault();
+      void importRef.current(text);
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, []);
   // Pegar archivos (Ctrl/⌘+V) con el foco en cualquier parte del diálogo, también fuera de las cajas: una vez por pegado.
   usePasteFiles(addFiles, () => formRef.current?.closest("[role=dialog]") ?? null);
   useEffect(() => {
@@ -424,7 +503,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         }
       }}>
         <div>
-          <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
+          <div className="flex items-center justify-between gap-2">
+            <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
+            {/* Copiar lo escrito como JSON o importar una tarea (portapapeles o fichero): discretos, junto al título. */}
+            <TaskJsonButtons onCopy={() => void copyForm()} onImport={importForm} shortcuts={{ paste: true }} className="-my-1.5 -mr-1.5 flex shrink-0 items-center" />
+          </div>
           <div className="relative">
             <input ref={titleRef} id={`${uid}-title`} className={cn("peer input min-w-0 w-full pr-10", overTitleLimit(title) && TITLE_INVALID_CLASSES)} value={title} onChange={(e) => setTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setTitle)} maxLength={TITLE_INPUT_LIMIT} aria-invalid={overTitleLimit(title) || undefined} aria-describedby={overTitleLimit(title) ? `${uid}-title-hint` : undefined} required data-autofocus />
             <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current?.parentElement?.parentElement ?? null} placement="inside" whileEditing className="top-1/2 -translate-y-1/2" />
