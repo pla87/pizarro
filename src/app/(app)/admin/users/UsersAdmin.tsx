@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
 import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { actionThrowResult } from "@/lib/stale-action";
 
 type Role = "ADMIN" | "MEMBER";
 type UserLocale = "ES" | "EN";
@@ -54,7 +55,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
       danger: true,
     });
     if (!ok) return;
-    const res = await unlinkGoogle(u.id);
+    const res = await unlinkGoogle(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google desvinculado: se han cerrado sus sesiones"));
     router.refresh();
@@ -64,7 +65,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
   const resend = async (u: UserRow) => {
     setResending(u.id);
     try {
-      const res = await resendInvite(u.id);
+      const res = await resendInvite(u.id).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       toast(t("Invitación reenviada a {email}: el enlace anterior ya no vale", { email: u.email }));
       router.refresh();
@@ -74,7 +75,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
   };
 
   const allow = async (u: UserRow) => {
-    const res = await allowGoogleRelink(u.id);
+    const res = await allowGoogleRelink(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
     toast(t("Google permitido: podrá volver a vincularse al entrar con Google"));
     router.refresh();

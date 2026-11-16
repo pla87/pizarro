@@ -11,6 +11,7 @@ import { useT } from "@/i18n/client";
 import type { EditorModeValue, TemplateOption } from "@/lib/types";
 import type { TemplateKindValue } from "@/lib/constants";
 import { useActionTransition } from "@/components/useActionTransition";
+import { actionThrowResult } from "@/lib/stale-action";
 
 const NO_USERS: never[] = [];
 
@@ -209,7 +210,7 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
                 aria-label={t("Borrar {name}", { name: tpl.name })}
                 onClick={async () => {
                   if (!(await confirm({ title: t("Borrar plantilla"), message: t("¿Borrar «{name}»?", { name: tpl.name }), confirmLabel: t("Borrar"), danger: true }))) return;
-                  const res = await actions.remove(tpl.id);
+                  const res = await actions.remove(tpl.id).catch((e) => actionThrowResult(e, t));
                   if (!res.ok) return toast(res.error, "error");
                   setItems((l) => l.filter((x) => x.id !== tpl.id));
                 }}
