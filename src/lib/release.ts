@@ -193,12 +193,18 @@ function formatReleaseDescription(description: string | null | undefined): strin
   return lines.map((l) => (l ? `  ${l}` : ""));
 }
 
-/** Línea de la tarea + adjuntos + descripción (los adjuntos antes, para que una lista al final de la descripción no los absorba). */
+/**
+ * Línea de la tarea + adjuntos + descripción (los adjuntos antes, para que una lista al final de la descripción no los
+ * absorba), cada parte en su párrafo dentro del punto (línea en blanco + sangría). Sin la línea en blanco, en Markdown la
+ * línea siguiente se unía al párrafo del título y la descripción salía seguida de él en el histórico y al copiar. (Un salto
+ * forzado no sirve: el editor con barra lo vuelve a escribir sin sangría.)
+ */
 function formatReleaseTask(task: ReleaseTaskInput, code: string, t: T): string {
-  const lines = [formatReleaseLine(task, code, t)];
-  if (task.attachments?.length) lines.push(`  ${t("Adjuntos")}: ${attachmentFileNames(code, task.attachments).join(", ")}`);
-  lines.push(...formatReleaseDescription(task.description));
-  return lines.join("\n");
+  const parts = [formatReleaseLine(task, code, t)];
+  if (task.attachments?.length) parts.push(`  ${t("Adjuntos")}: ${attachmentFileNames(code, task.attachments).join(", ")}`);
+  const description = formatReleaseDescription(task.description);
+  if (description.length) parts.push(description.join("\n"));
+  return parts.join("\n\n");
 }
 
 /** Secciones por tipo (sin título, cabecera ni pie). */

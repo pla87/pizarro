@@ -120,7 +120,7 @@ test("release notes en el idioma de quien la genera: «Otros», «Adjuntos», «
       { id: "b", title: "Dos", kindId: "borrado" },
     ],
   }, en);
-  assert.match(md, /### Feature\n- \*\*F1\*\* · Uno \(\[link\]\(<https:\/\/example\.com\/1>\)\)\n {2}Attachments: F1_foto\.webp/);
+  assert.match(md, /### Feature\n- \*\*F1\*\* · Uno \(\[link\]\(<https:\/\/example\.com\/1>\)\)\n\n {2}Attachments: F1_foto\.webp/);
   // La sección se traduce, pero el código sigue saliendo del nombre de serie («Otros» → O1).
   assert.match(md, /### Others\n- \*\*O1\*\* · Dos/);
   assert.doesNotMatch(md, /Adjuntos|enlace|Otros/);
@@ -201,7 +201,7 @@ test("descripción sangrada con menciones y adjuntos renombrados", () => {
   });
   assert.equal(
     md,
-    "### Funcionalidad\n- **F1** · Feat\n  Adjuntos: F1_captura.webp, F1_captura-2.webp, F1_Vista_Árbol__1_.webp\n  Hola @Ana\n\n  - punto\n- **F2** · Sin nada\n",
+    "### Funcionalidad\n- **F1** · Feat\n\n  Adjuntos: F1_captura.webp, F1_captura-2.webp, F1_Vista_Árbol__1_.webp\n\n  Hola @Ana\n\n  - punto\n- **F2** · Sin nada\n",
   );
 });
 

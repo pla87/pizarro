@@ -74,7 +74,7 @@ test("cabecera o pie de la release guardados con párrafos vacíos: sin «&nbsp;
     kinds: [{ id: "k", name: "Mejora" }],
     tasks: [{ id: "t", title: "Algo", kindId: "k", description: "Línea\n\n&nbsp;\n\n&nbsp;\n\nOtra" }],
   });
-  assert.equal(md, "Hola equipo\n\nNovedades:\n\n### Mejora\n- **M1** · Algo\n  Línea\n\n  Otra\n\nGracias\n\nEl equipo\n");
+  assert.equal(md, "Hola equipo\n\nNovedades:\n\n### Mejora\n- **M1** · Algo\n\n  Línea\n\n  Otra\n\nGracias\n\nEl equipo\n");
 });
 
 test("descripción en el .ics: los párrafos vacíos del editor no dejan «&nbsp;» ni líneas en blanco repetidas", () => {
