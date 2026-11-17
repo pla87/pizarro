@@ -16,9 +16,10 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
-import { COLOR_NAME, hasEvergreenTasks, isWhite, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, onColor, swatchBorder } from "@/lib/constants";
+import { COLOR_NAME, hasEvergreenTasks, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, swatchBorder } from "@/lib/constants";
 import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
+import { LabelToggles } from "./LabelToggles";
 import { cn } from "../ui/cn";
 import { DescriptionField } from "../ui/DescriptionField";
 import { DescriptionTools, descriptionTooLong } from "../ui/DescriptionTools";
@@ -1293,29 +1294,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </div>
           </Field>
           <Field label={t("Etiquetas")}>
-            <div className="flex flex-wrap gap-1.5 md:gap-1">
-              {board.labels.map((l) => {
-                const on = task.labelIds.includes(l.id);
-                return (
-                  <button
-                    key={l.id}
-                    type="button"
-                    onClick={() => {
-                      const labelIds = on ? task.labelIds.filter((x) => x !== l.id) : [...task.labelIds, l.id];
-                      save({ labelIds }, { labelIds });
-                    }}
-                    className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
-                    style={on ? { backgroundColor: l.color, color: onColor(l.color), boxShadow: isWhite(l.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined } : undefined}
-                    aria-pressed={on}
-                  >
-                    {l.name}
-                  </button>
-                );
-              })}
+            <LabelToggles
+              labels={board.labels}
+              selected={task.labelIds}
+              onToggle={(id, on) => {
+                const labelIds = on ? [...task.labelIds, id] : task.labelIds.filter((x) => x !== id);
+                save({ labelIds }, { labelIds });
+              }}
+              className="md:gap-1"
+            >
               <Link href={`/p/${board.project.id}/settings?tab=tablero#labels`} className="px-1 py-0.5 text-xs text-brand-600 dark:text-brand-300 hover:underline">
                 {t("Gestionar")}
               </Link>
-            </div>
+            </LabelToggles>
           </Field>
           <Field label={t("Enlace externo")}>
             {(id) => (
@@ -1387,7 +1378,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 }
 
 /** Selector de color compacto: un botón con el color actual que abre la paleta en un panel flotante (elegir uno lo cierra). */
-function ColorPopover({ value, onChange }: { value: string | null; onChange: (c: string | null) => void }) {
+export function ColorPopover({ value, onChange }: { value: string | null; onChange: (c: string | null) => void }) {
   const t = useT();
   const name = value === null ? t("Sin color") : COLOR_NAME[value.toLowerCase()] ? t(COLOR_NAME[value.toLowerCase()]!) : value;
   return (

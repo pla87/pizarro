@@ -145,4 +145,7 @@ export const portapapeles: Record<string, string> = {
   "{n} tareas completadas no se importan.": "{n} completed tasks are not imported.",
   "1 comentario de Todoist no se importa.": "1 Todoist comment is not imported.",
   "{n} comentarios de Todoist no se importan.": "{n} Todoist comments are not imported.",
+  // Importar en «Nueva tarea»: etiquetas que no existen en el proyecto
+  "etiqueta «{name}» (no existe en el proyecto)": "label “{name}” (doesn't exist in the project)",
+  "{n} etiquetas más (no existen en el proyecto)": "{n} more labels (don't exist in the project)",
 };

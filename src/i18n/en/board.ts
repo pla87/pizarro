@@ -356,4 +356,8 @@ export const board: Record<string, string> = {
 
   // «Nueva tarea» con una columna que otra persona borró
   "La columna elegida ya no existe. La tarea se creará en «{name}».": "The chosen column no longer exists. The task will be created in “{name}”.",
+
+  // «Nueva tarea»: color, enlace y etiquetas
+  "Color (opcional)": "Color (optional)",
+  "Enlace externo (opcional)": "External link (optional)",
 };

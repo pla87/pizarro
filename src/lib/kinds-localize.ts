@@ -42,6 +42,17 @@ export function localizeGeneralKind<K extends { id: string; name: string }>(kind
   return out as K;
 }
 
+/**
+ * Nombres de un tipo general de serie en los dos idiomas («Corrección» y «Bug fix»), si su nombre guardado sigue siendo el
+ * de serie; [] si no es de serie o un administrador lo renombró. Sirve para reconocerlo al importar una tarea exportada con
+ * la interfaz en el otro idioma. Vale con el tipo guardado o con el ya traducido (lleva el guardado en `codeName`).
+ */
+export function generalKindNames(kind: { id: string; name: string; codeName?: string }): string[] {
+  const seed = SEEDS[kind.id];
+  if (!seed || (kind.codeName ?? kind.name) !== seed.es.name) return [];
+  return [seed.es.name, seed.en.name];
+}
+
 export function localizeGeneralKinds<K extends { id: string; name: string }>(kinds: K[], locale: Locale): K[] {
   return locale === "en" ? kinds.map((k) => localizeGeneralKind(k, locale)) : kinds;
 }
