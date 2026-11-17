@@ -279,7 +279,7 @@ function MatchStep({ preview, plan, columns, kinds, setColumns, setKinds }: {
                 </span>
                 <select className="input" aria-label={t("Destino de «{name}»", { name: c.name })} value={columns[c.id] ?? "keep"} onChange={(e) => { const value = e.target.value; setColumns((m) => ({ ...m, [c.id]: value })); }}>
                   <optgroup label={t("Pasa a la columna de la plantilla")}>
-                    {template.columns.map((tc, i) => <option key={i} value={`t:${i}`}>{tc.name}{tc.role !== "NONE" ? ` (${t(roleLabel(tc.role))})` : ""}</option>)}
+                    {template.columns.map((tc, i) => <option key={i} value={`t:${i}`}>{tc.name}{tc.role !== "NONE" ? ` · ${t(roleLabel(tc.role))}` : ""}</option>)}
                   </optgroup>
                   <option value="keep">{t("Conservar al final")}</option>
                   {empty && <option value="drop">{t("Quitar (está vacía)")}</option>}

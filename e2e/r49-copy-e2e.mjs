@@ -347,10 +347,10 @@ if (only.includes("rel")) {
   await caretAfter(page, "Tarea Alfa");
   await page.keyboard.type(" editada");
   const edited = await downloadMd(page, dlg);
-  // El punto editado sale como lo escribe el editor (el salto de línea, como salto «  \n»); todo lo demás, idéntico.
-  const editedItem = /- \*\*R1F1\*\* · Tarea Alfa editada {0,2}\n {0,2}Descripción de Alfa/;
+  // El punto editado sale como lo escribe el editor (la descripción, en su párrafo sangrado debajo); todo lo demás, idéntico.
+  const editedItem = /- \*\*R1F1\*\* · Tarea Alfa editada\n\n {2}Descripción de Alfa/;
   L.check("REL: tras editar, la tarea editada lleva el cambio", editedItem.test(edited), edited);
-  L.eq("REL: tras editar, el resto queda idéntico (cabecera con #, enlace <…>, sangrías, pie)", edited.replace(editedItem, "@@"), markdownText.replace("- **R1F1** · Tarea Alfa\n  Descripción de Alfa", "@@"));
+  L.eq("REL: tras editar, el resto queda idéntico (cabecera con #, enlace <…>, sangrías, pie)", edited.replace(editedItem, "@@"), markdownText.replace("- **R1F1** · Tarea Alfa\n\n  Descripción de Alfa", "@@"));
   await dlg.getByRole("button", { name: "Copiar todo" }).click();
   await sleep(300);
   L.eq("REL: Copiar todo tras editar = .md", await page.evaluate(() => navigator.clipboard.readText()), edited);

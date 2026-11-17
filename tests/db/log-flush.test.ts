@@ -143,4 +143,21 @@ describe("guardado del lote", () => {
     await flushLogs();
     assert.equal((await rows("logpurge.")).length, 1);
   });
+
+  // Carrera vista con la CPU cargada: el temporizador ya había sacado el lote de la cola y lo estaba guardando, y
+  // flushLogs volvía en el acto (cola vacía) sin esperar esa escritura: quien leía después no encontraba las filas.
+  test("flushLogs espera también a la escritura que ya está en curso", async () => {
+    logEvent({ category: "test", action: "lograce.1" });
+    const timerFlush = flushLogs(); // como el temporizador: el lote sale de la cola y empieza a guardarse
+    assert.equal(state.queue.length, 0);
+    logEvent({ category: "test", action: "lograce.2" });
+    await flushLogs();
+    assert.deepEqual((await rows("lograce.")).map((r) => r.action), ["lograce.1", "lograce.2"]);
+    await timerFlush;
+    // Sin nada pendiente, también espera a la que esté en curso.
+    logEvent({ category: "test", action: "lograce.3" });
+    void flushLogs();
+    await flushLogs();
+    assert.equal((await rows("lograce.")).length, 3);
+  });
 });

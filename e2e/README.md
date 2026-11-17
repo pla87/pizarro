@@ -33,6 +33,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/bh52b-e2e.mjs` | 36 | ~40 s |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/bh53-e2e.mjs` | 25 | ~1 min |
+| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla» y `otro.md#apartado` (caza de bugs 54) | `e2e/bh54-e2e.mjs` | 32 | ~30 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -239,6 +240,20 @@ aviso. Cada opción de «Cómo se envían los emails» se nombra por su título 
 
 ```sh
 cd e2e && BASE=http://localhost:3276 DATABASE_URL=$DBURL node bh52b-e2e.mjs   # PART=zip,doc,columnas,mail
+```
+
+## Arreglos de la caza 54
+
+En el histórico de releases, la descripción de cada tarea (y la línea de adjuntos) va en su párrafo debajo del punto, y
+una release guardada con el texto antiguo se sigue viendo; el título es un `<h2>` con el botón dentro (la cabecera entera
+sigue abriéndola) y, sin portapapeles, «No se pudo copiar» sale como error. En el móvil, «Archivadas» del menú lateral lo
+cierra. En el calendario, «Proyectos» y «Persona» se llaman «Proyectos: <lo elegido>» (axe sin
+`label-content-name-mismatch`) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió (con clic
+fuera, no). En «Aplicar plantilla», el rol de la columna de destino va tras « · ». Un enlace de un HTML a
+`guia.md#instalacion-rapida` (o con tildes) abre el Markdown en ese apartado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh54-e2e.mjs   # PART=release,menu,cal,plantilla,md
 ```
 
 ## Arrastrar una selección

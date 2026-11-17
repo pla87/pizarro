@@ -134,13 +134,17 @@ export function ReleaseEntry({ release }: Props) {
   if (removed) return null;
   return (
     <article className="card">
-      <button className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+      {/* El título es un <h2> con el botón dentro (un botón no puede contener un título). El botón cubre toda la cabecera
+          con su ::after, así que se abre pulsando en cualquier parte de ella, como antes. */}
+      <div className="relative flex w-full items-center gap-3 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-medium">
-            {/* El espacio va en el mismo nodo de texto que el título: separa el número en el nombre accesible del botón
-                («R3 Release…», no «R3Release…»); Chrome no cuenta un nodo de texto que solo tiene un espacio. */}
-            <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
-            {` ${release.title}`}
+          <h2 className="font-medium">
+            <button type="button" className="block w-full truncate text-left after:absolute after:inset-0" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+              {/* El espacio va en el mismo nodo de texto que el título: separa el número en el nombre accesible del botón
+                  («R3 Release…», no «R3Release…»); Chrome no cuenta un nodo de texto que solo tiene un espacio. */}
+              <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
+              {` ${release.title}`}
+            </button>
           </h2>
           <p className="text-xs text-slate-500">
             {formatDate(date, "dateTime", locale)}
@@ -148,12 +152,12 @@ export function ReleaseEntry({ release }: Props) {
             {attachments.length > 0 && ` · ${attachments.length === 1 ? t("1 adjunto") : t("{n} adjuntos", { n: attachments.length })}`}
           </p>
         </div>
-        <ChevronDown size={18} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} />
-      </button>
+        <ChevronDown size={18} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
+      </div>
       {open && (
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="mb-3 flex flex-wrap gap-2">
-            <button className="btn-secondary py-1.5" onClick={async () => toast(await copyText(text) ? t("Copiado al portapapeles") : t("No se pudo copiar"))}>
+            <button className="btn-secondary py-1.5" onClick={async () => { if (await copyText(text)) toast(t("Copiado al portapapeles")); else toast(t("No se pudo copiar"), "error"); }}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
             <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
