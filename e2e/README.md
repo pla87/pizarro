@@ -43,7 +43,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 109 | ~1,5 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 97 | ~1,5 min |
-| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea», móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 83 | ~1,5 min |
+| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto), móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 132 | ~2,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -577,9 +577,14 @@ caducada o con un 413 de un proxy por delante, el aviso de siempre. Con tarjetas
 «Exportar (N)»: «Descargar .json» (nombre `tareas-<proyecto>-<fecha>.json`, sin emails) y «Copiar»; lo descargado se
 vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» copia lo escrito, «Importar
 tarea» rellena el formulario (pregunta antes de sustituir y avisa de lo que no admite), desde un fichero y con Ctrl+V
-estricto fuera de un campo. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
+estricto fuera de un campo. Ctrl+V de una tarea copiada (de otra instalación, con Markdown largo, tipo «Respuesta» y
+columna del proyecto) la importa entera con el foco en el título vacío, en cada selector, en un tipo, en un botón, en la
+fecha, en una zona vacía o en una caja con el formulario sin tocar; con algo escrito pregunta, y en otra caja se pega como
+texto; varias tareas avisan; desde el «+» de una columna manda la del JSON si existe (si no, la de la columna). Etiquetas
+(solo las del proyecto), color y enlace al crear, al importar (aviso de las etiquetas que no existen) y al copiar; con el
+selector de proyecto se quedan las etiquetas que existen en el otro. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
 cabe, la barra de selección tiene «Exportar». En inglés y en modo oscuro. Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,movil,ingles,oscuro
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro
 ```

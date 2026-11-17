@@ -26,12 +26,14 @@ import { pasteAsOneLine } from "../ui/textarea-edit";
 import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
 import { copyText } from "../ui/clipboard";
 import { parseTasksText, strictJsonFormat, stringifyTaskJson } from "@/lib/task-json";
-import { fillNewTaskForm, newTaskFormJson, type FormProject } from "@/lib/task-json-form";
+import { fillNewTaskForm, foldName, newTaskFormJson, type FormProject } from "@/lib/task-json-form";
 import { acceptsPastedText, eventIsFor } from "./taskClipboard";
 import { TaskJsonButtons } from "./TaskJsonButtons";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
-import { hasEvergreenTasks, MAX_DESCRIPTION, MAX_TITLE } from "@/lib/constants";
-import { TypeSelector } from "./TaskDialog";
+import { hasEvergreenTasks, MAX_DESCRIPTION, MAX_TASK_LABELS, MAX_TITLE, PALETTE } from "@/lib/constants";
+import { ColorPopover, TypeSelector } from "./TaskDialog";
+import { LabelToggles } from "./LabelToggles";
+import { isHttpUrl, normalizeLinkUrl } from "@/lib/link-url";
 import type { T } from "@/i18n/core";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { UploadProgress } from "./UploadProgress";
@@ -140,9 +142,20 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
   // Campos opcionales del proyecto elegido (el borrador guarda los activados).
   const [fieldsForm, setFieldsForm] = useState<FieldsForm>(() => fieldsFromDraft(d?.fields));
+  // Etiquetas (solo las que ya existen en el proyecto: aquí no se crean), color de la tarjeta y enlace externo, como en el detalle.
+  const [labelIds, setLabelIds] = useState<string[]>(() => {
+    const ids = Array.isArray(d?.labelIds) ? d.labelIds.filter((x): x is string => typeof x === "string") : [];
+    return (foreignInit ? ids : ids.filter((id) => board.labels.some((l) => l.id === id))).slice(0, MAX_TASK_LABELS);
+  });
+  const [color, setColor] = useState<string | null>(() => (typeof d?.color === "string" && (PALETTE as readonly string[]).includes(d.color) ? d.color : null));
+  const [linkUrl, setLinkUrl] = useState(() => (typeof d?.linkUrl === "string" ? d.linkUrl : ""));
 
   /** Ajusta las opciones al proyecto de `f`: conserva lo que siga existiendo en él y, si no, usa su primera columna / tipo. */
-  const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string }) => {
+  const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string; labelNames?: string[] }) => {
+    // Etiquetas: al cambiar de proyecto se quedan las que también existen en el nuevo (por nombre); las demás se quitan.
+    const names = keep.labelNames;
+    if (names) setLabelIds(f.labels.filter((l) => names.some((n) => foldName(n) === foldName(l.name))).map((l) => l.id).slice(0, MAX_TASK_LABELS));
+    else setLabelIds((ids) => ids.filter((id) => f.labels.some((l) => l.id === id)));
     setKindId(f.kinds.some((k) => k.id === keep.kindId) ? keep.kindId : (f.kinds[0]?.id ?? ""));
     setColumnId(f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? ""));
     setAssigneeId(f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : "");
@@ -151,7 +164,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   };
   const selectProject = async (id: string) => {
     if (id === projectId) return;
-    const keep = { kindId, columnId: "", assigneeId, deliverableId: "" };
+    const keep = { kindId, columnId: "", assigneeId, deliverableId: "", labelNames: form.labels.filter((l) => labelIds.includes(l.id)).map((l) => l.name) };
     setProjectId(id);
     wantedProject.current = id;
     const ready = id === board.project.id ? boardForm : formCache.current.get(id);
@@ -198,9 +211,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const discardDraft = useDraftAutosave(draftKey("new", board.currentUserId, board.project.id), () =>
     !autosave
       ? undefined
-      : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim()
+      : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim() && !labelIds.length && !color && !linkUrl.trim()
         ? null
-        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay, recurrenceDayPicked: dayPicked.current } satisfies NewTaskDraft),
+        : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay, recurrenceDayPicked: dayPicked.current, labelIds, color, linkUrl } satisfies NewTaskDraft),
   );
   // Si el diálogo ya no está montado (cierre del padre, navegación), una subida tardía no cierra ni descarta nada ajeno.
   const alive = useRef(true);
@@ -223,6 +236,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     toast(skippedMessage(t, locale, initialPlan.skipped, board.project.fileMaxMb), "error");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /** ¿Hay algo escrito o elegido? (cerrar pide confirmación e importar pregunta antes de sustituirlo). */
+  const isDirty = () => !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim() || labelIds.length || color || linkUrl.trim());
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
   const busyRef = useRef(false);
@@ -230,8 +245,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const requestClose = async (): Promise<boolean> => {
     // Mientras se crea la tarea y se suben sus archivos no se cierra (se ve el progreso): cerrar a medias dejaría la subida huérfana.
     if (busyRef.current) return false;
-    const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
-    if (dirty) {
+    if (isDirty()) {
       // Una sola confirmación a la vez (Escape o clics repetidos no las apilan).
       if (confirming.current) return false;
       confirming.current = true;
@@ -333,6 +347,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (description.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     const fieldsErr = fieldsError(fieldsForm, form.project.taskFields, dueDate, t);
     if (fieldsErr) return toast(fieldsErr, "error");
+    // Enlace: la misma normalización que el detalle («example.com/x» → https://…) y la misma regla que el servidor.
+    const link = normalizeLinkUrl(linkUrl);
+    if (link && (link.length > 2000 || !isHttpUrl(link))) return toast(t("El enlace debe empezar por http:// o https://"), "error");
     setBusy(true);
     busyRef.current = true;
     // Una subtarea a medio escribir también se guarda al crear.
@@ -346,6 +363,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         assigneeId: assigneeId || null, dueDate: dueDate || null, deliverableId: deliverableId || null,
         evergreen: isReleaseColumn && evergreen,
         recurrence, recurrenceDay,
+        color: color as never, linkUrl: link || null,
+        labelIds: labelIds.filter((id) => form.labels.some((l) => l.id === id)),
         subtasks: subtaskTitles,
         ...fieldsForCreate(fieldsForm, form.project.taskFields),
       }),
@@ -382,14 +401,14 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
 
   // --- La tarea en JSON (lib/task-json.ts): copiar lo que hay en el formulario e importar una tarea en él ---
   const formProject = useMemo<FormProject>(
-    () => ({ kinds: form.kinds, columns: form.columns, users: form.users, deliverables: form.deliverables, enabledFields: form.project.taskFields }),
+    () => ({ kinds: form.kinds, columns: form.columns, users: form.users, deliverables: form.deliverables, labels: form.labels, enabledFields: form.project.taskFields }),
     [form],
   );
   /** Copia lo escrito como JSON de tarea (sin `info`: aún no es una tarea guardada). */
   const copyForm = async () => {
     const pending = subtaskDraft.trim().slice(0, 200);
     const json = newTaskFormJson(
-      { title, kindId, description, columnId, assigneeId, dueDate, deliverableId, recurrence, recurrenceDay, subtasks: pending ? [...subtasks, pending] : subtasks, fields: fieldsForm },
+      { title, kindId, description, columnId, assigneeId, dueDate, deliverableId, recurrence, recurrenceDay, subtasks: pending ? [...subtasks, pending] : subtasks, fields: fieldsForm, labelIds, color, linkUrl },
       formProject,
     );
     if (await copyText(stringifyTaskJson(json))) toast(t("Tarea copiada"));
@@ -411,8 +430,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       return false;
     }
     if (loading || busyRef.current) return false;
-    const dirty = !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim());
-    if (dirty && !(await confirm({ title: t("Sustituir lo escrito"), message: t("La nueva tarea ya tiene contenido. ¿Sustituirlo por la tarea importada?"), confirmLabel: t("Sustituir"), danger: true }).catch(() => false))) return false;
+    if (isDirty() && !(await confirm({ title: t("Sustituir lo escrito"), message: t("La nueva tarea ya tiene contenido. ¿Sustituirlo por la tarea importada?"), confirmLabel: t("Sustituir"), danger: true }).catch(() => false))) return false;
     const { form: fill, notices } = fillNewTaskForm(one.task, one.problems, formProject, MAX_NEW_SUBTASKS, t);
     setTitle(fill.title ?? "");
     setDescription(fill.description ?? "");
@@ -429,6 +447,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       setRecurrenceDay(fill.recurrenceDay ?? defaultRecurrenceDay(fill.recurrence, fill.dueDate ?? (dueDate || null), board.today));
     }
     if (fill.fields) setFieldsForm((f) => ({ ...f, ...fill.fields }));
+    if (fill.labelIds) setLabelIds(fill.labelIds);
+    if (fill.color !== undefined) setColor(fill.color);
+    if (fill.linkUrl !== undefined) setLinkUrl(fill.linkUrl);
     if (notices.length) {
       const shown = notices.slice(0, 4).join("; ");
       toast(t("Tarea importada, salvo: {list}", { list: notices.length > 4 ? t("{list} y {n} más", { list: shown, n: notices.length - 4 }) : shown }), "error");
@@ -436,25 +457,37 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     return true;
   };
   const importRef = useRef(importForm);
+  /**
+   * ¿Un pegado de una tarea en JSON en esta caja de texto rellena el formulario? Sí en el título vacío (el foco está ahí al
+   * abrir «Nueva tarea») y en cualquier caja mientras el formulario está sin tocar; si no, se pega como texto.
+   */
+  const pasteFillsForm = (target: EventTarget | null) => (target instanceof Node && !!titleRef.current?.contains(target) && !title.trim()) || !isDirty();
+  const pasteFillsRef = useRef(pasteFillsForm);
   useEffect(() => {
     importRef.current = importForm;
+    pasteFillsRef.current = pasteFillsForm;
   });
 
   // Alt+S crea la tarea (también escribiendo), como Ctrl+Enter. Con dos modales a la vez, el que tiene el foco.
   const formRef = useRef<HTMLFormElement>(null);
-  // Ctrl+V / ⌘V fuera de un campo de texto con EXACTAMENTE una tarea en JSON en el portapapeles: rellena el formulario.
-  // Con cualquier otra cosa (o en un campo, o con archivos) el pegado sigue su curso.
+  // Ctrl+V / ⌘V (o «Pegar» del menú del navegador) con EXACTAMENTE una tarea en JSON en el portapapeles: rellena el
+  // formulario. Fuera de una caja de texto, siempre; dentro, en el título vacío o con el formulario sin tocar (pasteFillsForm).
+  // Varias tareas («pizarro.tasks») avisan de que se importan desde el tablero. Con cualquier otra cosa (o con archivos) el
+  // pegado sigue su curso. Va en la fase de captura: el título y las subtareas tienen su propio onPaste (pegar en una línea),
+  // que antes metía el JSON en el título como texto, y el editor de la descripción también se queda el pegado.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const dialog = formRef.current?.closest("[role=dialog]");
-      if (e.defaultPrevented || pasteClaimed(e) || acceptsPastedText(e.target) || !eventIsFor(dialog, e.target) || pastedFiles(e).length) return;
+      if (e.defaultPrevented || pasteClaimed(e) || !eventIsFor(dialog, e.target) || pastedFiles(e).length) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
-      if (strictJsonFormat(text) !== "pizarro.task") return;
+      if (!strictJsonFormat(text)) return;
+      if (acceptsPastedText(e.target) && !pasteFillsRef.current(e.target)) return;
       e.preventDefault();
+      e.stopPropagation();
       void importRef.current(text);
     };
-    document.addEventListener("paste", onPaste);
-    return () => document.removeEventListener("paste", onPaste);
+    document.addEventListener("paste", onPaste, true);
+    return () => document.removeEventListener("paste", onPaste, true);
   }, []);
   // Pegar archivos (Ctrl/⌘+V) con el foco en cualquier parte del diálogo, también fuera de las cajas: una vez por pegado.
   usePasteFiles(addFiles, () => formRef.current?.closest("[role=dialog]") ?? null);
@@ -618,6 +651,37 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               className="grid grid-cols-2 gap-x-3"
             />
           </div>
+          <div className="min-w-0">
+            <div className="label truncate">{t("Color (opcional)")}</div>
+            <ColorPopover value={color} onChange={setColor} />
+          </div>
+          <div className="min-w-0">
+            <label className="label truncate" htmlFor={`${uid}-link`}>{t("Enlace externo (opcional)")}</label>
+            <input
+              id={`${uid}-link`}
+              className="input"
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              maxLength={2000}
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              // Como en el detalle: «example.com/x» pasa a «https://example.com/x» al salir del campo.
+              onBlur={() => setLinkUrl((v) => normalizeLinkUrl(v))}
+              onPaste={(e) => pasteAsOneLine(e, setLinkUrl)}
+            />
+          </div>
+          {form.labels.length > 0 && (
+            <div className="col-span-2 min-w-0" role="group" aria-labelledby={`${uid}-labels`}>
+              <div className="label" id={`${uid}-labels`}>{t("Etiquetas (opcional)")}</div>
+              <LabelToggles
+                labels={form.labels}
+                selected={labelIds}
+                max={MAX_TASK_LABELS}
+                onToggle={(id, on) => !loading && setLabelIds((ids) => (on ? [...ids, id].slice(0, MAX_TASK_LABELS) : ids.filter((x) => x !== id)))}
+              />
+            </div>
+          )}
         </div>
         <TaskFieldsGroup
           enabled={form.project.taskFields}

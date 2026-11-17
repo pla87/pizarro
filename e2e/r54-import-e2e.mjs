@@ -5,11 +5,13 @@
 // exacto abre el diálogo con el texto. «Nueva tarea» copia lo escrito como JSON e importa una tarea en el formulario
 // (portapapeles, fichero y Ctrl+V fuera de un campo). Móvil (390 px: «Varias tareas» lleva a «Importar» y la barra de
 // selección tiene «Exportar»), inglés y modo oscuro. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs      # PART=importar,exportar,nueva,movil,ingles,oscuro
+// «pegar» (R54C1): Ctrl+V de una tarea copiada en «Nueva tarea» con el foco en el título vacío y en cualquier otro sitio, y
+// desde el «+» de una columna. «extras»: etiquetas existentes, color y enlace en «Nueva tarea» (también a 390 px y en oscuro).
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs      # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
-const only = (process.env.PART || "importar,exportar,nueva,movil,ingles,oscuro").split(",");
+const only = (process.env.PART || "importar,exportar,nueva,pegar,extras,movil,ingles,oscuro").split(",");
 
 await L.prepareUsers();
 const p0 = await L.project();
@@ -244,7 +246,7 @@ if (only.includes("nueva")) {
   await confirm.click();
   await L.eqEventually("IMPORTAR: rellena título, columna y responsable", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Columna").locator("option:checked").innerText(), await dlg.getByLabel("Asignada a (opcional)").locator("option:checked").innerText()], ["Importada", COL.doing, `${me.name} (yo)`]);
   L.check("IMPORTAR: y las subtareas", (await dlg.innerText()).includes("Hecha") && (await dlg.innerText()).includes("Otra") && !(await dlg.innerText()).includes("Primer paso"));
-  await L.checkEventually("IMPORTAR: avisa de lo que el formulario no admite", async () => { const a = await alerts(page); return [a.includes("Tarea importada, salvo:") && a.includes("etiquetas, color") && a.includes("subtareas hechas"), a]; });
+  await L.checkEventually("IMPORTAR: avisa de lo que no se ha podido poner (la etiqueta que no existe, las subtareas hechas)", async () => { const a = await alerts(page); return [a.includes("Tarea importada, salvo:") && a.includes("etiqueta «x» (no existe en el proyecto)") && a.includes("subtareas hechas") && !a.includes("color"), a]; });
   // Desde un fichero.
   await dlg.getByRole("button", { name: "Importar tarea", exact: true }).click();
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("menuitem", { name: /Desde un fichero/ }).click()]);
@@ -265,11 +267,249 @@ if (only.includes("nueva")) {
   L.eq("CTRL+V: un bloque ``` no rellena nada", await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "");
   await setClip(page, '{"format":"pizarro.task","title":"Por Ctrl+V","dueDate":"2027-09-10"}');
   await page.keyboard.press("Control+v");
+  // El color importado antes cuenta como algo escrito: pregunta antes de sustituirlo.
+  const again = page.getByRole("button", { name: "Sustituir" });
+  L.check("CTRL+V: con un color ya elegido, pregunta antes de sustituir", await again.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await again.click();
   await L.eqEventually("CTRL+V: una tarea exacta rellena el formulario", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Fecha límite (opcional)").inputValue()], ["Por Ctrl+V", "2027-09-10"]);
   await dlg.getByRole("button", { name: "Crear tarea" }).click();
   await L.eqEventually("CREAR: la tarea importada se crea", async () => (await taskOf("Por Ctrl+V"))?.due, "2027-09-10");
   L.assertNoErrors("nueva", [s]);
   await s.ctx.close();
+}
+
+// --- «Nueva tarea»: Ctrl+V de una tarea copiada, con el foco donde sea (R54C1) --------------------------------------------------
+if (only.includes("pegar")) {
+  L.scenario("pegar: Ctrl+V de una tarea en JSON en «Nueva tarea» la importa con el foco en el título vacío, en un selector, en un botón, en la fecha, en una zona vacía o en la descripción sin tocar");
+  await L.cleanBoard();
+  await cleanLabels();
+  // Una tarea copiada de otra instalación, inventada: Markdown largo con «-->», listas y barras escapadas, tipo «Respuesta».
+  const DESCRIPTION = [
+    "Respondo a las preguntas y lo que necesitas de mi:", "", "**1. ¿Qué versión hay en producción?**", "",
+    "- La v2 --> la que salió el lunes", "- La rama `main_estable` (con guion bajo: main\\_estable)", "  - sublista con *cursiva*", "",
+    "1. Primero", "2. Segundo --> y tercero", "", "Ruta en Windows: C:\\\\datos\\\\informes y un \\_escape\\_ de Markdown.", "",
+    ...Array.from({ length: 30 }, (_, i) => `Párrafo ${i + 1}: **negrita** y texto de relleno para que la descripción sea larga.`),
+  ].join("\n\n").replace(/\n\n\n\n/g, "\n\n");
+  const copied = (title, extra = {}) => JSON.stringify({
+    format: "pizarro.task", version: 1, title, description: DESCRIPTION, type: "Respuesta", column: COL.next, labels: [], assignee: null, dueDate: null,
+    recurrence: { rule: "none" }, color: null, deliverable: null, link: null, subtasks: [], dependsOn: null,
+    attachments: [{ name: "captura.png", url: "https://otra.example.com/api/attachments/adjunto_inventado" }],
+    info: { id: "tarea_inventada", project: "Otro", projectId: "proyecto_inventado", url: "https://otra.example.com/p/proyecto_inventado?task=tarea_inventada", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Persona Inventada" },
+    ...extra,
+  }, null, 2);
+  const s = await withClipboard();
+  const { page } = s;
+  const titleBox = (dlg) => dlg.getByRole("textbox", { name: "Título", exact: true });
+  const state = async (dlg) => [await titleBox(dlg).inputValue(), await dlg.getByLabel("Columna").locator("option:checked").innerText(), await dlg.locator("[role=radiogroup][aria-label=Tipo] [aria-checked=true]").innerText()];
+  const openNew = async (button = page.getByRole("button", { name: "Nueva tarea" }).first()) => {
+    await button.click();
+    const dlg = page.getByRole("dialog", { name: "Nueva tarea" });
+    await dlg.waitFor();
+    return dlg;
+  };
+  const discard = async (dlg) => {
+    await dlg.getByRole("button", { name: "Cancelar" }).click();
+    const d = page.getByRole("button", { name: "Descartar" });
+    if (await d.waitFor({ timeout: 1500 }).then(() => true, () => false)) await d.click();
+    await dlg.waitFor({ state: "detached" });
+  };
+  // Al abrir, el cursor sigue en el título (sin cambios); Ctrl+V ahí rellena el formulario en vez de meter el JSON en el título.
+  let dlg = await openNew();
+  L.check("ABRIR: el cursor está en el título", await titleBox(dlg).evaluate((el) => el === document.activeElement));
+  await setClip(page, copied("Copiada de otra instalación"));
+  await page.keyboard.press("Control+v");
+  await L.eqEventually("TÍTULO VACÍO: Ctrl+V importa título, columna y tipo (no mete el JSON en el título)", () => state(dlg), ["Copiada de otra instalación", COL.next, "Respuesta"]);
+  await L.checkEventually("TÍTULO VACÍO: «Tarea importada», sin avisos (adjuntos e info de otra instalación no cuentan)", async () => { const a = await alerts(page); return [a.includes("Tarea importada") && !a.includes("salvo"), a]; });
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("CREAR: descripción idéntica, tipo «Respuesta» y columna del JSON", async () => { const t = await L.dbTask("Copiada de otra instalación"); return t && [t.description === DESCRIPTION, t.kindId, t.columnName]; }, [true, "kind_respuesta", COL.next]);
+  // Con el foco en cualquier otro sitio del formulario.
+  const places = {
+    "un selector (columna)": (d) => d.getByLabel("Columna").focus(),
+    "un selector (responsable)": (d) => d.getByLabel("Asignada a (opcional)").focus(),
+    "un selector (entregable)": (d) => d.getByLabel("Entregable (opcional)").focus(),
+    "un selector (repetir)": (d) => d.getByLabel("Repetir", { exact: true }).focus(),
+    "un tipo": (d) => d.locator("[role=radiogroup][aria-label=Tipo] [role=radio]").first().focus(),
+    "un botón": (d) => d.getByRole("button", { name: "Copiar tarea", exact: true }).focus(),
+    "la fecha límite": (d) => d.getByLabel("Fecha límite (opcional)").focus(),
+    "una zona vacía (tras hacer clic en ella)": async (d) => { await d.getByText("Capturas y adjuntos").click(); },
+    "la columna, tras cambiarla con el teclado": async (d) => { await d.getByLabel("Columna").focus(); await page.keyboard.press("ArrowDown"); },
+    "la descripción (formulario sin tocar)": (d) => d.locator("[contenteditable=true]").first().click(),
+    "las subtareas (formulario sin tocar)": (d) => d.getByPlaceholder("Añadir subtarea…").focus(),
+  };
+  for (const [where, focus] of Object.entries(places)) {
+    dlg = await openNew();
+    await setClip(page, copied(`Foco en ${where}`));
+    await focus(dlg);
+    await page.keyboard.press("Control+v");
+    await L.eqEventually(`FOCO EN ${where.toUpperCase()}: Ctrl+V importa la tarea`, async () => (await state(dlg))[0], `Foco en ${where}`);
+    await discard(dlg);
+  }
+  // Con algo ya escrito: en el título vacío pregunta antes de sustituir; en otra caja se pega como texto.
+  dlg = await openNew();
+  await dlg.getByPlaceholder("Añadir subtarea…").fill("Paso escrito");
+  await setClip(page, copied("Sustituye lo escrito"));
+  await titleBox(dlg).focus();
+  await page.keyboard.press("Control+v");
+  const replace = page.getByRole("button", { name: "Sustituir" });
+  L.check("ESCRITO: en el título vacío, pregunta antes de sustituir", await replace.waitFor({ timeout: 4000 }).then(() => true, () => false));
+  await replace.click();
+  await L.eqEventually("ESCRITO: al confirmar, se importa", async () => [(await state(dlg))[0], await dlg.getByPlaceholder("Añadir subtarea…").inputValue()], ["Sustituye lo escrito", ""]);
+  await setClip(page, '{"format":"pizarro.task","title":"Como texto"}');
+  await dlg.getByPlaceholder("Añadir subtarea…").focus();
+  await page.keyboard.press("Control+v");
+  await sleep(500);
+  L.eq("ESCRITO: en otra caja, con el formulario ya tocado, el JSON se pega como texto", await dlg.getByPlaceholder("Añadir subtarea…").inputValue(), '{"format":"pizarro.task","title":"Como texto"}');
+  await discard(dlg);
+  // Varias tareas: avisa de que se importan desde el tablero y no mete nada en el título.
+  dlg = await openNew();
+  await setClip(page, JSON.stringify({ format: "pizarro.tasks", version: 1, tasks: [{ title: "Una" }, { title: "Otra" }] }));
+  await page.keyboard.press("Control+v");
+  await L.checkEventually("VARIAS: avisa de que se importan con «Importar» del tablero", async () => (await alerts(page)).includes("Hay 2 tareas. Para importar varias, usa «Importar» en el tablero."));
+  L.eq("VARIAS: el título sigue vacío", await titleBox(dlg).inputValue(), "");
+  await discard(dlg);
+  // Desde el «+» de una columna: manda la columna del JSON si existe; si no, la de la columna desde la que se abrió.
+  dlg = await openNew(page.getByRole("button", { name: `Añadir tarea en ${COL.doing}` }));
+  await setClip(page, copied("Desde el más"));
+  await page.keyboard.press("Control+v");
+  await L.eqEventually("COLUMNA «+»: la del JSON si existe en el proyecto", async () => (await state(dlg)).slice(0, 2), ["Desde el más", COL.next]);
+  await discard(dlg);
+  dlg = await openNew(page.getByRole("button", { name: `Añadir tarea en ${COL.doing}` }));
+  await setClip(page, copied("Columna ajena", { column: "Columna de otra instalación" }));
+  await page.keyboard.press("Control+v");
+  await L.eqEventually("COLUMNA «+»: si la del JSON no existe, la de la columna desde la que se abrió", async () => (await state(dlg)).slice(0, 2), ["Columna ajena", COL.doing]);
+  await L.checkEventually("COLUMNA «+»: avisa de la columna que no existe", async () => (await alerts(page)).includes("columna «Columna de otra instalación» (no existe)"));
+  await discard(dlg);
+  L.assertNoErrors("pegar", [s]);
+  await s.ctx.close();
+}
+
+// --- «Nueva tarea»: etiquetas, color y enlace -------------------------------------------------------------------------------
+if (only.includes("extras")) {
+  L.scenario("extras: «Nueva tarea» con etiquetas existentes, color y enlace; importar y copiar los llevan; cambiar de proyecto quita las que no existen");
+  await L.cleanBoard();
+  await cleanLabels();
+  await L.q(`INSERT INTO "Label"(id,"projectId",name,color) VALUES ('lbl_e2e_cli',$1,'Cliente','#22c55e'),('lbl_e2e_urg',$1,'Urgente','#ef4444')`, [p0.id]);
+  // Otro proyecto (privado, de quien prueba) con una etiqueta del mismo nombre que «Cliente» y sin «Urgente».
+  const OTHER = "r54_extras_otro";
+  await L.q(`DELETE FROM "Project" WHERE id=$1`, [OTHER]);
+  await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Zeta extras',true,$2,999995,NOW())`, [OTHER, me.id]);
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [OTHER, me.id]);
+  await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ($1,$2,'Pendiente',1000)`, [`${OTHER}_col`, OTHER]);
+  await L.q(`INSERT INTO "Label"(id,"projectId",name,color) VALUES ('lbl_e2e_otro_cli',$1,'cliente','#6366f1'),('lbl_e2e_otro_x',$1,'Solo allí','#64748b')`, [OTHER]);
+  const s = await withClipboard();
+  const { page } = s;
+  await page.getByRole("button", { name: "Nueva tarea" }).first().click();
+  const dlg = page.getByRole("dialog", { name: "Nueva tarea" });
+  await dlg.waitFor();
+  await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Con extras");
+  const labels = dlg.getByRole("group", { name: "Etiquetas (opcional)" });
+  L.eq("ETIQUETAS: las del proyecto, para elegir (sin crear nuevas)", await labels.getByRole("button").allInnerTexts(), ["Cliente", "Urgente"]);
+  await labels.getByRole("button", { name: "Urgente" }).click();
+  L.eq("ETIQUETAS: marcada", await labels.getByRole("button", { name: "Urgente" }).getAttribute("aria-pressed"), "true");
+  await dlg.getByRole("button", { name: /^Color: / }).click();
+  await page.getByRole("radio", { name: "Color Verde", exact: true }).click();
+  L.check("COLOR: el botón muestra el elegido", (await dlg.getByRole("button", { name: /^Color: / }).getAttribute("aria-label")) === "Color: Verde");
+  const link = dlg.getByLabel("Enlace externo (opcional)");
+  await link.fill("example.com/ficha");
+  await link.blur();
+  L.eq("ENLACE: se completa con https:// al salir del campo, como en el detalle", await link.inputValue(), "https://example.com/ficha");
+  // Copiar lo escrito lleva etiquetas, color y enlace.
+  await dlg.getByRole("button", { name: "Copiar tarea", exact: true }).click();
+  await L.checkEventually("COPIAR: «Tarea copiada»", async () => (await alerts(page)).includes("Tarea copiada"));
+  const copied = JSON.parse((await clip(page)) || "{}");
+  L.eq("COPIAR: etiquetas, color y enlace en el JSON", [copied.labels, copied.color, copied.link], [["Urgente"], "#22c55e", "https://example.com/ficha"]);
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("CREAR: con la etiqueta, el color y el enlace", async () => {
+    const [t] = await L.q(`SELECT t.color, t."linkUrl", array(SELECT l.name FROM "TaskLabel" tl JOIN "Label" l ON l.id=tl."labelId" WHERE tl."taskId"=t.id ORDER BY l.name) AS labels FROM "Task" t WHERE t.title='Con extras'`);
+    return t && [t.color, t.linkUrl, t.labels];
+  }, ["#22c55e", "https://example.com/ficha", ["Urgente"]]);
+  // Un enlace que no es http(s): no se crea y se avisa.
+  await page.getByRole("button", { name: "Nueva tarea" }).first().click();
+  await dlg.waitFor();
+  await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Enlace malo");
+  await dlg.getByLabel("Enlace externo (opcional)").fill("javascript:alert(1)");
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.checkEventually("ENLACE: uno que no es http(s) se rechaza con aviso", async () => (await alerts(page)).includes("El enlace debe empezar por http:// o https://"));
+  L.check("ENLACE: y no se crea la tarea", !(await L.dbTask("Enlace malo")));
+  // Importar: etiquetas existentes sí; las que no existen, con aviso; color y enlace también.
+  await setClip(page, JSON.stringify({ format: "pizarro.task", title: "Importada con extras", labels: ["cliente", "No existe"], color: "#ef4444", link: "https://example.com/importado", dependsOn: { title: "Otra" } }));
+  await dlg.getByRole("button", { name: "Importar tarea", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Desde el portapapeles/ }).click();
+  await page.getByRole("button", { name: "Sustituir" }).click();
+  await L.eqEventually("IMPORTAR: etiqueta existente marcada, color y enlace", async () => [
+    await labels.getByRole("button", { name: "Cliente" }).getAttribute("aria-pressed"), await labels.getByRole("button", { name: "Urgente" }).getAttribute("aria-pressed"),
+    await dlg.getByRole("button", { name: /^Color: / }).getAttribute("aria-label"), await dlg.getByLabel("Enlace externo (opcional)").inputValue(),
+  ], ["true", "false", "Color: Rojo", "https://example.com/importado"]);
+  await L.checkEventually("IMPORTAR: avisa de la etiqueta que no existe y de la dependencia (no de color ni enlace)", async () => {
+    const a = await alerts(page);
+    return [a.includes("etiqueta «No existe» (no existe en el proyecto)") && a.includes("dependencia (no se pueden poner al crear") && !a.includes("color, enlace"), a];
+  });
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("IMPORTAR: se crea con la etiqueta, el color y el enlace", async () => {
+    const [t] = await L.q(`SELECT t.color, t."linkUrl", array(SELECT l.name FROM "TaskLabel" tl JOIN "Label" l ON l.id=tl."labelId" WHERE tl."taskId"=t.id) AS labels FROM "Task" t WHERE t.title='Importada con extras'`);
+    return t && [t.color, t.linkUrl, t.labels];
+  }, ["#ef4444", "https://example.com/importado", ["Cliente"]]);
+  L.eq("IMPORTAR: no ha creado etiquetas", await labelNames(), ["Cliente", "Urgente"]);
+  // Segundo diálogo, con selector de proyecto: al cambiar de proyecto se quedan las etiquetas que también existen allí.
+  await page.getByRole("button", { name: "Nueva tarea" }).first().click();
+  await dlg.waitFor();
+  await dlg.getByRole("button", { name: "Abrir otra tarea nueva al lado" }).click();
+  const second = page.getByRole("dialog", { name: /Nueva tarea/ }).filter({ has: page.getByLabel("Proyecto", { exact: true }) });
+  await second.waitFor();
+  const secondLabels = second.getByRole("group", { name: "Etiquetas (opcional)" });
+  await secondLabels.getByRole("button", { name: "Cliente" }).click();
+  await secondLabels.getByRole("button", { name: "Urgente" }).click();
+  await second.getByLabel("Proyecto", { exact: true }).selectOption(OTHER);
+  await L.eqEventually("PROYECTO: se queda la que existe allí (por nombre) y se quita la que no", async () => {
+    const buttons = secondLabels.getByRole("button");
+    const names = await buttons.allInnerTexts();
+    const pressed = await Promise.all(names.map((_, i) => buttons.nth(i).getAttribute("aria-pressed")));
+    return names.map((n, i) => `${n}:${pressed[i]}`).sort();
+  }, ["Solo allí:false", "cliente:true"]);
+  await second.getByRole("textbox", { name: "Título", exact: true }).fill("En el otro proyecto");
+  await second.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("PROYECTO: se crea allí con su etiqueta", async () => (await L.q(`SELECT array(SELECT tl."labelId" FROM "TaskLabel" tl WHERE tl."taskId"=t.id) AS l FROM "Task" t WHERE t.title='En el otro proyecto' AND t."projectId"=$1`, [OTHER]))[0]?.l, ["lbl_e2e_otro_cli"]);
+  L.assertNoErrors("extras", [s]);
+  await s.ctx.close();
+  await L.q(`DELETE FROM "Project" WHERE id=$1`, [OTHER]);
+}
+
+// --- «Nueva tarea» a 390 px y en oscuro con los campos nuevos ---------------------------------------------------------------
+if (only.includes("extras")) {
+  L.scenario("extras: a 390 px y en modo oscuro, color, enlace y etiquetas caben y se ven");
+  await L.cleanBoard();
+  await cleanLabels();
+  await L.q(`INSERT INTO "Label"(id,"projectId",name,color) VALUES ('lbl_e2e_a',$1,'Etiqueta con un nombre bastante largo','#22c55e'),('lbl_e2e_b',$1,'Otra','#ef4444'),('lbl_e2e_c',$1,'Tercera','#6366f1')`, [p0.id]);
+  await L.q(`UPDATE "User" SET theme='DARK' WHERE id=$1`, [me.id]);
+  const m = await withClipboard({ viewport: { width: 390, height: 800 }, mobile: true });
+  const { page } = m;
+  await page.getByRole("button", { name: "Nueva tarea o captura" }).tap();
+  const nt = page.getByRole("dialog", { name: "Nueva tarea" });
+  await nt.waitFor();
+  await nt.getByRole("textbox", { name: "Título", exact: true }).fill("Desde el móvil");
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+  L.check("390: sin scroll lateral", wide <= 390, String(wide));
+  for (const [name, loc] of [["color", nt.getByRole("button", { name: /^Color: / })], ["enlace", nt.getByLabel("Enlace externo (opcional)")], ["etiqueta larga", nt.getByRole("button", { name: "Etiqueta con un nombre bastante largo" })]]) {
+    await loc.scrollIntoViewIfNeeded();
+    const b = await loc.boundingBox();
+    L.check(`390: «${name}» cabe`, !!b && b.x >= 0 && b.x + b.width <= 390, JSON.stringify(b));
+  }
+  const bg = await nt.getByLabel("Enlace externo (opcional)").evaluate((el) => getComputedStyle(el).backgroundColor);
+  L.check("OSCURO: el enlace no es una caja blanca", bg !== "rgb(255, 255, 255)", bg);
+  const off = await nt.getByRole("button", { name: "Otra" }).evaluate((el) => getComputedStyle(el).backgroundColor);
+  L.check("OSCURO: una etiqueta sin marcar no es clara", off !== "rgb(241, 245, 249)", off);
+  await nt.getByRole("button", { name: "Otra" }).tap();
+  await nt.getByRole("button", { name: /^Color: / }).tap();
+  await page.getByRole("radio", { name: "Color Celeste" }).tap();
+  await nt.getByLabel("Enlace externo (opcional)").fill("https://example.com/movil");
+  await nt.getByRole("button", { name: "Crear tarea" }).tap();
+  await L.eqEventually("390: se crea con etiqueta, color y enlace", async () => {
+    const [t] = await L.q(`SELECT t.color, t."linkUrl", array(SELECT l.name FROM "TaskLabel" tl JOIN "Label" l ON l.id=tl."labelId" WHERE tl."taskId"=t.id) AS labels FROM "Task" t WHERE t.title='Desde el móvil'`);
+    return t && [t.color, t.linkUrl, t.labels];
+  }, ["#0ea5e9", "https://example.com/movil", ["Otra"]]);
+  L.assertNoErrors("extras-movil", [m]);
+  await m.ctx.close();
+  await L.q(`UPDATE "User" SET theme=$2 WHERE id=$1`, [me.id, me.theme]);
 }
 
 // --- Móvil -------------------------------------------------------------------------------------------------------------------

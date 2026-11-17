@@ -107,4 +107,8 @@ export const portapapeles: Record<string, string> = {
   "Más opciones de la tarea": "More task options",
   "Importar desde el portapapeles": "Import from the clipboard",
   "Importar desde un fichero": "Import from a file",
+
+  // Importar en «Nueva tarea»: etiquetas que no existen en el proyecto
+  "etiqueta «{name}» (no existe en el proyecto)": "label “{name}” (doesn't exist in the project)",
+  "{n} etiquetas más (no existen en el proyecto)": "{n} more labels (don't exist in the project)",
 };
