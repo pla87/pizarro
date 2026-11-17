@@ -254,7 +254,7 @@ export async function executeJob(job: JobRow): Promise<void> {
   let error: string | null = null;
   try {
     if (!user || !user.active) throw new AppError("No autorizado", 401);
-    if (job.kind === "EXPORT") result = await runExport(job, progress);
+    if (job.kind === "EXPORT") result = await runExport(job, user, progress);
     else {
       const summary = await runImport(job, user, t, progress);
       result = summary;
@@ -354,7 +354,7 @@ export async function dropPreviousExports(job: { id: string; userId: string; pro
 /** Temporal del intento actual de una exportación (junto al archivo final, para renombrarlo sin salir del sistema de ficheros). */
 const exportTmpFile = (job: { id: string; attempts: number }) => path.join(exportsDir(), `${job.id}.${job.attempts}.tmp`);
 
-async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter>): Promise<ExportJobResult> {
+async function runExport(job: JobRow, user: { id: string; role: "ADMIN" | "MEMBER" }, progress: ReturnType<typeof progressWriter>): Promise<ExportJobResult> {
   const options = job.options as unknown as ExportOptions;
   if (!job.projectId) throw new AppError("No encontrado o sin acceso.", 404);
   const started = performance.now();
@@ -364,7 +364,9 @@ async function runExport(job: JobRow, progress: ReturnType<typeof progressWriter
   // La fase «datos» incluye leer y resumir cada adjunto: avanza por ficheros (el total sale de los recuentos previos).
   const total = options.attachments ? (await estimateProjectExport(project.id, options)).attachments : 0;
   let seen = 0;
-  const built = await buildProjectExport(project.id, options, new Date(), total ? () => progress.set({ phase: "datos", done: Math.min(++seen, total), total }) : undefined);
+  // Los emails de las demás personas solo si quien la pidió es administrador (y sigue siéndolo al hacerla).
+  const exporter = { userId: user.id, isAdmin: user.role === "ADMIN" };
+  const built = await buildProjectExport(project.id, options, exporter, new Date(), total ? () => progress.set({ phase: "datos", done: Math.min(++seen, total), total }) : undefined);
   const dir = exportsDir();
   await mkdir(dir, { recursive: true });
   // Con el tamaño exacto ya conocido: la comprobación definitiva de espacio, antes de escribir nada.
