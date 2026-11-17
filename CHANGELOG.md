@@ -2,6 +2,37 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.58.0 — 2026-11-17 02:24
+
+Importar tareas de Trello, Jira, GitHub, Asana y CSV, pegar una tarea en «Nueva tarea» con etiquetas, color y enlace, y caza de bugs
+
+### Nuevas funcionalidades
+
+- Importar tareas de otras herramientas: «Importar» del tablero (e «Importar tarea» si es una sola) entiende el JSON de un tablero o una tarjeta de Trello, las incidencias de Jira y GitHub, las tareas de Asana y cualquier CSV con cabecera (Linear, Notion, ClickUp, Todoist, GitHub Projects… o celdas copiadas de una hoja de cálculo), y dice qué formato ha detectado.
+- «Nueva tarea» tiene etiquetas (las del proyecto), color y enlace externo, y los rellena al importar o pegar una tarea.
+
+### Mejoras
+
+- Exportar un proyecto solo incluye los emails de otras personas si exporta un administrador.
+- Los tipos de serie se reconocen en los dos idiomas al importar o pegar: una tarea exportada en inglés como «Bug fix» llega como «Corrección».
+- El calendario suscrito y la comprobación de salud se guardan unos instantes en memoria: menos trabajo para el servidor.
+- Un enlace desde un HTML de la Documentación a «otro.md#apartado» abre el Markdown en ese apartado.
+
+### Correcciones
+
+- Pegar con Ctrl+V una tarea copiada en «Nueva tarea» funciona también con el cursor en el título, en cualquier campo sin tocar o fuera de ellos.
+- En el histórico de releases, la descripción de cada tarea va debajo de su título, no en la misma línea.
+- En el móvil, las opciones del menú lateral (también «Archivadas») lo cierran al tocarlas.
+- Calendario: los filtros dicen al lector de pantalla qué está elegido y, al cerrar «+N más», el foco vuelve a su botón.
+- «Aplicar plantilla» ya no muestra paréntesis dentro de paréntesis, y «No se pudo copiar» en Releases sale como error.
+- Los ficheros en codificación de Windows ya no pierden sus últimos caracteres al importarlos.
+
+### Cambios técnicos / DB
+
+- Importar un proyecto con decenas de miles de tareas en una columna ya no bloquea el servidor.
+- Importar tareas comprueba el acceso al proyecto antes de aceptar el texto, y el deshacer ya no lee operaciones que no usa.
+- El registro de actividad espera a las escrituras en curso antes de darse por guardado.
+
 ## v1.57.0 — 2026-11-16 18:48
 
 Importar y exportar tareas en JSON, responsable sin email, dependencias que vuelven al rehacer y caza de bugs

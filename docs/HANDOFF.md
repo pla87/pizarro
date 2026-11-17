@@ -212,6 +212,13 @@ Guardas que conviene conocer:
   `POST /api/projects/[projectId]/import-tasks` (fuera del proxy, con su propio tope: las acciones de servidor admiten
   1 MB, `next.config.ts`). Ningún `route.ts` importa `src/actions` (`tests/route-handlers.test.ts`): Next reenviaba las
   llamadas a la acción a la ruta. Deshacer usa `label.remove`/`label.restore` para las etiquetas creadas.
+- Importar tareas de otros Kanban: `src/lib/foreign-import/tasks.ts` detecta por contenido Trello (tablero, tarjeta,
+  lista), Jira (JSON de la API y CSV), GitHub Issues, Asana (JSON y CSV) y CSV genéricos (reutiliza `parseTrello` y
+  `parseCsvRows` de la importación de proyectos) y devuelve el mismo `TaskJsonInput` que el JSON propio: tipos, columnas
+  por nombre, etiquetas, topes, permisos y deshacer son los de siempre. Lo llama `parseTasksText`.
+- Cachés en memoria con tope: `memo` y `boundedMemo` (`src/lib/memo.ts`, en `globalThis`). El calendario suscrito guarda
+  60 s el .ics y su ETag por enlace (`cachedFeedIcs`, `FEED_CACHE_MAX` = 200) pero comprueba el token en cada petición;
+  `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
 - Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
   `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
   una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.
@@ -355,19 +362,21 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.57.0):**
+**Preguntas abiertas al propietario (tras la v1.58.0):**
 
-- Exportar un proyecto (`.pizarro.zip`, `src/lib/project-export/export.ts`) incluye el email de todas las personas que
-  aparecen en él aunque exporte un miembro que no es administrador. Propuesta: emails ajenos solo si exporta un
-  administrador (contra: al reimportar como proyecto de equipo, esas personas quedarían sin emparejar).
-- Calendario suscrito (`.ics`): se rehace entero en cada consulta aunque acabe en 304. Propuesta: ETag barato previo o
-  caché de 60 s por enlace (ahorro pequeño con pocos suscriptores).
-- `/api/health`: pública, sin límite de ritmo, una consulta a la base en cada llamada. Propuesta: guardar el resultado
-  2-5 s en memoria (riesgo real bajo).
-- Importar tareas no avisa a las personas mencionadas en el texto (deliberado, para no llenar de avisos al reimportar;
-  sí avisa a cada responsable). Confirmar.
-- «Nueva tarea» no tiene etiquetas, color, enlace, dependencia ni documentos: al importar una tarea en ella se avisa de
-  que esos campos se añaden después en el detalle. ¿Añadirlos al formulario?
+- Exportar un proyecto con muchos adjuntos mantiene abierta una transacción `RepeatableRead` mientras calcula la huella
+  SHA-256 de cada fichero (`buildInSnapshot`, `src/lib/project-export/export.ts`): si a la vez se despliega una migración
+  con `ALTER TABLE "Task"`, la app se queda esperando hasta que termina la exportación. Propuesta: leer las filas dentro
+  de la transacción y calcular las huellas después (reestructuración moderada; recomendado en una ronda tranquila).
+- Huecos de subida (3 en todo el servidor, compartidos por adjuntos, documentos e importaciones): ¿limitar a uno por
+  persona a la vez? Evita que una sola persona los ocupe todos; contra: sus subidas simultáneas irían en fila.
+- Las cabeceras y claves de los formatos de otros Kanban (`src/lib/foreign-import/tasks.ts`) salen de la documentación
+  de cada herramienta: confirmarlas con exportaciones reales (`PRUEBAS.pdf` §7.3) y ajustar el lector con lo que falle.
+
+**Decisiones de la ronda 54 (ya aplicadas):** importar no avisa a las personas mencionadas, sí al responsable; emails
+ajenos al exportar un proyecto solo para administradores; caché de 60 s del calendario suscrito y de 3 s de
+`/api/health`; «Nueva tarea» con etiquetas (solo existentes), color y enlace; el cursor de «Nueva tarea» sigue empezando
+en el título.
 
 **Ideas pospuestas por decisión del propietario:**
 
@@ -399,6 +408,12 @@ Cómo se revisa cada PR:
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
-  `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local.
+  `SEED_ADMIN_EMAIL="admin@example.com"` y `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local, y
+  `tests/db/task-json-paste.test.ts` espera `APP_URL="http://localhost:3000"` en el `.env` (los servidores de prueba en
+  otro puerto, con `PORT` y `APP_URL` en la línea de comandos). Si PostgreSQL no arranca tras reiniciarse el contenedor:
+  `pg_ctlcluster 16 main start` (usuario `postgres`, contraseña `postgres`). Los worktrees de los agentes quedan en
+  `.claude/worktrees/` (añade `.claude/` a `.git/info/exclude` para que no salgan como ficheros sin seguir). Tras
+  fusionar el PR de la rama de trabajo en `main`, no se puede forzar la subida de la rama: ponla igual que `main` con
+  `git merge origin/<rama>` (sin cambios de contenido) y súbela normal.
 - Ideas pospuestas (R36): tablero que recarga solo lo cambiado (a partir de ~10 personas a la vez).
 - Las copias de seguridad cifradas suben a un almacenamiento S3 compatible configurado por el propietario.
