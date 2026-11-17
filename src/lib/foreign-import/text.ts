@@ -271,3 +271,24 @@ export function parseInstant(raw: unknown): Date | null {
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) || d.getFullYear() < 1990 || d.getFullYear() > 2999 ? null : d;
 }
+
+/**
+ * Bytes → texto: UTF-8 (con o sin BOM), UTF-16 con BOM (Excel) y, si no es UTF-8 válido, Windows-1252. `whole`: son todos
+ * los bytes del archivo (no solo la cabecera que se mira para detectar el formato), así que no puede haber un carácter
+ * cortado al final: sin él, un Windows-1252 cuyos únicos bytes no ASCII están en los 3 últimos los perdía («Peñ\n»).
+ */
+export function decodeText(buf: Uint8Array, whole = false): string {
+  if (buf[0] === 0xff && buf[1] === 0xfe) return new TextDecoder("utf-16le").decode(buf.subarray(2));
+  if (buf[0] === 0xfe && buf[1] === 0xff) return new TextDecoder("utf-16be").decode(buf.subarray(2));
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    // Cortado a mitad de un carácter (solo la cabecera que se mira para detectar) o realmente no es UTF-8.
+    if (whole) return new TextDecoder("windows-1252").decode(buf);
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(buf.subarray(0, Math.max(0, buf.length - 3)));
+    } catch {
+      return new TextDecoder("windows-1252").decode(buf);
+    }
+  }
+}

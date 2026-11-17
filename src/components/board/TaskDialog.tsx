@@ -57,7 +57,7 @@ import { attachmentTotalsOf } from "@/lib/attachment-totals";
 import { UploadProgress } from "./UploadProgress";
 import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
-import { formatDate } from "@/lib/format";
+import { appTimeZone, formatDate } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
@@ -846,7 +846,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
    * texto alrededor. Varias tareas no: eso es «Importar» del tablero. `true` si se pegó.
    */
   const pasteTask = async (text: string): Promise<boolean> => {
-    const read = parseTasksText(text);
+    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    if (read.error) {
+      toast(read.error, "error");
+      return false;
+    }
     if (read.tasks.length > 1 || read.tooMany) {
       toast(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }), "error");
       return false;

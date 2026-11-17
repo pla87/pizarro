@@ -4,12 +4,13 @@
 // exportado se vuelve a importar (dependencias del lote hacia las nuevas). Ctrl+V en el tablero con un JSON de tareas
 // exacto abre el diálogo con el texto. «Nueva tarea» copia lo escrito como JSON e importa una tarea en el formulario
 // (portapapeles, fichero y Ctrl+V fuera de un campo). Móvil (390 px: «Varias tareas» lleva a «Importar» y la barra de
-// selección tiene «Exportar»), inglés y modo oscuro. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs      # PART=importar,exportar,nueva,movil,ingles,oscuro
+// selección tiene «Exportar»), inglés y modo oscuro. De otros Kanban (R54F1): un tablero de Trello y un CSV de Jira por
+// «Desde un fichero», y una tarjeta de Trello en «Nueva tarea». Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs      # PART=importar,exportar,nueva,movil,ingles,oscuro,otros
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { COL, sleep } = L;
-const only = (process.env.PART || "importar,exportar,nueva,movil,ingles,oscuro").split(",");
+const only = (process.env.PART || "importar,exportar,nueva,movil,ingles,oscuro,otros").split(",");
 
 await L.prepareUsers();
 const p0 = await L.project();
@@ -369,6 +370,73 @@ if (only.includes("oscuro")) {
   L.assertNoErrors("oscuro", [s]);
   await s.ctx.close();
   await L.q(`UPDATE "User" SET theme=$2 WHERE id=$1`, [me.id, me.theme]);
+}
+
+// --- De otros Kanban: Trello, CSV de Jira (en Windows-1252), Trello en «Nueva tarea» ------------------------------------------
+if (only.includes("otros")) {
+  L.scenario("otros: importar un tablero de Trello y un CSV de Jira por «Desde un fichero»; una tarjeta de Trello en «Nueva tarea»");
+  await L.cleanBoard();
+  await cleanLabels();
+  const s = await withClipboard();
+  const { page } = s;
+  const btn = page.getByRole("button", { name: "Importar", exact: true });
+  const fromFile = async (name, mimeType, buffer) => {
+    await btn.click();
+    await importDialog(page).waitFor();
+    const [ch] = await Promise.all([page.waitForEvent("filechooser"), importDialog(page).getByRole("button", { name: "Desde un fichero" }).click()]);
+    await ch.setFiles({ name, mimeType, buffer });
+  };
+  const trello = {
+    name: "Tablero inventado", lists: [{ id: "l1", name: COL.backlog, pos: 1 }, { id: "l2", name: COL.doing, pos: 2 }, { id: "l3", name: "Ideas", pos: 3 }],
+    labels: [{ id: "g", name: "trello-web", color: "green" }],
+    members: [{ id: "m", fullName: me.name, username: "yo" }],
+    cards: [
+      { id: "c1", idList: "l1", name: "De Trello 1", desc: "Texto de **Trello**", pos: 1, idLabels: ["g"], idMembers: ["m"], due: "2027-03-04T10:00:00.000Z" },
+      { id: "c2", idList: "l2", name: "De Trello 2", pos: 2 },
+      { id: "c3", idList: "l3", name: "De Trello 3", pos: 3 },
+      { id: "c4", idList: "l1", name: "Archivada", closed: true, pos: 4 },
+    ],
+    checklists: [{ id: "k", idCard: "c1", name: "Pasos", checkItems: [{ name: "Paso A", state: "complete", pos: 1 }, { name: "Paso B", state: "incomplete", pos: 2 }] }],
+    actions: [{ type: "commentCard", data: { card: { id: "c1" }, text: "Un comentario" }, memberCreator: { fullName: "Alguien" } }],
+  };
+  await fromFile("tablero.json", "application/json", Buffer.from(JSON.stringify(trello)));
+  await L.checkEventually("TRELLO: «Formato detectado: Trello (tablero)» y 3 tareas", async () => { const t = await importDialog(page).innerText(); return [t.includes("Formato detectado: Trello (tablero)") && t.includes("3 tareas detectadas"), t]; });
+  const warn = await importDialog(page).locator("[data-import-warnings]").innerText();
+  L.check("TRELLO: avisa de la archivada y del comentario que no se traen", warn.includes("1 tarea archivada no se importa.") && warn.includes("1 comentario de Trello no se importa"), warn);
+  const prev = await importDialog(page).locator("[data-import-preview] li").allInnerTexts();
+  L.check("TRELLO: la lista que no existe se avisa (irá a la primera)", prev.some((x) => x.includes("De Trello 3") && x.includes("columna «Ideas» (no existe)")), prev.join(" / "));
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.eqEventually("TRELLO: importadas", boardTitles, ["De Trello 1", "De Trello 2", "De Trello 3"]);
+  const [t1, t2, t3] = [await taskOf("De Trello 1"), await taskOf("De Trello 2"), await taskOf("De Trello 3")];
+  L.eq("TRELLO: columna por el nombre de la lista, fecha y responsable por nombre", [t1.col, t2.col, t3.col, t1.due, t1.assigneeId], [COL.backlog, COL.doing, COL.backlog, "2027-03-04", me.id]);
+  L.eq("TRELLO: checklist → subtareas", (await L.q(`SELECT title, done FROM "Subtask" WHERE "taskId"=$1 ORDER BY position`, [t1.id])).map((r) => [r.title, r.done]), [["Paso A", true], ["Paso B", false]]);
+  L.eq("TRELLO: la etiqueta se crea", await labelNames(), ["trello-web"]);
+  await L.checkEventually("TRELLO: … y se ven sin recargar", async () => (await L.cardLoc(page, "De Trello 2").count()) === 1);
+
+  // CSV de Jira guardado por Excel en Windows-1252 (las «ñ» se leen bien), con «Labels» repetida.
+  await L.cleanBoard();
+  await cleanLabels();
+  const csv = `Summary,Issue key,Status,Priority,Labels,Labels,Description\r\nDiseño del menú,WEB-1,${COL.doing},High,ux,web,Con eñes\r\nRevisión final,WEB-2,Done,,,,\r\n`;
+  await fromFile("jira.csv", "text/csv", Buffer.from(csv, "latin1"));
+  await L.checkEventually("CSV: «Formato detectado: CSV de Jira» y 2 tareas", async () => { const t = await importDialog(page).innerText(); return [t.includes("Formato detectado: CSV de Jira") && t.includes("2 tareas detectadas"), t]; });
+  await importDialog(page).locator("[data-import-submit]").click();
+  await L.eqEventually("CSV: importadas con sus eñes", boardTitles, ["Diseño del menú", "Revisión final"]);
+  L.eq("CSV: columna por el estado (la que no existe, a la primera)", [(await taskOf("Diseño del menú")).col, (await taskOf("Revisión final")).col], [COL.doing, COL.backlog]);
+  L.eq("CSV: las dos «Labels» juntas", await labelNames(), ["ux", "web"]);
+  const desc = (await L.q(`SELECT description FROM "Task" WHERE title=$1`, ["Diseño del menú"]))[0]?.description;
+  L.eq("CSV: descripción con la referencia de Jira", desc, "Con eñes\n\n_Referencia original: WEB-1_");
+
+  // Una tarjeta de Trello en «Nueva tarea» (por el portapapeles).
+  await setClip(page, JSON.stringify({ id: "c9", idBoard: "b", idList: "l", name: "Tarjeta suelta", desc: "Desde Trello", list: { id: "l", name: COL.doing } }));
+  await page.getByRole("button", { name: "Nueva tarea" }).first().click();
+  const nt = page.getByRole("dialog", { name: "Nueva tarea" });
+  await nt.waitFor();
+  await nt.getByRole("button", { name: "Importar tarea", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Desde el portapapeles/ }).click();
+  await L.eqEventually("NUEVA: la tarjeta de Trello rellena título y columna", async () => [await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await nt.getByLabel("Columna").locator("option:checked").innerText()], ["Tarjeta suelta", COL.doing]);
+  await nt.getByRole("button", { name: "Cancelar" }).click();
+  L.assertNoErrors("otros", [s]);
+  await s.ctx.close();
 }
 
 await L.q(`UPDATE "User" SET locale=$2, theme=$3 WHERE id=$1`, [me.id, me.locale, me.theme]);

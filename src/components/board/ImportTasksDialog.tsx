@@ -1,13 +1,14 @@
 "use client";
 
-// «Importar tareas» del tablero: pegar el JSON en un cuadro, leerlo del portapapeles o de un fichero (.json, .txt; también
-// arrastrándolo encima), vista previa (título, columna a la que irá y avisos) y crear todas de una vez (POST a
-// /api/projects/[projectId]/import-tasks, que vuelve a leer el texto en el servidor: lib/task-import.ts). Acepta el JSON
-// que descarga «Exportar», una lista de tareas, varias seguidas o lo que devuelva una IA (ver parseTasksText en
-// lib/task-json.ts).
+// «Importar tareas» del tablero: pegar el JSON en un cuadro, leerlo del portapapeles o de un fichero (.json, .csv, .txt;
+// también arrastrándolo encima), vista previa (de dónde viene, título, columna a la que irá y avisos) y crear todas de una
+// vez (POST a /api/projects/[projectId]/import-tasks, que vuelve a leer el texto en el servidor: lib/task-import.ts).
+// Acepta el JSON que descarga «Exportar», una lista de tareas, varias seguidas, lo que devuelva una IA (ver parseTasksText
+// en lib/task-json.ts) y lo exportado de otros Kanban: Trello, Jira, GitHub, Asana o un CSV (lib/foreign-import/tasks.ts).
 import { ClipboardPaste, FileUp, Loader2, TriangleAlert } from "lucide-react";
 import { useDeferredValue, useId, useMemo, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
+import { appTimeZone } from "@/lib/format";
 import { actionThrowResult } from "@/lib/stale-action";
 import { isOfflineMessage } from "@/lib/connection";
 import { parseTasksText, TASK_READ_FAILURE, TASKS_JSON_MAX, TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
@@ -61,7 +62,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   const columns = useMemo(() => [...board.columns].sort((a, b) => a.position - b.position), [board.columns]);
   // Con textos grandes, la vista previa va un paso por detrás de lo que se escribe.
   const shown = useDeferredValue(text);
-  const read = useMemo(() => parseTasksText(shown), [shown]);
+  const read = useMemo(() => parseTasksText(shown, { t, timeZone: appTimeZone() }), [shown, t]);
   const rows = useMemo(() => read.tasks.map((x) => ({ n: x.n, title: x.task.title ?? null, ...importPreview(x.task, { columns, kinds: board.kinds }, forced || null, t) })), [read, columns, board.kinds, forced, t]);
   const ready = rows.filter((r) => r.title);
   const unreadable = read.failed.length + rows.length - ready.length;
@@ -80,7 +81,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   };
 
   const submit = async () => {
-    if (busy || !ready.length || read.tooMany || read.tooLong) return;
+    if (busy || !ready.length || read.tooMany || read.tooLong || read.error) return;
     setBusy(true);
     const res = await board.track(postImport(board.project.id, text, forced || null, t)).catch((e) => actionThrowResult(e, t));
     setBusy(false);
@@ -91,7 +92,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
     res.data.tasks.forEach(board.upsertTask);
     const n = res.data.tasks.length;
     toast(n === 1 ? t("1 tarea importada") : t("{n} tareas importadas", { n }));
-    const notes = [...res.data.failed.map((f) => (f.title ? `«${f.title}»: ${f.text}` : t("tarea {n}: {reason}", { n: f.n, reason: f.text }))), ...res.data.notices.map((x) => `«${x.title}»: ${x.text}`)];
+    const notes = [...(res.data.warnings ?? []), ...res.data.failed.map((f) => (f.title ? `«${f.title}»: ${f.text}` : t("tarea {n}: {reason}", { n: f.n, reason: f.text }))), ...res.data.notices.map((x) => `«${x.title}»: ${x.text}`)];
     if (notes.length) {
       const list = notes.slice(0, 4).join("; ");
       toast(t("Importadas, salvo: {list}", { list: notes.length > 4 ? t("{list} y {n} más", { list, n: notes.length - 4 }) : list }), "error");
@@ -118,7 +119,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
       footer={
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
-          <button type="button" className="btn-primary" onClick={() => void submit()} disabled={busy || !ready.length || read.tooMany || read.tooLong} data-import-submit>
+          <button type="button" className="btn-primary" onClick={() => void submit()} disabled={busy || !ready.length || read.tooMany || read.tooLong || !!read.error} data-import-submit>
             {busy && <Loader2 size={16} className="animate-spin" />} {label}
           </button>
         </>
@@ -127,7 +128,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
       <div className="space-y-3">
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="label mb-0" htmlFor={`${uid}-text`}>{t("JSON de las tareas")}</label>
+            <label className="label mb-0" htmlFor={`${uid}-text`}>{t("Tareas en JSON o CSV")}</label>
             <div className="flex items-center gap-1">
               <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => void fromClipboard()}>
                 <ClipboardPaste size={14} /> {t("Desde el portapapeles")}
@@ -135,7 +136,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
               <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => fileRef.current?.click()}>
                 <FileUp size={14} /> {t("Desde un fichero")}
               </button>
-              <input ref={fileRef} type="file" accept=".json,.txt,application/json,text/plain" className="sr-only" tabIndex={-1} aria-hidden data-import-file onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void loadFile(f); }} />
+              <input ref={fileRef} type="file" accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain" className="sr-only" tabIndex={-1} aria-hidden data-import-file onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; void loadFile(f); }} />
             </div>
           </div>
           <textarea
@@ -143,13 +144,24 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
             className="input mt-1 h-36 w-full font-mono text-xs"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={t("Pega aquí el JSON (lo que descarga «Exportar», una lista de tareas o varias seguidas) o arrastra un fichero .json o .txt")}
+            placeholder={t("Pega aquí el JSON (lo que descarga «Exportar», una lista de tareas o varias seguidas), lo exportado de Trello, Jira, GitHub o Asana, o un CSV con cabecera; o arrastra un fichero .json, .csv o .txt")}
             spellCheck={false}
             maxLength={TASKS_TEXT_MAX_CHARS}
             data-autofocus
           />
         </div>
 
+        {read.source && (
+          <div className="text-xs text-slate-500" data-import-source>{t("Formato detectado: {name}", { name: read.source })}</div>
+        )}
+        {read.error && <div className="text-sm font-medium text-red-600" role="alert">{read.error}</div>}
+        {read.warnings.length > 0 && (
+          <ul className="space-y-0.5 text-xs text-amber-700 dark:text-amber-400" data-import-warnings>
+            {read.warnings.map((w) => (
+              <li key={w} className="flex items-start gap-1"><TriangleAlert size={12} className="mt-0.5 shrink-0" /> <span className="min-w-0">{w}</span></li>
+            ))}
+          </ul>
+        )}
         {(read.total > 0 || read.tooLong) && (
           <>
             <div className={cn("text-sm font-medium", (read.tooMany || read.tooLong) && "text-red-600")} role="status">

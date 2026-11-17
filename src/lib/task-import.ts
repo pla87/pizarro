@@ -60,15 +60,20 @@ interface ImportNotice {
   text: string;
 }
 
-/** Lo que devuelve la importación (y la ruta, en JSON): las tareas creadas, los avisos de cada una y las que no se leyeron. */
+/**
+ * Lo que devuelve la importación (y la ruta, en JSON): las tareas creadas, los avisos de cada una, las que no se leyeron
+ * y, si venían de otro Kanban, lo que no se importa de él (comentarios, archivadas…: `warnings`, ya traducidos).
+ */
 export interface ImportTasksData {
   tasks: BoardTask[];
   notices: ImportNotice[];
   failed: ImportNotice[];
+  warnings: string[];
 }
 
 /**
- * Importa las tareas de un texto (lo pegado o el contenido de un fichero .json/.txt; ver parseTasksText) en el proyecto:
+ * Importa las tareas de un texto (lo pegado o el contenido de un fichero .json/.csv/.txt, también lo exportado de Trello,
+ * Jira, GitHub, Asana o un CSV de otra herramienta: ver parseTasksText y lib/foreign-import/tasks.ts) en el proyecto:
  * el texto se vuelve a leer aquí (nunca se usa lo que haya entendido el navegador). Cada tarea se crea con las mismas
  * reglas que al pegar una (TaskJsonResolver): nombres buscados solo en este proyecto, etiquetas que se crean si caben (50
  * por proyecto, 20 por tarea), 100 subtareas y 100 documentos de Google por tarea, campos opcionales activos. La crea
@@ -99,7 +104,8 @@ export async function importTasks(projectId: string, text: string, opts: z.input
     const o = importOptions.parse(opts ?? {});
     await assertProjectAccess(user, pid);
     if (!rateLimit(`import-tasks:${user.id}`, 10, 60_000)) throw new AppError("Demasiadas importaciones seguidas. Espera un momento.");
-    const read = parseTasksText(raw);
+    const read = parseTasksText(raw, { t, timeZone: appTimeZone() });
+    if (read.error) throw new AppError(read.error);
     if (read.tooMany) throw new AppError(t("Hay {n} tareas y se importan como mucho {max} de una vez.", { n: read.total, max: TASKS_JSON_MAX }));
     const r = new TaskJsonResolver(user, pid, t, locale);
     const [columns, kinds] = await Promise.all([r.columns(), r.kinds()]);
@@ -146,7 +152,7 @@ export async function importTasks(projectId: string, text: string, opts: z.input
       });
     }
     if (!items.length) {
-      throw new AppError(failed.length ? t("No se ha podido leer ninguna tarea: {reason}.", { reason: failed[0]!.text }) : t("No hay ninguna tarea que importar."));
+      throw new AppError(failed.length ? t("No se ha podido leer ninguna tarea: {reason}.", { reason: failed[0]!.text }) : read.warnings.length ? t("No hay ninguna tarea que importar: {reason}", { reason: read.warnings.join(" ") }) : t("No hay ninguna tarea que importar."));
     }
     if (!rateLimit(`import-tasks-n:${user.id}`, TASKS_JSON_MAX * 4, 10 * 60_000, items.length)) throw new AppError("Demasiadas tareas importadas seguidas. Espera unos minutos.");
 
@@ -291,6 +297,6 @@ export async function importTasks(projectId: string, text: string, opts: z.input
     for (const [assigneeId, list] of byAssignee) {
       await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[list[0]!]!, projectId: pid, recipientIds: [assigneeId], excerpt: list.length === 1 ? makeExcerpt(items[list[0]!]!.title) : assignedBatchExcerpt(list.length) });
     }
-    return { tasks: await loadBoardTasksByIds(ids), notices, failed: failed.sort((a, b) => a.n - b.n) };
+    return { tasks: await loadBoardTasksByIds(ids), notices, failed: failed.sort((a, b) => a.n - b.n), warnings: read.warnings };
   });
 }
