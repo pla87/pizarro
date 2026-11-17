@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { assertProjectAccess } from "@/lib/access";
+import * as v from "@/lib/validation";
 import { importTasks } from "@/lib/task-import";
 import { TASKS_TEXT_MAX_BYTES, TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
@@ -37,6 +39,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const tooBig = () => NextResponse.json({ ok: false, error: t("El texto es demasiado largo para importarlo (máximo {mb} MB).", { mb: TASKS_TEXT_MAX_CHARS / 1_000_000 }) }, { status: 413 });
   const declared = declaredLength(req.headers);
   if (declared !== null && declared > TASKS_TEXT_MAX_BYTES) return tooBig();
+  // Antes de ocupar un hueco de subida (hay pocos, compartidos con adjuntos y documentos) y de leer el cuerpo: el proyecto
+  // debe existir y ser visible para quien importa, y su ritmo, razonable. Si no, quien no tiene acceso podría ocupar los
+  // huecos de todos enviando el texto despacio.
+  const { projectId } = await ctx.params;
+  const pid = v.id.safeParse(projectId);
+  const visible = pid.success && (await assertProjectAccess(user, pid.data).then(() => true, () => false));
+  if (!visible) return fail(404, "No encontrado o sin acceso.");
+  if (!rateLimit(`import-tasks:body:${user.id}`, 10, 60_000)) return fail(429, "Demasiadas importaciones seguidas. Espera un momento.", { "Retry-After": "60" });
   const release = await acquireUploadSlot();
   if (!release) return fail(429, "Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", { "Retry-After": "5" });
   try {
@@ -49,7 +59,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
       throw err;
     }
     if (text.length > TASKS_TEXT_MAX_CHARS) return tooBig();
-    const { projectId } = await ctx.params;
     const columnId = new URL(req.url).searchParams.get("columnId") || null;
     return NextResponse.json(await importTasks(projectId, text, { columnId }));
   } finally {

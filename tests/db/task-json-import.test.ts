@@ -296,9 +296,14 @@ describe("importar más de 1 MB por la ruta, avisos de etiquetas y rehacer con e
     const tooLong = await post(f.project.id, "x".repeat(5_000_001));
     assert.equal(tooLong.status, 413);
     assert.match(((await tooLong.json()) as { error: string }).error, /demasiado largo/);
-    const denied = (await (await post(other.project.id, '{"title":"Ajena"}')).json()) as { ok: boolean; error: string };
+    // Sin acceso al proyecto: 404 antes de ocupar un hueco de subida y de leer el cuerpo (aunque se declare enorme).
+    const deniedRes = await post(other.project.id, '{"title":"Ajena"}');
+    assert.equal(deniedRes.status, 404);
+    const denied = (await deniedRes.json()) as { ok: boolean; error: string };
     assert.equal(denied.ok, false);
     assert.match(denied.error, NOT_FOUND);
+    assert.equal((await post(other.project.id, "x", { "content-length": "14000000" })).status, 404);
+    assert.equal((await post("no válido", "x")).status, 404);
     logout();
     const anon = await post(f.project.id, '{"title":"Sin sesión"}');
     assert.equal(anon.status, 401);
