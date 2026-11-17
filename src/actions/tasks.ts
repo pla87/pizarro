@@ -1861,7 +1861,8 @@ export async function pasteTaskJson(taskId: string, text: string, since?: string
     const { projectId } = task;
     if (!rateLimit(`paste-task:${user.id}`, 30, 60_000)) throw new AppError("Demasiados pegados seguidos. Espera un momento.");
     const [t, locale] = await Promise.all([getT(), getLocale()]);
-    const read = parseTasksText(raw);
+    const read = parseTasksText(raw, { t, timeZone: appTimeZone() });
+    if (read.error) throw new AppError(read.error);
     if (read.tasks.length > 1 || read.tooMany) throw new AppError(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }));
     const one = read.tasks[0];
     if (!one) throw new AppError("El JSON de la tarea no es válido.");

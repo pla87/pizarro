@@ -3,8 +3,11 @@ import type { T } from "@/i18n/core";
 import { AppError } from "../errors";
 import { importMaxBytes } from "../project-export/config";
 import { parseCsvBoard } from "./csv";
+import { decodeText } from "./text";
 import { parseTrello } from "./trello";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignFormat } from "./types";
+
+export { decodeText };
 
 export type ImportFormat = "pizarro" | ForeignFormat;
 
@@ -29,22 +32,6 @@ export function sniffFormat(head: Uint8Array, fileName = ""): ImportFormat | nul
 /** Tamaño máximo (bytes) de un JSON o CSV: 25 MB, o PROJECT_IMPORT_MAX_MB si es menor (el ZIP de Pizarro solo tiene este último). */
 export function foreignMaxBytes(raw: string | undefined = process.env.PROJECT_IMPORT_MAX_MB): number {
   return Math.min(importMaxBytes(raw), FOREIGN_LIMITS.maxBytes);
-}
-
-/** Bytes → texto: UTF-8 (con o sin BOM), UTF-16 con BOM (Excel) y, si no es UTF-8 válido, Windows-1252. */
-export function decodeText(buf: Uint8Array): string {
-  if (buf[0] === 0xff && buf[1] === 0xfe) return new TextDecoder("utf-16le").decode(buf.subarray(2));
-  if (buf[0] === 0xfe && buf[1] === 0xff) return new TextDecoder("utf-16be").decode(buf.subarray(2));
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
-  } catch {
-    // Cortado a mitad de un carácter (solo la cabecera que se mira para detectar) o realmente no es UTF-8.
-    try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(buf.subarray(0, Math.max(0, buf.length - 3)));
-    } catch {
-      return new TextDecoder("windows-1252").decode(buf);
-    }
-  }
 }
 
 /** Topes de la aplicación sobre lo ya leído; lanza un AppError (texto en español, que el trabajo traduce). */
