@@ -242,7 +242,7 @@ if (only.includes("move")) {
   await L.eqEventually("MOVE: las tareas normales pasan a «En curso»", async () => (await L.q(`SELECT id FROM "Task" WHERE "columnId"='r51_curso' ORDER BY position`)).map((r) => r.id), ["r51_t1", "r51_t2"]);
   L.eq("MOVE: las fijas se quedan en el plan", (await L.q(`SELECT id, evergreen FROM "Task" WHERE "columnId"='r51_plan' ORDER BY position`)).map((r) => [r.id, r.evergreen]), [["r51_f1", true], ["r51_f2", true]]);
   await L.cardLoc(page, "Arreglar el login r51").waitFor({ timeout: 10000 });
-  L.check("MOVE: el tablero las muestra en «En curso»", (await L.colLoc(page, "En curso").innerText()).includes("Arreglar el login r51"));
+  await L.checkEventually("MOVE: el tablero las muestra en «En curso»", async () => (await L.colLoc(page, "En curso").innerText()).includes("Arreglar el login r51"));
   L.assertNoErrors("MOVE", [s]);
   await s.ctx.close();
 }

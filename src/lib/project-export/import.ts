@@ -148,14 +148,17 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   }
 
   // --- Personas: por email contra usuarios activos. En un proyecto privado solo vale quien importa.
-  const wantedEmails = [...new Set(data.users.map((u) => u.email.trim().toLowerCase()))];
+  // Sin email (lo exportó alguien que no es administrador y no era su propio email): no se empareja con nadie; sus tareas
+  // quedan sin responsable y sus menciones como texto.
+  const wantedEmails = [...new Set(data.users.map((u) => u.email.trim().toLowerCase()).filter(Boolean))];
   const found = wantedEmails.length
     ? await db.user.findMany({ where: { active: true, email: { in: wantedEmails } }, select: { id: true, email: true, role: true } })
     : [];
   const byEmail = new Map(found.map((u) => [u.email.toLowerCase(), u]));
   const userMap = new Map<string, { id: string; role: "ADMIN" | "MEMBER" } | null>();
   for (const u of data.users) {
-    const match = byEmail.get(u.email.trim().toLowerCase());
+    const email = u.email.trim().toLowerCase();
+    const match = email ? byEmail.get(email) : undefined;
     userMap.set(u.ref, match && (!opts.isPrivate || match.id === user.id) ? { id: match.id, role: match.role } : null);
   }
   const uid = (ref: string | null): string | null => (ref ? (userMap.get(ref)?.id ?? null) : null);
@@ -364,7 +367,12 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     // Posiciones iguales dentro de una columna: se separan lo mínimo conservando el orden del archivo.
     const taskPos = new Map<string, number>();
     const byColumn = new Map<string, typeof data.tasks>();
-    for (const x of data.tasks) byColumn.set(x.columnRef, [...(byColumn.get(x.columnRef) ?? []), x]);
+    // Con push (no copiando la lista en cada tarea): con decenas de miles de archivadas en una columna, copiarla era cuadrático.
+    for (const x of data.tasks) {
+      const list = byColumn.get(x.columnRef);
+      if (list) list.push(x);
+      else byColumn.set(x.columnRef, [x]);
+    }
     for (const list of byColumn.values()) {
       let last = -Infinity;
       for (const x of [...list].sort((a, b) => a.position - b.position)) {

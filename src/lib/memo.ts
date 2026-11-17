@@ -37,3 +37,49 @@ export function invalidateMemo(key: string): void {
   }
   for (const k of [...store.keys()]) if (k.startsWith(key)) store.delete(k);
 }
+
+/** Memoria con caducidad y tope de entradas (las menos usadas salen primero). */
+export interface BoundedMemo {
+  /** Como `memo`: valor guardado, consulta compartida si está en marcha, y un error no se guarda. */
+  get<T>(key: string, fn: () => Promise<T>, now?: number): Promise<T>;
+  delete(key: string): void;
+  clear(): void;
+  readonly size: number;
+}
+
+/**
+ * Memoria propia (no la de `memo`) para lo que tiene una clave por persona o enlace y podría crecer sin límite: guarda
+ * como mucho `maxEntries` claves durante `ttlMs`; al pasarse, olvida la usada hace más tiempo. Por nombre en globalThis
+ * (rutas y acciones pueden empaquetarse por separado y deben ver la misma).
+ */
+export function boundedMemo(name: string, ttlMs: number, maxEntries: number): BoundedMemo {
+  const all = ((globalThis as unknown as { __pzBoundedMemo?: Map<string, Map<string, Entry>> }).__pzBoundedMemo ??= new Map());
+  let map = all.get(name);
+  if (!map) all.set(name, (map = new Map()));
+  const entries = map;
+  return {
+    get<T>(key: string, fn: () => Promise<T>, now: number = Date.now()): Promise<T> {
+      const hit = entries.get(key);
+      if (hit && now - hit.at < ttlMs && now >= hit.at) {
+        // Map recuerda el orden de inserción: volver a ponerla al final la marca como la más reciente.
+        entries.delete(key);
+        entries.set(key, hit);
+        return hit.value as Promise<T>;
+      }
+      const value = fn();
+      const entry: Entry = { at: now, value };
+      entries.delete(key);
+      entries.set(key, entry);
+      while (entries.size > maxEntries) entries.delete(entries.keys().next().value!);
+      value.catch(() => {
+        if (entries.get(key) === entry) entries.delete(key);
+      });
+      return value;
+    },
+    delete: (key) => void entries.delete(key),
+    clear: () => entries.clear(),
+    get size() {
+      return entries.size;
+    },
+  };
+}

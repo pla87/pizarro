@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { buildFeedIcs, resolveFeedToken } from "@/lib/calendar-feed";
+import { cachedFeedIcs, resolveFeedToken } from "@/lib/calendar-feed";
 import { FEED_LOG_EVERY_MS, feedLogDue, feedRateKey, tokenFromFilename } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { ifNoneMatchHas } from "@/lib/etag";
@@ -20,10 +19,22 @@ const PER_TOKEN = { limit: 30, windowMs: 10 * 60_000 };
 const feedLog = new Map<string, { at: number; skipped: number }>();
 /** Avisos de exceso de ritmo: como mucho uno por hora y enlace o IP (son lo que más interesa de seguridad). */
 const RATE_LOG_EVERY_MS = 3_600_000;
+/** «Último uso» del enlace: como mucho una escritura por hora; en memoria, cuándo se intentó por última vez en este proceso. */
+const USED_EVERY_MS = 3_600_000;
+const usedAt = new Map<string, number>();
+function usedLogDue(key: string, now = Date.now()): boolean {
+  const prev = usedAt.get(key);
+  if (prev !== undefined && now - prev < USED_EVERY_MS && now >= prev) return false;
+  usedAt.delete(key);
+  usedAt.set(key, now);
+  if (usedAt.size > 5000) usedAt.delete(usedAt.keys().next().value!);
+  return true;
+}
 
 /**
  * Suscripción al calendario (.ics vivo) de una persona: /api/calendar/<token>.ics. Pública (sin sesión; el token es la
- * credencial); los permisos se evalúan en cada petición. El token nunca se anota en los registros.
+ * credencial). El enlace se comprueba en cada petición; el calendario ya hecho se guarda FEED_CACHE_MS (cachedFeedIcs),
+ * así que un cambio de tareas o permisos se ve como mucho un minuto después. El token nunca se anota en los registros.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ file: string }> }) {
   const start = performance.now();
@@ -69,9 +80,13 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     return notFound();
   }
 
-  const { ics, tasks, deliverables, repeats } = await buildFeedIcs(feed.user, feed.scope);
-  // Aviso de uso: como mucho una escritura por hora y enlace.
-  void db.calendarFeed.updateMany({ where: { id: feed.feedId, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: new Date(Date.now() - 3_600_000) } }] }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
+  // Guardado un minuto por enlace (cachedFeedIcs): un calendario que consulta a menudo, o varios a la vez, no lo rehacen.
+  const { ics, etag, tasks, deliverables, repeats } = await cachedFeedIcs(feed);
+  // Aviso de uso: como mucho una escritura por hora y enlace (y, en este proceso, ni siquiera la consulta entre medias).
+  // Por hash del token: al regenerar el enlace (lastUsedAt vuelve a null) el nuevo se anota en su primera consulta.
+  if (usedLogDue(feed.tokenHash)) {
+    void db.calendarFeed.updateMany({ where: { id: feed.feedId, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: new Date(Date.now() - USED_EVERY_MS) } }] }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
+  }
   // Muestreado: la primera consulta de cada enlace desde cada IP y luego como mucho una cada 6 h (los clientes de
   // calendario consultan cada pocos minutos). `skipped`: consultas correctas no anotadas desde la anterior.
   const skipped = feedLogDue(feedLog, `ok|${feed.feedId}|${rateIp(ip)}`, Date.now());
@@ -82,8 +97,6 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
       details: { tasks, deliverables, repeats, skipped, sampledEveryHours: FEED_LOG_EVERY_MS / 3_600_000 },
     });
   }
-  // Cada evento lleva como DTSTAMP su último cambio, así que un calendario igual da el mismo ETag (y 304).
-  const etag = `"${createHash("sha256").update(ics).digest("base64url").slice(0, 27)}"`;
   const headers = {
     "Content-Type": "text/calendar; charset=utf-8",
     "Content-Disposition": 'inline; filename="pizarro.ics"',

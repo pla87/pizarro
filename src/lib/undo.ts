@@ -407,7 +407,8 @@ export async function saveUndo(
     where: { userId, projectId, kind },
     orderBy: { createdAt: "desc" },
     skip: UNDO_LIMIT,
-    select: { id: true, ops: true },
+    // Solo el id: los adjuntos que se liberan los saca la propia base al borrar (discardEntries); las ops pueden pesar MB.
+    select: { id: true },
   });
   if (old.length) await discardEntries(old);
   return created.id;
@@ -459,7 +460,7 @@ export async function discardEntries(entries: { id: string }[]): Promise<void> {
 
 /** Descarta las entradas que cumplan la condición (al borrar un proyecto o un usuario, o por antigüedad). */
 export async function discardUndo(where: Prisma.UndoEntryWhereInput): Promise<number> {
-  const entries = await db.undoEntry.findMany({ where, select: { id: true, ops: true } });
+  const entries = await db.undoEntry.findMany({ where, select: { id: true } });
   await discardEntries(entries);
   return entries.length;
 }

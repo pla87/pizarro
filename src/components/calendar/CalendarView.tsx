@@ -391,21 +391,32 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
     return () => window.removeEventListener("keydown", onKey);
   }, [last, undo]);
 
+  // Cierra el panel «+N más». Con Escape o «Cerrar» el foco vuelve al botón que lo abrió (si estaba en el panel o se ha
+  // perdido): al desmontarse el panel el foco caía en <body>.
+  const closeDay = useCallback((returnFocus: boolean) => {
+    const key = openDay;
+    setOpenDay(null);
+    if (!returnFocus || !key) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && !active.closest("[data-day-popover]")) return;
+    document.querySelector<HTMLElement>(`[data-day-toggle="${CSS.escape(key)}"]`)?.focus();
+  }, [openDay]);
+
   // El panel «+N más» se cierra con clic fuera o Escape.
   useEffect(() => {
     if (!openDay) return;
     const onDown = (e: PointerEvent) => {
       // Los botones «+N más» alternan el panel por su cuenta (si no, cerrar y reabrir en el mismo clic).
-      if (!(e.target as HTMLElement).closest?.("[data-day-popover], [data-day-toggle]")) setOpenDay(null);
+      if (!(e.target as HTMLElement).closest?.("[data-day-popover], [data-day-toggle]")) closeDay(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpenDay(null);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeDay(true);
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [openDay]);
+  }, [openDay, closeDay]);
 
   const onChipKey = (e: React.KeyboardEvent, task: CalendarTask & { due: string }) => {
     if (!e.altKey || e.ctrlKey || e.metaKey) return;
@@ -629,9 +640,9 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
           onOpenChange={(open) => (open ? setDraft(filters.project) : applyProjects())}
           panelClassName="w-64 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
           trigger={({ open, props }) => (
-            <button type="button" {...props} aria-label={t("Proyectos")} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
-              <span className="min-w-0 truncate">{projectLabel}</span>
-              {filters.project.length > 1 && <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.project.length}</span>}
+            <button type="button" {...props} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
+              <span className="min-w-0 truncate"><span className="sr-only">{`${t("Proyectos")}: `}</span>{projectLabel}</span>
+              {filters.project.length > 1 && <span aria-hidden className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.project.length}</span>}
               <ChevronDown size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
             </button>
           )}
@@ -659,9 +670,9 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
           onOpenChange={(open) => (open ? setDraftPeople(filters.person) : applyPeople())}
           panelClassName="w-64 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
           trigger={({ open, props }) => (
-            <button type="button" {...props} aria-label={t("Persona")} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
-              <span className="min-w-0 truncate">{personLabel}</span>
-              {filters.person.length > 1 && <span className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.person.length}</span>}
+            <button type="button" {...props} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
+              <span className="min-w-0 truncate"><span className="sr-only">{`${t("Persona")}: `}</span>{personLabel}</span>
+              {filters.person.length > 1 && <span aria-hidden className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.person.length}</span>}
               <ChevronDown size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
             </button>
           )}
@@ -746,7 +757,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                     })}
                     {bands.length > MAX_BANDS && (
                       <div className="relative col-span-7">
-                        <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
+                        <button type="button" data-day-toggle={`d:${week[0]!.iso}`} onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
                           {bands.length - MAX_BANDS === 1 ? t("+1 entregable más") : t("+{n} entregables más", { n: bands.length - MAX_BANDS })}
                         </button>
                         {openDay === `d:${week[0]!.iso}` && (
@@ -800,7 +811,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                     })}
                     {rangeBands.length > MAX_RANGES && (
                       <div className="relative col-span-7">
-                        <button type="button" data-day-toggle onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
+                        <button type="button" data-day-toggle={`r:${week[0]!.iso}`} onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
                           {rangeBands.length - MAX_RANGES === 1 ? t("+1 tarea con rango más") : t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}
                         </button>
                         {openDay === `r:${week[0]!.iso}` && (
@@ -865,7 +876,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                           {hidden > 0 && (
                             <button
                               type="button"
-                              data-day-toggle
+                              data-day-toggle={day.iso}
                               onClick={() => setOpenDay(openDay === day.iso ? null : day.iso)}
                               aria-expanded={openDay === day.iso}
                               className="w-full rounded px-1.5 py-0.5 text-left text-xs font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800"
@@ -883,7 +894,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                           >
                             <div className="mb-1.5 flex items-center justify-between gap-2 text-xs font-semibold first-letter:uppercase">
                               <span className="truncate">{dayLabel(day.iso)}</span>
-                              <button type="button" autoFocus onClick={() => setOpenDay(null)} className="rounded p-0.5 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={t("Cerrar")}>
+                              <button type="button" autoFocus onClick={() => closeDay(true)} className="rounded p-0.5 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={t("Cerrar")}>
                                 <X size={14} aria-hidden />
                               </button>
                             </div>

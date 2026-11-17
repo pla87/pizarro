@@ -35,6 +35,10 @@ export interface NewTaskDraft {
   recurrenceDay?: number | null;
   /** El día se eligió a mano (si no, al recuperar el borrador sigue a la fecha límite, como antes de cerrarlo). */
   recurrenceDayPicked?: boolean;
+  /** Etiquetas elegidas (ids del proyecto del borrador), color de la tarjeta y enlace externo tal como se escribió. */
+  labelIds?: string[];
+  color?: string | null;
+  linkUrl?: string;
 }
 
 export interface EditTaskDraft {

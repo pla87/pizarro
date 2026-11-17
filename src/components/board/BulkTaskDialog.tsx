@@ -15,7 +15,8 @@ import { useToast } from "../ui/Toast";
 import { boardClients, useBoard, useTasks } from "./context";
 import { TypeSelector } from "./TaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
-import { isWhite, MAX_TITLE, onColor } from "@/lib/constants";
+import { MAX_TASK_LABELS, MAX_TITLE } from "@/lib/constants";
+import { LabelToggles } from "./LabelToggles";
 import { MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES } from "@/lib/task-fields";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -302,23 +303,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
             {form.labels.length > 0 && (
               <div className="col-span-2">
                 <div className="label">{t("Etiquetas (opcional)")}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {form.labels.map((l) => {
-                    const on = labelIds.includes(l.id);
-                    return (
-                      <button
-                        key={l.id}
-                        type="button"
-                        onClick={() => setLabelIds((ids) => (on ? ids.filter((x) => x !== l.id) : [...ids, l.id]))}
-                        className={cn("rounded px-2 py-0.5 text-xs font-medium", on ? "" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300")}
-                        style={on ? { backgroundColor: l.color, color: onColor(l.color), boxShadow: isWhite(l.color) ? "inset 0 0 0 1px rgb(0 0 0 / 0.2)" : undefined } : undefined}
-                        aria-pressed={on}
-                      >
-                        {l.name}
-                      </button>
-                    );
-                  })}
-                </div>
+                <LabelToggles labels={form.labels} selected={labelIds} onToggle={(id, on) => setLabelIds((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)))} max={MAX_TASK_LABELS} />
               </div>
             )}
           </div>

@@ -37,8 +37,10 @@ export function logRetentionDays(): number {
 }
 
 // En globalThis para sobrevivir a la recarga de módulos en desarrollo.
-const state = (globalThis as unknown as { __pzLog?: { queue: Prisma.AppLogCreateManyInput[]; timer: ReturnType<typeof setTimeout> | null; lastPurge: number } })
-  .__pzLog ??= { queue: [], timer: null, lastPurge: 0 };
+// `writing`: la última escritura en curso o en espera (ver flushLogs).
+const state = (globalThis as unknown as {
+  __pzLog?: { queue: Prisma.AppLogCreateManyInput[]; timer: ReturnType<typeof setTimeout> | null; lastPurge: number; writing?: Promise<void> };
+}).__pzLog ??= { queue: [], timer: null, lastPurge: 0 };
 
 const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie|phone/i;
 
@@ -111,10 +113,25 @@ export function logEvent(e: LogEvent): void {
   }
 }
 
-/** Escribe los eventos pendientes y, como mucho una vez por hora, borra los antiguos. */
-export async function flushLogs(): Promise<void> {
+/**
+ * Escribe los eventos pendientes y, como mucho una vez por hora, borra los antiguos. Las escrituras van una tras otra:
+ * si el temporizador ya ha sacado de la cola un lote y lo está guardando, esta llamada espera a que termine (y luego
+ * guarda lo que quede). Antes volvía en el acto con la cola vacía, y quien leía los logs justo después (la página de
+ * logs, las pruebas) no veía eventos anotados antes de llamar.
+ */
+export function flushLogs(): Promise<void> {
   if (state.timer) clearTimeout(state.timer);
   state.timer = null;
+  // Sin otra en curso empieza ya (el lote sale de la cola en el acto); si no, a continuación de ella. writeLogs no
+  // rechaza nunca (anota el fallo y devuelve los eventos a la cola).
+  const next = (state.writing ? state.writing.then(writeLogs) : writeLogs()).finally(() => {
+    if (state.writing === next) state.writing = undefined;
+  });
+  state.writing = next;
+  return next;
+}
+
+async function writeLogs(): Promise<void> {
   const batch = state.queue.splice(0);
   // Lo que se devuelve a la cola si se corta la conexión: nunca lo ya guardado (un fallo al purgar no duplica filas).
   let pending = batch;

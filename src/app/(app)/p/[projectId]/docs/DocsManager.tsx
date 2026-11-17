@@ -18,6 +18,7 @@ import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, is
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import type { EditorModeValue } from "@/lib/types";
 import { formatDate } from "@/lib/format";
+import { headingIdForHash } from "@/lib/heading-ids";
 import { normalizeSearch } from "@/lib/search-accents";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { actionThrowResult } from "@/lib/stale-action";
@@ -503,10 +504,25 @@ function DocPreview({ doc, name, src, projectId, docs, fromLink }: { doc: Docume
     );
   }
   return doc.kind === "MARKDOWN" ? (
-    <div data-testid="doc-markdown"><Markdown>{loaded.text}</Markdown></div>
+    <MarkdownPreview text={loaded.text} fromLink={fromLink} />
   ) : (
     <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded bg-slate-50 p-3 font-mono text-xs dark:bg-slate-900" data-testid="doc-text">{loaded.text}</pre>
   );
+}
+
+/**
+ * Markdown de la Documentación con un `id` en cada título. Al llegar por un enlace «otro.md#apartado» (desde un HTML de la
+ * misma Documentación) se desplaza a ese apartado, una vez.
+ */
+function MarkdownPreview({ text, fromLink }: { text: string; fromLink?: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!fromLink) return;
+    const id = headingIdForHash(window.location.hash);
+    const target = id ? box.current?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;
+    target?.scrollIntoView({ block: "start" });
+  }, [fromLink]);
+  return <div ref={box} data-testid="doc-markdown"><Markdown headingIds>{text}</Markdown></div>;
 }
 
 /** Vista previa de un documento de la papelera: solo se puede ver, descargar o restaurar. */

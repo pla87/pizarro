@@ -136,6 +136,13 @@ const PRIORITIES: Record<string, TaskPriorityValue> = {
   baja: "BAJA", low: "BAJA", minor: "BAJA", menor: "BAJA", lowest: "BAJA", trivial: "BAJA", p3: "BAJA", p4: "BAJA", "0": "BAJA", minima: "BAJA",
 };
 
+/** Prioridad de un texto de otra herramienta (Urgent/High/Medium/Low, P0-P4, Kanboard 0-3…), o null si no se reconoce. */
+export function foreignPriority(raw: string): TaskPriorityValue | null {
+  const key = fold(raw);
+  // Object.hasOwn: «constructor» o «toString» no son prioridades (antes devolvían una función del prototipo).
+  return Object.hasOwn(PRIORITIES, key) ? PRIORITIES[key]! : null;
+}
+
 const TRUE_RE = /^(true|yes|si|sí|y|s|1|x|verdadero)$/i;
 const isTruthy = (v: string) => { const s = v.trim(); return s !== "" && !/^(false|no|n|0|falso)$/i.test(s); };
 
@@ -186,8 +193,12 @@ export function assertCsvHeader(head: string): void {
 }
 
 export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
+  return parseCsvRows(parseCsv(text, undefined, FOREIGN_LIMITS.csvRows + 1), opts); // + la cabecera
+}
+
+/** Como parseCsvBoard, con las filas ya separadas (la primera es la cabecera): la importación de tareas las retoca antes. */
+export function parseCsvRows(rows: string[][], opts: CsvOptions): ForeignBoard {
   const { t } = opts;
-  const rows = parseCsv(text, undefined, FOREIGN_LIMITS.csvRows + 1); // + la cabecera
   if (rows.length < 2) throw new AppError("El CSV no tiene filas de tareas (solo cabecera o está vacío).");
   const { columns } = mapHeaders(rows[0]!);
   if (!columns.title) throw new AppError(NO_TITLE_COLUMN);
@@ -265,7 +276,7 @@ export function parseCsvBoard(text: string, opts: CsvOptions): ForeignBoard {
 
     let priority: TaskPriorityValue | null = null;
     const prCell = cell(row, "priority");
-    if (prCell) { priority = PRIORITIES[fold(prCell)] ?? null; if (!priority) badPriorities++; }
+    if (prCell) { priority = foreignPriority(prCell); if (!priority) badPriorities++; }
 
     const task: ForeignTask = {
       title: r.title, description, column: columnFor(row), archived: columns.archived ? TRUE_RE.test(cell(row, "archived").trim()) : false,

@@ -38,7 +38,7 @@ export async function importForeignFile(file: string, format: ForeignFormat, use
   opts.onProgress?.({ phase: "validar" });
   const max = foreignMaxBytes();
   if ((await stat(file)).size > max) throw new AppError(opts.t("El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).", { mb: Math.round(max / 1024 / 1024) }), 413);
-  const text = decodeText(await readFile(file));
+  const text = decodeText(await readFile(file), true);
   const board = parseForeign(text, format, { t: opts.t, timeZone: appTimeZone(), fileName: opts.fileName });
   return createProjectFromBoard(board, format, user, opts);
 }

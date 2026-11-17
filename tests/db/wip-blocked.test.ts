@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { createTask, archiveTask, deleteTask, deleteTasks, duplicateTask, moveTask, restoreTaskSnapshot, updateTask } from "../../src/actions/tasks";
 import { setColumnWipLimit } from "../../src/actions/columns";
 import { blockProblem } from "../../src/lib/blocking";
@@ -277,7 +277,7 @@ describe("exportar e importar con límite y bloqueos", () => {
     const a = await makeTask(f, { title: "Bloqueada" });
     const b = await makeTask(f, { title: "Bloqueadora" });
     await db.task.update({ where: { id: a.id }, data: { blockedById: b.id } });
-    const build = await buildProjectExport(f.project.id, { attachments: false, scope: "all" });
+    const build = await buildProjectExport(f.project.id, { attachments: false, scope: "all" }, ADMIN_EXPORT);
     const s = await importProjectFile(await toZip(build), asImporter(admin), { isPrivate: false });
     const cols = await db.column.findMany({ where: { projectId: s.projectId }, orderBy: { position: "asc" } });
     assert.deepEqual(cols.map((c) => c.wipLimit), [null, 4, null]);
@@ -296,7 +296,7 @@ describe("exportar e importar con límite y bloqueos", () => {
     const b = await makeTask(f, { title: "Archivada" });
     await db.task.update({ where: { id: a.id }, data: { blockedById: b.id } });
     await db.task.update({ where: { id: b.id }, data: { archivedAt: new Date() } });
-    const build = await buildProjectExport(f.project.id, { attachments: false, scope: "board" });
+    const build = await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT);
     const s = await importProjectFile(await toZip(build), asImporter(admin), { isPrivate: false });
     const imported = await db.task.findMany({ where: { projectId: s.projectId } });
     assert.equal(imported.length, 1);
@@ -308,7 +308,7 @@ describe("exportar e importar con límite y bloqueos", () => {
     const f = await makeProject({ members: [admin] });
     await makeTask(f, { title: "A" });
     await makeTask(f, { title: "B" });
-    const good = await buildProjectExport(f.project.id, { attachments: false, scope: "all" });
+    const good = await buildProjectExport(f.project.id, { attachments: false, scope: "all" }, ADMIN_EXPORT);
     const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
     const tamper = async (edit: (data: { tasks: { ref: string; blockedByRef?: string | null }[] }) => void) => {
       const data = JSON.parse((good.entries[1]!.body as Buffer).toString("utf8"));

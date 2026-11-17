@@ -39,10 +39,11 @@ test("sin tocar nada se devuelve el texto exacto", () => {
 
 test("al editar el título de una tarea solo cambia ese elemento; el resto (cabecera con #, sangrías, enlaces <…>, pie) queda igual", () => {
   const out = keep(editorAfter(base, "Exportar a CSV", "Exportar a CSV y Excel"));
-  const expected = base.replace("- **R3F2** · Exportar a CSV\n  Con **todas** las columnas.", "- **R3F2** · Exportar a CSV y Excel\nCon **todas** las columnas.");
+  const expected = base.replace("- **R3F2** · Exportar a CSV\n", "- **R3F2** · Exportar a CSV y Excel\n");
+  assert.notEqual(expected, base);
   assert.equal(out, expected);
   assert.match(out, /^# Novedades\n\nHola \*\*equipo\*\*, esto es <importante> & más\.\n/);
-  assert.match(out, /\(\[enlace\]\(<https:\/\/example\.com\/x\?a=1&b=2>\)\)\n {2}Adjuntos: R3F1_captura\.webp\n {2}Permite entrar\./);
+  assert.match(out, /\(\[enlace\]\(<https:\/\/example\.com\/x\?a=1&b=2>\)\)\n\n {2}Adjuntos: R3F1_captura\.webp\n\n {2}Permite entrar\./);
   assert.ok(out.endsWith("_Gracias_ — el equipo\n"));
 });
 
@@ -103,7 +104,7 @@ test("rendimiento: release de 400 tareas con un cambio, en un tiempo proporciona
   const ms = bestTime(() => keepUntouchedMarkdown(big, edited, editorMarkdown));
   assert.ok(ms < Math.max(reference * 3, 50), `${Math.round(ms)} ms frente a ${Math.round(reference)} ms de leer la release entera`);
   const out = keepUntouchedMarkdown(big, edited, editorMarkdown);
-  assert.equal(out.replace("Tarea número 200 (editada)\nDescripción 200.\n", "Tarea número 200\n  Descripción 200.\n\n"), big, "solo cambia la tarea editada");
+  assert.equal(out.replace("Tarea número 200 (editada)\n\n  Descripción 200.\n  - uno", "Tarea número 200\n\n  Descripción 200.\n\n  - uno"), big, "solo cambia la tarea editada");
 });
 
 // R50: un párrafo vacío en el editor con barra (Intro dos veces) salía como «&nbsp;» en Copiar todo, el .md y el .txt.
@@ -128,7 +129,7 @@ test("párrafos vacíos añadidos con el editor con barra: una línea en blanco,
 });
 
 test("un párrafo vacío dentro de una tarea editada (lista) tampoco deja «&nbsp;»", () => {
-  const raw = editorAfter(base, "- **R3F2** · Exportar a CSV\n  Con **todas** las columnas.", "- **R3F2** · Exportar a CSV\n\n  &nbsp;\n\n  &nbsp;\n\n  Con **todas** las columnas.");
+  const raw = editorAfter(base, "- **R3F2** · Exportar a CSV\n\n  Con **todas** las columnas.", "- **R3F2** · Exportar a CSV\n\n  &nbsp;\n\n  &nbsp;\n\n  Con **todas** las columnas.");
   const out = releaseFromEditor(base, raw);
   assert.doesNotMatch(out, /&nbsp;/);
   assert.doesNotMatch(out, /\n[ \t]*\n[ \t]*\n/);

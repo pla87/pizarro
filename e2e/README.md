@@ -33,6 +33,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/bh52-e2e.mjs` | 37 | ~30 s |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/bh52b-e2e.mjs` | 36 | ~40 s |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/bh53-e2e.mjs` | 25 | ~1 min |
+| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla» y `otro.md#apartado` (caza de bugs 54) | `e2e/bh54-e2e.mjs` | 32 | ~30 s |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
@@ -43,7 +44,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 109 | ~1,5 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 97 | ~1,5 min |
-| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea», móvil a 390 px, inglés y oscuro (ronda 54) | `e2e/r54-import-e2e.mjs` | 83 | ~1,5 min |
+| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/r54-import-e2e.mjs` | 149 | ~3 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -239,6 +240,20 @@ aviso. Cada opción de «Cómo se envían los emails» se nombra por su título 
 
 ```sh
 cd e2e && BASE=http://localhost:3276 DATABASE_URL=$DBURL node bh52b-e2e.mjs   # PART=zip,doc,columnas,mail
+```
+
+## Arreglos de la caza 54
+
+En el histórico de releases, la descripción de cada tarea (y la línea de adjuntos) va en su párrafo debajo del punto, y
+una release guardada con el texto antiguo se sigue viendo; el título es un `<h2>` con el botón dentro (la cabecera entera
+sigue abriéndola) y, sin portapapeles, «No se pudo copiar» sale como error. En el móvil, «Archivadas» del menú lateral lo
+cierra. En el calendario, «Proyectos» y «Persona» se llaman «Proyectos: <lo elegido>» (axe sin
+`label-content-name-mismatch`) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió (con clic
+fuera, no). En «Aplicar plantilla», el rol de la columna de destino va tras « · ». Un enlace de un HTML a
+`guia.md#instalacion-rapida` (o con tildes) abre el Markdown en ese apartado. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node bh54-e2e.mjs   # PART=release,menu,cal,plantilla,md
 ```
 
 ## Arrastrar una selección
@@ -567,7 +582,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r53-json-e2e.mjs  
 ## Importar y exportar tareas en JSON (ronda 54)
 
 En la cabecera del tablero, junto a «Varias tareas», «Importar» abre el diálogo de importar (cargado aparte): pegar en el
-cuadro, «Desde el portapapeles», «Desde un fichero» (.json, .txt) o arrastrar el fichero encima; vista previa con la
+cuadro, «Desde el portapapeles», «Desde un fichero» (.json, .csv, .txt) o arrastrar el fichero encima; vista previa con la
 columna a la que irá cada tarea y sus avisos, las que no se pueden leer y «Columna de destino» (la de cada tarea o una
 para todas). Se importan con un solo deshacer (que borra también las etiquetas creadas), historial en cada tarea,
 dependencias por título dentro del lote y hacia las que ya había, y responsable por id. Ctrl+V en el tablero con un JSON
@@ -577,9 +592,18 @@ caducada o con un 413 de un proxy por delante, el aviso de siempre. Con tarjetas
 «Exportar (N)»: «Descargar .json» (nombre `tareas-<proyecto>-<fecha>.json`, sin emails) y «Copiar»; lo descargado se
 vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» copia lo escrito, «Importar
 tarea» rellena el formulario (pregunta antes de sustituir y avisa de lo que no admite), desde un fichero y con Ctrl+V
-estricto fuera de un campo. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
-cabe, la barra de selección tiene «Exportar». En inglés y en modo oscuro. Misma base y servidor:
+estricto fuera de un campo. Ctrl+V de una tarea copiada (de otra instalación, con Markdown largo, tipo «Respuesta» y
+columna del proyecto) la importa entera con el foco en el título vacío, en cada selector, en un tipo, en un botón, en la
+fecha, en una zona vacía o en una caja con el formulario sin tocar; con algo escrito pregunta, y en otra caja se pega como
+texto; varias tareas avisan; desde el «+» de una columna manda la del JSON si existe (si no, la de la columna). Etiquetas
+(solo las del proyecto), color y enlace al crear, al importar (aviso de las etiquetas que no existen) y al copiar; con el
+selector de proyecto se quedan las etiquetas que existen en el otro. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
+cabe, la barra de selección tiene «Exportar». En inglés y en modo oscuro. De otros Kanban (`PART=otros`): un tablero de
+Trello por «Desde un fichero» («Formato detectado: Trello (tablero)», avisos de la archivada y del comentario, lista →
+columna por nombre o la primera, checklist → subtareas, etiqueta nueva, responsable por nombre), un CSV de Jira guardado
+en Windows-1252 (eñes bien leídas, dos columnas «Labels» juntas, referencia en la descripción) y una tarjeta de Trello
+pegada en «Nueva tarea». Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,movil,ingles,oscuro
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro,otros
 ```

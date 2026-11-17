@@ -52,11 +52,15 @@
 // («título», «fecha_limite», «Etiquetas»), fechas ISO completas o DD/MM/AAAA, prioridad en español o en inglés, subtareas
 // como textos sueltos («[x] Hecha»), etiquetas separadas por comas, el JSON dentro de un bloque ```json … ``` y sin el
 // marcador `format` si al menos trae un título. Para importar (parseTasksText) vale además una lista de tareas, varios
-// objetos seguidos (uno por línea, separados por líneas en blanco o por texto) y varios bloques ```json.
+// objetos seguidos (uno por línea, separados por líneas en blanco o por texto) y varios bloques ```json. Y, antes de todo
+// eso, lo exportado de otros Kanban (tablero o tarjeta de Trello, Jira, GitHub Issues, Asana o un CSV con cabecera): lo lee
+// lib/foreign-import/tasks.ts y da el mismo TaskJsonInput, con `source` (de dónde viene) y avisos.
 //
 // Ctrl+V sobre una tarea abierta (o en el tablero) es más estricto (strictJsonFormat): solo si el portapapeles es
 // exactamente un objeto JSON con su marcador `format`, sin nada alrededor.
 
+import { esT, type T } from "@/i18n/shared";
+import { readForeignTasks } from "./foreign-import/tasks";
 import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "./google-files";
 import { RECURRENCES, type RecurrenceRule } from "./recurrence-date";
 import { TASK_PRIORITIES, type TaskFieldKey, type TaskPriorityValue } from "./task-fields";
@@ -608,6 +612,12 @@ interface TasksTextParse {
   tooLong: boolean;
   /** Proyecto del envoltorio «pizarro.tasks», si lo hay. */
   project?: { name?: string; id?: string };
+  /** Si viene de otro Kanban (lib/foreign-import/tasks.ts): de dónde («Trello (tablero)», «CSV de Jira»…), ya traducido. */
+  source?: string;
+  /** Lo que no se importa de otro Kanban (comentarios, archivadas…), ya traducido. */
+  warnings: string[];
+  /** El formato de otro Kanban se ha reconocido pero no se puede leer (CSV sin filas…), ya traducido. */
+  error?: string;
 }
 
 /** Intentos de buscar el cierre de un `{` o `[` que no se cierra: cada uno recorre el resto del texto. */
@@ -711,12 +721,24 @@ function wrappedTasks(v: Record<string, unknown>): unknown[] | null {
 /**
  * Lee un texto con una o varias tareas, para importarlas: el envoltorio «pizarro.tasks», una lista de tareas, una sola
  * tarea, varios objetos seguidos (uno por línea, separados por líneas en blanco o por texto) o bloques ```json … ```.
- * Cada tarea se lee con la misma tolerancia que parseTaskJson. No lanza.
+ * Cada tarea se lee con la misma tolerancia que parseTaskJson. Antes, lo exportado de otros Kanban (Trello, Jira, GitHub,
+ * Asana o un CSV con cabecera: lib/foreign-import/tasks.ts), con `source` y sus avisos traducidos con `opts.t` (la zona,
+ * para pasar a día una fecha con hora). No lanza.
  */
-export function parseTasksText(raw: string): TasksTextParse {
-  const out: TasksTextParse = { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false };
+export function parseTasksText(raw: string, opts: { t?: T; timeZone?: string } = {}): TasksTextParse {
+  const out: TasksTextParse = { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false, warnings: [] };
   if (typeof raw !== "string") return out;
   if (raw.length > TASKS_TEXT_MAX_CHARS) return { ...out, tooLong: true };
+  const foreign = readForeignTasks(raw, { t: opts.t ?? esT, timeZone: opts.timeZone });
+  if (foreign) {
+    out.source = foreign.source;
+    out.warnings = foreign.warnings;
+    if (foreign.error) out.error = foreign.error;
+    out.total = foreign.tasks.length;
+    out.tooMany = out.total > TASKS_JSON_MAX;
+    out.tasks = foreign.tasks.slice(0, TASKS_JSON_MAX).map((task, i) => ({ n: i + 1, task, problems: [] }));
+    return out;
+  }
   const values = jsonValuesIn(raw, TASKS_JSON_MAX);
   // Cada elemento con el proyecto de su envoltorio «pizarro.tasks» (si salió de uno): las tareas sueltas de antes o de
   // después de un envoltorio no lo heredan, y dos envoltorios de proyectos distintos no se mezclan.

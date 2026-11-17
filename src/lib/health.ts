@@ -6,6 +6,8 @@ import { access, mkdir, statfs } from "node:fs/promises";
 
 const MB = 1024 * 1024;
 export const DEFAULT_MIN_FREE_MB = 200;
+/** Cuánto se guarda el resultado de /api/health (la ruta es pública y sin límite de ritmo). */
+export const HEALTH_CACHE_MS = 3_000;
 
 /** Espacio libre mínimo en el disco de subidas (HEALTH_MIN_FREE_MB; 0 desactiva la comprobación). */
 export function minFreeBytes(env: Record<string, string | undefined> = process.env): number {

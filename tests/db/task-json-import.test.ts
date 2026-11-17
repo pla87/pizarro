@@ -160,6 +160,38 @@ describe("importTasks", () => {
     expectFail(await importTasks(f.project.id, text, { columnId: other.columns.todo }), /La columna no existe/);
   });
 
+  test("tipos de serie entre idiomas: exportado en inglés («Bug fix», «Reply») se importa en español, y al revés", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const g = await makeProject({ members: [user] });
+    const fix = await makeTask(f, { title: "Arreglo" });
+    const reply = await makeTask(f, { title: "Contestación" });
+    await db.task.update({ where: { id: fix.id }, data: { kindId: "kind_correccion" } });
+    await db.task.update({ where: { id: reply.id }, data: { kindId: "kind_respuesta" } });
+    // Exporta con la interfaz en inglés: los tipos salen traducidos.
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    await loginAs(user);
+    const { text: english } = expectOk(await exportTasksJson(f.project.id, [fix.id, reply.id]));
+    assert.deepEqual((JSON.parse(english) as { tasks: { type: string }[] }).tasks.map((t) => t.type).sort(), ["Bug fix", "Reply"]);
+    // Importa en español.
+    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
+    await loginAs(user);
+    const es = expectOk(await importTasks(g.project.id, english));
+    assert.deepEqual(es.notices, []);
+    const kinds = async (projectId: string) => (await db.task.findMany({ where: { projectId, title: { in: ["Arreglo", "Contestación"] } }, orderBy: { title: "asc" } })).map((t) => t.kindId);
+    assert.deepEqual(await kinds(g.project.id), ["kind_correccion", "kind_respuesta"]);
+    // Al revés: exportado en español («Corrección», «Respuesta») e importado con la interfaz en inglés.
+    const { text: spanish } = expectOk(await exportTasksJson(f.project.id, [fix.id, reply.id]));
+    assert.deepEqual((JSON.parse(spanish) as { tasks: { type: string }[] }).tasks.map((t) => t.type).sort(), ["Corrección", "Respuesta"]);
+    const h = await makeProject({ members: [user] });
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    await loginAs(user);
+    const en = expectOk(await importTasks(h.project.id, spanish));
+    assert.deepEqual(en.notices, []);
+    assert.deepEqual(await kinds(h.project.id), ["kind_correccion", "kind_respuesta"]);
+    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
+  });
+
   test("dependencias: por título dentro del lote, por título en el proyecto, de otro proyecto ignorada sin aviso, sin círculos", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
@@ -296,9 +328,14 @@ describe("importar más de 1 MB por la ruta, avisos de etiquetas y rehacer con e
     const tooLong = await post(f.project.id, "x".repeat(5_000_001));
     assert.equal(tooLong.status, 413);
     assert.match(((await tooLong.json()) as { error: string }).error, /demasiado largo/);
-    const denied = (await (await post(other.project.id, '{"title":"Ajena"}')).json()) as { ok: boolean; error: string };
+    // Sin acceso al proyecto: 404 antes de ocupar un hueco de subida y de leer el cuerpo (aunque se declare enorme).
+    const deniedRes = await post(other.project.id, '{"title":"Ajena"}');
+    assert.equal(deniedRes.status, 404);
+    const denied = (await deniedRes.json()) as { ok: boolean; error: string };
     assert.equal(denied.ok, false);
     assert.match(denied.error, NOT_FOUND);
+    assert.equal((await post(other.project.id, "x", { "content-length": "14000000" })).status, 404);
+    assert.equal((await post("no válido", "x")).status, 404);
     logout();
     const anon = await post(f.project.id, '{"title":"Sin sesión"}');
     assert.equal(anon.status, 401);

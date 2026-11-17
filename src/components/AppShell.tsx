@@ -132,7 +132,9 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
       {drawerOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900">
+          {/* Cualquier enlace del menú lo cierra: el cierre por cambio de ruta no basta para los que se quedan en la
+              misma («Archivadas» es `/p/<id>?archivadas=1`, el tablero que ya se ve). */}
+          <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900" onClick={(e) => { if ((e.target as Element).closest?.("a[href]")) setDrawerOpen(false); }}>
             <button ref={drawerCloseRef} className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
               <X size={18} />
             </button>

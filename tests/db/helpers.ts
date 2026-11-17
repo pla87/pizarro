@@ -149,6 +149,9 @@ export async function makeTask(f: Fixture, opts: { title?: string; columnId?: st
   });
 }
 
+/** Exportar un proyecto como un administrador (con los emails de todas las personas citadas). */
+export const ADMIN_EXPORT = { userId: "", isAdmin: true };
+
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 /** La acción debe terminar bien; devuelve sus datos. */

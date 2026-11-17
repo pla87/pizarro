@@ -39,6 +39,9 @@ Cómo usar esta lista:
 | ☐ | 6.8 Dos instalaciones en el mismo móvil | Dos instalaciones de Pizarro |
 | ☐ | 6.9 Calendario suscrito en Google, Apple y Outlook | Cuentas de calendario |
 | ☐ | 6.10 Aviso de versión nueva | Publicar una versión |
+| ☐ | 7.1 Exportar tareas e importarlas en otro proyecto (y en otra instalación) | Dos proyectos; mejor dos instalaciones |
+| ☐ | 7.2 Pegar una tarea copiada en «Nueva tarea» y en otra tarea | Un proyecto |
+| ☐ | 7.3 Importar desde Trello, Jira, GitHub, Asana y CSV de otras herramientas | Cuentas o exportaciones reales de esas herramientas |
 
 ## 1. Baja de cuenta con Google
 
@@ -413,3 +416,48 @@ Una copia que no se ha restaurado nunca no cuenta como copia. Hazlo **en otra in
 **Qué debe pasar:** aparece el aviso de versión nueva, con un punto en el menú junto a **Administración**; **Ocultar este aviso** lo quita para esa versión. Tras actualizar, el aviso desaparece y la pestaña que estaba abierta se recarga sola al volver a ella (o muestra «Hay una versión nueva…»).
 
 **Si falla:** el servidor necesita salida a Internet hacia GitHub. Si tras actualizar aparece «Algo ha fallado», usa **Recargar**; esos errores quedan en Logs.
+
+## 7. Importar y exportar tareas
+
+### 7.1 Exportar tareas e importarlas en otro proyecto
+
+**Necesitas:** dos proyectos en tu instalación (mejor uno con tareas de verdad, con descripciones largas, etiquetas, subtareas y responsables); si puedes, una segunda instalación (por ejemplo, la del VPS de prueba).
+
+1. En el tablero, marca con su casilla unas cuantas tarjetas (prueba también con muchas, cientos si las tienes). El botón de la cabecera pasa a **Exportar (N)**: pulsa **Descargar .json**.
+2. Abre el otro proyecto, pulsa **Importar**, elige el fichero y mira la vista previa (columna a la que irá cada una y avisos). Pulsa **Importar N tareas**.
+3. Pulsa **Ctrl+Z** (o el botón de deshacer) y comprueba que desaparecen todas.
+4. Repite copiando en vez de descargar (**Exportar (N) → Copiar**) y pegando con **Ctrl+V** en el tablero del otro proyecto.
+5. Si tienes una segunda instalación, importa allí el mismo fichero, con la app en el otro idioma (inglés/español).
+
+**Qué debe pasar:** las tareas llegan con su título, descripción, tipo (también entre inglés y español), columna si existe con el mismo nombre, etiquetas (las que faltan se crean), subtareas y fecha. El responsable solo se asigna si existe una persona con ese nombre; el fichero nunca lleva emails. Tú eres el creador de las tareas importadas. Las dependencias con tareas de otro proyecto se ignoran. El deshacer quita también las etiquetas que creó.
+
+**Si falla:** busca `tasks.importTasks` en Logs. Si sale «Error inesperado» con un fichero grande, apunta su tamaño.
+
+### 7.2 Pegar una tarea en «Nueva tarea» y en otra tarea
+
+**Necesitas:** un proyecto con alguna tarea completa.
+
+1. Abre una tarea y pulsa **Copiar tarea** (o Ctrl+C sin texto seleccionado).
+2. Abre **Nueva tarea** (el cursor queda en el título) y pulsa **Ctrl+V** sin escribir nada. Repite con el foco en un desplegable o tras hacer clic en una zona vacía del formulario.
+3. Abre otra tarea y pulsa **Ctrl+V** fuera de un campo de texto; luego prueba **Importar tarea → Desde el portapapeles** y **Desde un fichero**.
+4. En el móvil, abre el detalle de una tarea y usa **⋯ → Copiar tarea / Importar**.
+
+**Qué debe pasar:** en «Nueva tarea» se rellena el formulario (título, descripción idéntica, tipo, columna, etiquetas que existan, color, enlace…) y avisa de lo que no admite; en otra tarea se sustituyen sus campos con un solo deshacer. Si el portapapeles tiene otra cosa (texto normal), Ctrl+V pega como siempre.
+
+**Si falla:** anota en qué campo estaba el cursor y qué navegador usas.
+
+### 7.3 Importar desde otras herramientas
+
+**Necesitas:** exportaciones reales (las de prueba usan formatos sacados de la documentación de cada herramienta; hay que confirmarlos con ficheros de verdad).
+
+1. **Trello:** exporta el JSON de un tablero (menú del tablero → Imprimir, exportar y compartir → Exportar como JSON) con listas, etiquetas con y sin nombre, checklists, fechas, miembros, tarjetas archivadas, comentarios y un adjunto. Importa en un proyecto con alguna columna del mismo nombre. Repite con un tablero grande (más de 5 MB) y con el `.json` de una sola tarjeta (abre la tarjeta y añade `.json` a la dirección; prueba también con `?list=true`).
+2. **Jira:** el CSV exportado con todos los campos (varias columnas «Labels», «Parent summary», «Due date») y, si puedes, el JSON de `/rest/api/3/issue/CLAVE`.
+3. **GitHub:** `gh issue list --state all --json title,body,labels,state,assignees,url` (o la API). Las cerradas y las pull requests no deben importarse.
+4. **Asana:** el CSV del proyecto y, si puedes, el JSON de la API.
+5. **Linear, Notion, ClickUp, Todoist, GitHub Projects:** el CSV de cada uno.
+6. **Planner y Monday:** guarda el Excel como CSV (prueba «CSV UTF-8» y «CSV delimitado por comas») e impórtalo.
+7. Repite alguno con la app en inglés y en el móvil.
+
+**Qué debe pasar:** la vista previa dice «Formato detectado: …» con la herramienta correcta; títulos, descripciones, estados (pasan a columnas del mismo nombre), etiquetas, fechas (sin desfases de un día) y subtareas salen bien; lo que no se trae (archivadas, comentarios, adjuntos subidos) se avisa.
+
+**Si falla:** guarda el fichero de prueba (sin datos personales, o con datos inventados) y anota la herramienta y la fecha de la exportación: así se puede ajustar el lector.

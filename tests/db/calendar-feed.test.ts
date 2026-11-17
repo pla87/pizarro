@@ -6,7 +6,8 @@ import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from ".
 import { GET } from "../../src/app/api/calendar/[file]/route";
 import { onRequestError } from "../../src/instrumentation";
 import { createProject } from "../../src/actions/projects";
-import { defaultFeedScope } from "../../src/lib/calendar-feed";
+import { cachedFeedIcs, defaultFeedScope, FEED_CACHE_MAX, FEED_CACHE_MS, feedCacheForTests, resolveFeedToken } from "../../src/lib/calendar-feed";
+import pg from "pg";
 import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
 import { appTimeZone } from "../../src/lib/board";
@@ -16,8 +17,12 @@ import { FEED_MAX_REPEATS } from "../../src/lib/calendar-feed-core";
 import { makeT } from "../../src/i18n/core";
 
 let n = 0;
-/** Pide la suscripción como lo haría un cliente de calendario (sin sesión), desde una IP propia de cada llamada. */
-async function fetchFeed(token: string, ip = `10.9.${Math.floor(n / 250)}.${(n++ % 250) + 1}`, headers: Record<string, string> = {}) {
+/**
+ * Pide la suscripción como lo haría un cliente de calendario (sin sesión), desde una IP propia de cada llamada. Salvo con
+ * `cached`, vacía antes la memoria del calendario (cachedFeedIcs) para ver el efecto de cada cambio al momento.
+ */
+async function fetchFeed(token: string, ip = `10.9.${Math.floor(n / 250)}.${(n++ % 250) + 1}`, headers: Record<string, string> = {}, cached = false) {
+  if (!cached) feedCacheForTests.clear();
   const res = await GET(new Request(`https://app.example.com/api/calendar/${token}.ics`, { headers: { "x-real-ip": ip, ...headers } }), { params: Promise.resolve({ file: `${token}.ics` }) });
   return { res, text: await res.text() };
 }
@@ -573,5 +578,128 @@ describe("tareas que se repiten en el calendario suscrito", () => {
     const sources = new Set(series.map((l) => l.replace(/-repeat.*$/, "")));
     assert.equal(sources.size, FEED_MAX_REPEATS);
     assert.equal(big.count, many + 1);
+  });
+});
+
+/** Cuenta las consultas SQL y los bytes que devuelven mientras corre `fn`. */
+async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; sql: string[]; bytes: number }> {
+  const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+  const orig = proto.query;
+  const sql: string[] = [];
+  let bytes = 0;
+  proto.query = function (this: unknown, ...args: unknown[]) {
+    const q = args[0];
+    sql.push(typeof q === "string" ? q : String((q as { text?: string } | undefined)?.text ?? ""));
+    const out = orig.apply(this, args);
+    if (out && typeof (out as Promise<unknown>).then === "function") {
+      return (out as Promise<{ rows?: unknown[] }>).then((res) => {
+        if (res?.rows?.length) bytes += JSON.stringify(res.rows).length;
+        return res;
+      });
+    }
+    return out;
+  };
+  try {
+    return { result: await fn(), sql, bytes };
+  } finally {
+    proto.query = orig;
+  }
+}
+
+describe("memoria del calendario suscrito", () => {
+  test("una segunda consulta antes de un minuto no rehace el calendario: solo comprueba el enlace", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f, { title: "Primera", dueDate: inDays(3) });
+    const { token } = await feedFor(user);
+    feedCacheForTests.clear();
+    const first = await fetchFeed(token, "10.5.5.1", {}, true);
+    assert.equal(first.res.status, 200);
+    assert.ok(first.text.includes(task.id));
+    const later = await makeTask(f, { title: "Segunda", dueDate: inDays(4) });
+    const again = await countQueries(() => fetchFeed(token, "10.5.5.1", {}, true));
+    assert.equal(again.result.res.status, 200);
+    // Solo la comprobación del token (el enlace y su persona; si acaso, la anotación del último uso que lanzó la primera).
+    const reads = again.sql.filter((s) => /^\s*SELECT/i.test(s));
+    assert.ok(reads.length >= 1 && reads.length <= 2, reads.join("\n"));
+    for (const s of reads) assert.match(s, /FROM "public"\."(CalendarFeed|User)"/);
+    assert.ok(!again.sql.some((s) => /"Task"|"Deliverable"|"Project"/.test(s)), "no rehace el calendario");
+    assert.equal(again.result.text, first.text, "el mismo calendario, ya hecho");
+    assert.equal(again.result.res.headers.get("etag"), first.res.headers.get("etag"));
+    // Con el mismo ETag, 304 también desde la memoria.
+    const notModified = await fetchFeed(token, "10.5.5.1", { "if-none-match": first.res.headers.get("etag")! }, true);
+    assert.equal(notModified.res.status, 304);
+    // Pasado el minuto (aquí, vaciando la memoria) se rehace y aparece la nueva.
+    assert.ok((await fetchFeed(token)).text.includes(later.id));
+  });
+
+  test("un enlace regenerado o desactivado da 404 aunque su calendario siga en la memoria", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { dueDate: inDays(2) });
+    const a = await feedFor(user);
+    feedCacheForTests.clear();
+    assert.equal((await fetchFeed(a.token, undefined, {}, true)).res.status, 200);
+    const b = await feedFor(user);
+    assert.equal((await fetchFeed(a.token, undefined, {}, true)).res.status, 404);
+    assert.equal((await fetchFeed(b.token, undefined, {}, true)).res.status, 200);
+    expectOk(await disableCalendarFeed());
+    assert.equal((await fetchFeed(b.token, undefined, {}, true)).res.status, 404);
+    // Usuario desactivado: también.
+    const c = await feedFor(user);
+    assert.equal((await fetchFeed(c.token, undefined, {}, true)).res.status, 200);
+    await db.user.update({ where: { id: user.id }, data: { active: false } });
+    assert.equal((await fetchFeed(c.token, undefined, {}, true)).res.status, 404);
+  });
+
+  test("consultas simultáneas del mismo enlace comparten la generación; caduca al minuto; el alcance cambia la clave", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { dueDate: inDays(2) });
+    const { token } = await feedFor(user, "ALL");
+    feedCacheForTests.clear();
+    const feed = (await resolveFeedToken(token))!;
+    const t0 = Date.now();
+    const [x, y, z] = await Promise.all([cachedFeedIcs(feed, t0), cachedFeedIcs(feed, t0), cachedFeedIcs(feed, t0 + 1000)]);
+    assert.ok(x === y && y === z, "una sola generación");
+    assert.notEqual(await cachedFeedIcs(feed, t0 + FEED_CACHE_MS), x, "caducado: se rehace");
+    expectOk(await setCalendarFeedScope("MINE"));
+    const mine = (await resolveFeedToken(token))!;
+    assert.equal(mine.scope, "MINE");
+    assert.notEqual(await cachedFeedIcs(mine), x);
+  });
+
+  test(`tope de ${FEED_CACHE_MAX} enlaces: se olvida el usado hace más tiempo`, async () => {
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    const real = (await resolveFeedToken(token))!;
+    feedCacheForTests.clear();
+    const fake = (i: number) => ({ ...real, tokenHash: `fake-${i}` });
+    const first = await cachedFeedIcs(fake(0));
+    const second = await cachedFeedIcs(fake(1));
+    for (let i = 2; i < FEED_CACHE_MAX; i++) await cachedFeedIcs(fake(i));
+    assert.equal(feedCacheForTests.size(), FEED_CACHE_MAX);
+    // Usar el 0 lo pone al día; al entrar uno más sale el 1, el más antiguo sin usar.
+    assert.equal(await cachedFeedIcs(fake(0)), first);
+    await cachedFeedIcs(fake(FEED_CACHE_MAX));
+    assert.equal(feedCacheForTests.size(), FEED_CACHE_MAX);
+    assert.equal(await cachedFeedIcs(fake(0)), first);
+    assert.notEqual(await cachedFeedIcs(fake(1)), second);
+    feedCacheForTests.clear();
+  });
+
+  test("descripciones largas: solo se lee su comienzo de la base", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const t1 = await makeTask(f, { title: "Larga", dueDate: inDays(2), recurrence: "WEEKLY" });
+    const long = `Inicio de la descripción. ${"palabra ".repeat(40_000)}`;
+    await db.task.update({ where: { id: t1.id }, data: { description: long } });
+    await db.deliverable.create({ data: { projectId: f.project.id, name: "Entrega larga", description: long, position: 1, dueDate: inDays(3) } });
+    const { token } = await feedFor(user);
+    const m = await countQueries(() => fetchFeed(token));
+    assert.equal(m.result.res.status, 200);
+    const unfolded = m.result.text.replace(/\r\n /g, "");
+    assert.ok(unfolded.includes("Inicio de la descripción. palabra"));
+    assert.ok(m.bytes < 40_000, `leídos ${m.bytes} bytes con descripciones de ${long.length}`);
   });
 });

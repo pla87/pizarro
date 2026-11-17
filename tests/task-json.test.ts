@@ -230,7 +230,7 @@ test("varias tareas: envoltorio, lista, líneas sueltas, bloques ```json y texto
 
   // Una sola tarea (lo que lee el detalle de la tarea) y nada.
   assert.equal(parseTasksText('{"format":"pizarro.task","dueDate":"2026-01-05"}').tasks.length, 1);
-  assert.deepEqual(parseTasksText("hola, sin JSON"), { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false });
+  assert.deepEqual(parseTasksText("hola, sin JSON"), { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false, warnings: [] });
 });
 
 test("varias tareas: topes de cantidad y de tamaño", () => {
