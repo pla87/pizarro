@@ -364,7 +364,12 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     // Posiciones iguales dentro de una columna: se separan lo mínimo conservando el orden del archivo.
     const taskPos = new Map<string, number>();
     const byColumn = new Map<string, typeof data.tasks>();
-    for (const x of data.tasks) byColumn.set(x.columnRef, [...(byColumn.get(x.columnRef) ?? []), x]);
+    // Con push (no copiando la lista en cada tarea): con decenas de miles de archivadas en una columna, copiarla era cuadrático.
+    for (const x of data.tasks) {
+      const list = byColumn.get(x.columnRef);
+      if (list) list.push(x);
+      else byColumn.set(x.columnRef, [x]);
+    }
     for (const list of byColumn.values()) {
       let last = -Infinity;
       for (const x of [...list].sort((a, b) => a.position - b.position)) {
