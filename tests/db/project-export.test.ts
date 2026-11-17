@@ -9,7 +9,7 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 import { crc32 } from "node:zlib";
 import sharp from "sharp";
-import { db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
+import { ADMIN_EXPORT, db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
 import { capTitle, freeProjectName, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
@@ -18,7 +18,8 @@ import { projectDataSchema, type ExportManifest, type ExportOptions, type Projec
 import { attachmentPath, documentPath, safeDownloadMime, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
 import { GET as exportRoute, POST as exportPost } from "../../src/app/api/projects/[projectId]/export/route";
-import { runNextTransferJob } from "../../src/lib/transfer-jobs";
+import { exportFileOf, runNextTransferJob } from "../../src/lib/transfer-jobs";
+import { openProjectArchive } from "../../src/lib/project-export/read";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pexport-"));
@@ -162,7 +163,7 @@ describe("exportar e importar un proyecto", () => {
   ] as ExportOptions[]) {
     test(`ida y vuelta idéntica (adjuntos: ${options.attachments}, alcance: ${options.scope})`, async () => {
       const { admin, projectId, member } = await richProject();
-      const built = await buildProjectExport(projectId, options, new Date("2026-11-11T10:00:00Z"));
+      const built = await buildProjectExport(projectId, options, ADMIN_EXPORT, new Date("2026-11-11T10:00:00Z"));
       const data = projectJsonOf(built);
       projectDataSchema.parse(data);
       // Contenido según las opciones.
@@ -186,7 +187,7 @@ describe("exportar e importar un proyecto", () => {
       assert.equal(summary.counts.tasks, data.tasks.length);
 
       // Reexportar lo importado da exactamente lo mismo (salvo el nombre y la fecha de exportación).
-      const again = await buildProjectExport(summary.projectId, options, new Date("2026-11-11T10:00:00Z"));
+      const again = await buildProjectExport(summary.projectId, options, ADMIN_EXPORT, new Date("2026-11-11T10:00:00Z"));
       assert.deepEqual(comparable(projectJsonOf(again)), comparable(data));
       // Mismas sumas de todos los ficheros (el de project.json difiere solo por el nombre).
       const sums = (m: ExportManifest) => ({ ...m, checksums: { ...m.checksums, "project.json": "" } });
@@ -211,7 +212,7 @@ describe("exportar e importar un proyecto", () => {
 
   test("el contenido y el estado del proyecto importado son los del original", async () => {
     const { admin, projectId, member } = await richProject();
-    const file = await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }));
+    const file = await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT));
     const s = await importProjectFile(file, asImporter(admin), { isPrivate: false });
     const p = await db.project.findUniqueOrThrow({
       where: { id: s.projectId },
@@ -268,7 +269,7 @@ describe("exportar e importar un proyecto", () => {
     await db.task.update({ where: { id: t1.id }, data: { description: `Mira ![captura](/api/attachments/${img.id}) y ![ajena](/api/attachments/cotroproyecto)` } });
     await db.taskComment.create({ data: { taskId: t1.id, authorId: admin.id, body: `Aquí: ![captura](/api/attachments/${img.id}?thumb=1)` } });
 
-    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" });
+    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT);
     const data = projectJsonOf(built);
     assert.ok(!JSON.stringify(data).includes(img.id), "el archivo no lleva ids de la base de datos");
     const exported = data.tasks.find((x) => x.title === "Tarea completa")!;
@@ -282,7 +283,7 @@ describe("exportar e importar un proyecto", () => {
     assert.ok(task.comments.some((c) => c.body === `Aquí: ![captura](/api/attachments/${imported.id}?thumb=1)`));
 
     // Sin adjuntos en el archivo, el texto queda como estaba.
-    const bare = projectJsonOf(await buildProjectExport(projectId, { attachments: false, scope: "board" }));
+    const bare = projectJsonOf(await buildProjectExport(projectId, { attachments: false, scope: "board" }, ADMIN_EXPORT));
     assert.match(bare.tasks.find((x) => x.title === "Tarea completa")!.description, new RegExp(`/api/attachments/${img.id}\\)`));
   });
 
@@ -291,7 +292,7 @@ describe("exportar e importar un proyecto", () => {
     const other = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [] });
     await makeTask(f, { title: "Una" });
-    const file = await writeExport(await buildProjectExport(f.project.id, { attachments: false, scope: "board" }));
+    const file = await writeExport(await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT));
     const a = await importProjectFile(file, asImporter(admin), { isPrivate: true });
     const b = await importProjectFile(file, asImporter(admin), { isPrivate: true });
     assert.equal(a.name, `${f.project.name} (importado)`);
@@ -339,7 +340,7 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     const data = program(minimal(sessions(100, 5)));
     const s = await importProjectFile(await craft({ ...data, project: { ...data.project, programVersion: 7 } }), asImporter(admin), { isPrivate: true });
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: s.projectId } })).programVersion, 7);
-    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" })).project.programVersion, 7);
+    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" }, ADMIN_EXPORT)).project.programVersion, 7);
     // Sin el dato (archivos anteriores), empieza en 0.
     const old = await importProjectFile(await craft(minimal()), asImporter(admin), { isPrivate: true });
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: old.projectId } })).programVersion, 0);
@@ -351,7 +352,7 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     const plan = { ...data, columns: data.columns.map((c) => ({ ...c, role: "AI_PLAN" as const, planCount: 4 })) };
     const s = await importProjectFile(await craft(plan), asImporter(admin), { isPrivate: true });
     assert.equal((await db.column.findFirstOrThrow({ where: { projectId: s.projectId } })).planCount, 4);
-    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" })).columns[0]!.planCount, 4);
+    assert.equal(projectJsonOf(await buildProjectExport(s.projectId, { attachments: false, scope: "all" }, ADMIN_EXPORT)).columns[0]!.planCount, 4);
     const old = await importProjectFile(await craft(minimal()), asImporter(admin), { isPrivate: true });
     assert.equal((await db.column.findFirstOrThrow({ where: { projectId: old.projectId } })).planCount, 0);
   });
@@ -364,7 +365,7 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     const html = Buffer.from("<!doctype html><h1>Tema 1</h1><script>alert(1)</script>");
     const doc = await db.projectDocument.create({ data: { projectId: f.project.id, name: "tema-1.html", mimeType: "text/html", size: html.length, kind: "HTML", createdById: admin.id } });
     await saveDocumentFile(doc.id, html);
-    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" });
+    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
     const data = projectJsonOf(built);
     projectDataSchema.parse(data);
     assert.deepEqual(data.tasks.flatMap((t) => t.links.map((l) => l.kind)), ["GOOGLE_SLIDES"]);
@@ -415,7 +416,7 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
 describe("importación cortada por un reinicio", () => {
   test("mientras dura, su registro anota cada fichero antes de escribirlo; al terminar desaparece", async () => {
     const { admin, projectId } = await richProject();
-    const file = await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }));
+    const file = await writeExport(await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT));
     const journal = path.join(process.env.UPLOAD_DIR!, "imports", "trabajo-prueba.import-journal");
     let during = "";
     const s = await importProjectFile(file, asImporter(admin), {
@@ -499,7 +500,7 @@ describe("importación cortada por un reinicio", () => {
 describe("importar: validación del archivo", () => {
   test("una versión del formato posterior se rechaza, y otro formato también", async () => {
     const { admin, projectId } = await richProject();
-    const built = await buildProjectExport(projectId, { attachments: false, scope: "board" });
+    const built = await buildProjectExport(projectId, { attachments: false, scope: "board" }, ADMIN_EXPORT);
     const withManifest = (patch: Record<string, unknown>) => [entry("manifest.json", Buffer.from(JSON.stringify({ ...json(built.entries[0]!.body), ...patch }))), ...built.entries.slice(1)];
     await assert.rejects(importProjectFile(await zipTo(withManifest({ formatVersion: 2 })), asImporter(admin), { isPrivate: false }), /más reciente/);
     await assert.rejects(importProjectFile(await zipTo(withManifest({ formatVersion: 0 })), asImporter(admin), { isPrivate: false }), /no es válida/);
@@ -511,7 +512,7 @@ describe("importar: validación del archivo", () => {
 
   test("una suma de control distinta (project.json o un fichero) o una entrada ajena se rechaza", async () => {
     const { admin, projectId } = await richProject();
-    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" });
+    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT);
     const before = await db.project.count();
     const reject = async (entries: StreamZipEntry[], re: RegExp) =>
       assert.rejects(importProjectFile(await zipTo(entries), asImporter(admin), { isPrivate: false }), re);
@@ -789,6 +790,54 @@ describe("permisos", () => {
     await new Promise((r) => setTimeout(r, 3500)); // el registro se escribe por lotes
     assert.ok(await db.appLog.count({ where: { action: "projects.export", projectId: f.project.id } }));
   });
+
+  test("emails: un miembro que exporta solo lleva el suyo; un administrador, los de todos; reimportar la del miembro funciona", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const member = await makeUser({ name: "Dueña Privada" });
+    const colleague = await makeUser({ name: "Compañero Citado" });
+    const priv = await makeProject({ visibility: "PRIVATE", owner: member, members: [colleague] });
+    const task = await makeTask(priv, { title: "Con gente", createdById: member.id });
+    await db.task.update({ where: { id: task.id }, data: { assigneeId: colleague.id, description: `Hola @[Compañero Citado](user:${colleague.id}) y @[Dueña Privada](user:${member.id})` } });
+    await db.taskComment.create({ data: { taskId: task.id, authorId: colleague.id, body: "Comentario del compañero" } });
+
+    // Por la ruta y el trabajo en segundo plano, como en la aplicación: el miembro exporta su proyecto privado.
+    await loginAs(member);
+    const res = await exportPost(new Request(`http://localhost/api/projects/${priv.project.id}/export`, { method: "POST", body: JSON.stringify({ attachments: "without", scope: "all" }), headers: { origin: "http://localhost", host: "localhost" } }), params(priv.project.id));
+    assert.equal(res.status, 202);
+    const { jobId } = await res.json();
+    assert.equal(await runNextTransferJob(), jobId);
+    const job = await db.projectTransferJob.findUniqueOrThrow({ where: { id: jobId } });
+    const exported = exportFileOf(job);
+    assert.ok(exported);
+    const archive = await openProjectArchive(exported.file);
+    const users = archive.data.users;
+    await archive.zip.close();
+    const byName = new Map(users.map((u) => [u.name, u.email]));
+    assert.equal(byName.get("Dueña Privada"), member.email, "su propio email sí");
+    assert.equal(byName.get("Compañero Citado"), "", "el de los demás, vacío");
+    assert.ok(!JSON.stringify(users).includes(colleague.email));
+
+    // Un administrador sí los lleva todos.
+    const asAdmin = projectJsonOf(await buildProjectExport(priv.project.id, { attachments: false, scope: "all" }, { userId: admin.id, isAdmin: true }));
+    assert.deepEqual(new Map(asAdmin.users.map((u) => [u.name, u.email])), new Map([["Dueña Privada", member.email], ["Compañero Citado", colleague.email]]));
+    // Y un miembro con la misma función, tampoco los ajenos (aunque llame directamente).
+    const asMember = projectJsonOf(await buildProjectExport(priv.project.id, { attachments: false, scope: "all" }, { userId: member.id, isAdmin: false }));
+    assert.equal(asMember.users.find((u) => u.name === "Compañero Citado")!.email, "");
+
+    // Reimportar como administrador la exportación del miembro: sin errores; el compañero queda como texto.
+    const s = await importProjectFile(exported.file, asImporter(admin), { isPrivate: false });
+    assert.deepEqual(s.unmappedUsers, [{ name: "Compañero Citado", email: "" }]);
+    assert.equal(s.mappedUsers, 1);
+    const t = await db.task.findFirstOrThrow({ where: { projectId: s.projectId }, include: { comments: { orderBy: { createdAt: "asc" } } } });
+    assert.equal(t.assigneeId, null);
+    assert.equal(t.createdById, member.id);
+    assert.equal(t.description, `Hola @Compañero Citado y @[Dueña Privada](user:${member.id})`);
+    const c = t.comments.find((x) => x.body === "Comentario del compañero")!;
+    assert.equal(c.authorId, null);
+    assert.equal(c.authorName, "Compañero Citado");
+    assert.ok(t.comments.some((x) => x.authorId === admin.id && /Compañero Citado/.test(x.body)), "nota con el responsable que tenía");
+    await db.projectTransferJob.deleteMany({ where: { id: jobId } });
+  });
 });
 
 describe("piezas del exportador", () => {
@@ -822,7 +871,7 @@ describe("piezas del exportador", () => {
     await db.taskEvent.createMany({ data: tasks.flatMap((t) => [{ taskId: t.id, projectId: f.project.id, userId: admin.id, userName: admin.name, code: "create", label: "Creó la tarea" }]) });
     for (const options of [{ attachments: false, scope: "board" }, { attachments: false, scope: "all" }] satisfies ExportOptions[]) {
       const est = await estimateProjectExport(f.project.id, options);
-      const built = await buildProjectExport(f.project.id, options);
+      const built = await buildProjectExport(f.project.id, options, ADMIN_EXPORT);
       const total = est.bytes + est.dataBytes;
       // La estimación no lee nada: basta con que acierte el orden de magnitud (±35 %).
       assert.ok(total > built.size * 0.65 && total < built.size * 1.35, `${options.scope}: estimado ${total} B, real ${built.size} B`);
@@ -837,7 +886,7 @@ describe("piezas del exportador", () => {
       const a = await db.taskAttachment.create({ data: { taskId: t.id, originalName: name, mimeType: "text/plain", isImage: false, size: 4 } });
       await saveRawAttachmentFile(a.id, Buffer.from("igual"));
     }
-    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" });
+    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
     assert.equal(built.manifest.counts.files, 1);
     assert.equal(built.manifest.counts.taskAttachments, 2);
     const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
@@ -845,7 +894,7 @@ describe("piezas del exportador", () => {
     // Un adjunto cuyo fichero ya no está se omite del archivo y se cuenta.
     const gone = await db.taskAttachment.create({ data: { taskId: t.id, originalName: "perdido.txt", mimeType: "text/plain", isImage: false, size: 4 } });
     assert.ok(gone.id);
-    const again = await buildProjectExport(f.project.id, { attachments: true, scope: "board" });
+    const again = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
     assert.equal(again.missingFiles, 1);
     assert.equal(again.manifest.counts.taskAttachments, 2);
   });
@@ -944,7 +993,7 @@ describe("importar: endurecimiento (ronda 15)", () => {
     const family = "👨‍👩‍👧‍👦";
     // Lo más largo que admite la aplicación: 76 familias (836 unidades), y 50 (550 unidades, que el importador cortaba a 210).
     for (const n of [76, 50]) await makeTask(f, { title: family.repeat(n) });
-    const built = await buildProjectExport(f.project.id, { attachments: false, scope: "all" });
+    const built = await buildProjectExport(f.project.id, { attachments: false, scope: "all" }, ADMIN_EXPORT);
     assert.deepEqual(projectJsonOf(built).tasks.map((x) => x.title).sort(), [family.repeat(50), family.repeat(76)]);
     const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
     const titles = (await db.task.findMany({ where: { projectId: s.projectId }, select: { title: true } })).map((x) => x.title).sort();
@@ -1009,7 +1058,7 @@ describe("importar: endurecimiento (ronda 15)", () => {
     const { projectId } = await richProject();
     const routines = await db.column.findFirstOrThrow({ where: { projectId, role: "ROUTINES" } });
     await db.task.updateMany({ where: { projectId, columnId: routines.id }, data: { waitingNotifiedAt: new Date("2026-05-05T05:05:05.000Z") } });
-    const built = await buildProjectExport(projectId, { attachments: false, scope: "all" });
+    const built = await buildProjectExport(projectId, { attachments: false, scope: "all" }, ADMIN_EXPORT);
     assert.ok(built.manifest.timeZone);
     const data = projectDataSchema.parse(projectJsonOf(built));
     const routineTask = data.tasks.find((x) => x.title === "Archivada")!;

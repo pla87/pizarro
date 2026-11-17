@@ -104,12 +104,23 @@ const isoOrNull = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
 /**
  * Reúne el proyecto y arma el plan del ZIP (nada se escribe todavía: las entradas con ficheros se leen del disco al emitirlas).
- * Sin comprobar permisos: quien llama ya lo hizo.
+ * Sin comprobar permisos: quien llama ya lo hizo. `exporter` decide qué emails salen: un administrador ve los de todos
+ * (Administración → Usuarios); cualquier otra persona, solo el suyo, y el resto van vacíos (al importar, esas personas no
+ * se emparejan: sus tareas quedan sin responsable y sus menciones como texto).
  */
-export async function buildProjectExport(projectId: string, options: ExportOptions, now: Date = new Date(), onFile?: () => void): Promise<ProjectExport> {
+export async function buildProjectExport(projectId: string, options: ExportOptions, exporter: ProjectExporter, now: Date = new Date(), onFile?: () => void): Promise<ProjectExport> {
   // Todas las lecturas ven la misma foto de la base de datos: una edición simultánea no deja referencias colgadas.
-  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, now, onFile), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
+  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, exporter, now, onFile), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
 }
+
+/** Quién exporta: de ello depende qué emails lleva el archivo. */
+export interface ProjectExporter {
+  userId: string;
+  isAdmin: boolean;
+}
+
+/** Email de una persona en el archivo: el de todos para un administrador; si no, solo el de quien exporta. */
+const exportedEmail = (exporter: ProjectExporter, user: { id: string; email: string }): string => (exporter.isAdmin || user.id === exporter.userId ? user.email : "");
 
 /** Referencia que debería existir; si no, el archivo saldría roto y es mejor fallar con un mensaje claro. */
 function must<T>(map: Map<string, T>, key: string): T {
@@ -118,7 +129,7 @@ function must<T>(map: Map<string, T>, key: string): T {
   return v;
 }
 
-async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, now: Date, onFile?: () => void): Promise<ProjectExport> {
+async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, exporter: ProjectExporter, now: Date, onFile?: () => void): Promise<ProjectExport> {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
@@ -376,7 +387,9 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   }
   const userList = users.entries().flatMap(([id, ref]) => {
     const u = userById.get(id);
-    return u ? [{ ref, name: u.name, email: u.email }] : [];
+    // Los emails ajenos solo si exporta un administrador (los demás no los ven en la aplicación). La clave se mantiene
+    // (vacía) para que las versiones anteriores lean el archivo.
+    return u ? [{ ref, name: u.name, email: exportedEmail(exporter, u) }] : [];
   });
 
   const data: ProjectExportData = {

@@ -5,7 +5,7 @@ import { mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, test } from "node:test";
-import { db, loginAs, logout, makeProject, makeTask, makeUser } from "./helpers";
+import { ADMIN_EXPORT, db, loginAs, logout, makeProject, makeTask, makeUser } from "./helpers";
 import { POST as ackPost } from "../../src/app/api/transfer-jobs/[id]/ack/route";
 import { GET as downloadRoute } from "../../src/app/api/transfer-jobs/[id]/download/route";
 import { GET as statusRoute } from "../../src/app/api/transfer-jobs/[id]/route";
@@ -37,7 +37,7 @@ beforeEach(async () => {
 async function validZip(): Promise<{ file: string; size: number }> {
   const f = await makeProject({ members: [] });
   await makeTask(f);
-  const built = await buildProjectExport(f.project.id, { attachments: false, scope: "all" });
+  const built = await buildProjectExport(f.project.id, { attachments: false, scope: "all" }, ADMIN_EXPORT);
   const file = path.join(work, `ok${++seq}.pizarro.zip`);
   const size = await writeProjectExport(built, file);
   return { file, size };

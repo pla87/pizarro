@@ -6,7 +6,8 @@
 //   files/<sha256>     → un fichero binario por contenido distinto (solo con la opción «Con adjuntos»)
 //
 // Las referencias («ref») son ids propios del archivo, asignados en orden: nunca son ids de la base de datos.
-// Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos.
+// Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos. El email de las
+// demás personas solo va si exporta un administrador; si no, va vacío y esa persona no se empareja (queda como texto).
 import { z } from "zod";
 import { COLUMN_ROLES, HEX_COLOR_RE, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS, TEMPLATE_KINDS } from "../constants";
 import { GOOGLE_FILE_KINDS } from "../google-files";
