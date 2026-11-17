@@ -4,6 +4,7 @@
 // servidor (lib/task-json-resolve.ts) con las mismas reglas de nombres.
 import { MAX_TASK_LABELS, PALETTE } from "./constants";
 import { ellipsize } from "./graphemes";
+import { generalKindNames } from "./kinds-localize";
 import { isHttpUrl, normalizeLinkUrl } from "./link-url";
 import { normalizeSearch } from "./search-accents";
 import { buildTaskJson, TASK_JSON_FIELD_LABEL as FIELD_LABEL, type TaskJsonField, type TaskJsonInput } from "./task-json";
@@ -20,12 +21,17 @@ const findByName = <T extends { name: string }>(list: readonly T[], name: string
   return list.find((x) => foldName(x.name) === want);
 };
 /**
- * Tipo por nombre: el que se ve (en inglés, los generales de serie van traducidos) o, si no, el guardado (`codeName`), como
- * hace el servidor. Así una tarea copiada en español («Respuesta») se importa con la interfaz en inglés («Reply»).
+ * Tipo por nombre, como el servidor (TaskJsonResolver.kindId): el que se ve (en inglés, los generales de serie van
+ * traducidos), el guardado (`codeName`) o, para los generales de serie, su nombre en el otro idioma. Así una tarea copiada
+ * en español («Respuesta», «Corrección») se importa con la interfaz en inglés («Reply», «Bug fix») y al revés.
  */
-const findKind = <T extends { name: string; codeName?: string }>(list: readonly T[], name: string): T | undefined => {
+const findKind = <T extends { id: string; name: string; codeName?: string }>(list: readonly T[], name: string): T | undefined => {
   const want = foldName(name);
-  return findByName(list, name) ?? list.find((x) => x.codeName !== undefined && foldName(x.codeName) === want);
+  return (
+    findByName(list, name) ??
+    list.find((x) => x.codeName !== undefined && foldName(x.codeName) === want) ??
+    list.find((x) => generalKindNames(x).some((n) => foldName(n) === want))
+  );
 };
 
 /** Un nombre del JSON dentro de un aviso: corto y sin saltos de línea. */

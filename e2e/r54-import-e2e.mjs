@@ -297,6 +297,9 @@ if (only.includes("pegar")) {
     info: { id: "tarea_inventada", project: "Otro", projectId: "proyecto_inventado", url: "https://otra.example.com/p/proyecto_inventado?task=tarea_inventada", createdAt: "2026-11-01T10:00:00.000Z", updatedAt: "2026-11-02T10:00:00.000Z", createdBy: "Persona Inventada" },
     ...extra,
   }, null, 2);
+  // El editor de la descripción de partida (otras suites lo cambian); más abajo, también con el editor de Markdown.
+  const [{ editorMode }] = await L.q(`SELECT "editorMode" FROM "User" WHERE id=$1`, [me.id]);
+  await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG' WHERE id=$1`, [me.id]);
   const s = await withClipboard();
   const { page } = s;
   const titleBox = (dlg) => dlg.getByRole("textbox", { name: "Título", exact: true });
@@ -333,7 +336,7 @@ if (only.includes("pegar")) {
     "la fecha límite": (d) => d.getByLabel("Fecha límite (opcional)").focus(),
     "una zona vacía (tras hacer clic en ella)": async (d) => { await d.getByText("Capturas y adjuntos").click(); },
     "la columna, tras cambiarla con el teclado": async (d) => { await d.getByLabel("Columna").focus(); await page.keyboard.press("ArrowDown"); },
-    "la descripción (formulario sin tocar)": (d) => d.locator("[contenteditable=true]").first().click(),
+    "la descripción (formulario sin tocar)": (d) => d.locator("[contenteditable=true], textarea[id$='-desc']").first().click(),
     "las subtareas (formulario sin tocar)": (d) => d.getByPlaceholder("Añadir subtarea…").focus(),
   };
   for (const [where, focus] of Object.entries(places)) {
@@ -344,6 +347,18 @@ if (only.includes("pegar")) {
     await L.eqEventually(`FOCO EN ${where.toUpperCase()}: Ctrl+V importa la tarea`, async () => (await state(dlg))[0], `Foco en ${where}`);
     await discard(dlg);
   }
+  // Con el editor de Markdown (una caja de texto): en la descripción sin tocar también, y la descripción llega idéntica.
+  await L.q(`UPDATE "User" SET "editorMode"='MARKDOWN' WHERE id=$1`, [me.id]);
+  await L.reload(page);
+  dlg = await openNew();
+  await setClip(page, copied("Con el editor de Markdown"));
+  await dlg.locator("textarea[id$='-desc']").click();
+  await page.keyboard.press("Control+v");
+  await L.eqEventually("MARKDOWN: Ctrl+V en la descripción sin tocar importa la tarea", async () => [...(await state(dlg)), await dlg.locator("textarea[id$='-desc']").inputValue() === DESCRIPTION], ["Con el editor de Markdown", COL.next, "Respuesta", true]);
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("MARKDOWN: se crea con la descripción idéntica", async () => (await L.dbTask("Con el editor de Markdown"))?.description === DESCRIPTION, true);
+  await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG' WHERE id=$1`, [me.id]);
+  await L.reload(page);
   // Con algo ya escrito: en el título vacío pregunta antes de sustituir; en otra caja se pega como texto.
   dlg = await openNew();
   await dlg.getByPlaceholder("Añadir subtarea…").fill("Paso escrito");
@@ -381,6 +396,7 @@ if (only.includes("pegar")) {
   await discard(dlg);
   L.assertNoErrors("pegar", [s]);
   await s.ctx.close();
+  await L.q(`UPDATE "User" SET "editorMode"=$2 WHERE id=$1`, [me.id, editorMode]);
 }
 
 // --- «Nueva tarea»: etiquetas, color y enlace -------------------------------------------------------------------------------

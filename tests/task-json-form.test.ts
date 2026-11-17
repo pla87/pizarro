@@ -145,3 +145,19 @@ test("copiar «Nueva tarea» lleva etiquetas (por nombre, en el orden del proyec
   const empty = newTaskFormJson({ title: "b", kindId: "k1", description: "", columnId: "c1", assigneeId: "", dueDate: "", deliverableId: "", recurrence: "NONE", recurrenceDay: null, subtasks: [], fields: EMPTY_FIELDS_FORM, labelIds: [], color: null, linkUrl: "" }, project);
   assert.deepEqual([empty.labels, empty.color, empty.link], [[], null, null]);
 });
+
+test("tipos de serie entre idiomas: el nombre en el otro idioma vale en el formulario y en la vista previa; renombrado, no", () => {
+  const es: FormProject = { ...project, kinds: [{ id: "kind_correccion", name: "Corrección" }, { id: "kind_respuesta", name: "Respuesta" }] };
+  const en: FormProject = { ...project, kinds: [{ id: "kind_correccion", name: "Bug fix", codeName: "Corrección" }, { id: "kind_respuesta", name: "Reply", codeName: "Respuesta" }] };
+  const kindOf = (p: FormProject, type: string) => {
+    const one = readOne(JSON.stringify({ format: "pizarro.task", title: "a", type }));
+    return [fillNewTaskForm(one.task, one.problems, p, 50, esT).form.kindId, importPreview(one.task, p, null, esT).notices];
+  };
+  assert.deepEqual(kindOf(es, "Bug fix"), ["kind_correccion", []]);
+  assert.deepEqual(kindOf(es, "reply"), ["kind_respuesta", []]);
+  assert.deepEqual(kindOf(en, "Corrección"), ["kind_correccion", []]);
+  assert.deepEqual(kindOf(en, "correccion"), ["kind_correccion", []]);
+  // Un tipo general que un administrador renombró ya no responde a los nombres de serie.
+  const renamed: FormProject = { ...project, kinds: [{ id: "kind_correccion", name: "Bugs" }] };
+  assert.deepEqual(kindOf(renamed, "Bug fix"), [undefined, ["tipo «Bug fix» (no existe)"]]);
+});

@@ -160,6 +160,38 @@ describe("importTasks", () => {
     expectFail(await importTasks(f.project.id, text, { columnId: other.columns.todo }), /La columna no existe/);
   });
 
+  test("tipos de serie entre idiomas: exportado en inglés («Bug fix», «Reply») se importa en español, y al revés", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const g = await makeProject({ members: [user] });
+    const fix = await makeTask(f, { title: "Arreglo" });
+    const reply = await makeTask(f, { title: "Contestación" });
+    await db.task.update({ where: { id: fix.id }, data: { kindId: "kind_correccion" } });
+    await db.task.update({ where: { id: reply.id }, data: { kindId: "kind_respuesta" } });
+    // Exporta con la interfaz en inglés: los tipos salen traducidos.
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    await loginAs(user);
+    const { text: english } = expectOk(await exportTasksJson(f.project.id, [fix.id, reply.id]));
+    assert.deepEqual((JSON.parse(english) as { tasks: { type: string }[] }).tasks.map((t) => t.type).sort(), ["Bug fix", "Reply"]);
+    // Importa en español.
+    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
+    await loginAs(user);
+    const es = expectOk(await importTasks(g.project.id, english));
+    assert.deepEqual(es.notices, []);
+    const kinds = async (projectId: string) => (await db.task.findMany({ where: { projectId, title: { in: ["Arreglo", "Contestación"] } }, orderBy: { title: "asc" } })).map((t) => t.kindId);
+    assert.deepEqual(await kinds(g.project.id), ["kind_correccion", "kind_respuesta"]);
+    // Al revés: exportado en español («Corrección», «Respuesta») e importado con la interfaz en inglés.
+    const { text: spanish } = expectOk(await exportTasksJson(f.project.id, [fix.id, reply.id]));
+    assert.deepEqual((JSON.parse(spanish) as { tasks: { type: string }[] }).tasks.map((t) => t.type).sort(), ["Corrección", "Respuesta"]);
+    const h = await makeProject({ members: [user] });
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    await loginAs(user);
+    const en = expectOk(await importTasks(h.project.id, spanish));
+    assert.deepEqual(en.notices, []);
+    assert.deepEqual(await kinds(h.project.id), ["kind_correccion", "kind_respuesta"]);
+    await db.user.update({ where: { id: user.id }, data: { locale: "ES" } });
+  });
+
   test("dependencias: por título dentro del lote, por título en el proyecto, de otro proyecto ignorada sin aviso, sin círculos", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });

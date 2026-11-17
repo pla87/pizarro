@@ -116,6 +116,21 @@ describe("getTaskJson", () => {
 });
 
 describe("pasteTaskJson", () => {
+  test("tipo de serie en el otro idioma: «Bug fix» pegado con la interfaz en español es «Corrección» (y «Respuesta» en inglés)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    await loginAs(user);
+    const es = expectOk(await paste(task.id, { format: "pizarro.task", type: "Bug fix" }));
+    assert.deepEqual(es.skipped, []);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).kindId, "kind_correccion");
+    await db.user.update({ where: { id: user.id }, data: { locale: "EN" } });
+    await loginAs(user);
+    const en = expectOk(await paste(task.id, { format: "pizarro.task", type: "Respuesta" }));
+    assert.deepEqual(en.skipped, []);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).kindId, "kind_respuesta");
+  });
+
   test("ida y vuelta: pega lo copiado en otra tarea, en una sola entrada que se deshace y se rehace de una vez", async () => {
     const { user, f, source, target } = await fullFixture();
     await loginAs(user);

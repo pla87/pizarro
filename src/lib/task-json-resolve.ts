@@ -10,7 +10,7 @@ import { db } from "./db";
 import { lockProject } from "./caps";
 import { listKinds } from "./board";
 import { projectUsersWhere } from "./access";
-import { localizeGeneralKind } from "./kinds-localize";
+import { generalKindNames, localizeGeneralKind } from "./kinds-localize";
 import { normalizeSearch } from "./search-accents";
 import { mentionsToPlain } from "./mentions";
 import { clampTitle } from "./title-clamp";
@@ -158,11 +158,18 @@ export class TaskJsonResolver {
     );
   }
 
-  /** Tipo por nombre (el traducido o el guardado). */
+  /**
+   * Tipo por nombre: el traducido, el guardado o, para los generales de serie, su nombre en el otro idioma (una tarea
+   * exportada con la interfaz en inglés trae «Bug fix» y se importa en español como «Corrección», y al revés).
+   */
   async kindId(name: string): Promise<string | undefined> {
     const kinds = await this.kinds();
     const want = foldName(name);
-    return (kinds.find((k) => foldName(localizeGeneralKind(k, this.locale).name) === want) ?? kinds.find((k) => foldName(k.name) === want))?.id;
+    return (
+      kinds.find((k) => foldName(localizeGeneralKind(k, this.locale).name) === want) ??
+      kinds.find((k) => foldName(k.name) === want) ??
+      kinds.find((k) => generalKindNames(k).some((n) => foldName(n) === want))
+    )?.id;
   }
   /** Columna por nombre. */
   async columnId(name: string): Promise<string | undefined> {
