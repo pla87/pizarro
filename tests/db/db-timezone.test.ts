@@ -1,6 +1,8 @@
-// Zona horaria de las conexiones: con la base (o el servidor) en otra zona, los NOW() de las consultas propias y de los
-// disparadores se guardaban en esa hora en columnas timestamp(3) sin zona, que Prisma lee como UTC (una o dos horas de
-// desfase en «archivar varias», el despliegue con archivo o la entrada en columna). Cada conexión fija ahora UTC.
+// Zona horaria: con la base (o el servidor) en otra zona, los NOW() de las consultas propias y de los disparadores se
+// guardaban en esa hora en columnas timestamp(3) sin zona, que Prisma lee como UTC (una o dos horas de desfase en
+// «archivar varias», el despliegue con archivo o la entrada en columna). Las consultas pasan ahora la hora desde la app y
+// el disparador la convierte a UTC. No se fija la zona en la conexión: un parámetro de arranque (`options`) lo rechazan
+// algunos poolers (PgBouncer) y la app no arrancaría.
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import pg from "pg";
@@ -28,7 +30,6 @@ after(async () => {
 
 const { db, expectOk, loginAs, makeProject, makeTask, makeUser } = await import("./helpers");
 const { archiveTasks, moveTask } = await import("../../src/actions/tasks");
-const { connectPgClient, utcSessionConfig } = await import("../../src/lib/pg-connect");
 
 /** ¿`d` está a menos de un minuto de ahora? (el desfase que se vigila es de una o dos horas). */
 const nearNow = (d: Date | null | undefined, label: string) => {
@@ -36,19 +37,13 @@ const nearNow = (d: Date | null | undefined, label: string) => {
   assert.ok(Math.abs(d.getTime() - Date.now()) < 60_000, `${label}: ${d.toISOString()} frente a ${new Date().toISOString()}`);
 };
 
-describe("zona horaria de las conexiones con la base en Europe/Madrid", () => {
+describe("fechas guardadas en UTC con la base en Europe/Madrid", () => {
   test("una conexión sin la configuración de la app sí ve la otra zona (la prueba tiene sentido)", async () => {
     const r = await admin("SELECT current_setting('TimeZone') AS tz");
     assert.equal(r.rows[0].tz, "Europe/Madrid");
   });
 
-  test("el pool de Prisma: la sesión va en UTC y NOW() coincide con la hora UTC", async () => {
-    const [row] = await db.$queryRaw<{ tz: string; now: Date }[]>`SELECT current_setting('TimeZone') AS tz, NOW()::timestamp(3) AS now`;
-    assert.equal(row!.tz, "UTC");
-    nearNow(row!.now, "NOW()");
-  });
-
-  test("archivar varias (NOW() en la consulta) y mover (disparador task_column_entered) guardan la hora UTC", async () => {
+  test("archivar varias (hora desde la app) y mover (disparador task_column_entered) guardan la hora UTC", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
     await loginAs(user);
@@ -61,25 +56,4 @@ describe("zona horaria de las conexiones con la base en Europe/Madrid", () => {
     nearNow((await db.task.findUniqueOrThrow({ where: { id: c.id } })).columnEnteredAt, "columnEnteredAt");
   });
 
-  test("las conexiones propias (copias, tareas de fondo) también, y se respeta el options de la URL", async () => {
-    const client = await connectPgClient(url, { label: "prueba" });
-    try {
-      const r = await client.query("SELECT current_setting('TimeZone') AS tz, current_setting('application_name') AS app");
-      assert.equal(r.rows[0].tz, "UTC");
-    } finally {
-      await client.end();
-    }
-    const withOptions = new URL(url);
-    withOptions.searchParams.set("options", "-c application_name=pz-prueba");
-    const cfg = utcSessionConfig(withOptions.toString());
-    assert.equal(cfg.options, undefined);
-    const c2 = new pg.Client(cfg);
-    await c2.connect();
-    try {
-      const r = await c2.query("SELECT current_setting('TimeZone') AS tz, current_setting('application_name') AS app");
-      assert.deepEqual(r.rows[0], { tz: "UTC", app: "pz-prueba" });
-    } finally {
-      await c2.end();
-    }
-  });
 });

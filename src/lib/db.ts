@@ -2,7 +2,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { PrismaClient } from "@/generated/prisma/client";
 import { dbConnectErrorMessage, dbPoolConfig } from "./db-pool";
-import { utcSessionConfig } from "./pg-connect";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -46,8 +45,7 @@ function createClient() {
   const { max, connectionTimeoutMillis, warnings } = dbPoolConfig();
   for (const w of warnings) console.warn(`[db] ${w}`);
   const pool = new LoggedPool({
-    // Sesión en UTC: los NOW() de las consultas, disparadores y valores por defecto, como las fechas que escribe Prisma.
-    ...utcSessionConfig(connectionString),
+    connectionString,
     max,
     connectionTimeoutMillis,
     // Por defecto pg cierra las conexiones inactivas a los 10 s y la siguiente petición paga

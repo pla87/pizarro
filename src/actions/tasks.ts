@@ -860,7 +860,7 @@ export async function archiveTasks(taskIds: string[]) {
     // Filas bloqueadas antes, en orden de id: el UPDATE solo las bloquearía en el orden en que las recorre (40P01).
     await db.$transaction(async (tx) => {
       await lockTaskRows(tx, active);
-      await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
+      await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = ${new Date()}, "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
     });
     const spawned = await spawnRecurrences(active, user.id);
     describeAction("Archivó {count}", { count: tasksN(active.length) }, { taskIds: active });

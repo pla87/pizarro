@@ -212,7 +212,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         await setTaskColumnPositions(moved, target.id, { client: tx });
       } else if (tasks.some((t) => !t.evergreen)) {
         // Se recuerda la columna de cada tarea para poder restaurarla en su sitio.
-        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
+        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = ${new Date()}, "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
