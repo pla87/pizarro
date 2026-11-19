@@ -360,4 +360,7 @@ export const board: Record<string, string> = {
   // «Nueva tarea»: color, enlace y etiquetas
   "Color (opcional)": "Color (optional)",
   "Enlace externo (opcional)": "External link (optional)",
+
+  // Detalle de tarea: columna derecha sin «(opcional)»
+  "Asignada a": "Assigned to",
 };
