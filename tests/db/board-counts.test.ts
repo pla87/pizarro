@@ -52,4 +52,23 @@ describe("recuentos de las tarjetas", () => {
     const created = expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, tasks: [{ title: "Uno", kindId: f.kindId }, { title: "Dos", kindId: f.kindId }] }));
     assert.deepEqual(created.map((t) => [t.title, t.commentCount, t.linkCount, t.hasDescription]), [["Uno", 0, 0, false], ["Dos", 0, 0, false]]);
   });
+
+  // Antes el tablero traía una fila por subtarea y por adjunto solo para contarlas; ahora son groupBy por tarea.
+  test("subtareas (hechas y total) y adjuntos (imágenes, ficheros y bytes): lo mismo en el tablero, por ids y en una sola", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const other = await makeProject({ members: [user] });
+    const a = await makeTask(f, { subtasks: ["s1", "s2", "s3"] });
+    const b = await makeTask(f, { position: 2000 });
+    const c = await makeTask(f, { position: 3000, subtasks: ["x"] });
+    const foreign = await makeTask(other, { subtasks: ["y", "z"] });
+    await db.subtask.updateMany({ where: { taskId: a.id, title: { in: ["s1", "s3"] } }, data: { done: true } });
+    const att = (taskId: string, isImage: boolean, size: number) => ({ taskId, originalName: `f${size}`, mimeType: isImage ? "image/webp" : "text/plain", isImage, size });
+    await db.taskAttachment.createMany({ data: [att(a.id, true, 100), att(a.id, true, 250), att(a.id, false, 7), att(c.id, false, 40), att(foreign.id, true, 9)] });
+    const pick = (t: Awaited<ReturnType<typeof loadBoardTask>>) => [t.subtaskTotal, t.subtaskDone, t.imageCount, t.fileCount, t.attachBytes];
+    const want = { [a.id]: [3, 2, 2, 1, 357], [b.id]: [0, 0, 0, 0, 0], [c.id]: [1, 0, 0, 1, 40] };
+    assert.deepEqual(Object.fromEntries((await loadBoardTasks(f.project.id)).map((t) => [t.id, pick(t)])), want);
+    for (const t of [a, b, c]) assert.deepEqual(pick(await loadBoardTask(t.id)), want[t.id]);
+    assert.deepEqual(Object.fromEntries((await loadBoardTasksByIds([c.id, foreign.id])).map((t) => [t.id, pick(t)])), { [c.id]: want[c.id], [foreign.id]: [2, 0, 1, 0, 9] });
+  });
 });

@@ -492,7 +492,8 @@ if (OG_ONLY) {
   process.exit(0);
 }
 
-const db = new Client({ connectionString: process.env.DATABASE_URL });
+// Sesión en UTC, como la app (src/lib/pg-connect.ts): los now() de los INSERT van a columnas timestamp sin zona.
+const db = new Client({ connectionString: process.env.DATABASE_URL, options: "-c TimeZone=UTC" });
 await db.connect();
 try {
   for (const lang of ["es", "en"]) {

@@ -148,4 +148,7 @@ export const portapapeles: Record<string, string> = {
   // Importar en «Nueva tarea»: etiquetas que no existen en el proyecto
   "etiqueta «{name}» (no existe en el proyecto)": "label “{name}” (doesn't exist in the project)",
   "{n} etiquetas más (no existen en el proyecto)": "{n} more labels (don't exist in the project)",
+  // Importar de Jira: incidencias resueltas
+  "1 incidencia resuelta no se importa.": "1 resolved issue is not imported.",
+  "{n} incidencias resueltas no se importan.": "{n} resolved issues are not imported.",
 };
