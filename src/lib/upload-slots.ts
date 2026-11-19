@@ -3,41 +3,106 @@
 // corta en cuanto supera el tope del proyecto (también sin Content-Length): las rutas de subida no pasan por el proxy
 // de Next (src/proxy.ts), así que nadie más pone un techo a lo que se recibe.
 
-const slots = ((globalThis as unknown as { __pzUploadSlots?: { active: number; waiting: (() => void)[] } }).__pzUploadSlots ??= { active: 0, waiting: [] });
+import { forgetUserActivity, noteUserActivity, recentlyActiveUsers } from "./user-activity";
+
+// Reparto entre personas: si hay más de una activa en los últimos 5 minutos (user-activity.ts; cuenta también quien tiene
+// una subida en curso o en cola), cada una tiene como mucho UNA subida a la vez y las demás suyas esperan en la cola; si
+// solo hay una, puede usar los MAX_UPLOADS_AT_ONCE huecos. La cola es por orden de llegada, pero una espera cuya persona
+// ya está en su tope no bloquea a las de detrás: el hueco que queda libre pasa a la primera que pueda usarlo (alguien que
+// llega después sin ninguna en curso adelanta a las de otra persona que ya tiene una).
+
+type Waiter = { userId: string; grant: () => void };
+type Slots = { active: number; byUser: Map<string, number>; waiting: Waiter[]; recheck: ReturnType<typeof setTimeout> | null };
+const slots: Slots = ((globalThis as unknown as { __pzUploadSlotsV2?: Slots }).__pzUploadSlotsV2 ??= { active: 0, byUser: new Map(), waiting: [], recheck: null });
 export const MAX_UPLOADS_AT_ONCE = 3;
+/** Subidas a la vez de una misma persona cuando hay más de una activa. */
+const MAX_UPLOADS_PER_USER_SHARED = 1;
 /** Cuánto espera una subida a que quede un hueco antes de rendirse (varias a la vez de una misma persona hacen cola). */
 const WAIT_MS = 60_000;
 
-function release() {
-  const next = slots.waiting.shift();
-  if (next) next(); // el hueco pasa directamente a la siguiente en cola
-  else slots.active--;
+/** Tope por persona ahora mismo, y cuándo caduca la actividad de las que solo cuentan por ella (para volver a mirar). */
+function perUserCap(now: number): { cap: number; nextExpiry: number | null } {
+  const recent = recentlyActiveUsers(now);
+  const busy = new Set<string>(slots.byUser.keys());
+  for (const w of slots.waiting) busy.add(w.userId);
+  const people = new Set<string>([...recent.keys(), ...busy]);
+  if (people.size <= 1) return { cap: MAX_UPLOADS_AT_ONCE, nextExpiry: null };
+  let nextExpiry: number | null = null;
+  for (const [id, until] of recent) if (!busy.has(id) && (nextExpiry === null || until < nextExpiry)) nextExpiry = until;
+  return { cap: MAX_UPLOADS_PER_USER_SHARED, nextExpiry };
+}
+
+function take(userId: string) {
+  slots.active++;
+  slots.byUser.set(userId, (slots.byUser.get(userId) ?? 0) + 1);
+}
+
+/** Da los huecos libres a las esperas que pueden usarlos, por orden de llegada. */
+function pump() {
+  if (slots.recheck) { clearTimeout(slots.recheck); slots.recheck = null; }
+  if (slots.waiting.length === 0) return;
+  const now = Date.now();
+  const { cap, nextExpiry } = perUserCap(now);
+  for (let i = 0; i < slots.waiting.length && slots.active < MAX_UPLOADS_AT_ONCE;) {
+    const w = slots.waiting[i]!;
+    if ((slots.byUser.get(w.userId) ?? 0) < cap) {
+      slots.waiting.splice(i, 1);
+      take(w.userId);
+      w.grant();
+    } else i++;
+  }
+  // Quedan esperas frenadas solo por el tope por persona: cuando caduque la actividad de alguien que no sube nada,
+  // puede que vuelva a haber una sola persona activa y se liberen sus huecos.
+  if (slots.waiting.length > 0 && slots.active < MAX_UPLOADS_AT_ONCE && nextExpiry !== null) {
+    slots.recheck = setTimeout(pump, Math.max(0, nextExpiry - now) + 1);
+    slots.recheck.unref?.();
+  }
+}
+
+function release(userId: string) {
+  slots.active--;
+  const n = (slots.byUser.get(userId) ?? 1) - 1;
+  if (n > 0) slots.byUser.set(userId, n);
+  else slots.byUser.delete(userId);
+  pump();
 }
 
 /**
- * Reserva un hueco de subida; si ya hay MAX_UPLOADS_AT_ONCE en curso, espera en cola hasta `waitMs`.
- * Devuelve la función que lo libera, o null si no quedó hueco a tiempo.
+ * Reserva un hueco de subida para `userId`; si no le toca ya (todos ocupados, o ya tiene las que le corresponden),
+ * espera en cola hasta `waitMs`. Devuelve la función que lo libera, o null si no quedó hueco a tiempo.
  */
-export async function acquireUploadSlot(waitMs = WAIT_MS): Promise<(() => void) | null> {
-  if (slots.active < MAX_UPLOADS_AT_ONCE) slots.active++;
-  else {
-    const got = await new Promise<boolean>((resolve) => {
-      const turn = () => { clearTimeout(timer); resolve(true); };
-      const timer = setTimeout(() => {
-        const i = slots.waiting.indexOf(turn);
-        if (i >= 0) slots.waiting.splice(i, 1);
-        resolve(false);
-      }, waitMs);
-      slots.waiting.push(turn);
-    });
-    if (!got) return null;
-  }
+export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS): Promise<(() => void) | null> {
+  noteUserActivity(userId);
+  const got = await new Promise<boolean>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const waiter: Waiter = { userId, grant: () => { if (timer) clearTimeout(timer); resolve(true); } };
+    slots.waiting.push(waiter);
+    pump(); // si le toca ya, grant se llama aquí mismo
+    if (!slots.waiting.includes(waiter)) return;
+    timer = setTimeout(() => {
+      const i = slots.waiting.indexOf(waiter);
+      if (i >= 0) slots.waiting.splice(i, 1);
+      resolve(false);
+      pump();
+    }, waitMs);
+  });
+  if (!got) return null;
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    release();
+    release(userId);
   };
+}
+
+/** Solo para las pruebas: vacía los huecos, la cola y la actividad anotada. */
+export function resetUploadSlots(): void {
+  if (slots.recheck) clearTimeout(slots.recheck);
+  slots.recheck = null;
+  slots.active = 0;
+  slots.byUser.clear();
+  slots.waiting.length = 0;
+  forgetUserActivity();
 }
 
 /** Longitud declarada del cuerpo; null si falta o no es un entero válido (algunos proxies la quitan: entonces se comprueba al leer). */

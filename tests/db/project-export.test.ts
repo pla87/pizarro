@@ -898,6 +898,53 @@ describe("piezas del exportador", () => {
     assert.equal(again.missingFiles, 1);
     assert.equal(again.manifest.counts.taskAttachments, 2);
   });
+
+  test("la foto de la base se cierra antes de leer los ficheros: un ALTER TABLE \"Task\" no espera a la exportación", async () => {
+    const { projectId } = await richProject();
+    let checked = 0;
+    // onFile se llama (y se espera) antes de calcular la huella de cada fichero.
+    const onFile = async () => {
+      if (checked++ > 0) return;
+      // Ninguna conexión queda con una transacción abierta mientras se leen los ficheros…
+      const [open] = await db.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() AND xact_start IS NOT NULL`;
+      assert.equal(open!.n, 0, "transacción de la exportación aún abierta");
+      // …y el candado que pide una migración con ALTER TABLE "Task" se concede en el acto (con la transacción abierta
+      // esperaría a que acabase la exportación; lock_timeout solo acota el fallo, no es una pausa).
+      await db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '10s'`);
+        await tx.$executeRawUnsafe(`LOCK TABLE "Task" IN ACCESS EXCLUSIVE MODE`);
+      });
+    };
+    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT, new Date(), onFile);
+    assert.ok(checked >= 6, `ficheros examinados: ${checked}`);
+    assert.equal(built.missingFiles, 0);
+    assert.equal(built.manifest.counts.taskAttachments, 2);
+  });
+
+  test("un adjunto que se borra del disco después de leer la base se omite y se cuenta, como si ya faltara", async () => {
+    const { projectId, t1, doc } = await richProject();
+    const atts = await db.taskAttachment.findMany({ where: { taskId: t1.id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+    let first = true;
+    const onFile = async () => {
+      if (!first) return;
+      first = false;
+      // Las filas ya se leyeron: se borran del disco el fichero de texto y el documento vivo.
+      const raw = atts.find((a) => !a.isImage)!;
+      await rm(attachmentPath(raw.id, "file"));
+      await rm(documentPath(doc.id));
+    };
+    const built = await buildProjectExport(projectId, { attachments: true, scope: "all" }, ADMIN_EXPORT, new Date(), onFile);
+    assert.equal(built.missingFiles, 2);
+    const data = projectJsonOf(built);
+    assert.deepEqual(data.tasks.find((t) => t.title === "Tarea completa")!.attachments.map((a) => a.originalName), ["captura.png"]);
+    assert.deepEqual(data.documents, []);
+    assert.equal(data.documentsTrash!.length, 1);
+    assert.equal(built.manifest.counts.taskAttachments, 1);
+    // El archivo sigue siendo válido y se importa.
+    const admin = await makeUser({ role: "ADMIN" });
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: true });
+    assert.equal(s.counts.taskAttachments, 1);
+  });
 });
 
 describe("importar: endurecimiento (ronda 15)", () => {
