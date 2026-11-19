@@ -15,6 +15,9 @@ import { createResetLink } from "../../src/lib/reset-link";
 import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
 import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
+import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
+import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
+import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
 
 describe("miembros de proyectos privados", () => {
   test("un miembro añade y quita miembros; quien no lo es recibe «no encontrado»", async () => {
@@ -333,5 +336,105 @@ describe("enlace de restablecimiento sin email", () => {
     // Un fallo (usuario desconocido) no deja rastro.
     await createResetLink("nadie@example.com", { appUrl: "https://app.example.com" });
     assert.equal(await db.appLog.count({ where: { action: "auth.resetLinkCli" } }), 2);
+  });
+});
+
+describe("accesos a medio completar (segundo paso pendiente) al cambiar la contraseña", () => {
+  const halfDone = (userId: string) => db.loginChallenge.count({ where: { userId, kind: { in: ["LOGIN", "SETUP"] } } });
+  /** Lo que lanza redirect() (stub de next/navigation): la URL de destino. */
+  const redirectTo = async (fn: () => Promise<unknown>): Promise<string> => {
+    try {
+      await fn();
+    } catch (e) {
+      const digest = String((e as { digest?: string }).digest ?? "");
+      if (digest.startsWith("NEXT_REDIRECT;")) return digest.split(";")[2]!;
+      throw e;
+    }
+    throw new Error("no ha redirigido");
+  };
+
+  /**
+   * Dos navegadores a medio entrar en la cuenta (contraseña ya comprobada): uno en el segundo paso (LOGIN) y otro que
+   * ya confirmó el alta del método y solo le falta abrir la sesión (SETUP confirmado). Devuelve las cookies de cada uno.
+   */
+  async function twoPending(userId: string) {
+    logout();
+    await startChallenge(userId, "LOGIN");
+    const loginCookie = saveSession();
+    // startChallenge deja uno por persona: el segundo se crea a mano, con su propia cookie.
+    const token = newToken();
+    await db.loginChallenge.create({ data: { userId, kind: "SETUP", tokenHash: hashAuthToken(token), confirmed: true, expiresAt: new Date(Date.now() + 10 * 60_000) } });
+    const setupCookie = new Map([[CHALLENGE_COOKIE, token]]);
+    restoreSession(setupCookie);
+    assert.equal((await readChallenge())?.kind, "SETUP");
+    restoreSession(loginCookie);
+    assert.equal((await readChallenge())?.kind, "LOGIN");
+    assert.equal(await halfDone(userId), 2);
+    return { loginCookie, setupCookie };
+  }
+
+  /** Ninguno de los dos puede terminar de entrar: ni el código del segundo paso ni «Continuar» tras los códigos. */
+  async function cannotFinish(userId: string, c: Awaited<ReturnType<typeof twoPending>>) {
+    assert.equal(await halfDone(userId), 0);
+    restoreSession(c.loginCookie);
+    assert.equal(await readChallenge(), null);
+    const form = new FormData();
+    form.set("code", "123456");
+    assert.equal(await redirectTo(() => verifyLoginCode({}, form)), "/login?error=twofactor_expired");
+    restoreSession(c.setupCookie);
+    assert.equal(await readChallenge(), null);
+    assert.equal(await redirectTo(() => finishSetup()), "/login");
+    assert.equal(await db.session.count({ where: { userId } }), 0);
+    logout();
+  }
+
+  test("forzar el cambio de contraseña anula los accesos a medio completar", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser({ role: "ADMIN" });
+    const c = await twoPending(target.id);
+    await loginAs(admin);
+    expectOk(await forcePasswordChange(target.id, { copyLink: true }));
+    await cannotFinish(target.id, c);
+  });
+
+  test("restablecer la contraseña con el enlace también los anula", async () => {
+    const target = await makeUser({ role: "ADMIN" });
+    const c = await twoPending(target.id);
+    const token = await issueAuthToken(target.id, "PASSWORD_RESET");
+    logout();
+    expectOk(await resetPassword(token, "clave-restablecida-segura-1"));
+    await cannotFinish(target.id, c);
+  });
+
+  test("cambiarla desde la app (applyNewPassword), desactivar la cuenta o desvincular Google, igual", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const a = await makeUser({ role: "ADMIN" });
+    const ca = await twoPending(a.id);
+    await applyNewPassword(a.id, await hashPassword("una-clave-nueva-larga-2"), { notice: false });
+    await cannotFinish(a.id, ca);
+
+    const b = await makeUser();
+    const cb = await twoPending(b.id);
+    await loginAs(admin);
+    expectOk(await updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: false }));
+    await cannotFinish(b.id, cb);
+
+    const g = await makeUser();
+    await db.user.update({ where: { id: g.id }, data: { googleSub: `google-sub-${g.id}` } });
+    const cg = await twoPending(g.id);
+    await loginAs(admin);
+    expectOk(await usersActions.unlinkGoogle(g.id));
+    await cannotFinish(g.id, cg);
+  });
+
+  test("los de otras personas no se tocan", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    const other = await makeUser({ role: "ADMIN" });
+    await twoPending(other.id);
+    await loginAs(admin);
+    expectOk(await forcePasswordChange(target.id, { copyLink: true }));
+    assert.equal(await halfDone(other.id), 2);
+    logout();
   });
 });

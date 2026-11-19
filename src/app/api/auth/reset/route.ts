@@ -12,6 +12,10 @@ export const dynamic = "force-dynamic";
 export function GET(req: Request) {
   // Un enlace desde otro sitio no debe poder cerrarle la sesión a nadie; los de las pantallas de error son del mismo origen.
   if (req.headers.get("sec-fetch-site") === "cross-site") return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
+  // Solo al navegar a la página (el enlace de las pantallas de error): una <img>, un fetch o un <script> que apunten aquí,
+  // aunque sean del mismo origen (una imagen de Markdown con «..» en la ruta), no deben cerrar la sesión de quien mira.
+  const dest = req.headers.get("sec-fetch-dest");
+  if (dest && dest !== "document") return new Response(null, { status: 403, headers: { "Cache-Control": "no-store" } });
   // Ruta relativa: detrás de un proxy la URL interna del servidor no es la que ve el navegador.
   const headers = new Headers({ Location: "/login", "Cache-Control": "no-store" });
   for (const c of clearAuthCookieHeaders()) headers.append("Set-Cookie", c);

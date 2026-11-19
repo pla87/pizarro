@@ -5,6 +5,15 @@
 const ATTACHMENT_REF = /\/api\/attachments\/([A-Za-z0-9_-]+)/g;
 
 /**
+ * ¿Es la dirección de un adjunto de la app (`/api/attachments/<id>`, con consulta opcional como `?thumb=1`)? Sin «..»,
+ * «%2e» ni más segmentos: la ruta queda fija. Comprobar solo el prefijo dejaba pasar `/api/attachments/../auth/reset`,
+ * que el navegador normaliza y pide desde el mismo origen al pintar la imagen.
+ */
+export function isAttachmentSrc(src: unknown): src is string {
+  return typeof src === "string" && /^\/api\/attachments\/[A-Za-z0-9_-]{1,40}(?:\?[^#\s]*)?$/.test(src);
+}
+
+/**
  * Cambia en `text` cada `/api/attachments/<id>` cuyo id está en `map` por el id nuevo (con lo que lleve detrás:
  * `?thumb=1`, el cierre del enlace…). Los ids que no están en el mapa (adjuntos de otra tarea) se dejan como están.
  */
