@@ -68,6 +68,8 @@ type Notify = typeof notifyTask;
  */
 export async function deliverDueNotices(now: Date = new Date(), notify: Notify = notifyTask): Promise<number> {
   let sent = 0;
+  let failed = 0;
+  let lastError = "";
   const claimUntil = new Date(now.getTime() + DUE_NOTICE_CLAIM_MS);
   for (;;) {
     const rows = await db.$queryRaw<ClaimedNotice[]>`
@@ -87,11 +89,17 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
       } catch (err) {
         // Se queda reclamada: se reintenta al pasar DUE_NOTICE_CLAIM_MS.
         console.error("[due-notices]", err);
+        failed++;
+        lastError = err instanceof Error ? err.message : String(err);
       }
     }
     if (rows.length < BATCH) break;
   }
   if (sent) logEvent({ category: "notify", action: "notify.dueGrouped", message: `${sent} aviso(s) de cambio de fecha enviados tras esperar`, details: { count: sent } });
+  // Un solo error por pasada en el registro (además del console.error de cada fallo), para verlo en Administración → Logs.
+  if (failed) {
+    logEvent({ level: "error", category: "notify", action: "notify.dueFailed", message: `${failed} aviso(s) de cambio de fecha no se pudieron enviar (se reintentan pasados unos minutos): ${lastError}`, details: { count: failed, lastError } });
+  }
   return sent;
 }
 

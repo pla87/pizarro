@@ -29,6 +29,8 @@ export async function POST(req: Request) {
   // y su error es justo el que hay que ver), con un límite más estricto por IP y un cuerpo más pequeño.
   const user = await getCurrentUser().catch(() => null);
   if (!rateLimit(`client-errors:${user ? "u" : "anon"}:${rateIp(ip)}`, user ? 20 : 10, 60_000)) return new Response(null, { status: 429 });
+  // Y un tope global sin sesión (muchas IP distintas no deben llenar los logs), antes de leer el cuerpo.
+  if (!user && !rateLimit("client-errors:anon:all", 120, 60_000)) return new Response(null, { status: 429 });
   const max = user ? 16_384 : ANON_MAX_BODY;
   const declared = declaredLength(req.headers);
   if (declared !== null && declared > max) return new Response(null, { status: 413 });

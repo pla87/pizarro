@@ -471,6 +471,18 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
   const at = () => new Date().toISOString();
   const runs: ExternalRun[] = [];
   try {
+    // Sin `force`, si todos los destinos ya tienen subida la última copia local (lo normal en cada pasada), no hay nada
+    // que hacer: se sale sin descifrar el manifiesto ni listar el almacén local (mismo criterio que el bucle de abajo).
+    if (!opts.force) {
+      const stem = (await listStems(localDestination(), { sizes: false })).find((s) => s.hasManifest)?.stem;
+      if (!stem) return [];
+      const status = await readStatus();
+      const done = (d: BackupDestination) => {
+        const prev = status.external?.[d.id];
+        return prev?.lastOkFile === stem && prev.last?.ok === true;
+      };
+      if (destinations.every(done)) return [];
+    }
     const latest = await latestLocalManifest(key);
     if (!latest) return [];
     const { manifest, bytes } = latest;

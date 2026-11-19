@@ -109,38 +109,41 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     : {};
   // También las tareas con rango que terminan después del mes mostrado pero empiezan dentro (solo si el proyecto tiene fecha de inicio).
   const overlapsEnd: Prisma.TaskWhereInput = { project: { AND: [projectWhere, { taskFields: { has: "startDate" } }] }, archivedAt: null, startDate: { lte: range.lte }, dueDate: { gt: range.lte } };
-  const rows = await db.task.findMany({
-    where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
-    take: MAX_TASKS,
-    orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      dueDate: true,
-      startDate: true,
-      project: { select: { id: true, name: true, taskFields: true } },
-      kind: { select: { id: true, name: true, color: true } },
-      column: { select: { isDone: true } },
-    },
-  });
+  // Las tareas del mes y las que se repiten no dependen una de otra: las dos consultas en paralelo.
+  const [rows, repeatRows] = await Promise.all([
+    db.task.findMany({
+      where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
+      take: MAX_TASKS,
+      orderBy: [{ dueDate: "asc" }, { project: { position: "asc" } }, { position: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        dueDate: true,
+        startDate: true,
+        project: { select: { id: true, name: true, taskFields: true } },
+        kind: { select: { id: true, name: true, color: true } },
+        column: { select: { isDone: true } },
+      },
+    }),
 
-  // Apariciones futuras previstas de las tareas que se repiten y aún no han dado la siguiente (las terminadas ya la dieron o
-  // no la darán; las archivadas tampoco). Solo con fecha límite: sin ella la fecha de la siguiente depende de cuándo se termine.
-  // Solo se prevén días posteriores a hoy y a la fecha límite, dentro de la cuadrícula visible.
-  const repeatRows = await db.task.findMany({
-    where: { AND: [{ project: projectWhere, archivedAt: null, column: { isDone: false }, recurrence: { not: "NONE" }, recurrenceNext: { is: null }, dueDate: { not: null, lt: range.lte } }, personWhere] },
-    take: MAX_REPEAT_SOURCES,
-    orderBy: [{ dueDate: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      dueDate: true,
-      recurrence: true,
-      recurrenceDay: true,
-      project: { select: { id: true, name: true } },
-      kind: { select: { id: true, name: true, color: true } },
-    },
-  });
+    // Apariciones futuras previstas de las tareas que se repiten y aún no han dado la siguiente (las terminadas ya la dieron o
+    // no la darán; las archivadas tampoco). Solo con fecha límite: sin ella la fecha de la siguiente depende de cuándo se termine.
+    // Solo se prevén días posteriores a hoy y a la fecha límite, dentro de la cuadrícula visible.
+    db.task.findMany({
+      where: { AND: [{ project: projectWhere, archivedAt: null, column: { isDone: false }, recurrence: { not: "NONE" }, recurrenceNext: { is: null }, dueDate: { not: null, lt: range.lte } }, personWhere] },
+      take: MAX_REPEAT_SOURCES,
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        dueDate: true,
+        recurrence: true,
+        recurrenceDay: true,
+        project: { select: { id: true, name: true } },
+        kind: { select: { id: true, name: true, color: true } },
+      },
+    }),
+  ]);
   const locale = await getLocale();
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
   const repeats: CalendarRepeat[] = [];
