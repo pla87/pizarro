@@ -72,7 +72,7 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
         </div>
       )}
       {!searching ? (
-        <button type="button" className="btn-secondary mt-1 w-full justify-center py-1 text-xs" onClick={() => setSearching(true)} aria-label={blocked ? t("Cambiar la tarea que bloquea") : t("Marcar como bloqueada por otra tarea")}>
+        <button type="button" className={`btn-secondary w-full justify-center py-1 text-xs${blocked ? " mt-1" : ""}`} onClick={() => setSearching(true)} aria-label={blocked ? t("Cambiar la tarea que bloquea") : t("Marcar como bloqueada por otra tarea")}>
           {blocked ? t("Cambiar…") : t("Elegir tarea…")}
         </button>
       ) : (

@@ -15,7 +15,6 @@ export const wip: Record<string, string> = {
   "Puso un límite de {n} tarjetas a la columna «{name}»": "Set a limit of {n} cards on the column «{name}»",
   // Tareas bloqueadas
   "Bloqueada por": "Blocked by",
-  "Bloqueada por (opcional)": "Blocked by (optional)",
   "Bloqueada por: {title}": "Blocked by: {title}",
   "Abrir la tarea que bloquea": "Open the blocking task",
   "(terminada)": "(done)",
