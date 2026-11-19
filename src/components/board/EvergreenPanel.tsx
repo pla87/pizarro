@@ -1,6 +1,6 @@
 "use client";
 
-import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronUp, GripVertical, Loader2, Plus } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
@@ -13,6 +13,7 @@ import { hasFiles } from "./upload";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
+import { draggingCard } from "./nearCards";
 
 /** Prefijo del id del droppable del panel (el resto es el id de su columna: la de la release o una de plan para IA). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -30,6 +31,17 @@ const storageKey = (projectId: string, columnId?: string) => `pizarro:evergreen-
 const listeners = new Set<() => void>();
 /** Respaldo en memoria si localStorage no está disponible. */
 const memory = new Map<string, boolean>();
+/** Suscripción al estado guardado: la misma función siempre (una nueva en cada dibujo hacía que React se volviera a suscribir). */
+function subscribeStored(cb: () => void): () => void {
+  listeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    listeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+const cardDragActive = () => draggingCard.get() !== null;
+const notDragging = () => false;
 
 /**
  * Panel al pie de la columna de la release con las tareas «siempre en la release» (evergreen), o de una columna de plan
@@ -42,14 +54,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   const key = storageKey(project.id, kind === "plan" ? columnId : undefined);
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      window.addEventListener("storage", cb);
-      return () => {
-        listeners.delete(cb);
-        window.removeEventListener("storage", cb);
-      };
-    },
+    subscribeStored,
     () => {
       try {
         return localStorage.getItem(key) === "1";
@@ -63,7 +68,9 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   // Arrastrar una tarjeta sobre el panel: se suelta aquí para hacerla fija y, tras una pausa, se abre solo
   // (como una carpeta con resorte). La apertura es temporal: se pliega al terminar el arrastre.
   const { setNodeRef, isOver } = useDroppable({ id: EVERGREEN_DROPPABLE_PREFIX + columnId });
-  const dragging = useDndContext().active !== null;
+  // ¿Hay un arrastre de tarjeta en curso? Del almacén que pone el tablero al empezar y al terminar (nearCards.ts), y no de
+  // useDndContext: ese contexto cambia en cada movimiento del puntero y redibujaba el panel en cada uno.
+  const dragging = useSyncExternalStore(draggingCard.subscribe, cardDragActive, notDragging);
   const [sprung, setSprung] = useState(false);
   // Archivo del escritorio sobre la barra plegada más de un segundo: se abre para poder soltarlo en una tarea concreta.
   const [fileSprung, setFileSprung] = useState(false);
@@ -90,9 +97,16 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   }, [fileSprung]);
   const open = stored || (sprung && dragging) || fileSprung;
   const hovering = isOver && dragging;
+  // Filas del panel montadas de nuevo tras cada arrastre (`round` va en su key). Una fija que se arrastra sobre una lista
+  // aparece allí como tarjeta ordenable con su mismo id, y al volver al panel (o soltarla) esa tarjeta se desmonta y borra
+  // de dnd-kit el registro del id, que era también el de la fila: la fila ya no se podía volver a arrastrar hasta recargar.
+  const [round, setRound] = useState(0);
   useEffect(() => {
     if (!dragging) return;
-    return () => setSprung(false); // al terminar el arrastre vuelve a plegarse
+    return () => {
+      setSprung(false); // al terminar el arrastre vuelve a plegarse
+      setRound((n) => n + 1);
+    };
   }, [dragging]);
   useEffect(() => {
     if (!hovering || open) return;
@@ -147,7 +161,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
-          {taskIds.map((id) => <EvergreenCard key={id} id={id} plan={kind === "plan"} />)}
+          {taskIds.map((id) => <EvergreenCard key={`${id}:${round}`} id={id} plan={kind === "plan"} />)}
           {/* Único hueco que acepta archivos (tarea fija nueva): el de debajo de las filas; entre filas no hace nada. */}
           <div
             data-file-zone

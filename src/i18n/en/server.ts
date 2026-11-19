@@ -311,4 +311,6 @@ export const server: Record<string, string> = {
   "Versión no válida.": "Invalid version.",
   "Elige una plantilla o un ejemplo, no los dos.": "Choose a template or an example, not both.",
   "El ejemplo ya no existe.": "The example no longer exists.",
+  // Copia con Ctrl soltada en el panel de fijas (ronda 55)
+  "Duplicó «{title}» como fija en «{col}»": "Duplicated “{title}” as pinned in “{col}”",
 };
