@@ -166,8 +166,9 @@ export async function requireUserPage(): Promise<CurrentUser> {
 }
 
 /** Registra la visita de página una sola vez por petición (layout y página llaman a requireUserPage). */
-// Los refrescos automáticos del tablero repiten la misma visita: una por persona y página cada minuto basta.
-const PAGE_VIEW_DEDUP_MS = 60_000;
+// Los refrescos automáticos del tablero (cada 2 min, en cada pestaña) repiten la misma visita: una por persona y página
+// cada 15 minutos basta.
+const PAGE_VIEW_DEDUP_MS = 15 * 60_000;
 const recentViews = (globalThis as unknown as { __pzViews?: Map<string, number> }).__pzViews ??= new Map();
 
 const logPageView = cache(async (user: CurrentUser): Promise<void> => {

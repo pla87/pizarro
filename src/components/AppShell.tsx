@@ -120,6 +120,8 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
 
   return (
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
+    {/* `unread` llega con tope de 100 (layout): con 100 o más la insignia pide 100 (algunos sistemas lo muestran como
+        «99+»), nunca un número menor que el real. */}
     <AppBadge count={unread} />
     <SkipToContent />
     {/* Fijo al viewport: nunca hay scroll del documento. En Android con la barra de gestos dibujada
@@ -155,7 +157,7 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
           </div>
           {current && inProject && <Presence projectId={current.id} compact />}
           {unread > 0 && (
-            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
+            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread > 99 ? t("Más de 99 avisos sin leer") : unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
               <Bell size={13} /> {unread > 99 ? "99+" : unread}
             </Link>
           )}
@@ -315,7 +317,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <NavLink href="/notifications" icon={Bell} active={pathname === "/notifications"}>
           <span className="flex-1">{t("Avisos")}</span>
           {unread > 0 && (
-            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={t("{n} sin leer", { n: unread })}>{unread > 99 ? "99+" : unread}</span>
+            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={unread > 99 ? t("Más de 99 sin leer") : t("{n} sin leer", { n: unread })}>{unread > 99 ? "99+" : unread}</span>
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>

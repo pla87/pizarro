@@ -24,6 +24,7 @@ export async function deliverWaitingReminders(now: Date = new Date()): Promise<n
   // en lotes y con un cursor (columnEnteredAt, id): una tarea que falla y queda libre no se repite en la misma pasada.
   let cursor: { at: string; id: string } | null = null;
   let seen = 0;
+  const failures: Failures = { count: 0, lastError: "" };
   while (seen < RUN_CAP) {
     const want = Math.min(BATCH, RUN_CAP - seen);
     const due: { id: string; at: Date }[] = await dueWaitingIds(now, tz, cursor, want);
@@ -36,10 +37,14 @@ export async function deliverWaitingReminders(now: Date = new Date()): Promise<n
       orderBy: [{ columnEnteredAt: "asc" }, { id: "asc" }],
       select: { id: true, projectId: true, columnId: true, assigneeId: true, createdById: true, columnEnteredAt: true, column: { select: { waitingDays: true } } },
     });
-    sent += await remindBatch(rows, now, tz);
+    sent += await remindBatch(rows, now, tz, failures);
     if (due.length < want) break;
   }
   if (sent) logEvent({ category: "notify", action: "notify.waiting", message: `${sent} recordatorio(s) de tareas en espera enviados`, details: { count: sent } });
+  // Un solo error por pasada en el registro (además del console.error de cada fallo), para verlo en Administración → Logs.
+  if (failures.count) {
+    logEvent({ level: "error", category: "notify", action: "notify.waitingFailed", message: `${failures.count} recordatorio(s) de tareas en espera no se pudieron enviar (se reintentan en la siguiente pasada): ${failures.lastError}`, details: { count: failures.count, lastError: failures.lastError } });
+  }
   return sent;
 }
 
@@ -61,10 +66,14 @@ async function dueWaitingIds(now: Date, tz: string, cursor: { at: string; id: st
   return rows;
 }
 
+/** Fallos de una pasada: cuántos y el último error. */
+interface Failures { count: number; lastError: string }
+
 async function remindBatch(
   rows: { id: string; projectId: string; columnId: string; assigneeId: string | null; createdById: string | null; columnEnteredAt: Date; column: { waitingDays: number | null } }[],
   now: Date,
   tz: string,
+  failures: Failures,
 ): Promise<number> {
   let sent = 0;
   for (const task of rows) {
@@ -83,6 +92,8 @@ async function remindBatch(
       sent += r.recipients.length;
     } catch (err) {
       console.error("[waiting]", err);
+      failures.count++;
+      failures.lastError = err instanceof Error ? err.message : String(err);
       // Si el aviso falló, se libera la reclamación para reintentarlo en la siguiente pasada.
       if (claimed) await db.task.updateMany({ where: { id: task.id, columnId: task.columnId, waitingNotifiedAt: now }, data: { waitingNotifiedAt: null } }).catch(() => {});
     }

@@ -288,7 +288,8 @@ export async function readManifest(dest: BackupDestination, stem: string, key: B
 /** Ids de los objetos que hay en el almacén del destino. */
 export async function listObjectKeys(dest: BackupDestination): Promise<Set<string>> {
   const out = new Set<string>();
-  for await (const { key } of dest.list(FILES_PREFIX)) out.add(key);
+  // Solo los nombres: en una carpeta, sin un stat por objeto.
+  for await (const { key } of dest.list(FILES_PREFIX, { sizes: false })) out.add(key);
   return out;
 }
 

@@ -108,6 +108,17 @@ describe("copias completas", () => {
     assert.equal((await computeBackupAlert()).active, false);
     // Sin cambios, la siguiente pasada no sube nada; una copia nueva solo sube lo nuevo.
     assert.deepEqual(await syncExternal(), []);
+    // Ya subida a todos los destinos: ni siquiera se lee el manifiesto local (uno ilegible no cambia nada; antes de
+    // comprobarlo se descifraba en cada pasada y aquí fallaría).
+    const localBackups = path.join(uploads, "backups");
+    const man = (await readdir(localBackups)).filter((n) => n.endsWith(".pzman")).sort().at(-1)!;
+    const manBytes = await readFile(path.join(localBackups, man));
+    await writeFile(path.join(localBackups, man), "no es un manifiesto");
+    try {
+      assert.deepEqual(await syncExternal(), []);
+    } finally {
+      await writeFile(path.join(localBackups, man), manBytes);
+    }
     await writeFile(path.join(uploads, "att4.webp"), randomBytes(500));
     await new Promise((r) => setTimeout(r, 1100)); // los nombres de las copias van por segundos
     assert.equal((await createBackup()).filesNew, 1);

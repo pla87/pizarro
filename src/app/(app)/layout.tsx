@@ -18,7 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // En paralelo: estas consultas van en cada página.
   const [projects, unread, backupAlert, updateAvailable, licenseNudge] = await Promise.all([
     listVisibleProjects(user),
-    db.notification.count({ where: { ...visibleNotificationsWhere(user), readAt: null } }),
+    // Con tope: la interfaz muestra «99+» a partir de 100, así que no hace falta contar más allá (AppShell).
+    db.notification.count({ where: { ...visibleNotificationsWhere(user), readAt: null }, take: 100 }),
     // Punto de aviso en «Administración» si la copia de seguridad está atrasada o es mucho menor que la última buena
     // (solo se consulta a los admins).
     isAdmin ? getBackupAlert().then((a) => (a?.active ? (a.reason === "shrunk" ? ("shrunk" as const) : true) : false), () => false) : false,

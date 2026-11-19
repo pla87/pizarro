@@ -116,6 +116,11 @@ describe("avisos de cambio de fecha agrupados", () => {
     };
     assert.equal(await deliverDueNotices(due, failing), 0);
     assert.equal(calls, 1);
+    // Un error en el registro por pasada, con cuántos fallaron y el último motivo.
+    await flushLogs();
+    const failLog = await db.appLog.findFirst({ where: { action: "notify.dueFailed", details: { path: ["lastError"], equals: "fallo simulado (SMTP caído, proceso detenido…)" } }, orderBy: { createdAt: "desc" } });
+    assert.equal(failLog?.level, "error");
+    assert.ok(((failLog?.details as { count?: number } | null)?.count ?? 0) >= 1);
     const claimed = await db.pendingDueNotice.findFirstOrThrow({ where: { taskId: task.id } });
     assert.equal(claimed.sendAfter.getTime(), due.getTime() + DUE_NOTICE_CLAIM_MS);
     // Mientras dura el reclamo, otra pasada (u otro proceso) no la toca.

@@ -23,6 +23,7 @@ beforeEach(async () => {
   resetRateLimit("client-errors:ip:10.9.8.7");
   resetRateLimit("client-errors:anon:10.9.8.7");
   resetRateLimit("client-errors:u:10.9.8.7");
+  resetRateLimit("client-errors:anon:all");
   await db.appLog.deleteMany({ where: { category: "client" } });
 });
 
@@ -81,6 +82,24 @@ describe("/api/client-errors", () => {
     for (let i = 0; i < 12; i++) statuses.push((await post(report(`rate ${i}`))).status);
     assert.deepEqual(statuses.slice(0, 10), Array(10).fill(204));
     assert.deepEqual(statuses.slice(10), [429, 429]);
+  });
+
+  test("anónimo: tope global de 120 por minuto aunque cada IP vaya por debajo de su límite", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 13; i++) {
+      const ip = `10.77.0.${i + 1}`;
+      for (let j = 0; j < 10; j++) statuses.push((await post(report(`global ${i}-${j}`), { "x-real-ip": ip })).status);
+    }
+    assert.deepEqual(statuses.slice(0, 120), Array(120).fill(204));
+    assert.deepEqual(statuses.slice(120), Array(10).fill(429));
+    // Con sesión no cuenta para ese tope.
+    await loginAs(await makeUser());
+    assert.equal((await post(report("con sesión tras el tope"), { "x-real-ip": "10.77.1.1" })).status, 204);
+    for (let i = 0; i < 13; i++) {
+      resetRateLimit(`client-errors:ip:10.77.0.${i + 1}`);
+      resetRateLimit(`client-errors:anon:10.77.0.${i + 1}`);
+    }
+    resetRateLimit("client-errors:anon:all");
   });
 
   test("las redirecciones y los «no encontrado» de Next que llegan a medio enviar la página no se registran", async () => {
