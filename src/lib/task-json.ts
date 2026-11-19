@@ -64,14 +64,13 @@ import { readForeignTasks } from "./foreign-import/tasks";
 import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "./google-files";
 import { RECURRENCES, type RecurrenceRule } from "./recurrence-date";
 import { TASK_PRIORITIES, type TaskFieldKey, type TaskPriorityValue } from "./task-fields";
+import { isObject, TASK_JSON_FORMAT, TASK_JSON_MAX_CHARS, TASKS_JSON_FORMAT, TASKS_TEXT_MAX_CHARS } from "./task-json-core";
 
-const TASK_JSON_FORMAT = "pizarro.task";
-const TASKS_JSON_FORMAT = "pizarro.tasks";
+// Marcadores, topes y Ctrl+V estricto viven en task-json-core.ts (sin imports, para el código del navegador que no lee
+// tareas); se reexportan aquí para los demás.
+export { strictJsonFormat, TASK_JSON_MAX_CHARS, TASKS_TEXT_MAX_CHARS } from "./task-json-core";
+
 const TASK_JSON_VERSION = 1;
-/** Tamaño máximo del texto que se intenta leer como UNA tarea (una descripción llena y 100 subtareas caben de sobra). */
-export const TASK_JSON_MAX_CHARS = 200_000;
-/** Tamaño máximo del texto que se lee al importar varias tareas (también lo comprueba el servidor). */
-export const TASKS_TEXT_MAX_CHARS = 5_000_000;
 /**
  * Tope del cuerpo de la importación en bytes (la ruta POST /api/projects/[projectId]/import-tasks, que recibe el texto tal
  * cual, en UTF-8): cualquier texto de TASKS_TEXT_MAX_CHARS caracteres cabe, porque cada unidad UTF-16 ocupa como mucho 3
@@ -264,7 +263,6 @@ const KEY_ALIASES: Record<TaskJsonField, string[]> = {
 const FIELD_OF_KEY = new Map<string, TaskJsonField>();
 for (const f of TASK_JSON_FIELDS) for (const a of KEY_ALIASES[f]) FIELD_OF_KEY.set(a, f);
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const text = (v: unknown): string | undefined => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : undefined);
 
 /** Primer valor de un objeto cuya clave (plegada) es una de `names`. */
@@ -765,27 +763,6 @@ export function parseTasksText(raw: string, opts: { t?: T; timeZone?: string } =
     else out.failed.push({ n: i + 1, reason: r.kind === "invalid" ? "empty" : "notTask" });
   });
   return out;
-}
-
-/**
- * Ctrl+V estricto: el formato del texto si es EXACTAMENTE un objeto JSON con `"format": "pizarro.task"` (o
- * «pizarro.tasks», con su lista `tasks`), sin bloque ```, sin texto alrededor (salvo espacios y la marca BOM) y sin ser una
- * lista; si no, null y el pegado sigue su curso. La importación con los botones es la tolerante (parseTasksText).
- */
-export function strictJsonFormat(raw: string): "pizarro.task" | "pizarro.tasks" | null {
-  if (typeof raw !== "string" || raw.length > TASKS_TEXT_MAX_CHARS) return null;
-  const s = raw.replace(/^﻿/, "").trim();
-  if (s.charCodeAt(0) !== 123 || s.charCodeAt(s.length - 1) !== 125) return null;
-  let v: unknown;
-  try {
-    v = JSON.parse(s);
-  } catch {
-    return null;
-  }
-  if (!isObject(v)) return null;
-  if (v.format === TASK_JSON_FORMAT) return s.length <= TASK_JSON_MAX_CHARS ? TASK_JSON_FORMAT : null;
-  if (v.format === TASKS_JSON_FORMAT && Array.isArray(v.tasks)) return TASKS_JSON_FORMAT;
-  return null;
 }
 
 /**
