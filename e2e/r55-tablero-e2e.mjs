@@ -1,0 +1,245 @@
+// Ronda 55 (tablero, panel de tareas fijas): al abrir «Siempre en la release» la lista de la columna ya no muestra una barra
+// de scroll si sus tarjetas caben (escritorio y móvil a 390 px; con muchas sigue habiendo scroll); una copia con Ctrl soltada
+// en el panel nace fija en ese panel (el de la release y el de «Siempre en el plan», y la de una fija en su propio panel),
+// con un solo paso de deshacer; y arrastrar con Ctrl entre la lista y el panel abierto, con la columna llena, no acaba en
+// «Algo ha fallado» (error #185 de React, «Maximum update depth exceeded»). Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs      # PART=scroll,copia,vaiven
+import os from "node:os";
+import * as L from "./qa/lib.mjs";
+import * as U from "./qa/ui.mjs";
+const { sleep } = L;
+const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
+const only = (process.env.PART || "scroll,copia,vaiven").split(",");
+
+await L.prepareUsers();
+const PID = "r55_project";
+const NAME = "Zeta r55";
+const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+const COLS = [["r55e_o", "Otra", "NONE"], ["r55e_r", "Salto", "NEXT_RELEASE"], ["r55e_p", "Plan", "AI_PLAN"]];
+
+/** Proyecto privado con las tres columnas (normal, release y plan para IA). */
+async function seed() {
+  await L.q(`DELETE FROM "Project" WHERE id=$1 OR name=$2`, [PID, NAME]);
+  await L.q(`UPDATE "User" SET locale='ES' WHERE id=$1`, [adm.id]);
+  await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,$2,true,$3,999993,NOW())`, [PID, NAME, adm.id]);
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [PID, adm.id]);
+  for (const [i, [id, name, role]] of COLS.entries()) await L.q(`INSERT INTO "Column"(id,"projectId",name,position,role) VALUES ($1,$2,$3,$4,$5)`, [id, PID, name, (i + 1) * 1000, role]);
+}
+/** `n` tarjetas al final de la columna («prefijo 1», «prefijo 2»…); `fixed`: fijas. */
+async function addTasks(columnId, n, prefix, { fixed = false, from = 0 } = {}) {
+  await L.q(
+    `INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,evergreen,"createdById","updatedAt")
+     SELECT $1 || '_' || g, $2, $3, $4 || ' ' || g, 'kind_funcionalidad', g * 1024, $5, $6, NOW() FROM generate_series($7::int + 1, $7::int + $8::int) g`,
+    [`${columnId}_${fixed ? "f" : "t"}`, PID, columnId, prefix, fixed, adm.id, from, n],
+  );
+}
+/** Sesión con los paneles de fijas abiertos o plegados de antemano (estado guardado en localStorage, EvergreenPanel). */
+const session = (open, opts = {}) => L.session({
+  ...opts,
+  init: `try { for (const k of ["pizarro:evergreen-open:${PID}", "pizarro:evergreen-open:${PID}:r55e_p"]) localStorage.setItem(k, ${JSON.stringify(open ? "1" : "0")}); } catch {}`,
+});
+async function openBoard(page, mobile = false) {
+  await page.goto(`${L.BASE}/p/${PID}`);
+  await L.colLoc(page, "Salto").waitFor({ state: "attached", timeout: 20000 });
+  await L.liveOpen(page);
+  if (mobile) await page.getByRole("button", { name: /^Salto/ }).first().tap();
+  await sleep(700);
+}
+const list = (page, col) => L.colLoc(page, col).locator("[data-card-list]");
+const scrollOf = (page, col) => list(page, col).evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, cards: el.querySelectorAll("[data-task-card]").length }));
+// Filas del panel (en táctil el asa también lleva role=button: se cuentan por la marca de la fila).
+const panelRows = (page, col) => L.colLoc(page, col).locator("[id^=evergreen-] [data-file-target]");
+/** Punto por el que se coge: el centro, o el título (a la izquierda) en las filas del panel, cuyo centro es el interruptor de cadencia. */
+const center = async (loc, { left = false } = {}) => {
+  const b = await loc.boundingBox();
+  return { x: left ? b.x + 24 : b.x + b.width / 2, y: b.y + b.height / 2 };
+};
+/** Arrastre con ratón de `from` a `to` (centros), con Ctrl pulsado desde el principio si `ctrl`. */
+async function drag(page, from, to, { ctrl = true, row = false } = {}) {
+  const a = await center(from, { left: row });
+  const b = await center(to);
+  await page.mouse.move(a.x, a.y);
+  if (ctrl) await page.keyboard.down("Control");
+  await page.mouse.down();
+  await page.mouse.move(a.x + 12, a.y + 12, { steps: 3 });
+  await page.mouse.move(b.x, b.y - 10, { steps: 15 });
+  await page.mouse.move(b.x, b.y, { steps: 4 });
+  await sleep(250);
+  await page.mouse.up();
+  if (ctrl) await page.keyboard.up("Control");
+}
+const copyRow = (title) => L.q(`SELECT "columnId", evergreen, "evergreenEvery" FROM "Task" WHERE "projectId"=$1 AND title=$2 AND "archivedAt" IS NULL`, [PID, title]);
+
+// --- C1: abrir el panel no hace aparecer scroll si las tarjetas caben ---------------------------------------------------------
+if (only.includes("scroll")) {
+  L.scenario("scroll: al abrir «Siempre en la release» la lista no muestra scroll si sus tarjetas caben");
+  await seed();
+  await addTasks("r55e_r", 5, "Tarea");
+  await addTasks("r55e_r", 3, "Fija", { fixed: true, from: 100 });
+  for (const [label, opts, mobile] of [["1280", { viewport: { width: 1280, height: 720 } }, false], ["1500", {}, false], ["390", { viewport: { width: 390, height: 900 }, mobile: true }, true]]) {
+    const s = await session(false, opts);
+    const { page } = s;
+    await openBoard(page, mobile);
+    const closed = await scrollOf(page, "Salto");
+    L.eq(`SCROLL ${label}: plegado, cinco tarjetas y sin scroll`, [closed.cards, closed.sh <= closed.ch + 1], [5, true]);
+    const toggle = L.colLoc(page, "Salto").locator("button[aria-controls^=evergreen]");
+    await (mobile ? toggle.tap() : toggle.click());
+    await panelRows(page, "Salto").nth(2).waitFor();
+    await sleep(400);
+    const open = await scrollOf(page, "Salto");
+    L.check(`SCROLL ${label}: con el panel abierto la lista es más baja`, open.ch < closed.ch, JSON.stringify({ closed, open }));
+    // 1280 × 720: antes 450 px de contenido en 379 (cinco tarjetas de ~370 px más el hueco del final): scroll innecesario.
+    L.check(`SCROLL ${label}: y sigue sin scroll (las cinco caben)`, open.sh <= open.ch + 1, JSON.stringify(open));
+    L.eq(`SCROLL ${label}: las tres fijas en el panel`, await panelRows(page, "Salto").count(), 3);
+    if (label === "1280") await page.screenshot({ path: `${SHOTS}/r55-panel-sin-scroll.png` });
+    L.assertNoErrors(`SCROLL ${label}`, [s]);
+    await s.ctx.close();
+  }
+  // Con muchas tarjetas sí hay scroll, y la última se puede ver entera por encima del panel.
+  await addTasks("r55e_r", 25, "Más", { from: 10 });
+  const s = await session(true, { viewport: { width: 1280, height: 720 } });
+  const { page } = s;
+  await openBoard(page);
+  const full = await scrollOf(page, "Salto");
+  L.check("SCROLL: con 30 tarjetas la lista tiene scroll", full.sh > full.ch + 50, JSON.stringify(full));
+  await list(page, "Salto").evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await sleep(300);
+  const last = await L.cardLoc(page, "Más 35").boundingBox();
+  const panel = await L.colLoc(page, "Salto").locator("[id^=evergreen-]").boundingBox();
+  L.check("SCROLL: al final, la última tarjeta queda entera por encima del panel", last && panel && last.y + last.height <= panel.y, JSON.stringify({ last, panel }));
+  L.assertNoErrors("SCROLL 30", [s]);
+  await s.ctx.close();
+}
+
+// --- C2: copia con Ctrl en el panel de fijas ------------------------------------------------------------------------------------
+if (only.includes("copia")) {
+  L.scenario("copia: Ctrl al soltar sobre el panel de fijas crea la copia fija en ese panel (release y plan)");
+  await seed();
+  await addTasks("r55e_o", 4, "Origen");
+  await addTasks("r55e_r", 5, "Tarea");
+  await addTasks("r55e_r", 2, "Fija", { fixed: true, from: 100 });
+  await addTasks("r55e_p", 3, "Paso");
+  await addTasks("r55e_p", 1, "FijaPlan", { fixed: true, from: 100 });
+  const s = await session(true);
+  const { page } = s;
+  await openBoard(page);
+  const undoBefore = (await L.q(`SELECT count(*)::int AS n FROM "UndoEntry" WHERE "projectId"=$1`, [PID]))[0].n;
+
+  await drag(page, L.cardLoc(page, "Origen 1"), L.colLoc(page, "Salto").locator("[id^=evergreen-]"));
+  // Optimista: la copia aparece en el panel antes de que responda el servidor (y la sustituye la de verdad).
+  L.check("COPIA: la copia aparece en el panel de la release", await L.waitFor(async () => (await panelRows(page, "Salto").filter({ hasText: "Origen 1 (copia)" }).count()) === 1));
+  L.eq("COPIA: y no en la lista de la columna", await list(page, "Salto").getByText("Origen 1 (copia)").count(), 0);
+  await L.eqEventually("COPIA: en la BD, fija en «Salto»", async () => JSON.stringify(await copyRow("Origen 1 (copia)")), JSON.stringify([{ columnId: "r55e_r", evergreen: true, evergreenEvery: 1 }]));
+  L.eq("COPIA: la original sigue en «Otra», sin fijar", JSON.stringify(await copyRow("Origen 1")), JSON.stringify([{ columnId: "r55e_o", evergreen: false, evergreenEvery: 1 }]));
+  await L.eqEventually("COPIA: una sola entrada de deshacer", async () => (await L.q(`SELECT count(*)::int AS n FROM "UndoEntry" WHERE "projectId"=$1`, [PID]))[0].n, undoBefore + 1);
+  L.eq("COPIA: tres fijas en el panel", await panelRows(page, "Salto").count(), 3);
+  await page.screenshot({ path: `${SHOTS}/r55-copia-panel.png` });
+
+  // Panel «Siempre en el plan» de una columna de plan para IA.
+  await drag(page, L.cardLoc(page, "Origen 2"), L.colLoc(page, "Plan").locator("[id^=evergreen-]"));
+  L.check("COPIA: en el panel del plan, también", await L.waitFor(async () => (await panelRows(page, "Plan").filter({ hasText: "Origen 2 (copia)" }).count()) === 1));
+  await L.eqEventually("COPIA: en la BD, fija en «Plan»", async () => JSON.stringify(await copyRow("Origen 2 (copia)")), JSON.stringify([{ columnId: "r55e_p", evergreen: true, evergreenEvery: 1 }]));
+
+  // Una fija «cada dos» copiada con Ctrl en su propio panel: otra fija, con la misma cadencia (antes no hacía nada).
+  await L.q(`UPDATE "Task" SET "evergreenEvery"=2 WHERE id='r55e_r_f_101'`);
+  await openBoard(page);
+  await drag(page, panelRows(page, "Salto").filter({ hasText: "Fija 101" }), L.colLoc(page, "Salto").locator("[id^=evergreen-] button", { hasText: "Añadir" }), { row: true });
+  await L.eqEventually("COPIA: una fija copiada en su panel queda fija, con su cadencia", async () => JSON.stringify(await copyRow("Fija 101 (copia)")), JSON.stringify([{ columnId: "r55e_r", evergreen: true, evergreenEvery: 2 }]));
+  L.check("COPIA: y se ve en el panel", await L.waitFor(async () => (await panelRows(page, "Salto").filter({ hasText: "Fija 101 (copia)" }).count()) === 1));
+
+  // Sin Ctrl, soltar en el panel sigue moviendo la tarea (no la copia).
+  await drag(page, L.cardLoc(page, "Origen 3"), L.colLoc(page, "Salto").locator("[id^=evergreen-]"), { ctrl: false });
+  await L.eqEventually("COPIA: sin Ctrl la tarea se mueve al panel como fija", async () => JSON.stringify(await copyRow("Origen 3")), JSON.stringify([{ columnId: "r55e_r", evergreen: true, evergreenEvery: 1 }]));
+  L.eq("COPIA: y no hay copia", (await copyRow("Origen 3 (copia)")).length, 0);
+
+  // Deshacer la copia la quita del panel (un paso).
+  await U.undoKey(page, "Control+z");
+  await L.eqEventually("COPIA: deshacer devuelve «Origen 3» a «Otra»", async () => (await copyRow("Origen 3"))[0]?.columnId, "r55e_o");
+  await U.undoKey(page, "Control+z");
+  await L.eqEventually("COPIA: otro deshacer quita la copia de la fija", async () => (await copyRow("Fija 101 (copia)")).length, 0);
+  L.check("COPIA: y desaparece del panel", await L.waitFor(async () => (await panelRows(page, "Salto").filter({ hasText: "Fija 101 (copia)" }).count()) === 0));
+  L.assertNoErrors("COPIA", [s]);
+  await s.ctx.close();
+}
+
+// --- C3: arrastres con Ctrl entre la lista y el panel abierto, con la columna llena --------------------------------------------
+if (only.includes("vaiven")) {
+  L.scenario("vaivén: arrastrar con Ctrl entre la lista llena y el panel abierto no acaba en «Algo ha fallado»");
+  await seed();
+  await addTasks("r55e_o", 8, "Origen");
+  await addTasks("r55e_r", 120, "Rel");
+  await addTasks("r55e_r", 3, "Fija", { fixed: true, from: 200 });
+  await addTasks("r55e_p", 2, "FijaPlan", { fixed: true, from: 100 });
+  const s = await session(true);
+  const { page } = s;
+  // Cuántos dibujos de React se encadenan sin volver al navegador (con un bucle de actualizaciones, React corta a los 50
+  // con el error #185): se cuentan con el gancho de las herramientas de desarrollo, que React llama en cada dibujo.
+  await page.addInitScript(() => {
+    const stats = (window.__r55 = { max: 0, cur: 0 });
+    let reset = false;
+    window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+      supportsFiber: true, renderers: new Map(), inject: () => 1, checkDCE() {}, onCommitFiberUnmount() {}, onPostCommitFiberRoot() {}, onScheduleFiberRoot() {},
+      onCommitFiberRoot() {
+        stats.max = Math.max(stats.max, ++stats.cur);
+        if (!reset) {
+          reset = true;
+          setTimeout(() => { reset = false; stats.cur = 0; }, 0);
+        }
+      },
+    };
+  });
+  await openBoard(page);
+  const failed = () => page.getByText("Algo ha fallado").count();
+  const panel = L.colLoc(page, "Salto").locator("[id^=evergreen-]");
+  for (let round = 0; round < 6; round++) {
+    const fromPanel = round % 3 === 2;
+    const src = fromPanel ? panelRows(page, "Salto").first() : L.cardLoc(page, `Origen ${1 + round}`);
+    // El scroll automático de las vueltas anteriores puede haber movido el panel: la fija, a la vista.
+    await src.scrollIntoViewIfNeeded();
+    const a = await center(src, { left: fromPanel });
+    const pb = await panel.boundingBox();
+    const lb = await list(page, "Salto").boundingBox();
+    await page.mouse.move(a.x, a.y);
+    await page.keyboard.down("Control");
+    await page.mouse.down();
+    await page.mouse.move(a.x + 10, a.y + 10, { steps: 3 });
+    await page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height - 40, { steps: 12 });
+    // Por la frontera entre la lista y el panel, encima del panel y otra vez a la lista (con scroll automático abajo).
+    for (let k = 0; k < 8; k++) {
+      await page.mouse.move(pb.x + 30 + k * 12, pb.y + 6, { steps: 3 });
+      await page.mouse.move(pb.x + 30 + k * 12, pb.y - 6, { steps: 3 });
+    }
+    for (let k = 0; k < 10; k++) {
+      await page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height - 6 - (k % 3) * 8, { steps: 2 });
+      await sleep(30);
+    }
+    if (round % 2) await page.mouse.move(lb.x + lb.width / 2, lb.y + 80, { steps: 8 });
+    // Ctrl suelta y vuelta a pulsar a mitad (el aviso «+ Duplicar» va y viene).
+    await page.keyboard.up("Control");
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + 20, { steps: 6 });
+    await page.keyboard.down("Control");
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2, { steps: 6 });
+    await sleep(200);
+    // Antes de soltar, el arrastre sigue en marcha y con el aviso «+ Duplicar» (en la sexta vuelta, la fija ya arrastrada
+    // en la tercera: antes no se podía volver a coger tras pasar por la lista).
+    L.eq(`VAIVÉN ${round + 1}: arrastrando con «+ Duplicar»`, await page.evaluate(() => [document.documentElement.hasAttribute("data-card-drag"), !!document.querySelector("[data-duplicate-hint]")]), [true, true]);
+    await page.mouse.up();
+    await page.keyboard.up("Control");
+    await sleep(900);
+    L.eq(`VAIVÉN ${round + 1}: sin «Algo ha fallado»`, await failed(), 0);
+  }
+  const chained = await page.evaluate(() => window.__r55?.max ?? 0);
+  L.check("VAIVÉN: los dibujos encadenados se quedan lejos del corte de React (50)", chained > 0 && chained < 25, String(chained));
+  // Las copias (las de «Origen» y la de la fija, soltadas en el panel) son fijas: ninguna acaba en la lista.
+  await L.eqEventually("VAIVÉN: seis copias, todas fijas en «Salto»", async () => JSON.stringify((await L.q(`SELECT evergreen, count(*)::int AS n FROM "Task" WHERE "projectId"=$1 AND title LIKE '%(copia)' GROUP BY evergreen`, [PID])).map((r) => [r.evergreen, r.n])), JSON.stringify([[true, 6]]));
+  await page.screenshot({ path: `${SHOTS}/r55-vaiven.png` });
+  L.assertNoErrors("VAIVÉN", [s]);
+  await s.ctx.close();
+}
+
+await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
+await L.closeBrowser(); await L.closeDb();
+const failedChecks = L.results.filter((r) => !r.pass);
+console.log(`\n${L.results.length - failedChecks.length}/${L.results.length} OK`);
+for (const f of failedChecks) console.log("FAIL", f.name, f.detail);
+process.exitCode = failedChecks.length ? 1 : 0;

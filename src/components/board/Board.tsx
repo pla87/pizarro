@@ -101,6 +101,10 @@ const ImportTasksDialog = ownSuspense(dynamic(() => importWhenOnline(loadImportT
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
 const EVERGREEN_ORIGIN = "__evergreen__";
+/** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
+const PINGPONG_MS = 60;
+/** Id de la copia provisional de un arrastre con Ctrl mientras responde el servidor (ver dropCopy). */
+const PENDING_COPY_PREFIX = "pending-copy-";
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -379,6 +383,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [dragItems, setDragItems] = useState<Items | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
+  // Último cambio de lista de la tarjeta arrastrada (ver onDragOver: evita el vaivén entre dos listas).
+  const lastContainerMove = useRef<{ from: string; to: string; at: number } | null>(null);
+  // Contador de las copias provisionales (dropCopy).
+  const pendingCopySeq = useRef(0);
   // Arrastre de una selección (groupDrag.ts): ids que se mueven juntos (null = solo la cogida) y cuántos son, para el
   // montón del overlay. `dragCount` es lo que dicen los avisos del lector de pantalla (llegan después de los manejadores,
   // también el de soltar, cuando el arrastre ya se ha limpiado): solo cambia al empezar y, con Ctrl, al soltar una copia.
@@ -957,6 +965,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       },
       setColumns,
       openTask: (id) => {
+        // La copia provisional de un arrastre con Ctrl aún no existe en el servidor: se abre la de verdad cuando llegue.
+        if (id.startsWith(PENDING_COPY_PREFIX)) return;
         prefetchTaskDetail(id);
         // Un borrador guardado de ESTA tarea (archivar o borrar desde el detalle lo cierra al momento; si falla, sin red,
         // lo escrito y sin guardar queda en el borrador): se recupera al volver a abrirla, como al recargar la página.
@@ -1188,26 +1198,41 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !dragItems) return;
     const id = String(active.id);
     const overId = String(over.id);
+    // Contenedor al que iría (o null si se queda donde está), calculado sobre lo último pintado: el cambio se decide aquí
+    // y no dentro del actualizador, para poder anotar el salto (abajo) sin efectos dentro de setState.
+    const from = findContainer(dragItems, id);
+    if (!from) return;
+    let to: string | null = null;
+    if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+      // Tarea fija que vuelve sobre su panel: regresa al origen virtual. Las demás no cambian de lista sobre un panel.
+      if (dragOrigin.current?.columnId === EVERGREEN_ORIGIN && from !== EVERGREEN_ORIGIN) to = EVERGREEN_ORIGIN;
+    } else {
+      const target = findContainer(dragItems, overId);
+      if (target && target !== from) to = target;
+    }
+    if (!to) return;
+    // Vaivén: si justo al cambiar de lista lo que queda bajo el puntero es la lista de la que venía (la tarjeta empuja a las
+    // demás, el panel de fijas cambia de alto…), volver allí haría cambiar de nuevo lo que hay debajo, y así sin fin: cada
+    // vuelta es un dibujo de dnd-kit seguido de otro del tablero, y React lo corta con «Maximum update depth exceeded»
+    // (error #185, la pantalla «Algo ha fallado»). Volver a la lista de la que acaba de salir no se hace hasta pasado un
+    // momento; mientras, la tarjeta se queda donde está (y al soltar va donde se ve).
+    const last = lastContainerMove.current;
+    if (last && last.to === from && last.from === to && performance.now() - last.at < PINGPONG_MS) return;
+    lastContainerMove.current = { from, to, at: performance.now() };
+    const dest = to;
     setDragItems((prev) => {
-      if (!prev) return prev;
-      const from = findContainer(prev, id);
-      if (!from) return prev;
-      // Tarea fija que vuelve sobre su panel: regresa al origen virtual.
-      if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
-        if (dragOrigin.current?.columnId !== EVERGREEN_ORIGIN || from === EVERGREEN_ORIGIN) return prev;
-        return { ...prev, [from]: prev[from]!.filter((x) => x !== id), [EVERGREEN_ORIGIN]: [id] };
-      }
-      const to = findContainer(prev, overId);
-      if (!to || from === to) return prev;
+      if (!prev || findContainer(prev, id) !== from) return prev;
+      if (dest === EVERGREEN_ORIGIN) return { ...prev, [from]: prev[from]!.filter((x) => x !== id), [EVERGREEN_ORIGIN]: [id] };
       return {
         ...prev,
         [from]: prev[from]!.filter((x) => x !== id),
-        [to]: insertBefore(prev[to]!, id, overId),
+        [dest]: insertBefore(prev[dest]!, id, overId),
       };
     });
   };
 
   const cancelDrag = () => {
+    lastContainerMove.current = null;
     draggingCard.set(null);
     dragGroup.current = null;
     setGroupSize(0);
@@ -1232,12 +1257,46 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: res.data.columnId, position: res.data.position, evergreen: true } : t)));
   };
 
-  /** Ctrl/Alt al soltar: una copia de la tarea (duplicateTask) en esa columna, entre esas vecinas; la original no se mueve. */
-  const dropCopy = async (id: string, columnId: string, prevId: string | null, nextId: string | null) => {
-    const res = await track(duplicateTask(id, { columnId, prevId, nextId }));
-    if (!res.ok) return toast(res.error, "error");
+  /**
+   * Ctrl/Alt al soltar: una copia de la tarea (duplicateTask) en esa columna, entre esas vecinas; la original no se mueve.
+   * `evergreen`: soltada en el panel de fijas de la columna (la de la release o una de plan para IA): la copia nace fija, al
+   * final del panel (una sola acción y un solo paso de deshacer). Optimista: una copia provisional aparece en el acto donde
+   * se soltó y la sustituye la del servidor al responder (o se quita si falla).
+   */
+  const dropCopy = async (id: string, columnId: string, prevId: string | null, nextId: string | null, evergreen = false) => {
+    const source = taskById.get(id);
+    const tempId = `${PENDING_COPY_PREFIX}${++pendingCopySeq.current}`;
+    if (source) {
+      const position = evergreen
+        ? Math.max(0, ...tasks.filter((x) => x.columnId === columnId).map((x) => x.position)) + 1024
+        : positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
+      upsertTask({
+        ...source,
+        id: tempId,
+        title: `${source.title} ${t("(copia)")}`,
+        columnId,
+        position,
+        evergreen,
+        evergreenEvery: evergreen && source.evergreen ? source.evergreenEvery : 1,
+        subtaskDone: 0,
+        commentCount: 0,
+        recurrence: "NONE",
+        recurrenceDay: null,
+        textVersion: null,
+        columnEnteredAt: new Date().toISOString(),
+      });
+    }
+    const res = await track(duplicateTask(id, { columnId, prevId: evergreen ? null : prevId, nextId: evergreen ? null : nextId, ...(evergreen ? { evergreen: true } : {}) }));
+    if (!res.ok) {
+      setTasks((prev) => prev.filter((x) => x.id !== tempId));
+      return toast(res.error, "error");
+    }
     const { copyNotice, ...copy } = res.data;
-    upsertTask(copy);
+    // La provisional y la de verdad se cambian a la vez (un solo dibujo).
+    setTasks((prev) => {
+      const rest = prev.filter((x) => x.id !== tempId && x.id !== copy.id);
+      return [...rest, copy];
+    });
     toast(t("Tarea duplicada"), "undo");
     if (copyNotice) toast(copyNotice, "error");
   };
@@ -1256,14 +1315,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     cancelDrag();
     if (!over || !current || !origin) return;
     const id = String(active.id);
+    // Una copia provisional (dropCopy) aún no existe en el servidor: no se puede mover ni copiar hasta que llegue.
+    if (id.startsWith(PENDING_COPY_PREFIX)) return;
     const overId = String(over.id);
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
       const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
+      // Copia sobre el panel de fijas: la copia nace fija en ese panel, donde se suelta (también la de una tarea fija
+      // soltada en su propio panel). Antes quedaba al final de la columna como tarea normal.
+      if (copy) return dropCopy(id, evergreenColumn, null, null, true);
       // Soltar una tarea fija en su propio panel no hace nada; en el de otra columna (otro plan para IA, o la release)
       // pasa allí como fija (abajo, dropOnEvergreen). Antes se ignoraba aunque el lector de pantalla anunciaba el cambio.
       if (origin.columnId === EVERGREEN_ORIGIN && taskById.get(id)?.columnId === evergreenColumn) return;
-      // Copia sobre el panel de fijas: al final de esa columna, como tarea normal.
-      if (copy) return dropCopy(id, evergreenColumn, null, null);
       // Una selección, igual: al final de esa columna como tareas normales (las fijas se hacen de una en una).
       if (group) {
         const rest = (current[evergreenColumn] ?? []).filter((x) => !group.includes(x));
