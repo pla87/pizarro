@@ -3,6 +3,7 @@ import { Code } from "@tiptap/extension-code";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import StarterKit from "@tiptap/starter-kit";
+import { isAttachmentSrc } from "./attachment-refs";
 
 /** Idioma de la página (las vistas del editor se pintan fuera de React y no tienen `t`). */
 const pageIsEnglish = () => typeof document !== "undefined" && document.documentElement.lang.startsWith("en");
@@ -92,7 +93,7 @@ const MarkdownImage = Node.create({
   renderHTML({ node, HTMLAttributes }) {
     const { raw, src, alt } = node.attrs as { raw: string; src: string; alt: string };
     const data = { "data-md-image": raw, "data-src": src, "data-alt": alt };
-    if (src.startsWith("/api/attachments/")) return ["img", mergeAttributes(HTMLAttributes, data, { src, alt, class: "max-w-full rounded" })];
+    if (isAttachmentSrc(src)) return ["img", mergeAttributes(HTMLAttributes, data, { src, alt, class: "max-w-full rounded" })];
     return ["span", mergeAttributes(HTMLAttributes, data, { class: "text-slate-400" }), `[${pageIsEnglish() ? "image" : "imagen"}: ${alt}]`];
   },
   markdownTokenName: "image",
