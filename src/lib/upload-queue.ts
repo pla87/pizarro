@@ -1,5 +1,6 @@
 // Lógica pura de la cola de subidas (sin React ni red): reparto de archivos aceptados y omitidos,
-// concurrencia limitada y reintentos educados. El servidor atiende 3 subidas a la vez (upload-slots).
+// concurrencia limitada y reintentos educados. El servidor atiende 3 subidas a la vez (upload-slots; 1 por persona si
+// hay más de una activa: las demás esperan en su cola).
 
 /** Subidas simultáneas desde el navegador: las mismas que admite el servidor. */
 const UPLOAD_CONCURRENCY = 3;

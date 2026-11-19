@@ -11,6 +11,7 @@ import { revokeSession } from "./revoke";
 import { requestContext } from "./request-context";
 import { clientIp } from "./request";
 import { PASSWORD_CHANGE_COOKIE, SESSION_MAX_AGE_SECONDS, sessionCookieName, sessionCookieOptions } from "./session-config";
+import { noteUserActivity } from "./user-activity";
 
 export interface CurrentUser {
   id: string;
@@ -109,6 +110,7 @@ async function querySessionUser(token: string): Promise<SessionUser | null> {
     }).catch(() => {});
   }
   const { active: _active, ...user } = session.user;
+  noteUserActivity(user.id); // en memoria: para saber cuántas personas usan la app (reparto de huecos de subida)
   return user;
 }
 

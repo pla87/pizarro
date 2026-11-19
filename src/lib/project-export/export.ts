@@ -84,9 +84,9 @@ async function hashSource(open: () => AsyncIterable<Buffer>): Promise<{ sha: str
 const diskStream = (file: string) => () => createReadStream(file) as unknown as AsyncIterable<Buffer>;
 
 /** Registra un fichero y devuelve su huella; null si ya no está en disco. `tick` avisa de cada fichero examinado (progreso). */
-async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>, tick?: () => void): Promise<FileInfo | null> {
+async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>, tick?: () => void | Promise<void>): Promise<FileInfo | null> {
+  await tick?.();
   try {
-    tick?.();
     if (!(await exists())) return null;
     const { sha, size, crc } = await hashSource(open);
     const prev = files.get(sha);
@@ -108,9 +108,13 @@ const isoOrNull = (d: Date | null | undefined) => (d ? d.toISOString() : null);
  * (Administración → Usuarios); cualquier otra persona, solo el suyo, y el resto van vacíos (al importar, esas personas no
  * se emparejan: sus tareas quedan sin responsable y sus menciones como texto).
  */
-export async function buildProjectExport(projectId: string, options: ExportOptions, exporter: ProjectExporter, now: Date = new Date(), onFile?: () => void): Promise<ProjectExport> {
-  // Todas las lecturas ven la misma foto de la base de datos: una edición simultánea no deja referencias colgadas.
-  return db.$transaction((tx) => buildInSnapshot(tx, projectId, options, exporter, now, onFile), { isolationLevel: "RepeatableRead", timeout: 30 * 60_000, maxWait: 60_000 });
+export async function buildProjectExport(projectId: string, options: ExportOptions, exporter: ProjectExporter, now: Date = new Date(), onFile?: () => void | Promise<void>): Promise<ProjectExport> {
+  // Todas las lecturas ven la misma foto de la base de datos (una edición simultánea no deja referencias colgadas), pero
+  // la transacción solo dura lo que tardan las consultas: las huellas de los ficheros se calculan después, ya cerrada.
+  // Abierta mientras se leían cientos de adjuntos, sus candados hacían esperar a una migración con ALTER TABLE "Task"
+  // (y detrás de ella, a toda la aplicación) hasta que terminaba la exportación.
+  const snapshot = await db.$transaction((tx) => readSnapshot(tx, projectId, options), { isolationLevel: "RepeatableRead", timeout: 10 * 60_000, maxWait: 60_000 });
+  return assembleExport(snapshot, options, exporter, now, onFile);
 }
 
 /** Quién exporta: de ello depende qué emails lleva el archivo. */
@@ -129,7 +133,14 @@ function must<T>(map: Map<string, T>, key: string): T {
   return v;
 }
 
-async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions, exporter: ProjectExporter, now: Date, onFile?: () => void): Promise<ProjectExport> {
+const tooBigForJson = () => new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
+
+/**
+ * Lee todas las filas que van en el archivo dentro de la transacción (una sola foto coherente), sin tocar el disco. Las
+ * personas se buscan aquí también: todas las que el archivo podría nombrar (las de un adjunto cuyo fichero acabe
+ * faltando sobran, pero solo salen las que el archivo cita).
+ */
+async function readSnapshot(db: Prisma.TransactionClient, projectId: string, options: ExportOptions) {
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
@@ -144,22 +155,12 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
     },
   });
   if (!project) throw new AppError("No encontrado o sin acceso.", 404);
-
-  const users = new UserRefs();
-  const files = new Map<string, FileInfo>();
-  let missingFiles = 0;
   const taskWhere: Prisma.TaskWhereInput = { projectId, ...(options.scope === "board" ? { archivedAt: null } : {}) };
-
-  // Refs de columnas, etiquetas y entregables (por orden).
-  const columnRef = new Map(project.columns.map((c, i) => [c.id, `c${i + 1}`]));
-  const labelRef = new Map(project.labels.map((l, i) => [l.id, `l${i + 1}`]));
-  const deliverableRef = new Map(project.deliverables.map((d, i) => [d.id, `d${i + 1}`]));
 
   // Tareas en orden estable; el resto de su contenido se lee por lotes.
   const orderedIds = (
     await db.task.findMany({ where: taskWhere, orderBy: [{ column: { position: "asc" } }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true } })
   ).map((t) => t.id);
-  const taskRef = new Map(orderedIds.map((id, i) => [id, `t${i + 1}`]));
 
   // Tipos: los del proyecto y los generales que usan sus tareas.
   const usedKindIds = new Set((await db.task.groupBy({ by: ["kindId"], where: taskWhere })).map((g) => g.kindId));
@@ -170,32 +171,10 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
         select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true },
       })
     : [];
-  const kindList = [...project.kinds.map((k) => ({ ...k, scope: "project" as const })), ...generalUsed.map((k) => ({ ...k, scope: "general" as const }))];
-  const kindRef = new Map(kindList.map((k, i) => [k.id, `k${i + 1}`]));
 
-  // Las menciones se dejan como están y se reescriben al final, cuando se sabe qué personas existen.
-  const mentionIds = new Set<string>();
-  const mention = (text: string) => {
-    mapMentions(text, (name, id) => { mentionIds.add(id); return name; });
-    return text;
-  };
-
-  // Adjuntos exportados: id → ref (`a1`, `a2`…). Las imágenes de los textos (`/api/attachments/<id>`) se escriben con la
-  // ref al final, como las menciones, y el importador las apunta a los adjuntos importados.
-  const attachmentRefs = new Map<string, string>();
-  const attachmentRef = (id: string) => {
-    const r = `a${attachmentRefs.size + 1}`;
-    attachmentRefs.set(id, r);
-    return r;
-  };
-
-  // Tareas.
-  const tasks: ProjectExportData["tasks"] = [];
-  let commentCount = 0;
-  let subtaskCount = 0;
-  let commentSeq = 0;
-  // Cota inferior del tamaño de project.json (los caracteres de los textos, que en UTF-8 nunca pesan menos): si ya pasa
-  // del tope, falla antes de examinar los adjuntos de las tareas siguientes, que es lo que tarda.
+  // Contenido de las tareas por lotes, en el orden de orderedIds. Cota inferior del tamaño de project.json (los
+  // caracteres de los textos, que en UTF-8 nunca pesan menos): si ya pasa del tope, falla sin leer más.
+  const taskRows = [];
   let textChars = 0;
   for (let i = 0; i < orderedIds.length; i += CHUNK) {
     const ids = orderedIds.slice(i, i + CHUNK);
@@ -216,146 +195,36 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       for (const c of r.comments) textChars += c.body.length;
       for (const s of r.subtasks) textChars += s.title.length;
     }
-    if (textChars > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
+    if (textChars > MAX_PROJECT_JSON_BYTES) throw tooBigForJson();
     for (const id of ids) {
       const t = byId.get(id);
-      if (!t) continue;
-      const commentRefs = new Map(t.comments.map((c) => [c.id, `m${++commentSeq}`]));
-      const attachments: ProjectExportData["tasks"][number]["attachments"] = [];
-      if (options.attachments) {
-        for (const a of t.attachments) {
-          const file = attachmentPath(a.id, a.isImage ? "full" : "file");
-          const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
-          if (!info) {
-            missingFiles++;
-            continue;
-          }
-          attachments.push({
-            originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: info.size,
-            createdBy: users.ref(a.createdById), createdAt: iso(a.createdAt), file: info.sha, ref: attachmentRef(a.id),
-          });
-        }
-      }
-      commentCount += t.comments.length;
-      subtaskCount += t.subtasks.length;
-      tasks.push({
-        ref: taskRef.get(id)!,
-        title: mention(t.title),
-        description: mention(t.description),
-        columnRef: must(columnRef, t.columnId),
-        kindRef: must(kindRef, t.kindId),
-        color: t.color,
-        linkUrl: t.linkUrl,
-        position: t.position,
-        assignee: users.ref(t.assigneeId),
-        createdBy: users.ref(t.createdById),
-        dueDate: dateToIso(t.dueDate),
-        startDate: dateToIso(t.startDate),
-        deliverableRef: t.deliverableId ? (deliverableRef.get(t.deliverableId) ?? null) : null,
-        archivedAt: isoOrNull(t.archivedAt),
-        archivedFromColumnRef: t.archivedFromColumnId ? (columnRef.get(t.archivedFromColumnId) ?? null) : null,
-        columnEnteredAt: iso(t.columnEnteredAt),
-        evergreen: t.evergreen,
-        evergreenEvery: t.evergreenEvery,
-        cost: t.cost ? t.cost.toFixed(2) : null,
-        costPaid: t.costPaid,
-        estimatedHours: t.estimatedHours ? t.estimatedHours.toFixed(2) : null,
-        actualHours: t.actualHours ? t.actualHours.toFixed(2) : null,
-        priority: t.priority,
-        client: t.client,
-        recurrence: t.recurrence,
-        recurrenceDay: t.recurrenceDay,
-        recurrenceFromRef: t.recurrenceFromId ? (taskRef.get(t.recurrenceFromId) ?? null) : null,
-        blockedByRef: t.blockedById ? (taskRef.get(t.blockedById) ?? null) : null,
-        routineColumnRef: t.routineColumnId ? (columnRef.get(t.routineColumnId) ?? null) : null,
-        waitingNotifiedAt: isoOrNull(t.waitingNotifiedAt),
-        contentUpdatedAt: isoOrNull(t.contentUpdatedAt),
-        contentUpdatedByRef: users.ref(t.contentUpdatedById),
-        createdAt: iso(t.createdAt),
-        updatedAt: iso(t.updatedAt),
-        labelRefs: t.labels.map((l) => labelRef.get(l.labelId)).filter((r): r is string => !!r).sort(),
-        subtasks: t.subtasks.map((s) => ({ title: s.title, done: s.done, position: s.position })),
-        followers: t.followers.map((f) => ({ user: users.ref(f.userId)!, muted: f.muted, createdAt: iso(f.createdAt) })),
-        comments: t.comments.map((c) => ({
-          ref: commentRefs.get(c.id)!,
-          author: users.ref(c.authorId),
-          authorName: c.authorId ? null : c.authorName,
-          body: mention(c.body),
-          createdAt: iso(c.createdAt),
-          editedAt: isoOrNull(c.editedAt),
-          parentRef: c.parentId ? (commentRefs.get(c.parentId) ?? null) : null,
-          deletedAt: isoOrNull(c.deletedAt),
-        })),
-        attachments,
-        links: t.links.map((l) => ({
-          kind: l.kind, title: l.title, url: l.url, createdBy: users.ref(l.createdById), createdAt: iso(l.createdAt),
-          externalId: l.externalId, shareStatus: (l.shareStatus as "SHARED" | "PARTIAL" | "NOT_SHARED" | null) ?? null, shareFailed: l.shareFailed,
-        })),
-      });
+      if (t) taskRows.push(t);
     }
   }
 
   // Releases con su contenido y adjuntos (solo con el histórico completo).
-  const releases: ProjectExportData["releases"] = [];
-  let releaseAttachmentCount = 0;
-  if (options.scope === "all") {
-    const rows = await db.release.findMany({
-      where: { projectId },
-      orderBy: [{ number: "asc" }],
-      include: { tasks: { orderBy: { id: "asc" } }, attachments: { orderBy: [{ position: "asc" }, { id: "asc" }] } },
-    });
-    for (const [i, r] of rows.entries()) {
-      const attachments: ProjectExportData["releases"][number]["attachments"] = [];
-      if (options.attachments) {
-        for (const a of r.attachments) {
-          const open = () => (async function* () { yield await readReleaseAttachmentFile(a.id); })();
-          const info = await addFile(files, open, async () => true, onFile);
-          if (!info) {
-            missingFiles++;
-            continue;
-          }
-          attachments.push({ fileName: a.fileName, size: info.size, isImage: a.isImage, position: a.position, createdAt: iso(a.createdAt), file: info.sha });
-        }
-      }
-      releaseAttachmentCount += attachments.length;
-      releases.push({
-        ref: `r${i + 1}`,
-        number: r.number,
-        title: r.title,
-        content: r.content,
-        createdBy: users.ref(r.createdById),
-        deployedAt: iso(r.deployedAt),
-        tasks: r.tasks.map((x) => ({ taskRef: x.taskId ? (taskRef.get(x.taskId) ?? null) : null, title: x.title, kindName: x.kindName })),
-        attachments,
-      });
-    }
-  }
+  const releaseRows = options.scope === "all"
+    ? await db.release.findMany({
+        where: { projectId },
+        orderBy: [{ number: "asc" }],
+        include: { tasks: { orderBy: { id: "asc" } }, attachments: { orderBy: [{ position: "asc" }, { id: "asc" }] } },
+      })
+    : [];
 
-  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
-  const documents: ProjectExportData["documents"] = [];
-  const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
+  // Documentación y su papelera. Sin ficheros no tiene sentido: solo con adjuntos.
+  const documentRows = [];
   if (options.attachments) {
     const live = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     // De la papelera, los borrados más recientes (los antiguos se purgan solos), en orden de creación como los demás.
     const trashed = (await db.projectDocument.findMany({ where: { projectId, deletedAt: { not: null } }, orderBy: [{ deletedAt: "desc" }, { id: "asc" }], take: TRASH_EXPORT_MAX }))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
-    let docSeq = 0;
-    for (const d of [...live, ...trashed]) {
-      const file = documentPath(d.id);
-      const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
-      if (!info) {
-        missingFiles++;
-        continue;
-      }
-      const row = { ref: `x${++docSeq}`, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha };
-      if (d.deletedAt) documentsTrash.push({ ...row, deletedAt: iso(d.deletedAt), deletedBy: users.ref(d.deletedById) });
-      else documents.push(row);
-    }
+    documentRows.push(...live, ...trashed);
   }
 
-  // Historial de cambios de las tareas (solo con el histórico completo).
-  const events: ProjectExportData["events"] = [];
+  // Historial de cambios de las tareas exportadas (solo con el histórico completo).
+  const eventRows = [];
   if (options.scope === "all") {
+    const exported = new Set(orderedIds);
     let cursor: string | undefined;
     for (;;) {
       const rows = await db.taskEvent.findMany({
@@ -366,17 +235,192 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
       });
       if (rows.length === 0) break;
       cursor = rows[rows.length - 1]!.id;
-      for (const e of rows) {
-        const tr = taskRef.get(e.taskId);
-        if (!tr) continue;
-        events.push({ taskRef: tr, user: users.ref(e.userId), userName: e.userName, code: e.code, label: e.label, createdAt: iso(e.createdAt) });
-      }
+      for (const e of rows) if (exported.has(e.taskId)) eventRows.push(e);
       if (rows.length < 5000) break;
     }
   }
 
+  // Personas que el archivo puede nombrar: autores, responsables, seguidores… y las citadas en los textos.
+  const userIds = new Set<string>();
+  const addUser = (id: string | null | undefined) => {
+    if (id) userIds.add(id);
+  };
+  const addMentions = (text: string) => {
+    mapMentions(text, (name, id) => { userIds.add(id); return name; });
+  };
+  for (const t of taskRows) {
+    for (const id of [t.assigneeId, t.createdById, t.contentUpdatedById, ...t.followers.map((f) => f.userId), ...t.comments.map((c) => c.authorId), ...t.attachments.map((a) => a.createdById), ...t.links.map((l) => l.createdById)]) addUser(id);
+    addMentions(t.title);
+    addMentions(t.description);
+    for (const c of t.comments) addMentions(c.body);
+  }
+  for (const r of releaseRows) addUser(r.createdById);
+  for (const d of documentRows) for (const id of [d.createdById, d.deletedById]) addUser(id);
+  for (const e of eventRows) addUser(e.userId);
+  const userRows = userIds.size ? await db.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true, email: true } }) : [];
+
+  return { project, orderedIds, generalUsed, taskRows, releaseRows, documentRows, eventRows, userRows };
+}
+
+type Snapshot = Awaited<ReturnType<typeof readSnapshot>>;
+
+/**
+ * Arma el archivo con la foto ya leída, fuera de la transacción: aquí se calcula la huella de cada fichero. Uno que haya
+ * desaparecido del disco entretanto se omite y se cuenta en `missingFiles`, igual que uno que ya faltaba.
+ */
+async function assembleExport(snapshot: Snapshot, options: ExportOptions, exporter: ProjectExporter, now: Date, onFile?: () => void | Promise<void>): Promise<ProjectExport> {
+  const { project, orderedIds, generalUsed, taskRows, releaseRows, documentRows, eventRows, userRows } = snapshot;
+  const users = new UserRefs();
+  const files = new Map<string, FileInfo>();
+  let missingFiles = 0;
+
+  // Refs de columnas, etiquetas, entregables y tareas (por orden).
+  const columnRef = new Map(project.columns.map((c, i) => [c.id, `c${i + 1}`]));
+  const labelRef = new Map(project.labels.map((l, i) => [l.id, `l${i + 1}`]));
+  const deliverableRef = new Map(project.deliverables.map((d, i) => [d.id, `d${i + 1}`]));
+  const taskRef = new Map(orderedIds.map((id, i) => [id, `t${i + 1}`]));
+
+  const kindList = [...project.kinds.map((k) => ({ ...k, scope: "project" as const })), ...generalUsed.map((k) => ({ ...k, scope: "general" as const }))];
+  const kindRef = new Map(kindList.map((k, i) => [k.id, `k${i + 1}`]));
+
+  // Adjuntos exportados: id → ref (`a1`, `a2`…). Las imágenes de los textos (`/api/attachments/<id>`) se escriben con la
+  // ref al final, como las menciones, y el importador las apunta a los adjuntos importados.
+  const attachmentRefs = new Map<string, string>();
+  const attachmentRef = (id: string) => {
+    const r = `a${attachmentRefs.size + 1}`;
+    attachmentRefs.set(id, r);
+    return r;
+  };
+
+  // Tareas.
+  const tasks: ProjectExportData["tasks"] = [];
+  let commentCount = 0;
+  let subtaskCount = 0;
+  let commentSeq = 0;
+  for (const t of taskRows) {
+    const commentRefs = new Map(t.comments.map((c) => [c.id, `m${++commentSeq}`]));
+    const attachments: ProjectExportData["tasks"][number]["attachments"] = [];
+    if (options.attachments) {
+      for (const a of t.attachments) {
+        const file = attachmentPath(a.id, a.isImage ? "full" : "file");
+        const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
+        if (!info) {
+          missingFiles++;
+          continue;
+        }
+        attachments.push({
+          originalName: a.originalName, mimeType: a.mimeType, isImage: a.isImage, width: a.width, height: a.height, size: info.size,
+          createdBy: users.ref(a.createdById), createdAt: iso(a.createdAt), file: info.sha, ref: attachmentRef(a.id),
+        });
+      }
+    }
+    commentCount += t.comments.length;
+    subtaskCount += t.subtasks.length;
+    tasks.push({
+      ref: taskRef.get(t.id)!,
+      title: t.title, // las menciones se reescriben al final, cuando se sabe qué personas existen
+      description: t.description,
+      columnRef: must(columnRef, t.columnId),
+      kindRef: must(kindRef, t.kindId),
+      color: t.color,
+      linkUrl: t.linkUrl,
+      position: t.position,
+      assignee: users.ref(t.assigneeId),
+      createdBy: users.ref(t.createdById),
+      dueDate: dateToIso(t.dueDate),
+      startDate: dateToIso(t.startDate),
+      deliverableRef: t.deliverableId ? (deliverableRef.get(t.deliverableId) ?? null) : null,
+      archivedAt: isoOrNull(t.archivedAt),
+      archivedFromColumnRef: t.archivedFromColumnId ? (columnRef.get(t.archivedFromColumnId) ?? null) : null,
+      columnEnteredAt: iso(t.columnEnteredAt),
+      evergreen: t.evergreen,
+      evergreenEvery: t.evergreenEvery,
+      cost: t.cost ? t.cost.toFixed(2) : null,
+      costPaid: t.costPaid,
+      estimatedHours: t.estimatedHours ? t.estimatedHours.toFixed(2) : null,
+      actualHours: t.actualHours ? t.actualHours.toFixed(2) : null,
+      priority: t.priority,
+      client: t.client,
+      recurrence: t.recurrence,
+      recurrenceDay: t.recurrenceDay,
+      recurrenceFromRef: t.recurrenceFromId ? (taskRef.get(t.recurrenceFromId) ?? null) : null,
+      blockedByRef: t.blockedById ? (taskRef.get(t.blockedById) ?? null) : null,
+      routineColumnRef: t.routineColumnId ? (columnRef.get(t.routineColumnId) ?? null) : null,
+      waitingNotifiedAt: isoOrNull(t.waitingNotifiedAt),
+      contentUpdatedAt: isoOrNull(t.contentUpdatedAt),
+      contentUpdatedByRef: users.ref(t.contentUpdatedById),
+      createdAt: iso(t.createdAt),
+      updatedAt: iso(t.updatedAt),
+      labelRefs: t.labels.map((l) => labelRef.get(l.labelId)).filter((r): r is string => !!r).sort(),
+      subtasks: t.subtasks.map((s) => ({ title: s.title, done: s.done, position: s.position })),
+      followers: t.followers.map((f) => ({ user: users.ref(f.userId)!, muted: f.muted, createdAt: iso(f.createdAt) })),
+      comments: t.comments.map((c) => ({
+        ref: commentRefs.get(c.id)!,
+        author: users.ref(c.authorId),
+        authorName: c.authorId ? null : c.authorName,
+        body: c.body,
+        createdAt: iso(c.createdAt),
+        editedAt: isoOrNull(c.editedAt),
+        parentRef: c.parentId ? (commentRefs.get(c.parentId) ?? null) : null,
+        deletedAt: isoOrNull(c.deletedAt),
+      })),
+      attachments,
+      links: t.links.map((l) => ({
+        kind: l.kind, title: l.title, url: l.url, createdBy: users.ref(l.createdById), createdAt: iso(l.createdAt),
+        externalId: l.externalId, shareStatus: (l.shareStatus as "SHARED" | "PARTIAL" | "NOT_SHARED" | null) ?? null, shareFailed: l.shareFailed,
+      })),
+    });
+  }
+
+  // Releases con su contenido y adjuntos (solo con el histórico completo).
+  const releases: ProjectExportData["releases"] = [];
+  let releaseAttachmentCount = 0;
+  for (const [i, r] of releaseRows.entries()) {
+    const attachments: ProjectExportData["releases"][number]["attachments"] = [];
+    if (options.attachments) {
+      for (const a of r.attachments) {
+        const open = () => (async function* () { yield await readReleaseAttachmentFile(a.id); })();
+        const info = await addFile(files, open, async () => true, onFile);
+        if (!info) {
+          missingFiles++;
+          continue;
+        }
+        attachments.push({ fileName: a.fileName, size: info.size, isImage: a.isImage, position: a.position, createdAt: iso(a.createdAt), file: info.sha });
+      }
+    }
+    releaseAttachmentCount += attachments.length;
+    releases.push({
+      ref: `r${i + 1}`,
+      number: r.number,
+      title: r.title,
+      content: r.content,
+      createdBy: users.ref(r.createdById),
+      deployedAt: iso(r.deployedAt),
+      tasks: r.tasks.map((x) => ({ taskRef: x.taskId ? (taskRef.get(x.taskId) ?? null) : null, title: x.title, kindName: x.kindName })),
+      attachments,
+    });
+  }
+
+  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
+  const documents: ProjectExportData["documents"] = [];
+  const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
+  let docSeq = 0;
+  for (const d of documentRows) {
+    const file = documentPath(d.id);
+    const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
+    if (!info) {
+      missingFiles++;
+      continue;
+    }
+    const row = { ref: `x${++docSeq}`, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha };
+    if (d.deletedAt) documentsTrash.push({ ...row, deletedAt: iso(d.deletedAt), deletedBy: users.ref(d.deletedById) });
+    else documents.push(row);
+  }
+
+  // Historial de cambios de las tareas (solo con el histórico completo).
+  const events: ProjectExportData["events"] = eventRows.map((e) => ({ taskRef: taskRef.get(e.taskId)!, user: users.ref(e.userId), userName: e.userName, code: e.code, label: e.label, createdAt: iso(e.createdAt) }));
+
   // Personas citadas (las que ya no existen se omiten: sus refs quedan sin resolver y al importar salen como texto).
-  const userRows = await db.user.findMany({ where: { id: { in: [...new Set([...users.entries().map(([id]) => id), ...mentionIds])] } }, select: { id: true, name: true, email: true } });
   const userById = new Map(userRows.map((u) => [u.id, u]));
   // Menciones: la de una persona que existe lleva su ref; la de una que ya no, queda como texto.
   const fixMentions = (text: string) => remapAttachmentRefs(mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`)), attachmentRefs);
@@ -433,7 +477,7 @@ async function buildInSnapshot(db: Prisma.TransactionClient, projectId: string, 
   projectDataSchema.parse(data);
 
   const projectJson = Buffer.from(JSON.stringify(data), "utf8");
-  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw new AppError("El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».", 413);
+  if (projectJson.length > MAX_PROJECT_JSON_BYTES) throw tooBigForJson();
 
   const counts: ExportCounts = {
     columns: data.columns.length, kinds: data.kinds.length, labels: data.labels.length, deliverables: data.deliverables.length,
