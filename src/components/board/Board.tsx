@@ -1353,7 +1353,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
     if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
+    // Reordenar dentro de la misma columna no empieza otra estancia («Esperando N d» no vuelve a 0; el servidor tampoco la cambia).
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, columnId: col, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: t.columnId === col ? t.columnEnteredAt : new Date().toISOString() } : t)));
 
     const turn = moveTurns.start([id]);
     const res = await track(moveTask(id, col, prevId, nextId));

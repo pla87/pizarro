@@ -1136,11 +1136,10 @@ export async function addSubtasks(taskId: string, titles: string[]) {
       if (room <= 0) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
       const last = await tx.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
       let position = last?.position;
-      const created: SubtaskInfo[] = [];
-      for (const title of names.slice(0, room)) {
-        position = positionBetween(position, null);
-        created.push(await tx.subtask.create({ data: { taskId, title, position }, select: { id: true, title: true, done: true, position: true } }));
-      }
+      const data = names.slice(0, room).map((title) => ({ taskId, title, position: (position = positionBetween(position, null)) }));
+      // Una sola consulta para todas (antes, una por subtarea con la tarea bloqueada).
+      const rows = await tx.subtask.createManyAndReturn({ data, select: { id: true, title: true, done: true, position: true } });
+      const created: SubtaskInfo[] = rows.sort((a, b) => a.position - b.position);
       return { created, skipped: Math.max(0, names.length - room) };
     });
     addUndo(...created.map((s) => ({ t: "subtask.remove" as const, id: s.id })));
