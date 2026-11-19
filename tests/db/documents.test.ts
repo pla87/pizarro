@@ -286,6 +286,19 @@ describe("documentación: borrar y renombrar", () => {
     await stat(documentPath(doc.id));
   });
 
+  // Antes, «   » o «...» se guardaban como «documento» sin avisar (el saneado ponía el nombre por defecto).
+  test("renombrar a un nombre que se queda vacío al sanearlo («   », «...», «./») avisa y no cambia nada", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    const doc = await db.projectDocument.create({ data: row(f.project.id, m.id, 4, "notas.md") });
+    await asUser(m, async () => {
+      for (const name of ["", "   ", "...", "./", " . . "]) expectFail(await renameDocument(doc.id, name), /^El nombre no puede estar vacío\.$/);
+      assert.equal((await db.projectDocument.findUniqueOrThrow({ where: { id: doc.id } })).name, "notas.md");
+      // «documento» escrito a mano sí vale.
+      assert.equal(expectOk(await renameDocument(doc.id, "documento")).name, "documento");
+    });
+  });
+
   test("borrar el proyecto elimina sus documentos y sus ficheros, y no toca los de otros", async () => {
     const m = await makeUser();
     const f = await makeProject({ members: [m] });

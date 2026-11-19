@@ -218,7 +218,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     });
     addUndo({ t: "release.remove", id: result.releaseId });
     // Recurrentes que salen terminadas (columna terminada de destino o archivo): nace su siguiente aparición.
-    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id, new Map(tasks.map((t) => [t.id, t.title]))) : [];
+    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id, new Map(tasks.map((t) => [t.id, t.title])), { asDone: !target }) : [];
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
       "Desplegó la release «{title}» con {count}{archived}{fixed}",

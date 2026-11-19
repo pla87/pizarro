@@ -41,7 +41,8 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   const [created, done, comments, assigned, due] = await Promise.all([
     // «Tareas nuevas»: las que crearon otras personas (las suyas ya las conoce, como sus comentarios).
     db.task.findMany({ where: { ...live, createdAt: { gte: since }, OR: [{ createdById: null }, { createdById: { not: user.id } }] }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
-    db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
+    // «Terminadas»: también las que se archivaron después de terminarlas (archivar lo terminado es lo normal antes del envío).
+    db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: { project: working } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.taskComment.findMany({ where: { deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: mine }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.task.findMany({

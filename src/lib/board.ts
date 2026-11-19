@@ -36,31 +36,76 @@ const boardTaskSelect = {
   _count: { select: { comments: { where: { deletedAt: null } }, links: true } },
 } satisfies Prisma.TaskSelect;
 
-/** Igual que boardTaskSelect pero sin recuentos (taskCounts). */
-const { _count: _counts, ...boardTaskManySelect } = boardTaskSelect;
+/**
+ * Igual que boardTaskSelect pero sin recuentos ni las filas de subtareas y adjuntos (taskCounts): en una lista, traer
+ * una fila por subtarea y por adjunto solo para contarlas costaba miles de filas por tablero.
+ */
+const { _count: _counts, subtasks: _subtasks, attachments: _attachments, ...boardTaskManySelect } = boardTaskSelect;
 /** Además sin la descripción: en el tablero completo solo hace falta saber si la hay. */
 const { description: _description, ...boardTaskListSelect } = boardTaskManySelect;
 
 type BoardTaskBaseRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskManySelect }>, "description"> & { description?: string };
-type BoardTaskRow = BoardTaskBaseRow & { _count: TaskCounts };
-interface TaskCounts { comments: number; links: number }
+type BoardTaskRow = Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>;
+interface TaskCounts {
+  comments: number;
+  links: number;
+  subtaskTotal: number;
+  subtaskDone: number;
+  imageCount: number;
+  fileCount: number;
+  attachBytes: number;
+}
 
 function toBoardTask(t: BoardTaskRow): BoardTask {
-  return toBoardTaskWith(t, (t.description ?? "").trim().length > 0, t._count);
+  return toBoardTaskWith(t, t.description.trim().length > 0, {
+    comments: t._count.comments,
+    links: t._count.links,
+    subtaskTotal: t.subtasks.length,
+    subtaskDone: t.subtasks.filter((s) => s.done).length,
+    imageCount: t.attachments.filter((a) => a.isImage).length,
+    fileCount: t.attachments.filter((a) => !a.isImage).length,
+    attachBytes: t.attachments.reduce((n, a) => n + a.size, 0),
+  });
 }
 
 /**
- * Comentarios (sin los borrados) y enlaces por tarea, con dos groupBy filtrados (por proyecto o por ids) que usan los
- * índices por taskId: solo leen las filas de esas tareas, no las de todo el servidor.
+ * Comentarios (sin los borrados), enlaces, subtareas (hechas o no) y adjuntos (imágenes o no, con su tamaño) por tarea,
+ * con groupBy filtrados (por proyecto o por ids) que usan los índices por taskId: solo leen las filas de esas tareas,
+ * no las de todo el servidor, y devuelven una fila por tarea (y estado) en lugar de una por subtarea o adjunto.
  */
 async function taskCounts(scope: { task: Prisma.TaskWhereInput } | { taskId: { in: string[] } }): Promise<(id: string) => TaskCounts> {
-  const [comments, links] = await Promise.all([
+  const [comments, links, subtasks, attachments] = await Promise.all([
     db.taskComment.groupBy({ by: ["taskId"], where: { deletedAt: null, ...scope }, _count: { _all: true } }),
     db.taskLink.groupBy({ by: ["taskId"], where: scope, _count: { _all: true } }),
+    db.subtask.groupBy({ by: ["taskId", "done"], where: scope, _count: { _all: true } }),
+    db.taskAttachment.groupBy({ by: ["taskId", "isImage"], where: scope, _count: { _all: true }, _sum: { size: true } }),
   ]);
   const c = new Map(comments.map((r) => [r.taskId, r._count._all]));
   const l = new Map(links.map((r) => [r.taskId, r._count._all]));
-  return (id) => ({ comments: c.get(id) ?? 0, links: l.get(id) ?? 0 });
+  const s = new Map<string, { total: number; done: number }>();
+  for (const r of subtasks) {
+    const e = s.get(r.taskId) ?? { total: 0, done: 0 };
+    e.total += r._count._all;
+    if (r.done) e.done += r._count._all;
+    s.set(r.taskId, e);
+  }
+  const a = new Map<string, { images: number; files: number; bytes: number }>();
+  for (const r of attachments) {
+    const e = a.get(r.taskId) ?? { images: 0, files: 0, bytes: 0 };
+    if (r.isImage) e.images += r._count._all;
+    else e.files += r._count._all;
+    e.bytes += r._sum.size ?? 0;
+    a.set(r.taskId, e);
+  }
+  return (id) => ({
+    comments: c.get(id) ?? 0,
+    links: l.get(id) ?? 0,
+    subtaskTotal: s.get(id)?.total ?? 0,
+    subtaskDone: s.get(id)?.done ?? 0,
+    imageCount: a.get(id)?.images ?? 0,
+    fileCount: a.get(id)?.files ?? 0,
+    attachBytes: a.get(id)?.bytes ?? 0,
+  });
 }
 
 function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: TaskCounts): BoardTask {
@@ -74,11 +119,11 @@ function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: T
     position: t.position,
     assigneeId: t.assigneeId,
     labelIds: t.labels.map((l) => l.labelId),
-    subtaskTotal: t.subtasks.length,
-    subtaskDone: t.subtasks.filter((s) => s.done).length,
-    imageCount: t.attachments.filter((a) => a.isImage).length,
-    fileCount: t.attachments.filter((a) => !a.isImage).length,
-    attachBytes: t.attachments.reduce((n, a) => n + a.size, 0),
+    subtaskTotal: counts.subtaskTotal,
+    subtaskDone: counts.subtaskDone,
+    imageCount: counts.imageCount,
+    fileCount: counts.fileCount,
+    attachBytes: counts.attachBytes,
     hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,

@@ -6,6 +6,7 @@ import { db, expectFail, expectOk, loginAs, makeUser } from "./helpers";
 import { removeLicense, saveLicense, setPersonalUseDeclared, snoozeLicenseNudge } from "../../src/actions/license";
 import { getLicense, getLicenseStatus, licenseNudgeFor } from "../../src/lib/license-registry";
 import { flushLogs } from "../../src/lib/log";
+import { todayIso } from "../../src/lib/dates";
 
 const DAY = 24 * 60 * 60 * 1000;
 const reset = () => db.appState.deleteMany({ where: { key: { in: ["commercialLicense", "licensePersonalUse"] } } });
@@ -90,5 +91,31 @@ describe("licencia comercial registrada", () => {
     expectOk(await saveLicense({ holder: "Empresa Ejemplo", reference: "", email: "" }));
     assert.equal(await licenseNudgeFor(other, soon), false);
     await reset();
+  });
+});
+
+describe("fecha de alta de la licencia", () => {
+  // Se tomaba el día UTC: en España, entre medianoche y la 1 (o las 2 en verano), salía el día anterior.
+  test("es el día de hoy en la zona horaria de la app, no el día UTC", async () => {
+    await reset();
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    // A cualquier hora, en una de las dos zonas el día no es el UTC (+14 h y −11 h).
+    const utc = new Date().toISOString().slice(0, 10);
+    const zone = todayIso("Pacific/Kiritimati") !== utc ? "Pacific/Kiritimati" : "Pacific/Pago_Pago";
+    const prev = process.env.APP_TIMEZONE;
+    process.env.APP_TIMEZONE = zone;
+    try {
+      const rec = expectOk(await saveLicense({ holder: "Empresa Ejemplo", reference: "", email: "" }));
+      assert.equal(rec.date, todayIso(zone));
+      assert.notEqual(rec.date, utc);
+      await removeLicense();
+      expectOk(await setPersonalUseDeclared(true));
+      assert.equal((await db.appState.findUniqueOrThrow({ where: { key: "licensePersonalUse" } })).value.includes(todayIso(zone)), true);
+    } finally {
+      if (prev === undefined) delete process.env.APP_TIMEZONE;
+      else process.env.APP_TIMEZONE = prev;
+      await reset();
+    }
   });
 });
