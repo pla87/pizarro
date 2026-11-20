@@ -11,10 +11,12 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard } from "./context";
 import { formatDate } from "@/lib/format";
 import { MentionText } from "../ui/MentionText";
+import { mentionsToPlain } from "@/lib/mentions";
 import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 import { actionThrowMessage, actionThrowResult } from "@/lib/stale-action";
+import { ArchivedTaskView } from "./ArchivedTaskView";
 
-/** Tareas archivadas del proyecto: consulta y recuperación. */
+/** Tareas archivadas del proyecto: consulta (cada una se abre en solo lectura: ArchivedTaskView) y recuperación. */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const board = useBoard();
   const toast = useToast();
@@ -26,6 +28,8 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Tarea abierta en solo lectura.
+  const [viewing, setViewing] = useState<ArchivedTask | null>(null);
   const q = query.trim();
   // Búsqueda vigente: una respuesta de «Ver más» que llega tras cambiar la búsqueda se descarta.
   const qRef = useRef(q);
@@ -98,11 +102,15 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     const res = await board.track(restoreTask(id));
     setBusy(null);
     if (!res.ok) {
-      if (res.error === t("La tarea no está archivada.")) setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
+      if (res.error === t("La tarea no está archivada.")) {
+        setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
+        setViewing((v) => (v?.id === id ? null : v));
+      }
       return toast(res.error, "error");
     }
     board.upsertTask(res.data.task);
     setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
+    setViewing((v) => (v?.id === id ? null : v));
     toast(t("Tarea recuperada en «{name}»", { name: res.data.columnName }));
   };
 
@@ -127,9 +135,17 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
           {filtered.map((task) => (
             <li key={task.id} className="flex items-start gap-3 py-2.5">
               <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2">
                   <TypeBadge kind={board.kindById.get(task.kindId)} />
-                  <span className="min-w-0 truncate text-sm font-medium"><MentionText text={task.title} /></span>
+                  {/* Dos líneas de título (antes una sola, cortada); al pulsarlo se abre en solo lectura. */}
+                  <button
+                    type="button"
+                    className="line-clamp-2 min-w-0 text-left text-sm font-medium break-words hover:text-brand-600 hover:underline"
+                    onClick={() => setViewing(task)}
+                    title={t("Ver la tarea archivada «{title}»", { title: mentionsToPlain(task.title) })}
+                  >
+                    <MentionText text={task.title} />
+                  </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                   <span>{t("Archivada el {date}", { date: dateFmt(task.archivedAt) })}</span>
@@ -153,6 +169,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       )}
+      {viewing && <ArchivedTaskView task={viewing} onClose={() => setViewing(null)} onRestore={() => void restore(viewing.id)} restoring={busy === viewing.id} />}
     </Modal>
   );
 }

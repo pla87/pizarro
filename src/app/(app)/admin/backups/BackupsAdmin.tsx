@@ -37,6 +37,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
     case "restoreTest": return t("Prueba de restauración mensual");
     case "periodicMail": return t("Resúmenes e informes por email");
     case "transferJobs": return t("Archivos de exportación de proyectos caducados");
+    case "sharedFiles": return t("Archivos compartidos con Pizarro sin usar");
     case "waitingReminders": return t("Recordatorios de tareas en espera");
     case "releaseResume": return t("Reanudar copias de adjuntos de releases");
     default: return name;

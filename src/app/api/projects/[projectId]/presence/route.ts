@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Personas (incluido el usuario actual) con actividad en el tablero en los últimos 5 minutos y, por tarea, las demás
  * personas que la tienen abierta ahora (círculos de las tarjetas). No se registra en los logs.
  *
- * Tener el tablero a la vista también cuenta como actividad: el tablero solo pregunta con la pestaña visible (cada 20 s y
+ * Tener el tablero a la vista también cuenta como actividad: el tablero solo pregunta con la pestaña visible (cada 60 s y
  * al volver a ella), así que una pestaña olvidada en segundo plano deja de contar a los 5 minutos.
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ projectId: string }> }) {
@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   if (!user) return new Response((await getT())("No autorizado"), { status: 401 });
   const parsed = v.id.safeParse((await ctx.params).projectId);
   if (!parsed.success) return new Response((await getT())("No encontrado"), { status: 404 });
-  // Acceso con caché breve (se consulta cada 15 s por pestaña); la sesión sí se comprueba siempre.
+  // Acceso con caché breve (se consulta cada 60 s por pestaña); la sesión sí se comprueba siempre.
   if (!(await canAccessProject(user, parsed.data))) return new Response((await getT())("No encontrado"), { status: 404 });
   const project = { id: parsed.data };
   notePresence(project.id, user.id, user.name);

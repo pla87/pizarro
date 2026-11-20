@@ -246,7 +246,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   // Varias tandas a la vez suman en un solo progreso, que se limpia cuando acaban todas.
   const [progressAgg] = useState(() => createProgressAggregator(setProgress));
-  // Cancelar o cerrar el diálogo aborta las subidas que aún no han empezado (las que van en curso terminan).
+  // «Descartar cambios» o cerrar el diálogo aborta las subidas que aún no han empezado (las que van en curso terminan).
   const uploadAbort = useRef(new AbortController());
   useEffect(() => {
     return () => uploadAbort.current.abort();
@@ -255,7 +255,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const [totalRejected, setTotalRejected] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
 
-  // Cómo estaba la tarea al abrir el diálogo (para «Cancelar»): la tarjeta al montar y el detalle en su primera carga.
+  // Cómo estaba la tarea al abrir el diálogo (para «Descartar cambios»): la tarjeta al montar y el detalle en su primera carga.
   const initialTask = useRef(task);
   const initialDetail = useRef<TaskDetail | null>(null);
   // Desde cuándo cuenta lo que se hace en el diálogo: la hora del servidor al cargar el detalle (sin depender del reloj
@@ -263,7 +263,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const [openedAtLocal] = useState(() => new Date().toISOString());
   const [cancelling, setCancelling] = useState(false);
   // Versión del texto contra la que se guarda: la del detalle, adelantada al instante por cada guardado propio (ver `save`).
-  // `ownTextVersion`: la del último guardado de texto de este diálogo («Cancelar» la usa: lo que cambie después, aunque
+  // `ownTextVersion`: la del último guardado de texto de este diálogo («Descartar cambios» la usa: lo que cambie después, aunque
   // sea desde otra pestaña, no se pisa).
   const textVersion = useRef<string | null | undefined>(undefined);
   const ownTextVersion = useRef<string | null | undefined>(undefined);
@@ -495,19 +495,43 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return sig(d0) !== sig(detail);
   };
 
+  /** ¿Hay algo escrito sin guardar? (título, enlace, descripción abierta, subtarea a medio escribir, comentario en edición). */
+  const typedUnsaved = (): boolean => {
+    const desc = descLive.current;
+    if (desc !== null && desc !== (detail?.description ?? "") && (descDirtyCheck.current?.() ?? true)) return true;
+    if (subtaskDraftPending.current?.() || commentEditDirty.current?.()) return true;
+    const { title: typed, link: typedLink } = textState.current;
+    const saved = board.getTask(task.id) ?? task;
+    return (!!typed.trim() && typed.trim() !== saved.title) || normalizeLinkUrl(typedLink) !== (saved.linkUrl ?? "");
+  };
+
   /**
-   * Botón Cancelar: deshace lo que has hecho en la tarea desde que abriste el diálogo (una sola acción, deshacible) y
-   * cierra; lo que hayan cambiado otras personas entretanto se queda. Lo que se esté escribiendo sin confirmar se
-   * descarta al cerrar.
+   * Botón «Descartar cambios»: deshace lo que has hecho en la tarea desde que abriste el diálogo (una sola acción,
+   * deshacible) y cierra; lo que hayan cambiado otras personas entretanto se queda. Lo que se esté escribiendo sin
+   * confirmar se descarta al cerrar. Si hay algo tuyo que descartar, pregunta antes (en el móvil no se ve el tooltip que lo
+   * explicaba); sin cambios cierra sin preguntar.
    */
-  const cancelEdits = async () => {
+  const discardEdits = async () => {
     if (cancelling) return;
     setCancelling(true);
-    uploadAbort.current.abort();
-    uploadAbort.current = new AbortController(); // si Cancelar falla y el diálogo sigue abierto, se puede volver a subir
     try {
       await board.settle();
-      if (!editedSinceOpen()) return onClose();
+      const edited = editedSinceOpen();
+      if (edited || typedUnsaved()) {
+        closeGuard.current = "confirming";
+        const ok = await confirm({
+          title: t("¿Descartar los cambios?"),
+          message: t("Se desharán los cambios que has hecho en esta tarea desde que la abriste, también lo escrito sin guardar, y se cerrará. Los comentarios y lo que hayan cambiado otras personas se quedan como están."),
+          confirmLabel: t("Descartar cambios"),
+          cancelLabel: t("Seguir editando"),
+          danger: true,
+        }).catch(() => false);
+        closeGuard.current = ok ? "discarding" : "idle";
+        if (!ok) return;
+      }
+      uploadAbort.current.abort();
+      uploadAbort.current = new AbortController(); // si falla y el diálogo sigue abierto, se puede volver a subir
+      if (!edited) return onClose();
       const t0 = initialTask.current;
       const d0 = initialDetail.current;
       const res = await tracked(restoreTaskSnapshot(task.id, {
@@ -523,6 +547,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         } : {}),
       }, d0 ? (ownTextVersion.current !== undefined ? ownTextVersion.current : d0.textVersion) : undefined));
       if (!res.ok) {
+        closeGuard.current = "idle";
         toast(res.error, "error");
         // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
         await reload();
@@ -531,7 +556,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       board.upsertTask(res.data.task);
       res.data.removed.forEach(board.removeTask);
       onClose();
-      // Solo había cambios de otras personas (Cancelar no los toca): nada que descartar ni que deshacer.
+      // Solo había cambios de otras personas («Descartar cambios» no los toca): nada que descartar ni que deshacer.
       if (!res.data.changed) return;
       board.refresh();
       toast(t("Cambios descartados"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
@@ -649,7 +674,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
-  // y restas sueltas: así subidas, borrados, deshacer, rehacer y «Cancelar» (todos acaban cambiando la lista) no los desajustan.
+  // y restas sueltas: así subidas, borrados, deshacer, rehacer y «Descartar cambios» (todos acaban cambiando la lista) no los desajustan.
   // Solo al cambiar la lista (no en cada refresco), para no pisar lo que traiga el servidor sobre cambios de otras personas.
   const listedAttachments = detail?.attachments;
   useEffect(() => {
@@ -999,14 +1024,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
 
-  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con Cancelar y Guardar, quepan en una línea
+  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Descartar cambios» y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
   const actionButtons = (
     <>
       <button className="btn-secondary touch-target px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
       <button className="btn-secondary touch-target px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
       <button className="btn-ghost touch-target px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-      <button className="btn-secondary ml-auto px-2 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
+      <button className="btn-secondary ml-auto px-2 py-1.5 text-center leading-tight whitespace-normal max-sm:max-w-[6.5rem] max-sm:text-xs" onClick={discardEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Descartar cambios")}</button>
       <button className="btn-primary px-3 py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
     </>
   );

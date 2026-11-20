@@ -18,18 +18,19 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
-| **Generales** | | **439** | |
-| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 390 | ~5 min |
+| **Generales** | | **443** | |
+| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
-| **Tablero** | | **677** | |
+| **Tablero** | | **693** | |
 | Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo) | `e2e/tablero-cabecera-e2e.mjs` | 103 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/tablero-fijas-e2e.mjs` | 75 | ~1 min |
-| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 87 | ~1,5 min |
-| **Detalle de la tarea** | | **44** | |
-| Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/detalle-comentarios-e2e.mjs` | 44 | ~1 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 86 | ~1,5 min |
+| «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado y sin sesión (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 16 | ~30 s |
+| **Detalle de la tarea** | | **56** | |
+| Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
 | **Copias de tareas** | | **120** | |
 | Copias con adjuntos y release con barra de formato | `e2e/copias-adjuntos-e2e.mjs` | 93 | ~2 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/copias-imagen-sin-red-e2e.mjs` | 27 | ~1 min |
@@ -72,7 +73,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **3065** | |
+| **Total** | | **3097** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -257,18 +258,34 @@ sitio. Misma base y servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
 ```
 
+### Compartir con Pizarro (ronda 57)
+
+El manifiesto declara `share_target` (POST multipart a `/api/share`). El envío tal como lo manda el navegador al
+compartir desde otra app (`Sec-Fetch-Site: none`, con título, texto, enlace y un archivo) responde 303 a `/share?id=…`,
+que abre «Nueva tarea» en el último proyecto usado con el título, el texto y el enlace en la descripción y el archivo;
+un formulario de la propia app con una imagen también llega, y descartar vuelve al tablero. «Crear tarea» crea la tarea
+con su adjunto, vuelve al tablero y lo compartido deja de estar en el servidor (404). Un formulario de otra web
+(cross-site, servido con `page.route`) recibe 403 sin crear nada. Sin sesión, el envío va al acceso y, al entrar, «Nueva
+tarea» trae el título y avisa de que el archivo no se guardó. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-e2e.mjs
+```
+
 ## Detalle de la tarea
 
 ### Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
 
 Tres personas comentan a la vez la misma tarea en varias rondas (todas ven todos los comentarios, en orden y sin «Ver
-anteriores»), el editor de la descripción con red lenta (CDP, y el trozo del editor retrasado 6 s: lo tecleado antes y
+anteriores»), editar el propio comentario en el móvil (el botón dice «Editar»; un admin no edita el ajeno pero sí lo
+borra; la mención nueva avisa una sola vez, la otra persona ve «(editado)» en vivo, queda en el historial y se deshace;
+ronda 57), el editor de la descripción con red lenta (CDP, y el trozo del editor retrasado 6 s: lo tecleado antes y
 durante su llegada no se pierde), dos pestañas de la misma persona guardando la descripción (la segunda, que la escribía a
 la vez, recibe el aviso; una sola pestaña guardando seguido no) y una release cuyo texto se generó antes de renombrar una tarea. Misma base y
 servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs   # PART=comments,desc,tabs,rel
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs   # PART=comments,edit,desc,tabs,rel
 ```
 
 

@@ -268,7 +268,8 @@ if (only.includes("capas")) {
     await sleep(500);
     L.eq(`CAPAS ${label}: con la tarea abierta no hay botones flotantes del tablero`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 0);
     L.eq(`CAPAS ${label}: nada tapa los botones del diálogo`, await covered(page), []);
-    await U.dialog(page).getByRole("button", { name: "Cancelar" }).tap();
+    // Sin cambios, «Descartar cambios» cierra sin preguntar.
+    await U.dialog(page).getByRole("button", { name: "Descartar cambios" }).tap();
     await U.dialog(page).waitFor({ state: "detached" });
     L.eq(`CAPAS ${label}: al cerrarla vuelven`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 1);
     await s.ctx.close();

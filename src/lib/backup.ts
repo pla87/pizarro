@@ -229,7 +229,8 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
  */
 async function collectFiles(key: Buffer) {
   // Exportaciones (pueden pesar GB y caducan en 24 h) e importaciones en curso son temporales: no entran en la copia.
-  const exclude = [backupsDir(), path.join(uploadDir(), "exports"), path.join(uploadDir(), "imports")];
+  // Fuera también lo compartido con «Compartir → Pizarro» sin usar (UPLOAD_DIR/shared: temporal, caduca a los 30 minutos).
+  const exclude = [backupsDir(), path.join(uploadDir(), "exports"), path.join(uploadDir(), "imports"), path.join(uploadDir(), "shared")];
   const extDir = process.env.BACKUP_EXTERNAL_DIR?.trim();
   if (extDir && path.isAbsolute(extDir)) exclude.push(extDir);
   const scanned = await scanFiles(uploadDir(), exclude);

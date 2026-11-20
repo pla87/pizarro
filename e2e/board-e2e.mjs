@@ -637,6 +637,8 @@ if (only.includes("com")) {
   L.eq("COM: sin lápiz en el comentario de otra persona", await theirs.getByRole("button", { name: "Editar comentario" }).count(), 0);
   const mine = U.dialog(p).locator("[data-comment-id]").first();
   const pencil = mine.getByRole("button", { name: "Editar comentario" });
+  await p.mouse.move(1, 1); // el ratón, fuera del comentario (el último clic pudo quedar encima)
+  await sleep(200);
   L.eq("COM: el lápiz no se ve sin pasar el ratón", await pencil.evaluate((el) => getComputedStyle(el).opacity), "0");
   await mine.hover();
   await sleep(200);

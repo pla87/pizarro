@@ -263,14 +263,15 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
           )}
           <span className="ml-auto flex items-center gap-3">
             {c.authorId === me && editing?.id !== c.id && (
+              // Con texto, como «Responder» y «Borrar»: solo con el lápiz pasaba desapercibido (sobre todo en el móvil).
               <button
                 type="button"
-                className={`${iconBtn} -m-1 rounded p-1 hover:text-brand-600`}
+                className={`${iconBtn} inline-flex items-center gap-0.5 hover:text-brand-600`}
                 onClick={() => setEditing({ id: c.id, text: c.body })}
                 aria-label={t("Editar comentario")}
                 title={t("Editar comentario")}
               >
-                <Pencil size={12} />
+                <Pencil size={12} /> {t("Editar")}
               </button>
             )}
             <button

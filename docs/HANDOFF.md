@@ -262,6 +262,14 @@ Guardas que conviene conocer:
   interna `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
+- «Compartir → Pizarro» (ronda 57): el manifiesto declara `share_target` (POST multipart a `/api/share`, fuera del proxy
+  como las demás subidas). La ruta solo guarda lo compartido en `UPLOAD_DIR/shared/<usuario>/<envío>/`
+  (`src/lib/share-inbox.ts`: 30 min, 3 envíos por persona, fuera de las copias, limpieza en el mantenimiento
+  `sharedFiles`) y redirige a `/share`, que abre «Nueva tarea» (`ShareTarget.tsx`, con `stubBoard`). CSRF: el navegador
+  manda el envío como navegación suya (`Sec-Fetch-Site: none`, sin `Origin`); `shareRequestAllowed` rechaza `cross-site`,
+  `same-site`, un `Origin` ajeno y la ausencia de ambas cabeceras, y guardar no tiene efectos: la tarea y sus adjuntos solo
+  se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
+  la dirección de vuelta del acceso).
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
