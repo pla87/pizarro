@@ -14,6 +14,8 @@ interface ToastItem {
   kind: ToastKind;
   message: string;
   action?: ToastAction;
+  /** El de sesión caducada: en móvil no se oculta aunque lleguen otros. */
+  pinned?: boolean;
 }
 /** Botón del aviso (p. ej. «Deshacer»): al pulsarlo se ejecuta y el aviso se cierra. */
 interface ToastAction {
@@ -96,7 +98,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       const id = nextId++;
       sessionToast.current = { id, timer: hide(id) };
       // Con el texto en el idioma de la interfaz: el servidor, sin sesión, lo manda en el de la instalación.
-      setItems((prev) => pushToast(prev, { id, kind, message: t(SESSION_EXPIRED), action: { label: t("Iniciar sesión"), onClick: goToLogin } }, id));
+      setItems((prev) => pushToast(prev, { id, kind, pinned: true, message: t(SESSION_EXPIRED), action: { label: t("Iniciar sesión"), onClick: goToLogin } }, id));
       return;
     }
     // Un aviso idéntico al anterior (mismo texto y tipo) y reciente no se repite: varias acciones seguidas con el mismo
@@ -121,10 +123,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4" aria-live="polite">
+      {/* En escritorio, arriba. En móvil, abajo (arriba tapaban la cabecera: menú, proyecto, deshacer/rehacer): por encima
+          de los botones flotantes de crear (hasta 8,25rem del pie), de la barra de selección (`--selection-bar-space`,
+          SelectionBar) y del aviso «Sin conexión» (`--connection-notice-space`, ConnectionNotice), con el más reciente
+          abajo y solo los dos últimos a la vista (más el de sesión caducada, que no se oculta nunca). */}
+      <div
+        data-toasts=""
+        className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4 max-md:top-auto max-md:bottom-[calc(env(safe-area-inset-bottom)+max(9rem,1rem+var(--selection-bar-space,0px))+var(--connection-notice-space,0px))] max-md:[&>:not([data-pinned]):nth-last-child(n+3)]:hidden"
+        aria-live="polite"
+      >
         {items.map((item) => (
           <div
             key={item.id}
+            data-pinned={item.pinned ? "" : undefined}
             // La región ya es «polite»; los errores se anuncian al momento.
             role={item.kind === "error" ? "alert" : undefined}
             className={cn(

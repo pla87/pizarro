@@ -54,6 +54,16 @@ export async function run() {
   L.check("móvil: barra «2 seleccionadas»", await p.getByText("2 seleccionadas").isVisible());
   await p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) }).selectOption({ label: COL.closed });
   await L.eqEventually("móvil: las dos pasan a «Cerrado» en orden", () => L.dbOrder(COL.closed), ["B", "C"]);
+  // Avisos en móvil: abajo, sin tapar la cabecera (deshacer/rehacer) ni la barra de selección ni los botones flotantes.
+  await L.checkEventually("móvil: el aviso sale abajo, entre la cabecera y la barra de selección o los botones flotantes", () => p.evaluate(() => {
+    const toast = [...document.querySelectorAll("[data-toasts] > div")].filter((e) => e.getClientRects().length).at(-1);
+    if (!toast) return [false, "sin aviso"];
+    const r = toast.getBoundingClientRect();
+    const head = document.querySelector("[aria-label='Deshacer la última acción']")?.getBoundingClientRect();
+    const bar = document.querySelector("[data-selection-bar]")?.getBoundingClientRect();
+    const floor = Math.min(innerHeight - 8.25 * 16, bar ? bar.top : Infinity);
+    return [r.bottom <= floor + 0.5 && r.top > (head?.bottom ?? 0) && r.top > innerHeight / 2, JSON.stringify({ top: r.top, bottom: r.bottom, floor, head: head?.bottom })];
+  }));
   // El historial se escribe al final de la acción, después del cambio en la BD (y las consultas, en fila).
   await L.checkEventually("móvil: eventos «done»", async () => { const last = [(await L.events("B")).at(-1)?.code, (await L.events("C")).at(-1)?.code]; return [last.every((c) => c === "done"), last]; });
   L.eq("móvil: Backlog conserva solo A", await L.dbOrder(COL.backlog), ["A"]);
