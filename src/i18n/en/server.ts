@@ -291,7 +291,7 @@ export const server: Record<string, string> = {
   "cadencia en la release": "release cadence",
   "Cambió cómo se comparten los documentos de Google": "Changed how Google documents are shared",
   "Un proyecto privado no se puede compartir con todo el dominio.": "A private project cannot be shared with the whole domain.",
-  "Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Ajustes → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).": "Sharing with the domain requires the Workspace domain to be set (Administration → Settings → Google sign-in, or GOOGLE_WORKSPACE_DOMAIN on the server).",
+  "Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Integraciones → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).": "Sharing with the domain requires the Workspace domain to be set (Administration → Integrations → Google sign-in, or GOOGLE_WORKSPACE_DOMAIN on the server).",
   "El destino no puede ser una columna terminada ni otra columna de rutinas.": "The destination cannot be a done column or another Routines column.",
   "Solo las columnas con el rol «Rutinas» tienen destino de la siguiente aparición.": "Only columns with the “Routines” role have a next occurrence destination.",
   "Cambió el destino de la siguiente aparición de la columna «{name}»": "Changed the next occurrence destination of column “{name}”",
@@ -318,4 +318,6 @@ export const server: Record<string, string> = {
   "El destinatario guardado ya no vale: elige a una persona del proyecto.": "The saved recipient is no longer valid: choose someone in the project.",
   // Informe semanal: dirección externa que conserva quien no es administrador
   "Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto.": "Only an administrator can keep an external address: choose someone in the project.",
+  // Informe PDF: tareas fijas fuera del avance (ronda 57)
+  "Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)": "Pinned tasks: {n} (always in the release or the plan; not counted in progress or pending)",
 };

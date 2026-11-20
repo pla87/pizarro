@@ -12,7 +12,7 @@ import { actionThrowResult } from "@/lib/stale-action";
 import { codeTemplateAdminText } from "@/lib/whatsapp-code-text";
 
 /**
- * «Telegram y WhatsApp»: el administrador activa los avisos por mensajería. Va en Ajustes, junto al email y Google (las
+ * «Telegram y WhatsApp»: el administrador activa los avisos por mensajería. Va en Integraciones, junto al email y Google (las
  * demás integraciones con credenciales), en lugar de en una pestaña propia. Los tokens se guardan cifrados y nunca vuelven
  * al navegador: solo se muestran sus 4 últimos caracteres.
  */

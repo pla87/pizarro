@@ -25,7 +25,7 @@ import { codeTemplateAdminText, codeTemplateUserText } from "@/lib/whatsapp-code
 import { getT } from "@/i18n/server";
 import { makeT, toLocale, type T } from "@/i18n/core";
 
-// Telegram y WhatsApp: Administración → Ajustes (solo administradores) y Mi perfil → Avisos (cada persona).
+// Telegram y WhatsApp: Administración → Integraciones (solo administradores) y Mi perfil → Avisos (cada persona).
 // Los tokens nunca se registran ni se devuelven: los args de las acciones de administración NO se pasan a runAction.
 
 const channelSchema = z.enum(["TELEGRAM", "WHATSAPP"]);
@@ -66,7 +66,7 @@ export async function saveTelegramBot(input: { token: string }) {
     await setTelegramEnabled(true);
     const sync = await syncTelegram();
     describeAction("Configuró el bot de Telegram @{bot}", { bot: bot.username }, { mode: sync.mode, syncError: sync.error, reconnectNeeded: reset });
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { bot: bot.username, mode: sync.mode, error: sync.error, reset };
   });
 }
@@ -79,7 +79,7 @@ export async function setTelegramActive(enabled: boolean) {
     await setTelegramEnabled(Boolean(enabled));
     const sync = await syncTelegram();
     describeAction(enabled ? "Activó los avisos por Telegram" : "Desactivó los avisos por Telegram", { mode: sync.mode, syncError: sync.error });
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { mode: sync.mode, error: sync.error };
   });
 }
@@ -94,7 +94,7 @@ export async function removeTelegramBot() {
     const { count } = await db.userChannel.deleteMany({ where: { channel: "TELEGRAM" } });
     await db.telegramLinkCode.deleteMany({});
     describeAction("Quitó el bot de Telegram", { disconnected: count });
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { disconnected: count };
   });
 }
@@ -156,7 +156,7 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
       codeLangEn: cfg.codeTemplateLangEn || null,
       complete: cfg.complete, active: cfg.active, authChange: change,
     });
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { complete: cfg.complete, active: cfg.active };
   });
 }
@@ -168,7 +168,7 @@ export async function setWhatsappActive(enabled: boolean) {
     if (enabled && !cfg.complete) throw new AppError("Faltan datos: el token, el identificador del número y la plantilla.");
     await setWhatsappEnabled(Boolean(enabled));
     describeAction(enabled ? "Activó los avisos por WhatsApp" : "Desactivó los avisos por WhatsApp");
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
   });
 }
 

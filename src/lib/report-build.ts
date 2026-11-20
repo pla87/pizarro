@@ -124,6 +124,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
         deliverableId: true,
         assignee: { select: { name: true } },
         updatedAt: true,
+        evergreen: true,
         subtasks: { select: { done: true } },
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
       },
@@ -173,6 +174,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
       subtaskDone: task.subtasks.filter((x) => x.done).length,
       updatedAt: task.updatedAt.toISOString(),
       doneAt: doneAt.get(task.id) ?? null,
+      evergreen: task.evergreen,
       fields: {
         cost: task.cost?.toFixed(2) ?? null, costPaid: task.costPaid, estimatedHours: task.estimatedHours?.toFixed(2) ?? null, actualHours: task.actualHours?.toFixed(2) ?? null,
         priority: task.priority, client: task.client, startDate: dateToIso(task.startDate),

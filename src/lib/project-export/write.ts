@@ -23,7 +23,7 @@ export async function writeProjectExport(built: ProjectExport, dest: string, onF
   onFile?.(0, total);
   try {
     await pipeline(Readable.from(streamZip(entries), { objectMode: false }), createWriteStream(tmp));
-    const size = (await stat(tmp)).size;
+    const size = (await stat(/*turbopackIgnore: true*/ tmp)).size;
     if (size !== built.size) throw new Error(`El archivo escrito (${size} B) no mide lo previsto (${built.size} B).`);
     await rename(tmp, dest);
     return size;

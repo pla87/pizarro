@@ -5,6 +5,7 @@ import { latestBackupPath } from "@/lib/backup";
 import { logEvent } from "@/lib/log";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ export async function GET(req: Request) {
     headers: {
       "Content-Type": "application/octet-stream",
       "Content-Length": String(latest.bytes),
+      // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
+      [DECLARED_LENGTH_HEADER]: String(latest.bytes),
       "Content-Disposition": `attachment; filename="${latest.name}"`,
       "Cache-Control": "no-store",
     },

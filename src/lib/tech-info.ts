@@ -8,7 +8,7 @@ import { configFlags, envPresence, messagingFlags, migrationStatus } from "./doc
 /** Texto de «Copiar información técnica»: versión, commit, Node, base de datos y nombres de variables (sin valores). */
 export async function collectTechInfo(): Promise<string> {
   const presence = envPresence();
-  // Telegram y WhatsApp configurados en Administración → Ajustes, no solo con las variables WHATSAPP_* (como el diagnóstico).
+  // Telegram y WhatsApp configurados en Administración → Integraciones, no solo con las variables WHATSAPP_* (como el diagnóstico).
   const messaging = await db.appState
     .findMany({ where: { OR: [{ key: { startsWith: "telegram." } }, { key: { startsWith: "whatsapp." } }] }, select: { key: true, value: true } })
     .then((rows) => messagingFlags(process.env, rows), () => null);

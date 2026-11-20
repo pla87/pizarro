@@ -5,13 +5,13 @@ import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
 import { useLiveStream, useTaskViewers, type TaskViewer } from "./taskPresence";
 
-const POLL_MS = 15_000;
+const POLL_MS = 60_000;
 
 /**
  * Aviso «Fulano también tiene abierta esta tarea» (para no pisarse al editar).
  *
  * Con el canal en vivo del tablero abierto, la tarea se anuncia una vez (con el id del canal) y quién más la tiene abierta
- * llega por el canal (evento `presence`). Sin canal, como antes: aviso cada 15 s, que también trae a los demás.
+ * llega por el canal (evento `presence`). Sin canal, como antes: aviso cada 60 s, que también trae a los demás.
  */
 export function TaskViewers({ taskId }: { taskId: string }) {
   const t = useT();
@@ -34,7 +34,7 @@ export function TaskViewers({ taskId }: { taskId: string }) {
         const json = (await res.json()) as { others: TaskViewer[]; live?: boolean };
         if (cancelled) return;
         setPolled(json.live ? null : { taskId, others: json.others });
-        // El servidor no conoce el canal (p. ej. otra instancia): se sigue avisando cada 15 s.
+        // El servidor no conoce el canal (p. ej. otra instancia): se sigue avisando cada 60 s.
         if (!json.live && !timer) timer = setInterval(ping, POLL_MS);
       } catch {
         // Sin conexión: se mantiene lo último conocido.

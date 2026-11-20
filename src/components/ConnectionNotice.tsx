@@ -1,7 +1,7 @@
 "use client";
 
 import { Wifi, WifiOff } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
 import { isOffline, subscribeConnection } from "@/lib/connection";
 
@@ -32,7 +32,18 @@ export function ConnectionNotice() {
     const timer = setTimeout(() => setRestored(0), RESTORED_MS);
     return () => clearTimeout(timer);
   }, [restored]);
-  if (!offline && !restored) return null;
+  // Lo que ocupa (su alto y un hueco de 0,5rem), en `--connection-notice-space` de la raíz: en móvil los avisos (Toast.tsx)
+  // se colocan por encima.
+  const ref = useRef<HTMLDivElement>(null);
+  const visible = offline || !!restored;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!visible || !el) return;
+    const root = document.documentElement.style;
+    root.setProperty("--connection-notice-space", `${el.offsetHeight + 8}px`);
+    return () => void root.removeProperty("--connection-notice-space");
+  }, [visible, offline]);
+  if (!visible) return null;
   // Solo informa (no hay nada que pulsar): no recibe toques, que pasan a lo que tenga debajo (tarjetas, asas, casillas).
   // En móvil va por encima de los botones flotantes de crear («+» y «Crear varias tareas», hasta 8,25rem del pie). Con
   // la barra de selección (que va a 1rem del pie y retira esos botones), por encima de ella en cualquier ancho: lo que
@@ -44,6 +55,7 @@ export function ConnectionNotice() {
       aria-live="polite"
     >
       <div
+        ref={ref}
         data-connection={offline ? "offline" : "restored"}
         className={
           offline

@@ -138,6 +138,14 @@ export const board: Record<string, string> = {
   "Desplegada el {date}": "Deployed on {date}",
   "En release: {title}": "In release: {title}",
   "Recuperar": "Restore",
+  // Tarea archivada en solo lectura (ArchivedTaskView)
+  "Tarea archivada: {title}": "Archived task: {title}",
+  "Detalle de la tarea archivada": "Archived task details",
+  "Tarea archivada: solo lectura. Recupérala para editarla o comentar.": "Archived task: read only. Restore it to edit it or comment.",
+  "Sin descripción.": "No description.",
+  "Sin comentarios.": "No comments.",
+  "Hecha": "Done",
+  "Ver la tarea archivada «{title}»": "View the archived task “{title}”",
   // SelectionBar
   "1 seleccionada": "1 selected",
   "{n} seleccionadas": "{n} selected",
@@ -368,4 +376,7 @@ export const board: Record<string, string> = {
 
   // Tablero con un filtro o una búsqueda activos: columna sin resultados
   "Ninguna tarjeta coincide": "No cards match",
+  // Agenda: el .ics se descarga sin salir del tablero (ronda 57)
+  "No se pudo exportar el calendario.": "The calendar could not be exported.",
+  "Sin conexión: no se ha podido exportar el calendario.": "Offline: the calendar could not be exported.",
 };

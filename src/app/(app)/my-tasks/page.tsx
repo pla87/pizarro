@@ -57,8 +57,8 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   const total = fetched.length > MAX_TASKS ? await db.task.count({ where }) : rows.length;
 
   const today = todayIso(appTimeZone());
-  // Una tarea en una columna «hecha» ya no corre prisa: se agrupa como «Sin fecha» aunque conserve su fecha límite.
-  const tasks = rows.map((task) => ({ ...task, due: dateToIso(task.dueDate), dueDate: task.column.isDone ? null : dateToIso(task.dueDate) }));
+  // La consulta ya excluye las columnas «hechas»: cada tarea se agrupa por su fecha límite.
+  const tasks = rows.map((task) => ({ ...task, due: dateToIso(task.dueDate), dueDate: dateToIso(task.dueDate) }));
   const counts = Object.fromEntries(FILTERS.map((f) => [f.value, tasks.filter((x) => matchesFilter(bucketOf(x.dueDate, today), f.value)).length])) as Record<TaskFilter, number>;
   const groups = groupByDue(tasks, today, filter);
   const shown = groups.reduce((n, g) => n + g.tasks.length, 0);
@@ -136,7 +136,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                     {task.due && (() => {
                       const st = dueStatus(task.due, task.column.isDone, today);
                       return (
-                        <span className={cn("shrink-0 text-xs", st === "overdue" ? "font-semibold text-red-600" : st === "today" || st === "soon" ? "font-semibold text-amber-600" : "text-slate-500")}>
+                        <span className={cn("shrink-0 text-xs", st === "overdue" ? "font-semibold text-red-600" : st === "today" || st === "soon" ? "font-semibold text-amber-700 dark:text-amber-400" : "text-slate-500")}>
                           {st === "today" ? t("Hoy") : formatDay(task.due, today, locale)}
                         </span>
                       );

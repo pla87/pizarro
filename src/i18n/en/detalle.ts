@@ -42,4 +42,8 @@ export const detalle: Record<string, string> = {
   // Cerrar el detalle con varios cambios a medias o un comentario en edición
   "Hay varios cambios sin guardar (descripción, subtareas o un comentario en edición). ¿Cerrar la tarea y descartarlos?": "There are several unsaved changes (description, subtasks or a comment being edited). Close the task and discard them?",
   "Estás editando un comentario y tiene cambios sin guardar. ¿Cerrar la tarea y descartarlos?": "You are editing a comment with unsaved changes. Close the task and discard them?",
+
+  // «Descartar cambios» del detalle (antes «Cancelar»): pide confirmación si hay cambios tuyos
+  "¿Descartar los cambios?": "Discard the changes?",
+  "Se desharán los cambios que has hecho en esta tarea desde que la abriste, también lo escrito sin guardar, y se cerrará. Los comentarios y lo que hayan cambiado otras personas se quedan como están.": "The changes you have made to this task since you opened it, including anything typed and not yet saved, will be undone and the task will close. Comments and changes made by other people stay as they are.",
 };

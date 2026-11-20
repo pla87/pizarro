@@ -6,7 +6,7 @@ import { Avatar } from "../ui/Avatar";
 import { cn } from "../ui/cn";
 import { setTaskViewers, type TaskViewer } from "./taskPresence";
 
-const POLL_MS = 20_000;
+const POLL_MS = 60_000;
 const MAX_SHOWN = 5;
 const MAX_COMPACT = 3; // cabecera móvil: círculos pequeños y solo 3
 
@@ -16,7 +16,7 @@ const NONE: ActiveUser[] = [];
 /**
  * Quién está en cada tablero. Lo normal es que llegue por el canal en vivo del tablero (evento `presence`, Board.tsx:
  * `setLivePresence`), con el estado completo al conectar y después cada cambio. Sin canal (no soportado, aún sin conectar
- * o caído) se pregunta como antes, cada 20 s y al volver a la ventana: un solo sondeo por proyecto, compartido por todos
+ * o caído) se pregunta como antes, cada 60 s y al volver a la ventana: un solo sondeo por proyecto, compartido por todos
  * los círculos montados (la cabecera de escritorio y la móvil están siempre montadas, una oculta por CSS).
  */
 interface Feed {

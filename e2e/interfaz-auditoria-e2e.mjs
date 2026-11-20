@@ -64,7 +64,7 @@ if (only.includes("hyd")) {
     `/p/${p.id}/settings?tab=tablero`, `/p/${p.id}/settings?tab=releases`, `/p/${p.id}/settings?tab=informes`,
     "/settings", "/settings?tab=preferencias", "/settings?tab=plantillas", "/settings?tab=avisos",
     "/my-tasks", "/calendar", "/notifications", "/changelog",
-    ...(admin ? ["/admin/users", "/admin/projects", "/admin/templates", "/admin/backups", "/admin/logs", "/admin/legal", "/admin/settings", "/admin/license", `/p/${p.id}/settings?tab=general`, `/p/${p.id}/settings?tab=adjuntos`] : []),
+    ...(admin ? ["/admin/users", "/admin/projects", "/admin/templates", "/admin/backups", "/admin/logs", "/admin/legal", "/admin/settings", "/admin/integrations", "/admin/license", `/p/${p.id}/settings?tab=general`, `/p/${p.id}/settings?tab=adjuntos`] : []),
   ];
   const runs = [
     { label: "escritorio Madrid es-ES", opts: {} },

@@ -154,6 +154,10 @@ export function closePresenceStream(id: string, now = Date.now()): void {
 const earlyReleases = (globalThis as unknown as { __pzEarlyReleases?: Map<string, number> }).__pzEarlyReleases ??= new Map();
 const EARLY_RELEASE_MS = 10_000;
 
+/** Montajes del diálogo que se recuerdan por tarea y canal, y tareas abiertas por canal (el más antiguo sale). */
+export const MAX_OPENS_PER_TASK = 20;
+export const MAX_TASKS_PER_STREAM = 50;
+
 function sweepEarlyReleases(now: number): void {
   for (const [k, at] of earlyReleases) if (now - at > EARLY_RELEASE_MS) earlyReleases.delete(k);
 }
@@ -174,9 +178,15 @@ export function holdTaskView(streamId: string, userId: string, taskId: string, p
     if (now - released <= EARLY_RELEASE_MS) return true;
   }
   const opens = s.tasks.get(taskId);
-  if (opens) opens.add(openId);
-  else {
+  if (opens) {
+    opens.delete(openId); // al final: es el más reciente
+    opens.add(openId);
+    // Con tope: cada anuncio con un `open` nuevo añadía un montaje sin límite. Sale el más antiguo.
+    if (opens.size > MAX_OPENS_PER_TASK) opens.delete(opens.values().next().value!);
+  } else {
     s.tasks.set(taskId, new Set([openId]));
+    // Y con tope de tareas por canal: sale la anunciada hace más tiempo.
+    if (s.tasks.size > MAX_TASKS_PER_STREAM) s.tasks.delete(s.tasks.keys().next().value!);
     notifyPresence(projectId);
   }
   return true;
@@ -290,7 +300,8 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
 
 // --- Tarea abierta sin canal en vivo (sondeo de respaldo cada pocos segundos) ----------------------------------------
 
-const VIEWER_WINDOW_MS = 45_000;
+// El sondeo de respaldo avisa cada 60 s: cada aviso vale 150 s (dos avisos y medio, por si uno se retrasa o se pierde).
+const VIEWER_WINDOW_MS = 150_000;
 type TaskViewers = { projectId: string; users: Map<string, Entry> };
 const viewers = (globalThis as unknown as { __pzViewers?: Map<string, TaskViewers> }).__pzViewers ??= new Map();
 // Las tareas de `viewers` de cada proyecto (el estado de un proyecto no recorre las de los demás).
@@ -322,7 +333,7 @@ export function taskViewersExcept(taskId: string, projectId: string, userId: str
   return [...out].map(([id, name]) => ({ id, name }));
 }
 
-/** Anota (45 s) que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
+/** Anota (150 s) que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
 export function noteTaskViewer(taskId: string, projectId: string, userId: string, name: string, now = Date.now()): Person[] {
   if (viewers.size > 200) sweepViewers(now);
   let v = viewers.get(taskId);

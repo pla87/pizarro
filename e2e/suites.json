@@ -92,6 +92,8 @@
       "src/components/board/TitleLimit.tsx",
       "src/components/board/NewTaskDialog.tsx",
       "src/components/ProjectMenu.tsx",
+      "src/components/ReportButton.tsx",
+      "src/components/board/lastKind.ts",
       "src/lib/presence.ts",
       "src/lib/graphemes.ts",
       "src/lib/title-clamp.ts",
@@ -129,6 +131,17 @@
       "src/components/board/drag-a11y.ts",
       "src/actions/tasks.ts",
       "src/lib/task-positions.ts"
+    ],
+    "tablero-compartir-e2e": [
+      "src/app/api/share/**",
+      "src/app/(app)/share/**",
+      "src/app/manifest.ts",
+      "src/components/board/ShareTarget.tsx",
+      "src/components/board/stubBoard.ts",
+      "src/components/board/NewTaskDialog.tsx",
+      "src/lib/share-*.ts",
+      "src/lib/web-manifest.ts",
+      "src/lib/upload-slots.ts"
     ],
     "detalle-comentarios-e2e": [
       "src/components/board/TaskDialog.tsx",
@@ -213,6 +226,8 @@
       "src/components/board/RecurrencePicker.tsx",
       "src/components/board/recurrence-ui.ts",
       "src/components/board/NewTaskDialog.tsx",
+      "src/components/board/ColumnView.tsx",
+      "src/app/api/projects/[projectId]/columns/[columnId]/ics/**",
       "src/lib/calendar*.ts",
       "src/lib/ics.ts",
       "src/lib/recurrence*.ts",
@@ -384,6 +399,7 @@
       "src/lib/upload-size.ts",
       "src/lib/quota*.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/api/upload-limit/**"
     ],
     "interfaz-esqueletos-e2e": [
@@ -398,6 +414,7 @@
       "src/app/manifest.ts",
       "src/app/app-icon/**",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/admin/backups/**",
       "src/app/api/admin/app-icon/**"
     ],
@@ -451,6 +468,7 @@
       "src/actions/mail-settings.ts",
       "src/lib/mail-settings-core.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/p/[projectId]/docs/**"
     ],
     "accesibilidad-releases-e2e": [
@@ -508,6 +526,7 @@
       "src/lib/builtin-templates*.ts",
       "src/lib/changelog*.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/admin/users/**",
       "src/app/(app)/settings/**",
       "scripts/boot.ts",

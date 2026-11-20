@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 // Quién tiene abierta cada tarea (otras personas): lo alimenta el canal en vivo del tablero (evento `presence`) o, sin
-// él, el sondeo de presencia (Presence.tsx, cada ~20 s), y lo leen las tarjetas y el detalle sin hacer su propia petición.
+// él, el sondeo de presencia (Presence.tsx, cada ~60 s), y lo leen las tarjetas y el detalle sin hacer su propia petición.
 
 export interface TaskViewer {
   id: string;

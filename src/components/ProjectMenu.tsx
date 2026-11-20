@@ -74,8 +74,8 @@ export function useProjectSwitchHref(): (projectId: string) => string {
   return (projectId) => projectSwitchPath(pathname, search, projectId);
 }
 
-/** Título del proyecto actual que abre un desplegable para cambiar de proyecto al instante. */
-export function ProjectMenu({ className, textClassName }: { className?: string; textClassName?: string }) {
+/** Título del proyecto actual que abre un desplegable para cambiar de proyecto al instante (barra superior del móvil). */
+export function ProjectMenu({ className }: { className?: string }) {
   const t = useT();
   const { projects, currentId } = useContext(ProjectsContext);
   const [open, setOpen] = useState(false);
@@ -84,7 +84,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
   const current = projects.find((p) => p.id === currentId);
   const switchHref = useProjectSwitchHref();
 
-  // Alt+P abre el desplegable (solo el que se ve: en la cabecera hay uno para escritorio y otro para móvil).
+  // Alt+P abre el desplegable (solo si se ve: en el móvil y la tableta; en escritorio responde el de la barra lateral).
   useEffect(() => {
     const onShortcut = () => {
       if (rootRef.current && rootRef.current.getClientRects().length > 0) setOpen(true);
@@ -92,7 +92,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
     window.addEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
     return () => window.removeEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
   }, []);
-  if (!current) return <span className={cn("truncate font-semibold", textClassName)}>Pizarro</span>;
+  if (!current) return <span className={"truncate font-semibold"}>Pizarro</span>;
 
   return (
     <Menu
@@ -110,7 +110,7 @@ export function ProjectMenu({ className, textClassName }: { className?: string; 
           title={`${current.name}\n${t("Cambiar de proyecto ({keys})", { keys: sc("Alt+P") })}`}
           {...props}
         >
-          <span data-project-name className={cn("truncate font-semibold", textClassName)}>{current.name}</span>
+          <span data-project-name className={"truncate font-semibold"}>{current.name}</span>
           {current.isPrivate && <PrivateIcon />}
           <ChevronDown size={16} className={cn("shrink-0 text-slate-400 transition-transform", isOpen && "rotate-180")} />
         </button>

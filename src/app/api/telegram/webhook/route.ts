@@ -9,7 +9,7 @@ import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Webhook del bot de Telegram (Administración → Ajustes → Telegram). Lo llama Telegram, no un navegador: no hay sesión
+// Webhook del bot de Telegram (Administración → Integraciones → Telegram). Lo llama Telegram, no un navegador: no hay sesión
 // ni Origin, y queda fuera del proxy de sesión (src/proxy.ts). La credencial es el secreto que Pizarro dio a Telegram
 // al registrar el webhook (setWebhook secret_token), que llega en X-Telegram-Bot-Api-Secret-Token y se compara en
 // tiempo constante. Responde 200 aunque falle el proceso de un mensaje: si no, Telegram lo reintentaría sin fin.

@@ -8,6 +8,7 @@ import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { attachmentPath, safeDownloadMime } from "@/lib/uploads";
+import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
       ...headers,
       "Content-Type": attachment.isImage ? "image/webp" : safeDownloadMime(attachment.mimeType),
       "Content-Length": String(size),
+      // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
+      [DECLARED_LENGTH_HEADER]: String(size),
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
     },
   });

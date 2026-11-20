@@ -10,6 +10,8 @@ import { addUndo } from "./undo";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
 import { logEvent } from "./log";
+import { copyAttachmentsBatch } from "./attachment-copy";
+import { attachmentRefIds, remapAttachmentRefs } from "./attachment-refs";
 import type { BoardTask } from "./types";
 
 /**
@@ -63,11 +65,50 @@ async function routineColumnsOf(sources: RoutineSource[]): Promise<(src: Routine
 }
 
 /**
+ * Imágenes y enlaces de la descripción (`![…](/api/attachments/<id>)`) que apuntan a adjuntos de la aparición anterior:
+ * la siguiente lleva su propia copia de esos adjuntos (solo de los citados: los demás adjuntos no pasan) y su
+ * descripción apunta a ellas. Si no, borrar la anterior (o ese adjunto) dejaba la imagen rota en la nueva. Lo que no cabe
+ * (tope de la tarea, cuotas, disco) conserva la referencia a la anterior y queda anotado en el registro. Para todo el
+ * lote a la vez: una lectura de los adjuntos, una transacción para las filas y un UPDATE para las descripciones (sin
+ * ninguna consulta si ninguna descripción cita adjuntos).
+ */
+async function copyDescriptionAttachments(spawned: { src: { id: string; projectId: string; title: string; description: string }; id: string }[]): Promise<void> {
+  const requests = spawned
+    .map(({ src, id }) => ({ src, fromTaskId: src.id, toTaskId: id, attachmentIds: attachmentRefIds(src.description) }))
+    .filter((r) => r.attachmentIds.length > 0);
+  if (!requests.length) return;
+  const results = await copyAttachmentsBatch(requests, "al crear la siguiente aparición de una tarea repetida");
+  const ids: string[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
+  requests.forEach((r, i) => {
+    const res = results[i]!;
+    const description = remapAttachmentRefs(r.src.description, res.ids);
+    if (description !== r.src.description) {
+      ids.push(r.toTaskId);
+      before.push(r.src.description);
+      after.push(description);
+    }
+    if (res.skipped.length) {
+      logEvent({
+        level: "warn", category: "system", action: "recurrence.attachmentsSkipped",
+        message: `La siguiente aparición de «${r.src.title}» no lleva copia de ${res.skipped.length === 1 ? "un adjunto" : `${res.skipped.length} adjuntos`} de su descripción: sigue apuntando a los de la anterior`,
+        projectId: r.src.projectId,
+        details: { taskId: r.toTaskId, fromTaskId: r.fromTaskId, skipped: res.skipped.map((s) => ({ name: s.name, size: s.size, reason: s.reason })) },
+      });
+    }
+  });
+  // Solo si nadie la ha cambiado entretanto (la descripción sigue siendo la copiada).
+  if (ids.length) await db.$executeRaw`UPDATE "Task" AS t SET "description" = d.a FROM unnest(${ids}::text[], ${before}::text[], ${after}::text[]) AS d(id, b, a) WHERE t."id" = d.id AND t."description" = d.b`;
+}
+
+/**
  * Crea la siguiente aparición de las tareas recurrentes que se acaban de terminar (movidas a una columna
  * «terminada») o archivar. Es idempotente: `recurrenceFromId` es único, así que de cada tarea solo sale una
  * siguiente, aunque se mueva varias veces, se archive después de terminarla o dos personas lo hagan a la vez.
  *
- * La nueva copia lleva los mismos campos (subtareas sin marcar; sin comentarios, adjuntos ni historial),
+ * La nueva copia lleva los mismos campos (subtareas sin marcar; sin comentarios ni historial, y de los adjuntos solo
+ * copia de los que cita la descripción: copyDescriptionAttachments),
  * la misma repetición y la fecha límite que marca la regla. Va al final de la primera columna no terminada
  * o, si la tarea no estaba en una terminada (p. ej. se archivó desde «En curso»), de su misma columna.
  * Deshacer la acción que la provocó quita también la copia (operación inversa anotada aquí).
@@ -202,10 +243,12 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   };
 
   let pending: Item[] = [];
+  const spawned: { src: Item["src"]; id: string }[] = [];
   const settle = (items: Item[], ids: (string | null)[]) => {
     ids.forEach((id, i) => {
       if (id) {
         created.push(id);
+        spawned.push({ src: items[i]!.src, id });
         addUndo({ t: "task.remove", id });
       } else {
         // No nació: deja de contar para el tope del proyecto.
@@ -277,6 +320,11 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     }
   }
   await flush();
+  // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue
+  // siendo un éxito (las descripciones conservan la referencia a los de la anterior).
+  await copyDescriptionAttachments(spawned).catch((err) =>
+    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", message: `No se copiaron los adjuntos de la descripción: ${err instanceof Error ? err.message : String(err)}` }),
+  );
   // En el orden en que nacieron; varias, con una sola lectura para todas (antes, una por tarea).
   if (created.length <= 1) return Promise.all(created.map((id) => loadBoardTask(id)));
   const byId = new Map((await loadBoardTasksByIds(created)).map((t) => [t.id, t]));

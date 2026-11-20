@@ -68,6 +68,8 @@ export async function setColumnRole(columnId: string, role: string) {
   return runAction({ name: "columns.setColumnRole", args: [columnId, role] }, async () => {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
+    // Elegir el rol que ya tiene no cambia nada: ni entrada en el historial ni deshacer.
+    if (value === column.role) return { costEnabled: false };
     // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
     const clearWaiting = column.role === "WAITING" && value !== "WAITING";
     const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";

@@ -116,6 +116,8 @@ export const config = {
   // el cuerpo, y lo lee con su propio tope; de este proxy no necesitan nada (son API: sin CSP ni renovación de cookie,
   // y la redirección canónica no toca /api). Solo admiten POST; con otro método, Next responde 405. Igual la importación
   // de tareas en JSON (import-tasks, hasta 5 millones de caracteres: más que el tope de este proxy).
+  // Y lo compartido con «Compartir → Pizarro» (api/share: textos y archivos, con el tope de una subida).
   // El webhook del bot de Telegram tampoco pasa: lo llama Telegram, sin sesión; se protege con su secreto y lee con tope.
-  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/projects/[^/]+/import-tasks$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|icons/|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest).*)"],
+  // /robots.txt tampoco: es público (sin él, el buscador iba a /login?next=/robots.txt) y dice que no se rastree nada.
+  matcher: ["/((?!api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/projects/[^/]+/import-tasks$|api/share$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|icons/|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest|robots.txt$).*)"],
 };

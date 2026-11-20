@@ -386,10 +386,12 @@ if (only.includes("pegar")) {
   await discard(dlg);
   // Varias tareas: avisa de que se importan desde el tablero y no mete nada en el título.
   dlg = await openNew();
+  // El título puede traer la plantilla del último tipo usado: lo que se comprueba es que no cambia.
+  const titleBefore = await titleBox(dlg).inputValue();
   await setClip(page, JSON.stringify({ format: "pizarro.tasks", version: 1, tasks: [{ title: "Una" }, { title: "Otra" }] }));
   await page.keyboard.press("Control+v");
   await L.checkEventually("VARIAS: avisa de que se importan con «Importar» del tablero", async () => (await alerts(page)).includes("Hay 2 tareas. Para importar varias, usa «Importar» en el tablero."));
-  L.eq("VARIAS: el título sigue vacío", await titleBox(dlg).inputValue(), "");
+  L.eq("VARIAS: el título no cambia", await titleBox(dlg).inputValue(), titleBefore);
   await discard(dlg);
   // Desde el «+» de una columna: manda la columna del JSON si existe; si no, la de la columna desde la que se abrió.
   dlg = await openNew(page.getByRole("button", { name: `Añadir tarea en ${COL.doing}` }));

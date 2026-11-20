@@ -10,6 +10,8 @@ import {
   hasPresenceEntry,
   holdTaskView,
   leavePresence,
+  MAX_OPENS_PER_TASK,
+  MAX_TASKS_PER_STREAM,
   notePresence,
   noteTaskViewer,
   openPresenceStream,
@@ -49,11 +51,33 @@ test("la tarea anunciada con el canal: solo del mismo usuario y proyecto, hasta 
   closePresenceStream(b);
 });
 
-test("sin canal, el aviso de la tarea dura 45 s y sale en el estado del proyecto", () => {
+test("topes en memoria: 20 montajes por tarea y 50 tareas por canal (sale el más antiguo)", () => {
+  const a = openPresenceStream("pp-cap", "ua", "Ana");
+  // 21 montajes de la misma tarea: el primero (m0) ya no se recuerda; al cerrar los otros 20, la tarea queda cerrada.
+  for (let i = 0; i <= MAX_OPENS_PER_TASK; i++) assert.equal(holdTaskView(a, "ua", "t1", "pp-cap", `m${i}`), true);
+  for (let i = 1; i <= MAX_OPENS_PER_TASK; i++) releaseTaskView(a, "ua", "t1", `m${i}`);
+  assert.deepEqual(presenceSnapshot("pp-cap").viewers, {});
+  // Volver a anunciar un montaje que ya estaba lo hace el más reciente: no sale por el tope.
+  for (let i = 0; i < MAX_OPENS_PER_TASK; i++) holdTaskView(a, "ua", "t2", "pp-cap", `n${i}`);
+  holdTaskView(a, "ua", "t2", "pp-cap", "n0");
+  holdTaskView(a, "ua", "t2", "pp-cap", "nuevo");
+  for (let i = 0; i < MAX_OPENS_PER_TASK; i++) if (i !== 1) releaseTaskView(a, "ua", "t2", `n${i}`);
+  assert.deepEqual(Object.keys(presenceSnapshot("pp-cap").viewers), ["t2"], "queda abierta por «nuevo»");
+  releaseTaskView(a, "ua", "t2", "nuevo");
+  assert.deepEqual(presenceSnapshot("pp-cap").viewers, {});
+  // 51 tareas en el mismo canal: la primera deja de contar como abierta.
+  for (let i = 0; i <= MAX_TASKS_PER_STREAM; i++) holdTaskView(a, "ua", `c${i}`, "pp-cap", "m");
+  const open = Object.keys(presenceSnapshot("pp-cap").viewers);
+  assert.equal(open.length, MAX_TASKS_PER_STREAM);
+  assert.ok(!open.includes("c0") && open.includes(`c${MAX_TASKS_PER_STREAM}`));
+  closePresenceStream(a);
+});
+
+test("sin canal, el aviso de la tarea dura 150 s y sale en el estado del proyecto", () => {
   const now = Date.now();
   noteTaskViewer("t9", "pp-3", "uc", "Carla", now);
   assert.deepEqual(presenceSnapshot("pp-3", now + 1000).viewers, { t9: [{ id: "uc", name: "Carla" }] });
-  assert.deepEqual(presenceSnapshot("pp-3", now + 46_000).viewers, {});
+  assert.deepEqual(presenceSnapshot("pp-3", now + 151_000).viewers, {});
   assert.deepEqual(presenceSnapshot("otro-proyecto", now + 1000).viewers, {}, "nunca en el estado de otro proyecto");
 });
 

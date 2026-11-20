@@ -28,6 +28,25 @@ export async function retireReleaseNumber(tx: Prisma.TransactionClient, projectI
   await tx.appState.upsert({ where: { key }, create: { key, value: String(number) }, update: { value: String(number) } });
 }
 
+/**
+ * Suelo de la numeración de un proyecto importado: el archivo no lleva el número retirado (está en AppState), así que
+ * se deduce del mayor de los códigos de release que llevan los títulos de las tareas («R12F1: …», también los que
+ * quedaron detrás de otro, «R5F1: R3F2: …») y de las releases importadas. Números absurdos (un archivo manipulado) no
+ * cuentan.
+ */
+export function releaseFloorFromImport(titles: Iterable<string>, releaseNumbers: Iterable<number>): number {
+  let floor = 0;
+  for (const n of releaseNumbers) if (Number.isInteger(n) && n > floor && n <= MAX_FLOOR) floor = n;
+  for (const title of titles) {
+    for (const m of title.matchAll(/(?<![\p{L}\p{N}])R(\d{1,7})[A-Z]{1,4}\d+:/gu)) {
+      const n = Number(m[1]);
+      if (n > floor && n <= MAX_FLOOR) floor = n;
+    }
+  }
+  return floor;
+}
+const MAX_FLOOR = 1_000_000;
+
 /** Al borrar el proyecto. */
 export async function forgetReleaseNumbers(projectId: string): Promise<void> {
   await db.appState.deleteMany({ where: { key: floorKey(projectId) } });

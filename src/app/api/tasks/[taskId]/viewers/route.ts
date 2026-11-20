@@ -1,5 +1,6 @@
 import { canAccessProject, projectOfTask } from "@/lib/access-cache";
 import { holdTaskView, leaveTask, notePresence, noteTaskViewer, releaseTaskView, taskViewersExcept } from "@/lib/presence";
+import { rateLimit } from "@/lib/rate-limit";
 import { isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -40,11 +41,13 @@ function openParam(req: Request): string {
  *
  * Con `?stream=<id del canal en vivo de la pestaña>&open=<id del montaje del diálogo>` basta un aviso al abrir: la tarea
  * cuenta como abierta hasta que se cierra ese montaje del diálogo (DELETE con los mismos parámetros) o el canal, y los cambios llegan por el canal (evento `presence`). Sin canal (no soportado o
- * caído), el diálogo repite el aviso cada 15 s y cada aviso vale 45 s.
+ * caído), el diálogo repite el aviso cada 60 s y cada aviso vale 150 s.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   const found = await load(ctx);
   if (!found) return new Response((await getT())("No encontrado"), { status: 404 });
+  // Cada anuncio puede añadir una tarea o un montaje en memoria (con tope en presence.ts): también con tope de ritmo.
+  if (!rateLimit(`viewers:${found.user.id}`, 120, 60_000)) return new Response((await getT())("Demasiadas peticiones"), { status: 429, headers: { "Retry-After": "60" } });
   notePresence(found.projectId, found.user.id, found.user.name);
   const stream = streamParam(req);
   const held = stream !== null && holdTaskView(stream, found.user.id, found.taskId, found.projectId, openParam(req));
@@ -59,7 +62,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: stri
   // Modifica estado (la presencia): misma comprobación de origen que el resto de rutas que escriben.
   if (!isSameOrigin(req)) return new Response(null, { status: 403 });
   const found = await load(ctx);
-  if (found) {
+  // Tope de ritmo también aquí: cada cierre con un `open` desconocido se apunta unos segundos (cierres adelantados).
+  if (found && rateLimit(`viewers-close:${found.user.id}`, 240, 60_000)) {
     const stream = streamParam(req);
     if (stream) releaseTaskView(stream, found.user.id, found.taskId, openParam(req));
     // También el aviso con caducidad: con `?stream=` el GET pudo caer en él (canal desconocido, p. ej. ya cerrado).

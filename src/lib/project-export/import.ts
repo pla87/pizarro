@@ -28,6 +28,7 @@ import {
 } from "../uploads";
 import { openImportJournal } from "./import-journal";
 import { remapAttachmentRefs } from "../attachment-refs";
+import { releaseFloorFromImport, retireReleaseNumber } from "../release-number";
 import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
 import type { ProjectExportData } from "./types";
@@ -572,6 +573,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         await insertChunks(attachmentRows, (rows) => tx.taskAttachment.createMany({ data: rows }));
 
         await insertChunks(releaseRows, (rows) => tx.release.createMany({ data: rows }));
+        // El número de release más alto ya usado (también el de releases borradas del histórico, cuyas tareas conservan
+        // el código): la siguiente release no lo repite.
+        const releaseFloor = releaseFloorFromImport(data.tasks.map((x) => x.title), data.releases.map((r) => r.number));
+        if (releaseFloor) await retireReleaseNumber(tx, projectId, releaseFloor);
         await insertChunks(releaseTaskRows, (rows) => tx.releaseTask.createMany({ data: rows }));
         await insertChunks(releaseAttachmentRows, (rows) => tx.releaseAttachment.createMany({ data: rows }));
         await insertChunks(documentRows, (rows) => tx.projectDocument.createMany({ data: rows }));

@@ -215,7 +215,7 @@ L.eq("INST: queda en el registro de actividad", (await L.q(`SELECT message FROM 
 // --- 5. Email de prueba con el buzón de pruebas y nada guardado ---------------------------------------------------------
 L.scenario("Avisos por email: email de prueba");
 await part("MAIL", async () => {
-await w.page.goto(L.BASE + "/admin/settings");
+await w.page.goto(L.BASE + "/admin/integrations");
 const mailSection = w.page.locator("section#avisos-email");
 const testBtn = mailSection.getByRole("button", { name: "Send test email" });
 L.check("MAIL: sin tocar nada, «Send test email» está activo (buzón de pruebas)", await testBtn.isEnabled());

@@ -4,17 +4,14 @@ import { FileDown, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/client";
-import { HEADER_LABEL } from "./board/useHeaderFit";
 
 type State = { status: "loading" } | { status: "ready"; url: string; filename: string } | { status: "error"; message: string };
 
-const CLASSES = {
-  sidebar: "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",
-  header: "btn-secondary",
-};
-
-/** Informe PDF: en escritorio se abre en una pestaña; en móvil o app instalada se genera y se ofrece descargar. */
-export function ReportButton({ projectId, variant }: { projectId: string; variant: "sidebar" | "header" }) {
+/**
+ * Informe PDF (entrada de la barra lateral y del menú del móvil; la cabecera del tablero ya no lo repite): en escritorio
+ * se abre en una pestaña; en móvil o app instalada se genera y se ofrece descargar.
+ */
+export function ReportButton({ projectId }: { projectId: string }) {
   const t = useT();
   const endpoint = `/api/projects/${projectId}/report`;
   const [open, setOpen] = useState(false);
@@ -68,9 +65,8 @@ export function ReportButton({ projectId, variant }: { projectId: string; varian
 
   return (
     <>
-      <button type="button" className={CLASSES[variant]} onClick={onClick} aria-label={variant === "header" ? t("Informe PDF") : undefined} title={variant === "header" ? t("Informe PDF") : undefined}>
-        {/* En la cabecera del tablero, con poco sitio solo el icono (lo decide la cabecera: ver board/useHeaderFit). */}
-        <FileDown size={variant === "sidebar" ? 17 : 16} /> <span className={variant === "header" ? HEADER_LABEL : undefined}>{t("Informe PDF")}</span>
+      <button type="button" className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" onClick={onClick}>
+        <FileDown size={17} /> <span>{t("Informe PDF")}</span>
       </button>
       <Modal open={open} onClose={close} title={t("Informe PDF")} size="sm">
         {state.status === "loading" && (

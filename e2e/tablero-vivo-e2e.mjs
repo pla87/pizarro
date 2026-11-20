@@ -268,7 +268,8 @@ if (only.includes("capas")) {
     await sleep(500);
     L.eq(`CAPAS ${label}: con la tarea abierta no hay botones flotantes del tablero`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 0);
     L.eq(`CAPAS ${label}: nada tapa los botones del diálogo`, await covered(page), []);
-    await U.dialog(page).getByRole("button", { name: "Cancelar" }).tap();
+    // Sin cambios, «Descartar cambios» cierra sin preguntar.
+    await U.dialog(page).getByRole("button", { name: "Descartar cambios" }).tap();
     await U.dialog(page).waitFor({ state: "detached" });
     L.eq(`CAPAS ${label}: al cerrarla vuelven`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 1);
     await s.ctx.close();
@@ -345,6 +346,8 @@ if (only.includes("altp")) {
   await page.keyboard.press("Alt+KeyP");
   await L.checkEventually("ALTP: se abre el selector de proyectos", () => page.locator("[role=menu]:visible").first().isVisible().catch(() => false), { timeout: 3000 });
   L.eq("ALTP: el buscador no recibe la letra", await boardSearch(page).inputValue(), "");
+  // Ronda 57: en escritorio la cabecera del tablero ya no tiene selector; abre el de la barra lateral (uno solo).
+  L.eq("ALTP: abre el selector de la barra lateral", [await page.locator("[role=menu]:visible").count(), await page.locator("[role=menu]:visible").first().getAttribute("aria-label")], [1, "Selecciona proyecto"]);
   await page.keyboard.press("Escape");
   L.assertNoErrors("altp", [s]);
   await s.ctx.close();

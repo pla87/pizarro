@@ -101,7 +101,7 @@ Guía completa, con los textos exactos: [docs/guias/whatsapp.md](guias/whatsapp.
 
 **Necesitas:** las dos plantillas aprobadas, el token y el **Phone number ID**.
 
-1. **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
+1. **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
 2. Rellena **Token de acceso**, **Identificador del número (Phone number ID)**, **Nombre de la plantilla** (`aviso_pizarro`), **Idioma** (`es`, o el código exacto con el que se aprobó) y **Plantilla de verificación** (`codigo_pizarro`).
 3. Pulsa **Guardar** y después **Activar**.
 4. Escribe un número en formato internacional (`+34600111222`) y pulsa **Probar**. Con el número de prueba de Meta, tiene que ser uno de los 5 verificados.
@@ -138,7 +138,7 @@ Guía completa: [docs/guias/telegram.md](guias/telegram.md). Es gratis.
 **Necesitas:** la app de Telegram.
 
 1. En Telegram, abre **@BotFather** (el verificado) y escribe `/newbot`. Dale un nombre y un usuario que termine en `bot`. Copia el token.
-2. En Pizarro: **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → Telegram (gratis)**. Pega el token en **Token del bot** y pulsa **Guardar y activar**.
+2. En Pizarro: **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → Telegram (gratis)**. Pega el token en **Token del bot** y pulsa **Guardar y activar**.
 3. Pulsa **Probar**.
 
 **Qué debe pasar:** aparece «Activo: bot @…» con el usuario de tu bot y el modo (webhook o sondeo). **Probar** confirma que el bot responde. El token no se vuelve a mostrar.
@@ -153,7 +153,7 @@ Guía completa: [docs/guias/telegram.md](guias/telegram.md). Es gratis.
 2. Pulsa **Abrir Telegram** (o escanea el código QR con el móvil).
 3. En Telegram, pulsa **Iniciar**.
 4. Vuelve a Pizarro, elige qué avisos quieres y pulsa **Guardar**.
-5. En **Administración → Ajustes**, pulsa otra vez **Probar**.
+5. En **Administración → Integraciones**, pulsa otra vez **Probar**.
 6. Con la otra persona, asígnate una tarea o menciónate.
 
 **Qué debe pasar:** el bot responde «Listo…» y Pizarro muestra «Conectado». Tras el paso 5 llega «Mensaje de prueba de Pizarro». Tras el paso 6 llega el aviso con el enlace a la tarea.
@@ -177,7 +177,7 @@ Pizarro elige solo, según `APP_URL`. Prueba el que te toque (o los dos, si tien
 
 ### 4.1 Configurar y «Enviar email de prueba»
 
-**Necesitas:** una de las dos opciones de **Administración → Ajustes → 1. Avisos por email**:
+**Necesitas:** una de las dos opciones de **Administración → Integraciones → 1. Avisos por email**:
 
 - **Gmail de un administrador (uso familiar):** en esa cuenta de Google activa la verificación en 2 pasos y crea una **contraseña de aplicación** en `myaccount.google.com/apppasswords`.
 - **Correo de la empresa:** los datos SMTP de tu proveedor (Google Workspace, Brevo, SendGrid, Amazon SES, Mailgun…).
@@ -288,7 +288,7 @@ Cómo está hoy el código:
 
 **Necesitas:** el cliente OAuth creado según [docs/guias/google-login.md](guias/google-login.md), con la dirección de redirección `https://pizarro.example.com/api/auth/google/callback`.
 
-1. **Administración → Ajustes → Acceso con Google**: pega el ID y el secreto y pulsa **Guardar**. El estado pasa a «Activo».
+1. **Administración → Integraciones → Acceso con Google**: pega el ID y el secreto y pulsa **Guardar**. El estado pasa a «Activo».
 2. Cierra la sesión y pulsa **Iniciar sesión con Google** con una cuenta cuyo email ya existe en Pizarro.
 3. Prueba con una cuenta de Google que **no** existe en Pizarro.
 4. Prueba con tu cuenta de administrador.
@@ -528,3 +528,33 @@ En *Releases*, abre una release con adjuntos y pulsa **Descargar adjuntos**: la 
 
 1. En *Ajustes del proyecto → Informes*, elige destinatario por nombre. Con una cuenta de miembro, mira que una dirección externa puesta por un administrador sale enmascarada.
 2. Cambia el email de la persona destinataria: el informe le sigue llegando a la nueva dirección.
+
+## 10. Novedades de la v1.61.0
+
+### 10.1 Compartir con Pizarro (móvil)
+
+**Necesitas:** la app instalada en un Android (o Chrome/Edge en el ordenador) con la versión nueva (si ya estaba instalada, ábrela una vez para que se actualice el manifiesto).
+
+1. Desde la galería, *Compartir → Pizarro* con una o dos fotos; desde el navegador, comparte un enlace; desde una app de notas, un texto.
+2. Cambia el proyecto en el selector antes de *Crear tarea*.
+3. Repite sin sesión iniciada.
+
+**Qué debe pasar:** se abre *Nueva tarea* con el texto, el enlace y los archivos; al crear vas al tablero del proyecto elegido. Sin sesión, pide entrar y conserva los textos (los archivos hay que volver a compartirlos).
+
+### 10.2 Plantillas de serie
+
+Crea un proyecto con *Mantenimiento e instalaciones*, *Ventas* y alguna revisada (*Negocio*, *Reformas y obras*, *Tareas familiares*) y úsalo un rato como lo usarías en real. Anota columnas, tipos o etiquetas que sobren o falten.
+
+### 10.3 Cabecera, menú de columna y Nueva tarea
+
+1. En el ordenador, cambia de proyecto desde la barra lateral (también con Alt+P); el informe PDF está en el menú lateral.
+2. En el menú ⋯ de una columna, *Rol de la columna ›*.
+3. Crea una tarea con un tipo y abre otra vez *Nueva tarea*: propone ese tipo, con su título y subtareas si los tiene.
+
+### 10.4 Móvil
+
+Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *Descartar cambios* pregunta antes; *Editar* en tus comentarios.
+
+### 10.5 Administración
+
+*Administración → Integraciones*: email, Google, Telegram y WhatsApp siguen configurados como estaban. Abre `/robots.txt` de tu instalación: debe decir `Disallow: /`.

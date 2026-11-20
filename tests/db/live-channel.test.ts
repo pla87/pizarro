@@ -71,7 +71,19 @@ describe("tarea abierta: cerrar el diálogo", () => {
     assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id).map((p) => p.id), [user.id]);
     const del = await viewersDelete(new Request(url, { method: "DELETE", headers: { origin: "http://localhost", host: "localhost" } }), ctx);
     assert.equal(del.status, 204);
-    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 45 s");
+    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 150 s");
+  });
+});
+
+describe("tarea abierta: tope de ritmo", () => {
+  test("el aviso admite 120 por minuto y persona; después, 429", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    const ctx = { params: Promise.resolve({ taskId: task.id }) };
+    await loginAs(user);
+    for (let i = 0; i < 120; i++) assert.equal((await viewersGet(new Request(`http://localhost/api/tasks/${task.id}/viewers?stream=${randomUUID()}&open=m${i}`), ctx)).status, 200);
+    assert.equal((await viewersGet(new Request(`http://localhost/api/tasks/${task.id}/viewers`), ctx)).status, 429);
   });
 });
 

@@ -314,7 +314,7 @@ export interface WhatsappConfig {
 }
 
 /**
- * Precedencia: lo guardado en Administración → Ajustes manda, campo a campo; lo que no se haya guardado sale de las
+ * Precedencia: lo guardado en Administración → Integraciones manda, campo a campo; lo que no se haya guardado sale de las
  * variables WHATSAPP_* del servidor (así una instalación que ya las usaba sigue funcionando sin tocar nada). Sin
  * activar ni desactivar nunca en la pantalla, está activo si la configuración está completa.
  */

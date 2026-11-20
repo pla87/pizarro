@@ -195,8 +195,8 @@ Marca cada punto. Crea cosas reconocibles para poder comprobarlas después (secc
 - [ ] **Proyecto:** crea un proyecto «Prueba VPS» con 2-3 columnas.
 - [ ] **Tarea con adjunto:** crea una tarea, ábrela y sube una imagen y un PDF. Se ve la miniatura y se abre el PDF. Crea unas 10 tareas, mueve alguna entre columnas y comenta en un par.
 - [ ] **Release:** crea una nota de versión (release) y ábrela en la vista previa o publícala.
-- [ ] **Email de prueba:** *Administración → Ajustes → Avisos por email*: configura un proveedor SMTP y pulsa el botón de envío de prueba. Esperado: llega un correo. Sin SMTP este punto se salta (no es un fallo; solo faltan invitaciones y «¿Olvidaste tu contraseña?»).
-- [ ] **Entrar con Google (opcional):** *Administración → Ajustes → Acceso con Google* y sigue la guía desplegable. Solo funciona con dominio y HTTPS.
+- [ ] **Email de prueba:** *Administración → Integraciones → Avisos por email*: configura un proveedor SMTP y pulsa el botón de envío de prueba. Esperado: llega un correo. Sin SMTP este punto se salta (no es un fallo; solo faltan invitaciones y «¿Olvidaste tu contraseña?»).
+- [ ] **Entrar con Google (opcional):** *Administración → Integraciones → Acceso con Google* y sigue la guía desplegable. Solo funciona con dominio y HTTPS.
 - [ ] **Estado:** abre `https://pizarro.example.com/api/health`. Esperado: `{"status":"ok"}`.
 
 Apunta cuántas tareas, adjuntos y releases has creado: los contarás de nuevo tras restaurar.

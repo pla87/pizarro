@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { makeT, type Locale } from "../i18n/core";
 import { appIconColor, appIconUrl, appNames, DEFAULT_APP_ICON, type AppIconAccent } from "./app-icon-core";
+import { SHARE_ACTION, SHARE_FIELDS } from "./share-core";
 
 /**
  * Manifiesto para instalar Pizarro como app (Android, iPhone, escritorio) en el idioma indicado: el de la instalación.
@@ -31,6 +32,19 @@ export function webManifest(locale: Locale, opts: { orgName?: string; appIcon?: 
       { name: t("Mis tareas"), short_name: t("Mis tareas"), url: "/my-tasks", icons: [small] },
       { name: t("Avisos"), short_name: t("Avisos"), url: "/notifications", icons: [small] },
     ],
+    // «Compartir → Pizarro» en el menú de compartir del sistema (Android, Chrome/Edge de escritorio con la app instalada):
+    // texto, enlaces, imágenes y cualquier otro archivo. Lo recibe api/share y abre «Nueva tarea» (/share).
+    share_target: {
+      action: SHARE_ACTION,
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: SHARE_FIELDS.title,
+        text: SHARE_FIELDS.text,
+        url: SHARE_FIELDS.url,
+        files: [{ name: SHARE_FIELDS.files, accept: ["image/*", "video/*", "audio/*", "application/pdf", "text/*", "*/*"] }],
+      },
+    },
     icons: [
       small,
       { src: appIconUrl(icon, "icon-512.png"), sizes: "512x512", type: "image/png" },

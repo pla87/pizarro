@@ -20,6 +20,7 @@ import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
 import { GET as exportRoute, POST as exportPost } from "../../src/app/api/projects/[projectId]/export/route";
 import { exportFileOf, runNextTransferJob } from "../../src/lib/transfer-jobs";
 import { openProjectArchive } from "../../src/lib/project-export/read";
+import { nextReleaseNumber, releaseFloorFromImport } from "../../src/lib/release-number";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pexport-"));
@@ -1126,4 +1127,27 @@ test("freeProjectName: el nombre largo con emojis se recorta sin partir ninguno,
   const f = await makeProject({ members: [] });
   await db.project.update({ where: { id: f.project.id }, data: { name: wanted } });
   assert.equal(await freeProjectName(importer, wanted, "(importado)"), `${"m".repeat(67)} (importado)`);
+});
+
+describe("importar: numeración de las releases", () => {
+  test("el suelo sale de los códigos de los títulos y de las releases importadas: la siguiente no repite un número retirado", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const AT = "2026-01-01T00:00:00.000Z";
+    // La R7 se borró del histórico en el origen (sus tareas conservan el código); queda la R3.
+    const data = minimal([{ title: "R7F1: Arreglo" }, { title: "R5F2: R2T1: Doble" }, { title: "Sin código R99 ni nada" }], {
+      releases: [{ ref: "r1", number: 3, title: "R", content: "", createdBy: null, deployedAt: AT, tasks: [], attachments: [] }],
+    });
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    assert.equal(await nextReleaseNumber(db, s.projectId), 8);
+    // Sin códigos en los títulos, el de las releases importadas basta (y sin releases ni códigos, nada guardado).
+    const plain = await importProjectFile(await craft(minimal([{ title: "Tarea" }])), asImporter(admin), { isPrivate: false });
+    assert.equal(await db.appState.count({ where: { key: `release-number:${plain.projectId}` } }), 0);
+    assert.equal(await nextReleaseNumber(db, plain.projectId), 1);
+  });
+
+  test("releaseFloorFromImport: códigos en cualquier parte del título, sin falsos positivos ni números absurdos", () => {
+    assert.equal(releaseFloorFromImport(["R12F1: a", "x R14OT3: b", "R2D2 robot", "PR30F1: no", "R99999999F1: no"], [4]), 14);
+    assert.equal(releaseFloorFromImport([], [2, 9, 5]), 9);
+    assert.equal(releaseFloorFromImport(["nada"], []), 0);
+  });
 });

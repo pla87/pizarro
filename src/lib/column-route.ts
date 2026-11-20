@@ -9,6 +9,17 @@ import { toLocale, type Locale, type T } from "../i18n/core";
 // Comprobaciones comunes de las rutas de descarga de una columna (PDF de la semana, lista, entrega, .ics):
 // sesión, límite de peticiones y acceso al proyecto. Devuelve la respuesta de error o el contexto.
 
+/** Descargas de una columna. Cada una con su propio contador: descargar varios .ics no agota los PDF, ni al revés. */
+type ColumnDownloadKind = "week" | "checklist" | "delivery" | "program" | "ics";
+
+/**
+ * Peticiones por minuto de cada descarga: los PDF ocupan la cola de generación (5/min); el .ics de la Agenda es texto
+ * barato y se descarga a menudo (30/min). El informe del proyecto lleva su propio contador (`project-report:`).
+ */
+const COLUMN_DOWNLOAD_LIMITS: Record<ColumnDownloadKind, number> = { week: 5, checklist: 5, delivery: 5, program: 5, ics: 30 };
+
+export const columnRateKey = (kind: ColumnDownloadKind, userId: string) => `column-${kind}:${userId}`;
+
 interface ColumnRouteContext {
   user: { id: string; name: string; role: string };
   t: T;
@@ -18,11 +29,13 @@ interface ColumnRouteContext {
   columnId: string;
 }
 
-export async function authorizeColumnRoute(params: Promise<{ projectId: string; columnId: string }>): Promise<ColumnRouteContext | Response> {
+export async function authorizeColumnRoute(params: Promise<{ projectId: string; columnId: string }>, kind: ColumnDownloadKind): Promise<ColumnRouteContext | Response> {
   const user = await getCurrentUser();
   const t = await getT();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
-  if (!rateLimit(`report:${user.id}`, 5, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  if (!rateLimit(columnRateKey(kind, user.id), COLUMN_DOWNLOAD_LIMITS[kind], 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  // Además, un tope común a todos los PDF de columna: cada tipo tiene el suyo, pero juntos no pasan de 10 por minuto.
+  if (kind !== "ics" && !rateLimit(`column-pdf:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId, columnId } = await params;
   const project = await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true } });
   if (!project) return new Response(t("No encontrado"), { status: 404 });

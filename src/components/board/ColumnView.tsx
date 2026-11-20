@@ -15,7 +15,7 @@ import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { usePrompt } from "../ui/PromptDialog";
-import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
+import { Menu, MenuItem, MenuSeparator, MenuSub } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { columnGateSnapshot } from "./columnGate";
@@ -61,7 +61,38 @@ type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget";
 const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
 /** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
 const weekPdf = (projectId: string, columnId: string, by: "day" | "person") => window.open(columnUrl(projectId, columnId, `week?by=${by}`), "_blank", "noopener");
-const agendaIcs = (projectId: string, columnId: string) => window.location.assign(columnUrl(projectId, columnId, "ics"));
+/** Columnas cuyo .ics se está descargando. */
+const icsInFlight = new Set<string>();
+/**
+ * Rol «Agenda»: descarga el .ics sin salir del tablero (fetch → blob → <a download>). Antes se navegaba a la ruta y, con
+ * un 429, 401 o 404, el tablero se sustituía por una página de texto; ahora el motivo sale en un aviso.
+ */
+async function agendaIcs(projectId: string, columnId: string, t: ReturnType<typeof useT>, toast: ReturnType<typeof useToast>) {
+  // Una descarga por columna a la vez (botón y menú): con la red lenta, cada clic bajaba otro fichero igual.
+  if (icsInFlight.has(columnId)) return;
+  icsInFlight.add(columnId);
+  try {
+    const res = await fetch(columnUrl(projectId, columnId, "ics"), { cache: "no-store" });
+    if (!res.ok) {
+      const text = (await res.text().catch(() => "")).trim();
+      return toast(res.status === 429 ? t("Demasiadas peticiones, espera un momento.") : text && text.length < 300 ? text : t("No se pudo exportar el calendario."), "error");
+    }
+    const blob = await res.blob();
+    const name = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "agenda.ics";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    toast(t("Sin conexión: no se ha podido exportar el calendario."), "error");
+  } finally {
+    icsInFlight.delete(columnId);
+  }
+}
 const deliveryPdf = (projectId: string, columnId: string) => window.open(columnUrl(projectId, columnId, "delivery"), "_blank", "noopener");
 
 /**
@@ -72,6 +103,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const { openNewTask, openRelease, setSelectedMany, project } = useBoard();
   const t = useT();
   const sc = useShortcut();
+  const toast = useToast();
   const selectedHere = useSelectedCount(taskIds);
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
@@ -79,7 +111,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   // La release y los planes para IA acaban en su panel de tareas fijas («Siempre en la release» / «… en el plan»).
   const withFixed = hasEvergreenTasks(column.role);
   const [dialog, setDialog] = useState<ColumnDialog | null>(null);
-  const action = roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc);
+  const action = roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc, toast);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
   const wipOver = wipExceeded(cardCount, column.wipLimit);
   // «Programa del curso»: tope de PROGRAM_MAX_SESSIONS sesiones (el servidor lo impone; aquí, el contador y el «+»).
@@ -215,7 +247,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             className={cn("min-h-10 flex-1 rounded-lg transition-colors lg:group-data-[fits]/list:-mt-2 lg:group-data-[fits]/list:min-h-0", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
             {taskIds.length === 0 && (
-              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+              <p className="py-6 text-center text-xs text-slate-600 dark:text-slate-400">
                 {fileZone.over ? t("Suelta para crear tarea") : (
                   // Con un filtro o una búsqueda activos (data-filtering en la raíz del tablero) el texto es otro. Por CSS: la
                   // columna (memorizada dentro de DndContext) no se vuelve a dibujar al escribir en el buscador.
@@ -409,7 +441,7 @@ function ReasonMenuItem({ reason, onClick, ...rest }: { reason: string | null; i
  */
 function roleAction(
   column: BoardColumn, projectId: string, cardCount: number, open: (d: ColumnDialog) => void, openRelease: (columnId: string) => void,
-  t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>,
+  t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>, toast: ReturnType<typeof useToast>,
 ): React.ReactNode {
   const empty = cardCount === 0;
   const hint = t(COLUMN_ROLE_HINT[column.role]);
@@ -430,7 +462,7 @@ function roleAction(
     case "CHECKLIST":
       return <GatedActionButton column={column} cardCount={cardCount} icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} />;
     case "AGENDA":
-      return <GatedActionButton column={column} cardCount={cardCount} icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => agendaIcs(projectId, column.id)} />;
+      return <GatedActionButton column={column} cardCount={cardCount} icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => void agendaIcs(projectId, column.id, t, toast)} />;
     case "DELIVERY":
       return <ColumnActionButton icon={FileDown} label={t("Resumen para el cliente (PDF)")} onClick={() => deliveryPdf(projectId, column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "BUDGET":
@@ -576,20 +608,25 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
       <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
       <MenuSeparator />
-      <div className="flex items-center gap-2 px-2.5 pt-1 pb-0.5 text-xs font-medium text-slate-500"><Tag size={13} /> {t("Rol de la columna")}</div>
-      {COLUMN_ROLES.map((r) => (
-        <MenuItem
-          key={r}
-          role="menuitemradio"
-          aria-checked={column.role === r}
-          onClick={() => setRole(r)}
-          icon={ROLE_ICON[r]}
-          title={t(COLUMN_ROLE_HINT[r])}
-          className={cn("py-1.5 pl-4 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
-        >
-          {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
-        </MenuItem>
-      ))}
+      {/* Los 13 roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
+      <MenuSub icon={Tag} label={t("Rol de la columna")} summary={t(COLUMN_ROLE_LABEL[column.role])}>
+        {COLUMN_ROLES.map((r) => (
+          <MenuItem
+            key={r}
+            role="menuitemradio"
+            aria-checked={column.role === r}
+            onClick={() => {
+              // El rol que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
+              if (column.role !== r) setRole(r);
+            }}
+            icon={ROLE_ICON[r]}
+            title={t(COLUMN_ROLE_HINT[r])}
+            className={cn("py-1.5 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
+          >
+            {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
+          </MenuItem>
+        ))}
+      </MenuSub>
       {column.role === "WAITING" && (
         <MenuItem icon={Hourglass} onClick={editWaitingDays}>
           {t("Recordar tras {n} d…", { n: column.waitingDays ?? DEFAULT_WAITING_DAYS })}
@@ -602,7 +639,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
         </>
       )}
       {column.role === "CHECKLIST" && <GatedMenuItem column={column} cardCount={cardCount} icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</GatedMenuItem>}
-      {column.role === "AGENDA" && <GatedMenuItem column={column} cardCount={cardCount} icon={CalendarDays} onClick={() => agendaIcs(project.id, column.id)}>{t("Exportar a calendario (.ics)")}</GatedMenuItem>}
+      {column.role === "AGENDA" && <GatedMenuItem column={column} cardCount={cardCount} icon={CalendarDays} onClick={() => void agendaIcs(project.id, column.id, t, toast)}>{t("Exportar a calendario (.ics)")}</GatedMenuItem>}
       {column.role === "ROUTINES" && (
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}

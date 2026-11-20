@@ -1,12 +1,13 @@
 // Caza de bugs 48c: comentarios de tres personas a la vez en el detalle abierto (todos se ven, en orden y sin «Ver
-// anteriores»), el editor de la descripción con red lenta (no se pierden las primeras teclas), dos pestañas de la misma
+// anteriores»), editar el propio comentario en el móvil (mención nueva, en vivo, historial, deshacer; un admin no edita
+// los ajenos), el editor de la descripción con red lenta (no se pierden las primeras teclas), dos pestañas de la misma
 // persona que guardan la descripción (la segunda, que la escribía a la vez, recibe el aviso y no pisa la primera) y una
 // release cuyo texto se generó antes de que otra persona renombrara una tarea. Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
-const only = (process.env.PART || "comments,desc,tabs,rel").split(",");
+const only = (process.env.PART || "comments,edit,desc,tabs,rel").split(",");
 
 const THIRD = "bh48c@example.com";
 await L.prepareUsers();
@@ -47,6 +48,61 @@ if (only.includes("comments")) {
   }
   L.assertNoErrors("COMMENTS", people);
   for (const p of people) await p.ctx.close();
+}
+
+// --- Editar el propio comentario en el móvil: botón con texto, mención nueva, en vivo, historial y deshacer -----------
+if (only.includes("edit")) {
+  L.scenario("edit: editar el propio comentario (móvil) con otra persona mirando");
+  const [taskId] = await L.seedTasks(L.COL.backlog, ["Editar comentario r57"]);
+  // Persona a la que se menciona (id sin «_»: el de una mención son letras y cifras, como los cuid).
+  if (!(await L.q(`SELECT 1 FROM "User" WHERE id='r57mencion'`)).length) {
+    const [a] = await L.q(`SELECT * FROM "User" WHERE email=$1`, [L.ADMIN]);
+    const cols = Object.keys(a).filter((c) => !["id", "email", "name"].includes(c));
+    await L.q(`INSERT INTO "User" (id,email,name,${cols.map((c) => `"${c}"`).join(",")}) VALUES ('r57mencion','r57mencion@example.com','Mencionada Rcincuenta',${cols.map((_, i) => `$${i + 1}`).join(",")})`, cols.map((c) => a[c]));
+  }
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") SELECT id,'r57mencion' FROM "Project" ON CONFLICT DO NOTHING`);
+  const mentions = async (userId) => Number((await L.q(`SELECT count(*)::int n FROM "Notification" WHERE "userId"=$1 AND type='MENTION'`, [userId]))[0].n);
+  const body = async () => (await L.q(`SELECT body FROM "TaskComment" WHERE "taskId"=$1`, [taskId]))[0]?.body;
+  const m = await L.session({ email: L.USER2, viewport: { width: 390, height: 844 }, mobile: true });
+  const a = await L.session({ email: L.ADMIN });
+  await U.openTask(m.page, "Editar comentario r57");
+  await U.openTask(a.page, "Editar comentario r57");
+  await U.dialog(m.page).getByLabel("Nuevo comentario").fill("Primera versión");
+  await U.dialog(m.page).getByRole("button", { name: "Comentar", exact: true }).tap();
+  await L.eqEventually("EDIT: comentario guardado", body, "Primera versión");
+  const mine = U.dialog(m.page).locator("[data-comment-id]").first();
+  const pencil = mine.getByRole("button", { name: "Editar comentario" });
+  await mine.scrollIntoViewIfNeeded();
+  L.eq("EDIT: el botón dice «Editar» (no solo un lápiz) y se ve sin ratón", [(await pencil.innerText()).trim(), await pencil.evaluate((el) => getComputedStyle(el).opacity)], ["Editar", "1"]);
+  const theirs = U.dialog(a.page).locator("[data-comment-id]").first();
+  await L.waitFor(async () => (await theirs.count()) > 0, { timeout: 8000 });
+  L.eq("EDIT: un admin no puede editar el comentario ajeno", await theirs.getByRole("button", { name: "Editar comentario" }).count(), 0);
+  await pencil.tap();
+  const edit = U.dialog(m.page).locator('textarea[aria-label="Editar comentario"]');
+  await edit.waitFor();
+  await edit.press("End");
+  await m.page.keyboard.type(" para @Mencionada");
+  await m.page.keyboard.press("Enter");
+  await mine.getByRole("button", { name: "Guardar", exact: true }).tap();
+  await L.eqEventually("EDIT: guarda la mención nueva", body, "Primera versión para @[Mencionada Rcincuenta](user:r57mencion)");
+  await L.eqEventually("EDIT: la persona mencionada en la edición recibe un aviso", () => mentions("r57mencion"), 1);
+  L.check("EDIT: «(editado)» con la fecha en el título", /^Editado el /.test((await mine.getByText("(editado)").getAttribute("title")) ?? ""));
+  await L.eqEventually("EDIT: la otra persona ve la edición en vivo", async () => { const x = await theirs.innerText(); return x.includes("para @Mencionada Rcincuenta") && x.includes("(editado)"); }, true, { timeout: 8000 });
+  // Segunda edición: quien ya estaba mencionado no recibe otro aviso.
+  await mine.getByRole("button", { name: "Editar comentario" }).tap();
+  await edit.waitFor();
+  await edit.press("End");
+  await m.page.keyboard.type(" de nuevo");
+  await mine.getByRole("button", { name: "Guardar", exact: true }).tap();
+  await L.eqEventually("EDIT: segunda edición guardada", body, "Primera versión para @[Mencionada Rcincuenta](user:r57mencion) de nuevo");
+  await sleep(500);
+  L.eq("EDIT: sin aviso repetido para quien ya estaba mencionado", await mentions("r57mencion"), 1);
+  L.check("EDIT: queda en el historial de la tarea", /Editó un comentario/.test(await U.historyText(m.page)));
+  await U.dialog(m.page).getByRole("button", { name: "Deshacer la última acción" }).first().tap();
+  await L.eqEventually("EDIT: deshacer devuelve el texto anterior", body, "Primera versión para @[Mencionada Rcincuenta](user:r57mencion)");
+  L.assertNoErrors("EDIT", [m, a]);
+  await m.ctx.close();
+  await a.ctx.close();
 }
 
 // --- Red lenta: el editor con barra aún no se ha descargado y ya se está escribiendo -------------------------------

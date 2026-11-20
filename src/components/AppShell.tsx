@@ -19,6 +19,7 @@ import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
 import { clearDraftsOnLogout } from "./board/drafts";
+import { OPEN_PROJECT_MENU_EVENT } from "./board/shortcuts";
 import { filesFrom, hasFiles } from "./board/upload";
 import { documentFailuresMessage, documentUploadName, uploadDocument } from "./docs/uploadDocuments";
 import { installDragMove } from "./ui/dragMove";
@@ -308,7 +309,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>
             <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>
             <DocsNavLink projectId={current.id} active={pathname.startsWith(`/p/${current.id}/docs`)} />
-            <ReportButton projectId={current.id} variant="sidebar" />
+            <ReportButton projectId={current.id} />
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>{t("Ajustes del proyecto")}</NavLink>
             <NavLink href={`/p/${current.id}?archivadas=1`} icon={Archive} active={false}>{t("Archivadas")}</NavLink>
             <div className="my-3 border-t border-slate-200 dark:border-slate-800" />
@@ -367,10 +368,23 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProjec
   const t = useT();
   const switchHref = useProjectSwitchHref();
   const [creating, setCreating] = useState(false);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Alt+P (atajo del tablero) abre este selector en escritorio, donde la cabecera del tablero ya no lleva el suyo. Solo
+  // el que se ve: en el móvil la barra lateral está oculta y responde el de la barra superior (ProjectMenu).
+  useEffect(() => {
+    const onShortcut = () => {
+      if (rootRef.current && rootRef.current.getClientRects().length > 0) setOpen(true);
+    };
+    window.addEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
+    return () => window.removeEventListener(OPEN_PROJECT_MENU_EVENT, onShortcut);
+  }, []);
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <DropdownMenu
         matchWidth
+        open={open}
+        onOpenChange={setOpen}
         label={t("Selecciona proyecto")}
         panelClassName="rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900"
         trigger={({ props }) => (

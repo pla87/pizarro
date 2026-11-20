@@ -197,7 +197,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
                 </>
               ) : (
                 <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                  {t("El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Ajustes.")}{" "}
+                  {t("El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Integraciones.")}{" "}
                   <InfoTip topic={t("Avisos por email")}>{t("También con las variables SMTP_* del servidor (docs/INSTALL.md).")}</InfoTip>
                 </p>
               )}

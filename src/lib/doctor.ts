@@ -101,7 +101,7 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     env: envPresence(),
     features: configFlags(),
   };
-  // Email configurado en Administración → Ajustes (sin valores: solo si hay servidor y remitente guardados). Las variables SMTP_* mandan.
+  // Email configurado en Administración → Integraciones (sin valores: solo si hay servidor y remitente guardados). Las variables SMTP_* mandan.
   await section(async () => {
     const rows = await db.appState.findMany({ where: { key: { in: ["mail.host", "mail.fromAddress"] } }, select: { key: true, value: true } });
     const emailInApp = ["mail.host", "mail.fromAddress"].every((k) => rows.some((r) => r.key === k && r.value.trim() !== ""));
@@ -110,7 +110,7 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     features.email = Boolean(features.email) || emailInApp;
     features.emailSource = features.smtp ? "env" : emailInApp ? "app" : features.mailOutbox ? "outbox" : "none";
   }, ctx);
-  // Google configurado en Administración → Ajustes (sin valores: solo si hay ID, secreto y dominio). Las variables GOOGLE_* mandan.
+  // Google configurado en Administración → Integraciones (sin valores: solo si hay ID, secreto y dominio). Las variables GOOGLE_* mandan.
   await section(async () => {
     const rows = await db.appState.findMany({ where: { key: { in: ["google.clientId", "google.clientSecretEnc", "google.workspaceDomain"] } }, select: { key: true, value: true } });
     const has = (k: string) => rows.some((r) => r.key === k && r.value.trim() !== "");

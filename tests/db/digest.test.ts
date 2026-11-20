@@ -1,8 +1,10 @@
 // Resumen diario por email, contra PostgreSQL real: lo que entra en cada apartado.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { updateCollabPrefs } from "../../src/actions/collab-prefs";
 import { gatherDigest } from "../../src/lib/periodic-mail";
+import { digestDue } from "../../src/lib/schedule";
 
 describe("resumen diario", () => {
   test("«Tareas nuevas» no incluye las que creó la propia persona", async () => {
@@ -34,5 +36,36 @@ describe("resumen diario", () => {
     const now = new Date();
     const d = await gatherDigest({ id: user.id, role: "MEMBER" }, now, now.toISOString().slice(0, 10));
     assert.deepEqual(d.done.filter((x) => [f.project.id, foreign.project.id].includes(x.projectId)).map((x) => x.title).sort(), ["Terminada", "Terminada y archivada"]);
+  });
+});
+
+describe("preferencias del resumen diario", () => {
+  const prefs = { notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true };
+  test("ni cambiar la hora tras recibirlo ni desactivarlo y volver a activarlo reinician el «ya enviado hoy»", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const sent = new Date();
+    await db.user.update({ where: { id: user.id }, data: { dailyDigest: true, digestHour: 7, lastDigestAt: sent } });
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 20 }));
+    const after = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { digestHour: true, lastDigestAt: true } });
+    assert.equal(after.digestHour, 20);
+    assert.equal(after.lastDigestAt?.getTime(), sent.getTime(), "no llega otro resumen con lo mismo el mismo día");
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: false, digestHour: 20 }));
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 20 }));
+    // Desactivarlo y volver a activarlo el mismo día no lo reinicia (antes llegaba otro resumen igual).
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).lastDigestAt?.getTime(), sent.getTime());
+  });
+
+  test("activarlo por primera vez, o con un envío de otro día, lo deja pendiente", async () => {
+    const now = new Date();
+    for (const last of [null, new Date(now.getTime() - 3 * 86_400_000)]) {
+      const user = await makeUser();
+      await loginAs(user);
+      await db.user.update({ where: { id: user.id }, data: { dailyDigest: false, lastDigestAt: last } });
+      expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 0 }));
+      const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { dailyDigest: true, digestHour: true, lastDigestAt: true } });
+      assert.equal(row.dailyDigest, true);
+      assert.equal(digestDue(now, "UTC", { hour: row.digestHour, lastSentAt: row.lastDigestAt }), true, String(last));
+    }
   });
 });

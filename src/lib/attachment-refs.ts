@@ -1,6 +1,6 @@
 // Enlaces a adjuntos dentro de un texto Markdown (`![captura](/api/attachments/<id>)` en una descripción). Puro, sin
 // base de datos: lo usan Duplicar (la copia apunta a sus propios adjuntos, no a los de la original) y la importación
-// de proyectos (los adjuntos importados tienen ids nuevos).
+// de proyectos (los adjuntos importados tienen ids nuevos) y la siguiente aparición de una tarea repetida.
 
 const ATTACHMENT_REF = /\/api\/attachments\/([A-Za-z0-9_-]+)/g;
 
@@ -23,4 +23,10 @@ export function remapAttachmentRefs(text: string, map: ReadonlyMap<string, strin
     const next = map.get(id);
     return next ? `/api/attachments/${next}` : whole;
   });
+}
+
+/** Ids de los adjuntos que cita `text` (`/api/attachments/<id>`), sin repetir y en orden de aparición. */
+export function attachmentRefIds(text: string): string[] {
+  if (!text.includes("/api/attachments/")) return [];
+  return [...new Set(Array.from(text.matchAll(ATTACHMENT_REF), (m) => m[1]!))];
 }

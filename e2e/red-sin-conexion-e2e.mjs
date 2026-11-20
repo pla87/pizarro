@@ -230,7 +230,8 @@ if (only.includes("title")) try {
     L.eq("TITLE: «Seguir editando» deja el detalle abierto", await page.locator("[role=dialog]").count(), 1);
     L.eq("TITLE: con lo escrito", await titleField(page).inputValue(), "Título que no se pudo guardar");
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Descartar cambios" }).click({ timeout: 5000 }).catch(() => {});
+    // El de la pregunta (el pie del detalle también tiene un «Descartar cambios»).
+    await page.locator("[role=dialog]").filter({ hasText: "Cambios sin guardar" }).getByRole("button", { name: "Descartar cambios" }).click({ timeout: 5000 }).catch(() => {});
     await sleep(600);
     L.eq("TITLE: «Descartar cambios» lo cierra", await page.locator("[role=dialog]").count(), 0);
   }

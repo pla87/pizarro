@@ -1,6 +1,81 @@
 {
   "versions": [
     {
+      "version": "1.61.0",
+      "date": "2026-11-20",
+      "releasedAt": "2026-11-20T17:52:09+01:00",
+      "summary": "Plantillas de serie para trabajo real, Compartir con Pizarro, Administración con Integraciones, cabecera más limpia, roles en submenú, archivadas en lectura, avisos abajo en el móvil, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Plantillas de serie revisadas para trabajo real: usan los roles de columna (Esperando, Rutinas, Agenda, Presupuesto, Lista consolidada, Revisión con requisitos, Entrega al cliente, Planificación semanal) y los campos de cada sector, y hay dos nuevas: «Mantenimiento e instalaciones» y «Ventas».",
+          "«Compartir → Pizarro»: con la app instalada, compartir desde otra app abre «Nueva tarea» con el texto, el enlace y las fotos o archivos.",
+          "Las tareas archivadas se pueden abrir para leerlas enteras, sin cambiarlas.",
+          "Administración tiene una pestaña nueva, «Integraciones» (email, Google, Telegram y WhatsApp), separada de «Ajustes»."
+        ],
+        "mejoras": [
+          "Cabecera del tablero más limpia: un solo selector de proyecto en el ordenador (el de la barra lateral, con Alt+P), sin el botón de «Informe PDF» (sigue en el menú) y los botones de solo icono más juntos.",
+          "El rol de una columna se elige en un submenú «Rol de la columna ›», y el menú de la columna se acorta a la mitad.",
+          "«Nueva tarea» propone el último tipo con el que creaste una tarea en ese proyecto, con su título, texto y subtareas automáticas.",
+          "El informe PDF no cuenta las tareas fijas en el avance ni en las pendientes.",
+          "En el móvil, los avisos salen abajo y no tapan la cabecera.",
+          "«Cancelar» del detalle pasa a «Descartar cambios» y pregunta antes si has cambiado algo; los comentarios propios tienen un botón «Editar» a la vista.",
+          "El .ics de una columna Agenda se descarga sin salir del tablero.",
+          "Las descargas grandes (adjuntos, documentos, exportaciones, copias) muestran el tamaño y el progreso en el navegador.",
+          "Calendario y Mis tareas más rápidos y con mejor contraste."
+        ],
+        "correcciones": [
+          "El informe semanal seguía enviándose, con el PDF del proyecto, a una cuenta borrada.",
+          "Las descargas de PDF y del .ics compartían un tope de 5 por minuto: el .ics podía bloquear los PDF y sacar a la persona del tablero.",
+          "Las imágenes de la descripción de una tarea que se repite dejaban de verse al borrar la aparición anterior.",
+          "Cambiar la hora del resumen diario o del informe semanal, o desactivarlo y volver a activarlo, lo reenviaba el mismo día o semana.",
+          "Importar un proyecto podía repetir el número de una release ya borrada en el original.",
+          "/robots.txt redirigía al acceso; ahora es público y pide no indexar la instalación.",
+          "Elegir el rol que la columna ya tenía anotaba un cambio vacío; varios clics en el .ics bajaban varios ficheros."
+        ],
+        "tecnicos": [
+          "La imagen de producción se compila con webpack, el mismo empaquetador que prueban las suites (con Turbopack el standalone arrastraba todo el proyecto).",
+          "Componente MenuSub accesible; `X-Robots-Tag: noindex` en `/api/*`; presencia con topes y límite de ritmo; topes de descarga por tipo y uno común para los PDF de columna; HEAD sin efectos en la descarga de exportaciones.",
+          "Copia de adjuntos por lotes (`copyAttachmentsBatch`) para Duplicar y las repeticiones; `share_target` con almacén temporal por persona (`UPLOAD_DIR/shared/`, 30 min) y limpieza en el mantenimiento."
+        ]
+      },
+      "en": {
+        "summary": "Standard templates for real work, Share to Pizarro, Administration with Integrations, cleaner header, roles in a submenu, read-only archived tasks, toasts at the bottom on mobile, and review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Standard templates reviewed for real work: they use column roles (Waiting, Routines, Agenda, Budget, Consolidated list, Review with requirements, Client delivery, Weekly planning) and each sector's fields, and there are two new ones: «Maintenance and facilities» and «Sales pipeline».",
+            "«Share → Pizarro»: with the app installed, sharing from another app opens «New task» with the text, link and photos or files.",
+            "Archived tasks can be opened to read them in full, without changing them.",
+            "Administration has a new «Integrations» tab (email, Google, Telegram and WhatsApp), separate from «Settings»."
+          ],
+          "mejoras": [
+            "Cleaner board header: a single project picker on desktop (the sidebar one, with Alt+P), no «PDF report» button (it stays in the menu) and icon-only buttons closer together.",
+            "A column's role is chosen in a «Column role ›» submenu, and the column menu is half as long.",
+            "«New task» suggests the last type you used in that project, with its automatic title, text and subtasks.",
+            "The PDF report doesn't count fixed tasks in the progress or pending figures.",
+            "On mobile, toasts appear at the bottom and don't cover the header.",
+            "«Cancel» in the task detail becomes «Discard changes» and asks first if you changed something; your own comments have a visible «Edit» button.",
+            "An Agenda column's .ics downloads without leaving the board.",
+            "Large downloads (attachments, documents, exports, backups) show size and progress in the browser.",
+            "Faster calendar and My tasks, with better contrast."
+          ],
+          "correcciones": [
+            "The weekly report kept being sent, with the project PDF, to a deleted account.",
+            "PDF and .ics downloads shared a limit of 5 per minute: the .ics could block the PDFs and take the person off the board.",
+            "Images in the description of a repeating task stopped showing when the previous occurrence was deleted.",
+            "Changing the time of the daily digest or weekly report, or turning it off and on, resent it the same day or week.",
+            "Importing a project could reuse the number of a release already deleted in the original.",
+            "/robots.txt redirected to sign-in; now it's public and asks not to index the installation.",
+            "Choosing the role a column already had logged an empty change; several clicks on the .ics downloaded several files."
+          ],
+          "tecnicos": [
+            "The production image is built with webpack, the same bundler the suites test (with Turbopack the standalone pulled in the whole project).",
+            "Accessible MenuSub component; `X-Robots-Tag: noindex` on `/api/*`; presence with caps and rate limit; per-type download limits plus a shared one for column PDFs; side-effect-free HEAD on export downloads.",
+            "Batched attachment copy (`copyAttachmentsBatch`) for Duplicate and recurrences; `share_target` with a per-person temporary store (`UPLOAD_DIR/shared/`, 30 min) cleaned by maintenance."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.60.0",
       "date": "2026-11-20",
       "releasedAt": "2026-11-20T12:55:35+01:00",

@@ -156,7 +156,7 @@ steps:
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
-| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Ajustes*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Integraciones*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
 Las integraciones son **opcionales**: si faltan sus variables, la app funciona igual y esas opciones aparecen como «no configuradas».
@@ -290,7 +290,7 @@ Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puer
 
 #### 7.3 Avisos por Telegram y WhatsApp
 
-Los dos se activan en **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp**, sin tocar variables ni
+Los dos se activan en **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp**, sin tocar variables ni
 redesplegar. Después cada persona conecta su canal en *Mi perfil → Avisos* y elige qué avisos recibe por él (por
 defecto, menciones y asignaciones). Los tokens se guardan cifrados con `ENCRYPTION_KEY` y nunca vuelven al navegador.
 

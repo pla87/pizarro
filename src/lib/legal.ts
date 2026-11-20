@@ -5,7 +5,7 @@ import { LEGAL_KINDS, LEGAL_RESPONSIBLE_KEY, legalTextKey, legalUpdatedKey, type
 
 // Textos legales editables (Administración → Textos legales), guardados en AppState: texto propio por página e idioma
 // (vacío = se usa el genérico), fecha de última modificación por página y nombre del responsable. El email de contacto
-// público es el mismo que se edita en Ajustes → Acceso con Google (google.publicContactEmail).
+// público es el mismo que se edita en Administración → Integraciones → Acceso con Google (google.publicContactEmail).
 
 export interface LegalSettings {
   responsible: string;

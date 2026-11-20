@@ -8,7 +8,7 @@ import { envGoogleCredentials, validateGoogleSettings, type GoogleSettingsInput 
 import { saveGoogleExtras, saveGoogleSettings as persist } from "@/lib/google-config";
 import { requireAdmin } from "@/lib/session";
 
-// Administración → Ajustes → «Acceso con Google». Solo administradores. El secreto nunca se registra ni se devuelve.
+// Administración → Integraciones → «Acceso con Google». Solo administradores. El secreto nunca se registra ni se devuelve.
 // Los args de la acción NO se pasan a runAction (llevarían el secreto al registro).
 
 interface GoogleSettingsForm extends GoogleSettingsInput {
@@ -33,7 +33,7 @@ export async function saveGoogleSettings(form: GoogleSettingsForm) {
         contactChanged: before.publicContactEmail !== after.publicContactEmail,
         authChange: "unchanged",
       });
-      revalidatePath("/admin/settings");
+      revalidatePath("/admin/integrations");
       return { settings: after };
     }
     const checked = validateGoogleSettings(form);
@@ -50,7 +50,7 @@ export async function saveGoogleSettings(form: GoogleSettingsForm) {
       contactChanged: before.publicContactEmail !== after.publicContactEmail,
       authChange: secretChange,
     });
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { settings: after };
   });
 }

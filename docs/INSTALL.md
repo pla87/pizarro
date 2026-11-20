@@ -116,8 +116,8 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
 ### Primeros pasos tras instalar
 
 1. **Asistente `/setup`:** abre `<tu dirección>/setup`, escribe el código (en el resumen del instalador o en los logs del despliegue), elige organización, idioma y zona horaria y crea el primer administrador. Después activa la verificación en dos pasos (obligatoria para administradores). Detalle en 2.3.
-2. **Email:** *Administración → Ajustes → Avisos por email*. Sin él no hay invitaciones ni «¿Olvidaste tu contraseña?». Detalle y proveedores en 3.6.
-3. **Entrar con Google (opcional):** *Administración → Ajustes → Acceso con Google*; la guía desplegable te lleva paso a paso por Google Cloud con las direcciones listas para copiar. Resumen en 3.6, punto 2.
+2. **Email:** *Administración → Integraciones → Avisos por email*. Sin él no hay invitaciones ni «¿Olvidaste tu contraseña?». Detalle y proveedores en 3.6.
+3. **Entrar con Google (opcional):** *Administración → Integraciones → Acceso con Google*; la guía desplegable te lleva paso a paso por Google Cloud con las direcciones listas para copiar. Resumen en 3.6, punto 2.
 4. **Copias de seguridad:** con `BACKUP_KEY` definida se hacen copias diarias cifradas dentro del servidor; añade un destino **externo** (S3 compatible o carpeta montada, sección 4.1 y 4.2) y guarda el kit de recuperación fuera del servidor.
 5. **Invita al equipo** desde *Administración → Usuarios*.
 
@@ -215,7 +215,7 @@ El código es de un solo uso para esta instalación: caduca a las 24 horas y se 
 
 Terminado el asistente, el código se borra y `/setup` responde 404. Mientras no haya usuarios, cualquier otra dirección redirige a `/setup`.
 
-Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: desde *Administración → Ajustes → Avisos por email* (sin tocar el servidor) o con `SMTP_*` en `.env` (sección 3.6).
+Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: desde *Administración → Integraciones → Avisos por email* (sin tocar el servidor) o con `SMTP_*` en `.env` (sección 3.6).
 
 ### 2.4 Administrador inicial por variables (alternativa)
 
@@ -257,7 +257,7 @@ La imagen publicada incluye **amd64 y arm64** (servidores normales y, por ejempl
   ```
   El script es idempotente: crea el rol y le pasa la propiedad de la base y sus tablas. Para volver atrás, quita las dos variables de `.env` y `docker compose up -d`.
 
-### 3.6 Email y Google desde Administración → Ajustes
+### 3.6 Email y Google desde Administración → Integraciones
 
 Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar `.env`. Si defines las variables en el servidor, mandan sobre lo guardado en Ajustes y la pantalla se muestra de solo lectura. Los secretos se guardan cifrados con `ENCRYPTION_KEY` y entran en la rotación de claves y en las copias; no se muestran de nuevo ni aparecen en el registro ni en el diagnóstico.
 
@@ -293,7 +293,7 @@ Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_
 **Cambiar de una opción a otra más adelante** (por ejemplo de `*.up.railway.app` a un dominio propio), sin cortar el acceso con Google:
 
 1. Pon `APP_URL` en la dirección nueva y redespliega (Railway: *Variables* → *Redeploy*; Docker Compose: `deploy/.env` y `docker compose up -d`).
-2. Entra por la dirección nueva en *Administración → Ajustes → Acceso con Google*: arriba verás la «Dirección pública de Pizarro» y las direcciones de redirección ya calculadas. Si entras por una dirección distinta de `APP_URL`, un aviso lo indica y se muestran las URI de las dos (la de `APP_URL` y la que usas) para poder dar de alta ambas durante el cambio.
+2. Entra por la dirección nueva en *Administración → Integraciones → Acceso con Google*: arriba verás la «Dirección pública de Pizarro» y las direcciones de redirección ya calculadas. Si entras por una dirección distinta de `APP_URL`, un aviso lo indica y se muestran las URI de las dos (la de `APP_URL` y la que usas) para poder dar de alta ambas durante el cambio.
 3. En Google Cloud **añade** las URI de redirección nuevas sin quitar las antiguas (Google admite varias a la vez), y cambia la página principal, los enlaces de privacidad y condiciones y los dominios autorizados.
 4. Comprueba que «Iniciar sesión con Google» funciona con la dirección nueva y entonces quita las URI antiguas.
 5. Avisa a tu gente: tienen que iniciar sesión otra vez, y quien instaló Pizarro como aplicación debe desinstalarla e instalarla de nuevo desde la dirección nueva.
@@ -310,7 +310,7 @@ Para servir Pizarro en `pizarro.example.com` (sustituye `example.com` por tu dom
 Qué cambia:
 
 - **Las sesiones de la dirección antigua terminan.** Las cookies son de cada dirección: en el dominio nuevo todo el mundo tiene que iniciar sesión otra vez. La dirección antigua sigue funcionando con sus propias cookies, salvo que actives la redirección opcional (más abajo).
-- **Google.** Si usas el acceso con Google o Docs/Sheets/Slides, en Google Cloud (*Google Auth Platform*) actualiza: las URI de redirección autorizadas del cliente (`https://pizarro.example.com/api/auth/google/callback` y `https://pizarro.example.com/api/google/callback`), la *Application home page*, los enlaces de privacidad (`https://pizarro.example.com/privacy`) y condiciones (`https://pizarro.example.com/terms`) y el dominio autorizado (`example.com`, sin subdominios). *Administración → Ajustes → Acceso con Google* muestra las direcciones ya calculadas a partir de `APP_URL`. Mientras no lo hagas, entrar con Google fallará con `redirect_uri_mismatch`.
+- **Google.** Si usas el acceso con Google o Docs/Sheets/Slides, en Google Cloud (*Google Auth Platform*) actualiza: las URI de redirección autorizadas del cliente (`https://pizarro.example.com/api/auth/google/callback` y `https://pizarro.example.com/api/google/callback`), la *Application home page*, los enlaces de privacidad (`https://pizarro.example.com/privacy`) y condiciones (`https://pizarro.example.com/terms`) y el dominio autorizado (`example.com`, sin subdominios). *Administración → Integraciones → Acceso con Google* muestra las direcciones ya calculadas a partir de `APP_URL`. Mientras no lo hagas, entrar con Google fallará con `redirect_uri_mismatch`.
 - **Emails.** Los enlaces de los emails (invitaciones, recuperar contraseña, avisos) se construyen con `APP_URL`; los enviados antes del cambio siguen apuntando a la dirección antigua.
 - **PWA.** Si alguien instaló Pizarro como aplicación (móvil o escritorio), esa instalación queda ligada a la dirección antigua: que la desinstale y la instale otra vez desde el dominio nuevo.
 - **Integraciones.** Cualquier servicio externo que llame a Pizarro (webhooks, calendarios suscritos por URL) debe usar la dirección nueva.
@@ -539,4 +539,4 @@ Notas:
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
 | En red local por HTTP, con muchas ventanas de Pizarro abiertas, las páginas tardan en cargar o no guardan | Límite de 6 conexiones por servidor de HTTP/1.1 (ver 3.3) | Cierra o minimiza ventanas que no uses, o sirve Pizarro por HTTPS (HTTP/2). |
-| No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Ajustes → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |
+| No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Integraciones → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |

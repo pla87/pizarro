@@ -171,6 +171,12 @@ async function purgeTransfers(now: Date = new Date()): Promise<number> {
   return purgeTransferJobs(now);
 }
 
+/** Borra lo compartido con «Compartir → Pizarro» que nadie ha usado (caduca a los 30 minutos; ver share-inbox.ts). */
+async function purgeSharedFiles(now: Date = new Date()): Promise<number> {
+  const { purgeShares } = await import("@/lib/share-inbox");
+  return purgeShares(now.getTime());
+}
+
 const RESUME_AFTER_MS = 10 * 1000;
 
 /** Retoma las copias de adjuntos de releases interrumpidas por un reinicio. */
@@ -192,6 +198,7 @@ export const MAINTENANCE_JOBS = [
   { name: "documentsTrashPurge", run: () => purgeDocumentsTrash(), everyMs: DOCS_TRASH_EVERY_MS },
   { name: "notifications", run: () => purgeOldNotifications() },
   { name: "transferJobs", run: () => purgeTransfers() },
+  { name: "sharedFiles", run: () => purgeSharedFiles() },
   { name: "authData", run: () => purgeAuthData() },
   { name: "taskHistory", run: () => purgeOldTaskHistory() },
   { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },

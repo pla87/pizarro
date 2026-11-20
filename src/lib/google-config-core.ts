@@ -1,5 +1,5 @@
 // Parte pura (sin base de datos ni «server-only») de la configuración de Google: claves, validación y la regla de
-// precedencia (las variables GOOGLE_* del servidor ganan a lo guardado en Administración → Ajustes).
+// precedencia (las variables GOOGLE_* del servidor ganan a lo guardado en Administración → Integraciones).
 // La usan el servidor, el diagnóstico y el script de rotación de claves.
 
 export const GOOGLE_CLIENT_ID_KEY = "google.clientId";
