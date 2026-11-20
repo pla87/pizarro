@@ -403,7 +403,7 @@ export function pastedDocs(docs: NonNullable<PastedTask["googleDocs"]>): { kind:
     .map((d) => ({ kind: d.kind, title: d.title.replace(/\s+/g, " ").trim().slice(0, 300) || d.url.slice(0, 300), url: d.url }));
 }
 
-/** Documentos de Google enlazados por tarea al pegar o importar (los creados con @docs no tienen otro tope que el ritmo). */
+/** Documentos de Google enlazados por tarea: al pegar, al importar y al crearlos desde la tarea (createGoogleFile). */
 export const MAX_TASK_DOCS = 100;
 
 const JSON_TASK_SELECT = {

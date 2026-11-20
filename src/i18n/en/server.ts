@@ -39,6 +39,7 @@ export const server: Record<string, string> = {
   "Cambió el máximo de comentarios por tarea de {from} a {to}": "Changed the maximum comments per task from {from} to {to}",
   "Demasiados comentarios seguidos. Espera un momento.": "Too many comments in a row. Please wait a moment.",
   "Demasiados documentos creados seguidos. Espera un minuto.": "Too many documents created in a row. Please wait a minute.",
+  "Esta tarea ya tiene el máximo de {max} documentos de Google.": "This task already has the maximum of {max} Google documents.",
   "Error inesperado. Inténtalo de nuevo.": "Unexpected error. Please try again.",
   "Datos no válidos.": "Invalid data.",
   "Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.": "The data has changed in the meantime. Reload and try again.",

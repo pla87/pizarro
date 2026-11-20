@@ -1767,6 +1767,11 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(GOOGLE_FILE_KINDS).parse(kind);
     const name = v.title.parse(title);
+    // El mismo tope de documentos por tarea que al pegar o importar; se mira antes de crear el archivo en Google Drive.
+    if ((await db.taskLink.count({ where: { taskId } })) >= MAX_TASK_DOCS) {
+      const t = await getT();
+      throw new AppError(t("Esta tarea ya tiene el máximo de {max} documentos de Google.", { max: MAX_TASK_DOCS }));
+    }
     // Con quién se comparte lo decide el proyecto (googleShareMode); en uno privado nunca es con el dominio.
     const project = await db.project.findUnique({
       where: { id: projectId },
