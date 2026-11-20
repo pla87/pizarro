@@ -1,11 +1,15 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { TASK_ORDER } from "./task-positions";
 import type { AttachmentTotals, BoardTask } from "./types";
 
+/**
+ * Campos de la tarjeta. Sin la descripción (puede ser larga y en el tablero solo hace falta saber si la hay) ni las filas
+ * de subtareas, adjuntos, comentarios y enlaces: todo eso sale ya contado de boardExtras.
+ */
 const boardTaskSelect = {
   id: true,
   columnId: true,
@@ -17,7 +21,6 @@ const boardTaskSelect = {
   assigneeId: true,
   dueDate: true,
   deliverableId: true,
-  description: true,
   evergreen: true,
   evergreenEvery: true,
   recurrence: true,
@@ -28,25 +31,11 @@ const boardTaskSelect = {
   // Solo id y título de la tarea que bloquea (una consulta por lote, sin N+1).
   blockedBy: { select: { id: true, title: true } },
   labels: { select: { labelId: true } },
-  subtasks: { select: { done: true } },
-  // Solo el flag de cada adjunto: la tarjeta distingue imágenes de otros ficheros.
-  attachments: { select: { isImage: true, size: true } },
-  // Para UNA tarea (loadBoardTask) el planificador filtra el recuento por su id. Para listas no: Prisma 7 lo convierte en
-  // un LEFT JOIN a un GROUP BY de TODA la tabla de comentarios y de enlaces del servidor; ahí se cuenta aparte (taskCounts).
-  _count: { select: { comments: { where: { deletedAt: null } }, links: true } },
 } satisfies Prisma.TaskSelect;
 
-/**
- * Igual que boardTaskSelect pero sin recuentos ni las filas de subtareas y adjuntos (taskCounts): en una lista, traer
- * una fila por subtarea y por adjunto solo para contarlas costaba miles de filas por tablero.
- */
-const { _count: _counts, subtasks: _subtasks, attachments: _attachments, ...boardTaskManySelect } = boardTaskSelect;
-/** Además sin la descripción: en el tablero completo solo hace falta saber si la hay. */
-const { description: _description, ...boardTaskListSelect } = boardTaskManySelect;
-
-type BoardTaskBaseRow = Omit<Prisma.TaskGetPayload<{ select: typeof boardTaskManySelect }>, "description"> & { description?: string };
 type BoardTaskRow = Prisma.TaskGetPayload<{ select: typeof boardTaskSelect }>;
-interface TaskCounts {
+interface TaskExtras {
+  hasDescription: boolean;
   comments: number;
   links: number;
   subtaskTotal: number;
@@ -55,60 +44,61 @@ interface TaskCounts {
   fileCount: number;
   attachBytes: number;
 }
-
-function toBoardTask(t: BoardTaskRow): BoardTask {
-  return toBoardTaskWith(t, t.description.trim().length > 0, {
-    comments: t._count.comments,
-    links: t._count.links,
-    subtaskTotal: t.subtasks.length,
-    subtaskDone: t.subtasks.filter((s) => s.done).length,
-    imageCount: t.attachments.filter((a) => a.isImage).length,
-    fileCount: t.attachments.filter((a) => !a.isImage).length,
-    attachBytes: t.attachments.reduce((n, a) => n + a.size, 0),
-  });
-}
+const NO_EXTRAS: TaskExtras = { hasDescription: false, comments: 0, links: 0, subtaskTotal: 0, subtaskDone: 0, imageCount: 0, fileCount: 0, attachBytes: 0 };
 
 /**
- * Comentarios (sin los borrados), enlaces, subtareas (hechas o no) y adjuntos (imágenes o no, con su tamaño) por tarea,
- * con groupBy filtrados (por proyecto o por ids) que usan los índices por taskId: solo leen las filas de esas tareas,
- * no las de todo el servidor, y devuelven una fila por tarea (y estado) en lugar de una por subtarea o adjunto.
+ * Un carácter que no es espacio para `String.prototype.trim()` (espacios y saltos de línea de JavaScript, los Unicode
+ * incluidos), escrito a mano para no depender de la configuración regional del servidor de PostgreSQL. Así «tiene
+ * descripción» es lo mismo aquí que en el navegador (`description.trim().length > 0`, TaskDialog).
  */
-async function taskCounts(scope: { task: Prisma.TaskWhereInput } | { taskId: { in: string[] } }): Promise<(id: string) => TaskCounts> {
-  const [comments, links, subtasks, attachments] = await Promise.all([
-    db.taskComment.groupBy({ by: ["taskId"], where: { deletedAt: null, ...scope }, _count: { _all: true } }),
-    db.taskLink.groupBy({ by: ["taskId"], where: scope, _count: { _all: true } }),
-    db.subtask.groupBy({ by: ["taskId", "done"], where: scope, _count: { _all: true } }),
-    db.taskAttachment.groupBy({ by: ["taskId", "isImage"], where: scope, _count: { _all: true }, _sum: { size: true } }),
-  ]);
-  const c = new Map(comments.map((r) => [r.taskId, r._count._all]));
-  const l = new Map(links.map((r) => [r.taskId, r._count._all]));
-  const s = new Map<string, { total: number; done: number }>();
-  for (const r of subtasks) {
-    const e = s.get(r.taskId) ?? { total: 0, done: 0 };
-    e.total += r._count._all;
-    if (r.done) e.done += r._count._all;
-    s.set(r.taskId, e);
-  }
-  const a = new Map<string, { images: number; files: number; bytes: number }>();
-  for (const r of attachments) {
-    const e = a.get(r.taskId) ?? { images: 0, files: 0, bytes: 0 };
-    if (r.isImage) e.images += r._count._all;
-    else e.files += r._count._all;
-    e.bytes += r._sum.size ?? 0;
-    a.set(r.taskId, e);
-  }
-  return (id) => ({
-    comments: c.get(id) ?? 0,
-    links: l.get(id) ?? 0,
-    subtaskTotal: s.get(id)?.total ?? 0,
-    subtaskDone: s.get(id)?.done ?? 0,
-    imageCount: a.get(id)?.images ?? 0,
-    fileCount: a.get(id)?.files ?? 0,
-    attachBytes: a.get(id)?.bytes ?? 0,
-  });
+const NON_SPACE = String.raw`[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]`;
+
+/**
+ * Si tiene descripción y comentarios (sin los borrados), enlaces, subtareas (total y hechas) y adjuntos (imágenes,
+ * otros ficheros y bytes) de las tareas de `scope` (condición sobre `"Task" t`), en una sola consulta.
+ *
+ * Antes eran cuatro groupBy filtrados por proyecto: Prisma los convertía en un JOIN con Task que el planificador
+ * resolvía recorriendo TODAS las filas de esas tablas del servidor (Seq Scan de los comentarios de todos los proyectos:
+ * 40 ms con 200.000). Aquí cada recuento filtra por la lista de ids de las tareas (`= ANY`, con los índices por taskId),
+ * así que solo lee las filas de esas tareas. No van como subconsultas correlacionadas por tarea: con un tablero grande su
+ * coste estimado pasa el umbral del JIT de PostgreSQL, y compilarlo costaba más (unos 25 ms) que la propia consulta.
+ *
+ * La descripción no se lee entera: `<> ''` solo mira su longitud y el principio (`substr`) basta casi siempre para ver
+ * un carácter que no sea espacio; solo se recorre completa si empieza por espacios.
+ */
+async function boardExtras(scope: Prisma.Sql): Promise<(id: string) => TaskExtras> {
+  const rows = await db.$queryRaw<({ id: string } & TaskExtras)[]>`
+    WITH t AS MATERIALIZED (
+      SELECT t."id", (t."description" <> '' AND (substr(t."description", 1, 64) ~ ${NON_SPACE} OR t."description" ~ ${NON_SPACE})) AS "hasDescription"
+      FROM "Task" t WHERE ${scope}
+    ), ids AS (SELECT array_agg("id") AS "all" FROM t)
+    SELECT t."id", t."hasDescription",
+      COALESCE(c."n", 0) AS "comments", COALESCE(l."n", 0) AS "links",
+      COALESCE(s."total", 0) AS "subtaskTotal", COALESCE(s."done", 0) AS "subtaskDone",
+      COALESCE(a."images", 0) AS "imageCount", COALESCE(a."files", 0) AS "fileCount", COALESCE(a."bytes", 0) AS "attachBytes"
+    FROM t
+    LEFT JOIN (
+      SELECT "taskId", count(*)::int AS "n" FROM "TaskComment"
+      WHERE "taskId" = ANY((SELECT "all" FROM ids)::text[]) AND "deletedAt" IS NULL GROUP BY "taskId"
+    ) c ON c."taskId" = t."id"
+    LEFT JOIN (
+      SELECT "taskId", count(*)::int AS "n" FROM "TaskLink"
+      WHERE "taskId" = ANY((SELECT "all" FROM ids)::text[]) GROUP BY "taskId"
+    ) l ON l."taskId" = t."id"
+    LEFT JOIN (
+      SELECT "taskId", count(*)::int AS "total", (count(*) FILTER (WHERE "done"))::int AS "done" FROM "Subtask"
+      WHERE "taskId" = ANY((SELECT "all" FROM ids)::text[]) GROUP BY "taskId"
+    ) s ON s."taskId" = t."id"
+    LEFT JOIN (
+      SELECT "taskId", (count(*) FILTER (WHERE "isImage"))::int AS "images", (count(*) FILTER (WHERE NOT "isImage"))::int AS "files",
+        sum("size")::float8 AS "bytes"
+      FROM "TaskAttachment" WHERE "taskId" = ANY((SELECT "all" FROM ids)::text[]) GROUP BY "taskId"
+    ) a ON a."taskId" = t."id"`;
+  const byId = new Map(rows.map(({ id, ...extras }) => [id, extras]));
+  return (id) => byId.get(id) ?? NO_EXTRAS;
 }
 
-function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: TaskCounts): BoardTask {
+function toBoardTask(t: BoardTaskRow, extras: TaskExtras): BoardTask {
   return {
     id: t.id,
     columnId: t.columnId,
@@ -119,16 +109,16 @@ function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: T
     position: t.position,
     assigneeId: t.assigneeId,
     labelIds: t.labels.map((l) => l.labelId),
-    subtaskTotal: counts.subtaskTotal,
-    subtaskDone: counts.subtaskDone,
-    imageCount: counts.imageCount,
-    fileCount: counts.fileCount,
-    attachBytes: counts.attachBytes,
-    hasDescription,
+    subtaskTotal: extras.subtaskTotal,
+    subtaskDone: extras.subtaskDone,
+    imageCount: extras.imageCount,
+    fileCount: extras.fileCount,
+    attachBytes: extras.attachBytes,
+    hasDescription: extras.hasDescription,
     dueDate: dateToIso(t.dueDate),
     deliverableId: t.deliverableId,
-    commentCount: counts.comments,
-    linkCount: counts.links,
+    commentCount: extras.comments,
+    linkCount: extras.links,
     evergreen: t.evergreen,
     evergreenEvery: t.evergreenEvery,
     recurrence: t.recurrence,
@@ -148,27 +138,24 @@ function toBoardTaskWith(t: BoardTaskBaseRow, hasDescription: boolean, counts: T
 
 /**
  * Tareas activas del tablero. No se traen las descripciones (pueden ser largas y se enviarían
- * todas al cliente): una consulta ligera dice cuáles tienen y el detalle se pide al abrir la tarea.
+ * todas al cliente): boardExtras dice cuáles tienen y el detalle se pide al abrir la tarea.
  */
 export async function loadBoardTasks(projectId: string): Promise<BoardTask[]> {
-  const where = { projectId, archivedAt: null };
-  const [rows, described, counts] = await Promise.all([
-    db.task.findMany({ where, orderBy: TASK_ORDER, select: boardTaskListSelect }),
-    db.task.findMany({ where: { ...where, description: { not: "" } }, select: { id: true } }),
-    taskCounts({ task: where }),
+  const [rows, extras] = await Promise.all([
+    db.task.findMany({ where: { projectId, archivedAt: null }, orderBy: TASK_ORDER, select: boardTaskSelect }),
+    boardExtras(Prisma.sql`t."projectId" = ${projectId} AND t."archivedAt" IS NULL`),
   ]);
-  const withText = new Set(described.map((d) => d.id));
-  return rows.map((r) => toBoardTaskWith(r, withText.has(r.id), counts(r.id)));
+  return rows.map((r) => toBoardTask(r, extras(r.id)));
 }
 
 /** Varias tareas por id (p. ej. las recién creadas), en el orden del tablero y con sus recuentos. */
 export async function loadBoardTasksByIds(ids: string[]): Promise<BoardTask[]> {
   if (!ids.length) return [];
-  const [rows, counts] = await Promise.all([
-    db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskManySelect }),
-    taskCounts({ taskId: { in: ids } }),
+  const [rows, extras] = await Promise.all([
+    db.task.findMany({ where: { id: { in: ids } }, orderBy: TASK_ORDER, select: boardTaskSelect }),
+    boardExtras(Prisma.sql`t."id" = ANY(${ids}::text[])`),
   ]);
-  return rows.map((r) => toBoardTaskWith(r, r.description.trim().length > 0, counts(r.id)));
+  return rows.map((r) => toBoardTask(r, extras(r.id)));
 }
 
 /**
@@ -183,7 +170,11 @@ export async function attachmentTotals(taskId: string, client: Pick<typeof db, "
 }
 
 export async function loadBoardTask(id: string): Promise<BoardTask> {
-  return toBoardTask(await db.task.findUniqueOrThrow({ where: { id }, select: boardTaskSelect }));
+  const [row, extras] = await Promise.all([
+    db.task.findUniqueOrThrow({ where: { id }, select: boardTaskSelect }),
+    boardExtras(Prisma.sql`t."id" = ${id}`),
+  ]);
+  return toBoardTask(row, extras(id));
 }
 
 /** Usuarios activos que pueden ver el proyecto (para el selector de asignación). */
