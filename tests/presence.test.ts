@@ -49,11 +49,11 @@ test("la tarea anunciada con el canal: solo del mismo usuario y proyecto, hasta 
   closePresenceStream(b);
 });
 
-test("sin canal, el aviso de la tarea dura 45 s y sale en el estado del proyecto", () => {
+test("sin canal, el aviso de la tarea dura 150 s y sale en el estado del proyecto", () => {
   const now = Date.now();
   noteTaskViewer("t9", "pp-3", "uc", "Carla", now);
   assert.deepEqual(presenceSnapshot("pp-3", now + 1000).viewers, { t9: [{ id: "uc", name: "Carla" }] });
-  assert.deepEqual(presenceSnapshot("pp-3", now + 46_000).viewers, {});
+  assert.deepEqual(presenceSnapshot("pp-3", now + 151_000).viewers, {});
   assert.deepEqual(presenceSnapshot("otro-proyecto", now + 1000).viewers, {}, "nunca en el estado de otro proyecto");
 });
 

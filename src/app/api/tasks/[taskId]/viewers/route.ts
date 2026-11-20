@@ -40,7 +40,7 @@ function openParam(req: Request): string {
  *
  * Con `?stream=<id del canal en vivo de la pestaña>&open=<id del montaje del diálogo>` basta un aviso al abrir: la tarea
  * cuenta como abierta hasta que se cierra ese montaje del diálogo (DELETE con los mismos parámetros) o el canal, y los cambios llegan por el canal (evento `presence`). Sin canal (no soportado o
- * caído), el diálogo repite el aviso cada 15 s y cada aviso vale 45 s.
+ * caído), el diálogo repite el aviso cada 60 s y cada aviso vale 150 s.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   const found = await load(ctx);

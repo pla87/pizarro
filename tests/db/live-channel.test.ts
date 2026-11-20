@@ -71,7 +71,7 @@ describe("tarea abierta: cerrar el diálogo", () => {
     assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id).map((p) => p.id), [user.id]);
     const del = await viewersDelete(new Request(url, { method: "DELETE", headers: { origin: "http://localhost", host: "localhost" } }), ctx);
     assert.equal(del.status, 204);
-    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 45 s");
+    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 150 s");
   });
 });
 

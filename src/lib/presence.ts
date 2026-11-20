@@ -290,7 +290,8 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
 
 // --- Tarea abierta sin canal en vivo (sondeo de respaldo cada pocos segundos) ----------------------------------------
 
-const VIEWER_WINDOW_MS = 45_000;
+// El sondeo de respaldo avisa cada 60 s: cada aviso vale 150 s (dos avisos y medio, por si uno se retrasa o se pierde).
+const VIEWER_WINDOW_MS = 150_000;
 type TaskViewers = { projectId: string; users: Map<string, Entry> };
 const viewers = (globalThis as unknown as { __pzViewers?: Map<string, TaskViewers> }).__pzViewers ??= new Map();
 // Las tareas de `viewers` de cada proyecto (el estado de un proyecto no recorre las de los demás).
@@ -322,7 +323,7 @@ export function taskViewersExcept(taskId: string, projectId: string, userId: str
   return [...out].map(([id, name]) => ({ id, name }));
 }
 
-/** Anota (45 s) que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
+/** Anota (150 s) que el usuario tiene la tarea abierta y devuelve quién más la tiene. */
 export function noteTaskViewer(taskId: string, projectId: string, userId: string, name: string, now = Date.now()): Person[] {
   if (viewers.size > 200) sweepViewers(now);
   let v = viewers.get(taskId);
