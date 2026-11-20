@@ -2,12 +2,14 @@
 // una aparición sin perder de qué tarea salió ni su columna de rutinas.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { createTask, deleteTask, moveTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
 import pg from "pg";
 import { spawnRecurrences } from "../../src/lib/recurrence";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "../../src/lib/constants";
+import { PROGRAM_MAX_SESSIONS } from "../../src/lib/program-limit";
+import { lockColumns } from "../../src/lib/task-positions";
 
 const nextOf = (taskId: string) => db.task.findFirstOrThrow({ where: { recurrenceFromId: taskId } });
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -166,5 +168,28 @@ describe("muchas apariciones a la vez", () => {
     const [a, b] = await Promise.all([spawnRecurrences(ids, user.id), spawnRecurrences(ids, user.id)]);
     assert.equal(a.length + b.length, 6);
     assert.equal(await db.task.count({ where: { recurrenceFromId: { in: ids } } }), 6);
+  });
+
+  test("una columna que pasa a «Programa del curso» (en el tope) mientras se reparten: no nace ninguna allí", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    // «Por hacer» llena hasta el tope de sesiones, aún sin el rol: el reparto la lee como columna sin tope.
+    await db.task.createMany({
+      data: Array.from({ length: PROGRAM_MAX_SESSIONS }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `S${i}`, position: (i + 1) * 1000 })),
+    });
+    const reps = [];
+    for (let i = 0; i < 3; i++) reps.push(await makeTask(f, { title: `Rep ${i}`, columnId: f.columns.done, recurrence: "DAILY" }));
+    // Con la columna bloqueada (como setColumnRole), el reparto espera al candado; entonces la columna pasa a PROGRAM.
+    let spawning: ReturnType<typeof spawnRecurrences> | undefined;
+    await db.$transaction(async (tx) => {
+      await lockColumns(tx, [f.columns.todo]);
+      spawning = spawnRecurrences(reps.map((t) => t.id), user.id);
+      await waitForLockWaiter();
+      await tx.column.update({ where: { id: f.columns.todo }, data: { role: "PROGRAM" } });
+    }, { timeout: 20_000 });
+    const spawned = await spawning!;
+    assert.equal(spawned.length, 0);
+    assert.equal(await db.task.count({ where: { columnId: f.columns.todo, archivedAt: null } }), PROGRAM_MAX_SESSIONS);
   });
 });
