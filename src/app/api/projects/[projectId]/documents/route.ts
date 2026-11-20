@@ -16,7 +16,7 @@ import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocument
 import { createDocumentWithinLimit, documentLimitProblem, type DocumentLimitProblem } from "@/lib/documents";
 import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
-import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 
 export const runtime = "nodejs";
@@ -137,5 +137,5 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
 
 /** La comprobación de acceso anota el proyecto en el contexto: así el log de la subida lo lleva. */
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
-  return actionContext.run({}, () => handlePost(req, ctx));
+  return withUploadCapHeader(await actionContext.run({}, () => handlePost(req, ctx)));
 }

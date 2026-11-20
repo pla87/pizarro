@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { esT, type T } from "@/i18n/shared";
 import type { UploadedAttachment } from "@/lib/types";
 import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
-import { QueueStopped, runQueue, summarizeSkipped, withRetry, type SkippedFile } from "@/lib/upload-queue";
+import { QueueStopped, runQueue, summarizeSkipped, uploadCap, uploadGate, withRetry, type SkippedFile } from "@/lib/upload-queue";
 
 const CLIENT_MAX_WIDTH = 1920;
 
@@ -72,17 +72,19 @@ async function uploadFile(taskId: string, file: File, onCreate = false, t: T = e
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
   const blob = isImage ? await shrink(file) : file;
-  return withRetry(async () => {
+  // Cada envío (también los reintentos) pasa por la puerta con el tope por persona que indica el servidor.
+  return withRetry(() => uploadGate.run(async () => {
     const body = new FormData();
     body.append("file", blob, name);
     const res = await fetch(`/api/tasks/${taskId}/attachments${onCreate ? "?alCrear=1" : ""}`, { method: "POST", body });
+    uploadCap.note(res.headers);
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       const retryAfter = Number(res.headers.get("Retry-After"));
       throw new UploadError(json.error ?? t("No se pudo subir el archivo."), json.code, res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
     }
     return json as UploadedAttachment;
-  }, { signal });
+  }), { signal });
 }
 
 type Totals = { imageCount: number; fileCount: number; attachBytes: number };
@@ -155,6 +157,8 @@ interface BatchResult {
 
 /**
  * Sube una lista de archivos a una tarea por una cola de 3 a la vez (las que admite el servidor), sin tope de cantidad.
+ * Con otra persona activa el servidor admite una sola por persona: antes de una tanda de varias se pregunta el tope (o se
+ * usa el de una respuesta reciente) y la cola se ajusta a lo que diga cada respuesta (cabecera UPLOAD_PER_USER_HEADER).
  * `onUploaded` se llama según termina cada una (para ir pintando el adjunto); `onProgress` con el avance de la tanda.
  */
 export async function uploadBatch(
@@ -167,6 +171,7 @@ export async function uploadBatch(
   let done = 0;
   const report = () => opts.onProgress?.({ total: files.length, done, active: [...active.values()] });
   report();
+  if (files.length > 1) await uploadCap.refresh();
   const results = await runQueue(
     files,
     async (file) => {
@@ -176,6 +181,7 @@ export async function uploadBatch(
       return att;
     },
     {
+      limit: uploadCap.current,
       onStart: (i) => {
         active.set(i, files[i]!.name);
         report();

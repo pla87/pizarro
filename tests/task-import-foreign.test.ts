@@ -128,6 +128,27 @@ describe("CSV", () => {
     assert.deepEqual(titles("Title,Resolution\nUna,Fixed\n"), ["Una"]);
   });
 
+  test("Jira en español: «Clave de incidencia», «Id de la incidencia» o «Tipo de incidencia» lo reconocen; «Sin resolución» cuenta como abierta", () => {
+    const r = read(
+      "Resumen,Clave de incidencia,Id de la incidencia,Tipo de incidencia,Estado,Resolución\n" +
+        "Abierta,WEB-1,10001,Tarea,En curso,Sin resolución\n" +
+        "Sin texto,WEB-2,10002,Tarea,Por hacer,\n" +
+        "Otra abierta,WEB-3,10003,Error,Por hacer,Unresolved\n" +
+        "Arreglada,WEB-4,10004,Error,Listo,Corregida\n",
+    );
+    assert.equal(r.source, "CSV de Jira");
+    assert.deepEqual(r.tasks.map((x) => x.task.title), ["Abierta", "Sin texto", "Otra abierta"]);
+    // La clave va como referencia, como «Issue key».
+    assert.match(r.tasks[0]!.task.description ?? "", /Referencia original: WEB-1/);
+    assert.deepEqual(r.warnings, ["1 incidencia resuelta no se importa."]);
+    // Basta con una de las tres cabeceras.
+    for (const head of ["Clave de incidencia", "Id de la incidencia", "Tipo de incidencia"]) {
+      const one = read(`Resumen,${head},Resolución\nUna,X-1,\nOtra,X-2,Hecha\n`);
+      assert.equal(one.source, "CSV de Jira", head);
+      assert.deepEqual(one.tasks.map((x) => x.task.title), ["Una"], head);
+    }
+  });
+
   test("Asana, ClickUp, Trello, Linear, GitHub Projects y Planner: cada uno con su nombre y sus columnas", () => {
     const asana = read("Task ID,Created At,Completed At,Name,Section/Column,Assignee,Assignee Email,Due Date,Tags,Notes,Parent task\n1,2026-11-01,,Diseñar,Por hacer,Ana,ana@example.com,2027-01-20,web,Notas,\n");
     assert.equal(asana.source, "CSV de Asana");

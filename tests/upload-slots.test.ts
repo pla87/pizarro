@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, describe, test } from "node:test";
-import { acquireUploadSlot, declaredLength, IMPORT_MAX_TOTAL_MS, MAX_UPLOADS_AT_ONCE, readBodyLimited, resetUploadSlots, UPLOAD_MAX_TOTAL_MS, UploadTooSlowError, uploadTotalMs } from "../src/lib/upload-slots";
+import { acquireUploadSlot, declaredLength, SMALL_BODY_BYTES, uploadPerUserCap, withUploadCapHeader, IMPORT_MAX_TOTAL_MS, MAX_UPLOADS_AT_ONCE, readBodyLimited, resetUploadSlots, UPLOAD_MAX_TOTAL_MS, UploadTooSlowError, uploadTotalMs } from "../src/lib/upload-slots";
 import { ACTIVE_WINDOW_MS, forgetUserActivity, noteUserActivity, recentlyActiveUsers } from "../src/lib/user-activity";
 
 describe("acquireUploadSlot", () => {
@@ -30,6 +30,44 @@ describe("acquireUploadSlot", () => {
     const free = await Promise.all(Array.from({ length: MAX_UPLOADS_AT_ONCE }, () => acquireUploadSlot("u1", 20)));
     assert.ok(free.every(Boolean));
     for (const r of free) r!();
+  });
+
+  test("tope por persona para la cabecera: 3 con una sola persona activa, 1 con dos (también en las respuestas)", async () => {
+    noteUserActivity("a");
+    assert.equal(uploadPerUserCap(), 3);
+    assert.equal(withUploadCapHeader(new Response("x", { status: 201 })).headers.get("X-Pizarro-Upload-Per-User"), "3");
+    noteUserActivity("b");
+    assert.equal(uploadPerUserCap(), 1);
+    const busy = withUploadCapHeader(Response.json({ code: "upload_busy" }, { status: 429, headers: { "Retry-After": "5" } }));
+    assert.equal(busy.headers.get("X-Pizarro-Upload-Per-User"), "1");
+    assert.equal(busy.headers.get("Retry-After"), "5");
+    // La actividad de b caduca a los 5 min: vuelve a 3.
+    assert.equal(uploadPerUserCap(Date.now() + ACTIVE_WINDOW_MS + 1), 3);
+  });
+
+  test("un cuerpo pequeño (Content-Length < 256 KB) no espera a otra subida propia, pero sí cuenta para el tope global", async () => {
+    assert.equal(SMALL_BODY_BYTES, 256 * 1024);
+    noteUserActivity("b"); // otra persona activa: a sube de una en una
+    const slow = await acquireUploadSlot("a", 20); // adjunto lento de a
+    assert.ok(slow);
+    // Su JSON de importar tareas entra sin esperar; sin Content-Length o con uno grande, no.
+    const json = await acquireUploadSlot("a", 20, { declaredBytes: 2_000 });
+    assert.ok(json);
+    assert.equal(await acquireUploadSlot("a", 20, { declaredBytes: null }), null);
+    assert.equal(await acquireUploadSlot("a", 20, { declaredBytes: SMALL_BODY_BYTES }), null);
+    // No ocupa el hueco por persona de a: b sigue entrando y ocupa el tercero global.
+    const b1 = await acquireUploadSlot("b", 20);
+    assert.ok(b1);
+    // Global lleno (3): ni siquiera uno pequeño entra.
+    assert.equal(await acquireUploadSlot("c", 20, { declaredBytes: 10 }), null);
+    json(); // al soltar el pequeño no se descuenta el adjunto de a
+    json();
+    assert.equal(await acquireUploadSlot("a", 20), null);
+    slow();
+    const a2 = await acquireUploadSlot("a", 20);
+    assert.ok(a2);
+    a2();
+    b1();
   });
 
   test("una persona sola usa los 3 huecos", async () => {

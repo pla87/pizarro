@@ -326,11 +326,17 @@ function readForeignJson(data: unknown, opts: ReadOptions): ForeignTasksRead | n
 
 // --- CSV ------------------------------------------------------------------------------------------------------------------
 
+/**
+ * Cabeceras (plegadas con fold) que solo pone Jira: «Issue key», «Issue id», «Issue Type» y las mismas con Jira en
+ * español («Clave de incidencia», «Id de la incidencia», «Tipo de incidencia»).
+ */
+const JIRA_CSV_HEADERS = ["issue key", "issue id", "issue type", "clave de incidencia", "id de la incidencia", "tipo de incidencia"];
+
 /** Herramienta que ha exportado un CSV, por su cabecera (ya plegada con fold): solo para decir de dónde viene. */
 function csvTool(h: Set<string>, t: T): string {
   const has = (...names: string[]) => names.some((n) => h.has(n));
   if (h.has("type") && h.has("content") && h.has("indent")) return t("CSV de Todoist");
-  if (has("issue key", "issue id", "issue type")) return t("CSV de Jira");
+  if (has(...JIRA_CSV_HEADERS)) return t("CSV de Jira");
   if (has("card name", "card id") && has("list name", "list id")) return t("CSV de Trello");
   if (h.has("section column") || (h.has("task id") && h.has("assignee email"))) return t("CSV de Asana");
   if (h.has("task content") || (h.has("task id") && h.has("task name") && has("date created", "parent id"))) return t("CSV de ClickUp");
@@ -347,7 +353,7 @@ function csvTool(h: Set<string>, t: T): string {
  * si la de destino no está ya. Ver la cabecera de csv.ts.
  */
 const CSV_RENAMES: [from: string, to: string][] = [
-  ["issue key", "reference"], ["parent summary", "parent task"], ["card description", "description"], ["list name", "list"],
+  ["issue key", "reference"], ["clave de incidencia", "reference"], ["parent summary", "parent task"], ["card description", "description"], ["list name", "list"],
   ["bucket name", "section"], ["subject", "title"], ["ref", "reference"], ["task content", "description"],
 ];
 /** Columnas de etiquetas: si se repiten (Jira pone una «Labels» por etiqueta), se juntan en la primera. */
@@ -410,8 +416,11 @@ function normalizeCsv(input: string[][], t: T): { rows: string[][]; warnings: st
   return { rows: out, warnings: jira.warnings };
 }
 
-/** Valores de «Resolution» de una incidencia sin resolver (Jira la deja vacía al exportar, pero algunos ponen el texto). */
-const JIRA_UNRESOLVED = new Set(["", "unresolved", "sin resolver", "no resuelta", "none", "-"]);
+/**
+ * Valores de «Resolution» de una incidencia sin resolver (Jira la deja vacía al exportar, pero algunos ponen el texto),
+ * ya plegados con fold: «Sin resolución» se compara como «sin resolucion».
+ */
+const JIRA_UNRESOLVED = new Set(["", "unresolved", "sin resolver", "sin resolucion", "no resuelta", "none", "-"]);
 /** «Status Category» de una incidencia terminada (en inglés y como la traduce Jira al español). */
 const JIRA_DONE_CATEGORY = new Set(["done", "listo", "hecho", "finalizado", "finalizada", "terminado", "terminada"]);
 
@@ -421,7 +430,7 @@ const JIRA_DONE_CATEGORY = new Set(["done", "listo", "hecho", "finalizado", "fin
  * madre no se importa, tampoco ella (si no, saldría como tarea pendiente).
  */
 function jiraUnresolved(rows: string[][], header: string[], t: T): { rows: string[][]; warnings: string[] } {
-  if (!["issue key", "issue id", "issue type"].some((h) => header.includes(h))) return { rows, warnings: [] };
+  if (!JIRA_CSV_HEADERS.some((h) => header.includes(h))) return { rows, warnings: [] };
   const resolution = header.findIndex((h) => h === "resolution" || h === "resolucion");
   const category = header.findIndex((h) => h === "status category" || h === "categoria de estado");
   if (resolution < 0 && category < 0) return { rows, warnings: [] };

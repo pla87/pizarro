@@ -38,14 +38,22 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
   PROJECT_TO_TEAM: FolderInput,
 };
 
-export function NotificationList({ items: initial, moreHref }: { items: Item[]; moreHref: string | null }) {
+/**
+ * `unreadTotal`: sin leer de verdad (contados en el servidor con tope `unreadCap`), no solo los cargados. A partir del
+ * tope se dice «Más de 99 sin leer», como la insignia de la cabecera («99+»).
+ */
+export function NotificationList({ items: initial, moreHref, unreadTotal, unreadCap }: { items: Item[]; moreHref: string | null; unreadTotal: number; unreadCap: number }) {
   const router = useRouter();
   const safeRefresh = useSafeRefresh();
   const t = useT();
   const locale = useIntlLocale();
   const [items, setItems] = useState(initial);
   const [pending, start] = useActionTransition();
-  const unread = items.filter((i) => !i.read).length;
+  const [allRead, setAllRead] = useState(false);
+  // Los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
+  const outside = Math.max(0, unreadTotal - initial.filter((i) => !i.read).length);
+  const unread = allRead ? 0 : outside + items.filter((i) => !i.read).length;
+  const many = !allRead && unreadTotal >= unreadCap;
 
   // router.refresh() actualiza el contador de la barra lateral y la insignia de la app.
   const markRead = (item: Item) => {
@@ -67,7 +75,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("Avisos")}</h1>
-          <p className="text-sm text-slate-500">{unread ? t("{n} sin leer", { n: unread }) : t("Estás al día.")}</p>
+          <p className="text-sm text-slate-500">{many ? t("Más de 99 sin leer") : unread ? t("{n} sin leer", { n: unread }) : t("Estás al día.")}</p>
         </div>
         {unread > 0 && (
           <button
@@ -76,6 +84,7 @@ export function NotificationList({ items: initial, moreHref }: { items: Item[]; 
             onClick={() =>
               start(async () => {
                 setItems((list) => list.map((x) => ({ ...x, read: true })));
+                setAllRead(true);
                 await markAllNotificationsRead();
                 safeRefresh();
               })
