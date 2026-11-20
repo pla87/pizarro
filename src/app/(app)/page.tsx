@@ -21,7 +21,7 @@ export default async function Home() {
       <p className="font-medium text-slate-700 dark:text-slate-300">{t("Todavía no tienes acceso a ningún proyecto.")}</p>
       {available > 0 && (
         <p className="text-sm">
-          {t("Hay {n} proyecto(s) de equipo.", { n: available })}{" "}
+          {available === 1 ? t("Hay 1 proyecto de equipo.") : t("Hay {n} proyectos de equipo.", { n: available })}{" "}
           <Link href="/projects" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Ver proyectos existentes")}</Link>.
         </p>
       )}

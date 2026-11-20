@@ -213,7 +213,10 @@ if (only.includes("outside")) {
   await L.eqEventually("OUTSIDE: selector", async () => (await sidebarSwitcher(page).innerText()).trim(), "R51 Equipo");
   // Desde «Proyectos existentes» con la navegación de la app (sin recargar).
   await page.goto(`${L.BASE}/projects`);
-  await page.getByRole("link", { name: "Abrir «R51 Equipo Dos»" }).click();
+  // «Abrir» es el nombre del enlace (el texto que se ve); el proyecto va en su descripción (aria-describedby).
+  const openTeam2 = page.getByRole("listitem").filter({ has: page.getByText("R51 Equipo Dos", { exact: true }) }).getByRole("link", { name: "Abrir", exact: true });
+  L.eq("OUTSIDE-NAV: «Abrir» descrito por el nombre del proyecto", await openTeam2.evaluate((a) => document.getElementById(a.getAttribute("aria-describedby") ?? "")?.textContent), "R51 Equipo Dos");
+  await openTeam2.click();
   await page.waitForURL(/\/p\/r51c_team2$/, { timeout: 15000 });
   await L.eqEventually("OUTSIDE-NAV: el selector cambia al proyecto abierto", async () => (await sidebarSwitcher(page).innerText()).trim(), "R51 Equipo Dos");
   L.check("OUTSIDE-NAV: marcado", await page.getByTestId("outside-list-notice").first().isVisible());
