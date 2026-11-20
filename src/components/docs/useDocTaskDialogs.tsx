@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { getProjectFormData } from "@/actions/tasks";
-import { BoardContext, type BoardApi } from "@/components/board/context";
-import { createBoardStores } from "@/components/board/stores";
+import { BoardContext } from "@/components/board/context";
+import { stubBoard } from "@/components/board/stubBoard";
 import { lazyDialog } from "@/components/lazyDialog";
 import { PairLeftWidthContext } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -26,39 +26,6 @@ interface Opts {
   doc: { id: string; name: string; kind?: DocumentKindName };
   /** Ancho normal del visor (para colocar la pareja). */
   viewerWidth: string;
-}
-
-/** Un «tablero» mínimo para los diálogos de tareas fuera del tablero: las opciones del proyecto y nada de tarjetas. */
-function stubBoard(form: ProjectFormData, currentUserId: string, editorMode: EditorModeValue): BoardApi {
-  const noop = () => {};
-  const passthrough = <T,>(p: Promise<T>) => p;
-  const stores = createBoardStores([]);
-  return {
-    project: form.project,
-    users: form.users,
-    currentUserId,
-    columns: form.columns,
-    labels: form.labels,
-    deliverables: form.deliverables,
-    kinds: form.kinds,
-    kindById: new Map(form.kinds.map((k) => [k.id, k])),
-    cardStyle: "STRIPE",
-    editorMode,
-    dragHandle: false,
-    google: { enabled: false, connected: false },
-    today: "",
-    stores,
-    getTask: () => undefined,
-    getTasks: () => [],
-    upsertTask: noop,
-    patchTask: noop,
-    removeTask: noop,
-    revealTask: noop,
-    track: passthrough,
-    trackRaw: passthrough,
-    settle: async () => {},
-    refresh: noop,
-  } as unknown as BoardApi;
 }
 
 /**

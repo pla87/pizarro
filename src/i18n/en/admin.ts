@@ -224,6 +224,7 @@ export const admin: Record<string, string> = {
   "Prueba de restauración mensual": "Monthly restore test",
   "Resúmenes e informes por email": "Email digests and reports",
   "Archivos de exportación de proyectos caducados": "Expired project export files",
+  "Archivos compartidos con Pizarro sin usar": "Unused files shared with Pizarro",
   "Reanudar copias de adjuntos de releases": "Resume release attachment copies",
   "1. Avisos por email": "1. Email notices",
   "Avisos, enlaces de acceso e informes.": "Notifications, sign-in links and reports.",

@@ -130,6 +130,17 @@
       "src/actions/tasks.ts",
       "src/lib/task-positions.ts"
     ],
+    "tablero-compartir-e2e": [
+      "src/app/api/share/**",
+      "src/app/(app)/share/**",
+      "src/app/manifest.ts",
+      "src/components/board/ShareTarget.tsx",
+      "src/components/board/stubBoard.ts",
+      "src/components/board/NewTaskDialog.tsx",
+      "src/lib/share-*.ts",
+      "src/lib/web-manifest.ts",
+      "src/lib/upload-slots.ts"
+    ],
     "detalle-comentarios-e2e": [
       "src/components/board/TaskDialog.tsx",
       "src/components/board/TaskComments.tsx",
