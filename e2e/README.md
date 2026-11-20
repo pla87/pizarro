@@ -56,12 +56,12 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, y UTF-8 con un `<meta>` de 8 bits mal puesto (ronda 52) | `e2e/documentacion-enlaces-e2e.mjs` | 52 | ~1 min |
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/documentacion-enlaces-bom-e2e.mjs` | 37 | ~30 s |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/documentacion-indice-e2e.mjs` | 39 | ~30 s |
-| **Cuentas** | | **132** | |
+| **Cuentas** | | **133** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
-| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/cuentas-borrar-restos-e2e.mjs` | 71 | ~45 s |
-| **Interfaz y textos** | | **238** | |
+| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/cuentas-borrar-restos-e2e.mjs` | 72 | ~45 s |
+| **Interfaz y textos** | | **229** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
-| Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 62 | ~1,5 min |
+| Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 29 | ~1 min |
 | **Accesibilidad** | | **68** | |
@@ -70,7 +70,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **2901** | |
+| **Total** | | **2893** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
