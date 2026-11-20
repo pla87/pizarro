@@ -20,6 +20,7 @@ export async function run() {
   await L.q(`UPDATE "Task" SET description='Descripción **rica**', "assigneeId"=$2, "dueDate"='2026-12-24', "deliverableId"=$3, color='#ef4444', "kindId"='kind_correccion' WHERE id=$1`, [b, u2.id, deliv.id]);
   await L.q(`INSERT INTO "TaskLabel"("taskId","labelId") VALUES ($1,'qlab1')`, [b]);
   await L.q(`INSERT INTO "Subtask"(id,"taskId",title,done,position) VALUES ('qd1',$1,'Sub uno',true,1024),('qd2',$1,'Sub dos',false,2048)`, [b]);
+  await L.q(`INSERT INTO "TaskComment"(id,"taskId","authorId",body) VALUES ('qc6',$1,$2,'Comentario del archivo')`, [b, u2.id]);
   const t0 = await L.dbNow();
   const s = await L.session({ viewport: U.WIDE });
   const p = s.page;
@@ -50,7 +51,17 @@ export async function run() {
   const arch = p.locator("[role=dialog]").first();
   await arch.getByText("T2").first().waitFor();
   L.check("archivadas: lista T2 «de «En progreso»»", /de «En progreso»/.test(await arch.innerText()));
-  await arch.getByRole("button", { name: "Recuperar" }).first().click();
+  // Abrir la archivada en solo lectura (pulsando su título) y recuperarla desde ahí.
+  await arch.getByRole("button", { name: "T2", exact: true }).click();
+  const view = p.getByRole("dialog", { name: "Tarea archivada: T2" });
+  await view.locator("[data-archived-view] strong", { hasText: "rica" }).waitFor({ timeout: 8000 });
+  const viewText = await view.innerText();
+  L.check("archivada en lectura: descripción, subtareas y comentarios", ["Sub uno", "Sub dos", "Comentario del archivo", "solo lectura"].every((x) => viewText.includes(x)), viewText);
+  L.eq("archivada en lectura: nada que editar", await view.locator("input, textarea, select, [contenteditable=true]").count(), 0);
+  await view.getByRole("button", { name: "Historial" }).click();
+  await L.checkEventually("archivada en lectura: con su historial", async () => [/Archivó/.test(await view.innerText()), await view.innerText()]);
+  await view.getByRole("button", { name: "Recuperar" }).click();
+  await view.waitFor({ state: "detached", timeout: 8000 });
   await L.eqEventually("recuperar: activa de nuevo", async () => (await full("T2"))[0].archived, false);
   const rec = (await full("T2"))[0];
   L.eq("recuperar: vuelve a su columna", rec.col, COL.doing);
