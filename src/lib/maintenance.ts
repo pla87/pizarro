@@ -4,6 +4,7 @@
 import type { JobDef } from "./jobs";
 import { LOCK_MAIL, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } from "./advisory-locks";
 import { isShuttingDown } from "./shutdown";
+import { logSize } from "./format-size";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NON_IMAGE_COPY_DAYS = 7;
@@ -117,7 +118,7 @@ async function purgeOrphanFiles(): Promise<number> {
       : "demasiados; ¿base de datos equivocada?";
     logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (${why})`, details: { ...report } });
   } else if (report.deleted > 0) {
-    logEvent({ category: "system", action: "uploads.orphansPurged", message: `Ficheros huérfanos borrados: ${report.deleted} (${Math.round(report.bytes / 1024)} KB)`, details: { ...report } });
+    logEvent({ category: "system", action: "uploads.orphansPurged", message: `Ficheros huérfanos borrados: ${report.deleted} (${logSize(report.bytes)})`, details: { ...report } });
   }
   return report.deleted;
 }

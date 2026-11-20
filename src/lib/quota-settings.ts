@@ -45,7 +45,7 @@ export async function saveQuotaSettings(next: { project: QuotaSetting; total: Qu
   invalidateQuotaSettings();
 }
 
-export interface EffectiveQuota extends QuotaBytes {
+interface EffectiveQuota extends QuotaBytes {
   projectMb: number | null;
   totalMb: number | null;
   projectSource: QuotaSource;

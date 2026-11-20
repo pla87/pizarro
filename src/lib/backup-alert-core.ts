@@ -4,7 +4,7 @@ import type { T } from "@/i18n/shared";
 /** Si la última copia correcta es más antigua que esto, se avisa. */
 export const BACKUP_STALE_MS = 48 * 60 * 60 * 1000;
 /** Como mucho un email de aviso a los administradores cada 24 h. */
-export const BACKUP_ALERT_MAIL_EVERY_MS = 24 * 60 * 60 * 1000;
+const BACKUP_ALERT_MAIL_EVERY_MS = 24 * 60 * 60 * 1000;
 
 /** La copia local más reciente es mucho menor que la última buena (lastGoodCopy en backup-dest.ts). */
 export interface BackupShrinkInfo {

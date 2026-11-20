@@ -19,11 +19,18 @@ test("release-notes: la versión actual sale con su resumen y sus cambios; una i
   assert.equal(spawnSync("node", ["scripts/release-notes.mjs", "latest"], { encoding: "utf8" }).status, 2);
 });
 
-test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64, caché gha y notas del changelog", () => {
+test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64 en máquinas nativas, caché gha y notas del changelog", () => {
   const wf = readFileSync(".github/workflows/release.yml", "utf8");
   assert.match(wf, /tags:\s*\n\s*- "v\*\.\*\.\*"/);
   assert.match(wf, /packages: write/);
-  assert.match(wf, /platforms: linux\/amd64,linux\/arm64/);
+  // Cada arquitectura en su máquina (sin QEMU), subida por digest y unida después con las etiquetas.
+  assert.match(wf, /platform: linux\/amd64\n\s+runner: ubuntu-latest/);
+  assert.match(wf, /platform: linux\/arm64\n\s+runner: ubuntu-24\.04-arm/);
+  assert.match(wf, /runs-on: \$\{\{ matrix\.runner \}\}/);
+  assert.match(wf, /push-by-digest=true/);
+  assert.match(wf, /docker buildx imagetools create/);
+  assert.doesNotMatch(wf, /setup-qemu-action/);
+  assert.match(wf, /needs: \[version, build\]/);
   assert.match(wf, /ghcr\.io\/pla87\/pizarro:\$\{VERSION\}/);
   assert.match(wf, /pizarro:latest/);
   assert.match(wf, /cache-from: type=gha/);
@@ -338,7 +345,7 @@ describe("workflow de release: versión ya publicada", () => {
   /** El script del paso que comprueba la versión, ejecutado con un `git` falso (ls-remote devuelve FAKE_LS). */
   function runCheck(env: Record<string, string>) {
     const wf = readFileSync(".github/workflows/release.yml", "utf8");
-    const m = /- name: Comprobar que la etiqueta coincide con package\.json\n\s+run: \|\n((?: {10}.*\n|\n)+)/.exec(wf);
+    const m = /- name: Comprobar que la etiqueta coincide con package\.json\n(?:\s+id: \w+\n)?\s+run: \|\n((?: {10}.*\n|\n)+)/.exec(wf);
     assert.ok(m, "paso de comprobación");
     const script = m[1]!.replace(/^ {10}/gm, "");
     const dir = mkdtempSync(join(tmpdir(), "pz-release-"));
@@ -348,7 +355,7 @@ describe("workflow de release: versión ya publicada", () => {
     chmodSync(join(bin, "git"), 0o755);
     const ghEnv = join(dir, "env");
     writeFileSync(ghEnv, "");
-    const r = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_ENV: ghEnv, ...env } });
+    const r = spawnSync("bash", ["-e", "-c", script], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_OUTPUT: ghEnv, ...env } });
     return { status: r.status, stderr: r.stderr, env: readFileSync(ghEnv, "utf8"), gitCalls: existsSync(join(dir, "git-calls")) ? readFileSync(join(dir, "git-calls"), "utf8") : "" };
   }
   const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
@@ -358,14 +365,14 @@ describe("workflow de release: versión ya publicada", () => {
     assert.equal(r.status, 1);
     assert.match(r.stderr, new RegExp(`La versión ${version.replace(/\./g, "\\.")} ya está publicada`));
     assert.match(r.stderr, /npm run version:bump/);
-    assert.equal(r.env, "", "no llega a fijar VERSION");
+    assert.equal(r.env, "", "no llega a fijar la versión");
     assert.match(r.gitCalls, new RegExp(`ls-remote --tags origin refs/tags/v${version.replace(/\./g, "\\.")}`));
   });
 
   test("a mano con una versión nueva sigue; si no se puede consultar el remoto, para", () => {
     const ok = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "" });
     assert.equal(ok.status, 0, ok.stderr);
-    assert.equal(ok.env, `VERSION=${version}\n`);
+    assert.equal(ok.env, `version=${version}\n`);
     const down = runCheck({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF_NAME: "main", FAKE_LS: "", FAKE_FAIL: "1" });
     assert.equal(down.status, 1);
   });

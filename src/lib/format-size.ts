@@ -10,3 +10,8 @@ export function formatSize(bytes: number, locale = "es-ES"): string {
 export function formatQuotaMb(mb: number, locale = "es-ES"): string {
   return formatSize(mb * 1024 * 1024, locale);
 }
+
+/** Tamaño para los mensajes del registro (en español, sin traducir): «512 B» por debajo de 1 KB, si no «840 KB». */
+export function logSize(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`;
+}

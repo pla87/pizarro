@@ -7,7 +7,7 @@ import { INSTANCE_TZ_GLOBAL } from "./format";
 import { validTimeZone } from "./setup-core";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, parseInstance, type InstanceSettings } from "./instance-core";
 
-export { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, parseInstance, type InstanceSettings } from "./instance-core";
+export { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY } from "./instance-core";
 
 /** Zona horaria guardada, leída por appTimeZone() (síncrona, en format.ts) de esta variable global: se rellena al cargar los ajustes. */
 const TZ_GLOBAL = INSTANCE_TZ_GLOBAL;

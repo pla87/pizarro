@@ -57,8 +57,8 @@ export const DEFAULT_WHATSAPP_TEMPLATE = "aviso_pizarro";
  */
 export const DEFAULT_WHATSAPP_CODE_TEMPLATE = "codigo_pizarro";
 /** Plantilla de versiones anteriores (4 variables y solo menciones): se sigue admitiendo tal cual. */
-export const LEGACY_WHATSAPP_TEMPLATE = "mencion_pizarro";
-export const DEFAULT_WHATSAPP_API_VERSION = "v23.0";
+const LEGACY_WHATSAPP_TEMPLATE = "mencion_pizarro";
+const DEFAULT_WHATSAPP_API_VERSION = "v23.0";
 
 type Env = Record<string, string | undefined>;
 type Rows = { key: string; value: string }[];
@@ -102,7 +102,7 @@ export function resolveTelegramConfig(saved: TelegramSettings, token: string, we
 }
 
 /** Formato del token que da @BotFather: «123456789:AA…». */
-export const TELEGRAM_TOKEN_RE = /^\d{4,20}:[A-Za-z0-9_-]{30,60}$/;
+const TELEGRAM_TOKEN_RE = /^\d{4,20}:[A-Za-z0-9_-]{30,60}$/;
 
 const PRIVATE_HOST = /^(localhost|.*\.localhost|.*\.local|.*\.internal|.*\.lan|.*\.home|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|0\.0\.0\.0|\[.*\])$/i;
 /** Puertos que Telegram admite para un webhook. */
@@ -151,7 +151,7 @@ export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb) && a.length === b.length;
 }
 
-export const escapeTelegramHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+const escapeTelegramHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 /**
  * Texto preparado para Telegram con parse_mode HTML. Solo sale de `telegramHtml` (escapa todo lo interpolado), de
@@ -192,7 +192,7 @@ export interface NoticeMessage {
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 /** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
-export function noticeHeadline(m: NoticeMessage, t: T): string {
+function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
   return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }) }));
 }
@@ -348,9 +348,9 @@ export function resolveWhatsappConfig(env: Env, saved: WhatsappSettings, savedTo
   };
 }
 
-export const WA_PHONE_ID_RE = /^\d{5,30}$/;
-export const WA_TEMPLATE_RE = /^[a-z0-9_]{1,512}$/;
-export const WA_LANG_RE = /^[a-z]{2,3}(_[A-Z]{2})?$/;
+const WA_PHONE_ID_RE = /^\d{5,30}$/;
+const WA_TEMPLATE_RE = /^[a-z0-9_]{1,512}$/;
+const WA_LANG_RE = /^[a-z]{2,3}(_[A-Z]{2})?$/;
 export const isWhatsappToken = (s: string) => s.length >= 20 && s.length <= 2000 && /^[A-Za-z0-9_\-.|]+$/.test(s);
 export const isTelegramToken = (s: string) => TELEGRAM_TOKEN_RE.test(s);
 
@@ -500,7 +500,7 @@ export function networkErrorCode(err: unknown): string | null {
  * WhatsApp solo se reintentan estos: un ECONNRESET o un 5xx pueden llegar después de que Meta aceptara (y cobrara) el
  * mensaje, y repetirlo lo enviaría (y cobraría) dos veces.
  */
-export const PRE_SEND_NETWORK_CODES: ReadonlySet<string> = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
+const PRE_SEND_NETWORK_CODES: ReadonlySet<string> = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"]);
 
 /** Qué hacer tras un fallo: reintentar, dar el canal por desconectado (bot bloqueado, chat borrado) o rendirse. */
 export function classifyFailure(channel: "TELEGRAM" | "WHATSAPP", err: unknown): "retry" | "disconnect" | "fail" {

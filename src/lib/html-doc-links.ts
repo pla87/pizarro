@@ -1,7 +1,7 @@
 // Enlaces entre los HTML de una misma Documentación. Funciones puras (también las usa el visor, en el navegador).
 import { sanitizeDocumentName } from "./document-kind";
 
-export type HtmlLink =
+type HtmlLink =
   | { type: "internal"; hash: string } // «#apartado» (o el propio documento, «este.html#x»): se desplaza dentro de él
   | { type: "external" } // con esquema (https://…, mailto:…) o «//host»: como hasta ahora, en otra pestaña
   | { type: "document"; id: string; hash: string } // otro documento de la MISMA Documentación
@@ -13,7 +13,7 @@ export type HtmlLink =
  * «a%20%20b.html» encuentra «a b.html» y un nombre escrito con tildes descompuestas (NFD, el de macOS) encuentra el suyo.
  * null si no hay nombre.
  */
-export function linkFileName(path: string): string | null {
+function linkFileName(path: string): string | null {
   const last = path.split(/[\\/]/).pop() ?? "";
   if (!last || last === "." || last === "..") return null;
   let decoded = last;

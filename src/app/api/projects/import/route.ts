@@ -20,6 +20,7 @@ import { ZipReadError } from "@/lib/zip-read";
 import { uploadDir } from "@/lib/upload-dir";
 import { acquireUploadSlot, createSlowGuard, withUploadCapHeader, declaredLength, IMPORT_MAX_TOTAL_MS, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError, uploadTotalMs } from "@/lib/upload-slots";
 import { getT } from "@/i18n/server";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -136,7 +137,7 @@ async function handlePost(req: Request): Promise<Response> {
     const job = await createImportJob(user.id, temp, received, isPrivate, fileName.replace(/\.(pizarro\.zip|zip|json|csv|tsv|txt)$/i, "").trim() || undefined, format);
     temp = null;
     logEvent({
-      category: "api", action: "projects.importQueued", message: `Importación de un proyecto en cola (${Math.round(received / 1024)} KB)`,
+      category: "api", action: "projects.importQueued", message: `Importación de un proyecto en cola (${logSize(received)})`,
       userId: user.id, userName: user.name, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { jobId: job.id, bytes: received, isPrivate, format },
     });
     return Response.json({ ok: true, jobId: job.id }, { status: 202, headers: { "Cache-Control": "private, no-store" } });

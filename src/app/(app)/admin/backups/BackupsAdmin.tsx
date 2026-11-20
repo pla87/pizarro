@@ -43,7 +43,7 @@ function jobLabel(t: (s: string) => string, name: string): string {
   }
 }
 
-export interface DestinationsInfo {
+interface DestinationsInfo {
   local: { label: string; files: boolean };
   external: { id: DestinationId; label: string }[];
   errors: string[];

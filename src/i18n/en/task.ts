@@ -13,7 +13,7 @@ export const task: Record<string, string> = {
   "Ir al proyecto": "Go to project",
   "Tarea borrada": "Task deleted",
   "Tarea archivada": "Task archived",
-  "¿Borrar definitivamente esta tarea y sus adjuntos?": "Permanently delete this task and its attachments?",
+  "¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después.": "Delete this task and its attachments? You can undo it right after.",
   "La integración con Google no está configurada en el servidor.": "The Google integration is not configured on the server.",
   "Conecta tu cuenta de Google en «Mi perfil» para crear documentos.": "Connect your Google account in “My profile” to create documents.",
   "Hoja de cálculo creada": "Spreadsheet created",

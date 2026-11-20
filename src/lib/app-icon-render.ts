@@ -28,7 +28,7 @@ export async function renderAppIcon(accent: AppIconAccent, file: IconFile): Prom
 }
 
 /** .ico con un solo icono de 32×32 que lleva dentro el PNG (formato que entienden todos los navegadores desde hace años). */
-export function pngToIco(png: Uint8Array, size = 32): Uint8Array {
+function pngToIco(png: Uint8Array, size = 32): Uint8Array {
   const head = Buffer.alloc(22);
   head.writeUInt16LE(0, 0); // reservado
   head.writeUInt16LE(1, 2); // tipo: icono

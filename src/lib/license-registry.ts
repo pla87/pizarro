@@ -57,7 +57,7 @@ export async function getLicenseStatus(): Promise<LicenseStatus> {
 }
 
 /** Alta de la instalación: la fecha de creación del primer usuario (null si no hay ninguno). */
-export async function installedAt(): Promise<Date | null> {
+async function installedAt(): Promise<Date | null> {
   const first = await db.user.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } });
   return first?.createdAt ?? null;
 }

@@ -1,7 +1,7 @@
 // Aviso de versión nueva: lógica pura (sin base de datos ni red directa), probada en tests/update-check.test.ts.
 
 export const UPDATE_CHECK_URL = "https://api.github.com/repos/pla87/pizarro/releases/latest";
-export const UPDATE_RELEASES_URL = "https://github.com/pla87/pizarro/releases";
+const UPDATE_RELEASES_URL = "https://github.com/pla87/pizarro/releases";
 /** «Cómo actualizar»: la sección de la guía de instalación de la web (docs/web/instalar.md, {#actualizar} y {#update}). */
 const UPDATE_DOCS_URL = "https://getpizarro.com/instalar/#actualizar";
 const UPDATE_DOCS_URL_EN = "https://getpizarro.com/en/install/#update";
