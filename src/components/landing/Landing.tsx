@@ -34,7 +34,10 @@ export function Landing({ t, locale, contactEmail }: { t: T; locale: Locale; con
           <Link href="/presentacion" className="mr-auto flex items-center gap-2 font-bold tracking-tight">
             <BrandMark size={28} /> Pizarro
           </Link>
-          <a href={`?lang=${other}`} hrefLang={other} lang={other} className="btn-ghost px-2" data-testid="landing-lang" aria-label={other === "en" ? "English" : "Español"}>{other.toUpperCase()}</a>
+          {/* Nombre accesible «EN English»: empieza por lo que se ve (WCAG 2.5.3) y dice el idioma. */}
+          <a href={`?lang=${other}`} hrefLang={other} lang={other} className="btn-ghost px-2" data-testid="landing-lang">
+            {other.toUpperCase()}<span className="sr-only"> {other === "en" ? "English" : "Español"}</span>
+          </a>
           <Link href="/login" className="btn-secondary whitespace-nowrap">{t("Iniciar sesión")}</Link>
         </div>
       </header>

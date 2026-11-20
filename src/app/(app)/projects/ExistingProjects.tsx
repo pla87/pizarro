@@ -35,12 +35,13 @@ export function ExistingProjects({ projects, userId }: { projects: Row[]; userId
       <ul className="space-y-2">
         {projects.map((p) => (
           <li key={p.id} className="card flex flex-wrap items-center gap-2 p-3">
-            <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+            <span id={`existing-project-${p.id}`} className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
             {p.picked && (
               <span className="inline-flex items-center gap-1 text-xs text-slate-500"><Check size={13} /> {t("En mis proyectos")}</span>
             )}
-            <Link href={`/p/${p.id}`} className="btn-secondary" aria-label={t("Abrir «{name}»", { name: p.name })}>{t("Abrir")}</Link>
-            <button type="button" className={p.picked ? "btn-secondary" : "btn-primary"} disabled={pending} onClick={() => toggle(p)} aria-label={p.picked ? t("Quitar «{name}» de mis proyectos", { name: p.name }) : t("Añadir «{name}» a mis proyectos", { name: p.name })}>
+            {/* El nombre del botón es el texto que se ve (WCAG 2.5.3); el proyecto, como descripción. */}
+            <Link href={`/p/${p.id}`} className="btn-secondary" aria-describedby={`existing-project-${p.id}`}>{t("Abrir")}</Link>
+            <button type="button" className={p.picked ? "btn-secondary" : "btn-primary"} disabled={pending} onClick={() => toggle(p)} aria-describedby={`existing-project-${p.id}`}>
               {p.picked ? t("Quitar de mis proyectos") : t("Añadir a mis proyectos")}
             </button>
           </li>
