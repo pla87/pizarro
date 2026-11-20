@@ -156,6 +156,17 @@ describe("numeración y historial de un despliegue", () => {
     assert.equal(await next(), 3);
   });
 
+  test("dos personas borran la misma release a la vez: las dos reciben «borrada» (no «Los datos han cambiado»)", async () => {
+    const { f } = await setup();
+    const t = await makeTask(f, { title: "Uno", columnId: f.columns.done });
+    const { releaseId } = expectOk(await deployRelease({ projectId: f.project.id, title: "Uno", content: "x", destination: "IN_PRODUCTION", taskIds: [t.id] }));
+    const [a, b] = await Promise.all([deleteRelease(releaseId), deleteRelease(releaseId)]);
+    assert.deepEqual([expectOk(a), expectOk(b)], [{ id: releaseId }, { id: releaseId }]);
+    assert.equal(await db.release.count({ where: { id: releaseId } }), 0);
+    // Y una pestaña sin refrescar que la borra después, igual.
+    assert.deepEqual(expectOk(await deleteRelease(releaseId)), { id: releaseId });
+  });
+
   test("cada tarea que sale apunta en su historial el movimiento a «En producción» o el archivado; deshacer lo quita", async () => {
     const { f, prod } = await setup();
     const a = await makeTask(f, { title: "A", columnId: f.columns.done, position: 1000 });

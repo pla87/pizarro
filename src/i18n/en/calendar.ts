@@ -33,4 +33,6 @@ export const calendar: Record<string, string> = {
   "1 vencida de antes de este mes": "1 overdue from before this month",
   "{n} vencidas de antes de este mes": "{n} overdue from before this month",
   "Se muestran las {shown} más antiguas.": "Showing the {shown} oldest.",
+  // Móvil: con vencidas no se baja solo hasta hoy; el aviso lleva este botón
+  "Ir a hoy": "Go to today",
 };

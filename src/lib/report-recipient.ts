@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 import { maskEmail } from "./mask-email";
 
@@ -43,4 +44,14 @@ export function reportRecipientView(recipient: string, people: { id: string; ema
   const person = people.find((p) => p.email.toLowerCase() === lower);
   if (person) return { kind: "user", userId: person.id };
   return { kind: "external", shown: viewerIsAdmin ? recipient : maskEmail(recipient) };
+}
+
+/**
+ * Una persona cambia de email (lo confirma en Mi perfil o se lo edita un administrador): los informes semanales que iban
+ * a su dirección anterior pasan a la nueva, en la misma transacción. Si no, seguían saliendo hacia la vieja (que ya no es
+ * de nadie y contaba como «externa») o se desactivaban sin avisar. Devuelve cuántos ha cambiado.
+ */
+export async function retargetReportSchedules(tx: Prisma.TransactionClient, oldEmail: string, newEmail: string): Promise<number> {
+  if (oldEmail === newEmail) return 0;
+  return (await tx.reportSchedule.updateMany({ where: { recipient: { equals: oldEmail, mode: "insensitive" } }, data: { recipient: newEmail } })).count;
 }

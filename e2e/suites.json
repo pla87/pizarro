@@ -247,6 +247,8 @@
       "src/components/board/AiPlanDialog.tsx",
       "src/components/board/ColumnActionButton.tsx",
       "src/components/board/attachments-zip.ts",
+      "src/app/api/projects/[projectId]/release-attachments/**",
+      "src/lib/response-length.ts",
       "src/actions/ai-plan.ts",
       "src/lib/ai-plan*.ts",
       "src/lib/zip*.ts",
@@ -417,6 +419,7 @@
     ],
     "interfaz-auditoria-e2e": [
       "src/components/ui/EmailSafe.tsx",
+      "src/components/CanonicalTabParam.tsx",
       "src/components/ui/ScrollTabs.tsx",
       "src/components/ui/Modal.tsx",
       "src/lib/tab-param.ts",

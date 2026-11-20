@@ -5,6 +5,7 @@ import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucid
 import { useCallback, useContext, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
+import { startDownload } from "@/components/board/attachments-zip";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
@@ -52,12 +53,12 @@ export function ReleaseEntry({ release }: Props) {
   const [planToken, setPlanToken] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const attachmentCount = attachments.length;
-  const fetchPlan = useCallback(async (): Promise<{ parts: number; v: string | null } | null> => {
+  const fetchPlan = useCallback(async (): Promise<{ parts: number; v: string | null; busy: boolean } | null> => {
     try {
       const r = await fetch(`/api/releases/${release.id}/attachments?plan=1`);
       if (!r.ok) return null;
-      const plan = (await r.json()) as { parts: unknown[]; v?: string };
-      return plan.parts.length > 0 ? { parts: plan.parts.length, v: plan.v ?? null } : null;
+      const plan = (await r.json()) as { parts: unknown[]; v?: string; busy?: boolean };
+      return plan.parts.length > 0 ? { parts: plan.parts.length, v: plan.v ?? null, busy: !!plan.busy } : null;
     } catch {
       return null;
     }
@@ -75,32 +76,30 @@ export function ReleaseEntry({ release }: Props) {
     };
   }, [open, attachmentCount, fetchPlan]);
 
-  /** Descarga un paquete con el token del plan; si los adjuntos han cambiado (409) avisa y ofrece volver a empezar. */
-  const downloadPart = async (part: number, plan: { parts: number; v: string | null } = { parts, v: planToken }) => {
+  /**
+   * Descarga un paquete: la hace el propio navegador (con su progreso y su botón de cancelar, sin pasar por la memoria de
+   * la página). Antes se pide el plan al momento: si los adjuntos han cambiado desde que se abrió la release (otro token)
+   * se avisa y se ofrece volver a empezar, como hacía el 409; si ya hay otro ZIP en curso, se avisa sin lanzarla. El
+   * enlace lleva el token (`?v=`): si aun así cambian entre medias, el servidor responde 409 y el navegador muestra la
+   * descarga como fallida.
+   */
+  const downloadPart = async (part: number, expected: string | null = planToken) => {
     setDownloading(true);
     try {
-      const res = await fetch(`/api/releases/${release.id}/attachments?part=${part}${plan.v ? `&v=${plan.v}` : ""}`);
-      if (res.status === 409) {
-        toast(await res.text(), "error", {
-          label: t("Reintentar"),
-          onClick: async () => {
-            // Vuelve a empezar: nuevo plan y el mismo paquete (si sigue existiendo).
-            const fresh = await fetchPlan();
-            if (fresh) setParts(fresh.parts);
-            if (fresh) setPlanToken(fresh.v);
-            if (fresh) await downloadPart(Math.min(part, fresh.parts), fresh);
-            else toast(t("No se pudieron descargar los adjuntos"), "error");
-          },
-        });
+      const fresh = await fetchPlan();
+      if (!fresh) return toast(t("No se pudieron descargar los adjuntos"), "error");
+      setParts(fresh.parts);
+      setPlanToken(fresh.v);
+      if (expected && fresh.v !== expected) {
+        // Vuelve a empezar: el plan nuevo y el mismo paquete (si sigue existiendo).
+        toast(t("Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos."), "error", { label: t("Reintentar"), onClick: () => void downloadPart(Math.min(part, fresh.parts), fresh.v) });
         return;
       }
-      if (!res.ok) return toast(res.status === 429 ? await res.text() : t("No se pudieron descargar los adjuntos"), "error");
-      const href = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = releaseZipName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, part, plan.parts, uiLocale);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(href), 1000);
+      if (fresh.busy) return toast(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), "error");
+      const name = releaseZipName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, part, fresh.parts, uiLocale);
+      startDownload(`/api/releases/${release.id}/attachments?part=${part}${fresh.v ? `&v=${fresh.v}` : ""}`, name);
+      // El botón vuelve enseguida: la descarga sigue en el navegador.
+      await new Promise((r) => setTimeout(r, 1000));
     } catch {
       toast(t("No se pudieron descargar los adjuntos"), "error");
     } finally {

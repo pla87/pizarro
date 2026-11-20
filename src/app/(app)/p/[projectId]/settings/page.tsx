@@ -1,4 +1,5 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import { CanonicalTabParam } from "@/components/CanonicalTabParam";
 import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, projectReleaseTemplates } from "@/lib/board";
 import { projectPlanTemplates } from "@/lib/ai-plan-templates";
@@ -62,8 +63,8 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // Gestionan el proyecto los administradores y, si es privado, sus miembros (como en las acciones).
   const canManage = isAdmin || project.isPrivate;
   const asked = resolveProjectSettingsTab(tabParam, canManage);
-  // Otro nombre de una pestaña («?tab=plantillas», «?tab=board»): se pasa a su id, el de los enlaces de las pestañas.
-  if (asked.kind === "alias") redirect(`/p/${project.id}/settings?tab=${asked.tab}`);
+  // Otro nombre de una pestaña («?tab=plantillas», «?tab=board»): se pinta la suya y el cliente pasa la dirección a su id
+  // (el de los enlaces de las pestañas) conservando el ancla (`?tab=board#labels`), que un redirect perdía.
   const tab = asked.tab;
   // Una pestaña que existe pero es de gestión (quien no gestiona el proyecto no la tiene): se dice cuál es.
   const manageView = asked.kind === "unknown" && !canManage ? resolveProjectSettingsTab(tabParam, true) : null;
@@ -104,62 +105,65 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
     : null;
 
   return (
-    <ProjectSettings
-      // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
-      key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
-      storageSection={storageSection}
-      applyTemplate={tab === "tablero" && canManage ? (
-        <ApplyTemplate
-          projectId={project.id}
-          lastChange={templateChange ? {
-            templateName: templateChange.templateName,
-            mode: templateChange.mode,
-            createdAt: templateChange.createdAt.toISOString(),
-            until: new Date(templateChange.createdAt.getTime() + TEMPLATE_UNDO_HOURS * 3_600_000).toISOString(),
-            userName: templateChange.userName,
-          } : null}
-        />
-      ) : null}
-      isAdmin={isAdmin}
-      tab={tab}
-      unknownTab={asked.kind === "unknown" ? asked.asked : undefined}
-      restrictedTab={restricted}
-      releaseTemplates={releaseTemplates}
-      planTemplates={planTemplates}
-      currentUserId={user.id}
-      project={{
-        id: project.id,
-        name: project.name,
-        description: project.description,
-        visibility: project.isPrivate ? "PRIVATE" : "TEAM",
-        releaseZipMaxMb: project.releaseZipMaxMb,
-        taskAttachMaxMb: project.taskAttachMaxMb,
-        googleShareMode: effectiveShareMode(project.googleShareMode, project.isPrivate, { role: process.env.GOOGLE_SHARE_ROLE }),
-        fileMaxMb: project.fileMaxMb,
-        taskFields: normalizeTaskFields(project.taskFields),
-        budgetColumns: project._count.columns,
-        members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
-      }}
-      labels={project.labels}
-      kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: kindTasks.get(k.id) ?? 0 }))}
-      generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
-      deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: deliverableTasks.get(d.id) ?? 0 }))}
-      users={users}
-      editorMode={editorMode}
-      google={{ enabled: googleEnabled(), domain: googleWorkspaceDomain() ?? null }}
-      reportSchedule={
-        <ReportScheduleSection
-          projectId={project.id}
-          initial={schedule
-            ? { enabled: schedule.enabled, weekday: schedule.weekday, hour: schedule.hour, recipient: reportRecipientView(schedule.recipient, reportPeople, isAdmin) }
-            : { enabled: false, recipient: null, weekday: 1, hour: 8 }}
-          people={reportPeople.map((p) => ({ id: p.id, name: p.name }))}
-          currentUserId={user.id}
-          emailAvailable={emailEnabled()}
-          timeZone={appTimeZone()}
-          recipients={project.isPrivate ? "members" : isAdmin ? "any" : "team"}
-        />
-      }
-    />
+    <>
+      {asked.kind === "alias" && <CanonicalTabParam tab={tab} />}
+      <ProjectSettings
+        // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
+        key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
+        storageSection={storageSection}
+        applyTemplate={tab === "tablero" && canManage ? (
+          <ApplyTemplate
+            projectId={project.id}
+            lastChange={templateChange ? {
+              templateName: templateChange.templateName,
+              mode: templateChange.mode,
+              createdAt: templateChange.createdAt.toISOString(),
+              until: new Date(templateChange.createdAt.getTime() + TEMPLATE_UNDO_HOURS * 3_600_000).toISOString(),
+              userName: templateChange.userName,
+            } : null}
+          />
+        ) : null}
+        isAdmin={isAdmin}
+        tab={tab}
+        unknownTab={asked.kind === "unknown" ? asked.asked : undefined}
+        restrictedTab={restricted}
+        releaseTemplates={releaseTemplates}
+        planTemplates={planTemplates}
+        currentUserId={user.id}
+        project={{
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          visibility: project.isPrivate ? "PRIVATE" : "TEAM",
+          releaseZipMaxMb: project.releaseZipMaxMb,
+          taskAttachMaxMb: project.taskAttachMaxMb,
+          googleShareMode: effectiveShareMode(project.googleShareMode, project.isPrivate, { role: process.env.GOOGLE_SHARE_ROLE }),
+          fileMaxMb: project.fileMaxMb,
+          taskFields: normalizeTaskFields(project.taskFields),
+          budgetColumns: project._count.columns,
+          members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
+        }}
+        labels={project.labels}
+        kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: kindTasks.get(k.id) ?? 0 }))}
+        generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
+        deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: deliverableTasks.get(d.id) ?? 0 }))}
+        users={users}
+        editorMode={editorMode}
+        google={{ enabled: googleEnabled(), domain: googleWorkspaceDomain() ?? null }}
+        reportSchedule={
+          <ReportScheduleSection
+            projectId={project.id}
+            initial={schedule
+              ? { enabled: schedule.enabled, weekday: schedule.weekday, hour: schedule.hour, recipient: reportRecipientView(schedule.recipient, reportPeople, isAdmin) }
+              : { enabled: false, recipient: null, weekday: 1, hour: 8 }}
+            people={reportPeople.map((p) => ({ id: p.id, name: p.name }))}
+            currentUserId={user.id}
+            emailAvailable={emailEnabled()}
+            timeZone={appTimeZone()}
+            recipients={project.isPrivate ? "members" : isAdmin ? "any" : "team"}
+          />
+        }
+      />
+    </>
   );
 }

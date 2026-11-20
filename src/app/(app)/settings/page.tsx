@@ -15,7 +15,7 @@ import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
 import { resolveProfileTab } from "./profile-tabs";
-import { redirect } from "next/navigation";
+import { CanonicalTabParam } from "@/components/CanonicalTabParam";
 import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
@@ -50,8 +50,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const { google, tab: tabParam, delete: deleteParam } = await searchParams;
   // El aviso de vuelta de Google se muestra en «Cuenta», donde está esa sección.
   const asked = resolveProfileTab(tabParam);
-  // Otro nombre de una pestaña («?tab=account», «?tab=Notificaciones»): se pasa a su id, el de los enlaces de las pestañas.
-  if (!google && asked.kind === "alias") redirect(`/settings?tab=${asked.tab}${deleteParam ? `&delete=${encodeURIComponent(deleteParam)}` : ""}`);
+  // Otro nombre de una pestaña («?tab=account», «?tab=Notificaciones»): se pinta la suya y el cliente pasa la dirección a su
+  // id (el de los enlaces de las pestañas) conservando el resto y el ancla, que un redirect del servidor perdía.
+  const canonicalTab = !google && asked.kind === "alias" ? asked.tab : null;
   const tab = google ? "cuenta" : asked.tab;
   const row = await db.user.findUniqueOrThrow({
     where: { id: user.id },
@@ -96,6 +97,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   if (googleMessage) googleMessage = { ...googleMessage, text: t(googleMessage.text) };
   return (
     <>
+      {canonicalTab && <CanonicalTabParam tab={canonicalTab} />}
       <ProfileSettings
         name={row.name}
         email={row.email}

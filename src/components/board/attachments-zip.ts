@@ -3,9 +3,49 @@ import type { T } from "@/i18n/shared";
 type Toast = (message: string, kind?: "success" | "error", action?: { label: string; onClick: () => void }) => void;
 
 /**
+ * Descarga directa del navegador (con su progreso y su botón de cancelar; nada pasa por la memoria de la página, y si se
+ * sale de ella la descarga sigue o se cancela desde el navegador). `name` solo es una sugerencia: manda el
+ * Content-Disposition del servidor.
+ */
+export function startDownload(href: string, name: string): void {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Un paquete que no ha empezado a enviarse en este tiempo (ni ha fallado) se da por perdido. */
+const START_TIMEOUT_MS = 45_000;
+
+type TicketStatus = { started: number[]; done: number[]; errors: Record<string, { status: number; message: string }> };
+
+/**
+ * Espera a que el paquete `part` empiece a enviarse (el último) o termine (los demás: cada persona descarga un ZIP a la
+ * vez, así que el siguiente se pide cuando acaba el anterior), consultando el vale cada segundo. Devuelve su error, si falla.
+ */
+async function waitForPart(statusUrl: string, part: number, untilDone: boolean): Promise<{ status: number; message: string } | null> {
+  const since = Date.now();
+  for (;;) {
+    await pause(1000);
+    const res = await fetch(statusUrl, { cache: "no-store" });
+    if (!res.ok) return { status: res.status, message: "" };
+    const st = (await res.json()) as TicketStatus;
+    const error = st.errors[String(part)];
+    if (error) return error;
+    if (st.done.includes(part) || (!untilDone && st.started.includes(part))) return null;
+    if (!st.started.includes(part) && Date.now() - since > START_TIMEOUT_MS) return { status: 0, message: "" };
+  }
+}
+
+/**
  * Descarga el ZIP de adjuntos de una release o de un plan de trabajo (la misma ruta, `release-attachments`, con sus
- * mismos topes y permisos). Primero pide el plan (cuántos paquetes caben en el tope del proyecto) y luego cada paquete,
- * uno tras otro, con el token del plan: si los adjuntos cambian a mitad, el servidor responde 409 y se ofrece reintentar.
+ * mismos topes y permisos). Primero pide el plan (cuántos paquetes caben en el tope del proyecto, con un vale para esta
+ * lista de tareas) y luego cada paquete en descarga directa del navegador, uno tras otro, con el token del plan: si los
+ * adjuntos cambian a mitad, el servidor responde 409 (queda en el vale) y se ofrece reintentar.
  * `items`: `{ taskId, code }` (release) o `{ taskId, folder }` (plan). `fileName`: nombre de cada paquete.
  */
 export async function downloadAttachmentsZip(opts: {
@@ -18,31 +58,25 @@ export async function downloadAttachmentsZip(opts: {
   setBusy?: (busy: boolean) => void;
 }): Promise<void> {
   const { projectId, items, fileName, t, toast, setBusy } = opts;
-  let changed: string | null = null;
+  let changed = false;
   setBusy?.(true);
   try {
     const url = `/api/projects/${projectId}/release-attachments`;
-    const body = JSON.stringify({ items });
-    const post = (query: string) => fetch(`${url}${query}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-    const planRes = await post("?plan=1");
+    const planRes = await fetch(`${url}?plan=1`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
     if (!planRes.ok) throw new Error(planRes.status === 429 ? await planRes.text() : "");
-    const plan = (await planRes.json()) as { parts: { oversize: boolean }[]; maxMb: number; v?: string };
+    const plan = (await planRes.json()) as { parts: { oversize: boolean }[]; maxMb: number; v?: string; ticket?: string; busy?: boolean };
+    if (!plan.ticket) throw new Error("");
+    if (plan.busy) throw new Error(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."));
     const total = plan.parts.length;
+    const ticket = encodeURIComponent(plan.ticket);
     for (let part = 1; part <= total; part++) {
-      const res = await post(`?part=${part}${plan.v ? `&v=${plan.v}` : ""}`);
-      if (res.status === 409) {
-        changed = await res.text();
-        throw new Error(changed);
+      const name = fileName(part, total);
+      startDownload(`${url}?ticket=${ticket}&part=${part}${plan.v ? `&v=${plan.v}` : ""}&name=${encodeURIComponent(name)}`, name);
+      const error = await waitForPart(`${url}?ticket=${ticket}&status=1`, part, part < total);
+      if (error) {
+        changed = error.status === 409;
+        throw new Error(error.message);
       }
-      if (!res.ok) throw new Error(res.status === 429 ? await res.text() : "");
-      const href = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = href;
-      a.download = fileName(part, total);
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(href), 1000);
-      // Pausa corta para que el navegador no agrupe ni descarte las descargas seguidas.
-      if (part < total) await new Promise((r) => setTimeout(r, 400));
     }
     if (total > 1) toast(t("Adjuntos descargados en {n} paquetes de hasta {mb} MB", { n: total, mb: plan.maxMb }));
     if (plan.parts.some((p) => p.oversize)) toast(t("Algún archivo supera por sí solo los {mb} MB y va en su propio paquete.", { mb: plan.maxMb }), "error");

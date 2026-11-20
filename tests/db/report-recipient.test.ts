@@ -3,7 +3,10 @@
 // respuesta no dice si una dirección es de alguien: un miembro no puede probar emails.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { confirmAccountChange } from "../../src/actions/auth";
 import { saveReportSchedule } from "../../src/actions/report-schedule";
+import { updateUser } from "../../src/actions/users";
+import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { reportRecipientPeople, reportRecipientView } from "../../src/lib/report-recipient";
 import { db, expectFail, expectOk, loginAs, makeProject, makeUser } from "./helpers";
 
@@ -60,7 +63,8 @@ describe("destinatario del informe semanal", () => {
     assert.deepEqual(reportRecipientView(member.email.toUpperCase(), people, false), { kind: "user", userId: member.id });
 
     await loginAs(member);
-    expectFail(await saveReportSchedule(f.project.id, { ...week, hour: 10, recipient: { keep: true } }), /ya no vale/);
+    // Cambiar solo la hora: el motivo es que la dirección es externa (no «ya no vale»).
+    expectFail(await saveReportSchedule(f.project.id, { ...week, hour: 10, recipient: { keep: true } }), /^Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto\.$/);
     // Desactivarlo sí puede (el destinatario se conserva).
     expectOk(await saveReportSchedule(f.project.id, { ...week, enabled: false, recipient: { keep: true } }));
     assert.equal(await stored(f.project.id), "fuera@example.com");
@@ -75,5 +79,64 @@ describe("destinatario del informe semanal", () => {
     expectFail(await saveReportSchedule(f.project.id, { ...week, recipient: { email: "fuera@example.com" } }), NOT_ALLOWED);
     expectOk(await saveReportSchedule(f.project.id, { ...week, recipient: { userId: owner.id } }));
     assert.equal(await stored(f.project.id), owner.email);
+  });
+
+  test("una persona que ya no vale (salió del proyecto): el mensaje de siempre, «ya no vale»", async () => {
+    const [member, mate] = [await makeUser(), await makeUser()];
+    const f = await makeProject({ members: [member, mate] });
+    await loginAs(member);
+    expectOk(await saveReportSchedule(f.project.id, { ...week, recipient: { userId: mate.id } }));
+    await db.projectMember.deleteMany({ where: { projectId: f.project.id, userId: mate.id } });
+    expectFail(await saveReportSchedule(f.project.id, { ...week, hour: 11, recipient: { keep: true } }), /^El destinatario guardado ya no vale/);
+  });
+
+  test("petición forjada con dos destinos a la vez: error de validación traducido, no «Invalid input»", async () => {
+    const [member, mate] = [await makeUser(), await makeUser()];
+    await db.user.update({ where: { id: member.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [member, mate] });
+    await loginAs(member);
+    const forged = { ...week, recipient: { userId: mate.id, email: "fuera@example.com" } } as never;
+    assert.equal(expectFail(await saveReportSchedule(f.project.id, forged)), "Invalid data.");
+    await db.user.update({ where: { id: member.id }, data: { locale: "ES" } });
+    assert.equal(expectFail(await saveReportSchedule(f.project.id, forged)), "Datos no válidos.");
+  });
+});
+
+describe("el destinatario cambia de email", () => {
+  test("al confirmar el cambio en Mi perfil, sus informes pasan a la dirección nueva (también con otras mayúsculas)", async () => {
+    const [admin, member] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const a = await makeProject({ members: [member] });
+    const b = await makeProject({ members: [member] });
+    const other = await makeProject({ members: [member] });
+    // Uno lo programa un administrador, otro un miembro; el tercero va a otra dirección y no se toca.
+    await loginAs(admin);
+    expectOk(await saveReportSchedule(a.project.id, { ...week, recipient: { userId: member.id } }));
+    expectOk(await saveReportSchedule(other.project.id, { ...week, recipient: { email: "fuera@example.com" } }));
+    await loginAs(member);
+    expectOk(await saveReportSchedule(b.project.id, { ...week, recipient: { userId: member.id } }));
+    await db.reportSchedule.update({ where: { projectId: b.project.id }, data: { recipient: member.email.toUpperCase() } });
+    const newEmail = `nueva-${Date.now().toString(36)}@example.com`;
+    const token = await issueAuthToken(member.id, "EMAIL_CHANGE", { newEmail });
+    expectOk(await confirmAccountChange(token));
+    assert.equal(await stored(a.project.id), newEmail);
+    assert.equal(await stored(b.project.id), newEmail);
+    assert.equal(await stored(other.project.id), "fuera@example.com");
+    // Y en Ajustes se sigue viendo como la persona, no como «Dirección externa».
+    assert.deepEqual(reportRecipientView(await stored(a.project.id), await reportRecipientPeople(a.project.id), false), { kind: "user", userId: member.id });
+    assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: b.project.id } })).enabled, true);
+  });
+
+  test("al editarle el email un administrador en Administración → Usuarios, igual", async () => {
+    const [admin, member] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const f = await makeProject({ members: [member] });
+    await loginAs(member);
+    expectOk(await saveReportSchedule(f.project.id, { ...week, recipient: { userId: member.id } }));
+    await loginAs(admin);
+    const newEmail = `editada-${Date.now().toString(36)}@example.com`;
+    expectOk(await updateUser(member.id, { name: member.name, email: newEmail, role: "MEMBER", active: true }));
+    assert.equal(await stored(f.project.id), newEmail);
+    // Sin cambio de email, nada cambia.
+    expectOk(await updateUser(member.id, { name: "Otro nombre", email: newEmail, role: "MEMBER", active: true }));
+    assert.equal(await stored(f.project.id), newEmail);
   });
 });

@@ -27,3 +27,8 @@ export function maskHostIn(text: string, label: string): string {
   const bare = host.replace(/:\d+$/, "");
   return text.split(host).join(masked).split(bare).join(maskHost(bare));
 }
+
+/** Lo mismo con varios destinos (p. ej. el último error de una tarea programada, que puede venir de cualquiera). */
+export function maskHostsIn(text: string, labels: readonly string[]): string {
+  return labels.reduce((acc, label) => maskHostIn(acc, label), text);
+}

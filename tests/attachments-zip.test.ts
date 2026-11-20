@@ -2,31 +2,47 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { downloadAttachmentsZip } from "../src/components/board/attachments-zip";
 
-/** El reintento de «adjuntos cambiados» pasa por el mismo camino que la descarga: el botón vuelve a quedar ocupado. */
-test("reintentar la descarga del ZIP vuelve a activar el estado «descargando»", async () => {
+/**
+ * El paquete lo descarga el navegador (enlace con el vale del plan) y su error se lee del estado del vale. El reintento de
+ * «adjuntos cambiados» pasa por el mismo camino que la descarga: el botón vuelve a quedar ocupado.
+ */
+test("descarga directa con el vale; reintentar tras un 409 vuelve a activar el estado «descargando»", async () => {
   const g = globalThis as unknown as Record<string, unknown>;
-  const saved = { fetch: g.fetch, document: g.document, URL: g.URL };
+  const saved = { fetch: g.fetch, document: g.document };
   let conflicts = 1;
+  const links: string[] = [];
   g.fetch = async (url: string) => {
-    if (String(url).includes("plan=1")) return new Response(JSON.stringify({ parts: [{ oversize: false }], maxMb: 10, v: "x" }), { status: 200 });
-    if (conflicts-- > 0) return new Response("Los adjuntos han cambiado", { status: 409 });
-    return new Response(new Blob(["zip"]), { status: 200 });
+    if (String(url).includes("plan=1")) return new Response(JSON.stringify({ parts: [{ oversize: false }], maxMb: 10, v: "0123456789abcdef", ticket: "tk", busy: false }), { status: 200 });
+    if (String(url).includes("status=1")) {
+      const errors = conflicts-- > 0 ? { 1: { status: 409, message: "Los adjuntos han cambiado" } } : {};
+      return new Response(JSON.stringify({ started: [1], done: [], errors }), { status: 200 });
+    }
+    throw new Error(`el paquete no se pide con fetch: ${url}`);
   };
-  g.document = { createElement: () => ({ click() {} }) };
-  g.URL = Object.assign(function () {}, { createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
+  g.document = {
+    createElement: () => { const a: { href?: string; click(): void; remove(): void } = { click() { links.push(a.href!); }, remove() {} }; return a; },
+    body: { append() {} },
+  };
   const busy: boolean[] = [];
+  const toasts: string[] = [];
   let retry: (() => void) | undefined;
   try {
     await downloadAttachmentsZip({
       projectId: "p1", items: [{ taskId: "t1", folder: "adjuntos/01-a" }], fileName: () => "a.zip",
       t: ((s: string) => s) as never, setBusy: (b) => busy.push(b),
-      toast: (_m, _k, action) => { retry = action?.onClick; },
+      toast: (m, _k, action) => { toasts.push(m); retry = action?.onClick; },
     });
     assert.deepEqual(busy, [true, false]);
+    assert.deepEqual(toasts, ["Los adjuntos han cambiado"]);
+    assert.deepEqual(links, ["/api/projects/p1/release-attachments?ticket=tk&part=1&v=0123456789abcdef&name=a.zip"]);
     assert.ok(retry, "se ofrece Reintentar");
     retry!();
     await new Promise((r) => setTimeout(r, 50));
+    assert.deepEqual(busy, [true, false, true]);
+    await new Promise((r) => setTimeout(r, 1200));
     assert.deepEqual(busy, [true, false, true, false]);
+    assert.equal(links.length, 2);
+    assert.equal(toasts.length, 1, "la segunda va bien: sin aviso");
   } finally {
     Object.assign(g, saved);
   }

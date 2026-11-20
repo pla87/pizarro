@@ -3,7 +3,7 @@
 // emails del HTML (como la «Email Address Obfuscation» de Cloudflare, que daba el #418 en Mi perfil y Administración →
 // Usuarios); (2) pestañas con alias (`?tab=plantillas`) y aviso de una desconocida; (3) informe semanal: el destinatario se
 // elige por nombre y a un miembro no se le enseña el email de otro; (4) calendario: vencidas en rojo, «N vencidas de antes de
-// este mes» y, en el móvil, se baja hasta hoy; (5) Mis tareas: singular/plural y borde rojo solo en las vencidas; (6) Usuarios
+// este mes» y, en el móvil, «Ir a hoy» en el aviso (sin vencidas, se baja solo hasta hoy); (5) Mis tareas: singular/plural y borde rojo solo en las vencidas; (6) Usuarios
 // a 393 px con menú «⋯», indicador de desplazamiento en las pestañas y pie del menú lateral entero; (7) theme-color con el
 // tema elegido; (8) accesibilidad: «Ver como lista» con aria-pressed, «Abrir menú» con aria-expanded, fondo inert con un
 // modal abierto (también diálogo dentro de diálogo, y los avisos emergentes siguen fuera) y nombres de los controles (axe).
@@ -132,6 +132,10 @@ if (only.includes("tabs")) {
   await L.goto(page, `${L.BASE}/p/${p.id}/settings?tab=Board`);
   await page.waitForURL(/tab=tablero/);
   L.eq("TABS: en inglés y con mayúsculas (?tab=Board) también", await current("Secciones del proyecto"), "Tablero");
+  // Con ancla: la dirección pasa a su id en el cliente y el ancla se conserva (el redirect del servidor la perdía).
+  await L.goto(page, `${L.BASE}/p/${p.id}/settings?tab=board#labels`);
+  await page.waitForURL(/tab=tablero/);
+  L.eq("TABS: ?tab=board#labels → ?tab=tablero#labels (conserva el ancla)", [await current("Secciones del proyecto"), new URL(page.url()).hash], ["Tablero", "#labels"]);
   await L.goto(page, `${L.BASE}/p/${p.id}/settings?tab=inventada`);
   L.eq("TABS: una desconocida abre la primera y lo avisa", [await current("Secciones del proyecto"), await page.getByTestId("unknown-tab").innerText()], ["General", "No hay ninguna sección «inventada»: se muestra «General»."]);
   await asMember();
@@ -183,7 +187,7 @@ if (only.includes("informe")) {
 
 // --- (4) Calendario ---------------------------------------------------------------------------------------------------
 if (only.includes("cal")) {
-  L.scenario("cal: vencidas en rojo, «N vencidas de antes de este mes» y el móvil baja hasta hoy");
+  L.scenario("cal: vencidas en rojo, «N vencidas de antes de este mes», «Ir a hoy» y el móvil baja hasta hoy sin vencidas");
   await L.cleanBoard();
   await asMember();
   const s = await L.session();
@@ -215,11 +219,26 @@ if (only.includes("cal")) {
   const todayRow = m.page.locator(`[data-mobile-day="${today}"]`);
   await todayRow.waitFor({ timeout: 15000 });
   await sleep(600);
-  if (dueDay > 3) {
-    const top = await todayRow.evaluate((el) => el.getBoundingClientRect().top - el.closest("main").getBoundingClientRect().top);
-    L.check("CAL móvil: al abrir el mes, hoy queda arriba", top >= -2 && top < 120, `top=${top}`);
-  } else L.note("CAL móvil: hoy es de los primeros días del mes, no hay nada que bajar");
+  const rowTop = () => todayRow.evaluate((el) => el.getBoundingClientRect().top - el.closest("main").getBoundingClientRect().top);
+  // Con vencidas de antes no baja solo (su aviso, arriba, quedaría fuera de la vista): el aviso se ve y lleva «Ir a hoy».
+  const mBox = m.page.getByTestId("cal-overdue");
+  const boxTop = await mBox.evaluate((el) => el.getBoundingClientRect().top - el.closest("main").getBoundingClientRect().top);
+  L.check("CAL móvil: con vencidas de antes, el aviso queda a la vista (no baja solo hasta hoy)", boxTop >= -2 && boxTop < 400, `top=${boxTop}`);
   await m.page.screenshot({ path: `${SHOTS}/r56-cal-movil.png` });
+  await m.page.getByTestId("cal-go-today").click();
+  await sleep(300);
+  if (dueDay > 3) {
+    const top = await rowTop();
+    L.check("CAL móvil: «Ir a hoy» deja hoy arriba", top >= -2 && top < 120, `top=${top}`);
+    // Sin vencidas de antes, al abrir el mes sí baja solo hasta hoy.
+    await L.q(`UPDATE "Task" SET "dueDate"=$2 WHERE id=$1`, [old, today]);
+    await L.goto(m.page, `${L.BASE}/calendar`);
+    await todayRow.waitFor({ timeout: 15000 });
+    await sleep(600);
+    L.eq("CAL móvil: sin vencidas de antes no hay aviso", await m.page.getByTestId("cal-overdue").count(), 0);
+    const top2 = await rowTop();
+    L.check("CAL móvil: sin vencidas de antes, al abrir el mes hoy queda arriba", top2 >= -2 && top2 < 120, `top=${top2}`);
+  } else L.note("CAL móvil: hoy es de los primeros días del mes, no hay nada que bajar");
   L.assertNoErrors("CAL", [m]);
   await m.ctx.close();
   await L.cleanBoard();

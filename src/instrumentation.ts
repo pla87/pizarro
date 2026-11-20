@@ -33,6 +33,13 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudo anotar la IP de las conexiones", err);
   }
+  // Content-Length de las descargas en flujo, que Next quita (ver lib/response-length.ts).
+  try {
+    const { installDeclaredLength } = await import("@/lib/response-length");
+    installDeclaredLength();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo conservar el tamaño de las descargas", err);
+  }
   try {
     const { installProcessErrorHandlers } = await import("@/lib/process-errors");
     installProcessErrorHandlers();

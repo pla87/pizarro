@@ -5,7 +5,8 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict } from "@/lib/release-zip";
+import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
 import { releaseAttachmentFileSize, releaseAttachmentStream } from "@/lib/uploads";
@@ -43,7 +44,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   );
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   const packages = planZipEntries(entries, maxMb);
-  if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb, entries), { headers: { "Cache-Control": "private, no-store" } });
+  // `busy`: la página avisa antes de lanzar la descarga directa si ahora tocaría «Ya se está preparando otro ZIP».
+  if (mode.kind === "plan") return Response.json({ ...zipPlanBody(packages, maxMb, entries), busy: zipSlotBusy(user.id) }, { headers: { "Cache-Control": "private, no-store" } });
   const conflict = zipVersionConflict(mode, entries, maxMb, t("Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos."));
   if (conflict) return conflict;
   const pkg = packages[mode.part - 1];
@@ -77,6 +79,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
     headers: {
       "Content-Type": "application/zip",
       "Content-Length": String(zipPart.bytes),
+      // Next quita el Content-Length; con este vuelve a salir y el navegador enseña el progreso (lib/response-length.ts).
+      [DECLARED_LENGTH_HEADER]: String(zipPart.bytes),
       "Content-Disposition": `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),

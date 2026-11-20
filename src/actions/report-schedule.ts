@@ -66,7 +66,12 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
     // El informe solo puede salir hacia alguien que ya ve el proyecto. Una dirección externa solo la
     // puede poner un administrador, y nunca en un proyecto privado (también al conservar la que había).
     if (data.enabled && !(await reportRecipientAllowed(pid, recipient, user.role))) {
-      if ("keep" in data.recipient) throw new AppError("El destinatario guardado ya no vale: elige a una persona del proyecto.");
+      if ("keep" in data.recipient) {
+        // Una dirección externa que puso un administrador: quien no lo es no puede conservarla (ni al cambiar solo el día o la hora).
+        const external = user.role !== "ADMIN" && !(await db.user.count({ where: { email: { equals: recipient, mode: "insensitive" } } }));
+        if (external) throw new AppError("Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto.");
+        throw new AppError("El destinatario guardado ya no vale: elige a una persona del proyecto.");
+      }
       throw new AppError(NOT_ALLOWED);
     }
     const reset = !prev || prev.weekday !== data.weekday || prev.hour !== data.hour || prev.enabled !== data.enabled;
