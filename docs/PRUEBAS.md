@@ -461,3 +461,38 @@ Una copia que no se ha restaurado nunca no cuenta como copia. Hazlo **en otra in
 **Qué debe pasar:** la vista previa dice «Formato detectado: …» con la herramienta correcta; títulos, descripciones, estados (pasan a columnas del mismo nombre), etiquetas, fechas (sin desfases de un día) y subtareas salen bien; lo que no se trae (archivadas, comentarios, adjuntos subidos) se avisa.
 
 **Si falla:** guarda el fichero de prueba (sin datos personales, o con datos inventados) y anota la herramienta y la fecha de la exportación: así se puede ajustar el lector.
+
+## 8. Novedades de la v1.59.0
+
+### 8.1 Copiar con Ctrl al panel de tareas fijas
+
+**Necesitas:** un proyecto con columna *Siguiente salto a producción* (y, si puedes, una de *Plan de trabajo para IA*).
+
+1. Abre el panel **Siempre en la release** con 3 o 4 tareas fijas y pocas tarjetas en la columna: no debe salir barra de desplazamiento en la lista si las tarjetas caben.
+2. Arrastra una tarjeta de otra columna y suéltala **con Ctrl** (⌥ en Mac) sobre el panel abierto. Repite sobre el panel cerrado (se abre al mantenerla encima) y sobre «Siempre en el plan».
+3. Arrastra varias veces seguidas, rápido, entre la lista de la columna y el panel, con y sin Ctrl.
+4. Ctrl/⌘+Z tras la copia.
+
+**Qué debe pasar:** la copia aparece al momento dentro del panel y queda como fija (con la misma cadencia si la original lo era); la original no se mueve; un solo deshacer la quita. Nunca sale «Algo ha fallado».
+
+**Si falla:** anota exactamente qué arrastre hacías justo antes (y si el panel estaba abierto) y mira *Administración → Logs* (categoría *client*).
+
+### 8.2 Subidas con dos personas a la vez
+
+**Necesitas:** dos personas con la app abierta (dos navegadores valen) y varios archivos grandes (10–20 MB).
+
+1. Con solo una persona conectada, adjunta 3 archivos a la vez a una tarea.
+2. Con las dos conectadas, la primera adjunta 3 archivos a la vez y la segunda, mientras tanto, adjunta uno.
+3. Con una subida grande en curso, importa unas tareas en JSON pequeñas.
+
+**Qué debe pasar:** sola, los 3 suben a la vez; con dos personas, los de la primera van de uno en uno, sin errores ni repeticiones, y el de la segunda entra sin esperar; la importación pequeña no espera.
+
+### 8.3 Detalle de tarea compacto
+
+1. Abre una tarea en un portátil (1280×720 o similar) en un proyecto con *Fecha de inicio* activada: la columna de campos debe caber sin desplazarse.
+2. En un proyecto con muchos tipos y etiquetas, en una pantalla ancha: la columna se ensancha.
+3. En el móvil, comprueba que se puede quitar la fecha límite con la ✕ junto a su rótulo.
+
+### 8.4 Jira con cabeceras en español
+
+Exporta un CSV de Jira con la interfaz en español que incluya incidencias resueltas y sin resolver. **Qué debe pasar:** «Formato detectado: Jira», las resueltas no se importan y se avisa de cuántas son.
