@@ -41,7 +41,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id, eager = fal
   const task = useTask(id);
   const [near, nearRef, bindNow] = useNearCard(id);
   const node = useRef<HTMLDivElement | null>(null);
-  const handle = useRef<HTMLButtonElement | null>(null);
+  const handle = useRef<HTMLSpanElement | null>(null);
   // Los manejadores de los sensores (pulsar con el puntero, teclas) los da useSortable; aquí se llaman los últimos. Si la
   // tarjeta aún no está apuntada (acaba de entrar en la vista), se apunta en el acto y el arrastre empieza igual.
   const listeners = useRef<Listeners | null>(null);
@@ -65,20 +65,20 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id, eager = fal
   // entera con ratón; solo el asa en táctil). Memorizada: un elemento nuevo en cada dibujo repintaría la tarjeta.
   const handleEl = useMemo(
     () => (
-      <button
-        type="button"
+      // Un <span> y no un <button>: dentro de la tarjeta (un botón) sería un control anidado.
+      <span
+        data-drag-handle
         ref={handle}
         onClick={(e) => e.stopPropagation()}
         {...(dragHandle ? relay : {})}
         className="-my-1 -mr-1.5 hidden h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600 pointer-coarse:flex"
         aria-label={t("Arrastrar para reordenar")}
         // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
-        // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
-        tabIndex={-1}
+        // Fuera del árbol accesible: dentro de la tarjeta (role=button) no se puede anunciar aparte.
         aria-hidden
       >
         <GripVertical size={16} />
-      </button>
+      </span>
     ),
     [dragHandle, relay, t],
   );
@@ -120,7 +120,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id, eager = fal
 function SortableBinding({ id, nodeRef, handleRef, listenersRef, withHandle }: {
   id: string;
   nodeRef: RefObject<HTMLDivElement | null>;
-  handleRef: RefObject<HTMLButtonElement | null>;
+  handleRef: RefObject<HTMLSpanElement | null>;
   listenersRef: RefObject<Listeners | null>;
   withHandle: boolean;
 }) {
@@ -324,29 +324,30 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       {!overlay && <span id={descId} hidden>{description}</span>}
       {task.color && !filled && <span className="absolute inset-y-0 left-0 w-1 ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} aria-hidden />}
       <div className="flex items-start gap-2">
-        <button
-          type="button"
+        {/* Casilla para el ratón y el dedo: un <span> y no un <button> (un control dentro de la tarjeta, que ya es un botón,
+            sería un control anidado aunque vaya fuera del Tab). */}
+        <span
           onClick={(e) => {
             e.stopPropagation();
             if (!pending) toggleSelected(task.id);
           }}
-          disabled={pending}
           onPointerDown={(e) => e.stopPropagation()}
-          // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
-          tabIndex={-1}
           className={cn(
             // En el móvil la zona que se puede tocar crece 10 px por cada lado (36×36 px; se ven 16×16) sin mover nada.
-            "relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
+            "relative mt-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
             isSelected
               ? "border-brand-600 bg-brand-600 text-on-brand"
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
           )}
-          aria-label={isSelected ? t("Quitar de la selección") : t("Seleccionar")}
-          // Para el lector de pantalla la selección la expone la tarjeta (aria-pressed) y se alterna con Espacio.
+          // Fuera del árbol accesible: para el lector de pantalla la selección la expone la propia tarjeta (aria-pressed,
+          // «botón pulsado») y se alterna con Espacio, así la tarjeta sigue siendo una sola parada de tabulador. Nombre fijo
+          // (el estado lo dice la tarjeta; lo usan las pruebas) y `data-selected` con el estado.
+          aria-label={t("Seleccionar")}
+          data-selected={isSelected || undefined}
           aria-hidden
         >
           {isSelected && <Check size={12} strokeWidth={3} />}
-        </button>
+        </span>
         {renaming ? (
           <RenameInput
             title={task.title}
@@ -454,20 +455,20 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
           </span>
         )}
         {task.linkUrl && (
-          <a
-            href={task.linkUrl}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            onClick={(e) => e.stopPropagation()}
+          // Atajo para el ratón (un <span>, no un enlace: dentro de la tarjeta, que es un botón, sería un control anidado). Con
+          // teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona).
+          <span
+            data-external-link
+            onClick={(e) => {
+              e.stopPropagation();
+              window.open(task.linkUrl!, "_blank", "noopener,noreferrer");
+            }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="hover:text-brand-600"
-            aria-label={t("Abrir enlace externo")}
-            // Atajo para el ratón: con teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona).
-            tabIndex={-1}
-            aria-hidden
+            className="cursor-pointer hover:text-brand-600"
+            title={t("Abrir enlace externo")}
           >
             <ExternalLink size={13} />
-          </a>
+          </span>
         )}
         <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Asignada a {name}", { name: assignee.name })} />}</span>
       </div>

@@ -182,7 +182,7 @@ if (only.includes("exportar")) {
   await L.q(`INSERT INTO "Subtask"(id,"taskId",title,done,position) VALUES ('r54s1',$1,'Paso',true,1024)`, [b]);
   const s = await withClipboard();
   const { page } = s;
-  for (const title of ["Exp A", "Exp B"]) await L.cardLoc(page, title).locator('button[aria-label="Seleccionar"]').click();
+  for (const title of ["Exp A", "Exp B"]) await L.cardLoc(page, title).locator('[aria-label="Seleccionar"]').click();
   const exportBtn = page.getByRole("button", { name: "Exportar (2)" });
   L.check("BOTÓN: con dos marcadas, «Importar» pasa a «Exportar (2)»", await exportBtn.isVisible().catch(() => false) && (await page.getByRole("button", { name: "Importar", exact: true }).count()) === 0);
   await exportBtn.click();
@@ -575,7 +575,7 @@ if (only.includes("movil")) {
   await dlg.locator("[data-import-submit]").tap();
   await L.eqEventually("IMPORTAR: importadas desde el móvil", boardTitles, ["Del móvil A", "Del móvil B", "Móvil 1", "Móvil 2"]);
   // Selección y exportar desde la barra de selección.
-  await L.cardLoc(page, "Móvil 1").locator('button[aria-label="Seleccionar"]').tap();
+  await L.cardLoc(page, "Móvil 1").locator('[aria-label="Seleccionar"]').tap();
   const bar = page.locator("[data-selection-bar]");
   await bar.waitFor();
   const exp = bar.locator("[data-selection-export]");
@@ -617,7 +617,7 @@ if (only.includes("ingles")) {
   await L.checkEventually("EN: vista previa en inglés", async () => { const t = await dlg.innerText(); return [t.includes("1 task detected") && t.includes("column “Nope” (does not exist)") && t.includes("Destination column"), t]; });
   await dlg.locator("[data-import-submit]").click();
   await L.checkEventually("EN: «1 task imported»", async () => (await alerts(page)).includes("1 task imported"));
-  await L.cardLoc(page, "In English").locator('button[aria-label="Select"]').click();
+  await L.cardLoc(page, "In English").locator('[aria-label="Select"]').click();
   await L.checkEventually("EN: «Export (1)»", async () => (await page.getByRole("button", { name: "Export (1)" }).count()) === 1);
   L.assertNoErrors("ingles", [s]);
   await s.ctx.close();

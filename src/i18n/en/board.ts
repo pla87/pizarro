@@ -54,7 +54,6 @@ export const board: Record<string, string> = {
   "Borrar columna": "Delete column",
   "Borrar (debe estar vacía)": "Delete (must be empty)",
   // TaskCard
-  "Quitar de la selección": "Remove from selection",
   "Seleccionar": "Select",
   "Plazo vencido": "Overdue",
   "Fecha límite": "Due date",

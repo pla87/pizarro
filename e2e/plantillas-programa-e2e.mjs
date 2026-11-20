@@ -136,7 +136,7 @@ try {
     L.eq("LIM: «Programa» sigue con 100", await active(PROG), 100);
     // «Mover a…» de la barra de selección: tampoco.
     await sleep(4500); // que se vaya el aviso anterior
-    await L.cardLoc(page, "Otra r51 2").locator('button[aria-label="Seleccionar"]').click();
+    await L.cardLoc(page, "Otra r51 2").locator('[aria-label="Seleccionar"]').click();
     const bar = page.locator("select").filter({ has: page.locator("option", { hasText: "Mover a…" }) });
     await bar.selectOption({ label: "Programa" });
     L.check("LIM: «Mover a…» a la columna llena avisa", await toastWith(page, "La columna «Programa» admite como mucho 100 sesiones."));

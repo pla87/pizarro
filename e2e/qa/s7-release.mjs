@@ -176,7 +176,7 @@ export async function run() {
 
   // --- segunda release con selección y destino «archivar» ---
   await L.reload(p);
-  for (const t of ["Alpha", "Gamma"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["Alpha", "Gamma"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Release con selección" }).click();
   const d2 = U.dialog(p);
   await d2.getByText("Paso 1 de 2").waitFor();
@@ -274,7 +274,7 @@ export async function run() {
   });
   // Lo mismo con «Release con selección» (tareas de varias columnas).
   await L.reload(p);
-  for (const t of ["Movida", "Quieta"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["Movida", "Quieta"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Release con selección" }).click();
   const d6 = U.dialog(p);
   await d6.getByText("Paso 1 de 2").waitFor();

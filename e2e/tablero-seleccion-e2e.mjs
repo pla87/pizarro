@@ -18,7 +18,7 @@ await L.cleanBoard();
 
 /** Marca la tarjeta con su casilla (la de la propia tarjeta; con ratón o con el dedo). */
 async function select(page, title, { tap = false } = {}) {
-  const box = L.cardLoc(page, title).locator('button[aria-label="Seleccionar"]');
+  const box = L.cardLoc(page, title).locator('[aria-label="Seleccionar"]');
   if (tap) await box.tap();
   else await box.click();
   await L.waitFor(() => L.cardLoc(page, title).getAttribute("aria-pressed").then((v) => v === "true"), { timeout: 3000 });
@@ -343,7 +343,7 @@ if (only.includes("touch")) {
   const { page } = s;
   await select(page, "Dedo B", { tap: true });
   await select(page, "Dedo D", { tap: true });
-  const handle = await L.cardLoc(page, "Dedo D").locator("button[aria-label='Arrastrar para reordenar']").boundingBox();
+  const handle = await L.cardLoc(page, "Dedo D").locator("[aria-label='Arrastrar para reordenar']").boundingBox();
   const top = await L.cardLoc(page, "Dedo A").boundingBox();
   const st = await touchDrag(page, center(handle), { x: top.x + top.width / 2, y: top.y + 5 }, async () => {
     await page.screenshot({ path: `${SHOTS}/r50-seleccion-touch-drag.png` });

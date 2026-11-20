@@ -100,7 +100,7 @@ if (only.includes("scroll")) {
       L.eq(`SCROLL ${label}: plegado, cinco tarjetas`, closed.cards, 5);
       L.check(`SCROLL ${label}: plegado, las tarjetas caben (data-fits)`, await list(page, "Salto").evaluate((el) => el.hasAttribute("data-fits")));
       L.eq(`SCROLL ${label}: plegado, con el hueco del final aunque quepan`, await padding(), "160px");
-      await L.cardLoc(page, "Tarea 1").locator("button[aria-label=Seleccionar]").tap();
+      await L.cardLoc(page, "Tarea 1").locator("[aria-label=Seleccionar]").tap();
       await page.locator("[data-selection-bar]").waitFor();
       await lastAboveBar("plegado");
       await page.locator("[data-selection-bar] button[aria-label='Limpiar selección']").tap();
@@ -110,7 +110,7 @@ if (only.includes("scroll")) {
       const open = await scrollOf(page, "Salto");
       L.check(`SCROLL ${label}: con el panel abierto la lista es más baja`, open.ch < closed.ch, JSON.stringify({ closed, open }));
       L.eq(`SCROLL ${label}: abierto, también con el hueco`, await padding(), "160px");
-      await L.cardLoc(page, "Tarea 1").locator("button[aria-label=Seleccionar]").tap();
+      await L.cardLoc(page, "Tarea 1").locator("[aria-label=Seleccionar]").tap();
       await page.locator("[data-selection-bar]").waitFor();
       await lastAboveBar("abierto");
     } else {

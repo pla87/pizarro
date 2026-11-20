@@ -6,17 +6,21 @@
 // campo al primer toque, la búsqueda salta a la columna con resultados, la columna nueva se muestra al crearla, se recuerda
 // la última columna vista y las pestañas avisan de que hay más; los botones flotantes no tapan el diálogo de una tarea ni
 // la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS); Alt+P abre el selector de proyectos
-// con el foco en el buscador; y la rueda sobre el detalle de una tarea no desplaza la columna de detrás.
+// con el foco en el buscador; la rueda sobre el detalle de una tarea no desplaza la columna de detrás; y axe no encuentra
+// controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
+// tarjetas se anuncia en un solo sitio.
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
-//   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda
+//   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep, COL } = L;
-const only = (process.env.PART || "ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda").split(",");
+const only = (process.env.PART || "ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe").split(",");
+const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 const MOBILE = { viewport: { width: 390, height: 844 }, mobile: true };
 
 await L.prepareUsers();
@@ -233,7 +237,18 @@ if (only.includes("capas")) {
   await sleep(600);
   L.check("CAPAS escritorio: copia de «Nueva tarea» encima del fondo (abre otra al lado)", (await d.page.locator("button[aria-label='Abrir otra tarea nueva al lado']:visible").count()) >= 1);
   L.eq("CAPAS escritorio: nada tapa los botones del diálogo", await covered(d.page), []);
-  await d.page.keyboard.press("Escape");
+  // Las copias flotantes van fuera del `inert` del modal (data-pz-layer): se pueden pulsar sin cerrar la tarea.
+  const floating = (name) => d.page.locator(`body > button[data-pz-layer][aria-label='${name}']`);
+  const sel = U.dialog(d.page).locator("select").first();
+  await sel.selectOption({ label: COL.doing });
+  await L.eqEventually("CAPAS escritorio: la tarea cambia de columna desde el detalle", async () => (await L.dbTask("Alfa r56")).columnName, COL.doing);
+  await floating("Deshacer la última acción en la tarea").click();
+  await L.eqEventually("CAPAS escritorio: «Deshacer» flotante deshace con la tarea abierta", async () => (await L.dbTask("Alfa r56")).columnName, COL.backlog);
+  L.eq("CAPAS escritorio: y el detalle sigue abierto", await d.page.locator("[role=dialog]").count(), 1);
+  await floating("Abrir otra tarea nueva al lado").click();
+  await L.eqEventually("CAPAS escritorio: la copia de «Nueva tarea» abre la segunda al lado", () => d.page.locator("[role=dialog]").count(), 2);
+  L.check("CAPAS escritorio: con la tarea aún abierta", await d.page.locator("[role=dialog]", { hasText: "Nueva tarea" }).count() === 1);
+  L.assertNoErrors("capas escritorio", [d]);
   await d.ctx.close();
   // Documentación en el móvil: «Nueva tarea» y «Varias tareas» van en el pie de la hoja, no flotando sobre la vista previa.
   const file = path.join(os.tmpdir(), "nota-r56.md");
@@ -271,11 +286,11 @@ if (only.includes("cls")) {
   const cls = await page.evaluate(() => window.__cls);
   L.note("CLS medido al cargar el tablero", String(cls));
   L.check("CLS: menos de 0,02 al cargar el tablero (antes ~0,1)", cls < 0.02, String(cls));
-  const handles = await page.locator("[data-task-card] button[aria-label='Arrastrar para reordenar']:visible").count();
+  const handles = await page.locator("[data-task-card] [aria-label='Arrastrar para reordenar']:visible").count();
   L.check("CLS: el asa sigue a la vista en táctil", handles > 0, String(handles));
   await s.ctx.close();
   const d = await L.session();
-  L.eq("CLS: en escritorio (ratón) el asa no se ve", await d.page.locator("[data-task-card] button[aria-label='Arrastrar para reordenar']:visible").count(), 0);
+  L.eq("CLS: en escritorio (ratón) el asa no se ve", await d.page.locator("[data-task-card] [aria-label='Arrastrar para reordenar']:visible").count(), 0);
   await d.ctx.close();
 }
 
@@ -312,6 +327,44 @@ if (only.includes("rueda")) {
   await page.keyboard.press("Escape");
   L.assertNoErrors("rueda", [s]);
   await s.ctx.close();
+}
+
+// --- axe: tarjetas (seleccionada), panel de fijas con su cadencia y recuento anunciado una sola vez ------------------------
+if (only.includes("axe")) {
+  L.scenario("axe: tarjetas y panel de fijas sin controles anidados; recuento en un solo aviso");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56", "Beta r56"]);
+  const ids = await L.seedTasks(COL.next, ["Fija r56", "Otra fija r56"]);
+  await L.q(`UPDATE "Task" SET evergreen=true, "evergreenEvery"=2 WHERE id=$1`, [ids[0]]);
+  await L.q(`UPDATE "Task" SET evergreen=true WHERE id=$1`, [ids[1]]);
+  const rules = ["nested-interactive", "label-content-name-mismatch", "aria-hidden-focus", "button-name"];
+  for (const [label, opts] of [["escritorio", {}], ["390", MOBILE]]) {
+    const s = await L.session({ ...opts, init: `try { localStorage.setItem("pizarro:evergreen-open:${p.id}", "1"); } catch {}` });
+    const { page } = s;
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Siguiente/ }).tap();
+    await L.colLoc(page, COL.next).locator("[data-testid=evergreen-every]").first().waitFor();
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
+    await L.cardLoc(page, "Alfa r56").locator("[aria-label='Seleccionar']").click();
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Siguiente/ }).tap();
+    await page.addScriptTag({ content: AXE });
+    // label-content-name-mismatch solo en el panel de fijas: la tarjeta se llama como su título a propósito (tipo, fecha,
+    // etiquetas… van en su descripción), y esa regla de axe (experimental) pide todo el texto visible en el nombre.
+    const found = await page.evaluate(async ([values, colName]) => {
+      const main = document.querySelector("main") ?? document;
+      const panel = document.querySelector(`[aria-label="${colName}"] [id^=evergreen-]`);
+      const a = await window.axe.run(main, { runOnly: { type: "rule", values: values.filter((v) => v !== "label-content-name-mismatch") } });
+      const b = panel ? await window.axe.run(panel, { runOnly: { type: "rule", values: ["label-content-name-mismatch"] } }) : { violations: [{ id: "sin panel", nodes: [] }] };
+      return [...a.violations, ...b.violations].map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`);
+    }, [rules, COL.next]);
+    L.eq(`AXE ${label}: sin ${rules.join(", ")} (esta, en el panel de fijas)`, found, []);
+    const chip = L.colLoc(page, COL.next).locator("[data-testid=evergreen-every]").first();
+    L.check(`AXE ${label}: el nombre de la cadencia empieza por lo que se ve`, /^Cada dos: incluir cada dos releases$/.test(await chip.getAttribute("aria-label")), await chip.getAttribute("aria-label"));
+    const live = await page.locator("[aria-live]").evaluateAll((els) => els.filter((e) => /tarjetas|\bde\b/.test(e.textContent)).length);
+    L.eq(`AXE ${label}: el recuento de tarjetas se anuncia en un solo sitio`, live, 1);
+    await page.locator("[data-selected]").first().click().catch(() => {});
+    L.assertNoErrors(`axe ${label}`, [s]);
+    await s.ctx.close();
+  }
 }
 
 await L.closeBrowser();

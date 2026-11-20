@@ -119,6 +119,8 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
         createPortal(
           <button
             type="button"
+            // Fuera del `inert` del modal (Modal.tsx): deshacer sigue a mano con una tarea abierta.
+            data-pz-layer
             className={floatingCls}
             style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
             onClick={() => void run(false)}
@@ -134,6 +136,8 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
         createPortal(
           <button
             type="button"
+            // Fuera del `inert` del modal (Modal.tsx): deshacer sigue a mano con una tarea abierta.
+            data-pz-layer
             className={floatingCls}
             style={{ left: redoRect.left, top: redoRect.top, width: redoRect.width, height: redoRect.height }}
             onClick={() => void run(true)}

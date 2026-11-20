@@ -1242,7 +1242,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const onSwipeStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (e.touches.length !== 1 || activeId || target.closest(`button[aria-label='${t("Arrastrar para reordenar")}'], input, textarea, select`)) {
+    if (e.touches.length !== 1 || activeId || target.closest(`[data-drag-handle], input, textarea, select`)) {
       swipe.current = null;
       return;
     }
@@ -1671,6 +1671,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   return (
     <BoardContext.Provider value={api}>
       <div ref={rootRef} className="flex h-full flex-col" data-filtering={filtering || undefined}>
+        {/* Recuento para lectores de pantalla, uno solo: la cabecera de escritorio y la fila del móvil y la tableta lo pintan
+            cada una a su manera (una de las dos oculta por CSS), y con el aviso en las dos se anunciaba dos veces. */}
+        <span className="sr-only" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
         {/* Contenedor de consulta: la cabecera se adapta al ancho que le deja la barra lateral, no al de la ventana. */}
         <div className="@container max-lg:hidden">
         {/* Nunca se sale de la pantalla: el nombre se trunca (entero en el tooltip) y, si así le queda poco sitio, los botones
@@ -1680,7 +1683,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
           <span
             className="shrink-0 text-sm text-slate-500"
-            aria-live="polite"
             title={filtering ? undefined : cardCount(t, tasks.length)}
           >
             {filtering ? (
@@ -1778,6 +1780,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <button
                 type="button"
                 tabIndex={-1}
+                // Fuera del `inert` del modal (Modal.tsx): es el acceso a la segunda tarea por encima del fondo.
+                data-pz-layer
                 className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "opacity-60")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondOpen && addSecond()}
@@ -1860,7 +1864,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           {/* En móvil los filtros ya están en la barra de pestañas. */}
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
           <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
-          <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
+          <span className="shrink-0 text-xs text-slate-500">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
           {(mobileSearch || filtering) && (
             <button
               type="button"

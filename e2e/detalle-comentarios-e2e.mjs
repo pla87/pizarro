@@ -164,7 +164,7 @@ if (only.includes("rel")) {
   const s = await L.session({ viewport: U.WIDE });
   const p = s.page;
   for (const [how, open] of [["Generar Release", () => p.getByRole("button", { name: "Generar Release" }).click()], ["Release con selección", async () => {
-    for (const t of ["Rel Alpha", "Rel Beta"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+    for (const t of ["Rel Alpha", "Rel Beta"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
     await p.getByRole("button", { name: "Release con selección" }).click();
   }]]) {
     await L.reload(p);
