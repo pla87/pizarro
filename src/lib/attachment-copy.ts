@@ -51,34 +51,49 @@ export interface AttachmentCopyResult {
   taskLimitMb?: number;
 }
 
-type Verdict = { ok: true } | { ok: false; reason: "task_total" } | { ok: false; reason: "quota"; quota: QuotaExceeded };
+type Verdict = { ok: true } | { ok: false; reason: "task_total" } | { ok: false; reason: "quota"; quota: QuotaExceeded } | { ok: false; reason: "error" };
+
+const MB = 1024 * 1024;
 
 /**
- * Qué cabe de estos tamaños, en orden, en la tarea `taskId` (tope de adjuntos por tarea del proyecto) y en las cuotas
- * de almacenamiento. Lo que no cabe no cuenta para los siguientes: un adjunto pequeño detrás de uno grande que no cabe
- * se copia igual. Mismas reglas que una subida (attachmentLimitProblem).
+ * Qué cabe de estos adjuntos, en orden, en su tarea de destino (tope de adjuntos por tarea del proyecto) y en las
+ * cuotas de almacenamiento. Lo que no cabe no cuenta para los siguientes: un adjunto pequeño detrás de uno grande que no
+ * cabe se copia igual. Mismas reglas que una subida (attachmentLimitProblem). Varias tareas a la vez con unas pocas
+ * consultas (las tareas, la suma por tarea y la cuota y el uso de cada proyecto, no de cada tarea), en fila: puede ir
+ * dentro de una transacción. Una tarea que ya no existe da «error».
  */
-async function fitPlan(client: Client, taskId: string, sizes: number[]): Promise<{ verdicts: Verdict[]; limitMb: number } | null> {
-  const task = await client.task.findUnique({ where: { id: taskId }, select: { projectId: true, project: { select: { taskAttachMaxMb: true } } } });
-  if (!task) return null;
-  const [sum, limits] = await Promise.all([
-    client.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId } }),
-    getQuotaLimits(task.projectId, client),
-  ]);
-  const usage = await storageUsage(task.projectId, client, { total: limits.total !== null });
-  const limitMb = task.project.taskAttachMaxMb;
-  const taskMax = limitMb * 1024 * 1024;
-  let taskUsed = sum._sum.size ?? 0;
-  let added = 0;
-  const verdicts = sizes.map((size): Verdict => {
-    if (taskUsed + size > taskMax) return { ok: false, reason: "task_total" };
-    const quota = checkQuota({ project: usage.project + added, total: usage.total + added }, size, limits);
+async function fitPlan(client: Client, items: { taskId: string; size: number }[]): Promise<{ verdicts: Verdict[]; limitMb: Map<string, number> }> {
+  const taskIds = [...new Set(items.map((i) => i.taskId))];
+  const tasks = await client.task.findMany({ where: { id: { in: taskIds } }, select: { id: true, projectId: true, project: { select: { taskAttachMaxMb: true } } } });
+  const taskById = new Map(tasks.map((t) => [t.id, t]));
+  const sums = await client.taskAttachment.groupBy({ by: ["taskId"], where: { taskId: { in: taskIds } }, _sum: { size: true } });
+  const taskUsed = new Map(sums.map((r) => [r.taskId, r._sum.size ?? 0]));
+  const limitsOf = new Map<string, Awaited<ReturnType<typeof getQuotaLimits>>>();
+  const usedOf = new Map<string, number>();
+  let totalUsed = 0;
+  for (const projectId of new Set(tasks.map((t) => t.projectId))) {
+    const limits = await getQuotaLimits(projectId, client);
+    const usage = await storageUsage(projectId, client, { total: limits.total !== null });
+    limitsOf.set(projectId, limits);
+    usedOf.set(projectId, usage.project);
+    totalUsed = usage.total; // el total del servidor, el mismo desde cualquier proyecto
+  }
+  const addedOf = new Map<string, number>();
+  let addedTotal = 0;
+  const verdicts = items.map(({ taskId, size }): Verdict => {
+    const task = taskById.get(taskId);
+    if (!task) return { ok: false, reason: "error" };
+    const used = taskUsed.get(taskId) ?? 0;
+    if (used + size > task.project.taskAttachMaxMb * MB) return { ok: false, reason: "task_total" };
+    const added = addedOf.get(task.projectId) ?? 0;
+    const quota = checkQuota({ project: usedOf.get(task.projectId)! + added, total: totalUsed + addedTotal }, size, limitsOf.get(task.projectId)!);
     if (quota) return { ok: false, reason: "quota", quota };
-    taskUsed += size;
-    added += size;
+    taskUsed.set(taskId, used + size);
+    addedOf.set(task.projectId, added + size);
+    addedTotal += size;
     return { ok: true };
   });
-  return { verdicts, limitMb };
+  return { verdicts, limitMb: new Map(tasks.map((t) => [t.id, t.project.taskAttachMaxMb])) };
 }
 
 /** Copia `from` en `to` sin dejar nunca un fichero a medias con el nombre final (temporal y rename, como las subidas). */
@@ -107,40 +122,74 @@ async function copyFiles(fromId: string, toId: string, isImage: boolean): Promis
 /**
  * Copia los adjuntos de `fromTaskId` en `toTaskId` (recién creada). Nunca lanza: lo que no se puede copiar (cuota,
  * tope de la tarea, fichero ausente, disco lleno: «disk») se devuelve en `skipped` y la tarea queda como esté.
+ */
+export async function copyTaskAttachments(fromTaskId: string, toTaskId: string): Promise<AttachmentCopyResult> {
+  return (await copyAttachmentsBatch([{ fromTaskId, toTaskId }]))[0]!;
+}
+
+interface AttachmentCopyRequest {
+  fromTaskId: string;
+  toTaskId: string;
+  /** Solo estos adjuntos de `fromTaskId` (los que cita su descripción); sin él, todos. */
+  attachmentIds?: readonly string[];
+}
+
+/**
+ * Copias de adjuntos de varias tareas a la vez (la siguiente aparición de un lote de tareas repetidas), con las mismas
+ * reglas que copyTaskAttachments y unas pocas consultas para todo el lote, no por tarea. Un resultado por petición, en
+ * el mismo orden. `purpose` completa los mensajes del registro.
  *
  * Mismo orden que una subida: primero los ficheros (con ids nuevos) y después las filas, dentro del candado común de
  * las subidas (`pz:attachment-quota`) y con la comprobación definitiva de topes y cuotas. Si el proceso se corta entre
  * medias queda como mucho un fichero sin fila, que borra la limpieza de huérfanos.
  */
-export async function copyTaskAttachments(fromTaskId: string, toTaskId: string): Promise<AttachmentCopyResult> {
-  const result: AttachmentCopyResult = { copied: 0, ids: new Map(), skipped: [] };
-  const sources = await db.taskAttachment.findMany({
-    where: { taskId: fromTaskId },
+export async function copyAttachmentsBatch(requests: readonly AttachmentCopyRequest[], purpose = "al duplicar la tarea"): Promise<AttachmentCopyResult[]> {
+  const results: AttachmentCopyResult[] = requests.map(() => ({ copied: 0, ids: new Map(), skipped: [] }));
+  const wantedReqs = requests.map((r, i) => ({ r, i })).filter(({ r }) => !r.attachmentIds || r.attachmentIds.length > 0);
+  if (!wantedReqs.length) return results;
+  const onlyListed = wantedReqs.every(({ r }) => r.attachmentIds);
+  const rows = await db.taskAttachment.findMany({
+    where: { taskId: { in: [...new Set(wantedReqs.map(({ r }) => r.fromTaskId))] }, ...(onlyListed ? { id: { in: wantedReqs.flatMap(({ r }) => r.attachmentIds!) } } : {}) },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true, createdById: true, createdAt: true },
+    select: { id: true, taskId: true, originalName: true, mimeType: true, isImage: true, width: true, height: true, size: true, createdById: true, createdAt: true },
   });
-  if (!sources.length) return result;
-  const skip = (a: (typeof sources)[number], reason: CopySkipReason) => result.skipped.push({ name: a.originalName, size: a.size, reason });
-  const noteVerdict = (a: (typeof sources)[number], v: Exclude<Verdict, { ok: true }>, limitMb: number) => {
-    skip(a, v.reason);
-    if (v.reason === "quota") result.quota ??= v.quota;
-    else result.taskLimitMb = limitMb;
+  type Source = Omit<(typeof rows)[number], "taskId">;
+  type Item = { req: number; toTaskId: string; src: Source };
+  const byTask = new Map<string, (typeof rows)[number][]>();
+  for (const row of rows) {
+    const list = byTask.get(row.taskId);
+    if (list) list.push(row);
+    else byTask.set(row.taskId, [row]);
+  }
+  const items: Item[] = [];
+  for (const { r, i } of wantedReqs) {
+    const only = r.attachmentIds ? new Set(r.attachmentIds) : null;
+    for (const { taskId: _from, ...src } of byTask.get(r.fromTaskId) ?? []) if (!only || only.has(src.id)) items.push({ req: i, toTaskId: r.toTaskId, src });
+  }
+  if (!items.length) return results;
+  const skip = (it: Item, reason: CopySkipReason) => results[it.req]!.skipped.push({ name: it.src.originalName, size: it.src.size, reason });
+  const noteVerdict = (it: Item, v: Exclude<Verdict, { ok: true }>, limitMb: Map<string, number>) => {
+    skip(it, v.reason);
+    if (v.reason === "quota") results[it.req]!.quota ??= v.quota;
+    else if (v.reason === "task_total") results[it.req]!.taskLimitMb = limitMb.get(it.toTaskId);
   };
+  const where = (it: Item) => ({ fromTaskId: requests[it.req]!.fromTaskId, toTaskId: it.toTaskId });
+  const batchDetails = (first: Item) => (requests.length === 1 ? where(first) : { tasks: requests.length });
 
   // Comprobación previa (sin candado): lo que ya no cabe ni se copia en el disco.
-  const early = await fitPlan(db, toTaskId, sources.map((a) => a.size)).catch(() => null);
+  const early = await fitPlan(db, items.map((it) => ({ taskId: it.toTaskId, size: it.src.size }))).catch(() => null);
   if (!early) {
-    for (const a of sources) skip(a, "error");
-    return result;
+    for (const it of items) skip(it, "error");
+    return results;
   }
-  const staged: { src: (typeof sources)[number]; id: string }[] = [];
+  const staged: { it: Item; id: string }[] = [];
   try {
     await mkdir(uploadDir(), { recursive: true });
   } catch {
     // Si no se puede crear la carpeta, cada copia fallará abajo con su motivo.
   }
   // Espacio en disco para lo que cabe en topes y cuotas (las imágenes llevan además su miniatura: un 10 % de holgura).
-  const wanted = sources.reduce((n, a, i) => (early.verdicts[i]!.ok ? n + a.size : n), 0);
+  const wanted = items.reduce((n, it, i) => (early.verdicts[i]!.ok ? n + it.src.size : n), 0);
   let diskFull = false;
   if (wanted > 0) {
     try {
@@ -149,80 +198,83 @@ export async function copyTaskAttachments(fromTaskId: string, toTaskId: string):
       diskFull = true;
       logEvent({
         level: "error", category: "system", action: "attachments.noSpace",
-        message: `Disco lleno: no se han copiado los adjuntos al duplicar la tarea (${logSize(wanted)})`,
-        details: { fromTaskId, toTaskId, bytes: wanted },
+        message: `Disco lleno: no se han copiado los adjuntos ${purpose} (${logSize(wanted)})`,
+        details: { ...batchDetails(items[0]!), bytes: wanted },
       });
     }
   }
-  for (const [i, src] of sources.entries()) {
+  for (const [i, it] of items.entries()) {
     const v = early.verdicts[i]!;
     if (!v.ok) {
-      noteVerdict(src, v, early.limitMb);
+      noteVerdict(it, v, early.limitMb);
       continue;
     }
     if (diskFull) {
-      skip(src, "disk");
+      skip(it, "disk");
       continue;
     }
     const id = newFileId();
     try {
-      await copyFiles(src.id, id, src.isImage);
-      staged.push({ src, id });
+      await copyFiles(it.src.id, id, it.src.isImage);
+      staged.push({ it, id });
     } catch (err) {
       await removeAttachmentFiles([id]);
       const noSpace = isNoSpaceError(err);
-      skip(src, isMissing(err) ? "missing" : noSpace ? "disk" : "error");
+      skip(it, isMissing(err) ? "missing" : noSpace ? "disk" : "error");
       // Disco lleno a media copia: los siguientes tampoco caben.
       if (noSpace) diskFull = true;
       if (!isMissing(err)) {
         logEvent({
           level: "error", category: "system", action: noSpace ? "attachments.noSpace" : "attachments.copyFailed",
-          message: `No se pudo copiar el adjunto «${src.originalName}» al duplicar la tarea: ${err instanceof Error ? err.message : String(err)}`,
-          details: { fromTaskId, toTaskId, attachmentId: src.id, bytes: src.size },
+          message: `No se pudo copiar el adjunto «${it.src.originalName}» ${purpose}: ${err instanceof Error ? err.message : String(err)}`,
+          details: { ...where(it), attachmentId: it.src.id, bytes: it.src.size },
         });
       }
     }
   }
-  if (!staged.length) return result;
+  if (!staged.length) return results;
 
-  let created: string[] = [];
+  let created = new Set<string>();
   try {
     const done = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
-      // La copia se ha podido borrar (o deshacer) mientras se copiaban los ficheros: entonces no se crea nada.
-      const alive = await tx.$queryRaw<unknown[]>`SELECT 1 FROM "Task" WHERE id = ${toTaskId} FOR KEY SHARE`;
-      if (!alive.length) return null;
-      const plan = await fitPlan(tx, toTaskId, staged.map((s) => s.src.size));
-      if (!plan) return null;
-      const rows: Prisma.TaskAttachmentCreateManyInput[] = [];
-      staged.forEach(({ src, id }, i) => {
+      // Una tarea de destino se ha podido borrar (o deshacer) mientras se copiaban los ficheros: a esa no se le crea nada.
+      const targets = [...new Set(staged.map((s) => s.it.toTaskId))];
+      const alive = new Set((await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Task" WHERE id = ANY(${targets}::text[]) FOR KEY SHARE`).map((r) => r.id));
+      const live = staged.filter((s) => alive.has(s.it.toTaskId));
+      if (!live.length) return null;
+      const plan = await fitPlan(tx, live.map((s) => ({ taskId: s.it.toTaskId, size: s.it.src.size })));
+      const data: Prisma.TaskAttachmentCreateManyInput[] = [];
+      live.forEach(({ it, id }, i) => {
         if (!plan.verdicts[i]!.ok) return;
         // Misma fecha y autor que la original: conserva el orden de los adjuntos (y de sus nombres en una release).
-        const { id: _from, ...data } = src;
-        rows.push({ ...data, id, taskId: toTaskId });
+        const { id: _from, ...fields } = it.src;
+        data.push({ ...fields, id, taskId: it.toTaskId });
       });
-      if (rows.length) await tx.taskAttachment.createMany({ data: rows });
-      return { ids: rows.map((r) => r.id!), plan };
+      if (data.length) await tx.taskAttachment.createMany({ data });
+      return { ids: data.map((r) => r.id!), live, plan };
     });
     if (done) {
-      created = done.ids;
-      staged.forEach(({ src }, i) => {
+      created = new Set(done.ids);
+      done.live.forEach(({ it }, i) => {
         const v = done.plan.verdicts[i]!;
-        if (!v.ok) noteVerdict(src, v, done.plan.limitMb);
+        if (!v.ok) noteVerdict(it, v, done.plan.limitMb);
       });
     }
   } catch (err) {
     logEvent({
       level: "error", category: "system", action: "attachments.copyFailed",
-      message: `No se pudieron guardar los adjuntos copiados al duplicar la tarea: ${err instanceof Error ? err.message : String(err)}`,
-      details: { fromTaskId, toTaskId },
+      message: `No se pudieron guardar los adjuntos copiados ${purpose}: ${err instanceof Error ? err.message : String(err)}`,
+      details: batchDetails(staged[0]!.it),
     });
-    for (const s of staged) skip(s.src, "error");
+    for (const s of staged) skip(s.it, "error");
   }
-  const kept = new Set(created);
-  for (const s of staged) if (kept.has(s.id)) result.ids.set(s.src.id, s.id);
-  const leftovers = staged.filter((s) => !kept.has(s.id)).map((s) => s.id);
+  for (const s of staged) {
+    if (!created.has(s.id)) continue;
+    results[s.it.req]!.ids.set(s.it.src.id, s.id);
+    results[s.it.req]!.copied++;
+  }
+  const leftovers = staged.filter((s) => !created.has(s.id)).map((s) => s.id);
   if (leftovers.length) await removeAttachmentFiles(leftovers);
-  result.copied = created.length;
-  return result;
+  return results;
 }
