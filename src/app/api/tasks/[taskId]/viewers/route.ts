@@ -1,5 +1,6 @@
 import { canAccessProject, projectOfTask } from "@/lib/access-cache";
 import { holdTaskView, leaveTask, notePresence, noteTaskViewer, releaseTaskView, taskViewersExcept } from "@/lib/presence";
+import { rateLimit } from "@/lib/rate-limit";
 import { isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -45,6 +46,8 @@ function openParam(req: Request): string {
 export async function GET(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   const found = await load(ctx);
   if (!found) return new Response((await getT())("No encontrado"), { status: 404 });
+  // Cada anuncio puede añadir una tarea o un montaje en memoria (con tope en presence.ts): también con tope de ritmo.
+  if (!rateLimit(`viewers:${found.user.id}`, 120, 60_000)) return new Response((await getT())("Demasiadas peticiones"), { status: 429, headers: { "Retry-After": "60" } });
   notePresence(found.projectId, found.user.id, found.user.name);
   const stream = streamParam(req);
   const held = stream !== null && holdTaskView(stream, found.user.id, found.taskId, found.projectId, openParam(req));

@@ -154,6 +154,10 @@ export function closePresenceStream(id: string, now = Date.now()): void {
 const earlyReleases = (globalThis as unknown as { __pzEarlyReleases?: Map<string, number> }).__pzEarlyReleases ??= new Map();
 const EARLY_RELEASE_MS = 10_000;
 
+/** Montajes del diálogo que se recuerdan por tarea y canal, y tareas abiertas por canal (el más antiguo sale). */
+export const MAX_OPENS_PER_TASK = 20;
+export const MAX_TASKS_PER_STREAM = 50;
+
 function sweepEarlyReleases(now: number): void {
   for (const [k, at] of earlyReleases) if (now - at > EARLY_RELEASE_MS) earlyReleases.delete(k);
 }
@@ -174,9 +178,15 @@ export function holdTaskView(streamId: string, userId: string, taskId: string, p
     if (now - released <= EARLY_RELEASE_MS) return true;
   }
   const opens = s.tasks.get(taskId);
-  if (opens) opens.add(openId);
-  else {
+  if (opens) {
+    opens.delete(openId); // al final: es el más reciente
+    opens.add(openId);
+    // Con tope: cada anuncio con un `open` nuevo añadía un montaje sin límite. Sale el más antiguo.
+    if (opens.size > MAX_OPENS_PER_TASK) opens.delete(opens.values().next().value!);
+  } else {
     s.tasks.set(taskId, new Set([openId]));
+    // Y con tope de tareas por canal: sale la anunciada hace más tiempo.
+    if (s.tasks.size > MAX_TASKS_PER_STREAM) s.tasks.delete(s.tasks.keys().next().value!);
     notifyPresence(projectId);
   }
   return true;
