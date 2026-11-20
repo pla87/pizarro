@@ -244,9 +244,17 @@ Guardas que conviene conocer:
   lista), Jira (JSON de la API y CSV), GitHub Issues, Asana (JSON y CSV) y CSV genéricos (reutiliza `parseTrello` y
   `parseCsvRows` de la importación de proyectos) y devuelve el mismo `TaskJsonInput` que el JSON propio: tipos, columnas
   por nombre, etiquetas, topes, permisos y deshacer son los de siempre. Lo llama `parseTasksText`.
-- Cachés en memoria con tope: `memo` y `boundedMemo` (`src/lib/memo.ts`, en `globalThis`). El calendario suscrito guarda
-  60 s el .ics y su ETag por enlace (`cachedFeedIcs`, `FEED_CACHE_MAX` = 200) pero comprueba el token en cada petición;
-  `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
+- Cachés en memoria con tope: `memo` y `boundedMemo` (`src/lib/memo.ts`, en `globalThis`). `boundedMemo` barre lo
+  caducado al leer (como mucho una vez por plazo) y admite un tope de bytes (`maxBytes` + `sizeOf`). El calendario suscrito
+  guarda 60 s el .ics (en bytes UTF-8) y su ETag por enlace (`cachedFeedIcs`, `FEED_CACHE_MAX` = 200,
+  `FEED_CACHE_MAX_BYTES` = 64 MB) pero comprueba el token en cada petición; `revokeProject`/`revokeUser` la vacían
+  (`clearBoundedMemo(FEED_CACHE_NAME)`) y la ruta manda `max-age` = lo que le queda en la memoria (≤ 60 s): un cambio se
+  ve como mucho al minuto. `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
+- Zona horaria: `appTimeZone()` (`src/lib/format.ts`) ignora una `APP_TIMEZONE` (o una zona guardada, o `data-tz`) que
+  Intl no acepte, con un aviso en el log; `envTimeZone()` es la variable solo si vale (lo que fija la zona en `/setup` y
+  Ajustes) y el diagnóstico la marca `invalid`.
+- «Hoy» a medianoche fuera del tablero: `useMidnightRefresh(today, refresh)` / `<MidnightRefresh today>`
+  (`src/components/useMidnightRefresh.ts`, regla pura `midnightStep` en `dates.ts`), en el Calendario y Mis tareas.
 - Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
   `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
   una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.

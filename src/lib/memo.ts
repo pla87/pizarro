@@ -45,20 +45,58 @@ interface BoundedMemo {
   delete(key: string): void;
   clear(): void;
   readonly size: number;
+  /** Bytes guardados según `sizeOf` (0 sin él). */
+  readonly bytes: number;
+}
+
+interface BoundedOptions {
+  /** Tope de bytes de todo lo guardado (con `sizeOf`): al pasarse, salen las menos usadas. */
+  maxBytes?: number;
+  /** Bytes que ocupa un valor ya resuelto. */
+  sizeOf?: (value: unknown) => number;
+}
+
+type SizedEntry = Entry & { bytes: number };
+type BoundedState = { entries: Map<string, SizedEntry>; bytes: number; sweptAt: number };
+
+const boundedStates = () => ((globalThis as unknown as { __pzBoundedMemos?: Map<string, BoundedState> }).__pzBoundedMemos ??= new Map());
+
+/** Vacía la memoria `name` de boundedMemo sin cargar el módulo que la usa (p. ej. al revocar accesos: revoke.ts). */
+export function clearBoundedMemo(name: string): void {
+  const st = boundedStates().get(name);
+  if (!st) return;
+  st.entries.clear();
+  st.bytes = 0;
 }
 
 /**
  * Memoria propia (no la de `memo`) para lo que tiene una clave por persona o enlace y podría crecer sin límite: guarda
- * como mucho `maxEntries` claves durante `ttlMs`; al pasarse, olvida la usada hace más tiempo. Por nombre en globalThis
- * (rutas y acciones pueden empaquetarse por separado y deben ver la misma).
+ * como mucho `maxEntries` claves durante `ttlMs`; al pasarse, olvida la usada hace más tiempo. Lo caducado sale al leer
+ * (un barrido como mucho cada `ttlMs`), no solo al llegar al tope: si no, quedaban retenidas hasta `maxEntries` respuestas
+ * ya inservibles. Con `maxBytes` y `sizeOf`, además, un tope de memoria. Por nombre en globalThis (rutas y acciones
+ * pueden empaquetarse por separado y deben ver la misma).
  */
-export function boundedMemo(name: string, ttlMs: number, maxEntries: number): BoundedMemo {
-  const all = ((globalThis as unknown as { __pzBoundedMemo?: Map<string, Map<string, Entry>> }).__pzBoundedMemo ??= new Map());
-  let map = all.get(name);
-  if (!map) all.set(name, (map = new Map()));
-  const entries = map;
+export function boundedMemo(name: string, ttlMs: number, maxEntries: number, opts: BoundedOptions = {}): BoundedMemo {
+  const all = boundedStates();
+  let state = all.get(name);
+  if (!state) all.set(name, (state = { entries: new Map(), bytes: 0, sweptAt: -Infinity }));
+  const st = state;
+  const { entries } = st;
+  const drop = (key: string) => {
+    const e = entries.get(key);
+    if (!e) return;
+    st.bytes -= e.bytes;
+    entries.delete(key);
+  };
+  const dropOldest = () => drop(entries.keys().next().value!);
+  const sweep = (now: number) => {
+    if (now - st.sweptAt < ttlMs && now >= st.sweptAt) return;
+    st.sweptAt = now;
+    for (const [key, e] of entries) if (now - e.at >= ttlMs) drop(key);
+  };
   return {
     get<T>(key: string, fn: () => Promise<T>, now: number = Date.now()): Promise<T> {
+      sweep(now);
       const hit = entries.get(key);
       if (hit && now - hit.at < ttlMs && now >= hit.at) {
         // Map recuerda el orden de inserción: volver a ponerla al final la marca como la más reciente.
@@ -67,19 +105,31 @@ export function boundedMemo(name: string, ttlMs: number, maxEntries: number): Bo
         return hit.value as Promise<T>;
       }
       const value = fn();
-      const entry: Entry = { at: now, value };
-      entries.delete(key);
+      const entry: SizedEntry = { at: now, value, bytes: 0 };
+      drop(key);
       entries.set(key, entry);
-      while (entries.size > maxEntries) entries.delete(entries.keys().next().value!);
-      value.catch(() => {
-        if (entries.get(key) === entry) entries.delete(key);
-      });
+      while (entries.size > maxEntries) dropOldest();
+      value.then(
+        (v) => {
+          if (!opts.sizeOf || entries.get(key) !== entry) return;
+          entry.bytes = opts.sizeOf(v);
+          st.bytes += entry.bytes;
+          // Las menos usadas primero; si ella sola pasa del tope, tampoco se guarda.
+          while (opts.maxBytes !== undefined && st.bytes > opts.maxBytes && entries.size > 0) dropOldest();
+        },
+        () => {
+          if (entries.get(key) === entry) drop(key);
+        },
+      );
       return value;
     },
-    delete: (key) => void entries.delete(key),
-    clear: () => entries.clear(),
+    delete: (key) => drop(key),
+    clear: () => clearBoundedMemo(name),
     get size() {
       return entries.size;
+    },
+    get bytes() {
+      return st.bytes;
     },
   };
 }

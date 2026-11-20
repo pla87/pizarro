@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { DEFAULT_TIME_ZONE } from "@/lib/format";
+import { DEFAULT_TIME_ZONE, envTimeZone } from "@/lib/format";
 import { emailEnabled } from "@/lib/mail";
 import { isSetupPending } from "@/lib/setup";
 import { setupCodeSource } from "@/lib/setup-core";
@@ -14,6 +14,7 @@ export default async function SetupPage() {
   if (!(await isSetupPending(db))) notFound();
   const zones = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE];
   if (!zones.includes("UTC")) zones.push("UTC");
-  const envTz = process.env.APP_TIMEZONE || null;
+  // Una APP_TIMEZONE mal escrita no fija la zona (se ignora): si no, el asistente enviaría una zona no válida.
+  const envTz = envTimeZone();
   return <SetupWizard zones={zones} defaultZone={envTz ?? DEFAULT_TIME_ZONE} zoneLocked={Boolean(envTz)} smtp={emailEnabled()} codeSource={setupCodeSource()} />;
 }

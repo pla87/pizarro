@@ -72,16 +72,6 @@ export function parseStoredCode(raw: string | null | undefined): StoredSetupCode
   return null;
 }
 
-/** Zona horaria IANA válida para Intl. */
-export function validTimeZone(tz: string): boolean {
-  try {
-    new Intl.DateTimeFormat("es", { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Email del asistente (administrador y email de prueba), con el mismo validador que el resto de la app (v.email): sin
  * comillas, `<`, `>`, `;` ni espacios en la parte local, que en una cabecera To podrían colar otros destinatarios.

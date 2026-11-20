@@ -3,8 +3,7 @@
 // (APP_TIMEZONE gana al valor guardado). Se cambian después en Administración → Ajustes → Instalación.
 import { db } from "./db";
 import { AppError } from "./errors";
-import { INSTANCE_TZ_GLOBAL } from "./format";
-import { validTimeZone } from "./setup-core";
+import { envTimeZone, INSTANCE_TZ_GLOBAL, validTimeZone } from "./format";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, parseInstance, type InstanceSettings } from "./instance-core";
 
 export { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY } from "./instance-core";
@@ -49,7 +48,8 @@ export async function saveInstanceSettings(
   const orgName = String(input.orgName ?? "").trim();
   if (!orgName || orgName.length > 80) throw new AppError("Escribe el nombre de la organización (hasta 80 caracteres).");
   if (input.locale !== "es" && input.locale !== "en") throw new AppError("Idioma no válido.");
-  const zoneLocked = Boolean(env.APP_TIMEZONE);
+  // Una APP_TIMEZONE mal escrita no cuenta (appTimeZone la ignora): la zona se puede elegir aquí.
+  const zoneLocked = envTimeZone(env) !== null;
   if (!zoneLocked && !validTimeZone(String(input.timeZone ?? ""))) throw new AppError("Zona horaria no válida.");
   const keys = [INSTANCE_ORG_KEY, INSTANCE_LOCALE_KEY, INSTANCE_TZ_KEY];
   const before = parseInstance(await db.appState.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } }));

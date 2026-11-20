@@ -1,8 +1,9 @@
 "use client";
 
 import { CalendarPlus, Check, Copy, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "@/actions/calendar-feed";
+import { useCallback, useRef, useState } from "react";
+import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "@/actions/calendar-feed";
+import { actionThrowResult } from "@/lib/stale-action";
 import { useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
@@ -22,16 +23,30 @@ const btn = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate
  * Suscripción al calendario (.ics vivo) desde Google/Apple/Outlook. El enlace solo se ve al generarlo (en la BD queda su
  * HMAC): para volver a verlo hay que regenerarlo, lo que invalida el anterior.
  */
-export function CalendarSubscribe({ initialActive, initialScope, className }: { initialActive: boolean; initialScope: Scope; className?: string }) {
+export function CalendarSubscribe({ initialActive, initialScope, className }: { initialActive: boolean; initialScope: Scope | null; className?: string }) {
   const t = useT();
   const toast = useToast();
   const [active, setActive] = useState(initialActive);
-  const [scope, setScope] = useState<Scope>(initialScope);
+  // null: sin suscripción y aún sin saber qué proponer; se pregunta al servidor al abrir el menú (no en cada visita).
+  const [scope, setScope] = useState<Scope | null>(initialScope);
+  const asked = useRef(false);
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useActionTransition();
 
-  const generate = (next: Scope = scope) =>
+  const onOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open || scope !== null || asked.current) return;
+      asked.current = true;
+      void suggestedCalendarFeedScope()
+        .catch((e) => actionThrowResult(e, t))
+        // Si no se puede saber (sin conexión…), «Todas»: con «Solo las mías» el calendario podría salir vacío.
+        .then((res) => setScope((cur) => cur ?? (res.ok ? res.data : "ALL")));
+    },
+    [scope, t],
+  );
+
+  const generate = (next: Scope = scope ?? "ALL") =>
     start(async () => {
       const res = await createCalendarFeed(next);
       if (!res.ok) return toast(res.error, "error");
@@ -41,12 +56,13 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
     });
 
   const changeScope = (next: Scope) => {
+    const prev = scope;
     setScope(next);
     if (!active) return;
     start(async () => {
       const res = await setCalendarFeedScope(next);
       if (!res.ok) {
-        setScope(scope);
+        setScope(prev);
         toast(res.error, "error");
       }
     });
@@ -77,6 +93,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       kind="dialog"
       label={t("Suscribirse al calendario")}
       align="end"
+      onOpenChange={onOpenChange}
       panelClassName="w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
       trigger={({ props }) => (
         <button type="button" {...props} className={cn("inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", className)}>
@@ -89,25 +106,32 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       <div className="space-y-3 text-sm">
         <p className="text-slate-600 dark:text-slate-300">{t("Tus fechas límite y entregables en Google Calendar, Apple Calendar u Outlook, siempre al día.")}</p>
 
-        <fieldset>
-          <legend className="mb-1 font-medium">{t("Qué incluye")}</legend>
-          {/* Cada opción explica qué entra: con «Solo las mías», las tareas sin responsable (habituales en casa) no salen. */}
-          <label className="flex cursor-pointer items-start gap-2 py-0.5">
-            <input type="radio" name="feed-scope" checked={scope === "MINE"} onChange={() => changeScope("MINE")} aria-describedby="feed-scope-mine" className="mt-1 accent-brand-600" />
-            <span>
-              {t("Solo las tareas asignadas a mí")}
-              <span id="feed-scope-mine" className="block text-xs text-slate-500">{t("Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.")}</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2 py-0.5">
-            <input type="radio" name="feed-scope" checked={scope === "ALL"} onChange={() => changeScope("ALL")} aria-describedby="feed-scope-all" className="mt-1 accent-brand-600" />
-            <span>
-              {t("Todas las de mis proyectos")}
-              <span id="feed-scope-all" className="block text-xs text-slate-500">{t("Tareas y entregables, con o sin responsable.")}</span>
-            </span>
-          </label>
-          <p className="mt-1 text-xs text-slate-500">{t("Solo tareas con fecha límite y sin terminar.")}</p>
-        </fieldset>
+        {scope === null ? (
+          <p className="flex items-center gap-2 text-slate-500" role="status">
+            <Loader2 size={14} className="animate-spin" aria-hidden />
+            {t("Cargando…")}
+          </p>
+        ) : (
+          <fieldset>
+            <legend className="mb-1 font-medium">{t("Qué incluye")}</legend>
+            {/* Cada opción explica qué entra: con «Solo las mías», las tareas sin responsable (habituales en casa) no salen. */}
+            <label className="flex cursor-pointer items-start gap-2 py-0.5">
+              <input type="radio" name="feed-scope" checked={scope === "MINE"} onChange={() => changeScope("MINE")} aria-describedby="feed-scope-mine" className="mt-1 accent-brand-600" />
+              <span>
+                {t("Solo las tareas asignadas a mí")}
+                <span id="feed-scope-mine" className="block text-xs text-slate-500">{t("Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.")}</span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 py-0.5">
+              <input type="radio" name="feed-scope" checked={scope === "ALL"} onChange={() => changeScope("ALL")} aria-describedby="feed-scope-all" className="mt-1 accent-brand-600" />
+              <span>
+                {t("Todas las de mis proyectos")}
+                <span id="feed-scope-all" className="block text-xs text-slate-500">{t("Tareas y entregables, con o sin responsable.")}</span>
+              </span>
+            </label>
+            <p className="mt-1 text-xs text-slate-500">{t("Solo tareas con fecha límite y sin terminar.")}</p>
+          </fieldset>
+        )}
 
         {links ? (
           <div className="space-y-2">
@@ -136,7 +160,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <button type="button" onClick={() => generate()} disabled={pending} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
+          <button type="button" onClick={() => generate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
             {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : active ? <RefreshCw size={14} aria-hidden /> : <CalendarPlus size={14} aria-hidden />}
             {active ? t("Regenerar enlace") : t("Generar enlace de suscripción")}
           </button>

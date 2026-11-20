@@ -1,6 +1,8 @@
 import "server-only";
 import { forgetProjectAccess, forgetUserAccess } from "./access-cache";
 import { forgetProjectAttachments } from "./attachment-cache";
+import { FEED_CACHE_NAME } from "./calendar-feed-core";
+import { clearBoundedMemo } from "./memo";
 import { dropProjectPresence, dropUserPresence, leavePresence } from "./presence";
 import { revokeProjectStreams, revokeSessionStreams, revokeUserStreams } from "./realtime";
 
@@ -13,6 +15,7 @@ export function revokeUser(userId: string): void {
   forgetUserAccess(userId);
   revokeUserStreams(userId);
   dropUserPresence(userId);
+  forgetCalendarFeeds();
 }
 
 /**
@@ -30,4 +33,14 @@ export function revokeProject(projectId: string): void {
   forgetProjectAttachments(projectId);
   revokeProjectStreams(projectId);
   dropProjectPresence(projectId);
+  forgetCalendarFeeds();
+}
+
+/**
+ * Los calendarios suscritos ya hechos (se guardan un minuto, calendar-feed.ts) de todos: un .ics no dice de qué proyectos
+ * sale, así que se vacía entera. Si no, quien pierde el acceso seguía viendo en su calendario hasta un minuto las tareas
+ * de un proyecto que ya no puede ver. Revocar es raro; rehacer los calendarios, barato.
+ */
+function forgetCalendarFeeds(): void {
+  clearBoundedMemo(FEED_CACHE_NAME);
 }

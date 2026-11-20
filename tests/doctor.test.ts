@@ -33,8 +33,15 @@ describe("presencia de variables", () => {
     assert.equal(p.TOKEN_SECRET, "invalid");
     assert.equal(p.BACKUP_KEY, "invalid");
     assert.equal(p.OTHER_UNDOCUMENTED, undefined);
+    assert.equal(p.APP_TIMEZONE, "unset");
     const json = JSON.stringify(p);
     for (const v of Object.values(env)) if (v.length > 4) assert.ok(!json.includes(v), v);
+  });
+
+  test("APP_TIMEZONE mal escrita: «invalid» (la app la ignora); bien escrita: «set»", () => {
+    assert.equal(envPresence({ APP_TIMEZONE: "Europe/Madird" }).APP_TIMEZONE, "invalid");
+    assert.equal(envPresence({ APP_TIMEZONE: "Europe/Madrid" }).APP_TIMEZONE, "set");
+    assert.equal(envPresence({ APP_TIMEZONE: "UTC" }).APP_TIMEZONE, "set");
   });
 
   test("la lista cubre todas las variables de la app documentadas en .env.example, deploy/.env.example y el README", () => {

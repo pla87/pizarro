@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { runAction } from "@/lib/action";
+import { defaultFeedScope } from "@/lib/calendar-feed";
 import { feedHttpsUrl, feedWebcalUrl, googleSubscribeUrl, hashFeedToken, newFeedToken } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
@@ -27,6 +28,18 @@ export async function createCalendarFeed(scope: "MINE" | "ALL") {
     const data = { tokenHash: hashFeedToken(token), scope: scopeSchema.parse(scope), rotatedAt: new Date(), lastUsedAt: null };
     await db.calendarFeed.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
     return links(token);
+  });
+}
+
+/**
+ * Qué opción marcar en «Suscribirse» para quien aún no tiene suscripción (defaultFeedScope: dos recuentos de tareas). Se
+ * pide al abrir el menú: antes se calculaba en cada visita al Calendario aunque casi nadie lo abriera.
+ */
+export async function suggestedCalendarFeedScope() {
+  return runAction({ name: "calendarFeed.suggestedScope" }, async () => {
+    const user = await requireUser();
+    const feed = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } });
+    return feed?.scope ?? (await defaultFeedScope(user));
   });
 }
 

@@ -4,7 +4,7 @@ import { getT } from "@/i18n/server";
 import { storageAdminView } from "@/lib/storage-stats";
 import { getInstanceSettings } from "@/lib/instance";
 import { getAppIcon } from "@/lib/app-icon";
-import { appTimeZone, DEFAULT_TIME_ZONE } from "@/lib/format";
+import { appTimeZone, DEFAULT_TIME_ZONE, envTimeZone } from "@/lib/format";
 import { SettingsAdmin } from "./SettingsAdmin";
 
 export async function generateMetadata() {
@@ -17,8 +17,8 @@ export async function generateMetadata() {
 export default async function SettingsPage() {
   await requireAdminPage();
   const [maxComments, storage, instance, appIcon] = await Promise.all([getMaxCommentsPerTask(), storageAdminView(), getInstanceSettings(), getAppIcon()]);
-  // Con APP_TIMEZONE manda la variable: solo se muestra la zona fija, sin la lista de ~400 zonas.
-  const zoneLocked = Boolean(process.env.APP_TIMEZONE);
+  // Con APP_TIMEZONE (válida) manda la variable: solo se muestra la zona fija, sin la lista de ~400 zonas.
+  const zoneLocked = envTimeZone() !== null;
   const zones = zoneLocked ? [] : typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE];
   if (!zoneLocked && !zones.includes("UTC")) zones.push("UTC");
   const installation = { orgName: instance.orgName, locale: instance.locale, timeZone: zoneLocked ? appTimeZone() : instance.timeZone || appTimeZone(), zoneLocked, zones };
