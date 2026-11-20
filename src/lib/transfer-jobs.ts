@@ -39,10 +39,17 @@ export const MAX_JOBS_PER_USER = 2;
 const TRANSFER_TTL_MS = 24 * 60 * 60 * 1000;
 /** Las filas terminadas se borran del todo pasado este tiempo. */
 const ROW_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
-/** Un trabajo RUNNING sin escribir nada desde hace esto se da por muerto (el trabajador late cada HEARTBEAT_MS). */
+/**
+ * Un trabajo RUNNING sin escribir nada desde hace esto se da por muerto (el trabajador late cada HEARTBEAT_MS). Va
+ * ligado al latido, no al barrido: con 40 s, el primer barrido tras un reinicio (a los 60 s) ya lo retoma.
+ */
 const STALE_MS = 40_000;
 const HEARTBEAT_MS = 10_000;
-const SWEEP_EVERY_MS = 20_000;
+/**
+ * Cada cuánto se buscan trabajos muertos y restos de importaciones. Encolar no espera a esto (despierta al trabajador
+ * al momento, kickTransferWorker); solo marca lo que tarda en retomarse un trabajo de un proceso que murió.
+ */
+const SWEEP_EVERY_MS = 60_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
 const MAX_ATTEMPTS = 2;
 const INTERRUPTED = "Interrumpido por un reinicio";

@@ -521,7 +521,7 @@ describe("trabajador en segundo plano", () => {
       status = (await db.projectTransferJob.findUniqueOrThrow({ where: { id: job.id } })).status;
     }
     assert.equal(status, "DONE");
-    // Un trabajo nuevo también se atiende.
+    // Un trabajo nuevo también se atiende, mucho antes del barrido de 60 s: encolar despierta al trabajador.
     const second = (await exportJob(u.id)).job;
     const end = Date.now() + 15_000;
     while (Date.now() < end && (await db.projectTransferJob.findUniqueOrThrow({ where: { id: second.id } })).status !== "DONE") await new Promise((r) => setTimeout(r, 100));

@@ -1,5 +1,6 @@
 import { appTimeZone } from "@/lib/format";
-import { readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { z } from "zod";
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { AI_PLAN_ZIP_FOLDER, aiPlanZipRoot } from "@/lib/ai-plan";
 import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, sizedZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -72,7 +73,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Todas las tareas deben existir en este proyecto y ser visibles.
   if (tasks.length !== ids.size) return new Response(t("No encontrado"), { status: 404 });
   const byId = new Map(tasks.map((t) => [t.id, t]));
-  // Cada paquete se arma en memoria hasta el tope del proyecto; si no cabe todo, salen varios.
+  // Cada paquete pesa como mucho el tope del proyecto; si no cabe todo, salen varios.
   const { releaseZipMaxMb } = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { releaseZipMaxMb: true } });
 
   const candidates: (Omit<ZipEntry, "size"> & { file: string })[] = [];
@@ -81,7 +82,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     const names = item.folder !== undefined ? plainAttachmentFileNames(attachments).map((n) => `${item.folder}/${n}`) : attachmentFileNames(item.code!, attachments);
     for (const [i, a] of attachments.entries()) {
       const file = attachmentPath(a.id, a.isImage ? "full" : "file");
-      candidates.push({ id: a.id, name: names[i]!, file, read: () => readFile(file) });
+      candidates.push({ id: a.id, name: names[i]!, file, open: () => createReadStream(file) });
     }
   }
   // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
@@ -93,31 +94,32 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   if (conflict) return conflict;
   const pkg = packages[mode.part - 1];
   if (!pkg) return new Response(t("No encontrado"), { status: 404 });
-  // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).
+  // Uno a la vez por persona y pocos en todo el servidor (cada paquete se lee dos veces del disco y se envía en flujo).
   const releaseSlot = acquireZipSlot(user.id);
   if (!releaseSlot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
-  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de armarlo.
-  let built: Awaited<ReturnType<typeof buildZipPart>>;
+  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de prepararlo.
+  // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria.
+  let zipPart: Awaited<ReturnType<typeof prepareZipPart>>;
   try {
-    built = await buildZipPart(entries, pkg);
+    zipPart = await prepareZipPart(entries, pkg);
   } catch (err) {
     releaseSlot();
     throw err;
   }
-  const { zip, files: fileCount } = built;
+  const fileCount = zipPart.entries.length;
   if (fileCount === 0) {
     releaseSlot();
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
   logEvent({
-    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
+    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zipPart.bytes / 1024)} KB)`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
-    durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
+    durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });
-  return new Response(zipBodyStream(zip, releaseSlot, { signal: req.signal }), {
+  return new Response(zipPartBody(zipPart, releaseSlot, { signal: req.signal }), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Length": String(zip.length),
+      "Content-Length": String(zipPart.bytes),
       "Content-Disposition": `attachment; filename="${(planZip ? aiPlanZipName : releaseZipName)({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale())}"`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),
