@@ -1213,7 +1213,9 @@ export async function reorderSubtask(subtaskId: string, prevId: string | null, n
     const next = await neighbour(nextId);
     let position = positionBetween(prev, next);
     if (needsRebalance(prev, next)) {
-      // Posiciones agotadas (muy raro): se renumera la lista y se recalcula.
+      // Posiciones agotadas (muy raro): se renumera la lista y se recalcula. Cambian las posiciones de todas, no solo la
+      // devuelta: la propia pestaña también se refresca (la acción va en ECHO_SAFE_ACTIONS).
+      needOwnRefresh();
       const all = await db.subtask.findMany({ where: { taskId: sub.taskId }, orderBy: { position: "asc" }, select: { id: true } });
       await db.$transaction(all.map((s, i) => db.subtask.update({ where: { id: s.id }, data: { position: (i + 1) * POSITION_STEP } })));
       const fresh = async (id: string | null) => (id ? (await db.subtask.findUnique({ where: { id }, select: { position: true } }))?.position ?? null : null);

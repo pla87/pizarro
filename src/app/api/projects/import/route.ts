@@ -97,7 +97,12 @@ async function handlePost(req: Request): Promise<Response> {
     // Sin Content-Length se cuenta con el máximo admitido.
     await assertDiskRoom(uploadDir(), Math.ceil((length ?? max) * 1.5));
     release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
-    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
+    if (!release) {
+      // El navegador se fue mientras esperaba turno («Descartar cambios», pestaña cerrada): nadie lee la respuesta y no es
+      // un servidor saturado, así que no se anota como fallo.
+      if (req.signal.aborted) return new Response(null, { status: 499 });
+      throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
+    }
 
     const dir = path.join(/*turbopackIgnore: true*/ uploadDir(), "imports");
     await mkdir(dir, { recursive: true });

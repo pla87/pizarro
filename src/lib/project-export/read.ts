@@ -11,10 +11,11 @@ const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 const MAX_PROJECT_JSON_BYTES = 64 * 1024 * 1024;
 const FILE_ENTRY = /^files\/([0-9a-f]{64})$/;
 /**
- * Cuánto puede inflarse un fichero de files/ respecto a lo que ocupa comprimido. Pizarro los guarda sin comprimir; un
- * ZIP vuelto a comprimir con otra herramienta rara vez pasa de esto, y una bomba (×1000 hasta 8 GB) sí.
+ * Cuánto puede inflarse un fichero de files/ respecto a lo que ocupa comprimido. Pizarro los guarda sin comprimir, pero
+ * un ZIP vuelto a comprimir con otra herramienta (Finder, 7-Zip) deja un .log, .csv o .bmp en ×10–×50: con ×100 esos se
+ * aceptan y una bomba (×1000 hasta 8 GB) no. Lo demás lo frenan el tope global del lector y la reserva de disco real.
  */
-const FILE_MAX_RATIO = 10;
+const FILE_MAX_RATIO = 100;
 
 export interface ProjectArchive {
   zip: ZipFile;
