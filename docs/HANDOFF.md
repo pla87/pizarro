@@ -92,11 +92,19 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador: todas las suites de `e2e/` (QA, tablero, pegado, las de cada ronda `rNN-*` y las de las cazas de
-bugs `bhNN*`). `scripts/e2e-all.sh` las lanza todas seguidas contra la build de producción, cada una con su servidor
-recién arrancado (base `pz_qa`; instrucciones en su cabecera); `SUITES="board-e2e r53-json-e2e" scripts/e2e-all.sh`
-lanza solo esas. La de instalación va aparte. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md`
-(las cifras solo se apuntan allí). Si cambias el rol o la
+Pruebas en navegador (suites de `e2e/`, nombradas por tema: `tablero-*`, `importar-*`, `plantillas-*`…), contra la
+build de producción con `scripts/e2e-all.sh` (cada suite con su servidor recién arrancado; base `pz_qa` o `E2E_DB`,
+puerto 3231 o `E2E_PORT`; instrucciones en su cabecera):
+
+- **En cada ronda, antes de fusionar:** las afectadas, `AFFECTED=1 scripts/e2e-all.sh` (la QA siempre, y las que
+  cubren los ficheros cambiados respecto a `origin/main` según `e2e/suites.json`; `DRY_RUN=1` dice cuáles y por qué).
+- **Antes de publicar una versión:** todas, `scripts/e2e-all.sh` (la de instalación incluida, al final).
+- `SUITES="board-e2e importar-json-detalle-e2e" scripts/e2e-all.sh` lanza solo esas.
+
+Termina con `Total: N/M comprobaciones OK`. Una suite nueva va con el prefijo de su tema y con su entrada en
+`e2e/suites.json` (lo comprueba `tests/e2e-affected.test.ts`); si una pieza nueva de la app la prueba una suite, añade
+su ruta a esa entrada. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md` (las cifras solo se
+apuntan allí). Si cambias el rol o la
 etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
 tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
 instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
@@ -205,7 +213,7 @@ Guardas que conviene conocer:
   lugar de `useTransition()`. Si la acción lanza (sin red, servidor caído, versión nueva) muestra «Sin conexión: no se ha
   guardado» o el aviso que toque (en un aviso emergente o, con `onError`, en el formulario) en vez de la pantalla «Algo ha
   fallado». Una llamada suelta (`await accion()` fuera de una transición) lleva `.catch((e) => actionThrowResult(e, t))`;
-  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/r49-infra-e2e.mjs`.
+  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/red-formularios-e2e.mjs`.
 - Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
   `parseTasksText` lineal, `strictJsonFormat` para Ctrl+V), resolución de nombres común a pegar e importar en
   `src/lib/task-json-resolve.ts`, importación en `src/lib/task-import.ts` servida por la ruta
@@ -252,7 +260,10 @@ llevan enlaces de sesión ni nombres de modelos.
    etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público. El mismo
    workflow mueve la rama `stable` al commit publicado (job «Rama stable», el único con permiso para escribir en el
    repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
-   GitHub, hay que permitir que la mueva GitHub Actions. La imagen se construye con `OFFICIAL_BUILD=1` y
+   GitHub, hay que permitir que la mueva GitHub Actions. Cada arquitectura de la imagen se construye en su máquina
+   nativa de GitHub (job «Imagen amd64» en `ubuntu-latest` e «Imagen arm64» en `ubuntu-24.04-arm`, sin emular con QEMU),
+   se sube a GHCR solo por su digest y el job «Imagen Docker» las une con `docker buildx imagetools create` en
+   `:X.Y.Z` (y `:latest`) y comprueba que la imagen publicada tiene las dos. La imagen se construye con `OFFICIAL_BUILD=1` y
    `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error» (en Railway, también
    si el código viene del repositorio oficial y de la rama `stable`; lógica en `src/lib/bug-report-core.ts`). El
    botón abre el formulario `.github/ISSUE_TEMPLATE/bug_report.yml` con datos técnicos rellenos (versión, commit,
