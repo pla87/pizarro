@@ -3,6 +3,22 @@
 Documento para retomar el desarrollo de Pizarro en una sesión nueva sin perder el método de trabajo. Léelo entero
 antes de empezar. No contiene datos personales: el repositorio es público y debe seguir sin ellos.
 
+## 0. Arranque de una sesión nueva
+
+1. Lee este documento entero, `docs/MANUAL.md` por encima y `e2e/README.md`.
+2. Rama de trabajo: la que indique la sesión, igual que `main` (`git fetch origin main && git checkout -B <rama> origin/main`).
+3. Entorno de la nube (si no está hecho): `pg_ctlcluster 16 main start`; si `postgres` no tiene contraseña,
+   `su postgres -c "psql -c \"alter user postgres password 'postgres'\""`; `.env` a partir de `.env.example` con
+   `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pizarro"`, un `SESSION_SECRET` aleatorio,
+   `APP_URL="http://localhost:3000"`, `UPLOAD_DIR="./uploads"`, `SEED_ADMIN_EMAIL="admin@example.com"`,
+   `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y `SEED_ADMIN_NAME="Administrador"`; `npm ci` (comprueba que existe
+   `node_modules/@next/swc-linux-x64-gnu`, ver §6), `createdb pizarro` y `npx prisma migrate deploy`.
+4. Añade `.claude/` a `.git/info/exclude` (ahí van los worktrees de los agentes).
+5. Los ZIP de capturas del propietario se extraen en una carpeta temporal fuera del repositorio. Las capturas y las
+   auditorías que manda pueden llevar nombres, dominios y datos de su instalación: no se suben ni se copian a los briefs.
+6. Antes de cada fusión en `main`, busca en el diff, en los PDF y en los mensajes de commit los términos personales que
+   indique el propietario (no se apuntan aquí: el repositorio es público).
+
 ## 1. Qué es Pizarro
 
 Kanban ligero con generador de release notes, documentación del proyecto, calendario, columnas especiales,
@@ -270,6 +286,18 @@ Guardas que conviene conocer:
   `same-site`, un `Origin` ajeno y la ausencia de ambas cabeceras, y guardar no tiene efectos: la tarea y sus adjuntos solo
   se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
   la dirección de vuelta del acceso).
+- Compartir con Pizarro (ronda 57): `share_target` del manifiesto → `POST /api/share` (fuera del proxy; acepta
+  `Sec-Fetch-Site: none|same-origin` o un Origin propio) guarda lo compartido en `UPLOAD_DIR/shared/<usuario>/<envío>/`
+  (`src/lib/share-inbox.ts`, 30 min, 3 envíos por persona, fuera de las copias, lo limpia la tarea `sharedFiles`) y
+  redirige a `/share`, que abre el «Nueva tarea» normal. Guardar no tiene efectos: nada se crea hasta «Crear tarea».
+- Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
+  Telegram y WhatsApp). Las anclas antiguas (`#avisos-email`, `#acceso-google`, `#mensajeria`) redirigen. Las guías de
+  `docs/guias/` y los textos de la app dicen «Administración → Integraciones».
+- Menús: `MenuSub` (`src/components/ui/Menu.tsx`) es el submenú accesible (se abre dentro del mismo panel; → o Intro,
+  ← o Escape). Lo usa el rol de la columna.
+- Agentes en paralelo: cada uno con su base (`pz_<nombre>`), su puerto y su carpeta de logs (`OUT=` en
+  `scripts/e2e-all.sh`; por defecto todas escriben en `/tmp/pizarro-e2e`). `npm run test:db` necesita
+  `APP_URL="http://localhost:3000"` en el `.env` (dos pruebas comprueban esa URL) y sus bases se llaman `pizarro_test_*`.
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
@@ -415,36 +443,38 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.60.0):**
+**Preguntas abiertas al propietario (tras la v1.61.0):**
 
-De las auditorías del propietario (escritorio y móvil, v1.58.0) quedan para decidir:
-- Crear tareas: hay muchas entradas (Nueva tarea, flotantes +/✨, «+» de columna, Varias tareas, Importar, Añadir en
-  fijas). ¿Juntar «Varias tareas» e «Importar» en un desplegable de «Nueva tarea»?
-- Dos selectores de proyecto (barra lateral y cabecera): ¿quitar uno?
-- Menú «⋯» de columna con unos 30 elementos: ¿roles en un submenú «Rol de la columna ›»?
-- Tipo preseleccionado en una tarea nueva: ¿recordar el último usado o no preseleccionar?
-- «Nueva tarea» y el detalle no se parecen (editor, rejilla, color): ¿unificarlos?
-- Botones peligrosos junto a los de uso frecuente (Borrar release/adjuntos en Releases, papelera siempre visible en
-  Documentación): ¿llevarlos a un menú «⋯»?
-- Informe PDF: las tareas fijas cuentan como pendientes y bajan el % de avance: ¿excluirlas o ponerlas aparte?
-- *Administración → Ajustes* muy larga: ¿subpestañas? (y ocultar el selector de zona con `APP_TIMEZONE` fijada).
-- Copias: los adjuntos solo están en el destino externo si `BACKUP_LOCAL_FILES=0`: ¿segunda copia o versionado del bucket?
-- Ctrl+Z solo funciona en el tablero (no en Documentación, Releases ni Ajustes) y el historial guarda 10 acciones: ¿ampliar
-  el deshacer a esas pantallas o subir el límite?
-- Móvil: avisos arriba tapando la cabecera (¿abajo?), lista sin tipo/subtareas/adjuntos, comentarios no editables,
-  archivadas que no se pueden abrir para leer, «Guardar» y «Cancelar» con guardado automático (¿«Revertir cambios»?),
-  y «Compartir → Pizarro» desde el móvil (`share_target`) para crear una tarea con una captura.
-- Releases y plantillas de *Mi perfil* pintan el Markdown en el navegador (~40 KB): ¿pasarlo al servidor?
+- «Nueva tarea» y el detalle no se parecen (en «Nueva tarea» la descripción es un editor siempre abierto y los campos van
+  en rejilla; en el detalle, clic para editar y barra lateral; el color es desplegable en uno y paleta en otro): ¿unificar
+  el aspecto? El propietario pidió que se lo expliquen mejor (se le explicó en el informe de la ronda 57).
+- Botones de borrar a un menú «⋯»: en *Releases*, «Borrar release» y «Borrar adjuntos» están en la misma fila que
+  Copiar/.md/.txt; en *Documentación*, la papelera de cada fichero siempre visible. Propuesta: moverlos a un «⋯» para
+  evitar pulsarlos sin querer. El propietario pidió que se lo expliquen mejor (explicado en el informe de la ronda 57).
+- Segunda copia de los adjuntos: con `BACKUP_LOCAL_FILES=0` los ficheros solo están en el destino externo (R2). El
+  propietario preguntó «¿para qué?»: protege si el bucket o la cuenta fallan o se comprometen (versionado o bloqueo de
+  objetos en el bucket, o copia local de ficheros). Pendiente de que decida.
+- Opcionales técnicos: `MALLOC_ARENA_MAX=2` en el `Dockerfile` (la memoria con imágenes baja un ~43 %); un workflow
+  que pase lint, tsc y pruebas unitarias en cada PR (también las de Dependabot); no precargar diálogos con
+  `navigator.connection.saveData`; que el nombre accesible de las tarjetas incluya tipo y fecha (axe
+  `label-content-name-mismatch`); copiar la imagen de la descripción de las repeticiones después de responder (`after()`).
+- Informe semanal: hoy no se repite en la misma semana (lunes a domingo): si se envía el lunes y se cambia al viernes, ese
+  viernes no llega. ¿Mejor «no repetir si se envió hace menos de unos 3 días»?
+- Coste de almacenamiento: cada aparición de una tarea repetida copia las imágenes que cita su descripción (cuentan para la
+  cuota).
+- Retirar más adelante (propuestas): el envío directo del ZIP por POST sin vale (`release-attachments` sin `?plan=1`, solo
+  lo usa una prueba) y la compatibilidad de `/viewers` sin `?open=` (pestañas anteriores a la v1.60).
+- Detrás de Cloudflare (la instalación del propietario lo está, por el DNS con proxy): conviene desactivar *Scrape
+  Shield → Email Address Obfuscation*; Pizarro ya protege sus emails con `EmailSafe`.
+- React #185 visto una vez en la ronda 55: no se ha vuelto a ver.
 
-De esta ronda:
-- Sondeo de respaldo de la presencia (`/api/projects/[id]/presence` y `/viewers` sin `stream`): se mantiene para cuando
-  no hay canal en vivo; ¿retirarlo más adelante o espaciarlo a 60 s?
-- Número de release retirado (`release-number:<proyecto>` en `AppState`): no viaja al exportar/importar un proyecto.
-- Alt+P mientras se renombra una tarjeta (F2) abre el selector y guarda el título al perder el foco: ¿así?
-- Detrás de Cloudflare conviene desactivar *Scrape Shield → Email Address Obfuscation* (Pizarro ya protege sus emails
-  con `EmailSafe`; era la causa más probable del error de hidratación #418).
-- En el móvil, recuperar la columna recordada mueve la vista tras el primer pintado (no medido): ¿leerla en el servidor?
-- React #185 («Maximum update depth») visto una vez en la ronda 55: no se ha vuelto a ver; si sale, anotar qué se hacía.
+**Decisiones de la ronda 57 (ya aplicadas):** un solo selector de proyecto en escritorio (el de la barra lateral) y sin
+«Informe PDF» en la cabecera; roles de columna en un submenú; recordar el último tipo usado; tareas fijas fuera del
+avance del informe PDF; *Administración* en dos pestañas (*Ajustes* e *Integraciones*); no juntar «Varias tareas» e
+«Importar» en «Nueva tarea»; no ampliar el deshacer fuera del tablero; en el móvil, avisos abajo, «Editar» comentarios
+a la vista, archivadas en lectura, «Descartar cambios» con confirmación y «Compartir → Pizarro»; sondeo de presencia de
+respaldo a 60 s; plantillas de serie mejoradas sin tocar *Vibecoding* ni *Curso o máster* (de esas se encarga el
+propietario).
 
 **Decisiones de la ronda 56 (ya aplicadas):** recarga de respaldo a 15 min con el canal sano; presencia por el canal en
 vivo; ZIP de release en flujo; tareas de fondo a 60 s; destinatario del informe por nombre y emails ajenos ocultos;

@@ -2,6 +2,45 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.61.0 — 2026-11-20 17:52
+
+Plantillas de serie para trabajo real, Compartir con Pizarro, Administración con Integraciones, cabecera más limpia, roles en submenú, archivadas en lectura, avisos abajo en el móvil, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Plantillas de serie revisadas para trabajo real: usan los roles de columna (Esperando, Rutinas, Agenda, Presupuesto, Lista consolidada, Revisión con requisitos, Entrega al cliente, Planificación semanal) y los campos de cada sector, y hay dos nuevas: «Mantenimiento e instalaciones» y «Ventas».
+- «Compartir → Pizarro»: con la app instalada, compartir desde otra app abre «Nueva tarea» con el texto, el enlace y las fotos o archivos.
+- Las tareas archivadas se pueden abrir para leerlas enteras, sin cambiarlas.
+- Administración tiene una pestaña nueva, «Integraciones» (email, Google, Telegram y WhatsApp), separada de «Ajustes».
+
+### Mejoras
+
+- Cabecera del tablero más limpia: un solo selector de proyecto en el ordenador (el de la barra lateral, con Alt+P), sin el botón de «Informe PDF» (sigue en el menú) y los botones de solo icono más juntos.
+- El rol de una columna se elige en un submenú «Rol de la columna ›», y el menú de la columna se acorta a la mitad.
+- «Nueva tarea» propone el último tipo con el que creaste una tarea en ese proyecto, con su título, texto y subtareas automáticas.
+- El informe PDF no cuenta las tareas fijas en el avance ni en las pendientes.
+- En el móvil, los avisos salen abajo y no tapan la cabecera.
+- «Cancelar» del detalle pasa a «Descartar cambios» y pregunta antes si has cambiado algo; los comentarios propios tienen un botón «Editar» a la vista.
+- El .ics de una columna Agenda se descarga sin salir del tablero.
+- Las descargas grandes (adjuntos, documentos, exportaciones, copias) muestran el tamaño y el progreso en el navegador.
+- Calendario y Mis tareas más rápidos y con mejor contraste.
+
+### Correcciones
+
+- El informe semanal seguía enviándose, con el PDF del proyecto, a una cuenta borrada.
+- Las descargas de PDF y del .ics compartían un tope de 5 por minuto: el .ics podía bloquear los PDF y sacar a la persona del tablero.
+- Las imágenes de la descripción de una tarea que se repite dejaban de verse al borrar la aparición anterior.
+- Cambiar la hora del resumen diario o del informe semanal, o desactivarlo y volver a activarlo, lo reenviaba el mismo día o semana.
+- Importar un proyecto podía repetir el número de una release ya borrada en el original.
+- /robots.txt redirigía al acceso; ahora es público y pide no indexar la instalación.
+- Elegir el rol que la columna ya tenía anotaba un cambio vacío; varios clics en el .ics bajaban varios ficheros.
+
+### Cambios técnicos / DB
+
+- La imagen de producción se compila con webpack, el mismo empaquetador que prueban las suites (con Turbopack el standalone arrastraba todo el proyecto).
+- Componente MenuSub accesible; `X-Robots-Tag: noindex` en `/api/*`; presencia con topes y límite de ritmo; topes de descarga por tipo y uno común para los PDF de columna; HEAD sin efectos en la descarga de exportaciones.
+- Copia de adjuntos por lotes (`copyAttachmentsBatch`) para Duplicar y las repeticiones; `share_target` con almacén temporal por persona (`UPLOAD_DIR/shared/`, 30 min) y limpieza en el mantenimiento.
+
 ## v1.60.0 — 2026-11-20 12:55
 
 Tablero en vivo más barato (presencia por el canal y recarga cada 15 min), iconos de Nueva tarea junto a la X, auditorías de escritorio y móvil, ZIP de releases en flujo, emails ajenos ocultos, calendario y Administración en el móvil, accesibilidad y caza de bugs
