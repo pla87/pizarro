@@ -414,12 +414,13 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   } catch {
     throw new AppError("El archivo subido ya no está en el servidor. Vuelve a subirlo.", 410);
   }
+  // Estimación con el tamaño subido; el .pizarro.zip la sustituye por el tamaño real descomprimido al abrirlo (diskReservation).
   const importBytes = Math.ceil((opts.bytes ?? 0) * IMPORT_FACTOR);
   await assertDiskRoom(uploadDir(), importBytes, undefined, undefined, job.id);
   reserveDisk(job.id, uploadDir(), importBytes);
   const summary = opts.format === "trello" || opts.format === "csv"
     ? await importForeignFile(opts.tempFile, opts.format, user, { isPrivate: !!opts.isPrivate, t, fileName: opts.name, onProgress: (p) => progress.set(p) })
-    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id });
+    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id });
   logEvent({
     category: "api", action: "projects.import",
     message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${logSize((opts.bytes ?? 0))})`,

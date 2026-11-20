@@ -7,14 +7,14 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { crc32 } from "node:zlib";
+import { crc32, deflateRawSync } from "node:zlib";
 import sharp from "sharp";
 import { ADMIN_EXPORT, db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
-import { capTitle, freeProjectName, importProjectFile, safeFileName, type ImportUser } from "../../src/lib/project-export/import";
+import { capTitle, freeProjectName, importProjectFile, safeFileName, threadComments, type ImportUser } from "../../src/lib/project-export/import";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
-import { projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
+import { LIMITS, projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
 import { attachmentPath, documentPath, safeDownloadMime, saveAttachmentFiles, saveDocumentFile, saveRawAttachmentFile, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 import { streamZip, type StreamZipEntry } from "../../src/lib/zip-stream";
 import { GET as exportRoute, POST as exportPost } from "../../src/app/api/projects/[projectId]/export/route";
@@ -22,6 +22,7 @@ import { exportFileOf, runNextTransferJob } from "../../src/lib/transfer-jobs";
 import { openProjectArchive } from "../../src/lib/project-export/read";
 import { nextReleaseNumber, releaseFloorFromImport } from "../../src/lib/release-number";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
+import { assertFast } from "../timing";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-pexport-"));
 const work = await mkdtemp(path.join(tmpdir(), "pz-pexport-zip-"));
@@ -1154,5 +1155,159 @@ describe("importar: numeración de las releases", () => {
     assert.equal(releaseFloorFromImport(["R12F1: a", "x R14OT3: b", "R2D2 robot", "PR30F1: no", "R99999999F1: no"], [4]), 14);
     assert.equal(releaseFloorFromImport([], [2, 9, 5]), 9);
     assert.equal(releaseFloorFromImport(["nada"], []), 0);
+  });
+});
+
+describe("importar y exportar: hilos de comentarios, disco, años y número de ficheros", () => {
+  const at = (i: number) => new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString();
+  const cm = (ref: string, parentRef: string | null, i: number) => ({ ref, author: null, authorName: "Ana", body: `c${i}`, createdAt: at(i), editedAt: null, parentRef, deletedAt: null });
+  const fileAtt = (file: Buffer, name: string) => ({ originalName: name, mimeType: "application/octet-stream", isImage: false, width: null, height: null, size: file.length, createdBy: null, createdAt: at(0), file: sha(file) });
+  const reserved = () => (globalThis as unknown as { __pzDiskReserved?: Map<string, { dir: string; bytes: number }> }).__pzDiskReserved ?? new Map<string, { dir: string; bytes: number }>();
+
+  test("las respuestas encadenadas cuelgan de su raíz, con su orden y sus fechas; un ciclo se rompe con aviso", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    // c2 responde a c1, c3 a c2…: antes se insertaba una ola por eslabón (cuadrático, dentro de la transacción).
+    const chain = Array.from({ length: 3000 }, (_, i) => cm(`m${i + 1}`, i ? `m${i}` : null, i));
+    // m1 ↔ m2 en círculo, m3 se responde a sí mismo, m4 responde a uno del círculo y m6 es una respuesta normal.
+    const loop = [cm("m1", "m2", 0), cm("m2", "m1", 1), cm("m3", "m3", 2), cm("m4", "m1", 3), cm("m5", null, 4), cm("m6", "m5", 5)];
+    const s = await importProjectFile(await craft(minimal([{ title: "Cadena", comments: chain }, { title: "Ciclo", comments: loop }])), asImporter(admin), { isPrivate: false });
+    assert.equal(s.counts.comments, chain.length + loop.length);
+    assert.ok(s.warnings.includes("2 respuestas se respondían a sí mismas (directa o indirectamente) y se han importado como comentarios sueltos."), s.warnings.join(" | "));
+    const comments = async (title: string) => (await db.task.findFirstOrThrow({ where: { projectId: s.projectId, title }, include: { comments: { orderBy: { createdAt: "asc" } } } })).comments;
+    const c = await comments("Cadena");
+    assert.deepEqual(c.map((x) => x.body), chain.map((x) => x.body));
+    assert.deepEqual(c.map((x) => x.createdAt.toISOString()), chain.map((x) => x.createdAt));
+    assert.equal(c[0]!.parentId, null);
+    assert.ok(c.slice(1).every((x) => x.parentId === c[0]!.id), "todas cuelgan de la raíz");
+    const byBody = new Map((await comments("Ciclo")).map((x) => [x.body, x]));
+    const id = (body: string) => byBody.get(body)!.id;
+    assert.deepEqual(
+      ["c0", "c1", "c2", "c3", "c4", "c5"].map((b) => byBody.get(b)!.parentId),
+      [id("c1"), null, null, id("c1"), null, id("c4")],
+    );
+  });
+
+  test("threadComments es lineal: una cadena de 200.000 respuestas", () => {
+    const rows = Array.from({ length: 200_000 }, (_, i) => ({ id: `id${i}`, taskId: "t", body: "", ref: `t/m${i}`, parentRef: i ? `t/m${i - 1}` : null }));
+    const out = assertFast(2000, () => threadComments(rows), "200.000 respuestas encadenadas");
+    assert.deepEqual([out.roots.length, out.replies.length, out.brokenCycles], [1, rows.length - 1, 0]);
+    assert.ok(out.replies.every((r) => r.parentId === "id0"));
+    assert.ok(![...out.roots, ...out.replies].some((r) => "ref" in r || "parentRef" in r), "sin los campos propios del archivo");
+  });
+
+  test("disco: se reserva lo que de verdad se va a escribir, se libera al terminar y sin sitio no se escribe nada", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const bin = randomBytes(40_000);
+    const data = minimal([{ attachments: [fileAtt(bin, "a.bin"), fileAtt(bin, "b.bin")] }]);
+    const seen: number[] = [];
+    const s = await importProjectFile(await craft(data, [bin]), asImporter(admin), {
+      isPrivate: false, diskReservation: "job-prueba",
+      onProgress: (p) => { if (p.phase === "archivos") seen.push(reserved().get("job-prueba")?.bytes ?? -1); },
+    });
+    assert.equal(s.counts.taskAttachments, 2);
+    // Cada referencia escribe su copia: dos veces el tamaño real (no lo que mide el ZIP).
+    assert.ok(seen.length > 0 && seen.every((b) => b === 2 * bin.length), seen.join(","));
+    assert.equal(reserved().has("job-prueba"), false, "liberada al terminar");
+
+    const prev = process.env.DISK_MIN_FREE_MB;
+    process.env.DISK_MIN_FREE_MB = String(1e12);
+    const before = await db.project.count();
+    try {
+      await assert.rejects(importProjectFile(await craft(data, [bin]), asImporter(admin), { isPrivate: false }), /No hay espacio suficiente/);
+      await assert.rejects(importProjectFile(await craft(data, [bin]), asImporter(admin), { isPrivate: false, diskReservation: "job-lleno" }), /No hay espacio suficiente/);
+    } finally {
+      if (prev === undefined) delete process.env.DISK_MIN_FREE_MB;
+      else process.env.DISK_MIN_FREE_MB = prev;
+    }
+    assert.equal(await db.project.count(), before);
+    assert.ok(![...reserved().keys()].some((k) => k.startsWith("import:") || k === "job-lleno"), [...reserved().keys()].join(","));
+  });
+
+  test("un fichero de files/ que se infla más de 10 veces se rechaza (Pizarro los guarda sin comprimir)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    /** ZIP con las entradas indicadas; las de `deflate` van comprimidas. */
+    const rawZip = async (entries: { name: string; data: Buffer; deflate?: boolean }[]) => {
+      const locals: Buffer[] = [];
+      const central: Buffer[] = [];
+      let offset = 0;
+      for (const e of entries) {
+        const name = Buffer.from(e.name);
+        const body = e.deflate ? deflateRawSync(e.data) : e.data;
+        const head = Buffer.alloc(30);
+        head.writeUInt32LE(0x04034b50, 0); head.writeUInt16LE(e.deflate ? 8 : 0, 8); head.writeUInt32LE(crc32(e.data), 14);
+        head.writeUInt32LE(body.length, 18); head.writeUInt32LE(e.data.length, 22); head.writeUInt16LE(name.length, 26);
+        const cen = Buffer.alloc(46);
+        cen.writeUInt32LE(0x02014b50, 0); cen.writeUInt16LE(e.deflate ? 8 : 0, 10); cen.writeUInt32LE(crc32(e.data), 16);
+        cen.writeUInt32LE(body.length, 20); cen.writeUInt32LE(e.data.length, 24); cen.writeUInt16LE(name.length, 28); cen.writeUInt32LE(offset, 42);
+        locals.push(head, name, body);
+        central.push(cen, name);
+        offset += 30 + name.length + body.length;
+      }
+      const cd = Buffer.concat(central);
+      const end = Buffer.alloc(22);
+      end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(entries.length, 8); end.writeUInt16LE(entries.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+      const file = path.join(work, `raw${++seq}.zip`);
+      await writeFile(file, Buffer.concat([...locals, cd, end]));
+      return file;
+    };
+    const withFile = (bin: Buffer) => {
+      const pj = Buffer.from(JSON.stringify(minimal([{ attachments: [fileAtt(bin, "x.bin")] }])));
+      const m = { format: "pizarro-project", formatVersion: 1, appVersion: "test", exportedAt: at(0), options: { attachments: true, scope: "all" }, counts: {}, checksums: { "project.json": sha(pj), [`files/${sha(bin)}`]: sha(bin) } };
+      return rawZip([{ name: "manifest.json", data: Buffer.from(JSON.stringify(m)) }, { name: "project.json", data: pj, deflate: true }, { name: `files/${sha(bin)}`, data: bin, deflate: true }]);
+    };
+    // Ceros: se comprimen unas 1000 veces (dentro del tope del lector ZIP, pero no del de files/).
+    await assert.rejects(importProjectFile(await withFile(Buffer.alloc(500_000)), asImporter(admin), { isPrivate: false }), /comprimido de forma sospechosa/);
+    // Vuelto a comprimir con otra herramienta (aquí, datos que apenas se comprimen): vale, y project.json puede ir comprimido.
+    const s = await importProjectFile(await withFile(randomBytes(50_000)), asImporter(admin), { isPrivate: false });
+    assert.equal(s.counts.taskAttachments, 1);
+  });
+
+  test("la repetición se normaliza al importar: mensual sin día toma el de su fecha límite, semanal con día imposible también", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const s = await importProjectFile(await craft(minimal([
+      { title: "Mensual sin día", recurrence: "MONTHLY", recurrenceDay: null, dueDate: "2027-01-31" },
+      { title: "Semanal con 31", recurrence: "WEEKLY", recurrenceDay: 31, dueDate: "2027-01-31" }, // domingo
+      { title: "Sin repetir con día", recurrence: "NONE", recurrenceDay: 5 },
+      { title: "Mensual con día", recurrence: "MONTHLY", recurrenceDay: 15, dueDate: "2027-01-31" },
+    ])), asImporter(admin), { isPrivate: false });
+    const rows = await db.task.findMany({ where: { projectId: s.projectId }, select: { title: true, recurrence: true, recurrenceDay: true }, orderBy: { position: "asc" } });
+    assert.deepEqual(rows.map((r) => [r.title, r.recurrence, r.recurrenceDay]), [
+      ["Mensual sin día", "MONTHLY", 31],
+      ["Semanal con 31", "WEEKLY", 7],
+      ["Sin repetir con día", "NONE", null],
+      ["Mensual con día", "MONTHLY", 15],
+    ]);
+  });
+
+  test("las fechas del año 0000 se rechazan al validar (PostgreSQL no las admite)", async () => {
+    assert.equal(projectDataSchema.safeParse(minimal([{ dueDate: "0000-01-01" }])).success, false);
+    assert.equal(projectDataSchema.safeParse(minimal([{ createdAt: "0000-06-01T00:00:00.000Z" }])).success, false);
+    // Del año 1 pero con desfase: en UTC cae en el año 0.
+    assert.equal(projectDataSchema.safeParse(minimal([{ archivedAt: "0001-01-01T00:00:00+05:00" }])).success, false);
+    assert.equal(projectDataSchema.safeParse(minimal([{ dueDate: "0001-01-01", createdAt: "0001-01-02T00:00:00.000Z" }])).success, true);
+    const admin = await makeUser({ role: "ADMIN" });
+    await assert.rejects(importProjectFile(await craft(minimal([{ startDate: "0000-02-29" }])), asImporter(admin), { isPrivate: false }), /project.json no es válido/);
+  });
+
+  test("exportar con más ficheros distintos de los que admite la importación avisa en vez de entregar un archivo inservible", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    const task = await makeTask(f, { title: "Con adjuntos" });
+    for (const [i, body] of ["uno", "dos", "tres", "uno"].entries()) {
+      const a = await db.taskAttachment.create({ data: { taskId: task.id, originalName: `f${i}.txt`, mimeType: "text/plain", isImage: false, size: body.length } });
+      await saveRawAttachmentFile(a.id, Buffer.from(body));
+    }
+    const limits = LIMITS as { files: number };
+    const prev = limits.files;
+    try {
+      limits.files = 3; // tres contenidos distintos (el cuarto repite): cabe
+      assert.equal((await buildProjectExport(f.project.id, { attachments: true, scope: "all" }, ADMIN_EXPORT)).manifest.counts.files, 3);
+      limits.files = 2;
+      await assert.rejects(buildProjectExport(f.project.id, { attachments: true, scope: "all" }, ADMIN_EXPORT), /más de 50\.000 ficheros adjuntos distintos/);
+      // Sin adjuntos no cuenta.
+      assert.equal((await buildProjectExport(f.project.id, { attachments: false, scope: "all" }, ADMIN_EXPORT)).manifest.counts.files, 0);
+    } finally {
+      limits.files = prev;
+    }
   });
 });
