@@ -2,9 +2,14 @@
 // una aparición sin perder de qué tarea salió ni su columna de rutinas.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { createTask, deleteTask, moveTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
+import pg from "pg";
+import { spawnRecurrences } from "../../src/lib/recurrence";
+import { MAX_ACTIVE_TASKS_PER_PROJECT } from "../../src/lib/constants";
+import { PROGRAM_MAX_SESSIONS } from "../../src/lib/program-limit";
+import { lockColumns } from "../../src/lib/task-positions";
 
 const nextOf = (taskId: string) => db.task.findFirstOrThrow({ where: { recurrenceFromId: taskId } });
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -81,5 +86,110 @@ describe("«Repetir» al crear la tarea", () => {
     // Y se comporta como una creada desde el detalle: al terminarla nace la siguiente.
     expectOk(await moveTask(weekly.id, f.columns.done, null, null));
     assert.equal((await nextOf(weekly.id)).dueDate?.toISOString().slice(0, 10), "2999-01-14");
+  });
+});
+
+describe("muchas apariciones a la vez", () => {
+  /** Consultas SQL que hace `fn` (las del registro de actividad aparte). */
+  async function counted<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
+    const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+    const orig = proto.query;
+    let queries = 0;
+    proto.query = function (this: unknown, ...args: unknown[]) {
+      const q = args[0];
+      const text = typeof q === "string" ? q : ((q as { text?: string } | undefined)?.text ?? "");
+      if (!/"AppLog"/.test(text)) queries++;
+      return orig.apply(this, args);
+    };
+    try {
+      return { value: await fn(), queries };
+    } finally {
+      proto.query = orig;
+    }
+  }
+
+  // Antes, varias consultas y una transacción por tarea: con 500, unas 6.000 consultas y varios segundos.
+  // (Con 500 de origen, terminadas pero activas, y 1 más, solo caben 499 por el tope de 1000 tareas activas: 450.)
+  test("450 tareas: lecturas una vez por lote, mismas columnas, posiciones, responsables, etiquetas y subtareas", async () => {
+    const user = await makeUser();
+    const gone = await makeUser({ active: false });
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const label = await db.label.create({ data: { projectId: f.project.id, name: "Etiqueta", color: "#123456" } });
+    const N = 450;
+    await db.task.createMany({
+      data: Array.from({ length: N }, (_, i) => ({
+        projectId: f.project.id, columnId: f.columns.done, kindId: f.kindId, title: `R${i}`, position: (i + 1) * 1000,
+        recurrence: "DAILY" as const, assigneeId: i % 2 ? user.id : gone.id,
+      })),
+    });
+    const sources = await db.task.findMany({ where: { projectId: f.project.id }, orderBy: { position: "asc" }, select: { id: true } });
+    await db.subtask.createMany({ data: sources.flatMap((t) => [1, 2].map((p) => ({ taskId: t.id, title: `s${p}`, position: p, done: true }))) });
+    await db.taskLabel.createMany({ data: sources.map((t) => ({ taskId: t.id, labelId: label.id })) });
+    await db.task.create({ data: { projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: "Ya estaba", position: 5000 } });
+    const { value: spawned, queries } = await counted(() => spawnRecurrences(sources.map((t) => t.id), user.id));
+    assert.equal(spawned.length, N);
+    assert.ok(queries < 200, `demasiadas consultas: ${queries}`);
+    const next = await db.task.findMany({
+      where: { recurrenceFromId: { in: sources.map((t) => t.id) } },
+      orderBy: { position: "asc" },
+      select: { id: true, title: true, columnId: true, position: true, assigneeId: true, labels: { select: { labelId: true } }, subtasks: { select: { done: true } } },
+    });
+    // En el orden de las de origen, al final de «Por hacer» (detrás de la que ya estaba), de 1024 en 1024.
+    assert.deepEqual(next.map((t) => t.title), sources.map((_, i) => `R${i}`));
+    assert.ok(next.every((t, i) => t.columnId === f.columns.todo && t.position === 5000 + (i + 1) * 1024));
+    assert.ok(next.every((t, i) => t.assigneeId === (i % 2 ? user.id : null)));
+    assert.ok(next.every((t) => t.labels.length === 1 && t.subtasks.length === 2 && t.subtasks.every((s) => !s.done)));
+    assert.deepEqual(spawned.map((t) => t.id), next.map((t) => t.id));
+    assert.ok(spawned.every((t) => t.subtaskTotal === 2 && t.subtaskDone === 0 && t.labelIds.length === 1));
+  });
+
+  test("con el proyecto cerca del tope de tareas activas solo nacen las que caben", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    await db.task.createMany({
+      data: Array.from({ length: MAX_ACTIVE_TASKS_PER_PROJECT - 7 }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `F${i}`, position: i })),
+    });
+    const reps = [];
+    for (let i = 0; i < 5; i++) reps.push(await makeTask(f, { title: `Rep ${i}`, columnId: f.columns.done, recurrence: "DAILY" }));
+    const spawned = await spawnRecurrences(reps.map((t) => t.id), user.id);
+    assert.equal(spawned.length, 2);
+    assert.equal(await db.task.count({ where: { projectId: f.project.id, archivedAt: null } }), MAX_ACTIVE_TASKS_PER_PROJECT);
+  });
+
+  test("dos peticiones a la vez sobre las mismas tareas: de cada una sale una sola siguiente", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const reps = [];
+    for (let i = 0; i < 6; i++) reps.push(await makeTask(f, { title: `Rep ${i}`, columnId: f.columns.done, recurrence: "DAILY" }));
+    const ids = reps.map((t) => t.id);
+    const [a, b] = await Promise.all([spawnRecurrences(ids, user.id), spawnRecurrences(ids, user.id)]);
+    assert.equal(a.length + b.length, 6);
+    assert.equal(await db.task.count({ where: { recurrenceFromId: { in: ids } } }), 6);
+  });
+
+  test("una columna que pasa a «Programa del curso» (en el tope) mientras se reparten: no nace ninguna allí", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    // «Por hacer» llena hasta el tope de sesiones, aún sin el rol: el reparto la lee como columna sin tope.
+    await db.task.createMany({
+      data: Array.from({ length: PROGRAM_MAX_SESSIONS }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `S${i}`, position: (i + 1) * 1000 })),
+    });
+    const reps: { id: string }[] = [];
+    for (let i = 0; i < 3; i++) reps.push(await makeTask(f, { title: `Rep ${i}`, columnId: f.columns.done, recurrence: "DAILY" }));
+    // Con la columna bloqueada (como setColumnRole), el reparto espera al candado; entonces la columna pasa a PROGRAM.
+    let spawning: ReturnType<typeof spawnRecurrences> | undefined;
+    await db.$transaction(async (tx) => {
+      await lockColumns(tx, [f.columns.todo]);
+      spawning = spawnRecurrences(reps.map((t) => t.id), user.id);
+      await waitForLockWaiter();
+      await tx.column.update({ where: { id: f.columns.todo }, data: { role: "PROGRAM" } });
+    }, { timeout: 20_000 });
+    const spawned = await spawning!;
+    assert.equal(spawned.length, 0);
+    assert.equal(await db.task.count({ where: { columnId: f.columns.todo, archivedAt: null } }), PROGRAM_MAX_SESSIONS);
   });
 });

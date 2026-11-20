@@ -2,6 +2,7 @@ import { Marked } from "marked";
 import { COPY_MARKER } from "./markdown-copy";
 import { UNDERLINE_HREF, underlineToLink } from "./markdown-underline";
 import { escapeHtml } from "./html-escape";
+import { isAttachmentSrc } from "./attachment-refs";
 import { mentionsToMarkdown } from "./mentions";
 
 /**
@@ -20,7 +21,7 @@ export function markdownToHtml(markdown: string, origin = ""): string {
         if (href.startsWith("#mention-")) return `<strong>${inner}</strong>`;
         return /^(https?:|mailto:|\/)/i.test(href) ? `<a href="${escapeHtml(href)}">${inner}</a>` : inner;
       },
-      image: ({ href, text }) => (href.startsWith("/api/attachments/") ? `<img alt="${escapeHtml(text)}" src="${escapeHtml(origin + href)}">` : escapeHtml(text)),
+      image: ({ href, text }) => (isAttachmentSrc(href) ? `<img alt="${escapeHtml(text)}" src="${escapeHtml(origin + href)}">` : escapeHtml(text)),
     },
   });
   const body = marked.parse(mentionsToMarkdown(underlineToLink(markdown)), { async: false });

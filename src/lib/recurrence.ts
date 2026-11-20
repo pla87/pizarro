@@ -2,39 +2,64 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { addDaysIso, daysBetween, dateToIso, isoToDate, todayIso } from "./dates";
 import { db } from "./db";
-import { appTimeZone, loadBoardTask } from "./board";
+import { appTimeZone, loadBoardTask, loadBoardTasksByIds } from "./board";
 import { nextOccurrenceDue } from "./recurrence-date";
 import { POSITION_STEP } from "./positions";
 import { lastPositionIn, lockColumns } from "./task-positions";
 import { addUndo } from "./undo";
-import { hasTaskCapacity } from "./caps";
+import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
 import { logEvent } from "./log";
 import type { BoardTask } from "./types";
 
-/** El responsable pasa a la siguiente aparición solo si sigue pudiendo tenerla (activo y con acceso). */
-async function stillAssignable(projectId: string, userId: string | null): Promise<string | null> {
-  if (!userId) return null;
-  const [user, project] = await Promise.all([
-    db.user.findFirst({ where: { id: userId, active: true }, select: { role: true, memberships: { where: { projectId }, select: { userId: true } } } }),
-    db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } }),
+/**
+ * Responsables que pueden pasar a la siguiente aparición en cada proyecto (activos y con acceso), leídos de una vez
+ * para todo el lote: `(projectId, userId) → userId | null`.
+ */
+async function assignableResolver(pairs: { projectId: string; assigneeId: string | null }[]): Promise<(projectId: string, userId: string | null) => string | null> {
+  const userIds = [...new Set(pairs.map((p) => p.assigneeId).filter((id): id is string => !!id))];
+  if (!userIds.length) return () => null;
+  const projectIds = [...new Set(pairs.map((p) => p.projectId))];
+  const [users, projects] = await Promise.all([
+    db.user.findMany({ where: { id: { in: userIds }, active: true }, select: { id: true, role: true, memberships: { where: { projectId: { in: projectIds } }, select: { projectId: true } } } }),
+    db.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, isPrivate: true } }),
   ]);
-  if (!user || !project) return null;
-  return user.memberships.length || (!project.isPrivate && user.role === "ADMIN") ? userId : null;
+  const userById = new Map(users.map((u) => [u.id, u]));
+  const privateById = new Map(projects.map((p) => [p.id, p.isPrivate]));
+  return (projectId, userId) => {
+    if (!userId) return null;
+    const user = userById.get(userId);
+    const isPrivate = privateById.get(projectId);
+    if (!user || isPrivate === undefined) return null;
+    return user.memberships.some((m) => m.projectId === projectId) || (!isPrivate && user.role === "ADMIN") ? userId : null;
+  };
 }
 
+/** Apariciones por transacción al crear muchas a la vez (cada transacción, muy por debajo de su tope de 5 s). */
+const SPAWN_BATCH = 100;
+
+type RoutineSource = { projectId: string; columnId: string; routineColumnId: string | null; column: { role: string } };
+
 /**
- * Columna ROUTINES de la que cuelga una tarea recurrente (en la que está o la última en la que estuvo) y columna
+ * Columna ROUTINES de la que cuelga cada tarea recurrente (en la que está o la última en la que estuvo) y columna
  * donde nace su siguiente aparición: la destino configurada o, por defecto, la propia columna de rutinas
  * (salvo que cuente como terminada: entonces se sigue la regla general). null si no viene de una rutina.
+ * Una sola consulta para todo el lote.
  */
-async function routineColumnOf(src: { projectId: string; columnId: string; routineColumnId: string | null; column: { role: string } }): Promise<{ columnId: string; targetId: string } | null> {
-  const id = src.column.role === "ROUTINES" ? src.columnId : src.routineColumnId;
-  if (!id) return null;
-  const col = await db.column.findFirst({ where: { id, projectId: src.projectId, role: "ROUTINES" }, select: { id: true, isDone: true, routineTargetColumnId: true } });
-  if (!col) return null;
-  if (col.routineTargetColumnId) return { columnId: col.id, targetId: col.routineTargetColumnId };
-  return col.isDone ? null : { columnId: col.id, targetId: col.id };
+async function routineColumnsOf(sources: RoutineSource[]): Promise<(src: RoutineSource) => { columnId: string; targetId: string } | null> {
+  const idOf = (src: RoutineSource) => (src.column.role === "ROUTINES" ? src.columnId : src.routineColumnId);
+  const ids = [...new Set(sources.map(idOf).filter((id): id is string => !!id))];
+  const cols = ids.length
+    ? await db.column.findMany({ where: { id: { in: ids }, role: "ROUTINES" }, select: { id: true, projectId: true, isDone: true, routineTargetColumnId: true } })
+    : [];
+  const byId = new Map(cols.map((c) => [c.id, c]));
+  return (src) => {
+    const id = idOf(src);
+    const col = id ? byId.get(id) : undefined;
+    if (!col || col.projectId !== src.projectId) return null;
+    if (col.routineTargetColumnId) return { columnId: col.id, targetId: col.routineTargetColumnId };
+    return col.isDone ? null : { columnId: col.id, targetId: col.id };
+  };
 }
 
 /**
@@ -48,8 +73,15 @@ async function routineColumnOf(src: { projectId: string; columnId: string; routi
  * Deshacer la acción que la provocó quita también la copia (operación inversa anotada aquí).
  * `titles` (taskId → título) sustituye al guardado: el despliegue de una release antepone un código al título
  * y la siguiente aparición debe nacer con el original.
+ * `asDone`: las tareas cuentan como terminadas aunque su columna no lo sea (el despliegue de una release con destino
+ * «Archivar» las archiva desde la columna de la release): la siguiente va a la primera columna no terminada, como al
+ * terminarlas, y no a la de la release (que entraría en la próxima release sin hacerse).
+ *
+ * Lo que no depende de cada tarea (columnas de rutina, primera columna abierta, tope de tareas, roles de las columnas,
+ * responsables) se lee una vez para todo el lote; cada tarea conserva su transacción corta (columna bloqueada, tope de
+ * sesiones de un «Programa del curso», idempotencia por `recurrenceFromId`).
  */
-export async function spawnRecurrences(taskIds: string[], actorId: string, titles?: Map<string, string>): Promise<BoardTask[]> {
+export async function spawnRecurrences(taskIds: string[], actorId: string, titles?: Map<string, string>, opts: { asDone?: boolean } = {}): Promise<BoardTask[]> {
   if (!taskIds.length) return [];
   const sources = await db.task.findMany({
     where: { id: { in: taskIds }, recurrence: { not: "NONE" }, recurrenceNext: null },
@@ -66,69 +98,49 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   if (!sources.length) return [];
   const today = todayIso(appTimeZone());
   const created: string[] = [];
-  const firstOpen = new Map<string, string | null>();
-
-  for (const src of sources) {
-    if (src.recurrence === "NONE") continue;
-    let columnId = src.columnId;
+  const projectIds = [...new Set(sources.map((s) => s.projectId))];
+  const [routineOf, assignable, openCols, activeCounts] = await Promise.all([
+    routineColumnsOf(sources),
+    assignableResolver(sources),
+    // Primera columna no terminada de cada proyecto (la primera por posición de cada uno).
+    db.column.findMany({ where: { projectId: { in: projectIds }, isDone: false }, orderBy: [{ projectId: "asc" }, { position: "asc" }], distinct: ["projectId"], select: { id: true, projectId: true } }),
+    // Tareas activas por proyecto: se cuentan una vez y se suman las que van naciendo (antes, un COUNT por tarea).
+    db.task.groupBy({ by: ["projectId"], where: { projectId: { in: projectIds }, archivedAt: null }, _count: { _all: true } }),
+  ]);
+  const firstOpen = new Map(openCols.map((c) => [c.projectId, c.id]));
+  const active = new Map(activeCounts.map((r) => [r.projectId, r._count._all]));
+  const plan = sources.map((src) => {
+    const routine = routineOf(src);
     // Rutinas: si la tarea vive (o vivió) en una columna ROUTINES, la siguiente aparición va a su columna destino.
-    const routine = await routineColumnOf(src);
-    if (routine) columnId = routine.targetId;
-    else if (src.column.isDone) {
-      if (!firstOpen.has(src.projectId)) {
-        const open = await db.column.findFirst({ where: { projectId: src.projectId, isDone: false }, orderBy: { position: "asc" }, select: { id: true } });
-        firstOpen.set(src.projectId, open?.id ?? null);
-      }
-      columnId = firstOpen.get(src.projectId) ?? src.columnId;
-    }
-    // Proyecto en el tope de tareas activas: no nace la siguiente aparición (y mover la tarjeta no falla).
-    if (!(await hasTaskCapacity(db, src.projectId))) {
-      logEvent({
-        level: "warn", category: "system", action: "recurrence.skippedCap",
-        message: `No se creó la siguiente aparición de «${src.title}»: el proyecto tiene el máximo de tareas activas`,
-        details: { taskId: src.id, projectId: src.projectId },
-      });
-      continue;
-    }
-    const dueIso = nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today);
-    const dueDate = isoToDate(dueIso);
-    // La fecha de inicio se desplaza los mismos días que la límite (sin límite no hay referencia: queda vacía).
-    const oldDue = dateToIso(src.dueDate);
-    const oldStart = dateToIso(src.startDate);
-    const startDate = oldStart && oldDue && dueIso ? isoToDate(addDaysIso(oldStart, daysBetween(oldDue, dueIso))) : null;
-    const assigneeId = await stillAssignable(src.projectId, src.assigneeId);
+    const columnId = routine ? routine.targetId : src.column.isDone || opts.asDone ? (firstOpen.get(src.projectId) ?? src.columnId) : src.columnId;
+    return { src, routine, columnId };
+  });
+  // Solo las columnas «Programa del curso» tienen tope de sesiones: las demás van en lote. Leído fuera de la transacción,
+  // solo sirve para repartir: el tope lo deciden createOne y createMany con la columna bloqueada (una columna puede pasar
+  // a PROGRAM entre esta lectura y el alta).
+  const programCols = new Set(
+    (await db.column.findMany({ where: { id: { in: [...new Set(plan.map((p) => p.columnId))] }, role: "PROGRAM" }, select: { id: true } })).map((c) => c.id),
+  );
+
+  /** Centinela de createMany: una columna del lote es ya «Programa del curso» (se repite una a una). */
+  const PROGRAM_SINCE_READ = new Error("program-column");
+
+  type Item = (typeof plan)[number] & { data: Omit<Prisma.TaskCreateManyInput, "position"> };
+
+  /** Una aparición en su propia transacción (columnas «Programa del curso», que tienen tope, y reintentos). */
+  const createOne = async ({ src, columnId, data }: Item): Promise<string | null> => {
     try {
       // Al final de la columna, con la columna bloqueada (sin compartir posición con otra tarea).
       const next = await db.$transaction(async (tx) => {
         await lockColumns(tx, [columnId]);
-        // Columna «Programa del curso» en el tope de sesiones: tampoco nace (igual que con el tope del proyecto).
+        // Columna «Programa del curso» en el tope de sesiones: tampoco nace (igual que con el tope del proyecto). El rol se
+        // lee aquí, con la columna bloqueada (no vale programCols, leído antes y fuera de la transacción).
         if (await columnRoomProblem(tx, columnId, 1)) return null;
         const last = await lastPositionIn(tx, columnId);
         return tx.task.create({
           data: {
-            projectId: src.projectId,
-            columnId,
-            title: titles?.get(src.id) ?? src.title,
-            description: src.description,
-            kindId: src.kindId,
-            color: src.color,
-            linkUrl: src.linkUrl,
-            assigneeId,
-            deliverableId: src.deliverableId,
-            dueDate,
-            startDate,
-            cost: src.cost,
-            costPaid: false,
-            estimatedHours: src.estimatedHours,
-            actualHours: null,
-            priority: src.priority,
-            client: src.client,
-            recurrence: src.recurrence,
-            recurrenceDay: src.recurrenceDay,
-            recurrenceFromId: src.id,
-            routineColumnId: routine?.columnId ?? null,
+            ...data,
             position: (last ?? 0) + POSITION_STEP,
-            createdById: actorId,
             labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
             subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
           },
@@ -141,15 +153,132 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
           message: `No se creó la siguiente aparición de «${src.title}»: su columna tiene el máximo de sesiones`,
           details: { taskId: src.id, projectId: src.projectId, columnId },
         });
-        continue;
+        return null;
       }
-      created.push(next.id);
-      addUndo({ t: "task.remove", id: next.id });
+      return next.id;
     } catch (err) {
       // Otra petición ya creó la siguiente aparición de esta tarea: nada que hacer.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") continue;
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return null;
       throw err;
     }
+  };
+
+  /**
+   * Varias apariciones (de columnas sin tope de sesiones) en una transacción: las columnas bloqueadas, una posición
+   * final por columna y tres INSERT para todas (tareas, etiquetas y subtareas), en el orden del lote. Si otra petición
+   * ha creado a la vez la siguiente de alguna (índice único de `recurrenceFromId`), no se crea ninguna del grupo y se
+   * repite una a una, que salta solo esa. Igual si alguna columna ha pasado a «Programa del curso» desde que se leyó
+   * programCols: una a una, cada una con su comprobación del tope.
+   */
+  const createMany = async (items: Item[]): Promise<(string | null)[]> => {
+    try {
+      return await db.$transaction(async (tx) => {
+        const cols = [...new Set(items.map((i) => i.columnId))];
+        await lockColumns(tx, cols);
+        if (await tx.column.count({ where: { id: { in: cols }, role: "PROGRAM" } })) throw PROGRAM_SINCE_READ;
+        const pos = new Map<string, number>();
+        for (const c of cols) pos.set(c, (await lastPositionIn(tx, c)) ?? 0);
+        const rows = await tx.task.createManyAndReturn({
+          data: items.map((i) => {
+            const position = pos.get(i.columnId)! + POSITION_STEP;
+            pos.set(i.columnId, position);
+            return { ...i.data, position };
+          }),
+          select: { id: true, recurrenceFromId: true },
+        });
+        const idOf = new Map(rows.map((r) => [r.recurrenceFromId, r.id]));
+        const labels = items.flatMap((i) => i.src.labels.map((l) => ({ taskId: idOf.get(i.src.id)!, labelId: l.labelId })));
+        if (labels.length) await tx.taskLabel.createMany({ data: labels });
+        const subtasks = items.flatMap((i) => i.src.subtasks.map((s) => ({ taskId: idOf.get(i.src.id)!, title: s.title, position: s.position })));
+        if (subtasks.length) await tx.subtask.createMany({ data: subtasks });
+        return items.map((i) => idOf.get(i.src.id) ?? null);
+      });
+    } catch (err) {
+      if (err !== PROGRAM_SINCE_READ && !(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
+      const out: (string | null)[] = [];
+      for (const item of items) out.push(await createOne(item));
+      return out;
+    }
+  };
+
+  let pending: Item[] = [];
+  const settle = (items: Item[], ids: (string | null)[]) => {
+    ids.forEach((id, i) => {
+      if (id) {
+        created.push(id);
+        addUndo({ t: "task.remove", id });
+      } else {
+        // No nació: deja de contar para el tope del proyecto.
+        const projectId = items[i]!.src.projectId;
+        active.set(projectId, (active.get(projectId) ?? 1) - 1);
+      }
+    });
+  };
+  const flush = async () => {
+    if (!pending.length) return;
+    const items = pending;
+    pending = [];
+    settle(items, await createMany(items));
+  };
+
+  for (const entry of plan) {
+    const { src, routine, columnId } = entry;
+    if (src.recurrence === "NONE") continue;
+    // Proyecto en el tope de tareas activas: no nace la siguiente aparición (y mover la tarjeta no falla).
+    if ((active.get(src.projectId) ?? 0) >= MAX_ACTIVE_TASKS_PER_PROJECT) {
+      logEvent({
+        level: "warn", category: "system", action: "recurrence.skippedCap",
+        message: `No se creó la siguiente aparición de «${src.title}»: el proyecto tiene el máximo de tareas activas`,
+        details: { taskId: src.id, projectId: src.projectId },
+      });
+      continue;
+    }
+    active.set(src.projectId, (active.get(src.projectId) ?? 0) + 1);
+    const dueIso = nextOccurrenceDue(src.recurrence, src.recurrenceDay, dateToIso(src.dueDate), today);
+    const dueDate = isoToDate(dueIso);
+    // La fecha de inicio se desplaza los mismos días que la límite (sin límite no hay referencia: queda vacía).
+    const oldDue = dateToIso(src.dueDate);
+    const oldStart = dateToIso(src.startDate);
+    const startDate = oldStart && oldDue && dueIso ? isoToDate(addDaysIso(oldStart, daysBetween(oldDue, dueIso))) : null;
+    const item: Item = {
+      ...entry,
+      data: {
+        projectId: src.projectId,
+        columnId,
+        title: titles?.get(src.id) ?? src.title,
+        description: src.description,
+        kindId: src.kindId,
+        color: src.color,
+        linkUrl: src.linkUrl,
+        assigneeId: assignable(src.projectId, src.assigneeId),
+        deliverableId: src.deliverableId,
+        dueDate,
+        startDate,
+        cost: src.cost,
+        costPaid: false,
+        estimatedHours: src.estimatedHours,
+        actualHours: null,
+        priority: src.priority,
+        client: src.client,
+        recurrence: src.recurrence,
+        recurrenceDay: src.recurrenceDay,
+        recurrenceFromId: src.id,
+        routineColumnId: routine?.columnId ?? null,
+        createdById: actorId,
+      },
+    };
+    if (programCols.has(columnId)) {
+      // Con tope de sesiones, de una en una y en orden (lo pendiente antes).
+      await flush();
+      settle([item], [await createOne(item)]);
+    } else {
+      pending.push(item);
+      if (pending.length >= SPAWN_BATCH) await flush();
+    }
   }
-  return Promise.all(created.map((id) => loadBoardTask(id)));
+  await flush();
+  // En el orden en que nacieron; varias, con una sola lectura para todas (antes, una por tarea).
+  if (created.length <= 1) return Promise.all(created.map((id) => loadBoardTask(id)));
+  const byId = new Map((await loadBoardTasksByIds(created)).map((t) => [t.id, t]));
+  return created.map((id) => byId.get(id)).filter((t): t is BoardTask => !!t);
 }

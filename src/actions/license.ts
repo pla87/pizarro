@@ -5,6 +5,8 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
+import { todayIso } from "@/lib/dates";
+import { appTimeZone } from "@/lib/format";
 import { LICENSE_EMAIL_MAX, LICENSE_HOLDER_MAX, LICENSE_REF_MAX, nudgeSnoozeUntil } from "@/lib/license-core";
 import { clearLicense, getLicense, getPersonalUse, invalidateLicenseNudge, setLicense, setPersonalUse } from "@/lib/license-registry";
 import { requireAdmin } from "@/lib/session";
@@ -15,7 +17,8 @@ const input = z.object({
   email: z.string().trim().max(LICENSE_EMAIL_MAX, "El email es demasiado largo.").refine((v) => v === "" || z.email().safeParse(v).success, "El email no es válido."),
 });
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Día de hoy en la zona horaria de la app (con UTC, entre medianoche y la 1 o las 2 salía el día anterior). */
+const today = () => todayIso(appTimeZone());
 
 /** Anota los datos de la licencia comercial de esta instalación. Solo informativo: no activa ni bloquea nada. */
 export async function saveLicense(value: { holder: string; reference: string; email: string }) {

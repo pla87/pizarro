@@ -39,7 +39,9 @@ export async function deleteDocumentForever(documentId: string) {
 export async function renameDocument(documentId: string, name: string) {
   return runAction({ name: "documents.renameDocument", args: [documentId, name] }, async () => {
     const user = await requireUser();
-    const clean = sanitizeDocumentName(z.string().max(300).parse(name));
+    // Sin el nombre por defecto: un nombre que se queda vacío al sanearlo («   », «...») es un error
+    // («El nombre no puede estar vacío.», renameDocumentRow), no «documento» sin avisar.
+    const clean = sanitizeDocumentName(z.string().max(300).parse(name), "");
     const before = await renameDocumentRow(user, v.id.parse(documentId), clean);
     describeAction("Renombró un documento a «{name}»", { name: before.name }, { documentId: before.id });
     return { name: clean };

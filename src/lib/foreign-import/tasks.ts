@@ -174,9 +174,15 @@ function jiraBrowseUrl(self: unknown, key: string): string | undefined {
 function readJira(issues: Obj[], t: T, timeZone: string | undefined): ForeignTasksRead {
   const tasks: TaskJsonInput[] = [];
   let noTitle = 0;
+  let resolved = 0;
   const clipped = { n: 0 };
   for (const issue of issues) {
     const f = issue.fields as Obj;
+    // Resueltas (categoría de estado «done»): no se importan, como las cerradas de GitHub o las completadas de Asana.
+    if (isObj(f.status) && isObj(f.status.statusCategory) && f.status.statusCategory.key === "done") {
+      resolved++;
+      continue;
+    }
     const title = cleanTitle(str(f.summary), undefined, clipped);
     if (!title) {
       noTitle++;
@@ -204,6 +210,7 @@ function readJira(issues: Obj[], t: T, timeZone: string | undefined): ForeignTas
     }));
   }
   const warnings = [
+    ...counted(resolved, t("1 incidencia resuelta no se importa."), t("{n} incidencias resueltas no se importan.", { n: resolved })),
     ...counted(noTitle, t("1 incidencia no tenía título y se ha ignorado."), t("{n} incidencias no tenían título y se han ignorado.", { n: noTitle })),
     ...counted(clipped.n, t("1 texto era más largo de lo permitido y se ha recortado."), t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n })),
   ];
@@ -319,11 +326,17 @@ function readForeignJson(data: unknown, opts: ReadOptions): ForeignTasksRead | n
 
 // --- CSV ------------------------------------------------------------------------------------------------------------------
 
+/**
+ * Cabeceras (plegadas con fold) que solo pone Jira: «Issue key», «Issue id», «Issue Type» y las mismas con Jira en
+ * español («Clave de incidencia», «Id de la incidencia», «Tipo de incidencia»).
+ */
+const JIRA_CSV_HEADERS = ["issue key", "issue id", "issue type", "clave de incidencia", "id de la incidencia", "tipo de incidencia"];
+
 /** Herramienta que ha exportado un CSV, por su cabecera (ya plegada con fold): solo para decir de dónde viene. */
 function csvTool(h: Set<string>, t: T): string {
   const has = (...names: string[]) => names.some((n) => h.has(n));
   if (h.has("type") && h.has("content") && h.has("indent")) return t("CSV de Todoist");
-  if (has("issue key", "issue id", "issue type")) return t("CSV de Jira");
+  if (has(...JIRA_CSV_HEADERS)) return t("CSV de Jira");
   if (has("card name", "card id") && has("list name", "list id")) return t("CSV de Trello");
   if (h.has("section column") || (h.has("task id") && h.has("assignee email"))) return t("CSV de Asana");
   if (h.has("task content") || (h.has("task id") && h.has("task name") && has("date created", "parent id"))) return t("CSV de ClickUp");
@@ -340,7 +353,7 @@ function csvTool(h: Set<string>, t: T): string {
  * si la de destino no está ya. Ver la cabecera de csv.ts.
  */
 const CSV_RENAMES: [from: string, to: string][] = [
-  ["issue key", "reference"], ["parent summary", "parent task"], ["card description", "description"], ["list name", "list"],
+  ["issue key", "reference"], ["clave de incidencia", "reference"], ["parent summary", "parent task"], ["card description", "description"], ["list name", "list"],
   ["bucket name", "section"], ["subject", "title"], ["ref", "reference"], ["task content", "description"],
 ];
 /** Columnas de etiquetas: si se repiten (Jira pone una «Labels» por etiqueta), se juntan en la primera. */
@@ -356,9 +369,11 @@ const TRELLO_COLOR_SUFFIX = /\s*\((?:green|yellow|orange|red|purple|blue|sky|lim
  * vacía y el CSV de Todoist (filas de sección, sangría para las subtareas, prioridad 1 = la más alta, @etiquetas en el
  * texto) pasado a columnas normales. Devuelve también los avisos de lo que no se importa.
  */
-function normalizeCsv(rows: string[][], t: T): { rows: string[][]; warnings: string[] } {
-  const header = rows[0]!.map(fold);
-  if (header.includes("type") && header.includes("content") && header.includes("indent")) return todoist(rows, header, t);
+function normalizeCsv(input: string[][], t: T): { rows: string[][]; warnings: string[] } {
+  const header = input[0]!.map(fold);
+  if (header.includes("type") && header.includes("content") && header.includes("indent")) return todoist(input, header, t);
+  const jira = jiraUnresolved(input, header, t);
+  const rows = jira.rows;
   const out = rows.map((r) => [...r]);
   const head = out[0]!;
   const present = new Set(header);
@@ -398,7 +413,44 @@ function normalizeCsv(rows: string[][], t: T): { rows: string[][]; warnings: str
       else if (EXTRA_PRIORITY[p]) row[priorityAt] = EXTRA_PRIORITY[p]!;
     }
   }
-  return { rows: out, warnings: [] };
+  return { rows: out, warnings: jira.warnings };
+}
+
+/**
+ * Valores de «Resolution» de una incidencia sin resolver (Jira la deja vacía al exportar, pero algunos ponen el texto),
+ * ya plegados con fold: «Sin resolución» se compara como «sin resolucion».
+ */
+const JIRA_UNRESOLVED = new Set(["", "unresolved", "sin resolver", "sin resolucion", "no resuelta", "none", "-"]);
+/** «Status Category» de una incidencia terminada (en inglés y como la traduce Jira al español). */
+const JIRA_DONE_CATEGORY = new Set(["done", "listo", "hecho", "finalizado", "finalizada", "terminado", "terminada"]);
+
+/**
+ * CSV de Jira: las incidencias resueltas («Resolution» rellena o «Status Category» terminada) no se importan, como en el
+ * JSON. Una subtarea resuelta de una incidencia que sí se importa se queda (entra como subtarea hecha); si su incidencia
+ * madre no se importa, tampoco ella (si no, saldría como tarea pendiente).
+ */
+function jiraUnresolved(rows: string[][], header: string[], t: T): { rows: string[][]; warnings: string[] } {
+  if (!JIRA_CSV_HEADERS.some((h) => header.includes(h))) return { rows, warnings: [] };
+  const resolution = header.findIndex((h) => h === "resolution" || h === "resolucion");
+  const category = header.findIndex((h) => h === "status category" || h === "categoria de estado");
+  if (resolution < 0 && category < 0) return { rows, warnings: [] };
+  const title = header.findIndex((h) => h === "summary" || h === "resumen");
+  const parent = header.findIndex((h) => h === "parent summary" || h === "parent task");
+  const isResolved = (row: string[]) =>
+    (resolution >= 0 && !JIRA_UNRESOLVED.has(fold(row[resolution] ?? ""))) || (category >= 0 && JIRA_DONE_CATEGORY.has(fold(row[category] ?? "")));
+  const parentOf = (row: string[]) => (parent >= 0 ? fold(cleanTitle(row[parent] ?? "")) : "");
+  // Títulos de las incidencias de primer nivel que se importan (las subtareas resueltas solo se quedan bajo una de ellas).
+  const kept = new Set(rows.slice(1).filter((r) => !parentOf(r) && !isResolved(r)).map((r) => (title >= 0 ? fold(cleanTitle(r[title] ?? "")) : "")));
+  let skipped = 0;
+  const out = [rows[0]!];
+  for (const row of rows.slice(1)) {
+    if (isResolved(row) && !(parentOf(row) && kept.has(parentOf(row)))) {
+      skipped++;
+      continue;
+    }
+    out.push(row);
+  }
+  return { rows: out, warnings: counted(skipped, t("1 incidencia resuelta no se importa."), t("{n} incidencias resueltas no se importan.", { n: skipped })) };
 }
 
 /** Prioridad de Todoist en su CSV (1 = la más alta, 4 = sin prioridad) → la del lector CSV. */

@@ -14,9 +14,6 @@ export const accesibilidad: Record<string, string> = {
   "Descartar «{name}»": "Dismiss “{name}”",
   "Restaurar «{name}»": "Restore “{name}”",
   "Borrar definitivamente «{name}»": "Delete “{name}” permanently",
-  "Abrir «{name}»": "Open “{name}”",
-  "Quitar «{name}» de mis proyectos": "Remove “{name}” from my projects",
-  "Añadir «{name}» a mis proyectos": "Add “{name}” to my projects",
   "Quitar la subtarea «{name}»": "Remove subtask “{name}”",
   "Quitar «{name}»": "Remove “{name}”",
 

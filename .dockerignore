@@ -19,3 +19,6 @@ deploy
 **/.env
 e2e
 site
+.claude
+**/node_modules
+PRUEBAS.pdf

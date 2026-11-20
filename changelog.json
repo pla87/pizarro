@@ -1,6 +1,99 @@
 {
   "versions": [
     {
+      "version": "1.59.0",
+      "date": "2026-11-20",
+      "releasedAt": "2026-11-20T02:51:23+01:00",
+      "summary": "Panel de fijas sin scroll de más y copia con Ctrl en el panel, detalle de tarea más compacto, subidas repartidas entre personas, exportar sin frenar despliegues, auditoría de seguridad, rendimiento y accesibilidad, y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Soltar una tarea con Ctrl (⌥ en Mac) sobre el panel «Siempre en la release» o «Siempre en el plan» crea la copia directamente como tarea fija en ese panel, con la misma cadencia si la original ya era fija, en un solo paso de deshacer.",
+          "Las tareas fijas del panel se pueden coger con Espacio y mover con el teclado, como las demás tarjetas.",
+          "Página «No encontrado» propia para las direcciones que no existen, en tu idioma y tema, y esqueleto de carga al cambiar de pestaña en Administración."
+        ],
+        "mejoras": [
+          "Detalle de tarea más compacto: la columna de campos muestra de dos en dos Columna y Asignada a, Fecha límite y los campos opcionales, y Repetir y Entregable; «Bloqueada por» ya no dice «(opcional)»; con muchos tipos y etiquetas la columna se ensancha en pantallas anchas.",
+          "Abrir el panel de tareas fijas ya no encoge la lista con una barra de desplazamiento si las tarjetas caben.",
+          "La copia con Ctrl aparece al momento donde se suelta.",
+          "Subidas repartidas: con más de una persona usando Pizarro, cada una sube sus archivos de uno en uno (sola, hasta tres a la vez); el navegador lo sabe antes de empezar y no repite subidas, y las importaciones de texto pequeñas no esperan.",
+          "Exportar un proyecto con muchos adjuntos ya no retrasa las actualizaciones de la aplicación.",
+          "Contraste: textos secundarios legibles en modo oscuro, etiquetas con texto blanco u oscuro según su color, avatares y días de otros meses del calendario más legibles; casillas de selección más fáciles de tocar en el móvil.",
+          "Las pestañas del navegador de Releases, Documentación y Ajustes llevan el nombre del proyecto.",
+          "El tablero y la Documentación descargan menos código al abrirse (diálogos y lectores de formatos se cargan al usarlos).",
+          "Importar de Jira (JSON o CSV, también con cabeceras en español) omite las incidencias resueltas y avisa de cuántas son.",
+          "Avisos: el número de sin leer es el total real; a partir de 100, «Más de 99 sin leer».",
+          "Con el tablero abierto, «Hoy» cambia solo a medianoche."
+        ],
+        "correcciones": [
+          "Soltar con Ctrl en el panel de fijas creaba la copia fuera del panel.",
+          "Una tarea fija arrastrada a una lista y devuelta al panel ya no se podía volver a arrastrar hasta recargar; se ha endurecido también el arrastre entre la lista y el panel, posible origen del «Algo ha fallado» del tablero.",
+          "Seguridad: una imagen en Markdown con «..» en la ruta podía cerrar la sesión de quien veía la tarea o lanzar descargas costosas; ahora solo se cargan imágenes que son adjuntos.",
+          "Seguridad: cambiar, restablecer o forzar la contraseña (y desactivar la cuenta, cambiarle el rol o desvincular Google) anula también los accesos que estaban a medio completar.",
+          "Una tarea repetitiva desplegada en una release con «Archivar» generaba la siguiente en la propia columna de la release; ahora nace en la primera columna no terminada.",
+          "Reordenar una tarjeta dentro de una columna «Esperando» ponía su contador a 0 hasta recargar.",
+          "El resumen diario perdía de «Terminadas» las tareas archivadas antes del envío.",
+          "Con PostgreSQL en hora local, archivar varias, desplegar con archivo y la entrada en columna guardaban la hora desplazada.",
+          "Renombrar un documento con un nombre vacío («   », «...») lo llamaba «documento» sin avisar.",
+          "La fecha de alta de la licencia se calculaba en UTC.",
+          "La copia provisional de Ctrl+arrastrar aceptaba acciones (renombrar, asignar, seleccionar) que fallaban y dejaba tarjetas duplicadas hasta recargar.",
+          "En el móvil, la última tarjeta de una columna con panel de fijas podía quedar bajo la barra de selección."
+        ],
+        "tecnicos": [
+          "Exportación de proyectos en dos fases: lecturas en una transacción corta y huellas y ZIP fuera de ella.",
+          "Huecos de subida por persona según la actividad de los últimos 5 minutos (user-activity.ts), cabecera X-Pizarro-Upload-Per-User y ruta /api/upload-limit; la cola del navegador ajusta su concurrencia.",
+          "Menos trabajo de servidor: recuentos del tablero con groupBy, repeticiones por lotes (500 tareas: de 6.010 consultas a 47), avisos sin leer contados hasta 100, subida externa de copias que no lee nada si ya está todo subido, trabajador de transferencias sin transacción con la cola vacía, historial de versiones que solo se reescribe si cambia, subtareas pegadas en una consulta, consultas del calendario en paralelo y visitas registradas como mucho cada 15 minutos.",
+          "Límite global para los informes de error del navegador sin sesión; /api/auth/reset solo responde a navegación de página.",
+          "Disparador task_column_entered en UTC (migración nueva) y hora de archivado enviada desde la app.",
+          "Módulos task-json-core.ts y lazyDialog.tsx; suite e2e r55-tablero (75 comprobaciones)."
+        ]
+      },
+      "en": {
+        "summary": "Fixed-tasks panel without extra scrolling and Ctrl copy into the panel, more compact task detail, uploads shared between people, exports that no longer hold up deployments, security, performance and accessibility audit, and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Dropping a task with Ctrl (⌥ on Mac) onto the «Always in the release» or «Always in the plan» panel creates the copy directly as a fixed task in that panel, keeping the cadence if the original was already fixed, in a single undo step.",
+            "Fixed tasks in the panel can be picked up with Space and moved with the keyboard, like other cards.",
+            "Own «Not found» page for addresses that don't exist, in your language and theme, and a loading skeleton when switching tabs in Administration."
+          ],
+          "mejoras": [
+            "More compact task detail: the fields column shows Column and Assigned to, Due date and the optional fields, and Repeat and Deliverable two by two; «Blocked by» no longer says «(optional)»; with many types and labels the column widens on wide screens.",
+            "Opening the fixed-tasks panel no longer shrinks the list with a scrollbar when the cards fit.",
+            "The Ctrl copy appears instantly where it is dropped.",
+            "Shared uploads: when more than one person is using Pizarro, each uploads their files one at a time (alone, up to three at once); the browser knows before starting and doesn't repeat uploads, and small text imports don't wait.",
+            "Exporting a project with many attachments no longer delays application updates.",
+            "Contrast: secondary text readable in dark mode, labels with white or dark text depending on their colour, more readable avatars and other-month days in the calendar; selection checkboxes easier to tap on mobile.",
+            "Browser tabs for Releases, Documentation and Settings include the project name.",
+            "The board and Documentation download less code when opened (dialogs and format readers load when used).",
+            "Importing from Jira (JSON or CSV, also with Spanish headers) skips resolved issues and says how many.",
+            "Notifications: the unread count is the real total; from 100, «More than 99 unread».",
+            "With the board open, «Today» changes on its own at midnight."
+          ],
+          "correcciones": [
+            "Dropping with Ctrl on the fixed-tasks panel created the copy outside the panel.",
+            "A fixed task dragged to a list and back to the panel could not be dragged again until reloading; dragging between the list and the panel has also been hardened, a possible source of the board's «Something went wrong».",
+            "Security: a Markdown image with «..» in its path could sign out whoever viewed the task or trigger costly downloads; now only attachment images are loaded.",
+            "Security: changing, resetting or forcing a password (and deactivating the account, changing its role or unlinking Google) also cancels half-finished sign-ins.",
+            "A recurring task deployed in a release with «Archive» spawned the next one in the release column itself; now it is created in the first unfinished column.",
+            "Reordering a card within a «Waiting» column reset its counter to 0 until reloading.",
+            "The daily digest missed from «Done» the tasks archived before it was sent.",
+            "With PostgreSQL on local time, bulk archive, deploy with archive and column entry stored a shifted time.",
+            "Renaming a document with an empty name («   », «...») called it «documento» without warning.",
+            "The licence registration date was computed in UTC.",
+            "The provisional copy from Ctrl+drag accepted actions (rename, assign, select) that failed and left duplicate cards until reloading.",
+            "On mobile, the last card of a column with a fixed-tasks panel could end up under the selection bar."
+          ],
+          "tecnicos": [
+            "Two-phase project export: reads in a short transaction, hashes and ZIP outside it.",
+            "Per-person upload slots based on activity in the last 5 minutes (user-activity.ts), X-Pizarro-Upload-Per-User header and /api/upload-limit route; the browser queue adjusts its concurrency.",
+            "Less server work: board counts with groupBy, batched recurrences (500 tasks: from 6,010 queries to 47), unread notifications counted up to 100, external backup sync that reads nothing when everything is uploaded, transfer worker without a transaction when the queue is empty, version history rewritten only when it changes, pasted subtasks in one query, parallel calendar queries and page views logged at most every 15 minutes.",
+            "Global limit for anonymous browser error reports; /api/auth/reset only answers page navigations.",
+            "task_column_entered trigger in UTC (new migration) and archive time sent from the app.",
+            "task-json-core.ts and lazyDialog.tsx modules; r55-tablero e2e suite (75 checks)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.58.0",
       "date": "2026-11-17",
       "releasedAt": "2026-11-17T02:24:53+01:00",

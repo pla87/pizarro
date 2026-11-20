@@ -1,5 +1,6 @@
 import type { Components } from "react-markdown";
 import type { T } from "@/i18n/core";
+import { isAttachmentSrc } from "@/lib/attachment-refs";
 import { UNDERLINE_HREF, underlineToLink } from "@/lib/markdown-underline";
 import { mentionsToMarkdown } from "@/lib/mentions";
 
@@ -20,7 +21,7 @@ export function markdownComponents(t: T): Components {
         </a>
       ),
     img: ({ node: _node, alt, src }) =>
-      typeof src === "string" && src.startsWith("/api/attachments/") ? (
+      isAttachmentSrc(src) ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img alt={alt ?? ""} src={src} loading="lazy" decoding="async" className="max-w-full rounded" />
       ) : (

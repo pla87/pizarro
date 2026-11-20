@@ -189,6 +189,9 @@ const state = ((globalThis as unknown as { __pzTransfer?: { active: number; pump
 
 /** Reserva el trabajo más antiguo en cola si hay hueco en todo el servidor (cuenta los RUNNING de cualquier proceso). */
 export async function claimNextJob(now: Date = new Date()): Promise<JobRow | null> {
+  // Lo normal es que no haya nada en cola (el barrido periódico llama aquí): sin abrir transacción ni tomar el bloqueo.
+  // Una lectura sin bloqueo basta: un trabajo encolado justo después despierta al trabajador al encolarse.
+  if (!(await db.projectTransferJob.findFirst({ where: { status: "QUEUED" }, select: { id: true } }))) return null;
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${LOCK_TRANSFER_CLAIM})::text`;
     if ((await tx.projectTransferJob.count({ where: { status: "RUNNING" } })) >= transferConcurrency()) return null;

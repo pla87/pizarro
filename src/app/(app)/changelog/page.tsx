@@ -23,7 +23,10 @@ export default async function ChangelogPage() {
   await requireUserPage();
   const t = await getT();
   const en = (await getLocale()) === "en";
-  const versions = (await db.appVersionLog.findMany()).sort((a, b) => compareSemver(a.version, b.version));
+  // Solo lo que se muestra (sin syncedAt), y la traducción solo en inglés.
+  const versions = (
+    await db.appVersionLog.findMany({ select: { id: true, version: true, releasedAt: true, summary: true, changes: true, summaryEn: en, changesEn: en } })
+  ).sort((a, b) => compareSemver(a.version, b.version));
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-6">

@@ -187,7 +187,11 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       if (emailChanged || !data.active) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
       for (const op of roleSwitch) await op(tx);
       // Al desactivar o cambiar de rol se cierran sus sesiones.
-      if (data.active !== user.active || data.role !== user.role) await tx.session.deleteMany({ where: { userId: user.id } });
+      // Y los accesos a medio completar: al reactivar no deben «revivir», y con otro rol cambia si se exige el segundo paso.
+      if (data.active !== user.active || data.role !== user.role) {
+        await tx.session.deleteMany({ where: { userId: user.id } });
+        await tx.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } });
+      }
     });
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {
@@ -226,6 +230,8 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
       // Los enlaces pendientes (un cambio de email pedido por quien conocía la contraseña, restablecimientos anteriores)
       // dejan de valer: el único válido será el que se genera ahora.
       db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
+      // También los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo).
+      db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
     ]);
     revokeUser(user.id);
     // El token nunca se registra: describeAction solo dice qué se hizo.
@@ -278,6 +284,8 @@ export async function unlinkGoogle(userId: string) {
     await db.$transaction([
       db.user.update({ where: { id: user.id }, data: { googleSub: null, googleRelinkBlocked: true } }),
       db.session.deleteMany({ where: { userId: user.id } }),
+      // Un acceso con Google a medio completar (falta el segundo paso) tampoco debe poder terminarse.
+      db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
     ]);
     revokeUser(user.id);
     describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);

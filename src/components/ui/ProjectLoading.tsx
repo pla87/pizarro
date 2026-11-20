@@ -8,12 +8,12 @@ import { cn } from "@/components/ui/cn";
 const SHOW_AFTER_MS = 200;
 
 /**
- * Marco común de los esqueletos de las páginas de proyecto (loading.tsx del tablero, Releases, Documentación y Ajustes):
+ * Marco común de los esqueletos de las páginas de proyecto (loading.tsx del tablero, Releases, Documentación y Ajustes, y el de Administración):
  * ocupa el hueco de la página (la barra lateral se queda), aparece a los 200 ms (CSS, así que también antes de hidratar)
  * y entonces anuncia «Cargando…». Brillo y retardo: `.project-skeleton` y `.sk` en globals.css (sin brillo con
  * movimiento reducido).
  */
-function SkeletonFrame({ kind, className, children }: { kind: "board" | "releases" | "docs" | "settings"; className?: string; children: React.ReactNode }) {
+function SkeletonFrame({ kind, className, children }: { kind: "board" | "releases" | "docs" | "settings" | "admin"; className?: string; children: React.ReactNode }) {
   const t = useT();
   const [announce, setAnnounce] = useState(false);
   useEffect(() => {
@@ -189,6 +189,36 @@ export function SettingsSkeleton() {
                 <Bone className="h-9 w-full rounded-lg" />
               </div>
             ))}
+          </div>
+        ))}
+      </div>
+    </SkeletonFrame>
+  );
+}
+
+/**
+ * Administración: lo que va bajo el título y las pestañas, que pone el layout y se quedan a la vista (sin márgenes propios):
+ * la cabecera de la sección (título, una línea y el botón) y una lista de filas en una tarjeta.
+ */
+export function AdminSkeleton() {
+  return (
+    <SkeletonFrame kind="admin" className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="space-y-1.5">
+          <Bone className="h-6 w-32 rounded-md" />
+          <Bone className="h-3.5 w-48" />
+        </div>
+        <span className="sk sk-brand ml-auto block h-9 w-36 rounded-lg" />
+      </div>
+      <div className="card sk-fade divide-y divide-slate-200 dark:divide-slate-800">
+        {["w-40", "w-32", "w-48", "w-36", "w-28"].map((w, i) => (
+          <div key={i} className="flex items-center gap-3 p-3">
+            <Bone className="h-8 w-8 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Bone className={cn("h-4", w)} />
+              <Bone className="h-3 w-56 max-w-full" />
+            </div>
+            <Bone className="h-8 w-20 rounded-lg" />
           </div>
         ))}
       </div>

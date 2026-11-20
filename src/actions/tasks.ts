@@ -336,10 +336,16 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
  * apuntar a esas copias); no copia comentarios, historial ni repetición. Los adjuntos que no caben (tope por tarea,
  * cuotas, disco del servidor) o cuyo fichero falta se omiten y la respuesta lleva `copyNotice`, el aviso para quien duplica.
  * Queda justo detrás de la original en su columna o, con `target` (Ctrl/Alt al soltar una tarjeta arrastrada),
- * en esa columna entre las vecinas indicadas, como moveTask. Se deshace de una vez (borra la copia; los ficheros de sus
+ * en esa columna entre las vecinas indicadas, como moveTask. Con `target.evergreen` (soltada con Ctrl/Alt en el panel de
+ * fijas de una columna de release o de plan de trabajo para IA) la copia nace fija, al final de ese panel, con la cadencia
+ * de la original si ya era fija: en la misma acción, sin un makeEvergreen después (un solo paso de deshacer y sin que nadie
+ * vea un momento la copia como tarea normal). Se deshace de una vez (borra la copia; los ficheros de sus
  * adjuntos se conservan mientras se pueda rehacer y después se borran, como al borrar una tarea).
  */
-const duplicateTargetSchema = z.object({ columnId: v.id, prevId: v.id.nullable(), nextId: v.id.nullable() }).nullable().default(null);
+const duplicateTargetSchema = z
+  .object({ columnId: v.id, prevId: v.id.nullable(), nextId: v.id.nullable(), evergreen: z.boolean().optional() })
+  .nullable()
+  .default(null);
 
 export async function duplicateTask(taskId: string, target?: z.input<typeof duplicateTargetSchema>) {
   return runAction({ name: "tasks.duplicateTask", args: [taskId, target] }, async () => {
@@ -356,7 +362,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-        columnId: true, blockedById: true,
+        columnId: true, blockedById: true, evergreen: true, evergreenEvery: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
         links: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { kind: true, title: true, url: true, externalId: true, createdById: true, shareStatus: true, shareFailed: true, createdAt: true } },
@@ -367,15 +373,23 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     // Si no cabe, se recorta el original (caracteres visibles, sin partir emojis ni menciones) y se conserva «(copia)».
     const title = `${clampTitle(src.title, MAX_TITLE - graphemeCount(suffix), MAX_TITLE_UNITS - suffix.length).value}${suffix}`;
     const columnId = dest?.columnId ?? src.columnId;
+    const evergreen = dest?.evergreen === true;
     const copy = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, projectId);
+      if (evergreen) {
+        // Solo la columna de la release y las de plan de trabajo para IA tienen panel de fijas (como makeEvergreen).
+        const column = await tx.column.findFirst({ where: { id: columnId, projectId, role: { in: [...EVERGREEN_COLUMN_ROLES] } }, select: { id: true } });
+        if (!column) throw new AppError("Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.");
+      }
       await lockColumns(tx, [columnId]);
       await assertColumnRoom(tx, columnId, 1);
       // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
-      // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna.
-      const { position } = dest
-        ? await placeInColumn(tx, columnId, dest.prevId, dest.nextId)
-        : await placeInColumn(tx, columnId, taskId, null);
+      // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna. Fija: al final.
+      const { position } = evergreen
+        ? { position: positionBetween(await lastPositionIn(tx, columnId), null) }
+        : dest
+          ? await placeInColumn(tx, columnId, dest.prevId, dest.nextId)
+          : await placeInColumn(tx, columnId, taskId, null);
       return tx.task.create({
         data: {
           projectId,
@@ -393,6 +407,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           // La copia queda bloqueada por la misma tarea que la original.
           blockedById: src.blockedById,
           position,
+          ...(evergreen ? { evergreen: true, evergreenEvery: src.evergreen ? src.evergreenEvery : 1 } : {}),
           createdById: user.id,
           labels: { create: src.labels.map((l) => ({ labelId: l.labelId })) },
           subtasks: { create: src.subtasks.map((s) => ({ title: s.title, position: s.position })) },
@@ -403,7 +418,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       });
     });
     addUndo({ t: "task.remove", id: copy.id });
-    if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
+    if (evergreen) describeAction("Duplicó «{title}» como fija en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
+    else if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
     else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
     // Después de crear la tarea (los ficheros pueden tardar): lo que no se copie se avisa, pero la copia ya existe.
     const copied = await copyTaskAttachments(taskId, copy.id);
@@ -860,7 +876,7 @@ export async function archiveTasks(taskIds: string[]) {
     // Filas bloqueadas antes, en orden de id: el UPDATE solo las bloquearía en el orden en que las recorre (40P01).
     await db.$transaction(async (tx) => {
       await lockTaskRows(tx, active);
-      await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
+      await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = ${new Date()}, "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1 WHERE "id" IN (${Prisma.join(active)}) AND "archivedAt" IS NULL`;
     });
     const spawned = await spawnRecurrences(active, user.id);
     describeAction("Archivó {count}", { count: tasksN(active.length) }, { taskIds: active });
@@ -1120,11 +1136,10 @@ export async function addSubtasks(taskId: string, titles: string[]) {
       if (room <= 0) throw new AppError("Una tarea no puede tener más de 100 subtareas.");
       const last = await tx.subtask.findFirst({ where: { taskId }, orderBy: { position: "desc" }, select: { position: true } });
       let position = last?.position;
-      const created: SubtaskInfo[] = [];
-      for (const title of names.slice(0, room)) {
-        position = positionBetween(position, null);
-        created.push(await tx.subtask.create({ data: { taskId, title, position }, select: { id: true, title: true, done: true, position: true } }));
-      }
+      const data = names.slice(0, room).map((title) => ({ taskId, title, position: (position = positionBetween(position, null)) }));
+      // Una sola consulta para todas (antes, una por subtarea con la tarea bloqueada).
+      const rows = await tx.subtask.createManyAndReturn({ data, select: { id: true, title: true, done: true, position: true } });
+      const created: SubtaskInfo[] = rows.sort((a, b) => a.position - b.position);
       return { created, skipped: Math.max(0, names.length - room) };
     });
     addUndo(...created.map((s) => ({ t: "subtask.remove" as const, id: s.id })));

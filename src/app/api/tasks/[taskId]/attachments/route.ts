@@ -17,7 +17,7 @@ import { attachmentLimitProblem, createAttachmentWithinLimit, roundMb, type Atta
 import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
-import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
 import { cleanFileName } from "@/lib/file-name";
@@ -72,7 +72,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = await acquireUploadSlot();
+    release = await acquireUploadSlot(user.id);
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
     // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
     const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
@@ -172,5 +172,5 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
 
 /** La comprobación de acceso anota el proyecto en el contexto: así el log de la subida lo lleva. */
 export async function POST(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
-  return actionContext.run({}, () => handlePost(req, ctx));
+  return withUploadCapHeader(await actionContext.run({}, () => handlePost(req, ctx)));
 }

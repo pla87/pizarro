@@ -2,6 +2,7 @@
 // y en los tests.
 
 import { isoInZone } from "./dates";
+import { addDays, startOfDayInZone } from "./log-range";
 import { blankEmptyParagraphs, decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { MAX_TITLE, MAX_TITLE_UNITS } from "./constants";
@@ -285,25 +286,12 @@ export function defaultReleaseTitle(dayIso: string, projectName: string, release
   return `Release ${dayIso}${n > 1 ? ` (${n})` : ""} · ${projectName}`;
 }
 
-/** Instantes UTC [inicio, fin) del día local `dayIso` (YYYY-MM-DD) en la zona horaria dada. */
+/**
+ * Instantes UTC [inicio, fin) del día local `dayIso` (YYYY-MM-DD) en la zona horaria dada. El cálculo es el mismo que el
+ * del intervalo de la descarga de logs (startOfDayInZone, también en los cambios de hora).
+ */
 export function zonedDayRange(dayIso: string, timeZone: string): { start: Date; end: Date } {
-  const [y, m, d] = dayIso.split("-").map(Number) as [number, number, number];
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", second: "numeric",
-  });
-  const midnight = (yy: number, mm: number, dd: number) => {
-    const wall = Date.UTC(yy, mm - 1, dd);
-    // Se afina dos veces por si el desfase cambia (horario de verano) cerca de la medianoche.
-    let guess = wall;
-    for (let i = 0; i < 2; i++) {
-      const p = Object.fromEntries(fmt.formatToParts(new Date(guess)).map((x) => [x.type, Number(x.value)]));
-      const shown = Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!, p.second!);
-      guess -= shown - wall;
-    }
-    return new Date(guess);
-  };
-  const next = new Date(Date.UTC(y, m - 1, d + 1));
-  return { start: midnight(y, m, d), end: midnight(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate()) };
+  return { start: startOfDayInZone(dayIso, timeZone), end: startOfDayInZone(addDays(dayIso, 1), timeZone) };
 }
 
 /** Trozo de nombre de fichero: espacios y símbolos a «_», sin repetidos ni en los extremos. */

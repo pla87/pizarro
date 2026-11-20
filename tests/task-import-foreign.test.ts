@@ -105,6 +105,50 @@ describe("CSV", () => {
     assert.deepEqual(r.warnings, []);
   });
 
+  test("Jira: las resueltas («Resolution» rellena o «Status Category» Done) no se importan; sus subtareas resueltas, solo bajo una abierta", () => {
+    const r = read(
+      "Summary,Issue key,Issue Type,Status,Status Category,Resolution,Resolved,Parent summary\n" +
+        "Abierta,WEB-1,Task,In Progress,In Progress,,,\n" +
+        "Arreglada,WEB-2,Bug,Done,Done,Fixed,2026-10-01,\n" +
+        "Descartada,WEB-3,Bug,Won't Do,To Do,Won't Do,2026-10-02,\n" +
+        "Sin categoría,WEB-4,Task,Cerrada,Done,,,\n" +
+        "Paso hecho,WEB-5,Sub-task,Done,Done,Done,2026-10-03,Abierta\n" +
+        "Paso pendiente,WEB-6,Sub-task,To Do,To Do,,,Abierta\n" +
+        "Paso de una arreglada,WEB-7,Sub-task,Done,Done,Done,2026-10-04,Arreglada\n" +
+        "Paso pendiente de una arreglada,WEB-8,Sub-task,To Do,To Do,Unresolved,,Arreglada\n",
+    );
+    assert.equal(r.source, "CSV de Jira");
+    assert.deepEqual(r.tasks.map((x) => [x.task.title, x.task.subtasks]), [
+      ["Abierta", [{ text: "Paso hecho", done: true }, { text: "Paso pendiente", done: false }]],
+      // Pendiente aunque su madre esté resuelta: entra como tarea (con la nota «Subtarea de»).
+      ["Paso pendiente de una arreglada", undefined],
+    ]);
+    assert.deepEqual(r.warnings, ["4 incidencias resueltas no se importan."]);
+    // Fuera de Jira, una columna «Resolution» no cambia nada.
+    assert.deepEqual(titles("Title,Resolution\nUna,Fixed\n"), ["Una"]);
+  });
+
+  test("Jira en español: «Clave de incidencia», «Id de la incidencia» o «Tipo de incidencia» lo reconocen; «Sin resolución» cuenta como abierta", () => {
+    const r = read(
+      "Resumen,Clave de incidencia,Id de la incidencia,Tipo de incidencia,Estado,Resolución\n" +
+        "Abierta,WEB-1,10001,Tarea,En curso,Sin resolución\n" +
+        "Sin texto,WEB-2,10002,Tarea,Por hacer,\n" +
+        "Otra abierta,WEB-3,10003,Error,Por hacer,Unresolved\n" +
+        "Arreglada,WEB-4,10004,Error,Listo,Corregida\n",
+    );
+    assert.equal(r.source, "CSV de Jira");
+    assert.deepEqual(r.tasks.map((x) => x.task.title), ["Abierta", "Sin texto", "Otra abierta"]);
+    // La clave va como referencia, como «Issue key».
+    assert.match(r.tasks[0]!.task.description ?? "", /Referencia original: WEB-1/);
+    assert.deepEqual(r.warnings, ["1 incidencia resuelta no se importa."]);
+    // Basta con una de las tres cabeceras.
+    for (const head of ["Clave de incidencia", "Id de la incidencia", "Tipo de incidencia"]) {
+      const one = read(`Resumen,${head},Resolución\nUna,X-1,\nOtra,X-2,Hecha\n`);
+      assert.equal(one.source, "CSV de Jira", head);
+      assert.deepEqual(one.tasks.map((x) => x.task.title), ["Una"], head);
+    }
+  });
+
   test("Asana, ClickUp, Trello, Linear, GitHub Projects y Planner: cada uno con su nombre y sus columnas", () => {
     const asana = read("Task ID,Created At,Completed At,Name,Section/Column,Assignee,Assignee Email,Due Date,Tags,Notes,Parent task\n1,2026-11-01,,Diseñar,Por hacer,Ana,ana@example.com,2027-01-20,web,Notas,\n");
     assert.equal(asana.source, "CSV de Asana");
@@ -221,6 +265,16 @@ describe("Jira", () => {
     });
     const search = read(JSON.stringify({ startAt: 0, total: 2, issues: [issue, { key: "WEB-10", fields: { summary: "Otra", description: "Texto *wiki* de la v2" } }] }));
     assert.deepEqual(search.tasks.map((x) => [x.task.title, x.task.description]), [["Migrar el servidor", one.tasks[0]!.task.description], ["Otra", "Texto *wiki* de la v2\n\n_Referencia original: WEB-10_"]]);
+  });
+  // Antes entraban como pendientes; ahora, como las cerradas de GitHub o las completadas de Asana, no se importan (con aviso).
+  test("las incidencias resueltas (categoría de estado «done») no se importan, con aviso contado", () => {
+    const done = (key: string) => ({ key, fields: { summary: `Hecha ${key}`, status: { name: "Done", statusCategory: { key: "done" } } } });
+    const one = read(JSON.stringify({ issues: [issue, done("WEB-20")] }));
+    assert.deepEqual(one.tasks.map((x) => x.task.title), ["Migrar el servidor"]);
+    assert.deepEqual(one.warnings, ["1 incidencia resuelta no se importa."]);
+    const two = read(JSON.stringify({ issues: [issue, done("WEB-20"), done("WEB-21")] }));
+    assert.deepEqual(two.warnings, ["2 incidencias resueltas no se importan."]);
+    assert.deepEqual(parseTasksText(JSON.stringify({ issues: [issue, done("WEB-20"), done("WEB-21")] }), { t: en, timeZone: "Europe/Madrid" }).warnings, ["2 resolved issues are not imported."]);
   });
   test("ADF muy anidado: se corta sin desbordar la pila", () => {
     // Escrito a mano: JSON.stringify de tantos niveles desborda la pila de la propia prueba (JSON.parse, no).

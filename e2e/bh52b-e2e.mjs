@@ -157,7 +157,8 @@ if (only.includes("columnas")) {
   const plan = L.colLoc(page, "Plan A").locator("[data-column-action] button").first();
   L.check("COLUMNAS: con tarjetas el botón no es aria-disabled", (await plan.getAttribute("aria-disabled")) === null);
   await plan.click();
-  L.check("COLUMNAS: …y abre el plan", await page.locator("[role=dialog]").filter({ hasText: /Generar plan de trabajo/ }).first().isVisible());
+  // El diálogo se carga aparte (lazyDialog): se espera a que aparezca.
+  await L.checkEventually("COLUMNAS: …y abre el plan", () => page.locator("[role=dialog]").filter({ hasText: /Generar plan de trabajo/ }).first().isVisible(), { timeout: 8000 });
   L.assertNoErrors("columnas", [s]);
   await s.ctx.close();
 }

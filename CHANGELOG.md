@@ -2,6 +2,54 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.59.0 — 2026-11-20 02:51
+
+Panel de fijas sin scroll de más y copia con Ctrl en el panel, detalle de tarea más compacto, subidas repartidas entre personas, exportar sin frenar despliegues, auditoría de seguridad, rendimiento y accesibilidad, y caza de bugs
+
+### Nuevas funcionalidades
+
+- Soltar una tarea con Ctrl (⌥ en Mac) sobre el panel «Siempre en la release» o «Siempre en el plan» crea la copia directamente como tarea fija en ese panel, con la misma cadencia si la original ya era fija, en un solo paso de deshacer.
+- Las tareas fijas del panel se pueden coger con Espacio y mover con el teclado, como las demás tarjetas.
+- Página «No encontrado» propia para las direcciones que no existen, en tu idioma y tema, y esqueleto de carga al cambiar de pestaña en Administración.
+
+### Mejoras
+
+- Detalle de tarea más compacto: la columna de campos muestra de dos en dos Columna y Asignada a, Fecha límite y los campos opcionales, y Repetir y Entregable; «Bloqueada por» ya no dice «(opcional)»; con muchos tipos y etiquetas la columna se ensancha en pantallas anchas.
+- Abrir el panel de tareas fijas ya no encoge la lista con una barra de desplazamiento si las tarjetas caben.
+- La copia con Ctrl aparece al momento donde se suelta.
+- Subidas repartidas: con más de una persona usando Pizarro, cada una sube sus archivos de uno en uno (sola, hasta tres a la vez); el navegador lo sabe antes de empezar y no repite subidas, y las importaciones de texto pequeñas no esperan.
+- Exportar un proyecto con muchos adjuntos ya no retrasa las actualizaciones de la aplicación.
+- Contraste: textos secundarios legibles en modo oscuro, etiquetas con texto blanco u oscuro según su color, avatares y días de otros meses del calendario más legibles; casillas de selección más fáciles de tocar en el móvil.
+- Las pestañas del navegador de Releases, Documentación y Ajustes llevan el nombre del proyecto.
+- El tablero y la Documentación descargan menos código al abrirse (diálogos y lectores de formatos se cargan al usarlos).
+- Importar de Jira (JSON o CSV, también con cabeceras en español) omite las incidencias resueltas y avisa de cuántas son.
+- Avisos: el número de sin leer es el total real; a partir de 100, «Más de 99 sin leer».
+- Con el tablero abierto, «Hoy» cambia solo a medianoche.
+
+### Correcciones
+
+- Soltar con Ctrl en el panel de fijas creaba la copia fuera del panel.
+- Una tarea fija arrastrada a una lista y devuelta al panel ya no se podía volver a arrastrar hasta recargar; se ha endurecido también el arrastre entre la lista y el panel, posible origen del «Algo ha fallado» del tablero.
+- Seguridad: una imagen en Markdown con «..» en la ruta podía cerrar la sesión de quien veía la tarea o lanzar descargas costosas; ahora solo se cargan imágenes que son adjuntos.
+- Seguridad: cambiar, restablecer o forzar la contraseña (y desactivar la cuenta, cambiarle el rol o desvincular Google) anula también los accesos que estaban a medio completar.
+- Una tarea repetitiva desplegada en una release con «Archivar» generaba la siguiente en la propia columna de la release; ahora nace en la primera columna no terminada.
+- Reordenar una tarjeta dentro de una columna «Esperando» ponía su contador a 0 hasta recargar.
+- El resumen diario perdía de «Terminadas» las tareas archivadas antes del envío.
+- Con PostgreSQL en hora local, archivar varias, desplegar con archivo y la entrada en columna guardaban la hora desplazada.
+- Renombrar un documento con un nombre vacío («   », «...») lo llamaba «documento» sin avisar.
+- La fecha de alta de la licencia se calculaba en UTC.
+- La copia provisional de Ctrl+arrastrar aceptaba acciones (renombrar, asignar, seleccionar) que fallaban y dejaba tarjetas duplicadas hasta recargar.
+- En el móvil, la última tarjeta de una columna con panel de fijas podía quedar bajo la barra de selección.
+
+### Cambios técnicos / DB
+
+- Exportación de proyectos en dos fases: lecturas en una transacción corta y huellas y ZIP fuera de ella.
+- Huecos de subida por persona según la actividad de los últimos 5 minutos (user-activity.ts), cabecera X-Pizarro-Upload-Per-User y ruta /api/upload-limit; la cola del navegador ajusta su concurrencia.
+- Menos trabajo de servidor: recuentos del tablero con groupBy, repeticiones por lotes (500 tareas: de 6.010 consultas a 47), avisos sin leer contados hasta 100, subida externa de copias que no lee nada si ya está todo subido, trabajador de transferencias sin transacción con la cola vacía, historial de versiones que solo se reescribe si cambia, subtareas pegadas en una consulta, consultas del calendario en paralelo y visitas registradas como mucho cada 15 minutos.
+- Límite global para los informes de error del navegador sin sesión; /api/auth/reset solo responde a navegación de página.
+- Disparador task_column_entered en UTC (migración nueva) y hora de archivado enviada desde la app.
+- Módulos task-json-core.ts y lazyDialog.tsx; suite e2e r55-tablero (75 comprobaciones).
+
 ## v1.58.0 — 2026-11-17 02:24
 
 Importar tareas de Trello, Jira, GitHub, Asana y CSV, pegar una tarea en «Nueva tarea» con etiquetas, color y enlace, y caza de bugs

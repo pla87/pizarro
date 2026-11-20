@@ -89,3 +89,16 @@ export function budgetSummary(tasks: readonly { cost: string | null; costPaid: b
   const paid = sumCents(priced.filter((t) => t.costPaid).map((t) => t.cost));
   return { paid, pending: total - paid, total, count: priced.length };
 }
+
+/**
+ * Campo de media columna que, en la rejilla de dos columnas, se quedaría sin pareja justo antes del Coste (que ocupa la
+ * fila entera) y dejaría la celda de su derecha vacía: ese campo pasa a ocupar la fila entera. `before` son los campos de
+ * media columna que van delante del grupo en la misma rejilla (en el detalle, la fecha límite: "due"), y `startFirst`,
+ * si la fecha de inicio va al principio del grupo (en el detalle) y no al final. null si no queda ninguno suelto. Se
+ * calcula por posición, no con grid-flow-dense: ese reordena las celdas a la vista y el tabulador ya no seguiría el orden.
+ */
+export function loneHalfBeforeCost(enabled: readonly TaskFieldKey[], { before = [], startFirst = false }: { before?: readonly string[]; startFirst?: boolean } = {}): string | null {
+  if (!enabled.includes("cost")) return null;
+  const halves = [...before, ...(["startDate", "priority", "client"] as const).filter((k) => enabled.includes(k) && (k !== "startDate" || startFirst))];
+  return halves.length % 2 ? halves.at(-1)! : null;
+}

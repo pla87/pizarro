@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import type { Announcements } from "@dnd-kit/core";
-import { keyboardBlock, placeBlock, sameOrder, selectionGroup } from "../src/components/board/groupDrag";
+import { PENDING_COPY_PREFIX, keyboardBlock, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies } from "../src/components/board/groupDrag";
 import { boardDragA11y } from "../src/components/board/drag-a11y";
 import { blockNeedsRebalance, spreadPositions, POSITION_STEP } from "../src/lib/positions";
 import { esT, makeTWith } from "../src/i18n/shared";
@@ -100,5 +100,28 @@ describe("avisos del lector de pantalla", () => {
   test("en inglés", () => {
     const a = announce(2, makeTWith(EN));
     assert.equal(a.onDragStart({ active } as never), "Picked up 2 cards (“Uno” and 1 more), in the Por hacer column.");
+  });
+});
+
+describe("copias provisionales de un arrastre con Ctrl (no van nunca al servidor)", () => {
+  const P = `${PENDING_COPY_PREFIX}1`;
+  test("las vecinas de un bloque se saltan la provisional: la siguiente de verdad o ninguna", () => {
+    // Soltado justo detrás de la provisional, al final de la columna.
+    const placed = placeBlock(["a", P, "x", "y"], "x", ["x", "y"]);
+    assert.equal(placed.prevId, P);
+    const { placement, group } = realPlacement(placed, ["x", "y"]);
+    assert.deepEqual(group, ["x", "y"]);
+    assert.deepEqual(placement, { list: ["a", "x", "y"], prevId: "a", nextId: null });
+    // Delante de la provisional, que era la primera.
+    assert.deepEqual(realPlacement({ list: ["x", P, "b"], prevId: null, nextId: P }, ["x"]).placement, { list: ["x", "b"], prevId: null, nextId: "b" });
+  });
+  test("una provisional en el grupo se quita; sin provisionales no cambia nada", () => {
+    assert.deepEqual(realPlacement({ list: ["a", P, "x"], prevId: "a", nextId: null }, [P, "x"]).group, ["x"]);
+    const plain = placeBlock(["a", "x", "b"], "x", ["x"]);
+    assert.deepEqual(realPlacement(plain, ["x"]).placement, plain);
+  });
+  test("withoutPendingCopies conserva la tarjeta que se mueve", () => {
+    assert.deepEqual(withoutPendingCopies(["a", P, "b"]), ["a", "b"]);
+    assert.deepEqual(withoutPendingCopies(["a", P, "b"], P), ["a", P, "b"]);
   });
 });

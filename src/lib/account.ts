@@ -17,6 +17,9 @@ export async function applyNewPassword(userId: string, passwordHash: string, opt
     db.authToken.deleteMany({ where: { userId, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
     // Con otra contraseña, también se deja de confiar en los dispositivos recordados para el segundo paso.
     db.knownDevice.updateMany({ where: { userId, trustedUntil: { not: null } }, data: { trustedUntil: null } }),
+    // Y los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo): eran de la
+    // contraseña anterior y no deben poder terminarse con ella.
+    db.loginChallenge.deleteMany({ where: { userId, kind: { in: ["LOGIN", "SETUP"] } } }),
   ]);
   // Sesiones borradas: también se cortan sus canales en vivo (SSE, presencia).
   revokeUser(userId);

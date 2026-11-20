@@ -157,4 +157,8 @@ export const common: Record<string, string> = {
 
   // Contador de avisos con 1
   "1 aviso sin leer": "1 unread notification",
+
+  // Contador de avisos con tope (100 o más)
+  "Más de 99 avisos sin leer": "More than 99 unread notifications",
+  "Más de 99 sin leer": "More than 99 unread",
 };

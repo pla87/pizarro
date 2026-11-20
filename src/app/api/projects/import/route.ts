@@ -18,7 +18,7 @@ import { getCurrentUser } from "@/lib/session";
 import { assertUserCanQueue, createImportJob } from "@/lib/transfer-jobs";
 import { ZipReadError } from "@/lib/zip-read";
 import { uploadDir } from "@/lib/upload-dir";
-import { acquireUploadSlot, createSlowGuard, declaredLength, IMPORT_MAX_TOTAL_MS, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError, uploadTotalMs } from "@/lib/upload-slots";
+import { acquireUploadSlot, createSlowGuard, withUploadCapHeader, declaredLength, IMPORT_MAX_TOTAL_MS, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError, uploadTotalMs } from "@/lib/upload-slots";
 import { getT } from "@/i18n/server";
 
 export const runtime = "nodejs";
@@ -59,8 +59,13 @@ async function readHead(file: string, bytes = 8192): Promise<Buffer> {
  * trozos en un temporal para no cargarlo en memoria. `?private=1` crea el proyecto como privado. Solo administradores.
  * Aquí solo se sube y se comprueba lo barato (directorio del ZIP y manifiesto); la importación en sí es un trabajo en
  * segundo plano (lib/transfer-jobs.ts) y la respuesta (202) lleva su id. El hueco de subida se suelta al terminar de recibir.
+ * Todas las respuestas llevan el tope actual de subidas por persona (withUploadCapHeader).
  */
 export async function POST(req: Request) {
+  return withUploadCapHeader(await handlePost(req));
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const t = await getT();
   const start = performance.now();
   const ip = clientIp(req.headers);
@@ -90,7 +95,7 @@ export async function POST(req: Request) {
     // Antes de recibir nada: el temporal y la importación (lib/transfer-jobs, IMPORT_FACTOR) deben caber en el disco.
     // Sin Content-Length se cuenta con el máximo admitido.
     await assertDiskRoom(uploadDir(), Math.ceil((length ?? max) * 1.5));
-    release = await acquireUploadSlot();
+    release = await acquireUploadSlot(user.id);
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
     const dir = path.join(/*turbopackIgnore: true*/ uploadDir(), "imports");

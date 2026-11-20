@@ -6,7 +6,7 @@ import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, Fi
 import { blockerIsDone } from "@/lib/blocked";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextOccurrenceDue } from "@/lib/recurrence-date";
-import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
+import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE, onColor } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
@@ -20,6 +20,7 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useIsSelected, useTask } from "./context";
 import { useCardFileDrop } from "./useCardFileDrop";
 import { useNearCard } from "./nearCards";
+import { isPendingCopy } from "./groupDrag";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
@@ -210,8 +211,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
   const [renaming, setRenaming] = useState(false);
   const [dueAnchor, setDueAnchor] = useState<HTMLElement | null>(null);
+  // Copia provisional de un arrastre con Ctrl (aún sin respuesta del servidor; Board.tsx, dropCopy): se ve, pero no admite
+  // teclado, selección ni archivos hasta que la sustituya la de verdad (su id no existe en el servidor).
+  const pending = !overlay && isPendingCopy(task.id);
   // Soltar archivos sobre la tarjeta (escritorio) los adjunta a la tarea.
-  const fileDrop = useCardFileDrop(task.id, !overlay);
+  const fileDrop = useCardFileDrop(task.id, !overlay && !pending);
   // Movida a otra columna con el teclado: se vuelve a montar allí y recoge el foco al montarse (focusCard, shortcuts.ts).
   const cardRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -219,6 +223,14 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   }, [task.id, overlay]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (pending) {
+      // Ni abrir, ni seleccionar, ni atajos; tampoco el arrastre con teclado ni el scroll de Espacio.
+      if (e.key === "Enter" || e.key === " " || e.altKey || e.code === "F2") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
     if (e.key === "Enter") {
       // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
       e.stopPropagation();
@@ -268,7 +280,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       aria-describedby={overlay ? undefined : descId}
       // Selección múltiple (Espacio): botón que se queda pulsado mientras está seleccionada.
       aria-pressed={overlay ? undefined : isSelected}
-      aria-keyshortcuts={overlay ? undefined : CARD_SHORTCUTS}
+      aria-keyshortcuts={overlay || pending ? undefined : CARD_SHORTCUTS}
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
       onClick={() => openTask(task.id)}
       onKeyDown={onKeyDown}
       {...(overlay ? {} : fileDrop.handlers)}
@@ -303,13 +317,15 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            toggleSelected(task.id);
+            if (!pending) toggleSelected(task.id);
           }}
+          disabled={pending}
           onPointerDown={(e) => e.stopPropagation()}
           // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
           tabIndex={-1}
           className={cn(
-            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity",
+            // En el móvil la zona que se puede tocar crece 10 px por cada lado (36×36 px; se ven 16×16) sin mover nada.
+            "relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
             isSelected
               ? "border-brand-600 bg-brand-600 text-on-brand"
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
@@ -338,7 +354,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       {taskLabels.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {taskLabels.map((l) => (
-            <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) ? "text-slate-800 ring-1 ring-inset ring-slate-300" : "text-white")} style={{ backgroundColor: l.color }}>
+            <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) && "ring-1 ring-inset ring-slate-300")} style={{ backgroundColor: l.color, color: onColor(l.color) }}>
               {l.name}
             </span>
           ))}

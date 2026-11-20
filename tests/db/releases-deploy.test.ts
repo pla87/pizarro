@@ -184,3 +184,30 @@ describe("topes de la release", () => {
     expectFail(await deployRelease({ ...input, taskIds: [one.id], attachments }), /^A release holds at most 200 tasks with attachments: remove some from the selection\.$/);
   });
 });
+
+describe("tareas repetitivas en una release", () => {
+  // Al archivar con la release, la siguiente aparición nacía en la propia columna de la release (no terminada) y
+  // entraba en la próxima release sin hacerse. Ahora cuenta como terminada: va a la primera columna no terminada.
+  test("destino «Archivar»: la siguiente aparición va a la primera columna no terminada, sin el código en el título", async () => {
+    const { f } = await setup();
+    const rep = await makeTask(f, { title: "Copia semanal", columnId: f.columns.doing, recurrence: "DAILY" });
+    const res = expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "ARCHIVE", taskIds: [rep.id] }));
+    const next = await db.task.findFirstOrThrow({ where: { recurrenceFromId: rep.id } });
+    assert.equal(next.columnId, f.columns.todo);
+    assert.equal(next.title, "Copia semanal");
+    assert.equal(next.archivedAt, null);
+    assert.deepEqual(res.spawned.map((t) => [t.id, t.columnId]), [[next.id, f.columns.todo]]);
+  });
+
+  test("destino «En producción» terminada: igual, a la primera no terminada; sin terminar, no nace ninguna", async () => {
+    const { f, prod } = await setup();
+    await db.column.update({ where: { id: prod.id }, data: { isDone: true } });
+    const a = await makeTask(f, { title: "A", columnId: f.columns.doing, recurrence: "DAILY" });
+    expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id] }));
+    assert.equal((await db.task.findFirstOrThrow({ where: { recurrenceFromId: a.id } })).columnId, f.columns.todo);
+    await db.column.update({ where: { id: prod.id }, data: { isDone: false } });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.doing, recurrence: "DAILY" });
+    expectOk(await deployRelease({ projectId: f.project.id, title: "R2", content: "x", destination: "IN_PRODUCTION", taskIds: [b.id] }));
+    assert.equal(await db.task.count({ where: { recurrenceFromId: b.id } }), 0);
+  });
+});

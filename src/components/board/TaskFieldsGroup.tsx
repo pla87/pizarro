@@ -2,8 +2,9 @@
 
 import { useId } from "react";
 import { useT } from "@/i18n/client";
+import { cn } from "../ui/cn";
 import { fieldsError, type FieldsForm } from "@/lib/fields-form";
-import { HOURS_STEP, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskFieldKey } from "@/lib/task-fields";
+import { HOURS_STEP, loneHalfBeforeCost, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskFieldKey } from "@/lib/task-fields";
 
 export { fieldsError, fieldsForCreate, fieldsFormOf, fieldsPatch, type FieldsForm } from "@/lib/fields-form";
 
@@ -39,9 +40,14 @@ function DecimalInput({ value, onChange, step, ...rest }: Omit<React.InputHTMLAt
   );
 }
 
-/** Grupo compacto «Campos» con los campos opcionales que el proyecto tiene activados. */
+/**
+ * Grupo «Campos» con los campos opcionales que el proyecto tiene activados. Por defecto, un recuadro con leyenda y su
+ * propia rejilla de dos columnas; con `inline` (columna derecha del detalle) no pinta recuadro ni rejilla propia: sus
+ * campos pasan a ser celdas de la rejilla de dos columnas que lo contiene (la leyenda queda solo para lectores de
+ * pantalla) y la fecha de inicio va primero, junto a la fecha límite.
+ */
 export function TaskFieldsGroup({
-  enabled, value, onChange, onCommit, dueDate, clients = [], disabled = false,
+  enabled, value, onChange, onCommit, dueDate, clients = [], disabled = false, inline = false,
 }: {
   enabled: readonly TaskFieldKey[];
   value: FieldsForm;
@@ -52,6 +58,8 @@ export function TaskFieldsGroup({
   /** Clientes ya usados en el proyecto (sugerencias). */
   clients?: string[];
   disabled?: boolean;
+  /** Sin recuadro: los campos son celdas de la rejilla (de dos columnas) del contenedor. */
+  inline?: boolean;
 }) {
   const t = useT();
   const uid = useId();
@@ -63,32 +71,51 @@ export function TaskFieldsGroup({
     onChange(patch);
     onCommit?.({ ...value, ...patch });
   };
+  const label = cn("label", inline && "md:mb-0.5");
+  // El de media columna que se quedaría solo antes del Coste ocupa la fila entera (en el detalle cuenta la fecha límite,
+  // que va delante en la misma rejilla: si es ella, la ensancha el detalle con loneHalfBeforeCost).
+  const lone = loneHalfBeforeCost(enabled, inline ? { before: ["due"], startFirst: true } : {});
+  const cell = (k: TaskFieldKey) => cn("min-w-0", lone === k && "col-span-2");
+  // Como los demás campos de la columna: más altos en el móvil (dedo), compactos en escritorio.
+  const input = inline ? "input md:px-2 md:py-1" : "input py-1";
+  const startDate = has("startDate") && (
+    <div className={cell("startDate")}>
+      <label className={label} htmlFor={`${uid}-start`}>{t("Fecha de inicio")}</label>
+      <input id={`${uid}-start`} type="date" className={input} value={value.startDate} max={dueDate || undefined} onChange={(e) => {
+        // Al teclear el año, Chrome emite 0002, 0020…: solo se guarda una fecha completa y válida.
+        const v = e.target.value;
+        if (v === "" || v.slice(0, 4) >= "1900") change({ startDate: v });
+        else onChange({ startDate: v });
+      }} />
+    </div>
+  );
   return (
-    <fieldset className="rounded-lg border border-slate-200 p-2.5 dark:border-slate-700" disabled={disabled} onBlur={() => onCommit?.(value)}>
-      <legend className="px-1 text-xs font-medium text-slate-500">{t("Campos")}</legend>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+    <fieldset className={inline ? "contents" : "rounded-lg border border-slate-200 p-2.5 dark:border-slate-700"} disabled={disabled} onBlur={() => onCommit?.(value)}>
+      <legend className={inline ? "sr-only" : "px-1 text-xs font-medium text-slate-500"}>{t("Campos")}</legend>
+      <div className={inline ? "contents" : "grid grid-cols-2 gap-x-3 gap-y-2"}>
+        {inline && startDate}
         {has("priority") && (
-          <div className="min-w-0">
-            <label className="label" htmlFor={`${uid}-priority`}>{t("Prioridad")}</label>
-            <select id={`${uid}-priority`} className="input py-1" value={value.priority} onChange={(e) => change({ priority: e.target.value })}>
+          <div className={cell("priority")}>
+            <label className={label} htmlFor={`${uid}-priority`}>{t("Prioridad")}</label>
+            <select id={`${uid}-priority`} className={input} value={value.priority} onChange={(e) => change({ priority: e.target.value })}>
               <option value="">{t("Sin prioridad")}</option>
               {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
             </select>
           </div>
         )}
         {has("client") && (
-          <div className="min-w-0">
-            <label className="label" htmlFor={`${uid}-client`}>{t("Cliente")}</label>
-            <input id={`${uid}-client`} className="input py-1" value={value.client} maxLength={MAX_CLIENT} list={`${uid}-clients`} autoComplete="off" onChange={(e) => onChange({ client: e.target.value })} />
+          <div className={cell("client")}>
+            <label className={label} htmlFor={`${uid}-client`}>{t("Cliente")}</label>
+            <input id={`${uid}-client`} className={input} value={value.client} maxLength={MAX_CLIENT} list={`${uid}-clients`} autoComplete="off" onChange={(e) => onChange({ client: e.target.value })} />
             <datalist id={`${uid}-clients`}>{clients.map((c) => <option key={c} value={c} />)}</datalist>
           </div>
         )}
         {has("cost") && (
           <div className="col-span-2 min-w-0">
-            <label className="label" htmlFor={`${uid}-cost`}>{t("Coste")}</label>
+            <label className={label} htmlFor={`${uid}-cost`}>{t("Coste")}</label>
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
-                <DecimalInput id={`${uid}-cost`} step={0.01} className="input py-1 pr-7" value={value.cost} onChange={(cost) => onChange({ cost })} />
+                <DecimalInput id={`${uid}-cost`} step={0.01} className={cn(input, "pr-7")} value={value.cost} onChange={(cost) => onChange({ cost })} />
                 <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-sm text-slate-500" aria-hidden>€</span>
               </div>
               <label className="flex shrink-0 items-center gap-1 text-xs">
@@ -101,28 +128,18 @@ export function TaskFieldsGroup({
         {has("hours") && (
           <>
             <div className="min-w-0">
-              <label className="label" htmlFor={`${uid}-est`}>{t("Horas estimadas")}</label>
-              <DecimalInput id={`${uid}-est`} step={HOURS_STEP} className="input py-1" value={value.estimatedHours} onChange={(estimatedHours) => onChange({ estimatedHours })} />
+              <label className={label} htmlFor={`${uid}-est`}>{t("Horas estimadas")}</label>
+              <DecimalInput id={`${uid}-est`} step={HOURS_STEP} className={input} value={value.estimatedHours} onChange={(estimatedHours) => onChange({ estimatedHours })} />
             </div>
             <div className="min-w-0">
-              <label className="label" htmlFor={`${uid}-act`}>{t("Horas reales")}</label>
-              <DecimalInput id={`${uid}-act`} step={HOURS_STEP} className="input py-1" value={value.actualHours} onChange={(actualHours) => onChange({ actualHours })} />
+              <label className={label} htmlFor={`${uid}-act`}>{t("Horas reales")}</label>
+              <DecimalInput id={`${uid}-act`} step={HOURS_STEP} className={input} value={value.actualHours} onChange={(actualHours) => onChange({ actualHours })} />
             </div>
           </>
         )}
-        {has("startDate") && (
-          <div className="min-w-0">
-            <label className="label" htmlFor={`${uid}-start`}>{t("Fecha de inicio")}</label>
-            <input id={`${uid}-start`} type="date" className="input py-1" value={value.startDate} max={dueDate || undefined} onChange={(e) => {
-              // Al teclear el año, Chrome emite 0002, 0020…: solo se guarda una fecha completa y válida.
-              const v = e.target.value;
-              if (v === "" || v.slice(0, 4) >= "1900") change({ startDate: v });
-              else onChange({ startDate: v });
-            }} />
-          </div>
-        )}
+        {!inline && startDate}
       </div>
-      {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
+      {error && <p className="col-span-2 mt-1.5 text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
     </fieldset>
   );
 }

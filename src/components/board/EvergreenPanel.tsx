@@ -1,6 +1,6 @@
 "use client";
 
-import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronUp, GripVertical, Loader2, Plus } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useT } from "@/i18n/client";
@@ -13,6 +13,8 @@ import { hasFiles } from "./upload";
 import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
+import { draggingCard } from "./nearCards";
+import { isPendingCopy } from "./groupDrag";
 
 /** Prefijo del id del droppable del panel (el resto es el id de su columna: la de la release o una de plan para IA). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -30,6 +32,23 @@ const storageKey = (projectId: string, columnId?: string) => `pizarro:evergreen-
 const listeners = new Set<() => void>();
 /** Respaldo en memoria si localStorage no está disponible. */
 const memory = new Map<string, boolean>();
+/** Suscripción al estado guardado: la misma función siempre (una nueva en cada dibujo hacía que React se volviera a suscribir). */
+function subscribeStored(cb: () => void): () => void {
+  listeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    listeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+const cardDragActive = () => draggingCard.get() !== null;
+const notDragging = () => false;
+
+/**
+ * Fijas que en el arrastre en curso han pasado a una lista de tarjetas (las anota el tablero en onDragOver y las vacía al
+ * empezar otro arrastre). Solo esas filas hay que volver a montar al terminar (ver `remounts` en EvergreenPanel).
+ */
+export const evergreenLeftPanel = new Set<string>();
 
 /**
  * Panel al pie de la columna de la release con las tareas «siempre en la release» (evergreen), o de una columna de plan
@@ -42,14 +61,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   const key = storageKey(project.id, kind === "plan" ? columnId : undefined);
   // Estado en localStorage leído como store externo (en servidor, plegado).
   const stored = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      window.addEventListener("storage", cb);
-      return () => {
-        listeners.delete(cb);
-        window.removeEventListener("storage", cb);
-      };
-    },
+    subscribeStored,
     () => {
       try {
         return localStorage.getItem(key) === "1";
@@ -63,7 +75,9 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   // Arrastrar una tarjeta sobre el panel: se suelta aquí para hacerla fija y, tras una pausa, se abre solo
   // (como una carpeta con resorte). La apertura es temporal: se pliega al terminar el arrastre.
   const { setNodeRef, isOver } = useDroppable({ id: EVERGREEN_DROPPABLE_PREFIX + columnId });
-  const dragging = useDndContext().active !== null;
+  // ¿Hay un arrastre de tarjeta en curso? Del almacén que pone el tablero al empezar y al terminar (nearCards.ts), y no de
+  // useDndContext: ese contexto cambia en cada movimiento del puntero y redibujaba el panel en cada uno.
+  const dragging = useSyncExternalStore(draggingCard.subscribe, cardDragActive, notDragging);
   const [sprung, setSprung] = useState(false);
   // Archivo del escritorio sobre la barra plegada más de un segundo: se abre para poder soltarlo en una tarea concreta.
   const [fileSprung, setFileSprung] = useState(false);
@@ -90,10 +104,41 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   }, [fileSprung]);
   const open = stored || (sprung && dragging) || fileSprung;
   const hovering = isOver && dragging;
+  // Filas que se vuelven a montar al terminar un arrastre (su contador va en la key). Una fija que se arrastra sobre una lista
+  // aparece allí como tarjeta ordenable con su mismo id, y al volver al panel (o soltarla) esa tarjeta se desmonta y borra
+  // de dnd-kit el registro del id, que era también el de la fila: la fila ya no se podía volver a arrastrar hasta recargar.
+  // Solo esas (evergreenLeftPanel): antes se montaban de nuevo todas tras cada arrastre, y con el teclado (Espacio para
+  // coger, Escape o Espacio para soltar en su panel) el foco que dnd-kit devuelve a la fila caía en un nodo ya quitado
+  // (<body>). Si la fila que se vuelve a montar tenía el foco, se le devuelve.
+  const [remounts, setRemounts] = useState<Record<string, number>>({});
+  const idsRef = useRef(taskIds);
+  const refocus = useRef<string | null>(null);
+  useEffect(() => {
+    idsRef.current = taskIds;
+  });
   useEffect(() => {
     if (!dragging) return;
-    return () => setSprung(false); // al terminar el arrastre vuelve a plegarse
+    return () => {
+      setSprung(false); // al terminar el arrastre vuelve a plegarse
+      const left = idsRef.current.filter((id) => evergreenLeftPanel.has(id));
+      if (!left.length) return;
+      for (const id of left) evergreenLeftPanel.delete(id);
+      const focused = document.activeElement instanceof HTMLElement ? document.activeElement.closest("[data-file-target]")?.getAttribute("data-file-target") : null;
+      if (focused && left.includes(focused)) refocus.current = focused;
+      setRemounts((prev) => {
+        const next = { ...prev };
+        for (const id of left) next[id] = (next[id] ?? 0) + 1;
+        return next;
+      });
+    };
   }, [dragging]);
+  useEffect(() => {
+    const id = refocus.current;
+    if (!id) return;
+    refocus.current = null;
+    const row = document.getElementById(`evergreen-${columnId}`)?.querySelector<HTMLElement>(`[data-file-target="${CSS.escape(id)}"]`);
+    if (row && (document.activeElement === document.body || !document.activeElement?.isConnected)) row.focus();
+  }, [remounts, columnId]);
   useEffect(() => {
     if (!hovering || open) return;
     const timer = setTimeout(() => setSprung(true), SPRING_OPEN_MS);
@@ -147,7 +192,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
-          {taskIds.map((id) => <EvergreenCard key={id} id={id} plan={kind === "plan"} />)}
+          {taskIds.map((id) => <EvergreenCard key={`${id}:${remounts[id] ?? 0}`} id={id} plan={kind === "plan"} />)}
           {/* Único hueco que acepta archivos (tarea fija nueva): el de debajo de las filas; entre filas no hace nada. */}
           <div
             data-file-zone
@@ -188,9 +233,12 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
   const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
   // Rol que lee el lector de pantalla (dnd-kit dice «draggable»).
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, attributes: { roleDescription: t("arrastrable") } });
+  // Copia provisional de un arrastre con Ctrl (aún sin respuesta del servidor): se ve, pero no se arrastra, ni cambia de
+  // cadencia, ni admite teclado ni archivos hasta que la sustituya la de verdad.
+  const pending = isPendingCopy(id);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, disabled: pending, attributes: { roleDescription: t("arrastrable") } });
   // Archivos soltados sobre la tarea: se adjuntan a ella (y no abren la tarea nueva del panel).
-  const fileDrop = useCardFileDrop(id, true);
+  const fileDrop = useCardFileDrop(id, !pending);
   const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
@@ -209,12 +257,19 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
       data-file-target={id}
       {...fileDrop.handlers}
       onClick={() => openTask(id)}
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
       onKeyDown={(e) => {
+        if (pending) return;
         // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
         if (e.key === "Enter" && e.target === e.currentTarget) {
           e.stopPropagation();
           openTask(id);
+          return;
         }
+        // Las demás teclas, al sensor de teclado (Espacio coge la fila, como anuncia su descripción): antes este manejador
+        // sustituía al de dnd-kit y con el teclado no se podía arrastrar.
+        if (!dragHandle) listeners?.onKeyDown?.(e);
       }}
       className={cn(
         fileDrop.over && "border-focus ring-2 ring-focus/50",
@@ -234,6 +289,7 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
         aria-label={everyHint}
         title={everyHint}
         data-testid="evergreen-every"
+        disabled={pending}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         onClick={(e) => {

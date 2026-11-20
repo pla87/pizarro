@@ -63,6 +63,7 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
+import { loneHalfBeforeCost } from "@/lib/task-fields";
 import { draftKey, readCommentDraft, readDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
@@ -723,6 +724,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const rootRef = useRef<HTMLDivElement>(null);
   // Pegar archivos (Ctrl/⌘+V) en cualquier parte del detalle, también fuera de las cajas: una vez por pegado.
   usePasteFiles((files) => void upload(files), () => rootRef.current?.closest("[role=dialog]") ?? null);
+  // Columna derecha llena: con muchos tipos y etiquetas (cada uno es una «pastilla» y juntos llenan varias líneas) la
+  // columna se ensancha en pantallas anchas (de 18 a 21 rem desde lg y a 24 rem desde xl; la descripción y los
+  // comentarios se estrechan) para que quepan más por línea y haga falta menos scroll. Criterio, simple y medible: tipos
+  // visibles + etiquetas del proyecto >= CROWDED_ASIDE_ITEMS (12: con menos caben en 3-4 líneas a 18 rem). Medido con
+  // 11 tipos y 22 etiquetas a 1440×900: la columna pasa de 820 a 744 px de alto.
+  const crowdedAside = board.kinds.length + board.labels.length >= CROWDED_ASIDE_ITEMS;
   // Columna derecha (escritorio): si sus campos no caben, primero la paleta de color pasa a un botón con selector; si aun así
   // no caben, el diálogo entero pasa a tener un solo scroll (`flow`): las dos columnas crecen con su contenido y desplaza el
   // cuerpo del diálogo, con los botones de abajo fijos. Así la columna nunca tiene un scroll propio (antes salía una barra
@@ -1062,7 +1069,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} className={cn("grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
+      <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : "md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:[--sticky-top:-0.5rem]")}>
           <TaskViewers taskId={task.id} />
@@ -1174,7 +1181,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <aside ref={setAsideEl} className="flex flex-col text-sm md:-m-2 md:min-h-0 md:p-2">
           {/* Relleno de 6 px abajo: el anillo de foco del último botón (3 px + 2 de separación) no se recorta ni crea scroll. */}
           <div data-aside-scroll className={cn("md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:px-2 md:pt-2 md:pb-1.5", !flow && "md:overflow-y-auto")}>
-          <div className="flex flex-col gap-4 md:gap-2">
+          {/* Rejilla de dos columnas: los campos cortos (selectores y fechas) van de dos en dos; los anchos (tipo, bloqueo,
+              color, etiquetas, enlace) ocupan la fila entera. Los campos opcionales del proyecto entran en la misma rejilla. */}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-3 md:gap-y-2">
           <Field label={t("Columna")}>
             {(id) => (
               <select id={id} className="input min-w-0 truncate md:py-1" title={board.columns.find((c) => c.id === task.columnId)?.name} value={task.columnId} onChange={(e) => changeColumn(e.target.value)}>
@@ -1182,24 +1191,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          {hasEvergreenTasks(board.columns.find((c) => c.id === task.columnId)?.role) && (
-            <label
-              className="flex items-center gap-2"
-              title={board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Se queda en la columna al guardar el plan y se incluye siempre en el texto") : t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}
-            >
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-brand-600"
-                checked={task.evergreen}
-                onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
-              />
-              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
-            </label>
-          )}
-          <Field label={t("Tipo")}>
-            <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
-          </Field>
-          <Field label={t("Asignada a (opcional)")}>
+          <Field label={t("Asignada a")}>
             {(id) => (
               <select
                 id={id}
@@ -1213,33 +1205,54 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          <Field label={t("Fecha límite")}>
+          {hasEvergreenTasks(board.columns.find((c) => c.id === task.columnId)?.role) && (
+            <label
+              className="col-span-2 flex items-center gap-2"
+              title={board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Se queda en la columna al guardar el plan y se incluye siempre en el texto") : t("Se queda en la columna de la release al desplegar y se incluye siempre en el texto")}
+            >
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-brand-600"
+                checked={task.evergreen}
+                onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
+              />
+              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
+            </label>
+          )}
+          <Field label={t("Tipo")} wide>
+            <TypeSelector kinds={board.kinds} value={task.kindId} onChange={changeKind} />
+          </Field>
+          <Field
+            label={t("Fecha límite")}
+            // Sola antes del Coste (que ocupa la fila entera), a lo ancho: si no, quedaba una celda vacía a su derecha.
+            wide={loneHalfBeforeCost(enabledFields, { before: ["due"], startFirst: true }) === "due"}
+            // Quitar la fecha, junto al rótulo: así el campo cabe entero en media columna.
+            aside={task.dueDate && (
+              <button type="button" className="btn-icon -my-1 h-5 w-5 shrink-0" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")} title={t("Quitar fecha límite")}>
+                <X size={13} />
+              </button>
+            )}
+          >
             {(id) => (
-              <div className="flex gap-1">
-                <input
-                  id={id}
-                  type="date"
-                  className={cn(
-                    "input md:py-1",
-                    dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
-                      "border-red-400 text-red-700 dark:text-red-300",
-                  )}
-                  value={task.dueDate ?? ""}
-                  onChange={(e) => {
-                    // Al teclear el año, Chrome emite 0002, 0020… : solo se guarda una fecha completa y válida.
-                    const v = e.target.value;
-                    if (v === "" || v.slice(0, 4) >= "1900") save({ dueDate: v || null }, { dueDate: v || null });
-                  }}
-                />
-                {task.dueDate && (
-                  <button className="btn-icon h-9 w-9 shrink-0 md:h-7.5 md:w-7.5" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")}>
-                    <X size={15} />
-                  </button>
+              <input
+                id={id}
+                type="date"
+                className={cn(
+                  "input md:px-2 md:py-1",
+                  dueStatus(task.dueDate, board.columns.find((c) => c.id === task.columnId)?.isDone ?? false, board.today) === "overdue" &&
+                    "border-red-400 text-red-700 dark:text-red-300",
                 )}
-              </div>
+                value={task.dueDate ?? ""}
+                onChange={(e) => {
+                  // Al teclear el año, Chrome emite 0002, 0020… : solo se guarda una fecha completa y válida.
+                  const v = e.target.value;
+                  if (v === "" || v.slice(0, 4) >= "1900") save({ dueDate: v || null }, { dueDate: v || null });
+                }}
+              />
             )}
           </Field>
           <TaskFieldsGroup
+            inline
             enabled={enabledFields}
             value={fieldsForm}
             onChange={(p) => setFieldsForm((f) => ({ ...f, ...p }))}
@@ -1249,19 +1262,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           />
           <Field label={t("Repetir")}>
             {(id) => (
-              <>
-                <RecurrencePicker
-                  id={id}
-                  rule={task.recurrence}
-                  day={task.recurrenceDay}
-                  onRule={changeRecurrence}
-                  onDay={(d) => save({ recurrenceDay: d }, { recurrenceDay: d })}
-                  selectClassName="md:py-1"
-                />
-                {task.recurrence !== "NONE" && (
-                  <p className="mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
-                )}
-              </>
+              <RecurrencePicker
+                id={id}
+                rule={task.recurrence}
+                day={task.recurrenceDay}
+                onRule={changeRecurrence}
+                onDay={(d) => save({ recurrenceDay: d }, { recurrenceDay: d })}
+                // Media columna: el día (semanal o mensual) va debajo de la regla.
+                className="flex flex-col gap-1"
+                selectClassName="md:py-1"
+              />
             )}
           </Field>
           <Field label={t("Entregable")}>
@@ -1278,10 +1288,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          <Field label={t("Bloqueada por (opcional)")}>
+          {task.recurrence !== "NONE" && (
+            <p className="col-span-2 -mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
+          )}
+          <Field label={t("Bloqueada por")} wide>
             <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} />
           </Field>
-          <Field label={t("Color")}>
+          <Field label={t("Color")} wide>
             <div ref={colorBox}>
               {compactColor ? (
                 <ColorPopover value={task.color} onChange={(color) => save({ color: color as never }, { color })} />
@@ -1293,7 +1306,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               )}
             </div>
           </Field>
-          <Field label={t("Etiquetas")}>
+          <Field label={t("Etiquetas")} wide>
             <LabelToggles
               labels={board.labels}
               selected={task.labelIds}
@@ -1308,7 +1321,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </Link>
             </LabelToggles>
           </Field>
-          <Field label={t("Enlace externo")}>
+          <Field label={t("Enlace externo")} wide>
             {(id) => (
               <div className="flex gap-1">
                 <input
@@ -1331,13 +1344,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             )}
           </Field>
           {detail && (
-            <p className="text-xs text-slate-500">
+            <p className="col-span-2 text-xs text-slate-500">
               {detail.createdByName
                 ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
                 : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
             </p>
           )}
-          <FollowToggle taskId={task.id} following={detail?.following} />
+          <div className="col-span-2">
+            <FollowToggle taskId={task.id} following={detail?.following} />
+          </div>
           </div>
           </div>
           {/* En móvil estos botones van en el pie fijo, junto a Guardar; en escritorio, fijos bajo la columna (no se desplazan). */}
@@ -1411,24 +1426,34 @@ export function ColorPopover({ value, onChange }: { value: string | null; onChan
   );
 }
 
+/** Ver `crowdedAside` en el detalle. */
+const CROWDED_ASIDE_ITEMS = 12;
+const CROWDED_ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_24rem]";
+
 /**
  * Campo lateral del detalle con su etiqueta. Con una función como contenido, la etiqueta es un <label> del control que
  * recibe el id (un lector de pantalla lo anuncia con su nombre: antes los desplegables no tenían ninguno y «Columna» se
- * anunciaba con el de la columna elegida); si no, el bloque es un grupo con la etiqueta como nombre.
+ * anunciaba con el de la columna elegida); si no, el bloque es un grupo con la etiqueta como nombre. Ocupa una celda de
+ * la rejilla de dos columnas de la columna derecha; `wide`, la fila entera. `aside` va a la derecha del rótulo (el
+ * botón de quitar la fecha límite).
  */
-function Field({ label, children }: { label: string; children: React.ReactNode | ((id: string) => React.ReactNode) }) {
+function Field({ label, children, wide = false, aside }: { label: string; children: React.ReactNode | ((id: string) => React.ReactNode); wide?: boolean; aside?: React.ReactNode }) {
   const id = useId();
+  const cell = cn("min-w-0", wide && "col-span-2");
+  // Con `aside`, el margen inferior lo pone la fila (el botón es algo más alto que el rótulo).
+  const labelClass = aside ? "label mb-0! truncate" : "label truncate md:mb-0.5";
+  const head = (labelEl: React.ReactNode) => (aside ? <div className="mb-0.5 flex items-center justify-between gap-1">{labelEl}{aside}</div> : labelEl);
   if (typeof children === "function") {
     return (
-      <div>
-        <label className="label md:mb-0.5" htmlFor={id}>{label}</label>
+      <div className={cell}>
+        {head(<label className={labelClass} htmlFor={id}>{label}</label>)}
         {children(id)}
       </div>
     );
   }
   return (
-    <div role="group" aria-labelledby={`${id}-label`}>
-      <div className="label md:mb-0.5" id={`${id}-label`}>{label}</div>
+    <div className={cell} role="group" aria-labelledby={`${id}-label`}>
+      {head(<div className={labelClass} id={`${id}-label`}>{label}</div>)}
       {children}
     </div>
   );

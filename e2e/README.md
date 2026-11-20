@@ -52,6 +52,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/r51-plan-e2e.mjs` | 147 | ~1 min |
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 101 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
+| Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/r55-tablero-e2e.mjs` | 75 | ~1 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
@@ -606,4 +607,28 @@ pegada en «Nueva tarea». Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r54-import-e2e.mjs   # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro,otros
+```
+
+## Panel de tareas fijas: scroll, copias con Ctrl y arrastres de ida y vuelta (ronda 55)
+
+Con cinco tarjetas en la columna de la release, abrir «Siempre en la release» ya no hace aparecer la barra de scroll en
+la lista (a 1280 × 720 y 1500 × 900: antes el hueco del final, que no hace falta con el panel debajo, era lo único que no
+cabía). En el móvil a 390 px el hueco se queda aunque las tarjetas quepan (la barra de selección y los botones flotantes
+tapan el final de la lista): con una tarjeta seleccionada, plegado y abierto, al bajar del todo la última queda por encima
+de la barra de selección. Con 30 tarjetas sí hay scroll y la última queda entera por encima del panel. Arrastrar con
+Ctrl una tarjeta y soltarla en el panel crea la copia fija en ese panel (no al final de la lista), al momento (optimista) y
+con una sola entrada de deshacer; igual en «Siempre en el plan» de una columna de plan para IA, y una fija «cada dos»
+copiada en su propio panel da otra fija «cada dos»; sin Ctrl la tarea se mueve como siempre, y Ctrl+Z deshace los dos
+pasos. Por último, seis arrastres con Ctrl de ida y vuelta por la frontera entre la lista (120 tarjetas, con scroll
+automático) y el panel abierto, soltando Ctrl a mitad, con tarjetas de otra columna y con fijas del propio panel: ni
+«Algo ha fallado» (error #185 de React) ni errores, los dibujos de React encadenados (contados con el gancho de las
+herramientas de desarrollo) se quedan lejos del corte de 50, todas las copias son fijas, y una fija que ya pasó por la
+lista se puede volver a arrastrar (antes dnd-kit perdía su registro). Con el teclado, Espacio coge una fija del panel y
+Escape, o Espacio sobre su panel, la deja con el foco en su fila (también después de pasar con el ratón por la lista y
+volver, cuando la fila se vuelve a montar). Con las acciones de servidor retrasadas 2,5 s, la copia provisional de un
+arrastre con Ctrl va marcada (aria-busy) y ni los atajos (Alt+M, F2, Alt+↑, Espacio, Alt+Mayús+D) ni otra tarjeta soltada
+encima mandan su id al servidor; al responder no quedan tarjetas fantasma. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs   # PART=scroll,copia,vaiven,foco,provisional
 ```

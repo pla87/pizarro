@@ -212,13 +212,13 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         await setTaskColumnPositions(moved, target.id, { client: tx });
       } else if (tasks.some((t) => !t.evergreen)) {
         // Se recuerda la columna de cada tarea para poder restaurarla en su sitio.
-        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = NOW(), "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
+        await tx.$executeRaw`UPDATE "Task" SET "archivedAt" = ${new Date()}, "archivedFromColumnId" = "columnId" WHERE "id" IN (${Prisma.join(tasks.filter((t) => !t.evergreen).map((t) => t.id))})`;
       }
       return { releaseId: release.id, moved, archived: target ? [] : tasks.filter((t) => !t.evergreen).map((t) => t.id) };
     });
     addUndo({ t: "release.remove", id: result.releaseId });
     // Recurrentes que salen terminadas (columna terminada de destino o archivo): nace su siguiente aparición.
-    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id, new Map(tasks.map((t) => [t.id, t.title]))) : [];
+    const spawned = !target || target.isDone ? await spawnRecurrences(tasks.filter((t) => !t.evergreen).map((t) => t.id), user.id, new Map(tasks.map((t) => [t.id, t.title])), { asDone: !target }) : [];
     const fixed = tasks.filter((t) => t.evergreen).length;
     describeAction(
       "Desplegó la release «{title}» con {count}{archived}{fixed}",

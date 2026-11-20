@@ -6,7 +6,7 @@ import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deleteAttachment, deleteTask, duplicateTask, updateTask } from "../../src/actions/tasks";
 import { redoLast, undoLast } from "../../src/actions/undo";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
@@ -217,5 +217,43 @@ describe("duplicar una tarea copia sus adjuntos", () => {
     assert.equal(copy.copyNotice, undefined);
     assert.equal(await db.taskAttachment.count({ where: { taskId: copy.id } }), 0);
     assert.equal(await db.taskLink.count({ where: { taskId: copy.id } }), 0);
+  });
+});
+
+// Copia con Ctrl soltada en el panel de fijas (R55C2): nace fija, al final del panel, en una sola acción y un solo deshacer.
+describe("duplicar en el panel de fijas", () => {
+  test("la copia nace fija al final de la columna de la release o de un plan para IA, con la cadencia de la original fija", async () => {
+    const { f, task } = await setup();
+    const release = await db.column.update({ where: { id: f.columns.doing }, data: { role: "NEXT_RELEASE" }, select: { id: true } });
+    const plan = await db.column.update({ where: { id: f.columns.done }, data: { role: "AI_PLAN" }, select: { id: true } });
+    await makeTask(f, { columnId: release.id, position: 5000 });
+
+    const copy = expectOk(await duplicateTask(task.id, { columnId: release.id, prevId: null, nextId: null, evergreen: true }));
+    assert.equal(copy.columnId, release.id);
+    assert.equal(copy.evergreen, true);
+    assert.equal(copy.evergreenEvery, 1);
+    assert.ok(copy.position > 5000, "al final de la columna");
+    const original = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.equal(original.evergreen, false, "la original no cambia");
+    assert.equal(original.columnId, f.columns.todo);
+
+    // Una fija «cada dos» copiada al panel del plan conserva la cadencia.
+    await db.task.update({ where: { id: copy.id }, data: { evergreenEvery: 2 } });
+    const again = expectOk(await duplicateTask(copy.id, { columnId: plan.id, prevId: null, nextId: null, evergreen: true }));
+    assert.equal(again.columnId, plan.id);
+    assert.equal(again.evergreen, true);
+    assert.equal(again.evergreenEvery, 2);
+
+    // Un solo paso de deshacer: la copia desaparece entera.
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.task.count({ where: { id: again.id } }), 0);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: copy.id } })).evergreen, true, "la copia anterior sigue fija");
+  });
+
+  test("en una columna sin panel de fijas se rechaza (y no se crea nada)", async () => {
+    const { f, task } = await setup();
+    const before = await db.task.count({ where: { projectId: f.project.id } });
+    expectFail(await duplicateTask(task.id, { columnId: f.columns.doing, prevId: null, nextId: null, evergreen: true }), "Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.");
+    assert.equal(await db.task.count({ where: { projectId: f.project.id } }), before);
   });
 });

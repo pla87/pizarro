@@ -176,12 +176,13 @@ const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
  * controles (ver cleanFileName: paréntesis, comas, &, +, #… se conservan; «\» y «/» pasan a «_», como en los adjuntos)
  * y con 120 caracteres como mucho, recortando el nombre y no la extensión (de ella depende el tipo de documento). Solo
  * de una ruta absoluta se toma el último tramo: un nombre normal con «\» («Informe 1\2») no pierde lo anterior.
+ * Si no queda nada («   », «...»), `fallback` («documento»; renombrar pasa "" para avisar en vez de ponerlo).
  */
-export function sanitizeDocumentName(raw: string | null | undefined): string {
+export function sanitizeDocumentName(raw: string | null | undefined, fallback = "documento"): string {
   const text = (raw ?? "").trim();
   // Los «../» o «./» del principio (ruta relativa) se quitan; el resto de barras pasan a «_».
   const base = ABSOLUTE_PATH.test(text) ? (text.split(/[\\/]/).pop() ?? "") : text.replace(/^(?:\.{1,2}[\\/])+/, "");
-  return cleanFileName(base, "").replace(/^[.\s]+/, "") || "documento";
+  return cleanFileName(base, "").replace(/^[.\s]+/, "") || fallback;
 }
 
 /** MIME guardado según el tipo confirmado (OTHER: el que declaró el cliente, ya normalizado). */

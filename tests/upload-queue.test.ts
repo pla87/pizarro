@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { planUploads, QueueStopped, retryDelayMs, runQueue, summarizeSkipped, withRetry } from "../src/lib/upload-queue";
+import { createGate, createUploadCapTracker, parseUploadCap, planUploads, QueueStopped, retryDelayMs, runQueue, summarizeSkipped, UPLOAD_PER_USER_HEADER, withRetry } from "../src/lib/upload-queue";
 
 const file = (name: string, size: number) => ({ name, size }) as File;
 
@@ -118,4 +118,132 @@ describe("withRetry", () => {
 test("summarizeSkipped acorta la lista", () => {
   const s = Array.from({ length: 8 }, (_, i) => ({ name: `f${i}`, size: 1, reason: "total" as const }));
   assert.equal(summarizeSkipped(s, (x) => x.name, 3), "f0, f1, f2 … +5");
+});
+
+describe("tope por persona que indica el servidor", () => {
+  const tick = () => new Promise((r) => setImmediate(r));
+  /** Promesas que se resuelven a mano, para ver cuántas van a la vez sin pausas. */
+  const deferred = () => {
+    let resolve!: () => void;
+    const p = new Promise<void>((r) => { resolve = r; });
+    return { p, resolve };
+  };
+
+  test("parseUploadCap: entero entre 1 y 3; lo demás no vale", () => {
+    assert.equal(UPLOAD_PER_USER_HEADER, "X-Pizarro-Upload-Per-User");
+    assert.equal(parseUploadCap("1"), 1);
+    assert.equal(parseUploadCap(" 3 "), 3);
+    assert.equal(parseUploadCap("7"), 3);
+    for (const bad of [null, undefined, "", "0", "-1", "1.5", "dos"]) assert.equal(parseUploadCap(bad), null, String(bad));
+  });
+
+  test("runQueue con limit: baja a 1 a mitad de la cola (sin cortar las que ya van) y vuelve a 3", async () => {
+    let cap = 3;
+    let active = 0;
+    const peaks: number[] = [];
+    const gates = Array.from({ length: 9 }, deferred);
+    const run = runQueue(gates, async (g, i) => {
+      active++;
+      peaks[i] = active;
+      await g.p;
+      active--;
+      // La primera respuesta dice «1»; la sexta, «3».
+      if (i === 0) cap = 1;
+      if (i === 5) cap = 3;
+    }, { limit: () => cap });
+    await tick();
+    assert.equal(active, 3); // empiezan 3 (aún no se sabe nada)
+    gates[0]!.resolve();
+    await tick();
+    assert.equal(active, 2); // con tope 1 no empieza ninguna más hasta que queden menos de 1 en marcha
+    gates[1]!.resolve();
+    gates[2]!.resolve();
+    await tick();
+    assert.equal(active, 1); // ahora de una en una
+    gates[3]!.resolve();
+    await tick();
+    assert.equal(active, 1);
+    gates[4]!.resolve();
+    await tick();
+    assert.equal(active, 1);
+    gates[5]!.resolve(); // dice «3» al terminar: se empiezan las que quedan hasta 3
+    await tick();
+    assert.equal(active, 3);
+    for (const g of gates.slice(6)) g.resolve();
+    const res = await run;
+    assert.ok(res.every((r) => r.status === "fulfilled"));
+    assert.deepEqual(peaks.slice(3, 6), [1, 1, 1]);
+  });
+
+  test("runQueue: un limit de 0 o NaN cuenta como 1 y uno mayor que concurrency no lo supera", async () => {
+    for (const [limit, expected] of [[0, 1], [Number.NaN, 1], [10, 2]] as const) {
+      let active = 0;
+      let peak = 0;
+      await runQueue([1, 2, 3, 4, 5], async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await tick();
+        active--;
+      }, { concurrency: 2, limit: () => limit });
+      assert.equal(peak, expected, String(limit));
+    }
+  });
+
+  test("createGate: los reintentos de subidas ya empezadas también van de uno en uno con tope 1", async () => {
+    let cap = 3;
+    const gate = createGate(() => cap);
+    let inside = 0;
+    let peak = 0;
+    const gates = Array.from({ length: 3 }, deferred);
+    const runs = gates.map((g) => gate.run(async () => {
+      inside++;
+      peak = Math.max(peak, inside);
+      await g.p;
+      inside--;
+    }));
+    await tick();
+    assert.equal(inside, 3);
+    cap = 1; // el servidor dice 1: las tres siguen hasta terminar
+    for (const g of gates) g.resolve();
+    await Promise.all(runs);
+    // Ahora tres reintentos a la vez: entran de uno en uno.
+    peak = 0;
+    const retries = Array.from({ length: 3 }, deferred);
+    const again = retries.map((g) => gate.run(async () => {
+      inside++;
+      peak = Math.max(peak, inside);
+      await g.p;
+      inside--;
+    }));
+    await tick();
+    assert.equal(inside, 1);
+    for (const g of retries) { g.resolve(); await tick(); }
+    await Promise.all(again);
+    assert.equal(peak, 1);
+    // Un fallo dentro libera el paso.
+    await assert.rejects(gate.run(async () => { throw new Error("x"); }));
+    assert.equal(await gate.run(async () => 5), 5);
+  });
+
+  test("createUploadCapTracker: toma la cabecera de cualquier respuesta; antes de una tanda pregunta solo si lo sabido es viejo", async () => {
+    let now = 1_000_000;
+    let asked = 0;
+    let answer: number | null = 1;
+    const cap = createUploadCapTracker({ now: () => now, freshMs: 15_000, fetchCap: async () => { asked++; if (answer === null) throw new Error("sin red"); return answer; } });
+    assert.equal(cap.current(), 3); // sin saber nada, lo de siempre
+    assert.equal(await cap.refresh(), 1);
+    assert.equal(asked, 1);
+    now += 5_000;
+    assert.equal(await cap.refresh(), 1); // reciente: no vuelve a preguntar
+    assert.equal(asked, 1);
+    cap.note(new Headers({ [UPLOAD_PER_USER_HEADER]: "3" })); // respuesta 2xx con «3»
+    assert.equal(cap.current(), 3);
+    cap.note(new Headers()); // sin cabecera (otro servidor, proxy): no cambia
+    cap.note(null);
+    assert.equal(cap.current(), 3);
+    now += 20_000;
+    answer = null; // la pregunta falla: se queda con lo que sabía
+    assert.equal(await cap.refresh(), 3);
+    assert.equal(asked, 2);
+  });
 });

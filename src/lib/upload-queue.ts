@@ -1,8 +1,97 @@
 // Lógica pura de la cola de subidas (sin React ni red): reparto de archivos aceptados y omitidos,
-// concurrencia limitada y reintentos educados. El servidor atiende 3 subidas a la vez (upload-slots).
+// concurrencia limitada y reintentos educados. El servidor atiende 3 subidas a la vez (upload-slots; 1 por persona si
+// hay más de una activa: las demás esperan en su cola).
 
 /** Subidas simultáneas desde el navegador: las mismas que admite el servidor. */
 const UPLOAD_CONCURRENCY = 3;
+
+/**
+ * Cabecera de las respuestas de subida (también de las 2xx y del 429 «upload_busy») con las subidas a la vez que admite
+ * ahora el servidor a cada persona (upload-slots.ts: 3 si solo hay una activa, 1 si hay más). La cola ajusta a ese valor
+ * su concurrencia: con 3 cuerpos en paralelo y hueco para uno, los otros dos esperaban 60 s, recibían 429 y se volvían
+ * a enviar enteros.
+ */
+export const UPLOAD_PER_USER_HEADER = "X-Pizarro-Upload-Per-User";
+
+/** Valor de la cabecera UPLOAD_PER_USER_HEADER: entero entre 1 y UPLOAD_CONCURRENCY, o null si falta o no vale. */
+export function parseUploadCap(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || !/^\s*\d+\s*$/.test(raw)) return null;
+  const n = Number(raw);
+  return n >= 1 ? Math.min(n, UPLOAD_CONCURRENCY) : null;
+}
+
+/** Cuánto vale como reciente el último tope conocido antes de volver a preguntarlo al empezar una tanda. */
+const UPLOAD_CAP_FRESH_MS = 15_000;
+
+/**
+ * Tope de subidas a la vez que ha indicado el servidor. `note` lo toma de la cabecera de cualquier respuesta de subida;
+ * `refresh` (antes de una tanda de varias) usa el último si es reciente y, si no, lo pregunta con `fetchCap` (una
+ * petición GET ligera); si falla, se queda con el que tenía (al principio, UPLOAD_CONCURRENCY).
+ */
+export function createUploadCapTracker(opts: { fetchCap: () => Promise<number | null>; now?: () => number; freshMs?: number }) {
+  const now = opts.now ?? Date.now;
+  const freshMs = opts.freshMs ?? UPLOAD_CAP_FRESH_MS;
+  let value = UPLOAD_CONCURRENCY;
+  let at = -Infinity;
+  const set = (n: number | null) => {
+    if (n === null) return;
+    value = n;
+    at = now();
+  };
+  return {
+    note(headers: { get(name: string): string | null } | null | undefined) {
+      set(parseUploadCap(headers?.get(UPLOAD_PER_USER_HEADER)));
+    },
+    current: () => value,
+    async refresh(): Promise<number> {
+      if (now() - at < freshMs) return value;
+      set(await opts.fetchCap().catch(() => null));
+      return value;
+    },
+  };
+}
+
+/** El del navegador: pregunta a GET /api/upload-limit. */
+export const uploadCap = createUploadCapTracker({
+  fetchCap: async () => {
+    const res = await fetch("/api/upload-limit", { cache: "no-store" });
+    return res.ok ? parseUploadCap(res.headers.get(UPLOAD_PER_USER_HEADER)) : null;
+  },
+});
+
+/**
+ * Puerta con un número variable de pasos a la vez (`limit()`, como mínimo 1): cada envío de un cuerpo (también los
+ * reintentos de una subida ya empezada) pasa por ella, así que, aunque la cola haya empezado 3 antes de saber que el tope
+ * es 1, los reintentos van de uno en uno.
+ */
+export function createGate(limit: () => number) {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const cap = () => Math.max(1, Math.floor(limit()) || 1);
+  const pump = () => {
+    while (waiting.length && active < cap()) {
+      active++;
+      waiting.shift()!();
+    }
+  };
+  return {
+    async run<R>(fn: () => Promise<R>): Promise<R> {
+      await new Promise<void>((resolve) => {
+        waiting.push(resolve);
+        pump();
+      });
+      try {
+        return await fn();
+      } finally {
+        active--;
+        pump();
+      }
+    },
+  };
+}
+
+/** La de todas las subidas del navegador (adjuntos y documentos), con el tope que dice el servidor. */
+export const uploadGate = createGate(() => uploadCap.current());
 
 export type SkipReason = "empty" | "too_big" | "total";
 
@@ -46,6 +135,11 @@ export class QueueStopped extends Error {
 
 interface QueueOptions {
   concurrency?: number;
+  /**
+   * Tope variable (se consulta cada vez que se va a empezar un elemento; entre 1 y `concurrency`): p. ej. el que indica el
+   * servidor en sus respuestas. Si baja, los que ya van siguen; si sube, se empiezan más al terminar el siguiente.
+   */
+  limit?: () => number;
   onStart?: (index: number) => void;
   onSettle?: (index: number, result: PromiseSettledResult<unknown>) => void;
   /** Si devuelve true para un error, no se empiezan más elementos (los que faltan quedan como QueueStopped). */
@@ -54,33 +148,51 @@ interface QueueOptions {
   signal?: AbortSignal;
 }
 
-/** Ejecuta `worker` sobre cada elemento con como mucho `concurrency` a la vez, respetando el orden de salida. */
+/** Ejecuta `worker` sobre cada elemento con como mucho `concurrency` (o `limit()`) a la vez, respetando el orden de salida. */
 export async function runQueue<T, R>(items: readonly T[], worker: (item: T, index: number) => Promise<R>, opts: QueueOptions = {}): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = new Array(items.length);
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? UPLOAD_CONCURRENCY, items.length || 1));
+  const cap = () => (opts.limit ? Math.max(1, Math.min(concurrency, Math.floor(opts.limit()) || 1)) : concurrency);
   let next = 0;
+  let running = 0;
   let stopped = false;
-  const lane = async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      if (stopped || opts.signal?.aborted) {
-        results[i] = { status: "rejected", reason: new QueueStopped() };
-        opts.onSettle?.(i, results[i]!);
-        continue;
+  return new Promise((resolve) => {
+    const pump = () => {
+      while (next < items.length) {
+        if (stopped || opts.signal?.aborted) {
+          const i = next++;
+          results[i] = { status: "rejected", reason: new QueueStopped() };
+          opts.onSettle?.(i, results[i]!);
+          continue;
+        }
+        if (running >= cap()) break;
+        const i = next++;
+        running++;
+        opts.onStart?.(i);
+        let p: Promise<R>;
+        try {
+          p = Promise.resolve(worker(items[i]!, i));
+        } catch (reason) {
+          p = Promise.reject(reason);
+        }
+        void p
+          .then(
+            (value) => { results[i] = { status: "fulfilled", value }; },
+            (reason) => {
+              results[i] = { status: "rejected", reason };
+              if (opts.stopWhen?.(reason)) stopped = true;
+            },
+          )
+          .then(() => {
+            running--;
+            opts.onSettle?.(i, results[i]!);
+            pump();
+          });
       }
-      opts.onStart?.(i);
-      try {
-        results[i] = { status: "fulfilled", value: await worker(items[i]!, i) };
-      } catch (reason) {
-        results[i] = { status: "rejected", reason };
-        if (opts.stopWhen?.(reason)) stopped = true;
-      }
-      opts.onSettle?.(i, results[i]!);
-    }
-  };
-  await Promise.all(Array.from({ length: concurrency }, lane));
-  return results;
+      if (next >= items.length && running === 0) resolve(results);
+    };
+    pump();
+  });
 }
 
 const RETRY_STATUSES = [429, 503];

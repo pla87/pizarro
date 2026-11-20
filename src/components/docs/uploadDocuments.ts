@@ -1,5 +1,5 @@
 import type { T } from "@/i18n/core";
-import { withRetry } from "@/lib/upload-queue";
+import { uploadCap, uploadGate, withRetry } from "@/lib/upload-queue";
 
 /** Nombre con el que se sube un archivo: las capturas pegadas llegan como «image.png» y se les da uno con fecha. */
 export function documentUploadName(file: File, t: T): string {
@@ -23,15 +23,17 @@ export async function uploadDocument(projectId: string, file: File, t: T, fileMa
     return { ok: false, error: t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }) };
   }
   try {
-    await withRetry(async () => {
+    // Por la misma puerta que los adjuntos: con otra persona activa, una subida a la vez en total desde esta pestaña.
+    await withRetry(() => uploadGate.run(async () => {
       const body = new FormData();
       body.append("file", file, documentUploadName(file, t));
       const res = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body });
+      uploadCap.note(res.headers);
       if (res.ok) return;
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       const retryAfter = Number(res.headers.get("Retry-After"));
       throw new DocumentUploadError(json.error ?? t("No se pudo subir el archivo."), res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
-    });
+    }));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof DocumentUploadError ? err.message : t("No se pudo subir el archivo.") };

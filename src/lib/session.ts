@@ -11,6 +11,7 @@ import { revokeSession } from "./revoke";
 import { requestContext } from "./request-context";
 import { clientIp } from "./request";
 import { PASSWORD_CHANGE_COOKIE, SESSION_MAX_AGE_SECONDS, sessionCookieName, sessionCookieOptions } from "./session-config";
+import { noteUserActivity } from "./user-activity";
 
 export interface CurrentUser {
   id: string;
@@ -109,6 +110,7 @@ async function querySessionUser(token: string): Promise<SessionUser | null> {
     }).catch(() => {});
   }
   const { active: _active, ...user } = session.user;
+  noteUserActivity(user.id); // en memoria: para saber cuántas personas usan la app (reparto de huecos de subida)
   return user;
 }
 
@@ -166,8 +168,9 @@ export async function requireUserPage(): Promise<CurrentUser> {
 }
 
 /** Registra la visita de página una sola vez por petición (layout y página llaman a requireUserPage). */
-// Los refrescos automáticos del tablero repiten la misma visita: una por persona y página cada minuto basta.
-const PAGE_VIEW_DEDUP_MS = 60_000;
+// Los refrescos automáticos del tablero (cada 2 min, en cada pestaña) repiten la misma visita: una por persona y página
+// cada 15 minutos basta.
+const PAGE_VIEW_DEDUP_MS = 15 * 60_000;
 const recentViews = (globalThis as unknown as { __pzViews?: Map<string, number> }).__pzViews ??= new Map();
 
 const logPageView = cache(async (user: CurrentUser): Promise<void> => {

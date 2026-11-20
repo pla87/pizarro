@@ -17,17 +17,20 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
-import { AiPlanDialog } from "./AiPlanDialog";
-import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { columnGateSnapshot } from "./columnGate";
-import { ChecklistDialog } from "./ChecklistDialog";
-import { ProgramDialog } from "./ProgramDialog";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
 import { useFileZone } from "./useFileZone";
+import { lazyDialog } from "../lazyDialog";
+
+// Diálogos de las columnas especiales: fuera del código inicial del tablero, se cargan al abrirlos.
+const AiPlanDialog = lazyDialog(() => import("./AiPlanDialog"), (m) => m.AiPlanDialog);
+const BudgetSummaryDialog = lazyDialog(() => import("./BudgetSummaryDialog"), (m) => m.BudgetSummaryDialog);
+const ChecklistDialog = lazyDialog(() => import("./ChecklistDialog"), (m) => m.ChecklistDialog);
+const ProgramDialog = lazyDialog(() => import("./ProgramDialog"), (m) => m.ProgramDialog);
 
 interface Props {
   column: BoardColumn;
@@ -84,6 +87,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (las de tareas fijas acaban siempre en su panel).
   const listRef = useRef<HTMLDivElement>(null);
   useMoreBelow(listRef, !withFixed);
+  // Con panel de fijas: sin hueco final mientras las tarjetas caben (ver useFitsWithoutTail).
+  useFitsWithoutTail(listRef, withFixed);
 
   return (
     <section
@@ -112,7 +117,9 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             type="button"
             onClick={() => setSelectedMany(taskIds, !allSelected)}
             className={cn(
-              "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+              // Móvil: zona de toque de 36 px (pseudo-elemento invisible) sin cambiar el tamaño visible; cabe en el
+              // relleno de la cabecera y solo roza el nombre de la columna, que no es un botón.
+              "relative flex h-4 w-4 shrink-0 items-center justify-center rounded border max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
               allSelected || selectedHere ? "border-brand-600 bg-brand-600 text-on-brand" : "border-slate-300 dark:border-slate-600",
             )}
             aria-label={allSelected ? t("Quitar la selección de «{name}»", { name: column.name }) : t("Seleccionar todas las tareas de «{name}»", { name: column.name })}
@@ -187,6 +194,12 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             // de la barra de selección y, sin ella, de los botones flotantes. Es el mismo haya o no selección: la barra
             // flota encima sin cambiar el alto ni el contenido de la columna, y el scroll no salta al aparecer.
             "pb-40 md:pb-32 lg:pb-6",
+            // Columnas con panel de fijas al pie: si las tarjetas caben, sin ese hueco (ni el mínimo de la zona de archivos ni su separación),
+            // que solo hacía aparecer la barra de scroll al abrir el panel (data-fits, useFitsWithoutTail). Solo desde `lg`:
+            // en móvil y tableta el hueco es el que deja subir la última tarjeta por encima de la barra de selección y de
+            // los botones flotantes, que tapan el final de la lista aunque las tarjetas quepan.
+            // `relative`: la lista es el offsetParent de sus tarjetas (useFitsWithoutTail mide con offsetTop).
+            "group/list relative lg:data-[fits]:pb-0",
             isOver && "bg-brand-50/60 dark:bg-brand-500/5",
           )}
           {...fileZone.handlers}
@@ -197,10 +210,10 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           {/* Único hueco que acepta archivos para crear una tarea: lo que queda libre bajo la última tarjeta (los huecos entre tarjetas no). */}
           <div
             data-file-zone
-            className={cn("min-h-10 flex-1 rounded-lg transition-colors", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
+            className={cn("min-h-10 flex-1 rounded-lg transition-colors lg:group-data-[fits]/list:-mt-2 lg:group-data-[fits]/list:min-h-0", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
             {taskIds.length === 0 && (
-              <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
+              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
             )}
           </div>
         </div>
@@ -218,6 +231,68 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
  * scroll de la lista o de la página (pasivos), al cambiar la ventana o el viewport visual, y con un ResizeObserver sobre la
  * lista y cada tarjeta (añadir, quitar o arrastrar tarjetas, cambios en vivo, pasar de una columna a otra en móvil).
  */
+/**
+ * Lista de una columna con panel de fijas al pie (la de la release, las de plan para IA): marca `data-fits` mientras sus
+ * tarjetas caben enteras en lo que mide la lista. Con la marca, el CSS quita el hueco del final (el relleno para la barra de
+ * selección y los botones flotantes, y el mínimo de la zona de archivos, que se queda con el sitio libre que haya): el panel
+ * ya está debajo, y ese hueco era lo único que no cabía al abrir el panel, de modo que aparecía la barra de scroll con
+ * las tarjetas a la vista y sitio de sobra. Sin la marca (no caben), la lista tiene scroll como siempre, con su hueco.
+ * La marca solo cambia el CSS desde `lg` (en móvil y tableta el hueco hace falta igual: ver la lista).
+ * Sin estado de React (atributo + CSS, como useMoreBelow): lo que se mide (dónde acaban las tarjetas y el alto de la lista)
+ * no depende de la marca, así que ponerla o quitarla no cambia la medida siguiente.
+ */
+function useFitsWithoutTail(listRef: RefObject<HTMLDivElement | null>, enabled: boolean) {
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const set = (fits: boolean) => {
+      if (fits !== list.hasAttribute("data-fits")) list.toggleAttribute("data-fits", fits);
+    };
+    if (!enabled) return set(false);
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const zone = list.querySelector<HTMLElement>(":scope > [data-file-zone]");
+      if (!zone || list.clientHeight === 0) return set(false);
+      // Dónde acaba la última tarjeta dentro del contenido de la lista (offsetTop: sin el scroll ni el desplazamiento que
+      // pone dnd-kit al arrastrar). Sin tarjetas, caben.
+      const last = zone.previousElementSibling as HTMLElement | null;
+      const cardsEnd = last ? last.offsetTop + last.offsetHeight : 0;
+      set(cardsEnd <= list.clientHeight + 0.5);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    const stop = observeList(list, schedule);
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      stop();
+      set(false);
+    };
+  }, [listRef, enabled]);
+}
+
+/** Vigila el tamaño de la lista y de cada tarjeta (también las que se añaden o quitan) y llama a `schedule`. Devuelve cómo dejar de hacerlo. */
+function observeList(list: HTMLElement, schedule: () => void): () => void {
+  const ro = new ResizeObserver(schedule);
+  const observeAll = () => {
+    ro.disconnect();
+    ro.observe(list);
+    for (const el of list.children) ro.observe(el);
+  };
+  observeAll();
+  const mo = new MutationObserver(() => {
+    observeAll();
+    schedule();
+  });
+  mo.observe(list, { childList: true });
+  return () => {
+    ro.disconnect();
+    mo.disconnect();
+  };
+}
+
 function useMoreBelow(listRef: RefObject<HTMLDivElement | null>, enabled: boolean) {
   useEffect(() => {
     const list = listRef.current;
@@ -243,18 +318,7 @@ function useMoreBelow(listRef: RefObject<HTMLDivElement | null>, enabled: boolea
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
     };
-    const ro = new ResizeObserver(schedule);
-    const observeAll = () => {
-      ro.disconnect();
-      ro.observe(list);
-      for (const el of list.children) ro.observe(el);
-    };
-    observeAll();
-    const mo = new MutationObserver(() => {
-      observeAll();
-      schedule();
-    });
-    mo.observe(list, { childList: true });
+    const stop = observeList(list, schedule);
     const vvp = window.visualViewport;
     const opts = { passive: true } as const;
     list.addEventListener("scroll", schedule, opts);
@@ -265,8 +329,7 @@ function useMoreBelow(listRef: RefObject<HTMLDivElement | null>, enabled: boolea
     measure();
     return () => {
       cancelAnimationFrame(frame);
-      ro.disconnect();
-      mo.disconnect();
+      stop();
       list.removeEventListener("scroll", schedule);
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);

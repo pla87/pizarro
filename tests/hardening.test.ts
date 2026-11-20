@@ -124,6 +124,23 @@ test("/api/auth/reset rechaza la petición iniciada desde otro sitio y acepta la
   }
 });
 
+test("/api/auth/reset solo vale al navegar: una imagen, un fetch o un script del mismo origen dan 403 sin tocar las cookies", async () => {
+  const { GET } = await import("../src/app/api/auth/reset/route");
+  for (const dest of ["image", "empty", "script", "iframe", "style"]) {
+    const res = GET(new Request("http://localhost/api/auth/reset", { headers: { "sec-fetch-site": "same-origin", "sec-fetch-dest": dest } }));
+    assert.equal(res.status, 403, dest);
+    assert.equal(res.headers.get("set-cookie"), null, dest);
+    assert.equal(res.headers.get("cache-control"), "no-store", dest);
+  }
+  // El enlace «Volver a iniciar sesión» (navegación) y los navegadores que no mandan la cabecera siguen funcionando.
+  const navigations: Record<string, string>[] = [{ "sec-fetch-site": "same-origin", "sec-fetch-dest": "document" }, { "sec-fetch-site": "none", "sec-fetch-dest": "document" }, {}];
+  for (const headers of navigations) {
+    const res = GET(new Request("http://localhost/api/auth/reset", { headers }));
+    assert.equal(res.status, 303, JSON.stringify(headers));
+    assert.ok(res.headers.get("set-cookie"), JSON.stringify(headers));
+  }
+});
+
 test("NUL en la URL: los filtros de Logs lo quitan y una ruta con NUL da 404 sin llegar a PostgreSQL (error 22021)", async () => {
   const { parseLogFilters } = await import("../src/lib/log-query");
   const f = parseLogFilters({ category: "\u0000", user: "u\u00001", q: " a\u0000b ", range: "7d" });

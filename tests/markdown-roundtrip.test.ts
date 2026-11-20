@@ -100,3 +100,17 @@ test("las entidades escritas dentro de código no se convierten en caracteres", 
   assert.equal(saved("usa `&nbsp;` y `&lt;b&gt;`"), "usa `&nbsp;` y `&lt;b&gt;`");
   assert.equal(saved("```html\n<p>&amp;&lt;</p>\n```"), "```html\n<p>&amp;&lt;</p>\n```");
 });
+
+test("el editor solo pinta como <img> las imágenes de un adjunto con la ruta fija (sin «..» ni %2e)", () => {
+  const toDOM = schema.nodes.markdownImage!.spec.toDOM!;
+  const tag = (md: string) => {
+    const doc: JSONContent = toDoc(md).toJSON();
+    const img = doc.content?.[0]?.content?.find((n) => n.type === "markdownImage");
+    assert.ok(img, md);
+    return (toDOM(schema.nodeFromJSON(img)) as unknown as [string])[0];
+  };
+  assert.equal(tag("![x](/api/attachments/abc?thumb=1)"), "img");
+  for (const s of ["/api/attachments/../auth/reset", "/api/attachments/%2e%2e/auth/reset", "/api/attachments/a/b"]) assert.equal(tag(`![x](${s})`), "span", s);
+  // Y se guarda igual: el texto no se pierde aunque no se pinte.
+  assert.equal(saved("![x](/api/attachments/../auth/reset)"), "![x](/api/attachments/../auth/reset)");
+});
