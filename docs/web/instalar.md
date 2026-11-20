@@ -32,7 +32,7 @@ que se usa, y otra en GitHub.
 
 ## Elige tu camino {#elige-tu-camino}
 
-| | Servidor propio | Railway |
+| Opción | Servidor propio | Railway |
 |---|---|---|
 | **Ideal si** | Tienes un VPS o un equipo con Linux | No quieres mantener un servidor |
 | **Cómo** | Un comando en la terminal | Unos clics en el panel de Railway |

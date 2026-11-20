@@ -14,6 +14,8 @@
   --brand-soft: #eef2ff;
   --brand-text: #4338ca;
   --on-brand: #ffffff;
+  /* Anillo de foco: en oscuro, más claro que el botón (el índigo de los botones da menos de 3:1 sobre el fondo). */
+  --focus: #4f46e5;
   --ok: #059669;
   --code-bg: #0f172a;
   --code-text: #e2e8f0;
@@ -41,8 +43,10 @@
     --subtle: #8b97ad;
     --border: #212b45;
     --border-strong: #2f3b5c;
-    --brand: #6366f1;
-    --brand-strong: #818cf8;
+    /* El mismo índigo que en claro: con #6366f1 el texto blanco de los botones daba 4,47:1 (WCAG pide 4,5). */
+    --brand: #4f46e5;
+    --brand-strong: #4338ca; /* fondo del botón al pasar por encima: con #818cf8 el blanco daba 2,9:1 */
+    --focus: #818cf8;
     --brand-soft: rgb(99 102 241 / 0.16);
     --brand-text: #a5b4fc;
     --ok: #34d399;
@@ -81,7 +85,7 @@ p { margin: 0 0 1em; }
 a { color: var(--brand-text); }
 img { max-width: 100%; height: auto; display: block; }
 code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
 ul { margin: 0; padding: 0; list-style: none; }
 
 .wrap { max-width: 1192px; margin: 0 auto; padding: 0 24px; }
