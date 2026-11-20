@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build && node scripts/postbuild.mjs && npm run build:boot",
+    "build": "prisma generate && next build --webpack && node scripts/postbuild.mjs && npm run build:boot",
     "start": "node --env-file-if-exists=.env --env-file=scripts/server.env scripts/start-local.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
