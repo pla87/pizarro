@@ -4,14 +4,20 @@ import { useMemo, useState } from "react";
 import { getProjectFormData } from "@/actions/tasks";
 import { BoardContext, type BoardApi } from "@/components/board/context";
 import { createBoardStores } from "@/components/board/stores";
-import { BulkTaskDialog } from "@/components/board/BulkTaskDialog";
-import { NewTaskDialog } from "@/components/board/NewTaskDialog";
+import { lazyDialog } from "@/components/lazyDialog";
 import { PairLeftWidthContext } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { actionThrowMessage } from "@/lib/stale-action";
 import type { DocumentKindName } from "@/lib/document-kind";
 import type { EditorModeValue, ProjectFormData } from "@/lib/types";
+
+// Los diálogos (con el editor de texto y el Markdown) no van en el código inicial de la Documentación: se piden al pulsar
+// el botón, a la vez que las opciones del proyecto.
+const loadNewTaskDialog = () => import("@/components/board/NewTaskDialog");
+const loadBulkTaskDialog = () => import("@/components/board/BulkTaskDialog");
+const NewTaskDialog = lazyDialog(loadNewTaskDialog, (m) => m.NewTaskDialog);
+const BulkTaskDialog = lazyDialog(loadBulkTaskDialog, (m) => m.BulkTaskDialog);
 
 interface Opts {
   projectId: string;
@@ -69,6 +75,8 @@ export function useDocTaskDialogs({ projectId, currentUserId, editorMode, doc, v
   async function open(kind: "new" | "bulk") {
     if (loading) return;
     if (form) return setSecond(kind);
+    // El código del diálogo llega mientras se piden las opciones (sin red espera; el fallo de la petición ya avisa).
+    (kind === "new" ? loadNewTaskDialog : loadBulkTaskDialog)().catch(() => {});
     setLoading(true);
     try {
       const res = await getProjectFormData(projectId);

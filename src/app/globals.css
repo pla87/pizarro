@@ -343,7 +343,7 @@ body {
 .prose-md ul { @apply my-2 list-disc pl-5; }
 .prose-md ol { @apply my-2 list-decimal pl-5; }
 .prose-md li { @apply my-0.5; }
-.prose-md a { @apply text-brand-600 underline dark:text-brand-500; }
+.prose-md a { @apply text-brand-600 underline dark:text-brand-300; }
 .prose-md code { @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.85em] dark:bg-slate-800; }
 .prose-md pre { @apply my-2 overflow-x-auto rounded-lg bg-slate-100 p-3 dark:bg-slate-800; }
 .prose-md pre code { @apply bg-transparent p-0; }
@@ -536,5 +536,20 @@ body {
   .project-skeleton .sk {
     animation: none;
     background-image: none;
+  }
+}
+
+/*
+ * Texto secundario en oscuro: text-slate-500 sin variante dark: daba 3,7:1 sobre las tarjetas (slate-900) y 4,2:1 sobre el
+ * fondo (slate-950); en oscuro pasa a slate-400 (más de 7:1). Solo el que no trae su propio dark:text-…; con :where no suma
+ * especificidad, así que hover:, group-hover:, aria-… y demás variantes siguen mandando. Es el slate-400 del tema de color
+ * elegido (cada acento redefine la escala slate). En la capa de utilidades y después de ellas: gana a text-slate-500.
+ */
+@layer utilities {
+  /* @variant dentro de la regla (no al revés): fuera, Tailwind lo escribe con :scope delante, que sí suma especificidad. */
+  .text-slate-500:where(:not([class*="dark:text-"])) {
+    @variant dark {
+      color: var(--color-slate-400);
+    }
   }
 }

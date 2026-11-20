@@ -14,7 +14,6 @@ export const proyectos: Record<string, string> = {
   "Proyecto quitado de sus proyectos de trabajo": "Project removed from their work projects",
   "Proyecto añadido a sus proyectos de trabajo": "Project added to their work projects",
   "Ver proyectos existentes": "Browse existing projects",
-  "Hay {n} proyecto(s) de equipo.": "There are {n} team project(s).",
   "Proyectos existentes": "Existing projects",
   "Añade a tus proyectos los que quieras ver en selectores, menús y calendario.": "Add to your projects the ones you want in pickers, menus and the calendar.",
   "Añadir a mis proyectos": "Add to my projects",
@@ -150,4 +149,7 @@ export const proyectos: Record<string, string> = {
   "La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.": "The template's structure (columns, types, labels and fields), no cards.",
   // Exportar: el tamaño estimado cuenta también los datos, no solo los adjuntos.
   "Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos: un archivo de unos {size} MB.": "{tasks} cards ({archived} archived), {releases} releases and {attachments} attachments will be exported: a file of about {size} MB.",
+  // Inicio sin proyectos: cuántos de equipo hay (singular y plural)
+  "Hay 1 proyecto de equipo.": "There is 1 team project.",
+  "Hay {n} proyectos de equipo.": "There are {n} team projects.",
 };

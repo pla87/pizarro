@@ -5,11 +5,12 @@ import { COLUMN_ROLE_LABEL } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { projectSectionMetadata } from "../project-title";
 import { ReleasesList } from "./ReleasesList";
 
-export async function generateMetadata() {
+export async function generateMetadata({ params }: { params: Promise<{ projectId: string }> }) {
   const t = await getT();
-  return { title: t("Releases") };
+  return projectSectionMetadata(params, t("Releases"));
 }
 
 const PAGE_STEP = 50;

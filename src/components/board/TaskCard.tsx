@@ -6,7 +6,7 @@ import { AlignLeft, Loader2, CalendarClock, Check, CheckSquare, ExternalLink, Fi
 import { blockerIsDone } from "@/lib/blocked";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextOccurrenceDue } from "@/lib/recurrence-date";
-import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE } from "@/lib/constants";
+import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE, onColor } from "@/lib/constants";
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
@@ -309,7 +309,8 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
           // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
           tabIndex={-1}
           className={cn(
-            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity",
+            // En el móvil la zona que se puede tocar crece 10 px por cada lado (36×36 px; se ven 16×16) sin mover nada.
+            "relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
             isSelected
               ? "border-brand-600 bg-brand-600 text-on-brand"
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
@@ -338,7 +339,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       {taskLabels.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {taskLabels.map((l) => (
-            <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) ? "text-slate-800 ring-1 ring-inset ring-slate-300" : "text-white")} style={{ backgroundColor: l.color }}>
+            <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) && "ring-1 ring-inset ring-slate-300")} style={{ backgroundColor: l.color, color: onColor(l.color) }}>
               {l.name}
             </span>
           ))}

@@ -9,7 +9,7 @@ import { ClipboardCopy, ClipboardPaste, FileUp, Import, MoreHorizontal } from "l
 import { useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
-import { TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
+import { TASKS_TEXT_MAX_CHARS } from "@/lib/task-json-core";
 import { compactTrelloBoard } from "@/lib/foreign-import/tasks";
 import { decodeText } from "@/lib/foreign-import/text";
 import { FOREIGN_LIMITS } from "@/lib/foreign-import/types";

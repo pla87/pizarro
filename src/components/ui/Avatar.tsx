@@ -1,7 +1,8 @@
 import { initialsOf } from "@/lib/graphemes";
 import { cn } from "./cn";
 
-const COLORS = ["bg-indigo-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-sky-500", "bg-violet-500", "bg-teal-500"];
+// Tonos con al menos 5:1 frente a las iniciales en blanco (los -500 daban entre 2,1 y 4,5; rose-600 se quedaba en 4,5 justo).
+const COLORS = ["bg-indigo-600", "bg-emerald-700", "bg-amber-700", "bg-rose-700", "bg-sky-700", "bg-violet-600", "bg-teal-700"];
 
 function hash(s: string): number {
   let h = 0;

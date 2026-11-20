@@ -6,11 +6,12 @@ import { listProjectDocumentsOf, listTrashedDocumentsOf } from "@/lib/documents"
 import { requireUserPage } from "@/lib/session";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
 import { getT } from "@/i18n/server";
+import { projectSectionMetadata } from "../project-title";
 import { DocsManager } from "./DocsManager";
 
-export async function generateMetadata() {
+export async function generateMetadata({ params }: { params: Promise<{ projectId: string }> }) {
   const t = await getT();
-  return { title: t("Documentación") };
+  return projectSectionMetadata(params, t("Documentación"));
 }
 
 export default async function ProjectDocsPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ doc?: string | string[] }> }) {

@@ -313,3 +313,15 @@ test("los nombres de los avisos de la vista previa se recortan sin partir emojis
   const short = importPreview({ column: `${"a".repeat(30)}👨‍👩‍👧${"b".repeat(20)}` }, { columns: [], kinds: [] }, null, esT).notices[0]!;
   assert.equal(short, `columna «${"a".repeat(30)}👨‍👩‍👧b…» (no existe)`);
 });
+
+test("task-json-core: sin imports (lo usa el código del navegador) y reexportado por task-json", async () => {
+  const { readFileSync } = await import("node:fs");
+  const core = await import("../src/lib/task-json-core");
+  const src = readFileSync(new URL("../src/lib/task-json-core.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /^\s*(import|export \{[^}]*\} from)\s/m, "task-json-core no importa nada");
+  assert.equal(strictJsonFormat, core.strictJsonFormat);
+  assert.equal(TASK_JSON_MAX_CHARS, core.TASK_JSON_MAX_CHARS);
+  assert.equal(TASKS_TEXT_MAX_CHARS, core.TASKS_TEXT_MAX_CHARS);
+  assert.equal(core.isObject({}), true);
+  assert.equal(core.isObject([]), false);
+});

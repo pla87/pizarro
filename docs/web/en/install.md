@@ -32,7 +32,7 @@ you use, and a GitHub account.
 
 ## Choose your path {#choose-your-path}
 
-| | Your own server | Railway |
+| Option | Your own server | Railway |
 |---|---|---|
 | **Best if** | You have a VPS or a Linux machine | You don't want to look after a server |
 | **How** | One command in the terminal | A few clicks in Railway's dashboard |

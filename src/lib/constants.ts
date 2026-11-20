@@ -102,8 +102,31 @@ function isVeryLight(c: string | null | undefined) {
 /** Clases de borde para una muestra de color: el blanco (y lo muy claro) lleva un borde visible, en claro y en oscuro. */
 export const swatchBorder = (c: string | null | undefined) => (isVeryLight(c) ? "border border-slate-400 dark:border-slate-500" : "");
 
-/** Color de texto legible sobre un fondo de la paleta (el blanco necesita texto oscuro). */
-export const onColor = (c: string) => (isWhite(c) ? "#0f172a" : "#ffffff");
+const DARK_TEXT = "#0f172a";
+/** Luminancia relativa (WCAG) de un color #rgb o #rrggbb; null si no lo es. */
+function luminance(c: string): number | null {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c.trim());
+  if (!m) return null;
+  const hex = m[1]!.length === 3 ? m[1]!.replace(/./g, "$&$&") : m[1]!;
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+/**
+ * Color de texto legible sobre un fondo (etiquetas, muestras): blanco si da al menos 4,5:1 con el fondo (WCAG AA); si no,
+ * el que más contraste dé de blanco y casi negro (#0f172a). En la paleta llevan texto oscuro el blanco, rojo, naranja,
+ * amarillo, verde, turquesa, celeste, violeta y rosa; el índigo (4,47:1 con blanco, 4,0:1 con oscuro) se queda en blanco.
+ */
+export function onColor(c: string): string {
+  const l = luminance(c);
+  if (l === null) return isWhite(c) ? DARK_TEXT : "#ffffff";
+  const withWhite = 1.05 / (l + 0.05);
+  if (withWhite >= 4.5) return "#ffffff";
+  const withDark = (l + 0.05) / ((luminance(DARK_TEXT) ?? 0) + 0.05);
+  return withDark > withWhite ? DARK_TEXT : "#ffffff";
+}
 
 /** Nombre en español de cada color de la paleta (accesibilidad). */
 export const COLOR_NAME: Record<string, string> = {

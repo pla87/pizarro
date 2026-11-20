@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowUp, CalendarClock, CheckSquare, ChevronsUpDown, Lock } from "lucide-react";
 import { memo, useMemo, useState, useSyncExternalStore } from "react";
 import { blockerIsDone } from "@/lib/blocked";
-import { isWhite } from "@/lib/constants";
+import { isWhite, onColor } from "@/lib/constants";
 import { mentionsToPlain } from "@/lib/mentions";
 import { dueStatus, formatDay } from "@/lib/dates";
 import { PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
@@ -236,7 +236,7 @@ const TableRow = memo(function TableRow({ task, lookups, today, locale, t, prior
         {taskLabels.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {taskLabels.map((l) => (
-              <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) ? "text-slate-800 ring-1 ring-slate-300 ring-inset" : "text-white")} style={{ backgroundColor: l.color }}>{l.name}</span>
+              <span key={l.id} className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", isWhite(l.color) && "ring-1 ring-slate-300 ring-inset")} style={{ backgroundColor: l.color, color: onColor(l.color) }}>{l.name}</span>
             ))}
           </div>
         ) : (
