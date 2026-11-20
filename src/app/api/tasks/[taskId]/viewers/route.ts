@@ -62,7 +62,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: stri
   // Modifica estado (la presencia): misma comprobación de origen que el resto de rutas que escriben.
   if (!isSameOrigin(req)) return new Response(null, { status: 403 });
   const found = await load(ctx);
-  if (found) {
+  // Tope de ritmo también aquí: cada cierre con un `open` desconocido se apunta unos segundos (cierres adelantados).
+  if (found && rateLimit(`viewers-close:${found.user.id}`, 240, 60_000)) {
     const stream = streamParam(req);
     if (stream) releaseTaskView(stream, found.user.id, found.taskId, openParam(req));
     // También el aviso con caducidad: con `?stream=` el GET pudo caer en él (canal desconocido, p. ej. ya cerrado).

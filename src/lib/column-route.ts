@@ -34,6 +34,8 @@ export async function authorizeColumnRoute(params: Promise<{ projectId: string; 
   const t = await getT();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   if (!rateLimit(columnRateKey(kind, user.id), COLUMN_DOWNLOAD_LIMITS[kind], 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  // Además, un tope común a todos los PDF de columna: cada tipo tiene el suyo, pero juntos no pasan de 10 por minuto.
+  if (kind !== "ics" && !rateLimit(`column-pdf:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId, columnId } = await params;
   const project = await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true } });
   if (!project) return new Response(t("No encontrado"), { status: 404 });

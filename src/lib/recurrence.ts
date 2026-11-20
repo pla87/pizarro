@@ -320,7 +320,11 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     }
   }
   await flush();
-  await copyDescriptionAttachments(spawned);
+  // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue
+  // siendo un éxito (las descripciones conservan la referencia a los de la anterior).
+  await copyDescriptionAttachments(spawned).catch((err) =>
+    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", message: `No se copiaron los adjuntos de la descripción: ${err instanceof Error ? err.message : String(err)}` }),
+  );
   // En el orden en que nacieron; varias, con una sola lectura para todas (antes, una por tarea).
   if (created.length <= 1) return Promise.all(created.map((id) => loadBoardTask(id)));
   const byId = new Map((await loadBoardTasksByIds(created)).map((t) => [t.id, t]));

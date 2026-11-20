@@ -15,6 +15,11 @@ import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Sin HEAD automático: Next lo derivaría del GET, que anota la descarga en el registro y abre el fichero. */
+export function HEAD() {
+  return new Response(null, { status: 405, headers: { Allow: "GET" } });
+}
+
 /** Descarga del archivo de una exportación lista, en flujo y con Content-Length; admite Range (un solo rango) e If-Range para reanudarla. Solo quien la pidió y mientras siga gestionando el proyecto (un administrador ve el estado, pero no se lleva el archivo de otra persona). */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return actionContext.run({}, async () => {
