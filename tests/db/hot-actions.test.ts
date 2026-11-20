@@ -349,7 +349,8 @@ describe("deployRelease", () => {
         ),
         taskId: null,
       }],
-      events: [],
+      // Una línea de historial por tarea que sale (la fija se queda y no apunta nada).
+      events: ["A", "B"].map((taskId) => ({ code: "move", label: "{\"k\":\"Movió la tarea a «{to}» al desplegar la release «{title}»\",\"p\":{\"to\":\"En producción\",\"title\":\"R uno\"}}", taskId })),
       logs: [{ level: "info", message: "Desplegó la release «R uno» con 3 tareas (1 fija se queda)" }],
     });
     // La copia del adjunto que existe se guarda (en segundo plano); la del que falta se omite y queda en el registro.
