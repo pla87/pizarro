@@ -558,3 +558,31 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 10.5 Administración
 
 *Administración → Integraciones*: email, Google, Telegram y WhatsApp siguen configurados como estaban. Abre `/robots.txt` de tu instalación: debe decir `Disallow: /`.
+
+## 11. Novedades de la v1.62.0
+
+### 11.1 Railway: arranque con la base de datos parada
+
+1. En Railway, reinicia a la vez el servicio de PostgreSQL y el de Pizarro (o detén Postgres un minuto y reinicia Pizarro).
+2. Mira los logs del despliegue de Pizarro.
+
+**Qué debe pasar:** salen avisos de espera («PostgreSQL aún no responde… Se reintenta cada 3 s») y, en cuanto la base responde, Pizarro arranca solo, sin quedarse en «Crashed». Un despliegue normal no debe tardar más que antes.
+
+### 11.2 Servidor propio: actualizar
+
+1. Actualiza con el mismo comando de instalación (`get.sh`).
+2. Comprueba que en la salida se descargan las imágenes de Pizarro, Caddy y PostgreSQL, y que el mensaje final es el de actualización (no «crea el primer administrador»).
+3. `docker compose exec app sh -c 'echo "[$POSTGRES_PASSWORD]"'` (en `/opt/pizarro/deploy`) debe mostrar `[]`.
+4. Abre `deploy/recovery-kit.txt`: lleva las cuatro claves y los pasos de la guía de la web.
+
+### 11.3 Releases y Documentación
+
+1. En *Releases*, abre una release: *Borrar adjuntos* y *Borrar release* están en el botón ⋯ al final de la fila Copiar/.md/.txt.
+2. En *Documentación*, cada fila tiene ⋯ con *Descargar* y *Enviar a la papelera*.
+3. Genera un PDF grande (programa del curso, lista consolidada o resumen para el cliente con muchas tareas): debe salir en segundos y verse igual que antes.
+
+### 11.4 Varios
+
+- Con el móvil en modo oscuro, los textos en rojo (Borrar…) y los enlaces de color se leen bien.
+- Cambia el día del informe semanal a otro posterior de la misma semana tras un envío: si han pasado 3 días o más, llega.
+- Cierra sesión y abre `/login?next=/.//example.com`: tras entrar, debes quedarte en Pizarro.
