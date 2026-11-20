@@ -2,6 +2,7 @@
 // de escribir el fichero (con el mismo mensaje que la definitiva, que sigue dentro de la transacción), y disco lleno
 // (ENOSPC) al escribir: 507 con un mensaje claro y anotado en el registro del sistema, en vez del 500 genérico.
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -96,12 +97,22 @@ describe("subidas: comprobación previa antes de escribir el fichero", () => {
 });
 
 describe("subidas: disco lleno al escribir", () => {
-  /** Toda escritura de fichero falla como con el disco lleno. */
+  /**
+   * Toda escritura de fichero falla como con el disco lleno: writeFile (imágenes) y los flujos de escritura (lo que no es
+   * imagen se escribe en flujo desde el File; el temporal se crea y la escritura falla, como en un disco lleno de verdad).
+   */
   function diskFull() {
+    const enospc = () => Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC", errno: -28, syscall: "write" });
     mock.method(fsp, "writeFile", async () => {
-      throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC", errno: -28, syscall: "write" });
+      throw enospc();
     });
-    syncBuiltinESMExports(); // los `import { writeFile }` de uploads.ts ven la versión simulada
+    const realCreateWriteStream = fs.createWriteStream;
+    mock.method(fs, "createWriteStream", (file: string) => {
+      const out = realCreateWriteStream(file);
+      out._write = (_chunk, _enc, cb) => cb(enospc());
+      return out;
+    });
+    syncBuiltinESMExports(); // los `import { writeFile }` / `import { createWriteStream }` de uploads.ts ven la versión simulada
   }
   const noSpaceLogs = (action: string) => db.appLog.findMany({ where: { action }, select: { level: true, category: true, details: true } });
 
