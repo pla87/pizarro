@@ -103,7 +103,7 @@ describe("Publicar programa (PDF)", () => {
   test("el PDF trae las sesiones no archivadas en el orden de la columna, con fecha, descripción y, si se pide, responsable", async () => {
     const admin = await makeUser({ role: "ADMIN", name: "Profesora Uno" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const res = await programGet(getReq(projectId, programId), params(projectId, programId));
     assert.equal(res.status, 200);
@@ -127,7 +127,7 @@ describe("Publicar programa (PDF)", () => {
   test("POST con save=1 lo devuelve para descargar y guarda «Programa – fecha_v1.pdf» en la Documentación", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const res = await programPost(postReq(projectId, programId), params(projectId, programId));
     assert.equal(res.status, 200);
@@ -151,11 +151,11 @@ describe("Publicar programa (PDF)", () => {
   test("versiones: cada publicación guardada es un documento nuevo _vN; sigue subiendo aunque se borre uno, no se repite a la vez y no se gasta si no se guarda", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const today = todayIso(appTimeZone());
     const publish = async () => {
-      resetRateLimit(`report:${admin.id}`);
+      resetRateLimit(`column-program:${admin.id}`);
       const res = await programPost(postReq(projectId, programId), params(projectId, programId));
       assert.equal(res.status, 200);
       await res.arrayBuffer();
@@ -187,7 +187,7 @@ describe("Publicar programa (PDF)", () => {
     // La versión es del proyecto: otra columna «Programa» sigue la misma cuenta (sin dos documentos con el mismo nombre).
     const second = await db.column.findFirstOrThrow({ where: { projectId, name: "Ideas" } });
     await db.column.update({ where: { id: second.id }, data: { role: "PROGRAM" } });
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const other = await programPost(postReq(projectId, second.id), params(projectId, second.id));
     assert.equal(other.headers.get("X-Pizarro-Document-Version"), "7");
   });
@@ -195,7 +195,7 @@ describe("Publicar programa (PDF)", () => {
   test("como mucho 100 sesiones en el PDF: con más (datos antiguos), las primeras 100 y aviso de cuántas faltan", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const session = await db.taskKind.findFirstOrThrow({ where: { projectId, name: "Sesión" } });
     // 3 de courseProject + 102 = 105 activas.
@@ -216,7 +216,7 @@ describe("Publicar programa (PDF)", () => {
   test("si no cabe en la cuota o pasa del tamaño máximo, se descarga igual y dice por qué no se guardó", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const prev = process.env.UPLOAD_QUOTA_MB_PER_PROJECT;
     process.env.UPLOAD_QUOTA_MB_PER_PROJECT = "1";
@@ -279,7 +279,7 @@ describe("Publicar programa (PDF)", () => {
   test("acceso: sin sesión 401, ajeno 404, columna sin el rol 404 y POST de otro origen 403; el rol se asigna desde el menú", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const { projectId, programId } = await courseProject(admin);
     const outsider = await makeUser();
     await loginAs(outsider);
@@ -298,7 +298,7 @@ describe("Publicar programa (PDF)", () => {
     expectOk(await setColumnRole(f.columns.todo, "PROGRAM"));
     expectOk(await setColumnRole(f.columns.doing, "PROGRAM"));
     assert.equal(await db.column.count({ where: { projectId: f.project.id, role: "PROGRAM" } }), 2);
-    resetRateLimit(`report:${admin.id}`);
+    resetRateLimit(`column-program:${admin.id}`);
     const empty = await programGet(getReq(f.project.id, f.columns.todo), params(f.project.id, f.columns.todo));
     assert.equal(empty.status, 200);
     assert.ok((await text(empty)).includes("Aún no hay sesiones en esta columna."));

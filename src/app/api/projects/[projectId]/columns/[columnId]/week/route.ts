@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 /** PDF de la semana de una columna «Planificación semanal»: `?by=day` (por defecto) o `?by=person`. */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string; columnId: string }> }) {
   const start = performance.now();
-  const auth = await authorizeColumnRoute(ctx.params);
+  const auth = await authorizeColumnRoute(ctx.params, "week");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const groupBy = new URL(req.url).searchParams.get("by") === "person" ? "person" : "day";

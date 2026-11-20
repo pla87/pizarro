@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 /** PDF de la lista consolidada de una columna «Lista consolidada»: `?by=card` (por defecto) o `?by=kind`. */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string; columnId: string }> }) {
   const start = performance.now();
-  const auth = await authorizeColumnRoute(ctx.params);
+  const auth = await authorizeColumnRoute(ctx.params, "checklist");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const by = new URL(req.url).searchParams.get("by") === "kind" ? "kind" : "card";
