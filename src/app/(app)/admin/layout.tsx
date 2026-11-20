@@ -9,7 +9,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const t = await getT();
   const update = await getUpdateNotice();
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+    // max-w-5xl: las nueve pestañas caben en una fila en escritorio (en el móvil se desplazan, ScrollTabs).
+    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <h1 className="text-xl font-bold">{t("Administración")}</h1>
       {update && <UpdateNotice version={update.version} url={update.url} railway={runsOnRailway()} />}
       <AdminTabs />
