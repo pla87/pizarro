@@ -1,6 +1,7 @@
 import "server-only";
 import sharp from "sharp";
 import { APP_ICON_FILES, APP_ICON_REV, appIconSvg, type AppIconAccent } from "@/lib/app-icon-core";
+import { ifNoneMatchHas } from "@/lib/etag";
 
 type IconFile = keyof typeof APP_ICON_FILES;
 
@@ -64,15 +65,6 @@ export function rootIconEtag(accent: AppIconAccent, file: IconFile, ico = false)
   return `"${accent}-r${APP_ICON_REV}-${shape}-${size ?? "svg"}${ico ? "-ico" : ""}"`;
 }
 
-/** ¿Vale la copia del navegador? `If-None-Match` con el mismo ETag (comparación débil: «W/» no cuenta) o «*». */
-export function etagMatches(ifNoneMatch: string | null | undefined, etag: string): boolean {
-  if (!ifNoneMatch) return false;
-  return ifNoneMatch.split(",").some((raw) => {
-    const tag = raw.trim();
-    return tag === "*" || tag.replace(/^W\//, "") === etag;
-  });
-}
-
 /**
  * Respuesta de un icono en una dirección fija de la raíz (/favicon.ico, /apple-touch-icon.png, /icon.svg, /icon.png). A
  * diferencia de /app-icon/<tema>/…, la dirección no cambia con el color, así que no se guarda como inmutable: caché corta
@@ -83,7 +75,7 @@ export function etagMatches(ifNoneMatch: string | null | undefined, etag: string
 export async function rootIconResponse(accent: AppIconAccent, file: IconFile, ico = false, req?: Pick<Request, "headers">): Promise<Response> {
   const etag = rootIconEtag(accent, file, ico);
   const headers = { "Cache-Control": "public, max-age=300, must-revalidate", ETag: etag, "X-Content-Type-Options": "nosniff" };
-  if (etagMatches(req?.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers });
+  if (ifNoneMatchHas(req?.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers });
   if (ico && APP_ICON_FILES[file].size !== null) return new Response((await renderIco(accent)) as BodyInit, { headers: { ...headers, "Content-Type": "image/x-icon" } });
   const { body, type } = await renderAppIcon(accent, file);
   return new Response(body as BodyInit, { headers: { ...headers, "Content-Type": type } });

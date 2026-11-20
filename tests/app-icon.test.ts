@@ -6,7 +6,8 @@ import { test } from "node:test";
 import sharp from "sharp";
 import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon, shortAppName } from "../src/lib/app-icon-core";
 import { webManifest } from "../src/lib/web-manifest";
-import { etagMatches, rootIconEtag, rootIconResponse } from "../src/lib/app-icon-render";
+import { rootIconEtag, rootIconResponse } from "../src/lib/app-icon-render";
+import { ifNoneMatchHas } from "../src/lib/etag";
 import { GET } from "../src/app/app-icon/[accent]/[file]/route";
 
 const get = (accent: string, file: string) => GET(new Request(`http://localhost/app-icon/${accent}/${file}`), { params: Promise.resolve({ accent, file }) });
@@ -175,10 +176,10 @@ test("iconos de la raíz: ETag (color + revisión + tamaño), 304 con If-None-Ma
   }
   // Sin petición (llamadas antiguas): respuesta completa.
   assert.equal((await rootIconResponse("forest", "icon.svg")).status, 200);
-  assert.equal(etagMatches(null, '"a"'), false);
-  assert.equal(etagMatches("", '"a"'), false);
-  assert.equal(etagMatches('"a"', '"a"'), true);
-  assert.equal(etagMatches('"ab"', '"a"'), false);
+  assert.equal(ifNoneMatchHas(null, '"a"'), false);
+  assert.equal(ifNoneMatchHas("", '"a"'), false);
+  assert.equal(ifNoneMatchHas('"a"', '"a"'), true);
+  assert.equal(ifNoneMatchHas('"ab"', '"a"'), false);
 
   // El .ico se arma una vez por color: dos respuestas, los mismos bytes, y válidos.
   const a = Buffer.from(await (await rootIconResponse("mustard", "icon-32.png", true)).arrayBuffer());
