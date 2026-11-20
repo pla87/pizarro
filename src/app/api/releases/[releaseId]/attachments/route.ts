@@ -55,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria.
   let zipPart: Awaited<ReturnType<typeof prepareZipPart>>;
   try {
-    zipPart = await prepareZipPart(entries, pkg);
+    zipPart = await prepareZipPart(entries, pkg, req.signal);
   } catch (err) {
     releaseSlot();
     throw err;

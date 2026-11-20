@@ -54,11 +54,12 @@ interface ZipPart {
 }
 
 /** Lee una vez en flujo el contenido de una entrada para medir su tamaño real y su CRC-32; null si no se puede leer. */
-async function measure(e: ZipEntry): Promise<{ size: number; crc: number } | null> {
+async function measure(e: ZipEntry, signal?: AbortSignal): Promise<{ size: number; crc: number } | null> {
   try {
     let size = 0;
     let crc = 0;
     for await (const chunk of e.open()) {
+      if (signal?.aborted) return null;
       size += chunk.byteLength;
       crc = crc32(chunk, crc);
     }
@@ -72,12 +73,14 @@ async function measure(e: ZipEntry): Promise<{ size: number; crc: number } | nul
 /**
  * Prepara un paquete sin juntarlo en memoria: una primera pasada en flujo mide el tamaño y el CRC de cada fichero
  * (los que ya no están se omiten) y después `zipPartBody` lo envía en flujo. La memoria no depende del tamaño del paquete.
+ * Si se aborta la petición (`signal`) mientras se mide, deja de leer y devuelve el paquete vacío.
  */
-export async function prepareZipPart(entries: ZipEntry[], pkg: ZipPackage): Promise<ZipPart> {
+export async function prepareZipPart(entries: ZipEntry[], pkg: ZipPackage, signal?: AbortSignal): Promise<ZipPart> {
   const out: StreamZipEntry[] = [];
   for (const i of pkg.items) {
+    if (signal?.aborted) return { entries: [], bytes: 0 };
     const e = entries[i]!;
-    const m = await measure(e);
+    const m = await measure(e, signal);
     if (m) out.push({ name: e.name, size: m.size, crc: m.crc, body: e.open });
   }
   return { entries: out, bytes: out.length ? streamZipSize(out) : 0 };

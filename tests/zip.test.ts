@@ -117,6 +117,13 @@ test("ZIP: si un fichero cambia entre la medida y el envío, el flujo se corta c
   again();
 });
 
+test("ZIP: si se aborta la petición mientras se mide, deja de leer y el paquete queda vacío", async () => {
+  const ac = new AbortController();
+  ac.abort();
+  const part = await prepareZipPart(diskEntries(files), { items: [0, 1], bytes: 0, oversize: false }, ac.signal);
+  assert.deepEqual(part, { entries: [], bytes: 0 });
+});
+
 test("ZIP: lo abre python zipfile (si hay python3)", async (t) => {
   const file = path.join(dir, "t.zip");
   writeFileSync(file, (await download(diskEntries(files))).zip);

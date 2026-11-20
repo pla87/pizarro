@@ -102,7 +102,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria.
   let zipPart: Awaited<ReturnType<typeof prepareZipPart>>;
   try {
-    zipPart = await prepareZipPart(entries, pkg);
+    zipPart = await prepareZipPart(entries, pkg, req.signal);
   } catch (err) {
     releaseSlot();
     throw err;
