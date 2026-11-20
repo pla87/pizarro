@@ -1,10 +1,13 @@
 // Plantillas de serie: sembrado único, recuperar y restablecer, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { createProject } from "../../src/actions/projects";
 import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
+import { applyTemplateChange } from "../../src/actions/template-apply";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
+import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
+import { resetRateLimit } from "../../src/lib/rate-limit";
 import { seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
 
 describe("plantillas de proyecto de serie", () => {
@@ -124,7 +127,7 @@ describe("plantillas de proyecto de serie", () => {
     const mudanza = list.find((t) => t.builtinKey === "mudanza")!;
     const created = expectOk(await createProject("Move", { templateId: mudanza.id }));
     const cols = await db.column.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
-    assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Done"]);
+    assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Moving day", "Done"]);
     const kinds = await db.taskKind.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
     assert.equal(kinds[0]!.name, "Admin and change of address");
     assert.match(kinds[1]!.descriptionTemplate, /What is being packed/);
@@ -138,5 +141,70 @@ describe("plantillas de proyecto de serie", () => {
     assert.equal(viajes.kinds[0]!.name, "Transporte");
     const trip = expectOk(await createProject("Trip", { templateId: viajes.id }));
     assert.equal((await db.taskKind.findMany({ where: { projectId: trip.id }, orderBy: { position: "asc" } }))[0]!.name, "Transporte");
+  });
+  test("cada plantilla de serie crea su proyecto sin errores en los dos idiomas, y se puede aplicar a uno con tareas", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    const rows = await db.projectTemplate.findMany({ where: { builtinKey: { not: null } }, select: { id: true, builtinKey: true } });
+    assert.equal(rows.length, BUILTIN_KEYS.length);
+    for (const locale of ["ES", "EN"] as const) {
+      const admin = await makeUser({ role: "ADMIN" });
+      await db.user.update({ where: { id: admin.id }, data: { locale } });
+      await loginAs(admin);
+      for (const { id, builtinKey } of rows) {
+        const canon = locale === "EN" ? canonicalTemplateEn(builtinKey!)! : canonicalTemplate(builtinKey!)!;
+        const at = `${builtinKey} (${locale})`;
+        resetRateLimit(`project-create:${admin.id}`); // 10 proyectos por hora y persona
+        const created = expectOk(await createProject(`P ${builtinKey} ${locale}`, { templateId: id }));
+        const cols = await db.column.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
+        assert.deepEqual(cols.map((c) => [c.name, c.role, c.isDone]), canon.columns.map((c) => [c.name, c.role, c.isDone]), at);
+        const kinds = await db.taskKind.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
+        assert.deepEqual(kinds.map((k) => [k.name, k.subtaskTemplate]), canon.kinds.map((k) => [k.name, k.subtaskTemplate]), at);
+        const labels = await db.label.findMany({ where: { projectId: created.id } });
+        assert.deepEqual(labels.map((l) => l.name).sort(), canon.labels.map((l) => l.name).sort(), at);
+        const project = await db.project.findUniqueOrThrow({ where: { id: created.id }, select: { taskFields: true } });
+        assert.deepEqual([...project.taskFields].sort(), [...canon.taskFields].sort(), at);
+        if (canon.columns.some((c) => c.role === "BUDGET")) assert.ok(project.taskFields.includes("cost"), `${at}: coste`);
+      }
+      // «Aplicar plantilla» a un proyecto existente con tareas: añadir lo que falte y cambiar a la plantilla (con la
+      // sugerencia de emparejamiento) funcionan con todas, y ninguna tarea se pierde.
+      for (const { id, builtinKey } of rows) {
+        const f = await makeProject({ members: [admin] });
+        await makeTask(f, { title: "A", columnId: f.columns.todo });
+        await makeTask(f, { title: "B", columnId: f.columns.done });
+        const ref = { source: "template" as const, id };
+        resetRateLimit(`template-change:user:${admin.id}`); // 20 cambios por hora y persona
+        expectOk(await applyTemplateChange(f.project.id, ref, "ADD"));
+        expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE"));
+        assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 2, `${builtinKey} (${locale}): tareas`);
+      }
+    }
+  });
+
+  test("las de serie de la v1.60 sin tocar pasan solas a la revisión con roles; una editada se respeta", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    // Lo que sembró la v1.60.0 para «Mudanza» y «Viajes» (columnas sin roles, otras etiquetas, sin campos).
+    const plain = (names: string[], done: string) => names.map((name) => ({ name, role: "NONE" as const, isDone: name === done }));
+    const old = {
+      mudanza: { ...canonicalTemplate("mudanza")!, columns: plain(["Por hacer", "Esta semana", "Esperando", "Hecho"], "Hecho"), kinds: canonicalTemplate("mudanza")!.kinds.slice(0, 6) },
+      viajes: { ...canonicalTemplate("viajes")!, columns: plain(["Ideas", "Por reservar", "Reservado", "Antes de salir", "Durante el viaje", "Hecho"], "Hecho"), taskFields: [] },
+    };
+    for (const [key, data] of Object.entries(old)) {
+      await db.projectTemplate.update({ where: { builtinKey: key }, data: { columns: data.columns, kinds: data.kinds, taskFields: data.taskFields } });
+      await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(data) } });
+    }
+    // El administrador había cambiado «Viajes»: se queda como estaba.
+    await db.projectTemplate.update({ where: { builtinKey: "viajes" }, data: { name: "Nuestros viajes" } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), ["mudanza"]);
+    const mudanza = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "mudanza" } });
+    assert.deepEqual((mudanza.columns as { role: string }[]).map((c) => c.role), ["NONE", "WEEKLY_PLAN", "WAITING", "CHECKLIST", "NONE"]);
+    const viajes = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "viajes" } });
+    assert.equal(viajes.name, "Nuestros viajes");
+    assert.ok((viajes.columns as { role: string }[]).every((c) => c.role === "NONE"));
+    assert.deepEqual(viajes.taskFields, []);
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
   });
 });
