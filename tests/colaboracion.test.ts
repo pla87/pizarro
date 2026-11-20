@@ -74,6 +74,18 @@ test("informe semanal: solo el día elegido, desde la hora elegida y una vez", (
   assert.equal(reportDue(monday, tz, { ...s, lastSentAt: new Date("2026-10-12T06:10:00Z") }), true);
 });
 
+test("informe semanal: cambiar el día a otro posterior de la misma semana tras el envío no lo repite", () => {
+  const tz = "Europe/Madrid";
+  const sentMonday = new Date("2026-10-19T06:10:00Z"); // lunes 08:10
+  const thursday = new Date("2026-10-22T08:10:00Z");
+  assert.equal(reportDue(thursday, tz, { weekday: 4, hour: 8, lastSentAt: sentMonday }), false);
+  // El domingo es de la misma semana; el lunes siguiente, de otra (en hora local: el domingo 23:30 en Madrid).
+  assert.equal(reportDue(new Date("2026-10-25T22:30:00Z"), tz, { weekday: 7, hour: 8, lastSentAt: sentMonday }), false);
+  assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: sentMonday }), true);
+  // Enviado el domingo: el lunes siguiente ya es otra semana.
+  assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: new Date("2026-10-25T09:00:00Z") }), true);
+});
+
 // --- Mis tareas ---
 
 test("mis tareas: grupos por vencimiento respecto a hoy", () => {

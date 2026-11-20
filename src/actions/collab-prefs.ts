@@ -18,9 +18,10 @@ export async function updateCollabPrefs(input: z.input<typeof schema>) {
   return runAction({ name: "profile.updateCollabPrefs", args: [input] }, async () => {
     const user = await requireUser();
     const data = schema.parse(input);
-    const prev = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { dailyDigest: true, digestHour: true } });
-    // Al activar el resumen o cambiar la hora se reinicia el «ya enviado hoy»: si la hora aún no ha pasado, llegará hoy.
-    const reset = data.dailyDigest && (!prev.dailyDigest || prev.digestHour !== data.digestHour);
+    const prev = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { dailyDigest: true } });
+    // Solo al activar el resumen se reinicia el «ya enviado hoy» (si la hora aún no ha pasado, llegará hoy). Cambiar la
+    // hora después de recibirlo no lo reinicia: llegaría otro con lo mismo el mismo día.
+    const reset = data.dailyDigest && !prev.dailyDigest;
     await db.user.update({ where: { id: user.id }, data: { ...data, ...(reset ? { lastDigestAt: null } : {}) } });
   });
 }

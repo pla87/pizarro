@@ -164,3 +164,21 @@ describe("el destinatario borra su cuenta", () => {
     assert.equal(logs[0]!.userId, admin.id);
   });
 });
+
+describe("cambiar el día o la hora del informe", () => {
+  test("tras el envío de esta semana no reinicia el «ya enviado»; activarlo, sí", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    await loginAs(member);
+    expectOk(await saveReportSchedule(f.project.id, { ...week, recipient: { userId: member.id } }));
+    const sent = new Date();
+    await db.reportSchedule.update({ where: { projectId: f.project.id }, data: { lastSentAt: sent } });
+    expectOk(await saveReportSchedule(f.project.id, { enabled: true, weekday: 5, hour: 18, recipient: { keep: true } }));
+    const row = await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } });
+    assert.deepEqual([row.weekday, row.hour, row.lastSentAt?.getTime()], [5, 18, sent.getTime()]);
+    expectOk(await saveReportSchedule(f.project.id, { enabled: false, weekday: 5, hour: 18, recipient: { keep: true } }));
+    assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt?.getTime(), sent.getTime());
+    expectOk(await saveReportSchedule(f.project.id, { enabled: true, weekday: 5, hour: 18, recipient: { keep: true } }));
+    assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt, null);
+  });
+});

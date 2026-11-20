@@ -39,7 +39,7 @@ const NOT_ALLOWED = "El destinatario debe ser alguien con acceso al proyecto.";
 
 /**
  * Informe semanal por email de un proyecto: quien tenga acceso al proyecto lo configura (destinatario, día de la semana
- * y hora). Guardar reinicia el «ya enviado» para que no se pierda el próximo. Nadie escribe el email de otra persona: se
+ * y hora). Activarlo reinicia el «ya enviado»; cambiar el día o la hora no (lo ya enviado esta semana no se repite). Nadie escribe el email de otra persona: se
  * elige de la lista por nombre, así que la respuesta no dice si una dirección es de alguien.
  */
 export async function saveReportSchedule(projectId: string, input: z.input<typeof schema>) {
@@ -49,7 +49,7 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
     const data = schema.parse(input);
     await assertProjectAccess(user, pid);
     if (!rateLimit(`report-schedule:${user.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
-    const prev = await db.reportSchedule.findUnique({ where: { projectId: pid }, select: { weekday: true, hour: true, enabled: true, recipient: true } });
+    const prev = await db.reportSchedule.findUnique({ where: { projectId: pid }, select: { enabled: true, recipient: true } });
     let recipient: string;
     if ("userId" in data.recipient) {
       const person = (await reportRecipientPeople(pid)).find((p) => p.id === (data.recipient as { userId: string }).userId);
@@ -74,7 +74,8 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
       }
       throw new AppError(NOT_ALLOWED);
     }
-    const reset = !prev || prev.weekday !== data.weekday || prev.hour !== data.hour || prev.enabled !== data.enabled;
+    // Solo al activarlo: cambiar el día o la hora después del envío de esta semana no lo repite (reportDue).
+    const reset = data.enabled && !prev?.enabled;
     const row = { enabled: data.enabled, recipient, weekday: data.weekday, hour: data.hour };
     await db.reportSchedule.upsert({
       where: { projectId: pid },
