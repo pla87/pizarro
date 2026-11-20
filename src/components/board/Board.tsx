@@ -20,6 +20,8 @@ import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
+import { msUntilNextDay, todayIso } from "@/lib/dates";
+import { appTimeZone } from "@/lib/format";
 import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
@@ -36,7 +38,7 @@ import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { boardDragA11y } from "./drag-a11y";
-import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
+import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
@@ -103,6 +105,8 @@ const COLUMN_PREFIX = "col:";
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
 const PINGPONG_MS = 60;
+/** Margen tras la medianoche antes de refrescar «hoy» (el reloj del servidor puede ir unos segundos detrás). */
+const MIDNIGHT_MARGIN_MS = 5_000;
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -456,6 +460,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
   // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
   const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
+  // «Hoy» (data.today, del servidor: plazos, «vence hoy», filtros por fecha) cambia a medianoche en la zona de la app aunque
+  // el tablero siga abierto: al empezar el día siguiente se refresca. Se espera como mucho una hora de cada vez y se vuelve
+  // a mirar el día (los cambios de hora alargan o acortan el día); unos segundos de margen por si el reloj del servidor va
+  // algo detrás. Si tras refrescar el servidor aún dice el día anterior, se reintenta un par de veces. Sin estado: el
+  // temporizador no vuelve a dibujar nada (ni DndContext) hasta que llegan los datos nuevos.
+  useEffect(() => {
+    const tz = appTimeZone();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let retries = 0;
+    const check = () => {
+      if (todayIso(tz) === data.today) {
+        timer = setTimeout(check, Math.min(msUntilNextDay(tz) + MIDNIGHT_MARGIN_MS, 3_600_000));
+      } else if (retries++ < 3) {
+        refresh();
+        timer = setTimeout(check, 60_000);
+      }
+    };
+    // Con el día del navegador ya distinto al abrir (reloj del equipo desajustado) no se refresca en bucle.
+    if (todayIso(tz) === data.today) check();
+    return () => clearTimeout(timer);
+  }, [data.today, refresh]);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;
@@ -1177,6 +1202,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setSkipDropAnimation(false);
     // La tarjeta arrastrada sigue apuntada a dnd-kit aunque cambie de columna; las demás no se desapuntan hasta soltar.
     draggingCard.set(id);
+    evergreenLeftPanel.clear();
     const col = findContainer(baseItems, id);
     // Una tarjeta seleccionada con otras se lleva toda la selección; una sin seleccionar (o una fija), solo ella.
     const group = col ? selectionGroup(stores.selection.get(), id, sortedColumns.map((c) => c.id), baseItems) : null;
@@ -1222,6 +1248,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const last = lastContainerMove.current;
     if (last && last.to === from && last.from === to && performance.now() - last.at < PINGPONG_MS) return;
     lastContainerMove.current = { from, to, at: performance.now() };
+    // Una fija que sale de su panel a una lista: su fila se vuelve a montar al terminar (ver EvergreenPanel, `remounts`).
+    if (from === EVERGREEN_ORIGIN && to !== EVERGREEN_ORIGIN) evergreenLeftPanel.add(id);
     const dest = to;
     setDragItems((prev) => {
       if (!prev || findContainer(prev, id) !== from) return prev;

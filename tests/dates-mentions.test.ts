@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { daysBetween, dueStatus, formatDay } from "../src/lib/dates";
+import { daysBetween, dueStatus, formatDay, msUntilNextDay } from "../src/lib/dates";
 import { excerpt, extractMentionIds, mentionToken, mentionsToMarkdown, mentionsToPlain } from "../src/lib/mentions";
 
 test("estado de plazo", () => {
@@ -32,4 +32,12 @@ test("fechas límite: solo días reales y años razonables", async () => {
     assert.equal(dayIso.safeParse(bad).success, false, bad);
   }
   assert.equal(dayIso.parse(null), null);
+});
+
+test("lo que falta para el día siguiente, en la zona de la app", () => {
+  // 23:59:30 en Madrid (UTC+1 en noviembre): faltan 30 s, aunque en UTC sean las 22:59.
+  assert.equal(msUntilNextDay("Europe/Madrid", new Date("2026-11-20T22:59:30.000Z")), 30_000);
+  assert.equal(msUntilNextDay("UTC", new Date("2026-11-20T12:00:00.250Z")), 12 * 3_600_000 - 250);
+  // Justo a medianoche: un día entero.
+  assert.equal(msUntilNextDay("America/New_York", new Date("2026-11-21T05:00:00.000Z")), 86_400_000);
 });

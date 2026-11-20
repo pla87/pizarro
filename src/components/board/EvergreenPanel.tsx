@@ -44,6 +44,12 @@ const cardDragActive = () => draggingCard.get() !== null;
 const notDragging = () => false;
 
 /**
+ * Fijas que en el arrastre en curso han pasado a una lista de tarjetas (las anota el tablero en onDragOver y las vacía al
+ * empezar otro arrastre). Solo esas filas hay que volver a montar al terminar (ver `remounts` en EvergreenPanel).
+ */
+export const evergreenLeftPanel = new Set<string>();
+
+/**
  * Panel al pie de la columna de la release con las tareas «siempre en la release» (evergreen), o de una columna de plan
  * de trabajo para IA con las «siempre en el plan» (`kind="plan"`). Plegado es una barra con el contador; desplegado crece
  * hacia arriba mostrando tarjetas compactas.
@@ -97,17 +103,41 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
   }, [fileSprung]);
   const open = stored || (sprung && dragging) || fileSprung;
   const hovering = isOver && dragging;
-  // Filas del panel montadas de nuevo tras cada arrastre (`round` va en su key). Una fija que se arrastra sobre una lista
+  // Filas que se vuelven a montar al terminar un arrastre (su contador va en la key). Una fija que se arrastra sobre una lista
   // aparece allí como tarjeta ordenable con su mismo id, y al volver al panel (o soltarla) esa tarjeta se desmonta y borra
   // de dnd-kit el registro del id, que era también el de la fila: la fila ya no se podía volver a arrastrar hasta recargar.
-  const [round, setRound] = useState(0);
+  // Solo esas (evergreenLeftPanel): antes se montaban de nuevo todas tras cada arrastre, y con el teclado (Espacio para
+  // coger, Escape o Espacio para soltar en su panel) el foco que dnd-kit devuelve a la fila caía en un nodo ya quitado
+  // (<body>). Si la fila que se vuelve a montar tenía el foco, se le devuelve.
+  const [remounts, setRemounts] = useState<Record<string, number>>({});
+  const idsRef = useRef(taskIds);
+  const refocus = useRef<string | null>(null);
+  useEffect(() => {
+    idsRef.current = taskIds;
+  });
   useEffect(() => {
     if (!dragging) return;
     return () => {
       setSprung(false); // al terminar el arrastre vuelve a plegarse
-      setRound((n) => n + 1);
+      const left = idsRef.current.filter((id) => evergreenLeftPanel.has(id));
+      if (!left.length) return;
+      for (const id of left) evergreenLeftPanel.delete(id);
+      const focused = document.activeElement instanceof HTMLElement ? document.activeElement.closest("[data-file-target]")?.getAttribute("data-file-target") : null;
+      if (focused && left.includes(focused)) refocus.current = focused;
+      setRemounts((prev) => {
+        const next = { ...prev };
+        for (const id of left) next[id] = (next[id] ?? 0) + 1;
+        return next;
+      });
     };
   }, [dragging]);
+  useEffect(() => {
+    const id = refocus.current;
+    if (!id) return;
+    refocus.current = null;
+    const row = document.getElementById(`evergreen-${columnId}`)?.querySelector<HTMLElement>(`[data-file-target="${CSS.escape(id)}"]`);
+    if (row && (document.activeElement === document.body || !document.activeElement?.isConnected)) row.focus();
+  }, [remounts, columnId]);
   useEffect(() => {
     if (!hovering || open) return;
     const timer = setTimeout(() => setSprung(true), SPRING_OPEN_MS);
@@ -161,7 +191,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
     >
       {open && (
         <div id={`evergreen-${columnId}`} className="-mb-1.5 max-h-56 space-y-1.5 overflow-y-auto px-2 pt-2 pb-1.5 max-lg:pr-16">
-          {taskIds.map((id) => <EvergreenCard key={`${id}:${round}`} id={id} plan={kind === "plan"} />)}
+          {taskIds.map((id) => <EvergreenCard key={`${id}:${remounts[id] ?? 0}`} id={id} plan={kind === "plan"} />)}
           {/* Único hueco que acepta archivos (tarea fija nueva): el de debajo de las filas; entre filas no hace nada. */}
           <div
             data-file-zone
@@ -228,7 +258,11 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
         if (e.key === "Enter" && e.target === e.currentTarget) {
           e.stopPropagation();
           openTask(id);
+          return;
         }
+        // Las demás teclas, al sensor de teclado (Espacio coge la fila, como anuncia su descripción): antes este manejador
+        // sustituía al de dnd-kit y con el teclado no se podía arrastrar.
+        if (!dragHandle) listeners?.onKeyDown?.(e);
       }}
       className={cn(
         fileDrop.over && "border-focus ring-2 ring-focus/50",

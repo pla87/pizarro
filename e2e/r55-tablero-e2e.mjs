@@ -1,15 +1,17 @@
 // Ronda 55 (tablero, panel de tareas fijas): al abrir «Siempre en la release» la lista de la columna ya no muestra una barra
-// de scroll si sus tarjetas caben (escritorio y móvil a 390 px; con muchas sigue habiendo scroll); una copia con Ctrl soltada
+// de scroll si sus tarjetas caben (escritorio; con muchas sigue habiendo scroll; en móvil, a 390 px, se queda el hueco del
+// final para que la última tarjeta suba por encima de la barra de selección); una copia con Ctrl soltada
 // en el panel nace fija en ese panel (el de la release y el de «Siempre en el plan», y la de una fija en su propio panel),
 // con un solo paso de deshacer; y arrastrar con Ctrl entre la lista y el panel abierto, con la columna llena, no acaba en
-// «Algo ha fallado» (error #185 de React, «Maximum update depth exceeded»). Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs      # PART=scroll,copia,vaiven
+// «Algo ha fallado» (error #185 de React, «Maximum update depth exceeded»); y coger con Espacio una fija del panel y soltarla
+// o cancelar deja el foco en su fila. Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs      # PART=scroll,copia,vaiven,foco
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "scroll,copia,vaiven").split(",");
+const only = (process.env.PART || "scroll,copia,vaiven,foco").split(",");
 
 await L.prepareUsers();
 const PID = "r55_project";
@@ -80,16 +82,47 @@ if (only.includes("scroll")) {
     const s = await session(false, opts);
     const { page } = s;
     await openBoard(page, mobile);
-    const closed = await scrollOf(page, "Salto");
-    L.eq(`SCROLL ${label}: plegado, cinco tarjetas y sin scroll`, [closed.cards, closed.sh <= closed.ch + 1], [5, true]);
     const toggle = L.colLoc(page, "Salto").locator("button[aria-controls^=evergreen]");
-    await (mobile ? toggle.tap() : toggle.click());
-    await panelRows(page, "Salto").nth(2).waitFor();
-    await sleep(400);
-    const open = await scrollOf(page, "Salto");
-    L.check(`SCROLL ${label}: con el panel abierto la lista es más baja`, open.ch < closed.ch, JSON.stringify({ closed, open }));
-    // 1280 × 720: antes 450 px de contenido en 379 (cinco tarjetas de ~370 px más el hueco del final): scroll innecesario.
-    L.check(`SCROLL ${label}: y sigue sin scroll (las cinco caben)`, open.sh <= open.ch + 1, JSON.stringify(open));
+    if (mobile) {
+      // Móvil y tableta: el hueco del final se queda aunque las tarjetas quepan (data-fits solo cuenta desde `lg`): la barra
+      // de selección y los botones flotantes tapan el final de la lista, y el hueco es lo que deja subir la última tarjeta
+      // por encima. Con el panel abierto la lista puede tener algo de scroll (como las demás columnas en móvil).
+      const padding = () => list(page, "Salto").evaluate((el) => getComputedStyle(el).paddingBottom);
+      const lastAboveBar = async (what) => {
+        await list(page, "Salto").evaluate((el) => (el.scrollTop = el.scrollHeight));
+        await sleep(300);
+        const last = await L.cardLoc(page, "Tarea 5").boundingBox();
+        const bar = await page.locator("[data-selection-bar]").boundingBox();
+        L.check(`SCROLL ${label}: ${what}, al bajar del todo la última tarjeta queda por encima de la barra de selección`, last && bar && last.y + last.height <= bar.y, JSON.stringify({ last, bar }));
+      };
+      const closed = await scrollOf(page, "Salto");
+      L.eq(`SCROLL ${label}: plegado, cinco tarjetas`, closed.cards, 5);
+      L.check(`SCROLL ${label}: plegado, las tarjetas caben (data-fits)`, await list(page, "Salto").evaluate((el) => el.hasAttribute("data-fits")));
+      L.eq(`SCROLL ${label}: plegado, con el hueco del final aunque quepan`, await padding(), "160px");
+      await L.cardLoc(page, "Tarea 1").locator("button[aria-label=Seleccionar]").tap();
+      await page.locator("[data-selection-bar]").waitFor();
+      await lastAboveBar("plegado");
+      await page.locator("[data-selection-bar] button[aria-label='Limpiar selección']").tap();
+      await toggle.tap();
+      await panelRows(page, "Salto").nth(2).waitFor();
+      await sleep(400);
+      const open = await scrollOf(page, "Salto");
+      L.check(`SCROLL ${label}: con el panel abierto la lista es más baja`, open.ch < closed.ch, JSON.stringify({ closed, open }));
+      L.eq(`SCROLL ${label}: abierto, también con el hueco`, await padding(), "160px");
+      await L.cardLoc(page, "Tarea 1").locator("button[aria-label=Seleccionar]").tap();
+      await page.locator("[data-selection-bar]").waitFor();
+      await lastAboveBar("abierto");
+    } else {
+      const closed = await scrollOf(page, "Salto");
+      L.eq(`SCROLL ${label}: plegado, cinco tarjetas y sin scroll`, [closed.cards, closed.sh <= closed.ch + 1], [5, true]);
+      await toggle.click();
+      await panelRows(page, "Salto").nth(2).waitFor();
+      await sleep(400);
+      const open = await scrollOf(page, "Salto");
+      L.check(`SCROLL ${label}: con el panel abierto la lista es más baja`, open.ch < closed.ch, JSON.stringify({ closed, open }));
+      // 1280 × 720: antes 450 px de contenido en 379 (cinco tarjetas de ~370 px más el hueco del final): scroll innecesario.
+      L.check(`SCROLL ${label}: y sigue sin scroll (las cinco caben)`, open.sh <= open.ch + 1, JSON.stringify(open));
+    }
     L.eq(`SCROLL ${label}: las tres fijas en el panel`, await panelRows(page, "Salto").count(), 3);
     if (label === "1280") await page.screenshot({ path: `${SHOTS}/r55-panel-sin-scroll.png` });
     L.assertNoErrors(`SCROLL ${label}`, [s]);
@@ -234,6 +267,69 @@ if (only.includes("vaiven")) {
   await L.eqEventually("VAIVÉN: seis copias, todas fijas en «Salto»", async () => JSON.stringify((await L.q(`SELECT evergreen, count(*)::int AS n FROM "Task" WHERE "projectId"=$1 AND title LIKE '%(copia)' GROUP BY evergreen`, [PID])).map((r) => [r.evergreen, r.n])), JSON.stringify([[true, 6]]));
   await page.screenshot({ path: `${SHOTS}/r55-vaiven.png` });
   L.assertNoErrors("VAIVÉN", [s]);
+  await s.ctx.close();
+}
+
+// --- Foco tras arrastrar con teclado una fija de su panel ----------------------------------------------------------------------
+if (only.includes("foco")) {
+  L.scenario("foco: coger con Espacio una fija del panel y cancelar o soltar en su panel deja el foco en la fila");
+  await seed();
+  await addTasks("r55e_r", 4, "Tarea");
+  await addTasks("r55e_r", 3, "Fija", { fixed: true, from: 100 });
+  const s = await session(true);
+  const { page } = s;
+  await openBoard(page);
+  const row = (title) => panelRows(page, "Salto").filter({ hasText: title });
+  /** Lo que tiene el foco: la fila del panel (su título), otra cosa o <body>. */
+  const focused = () => page.evaluate(() => {
+    const el = document.activeElement;
+    if (!el || el === document.body) return "body";
+    const r = el.closest("[data-file-target]");
+    return r ? `fila ${r.querySelector("span")?.textContent?.trim()}` : `${el.tagName.toLowerCase()} ${el.getAttribute("aria-label") ?? ""}`.trim();
+  });
+  /** Espera a que termine el arrastre (y la animación de soltar) y a que dnd-kit devuelva el foco. */
+  const settled = async () => {
+    await L.waitFor(async () => !(await page.evaluate(() => document.documentElement.hasAttribute("data-card-drag"))), { timeout: 4000 });
+    await sleep(300);
+  };
+  for (const [label, end] of [["Escape", "Escape"], ["soltar en su panel", " "]]) {
+    await row("Fija 102").focus();
+    await page.keyboard.press(" ");
+    L.check(`FOCO ${label}: Espacio coge la fija`, await L.waitFor(() => page.evaluate(() => document.documentElement.hasAttribute("data-card-drag"))));
+    await sleep(200);
+    await page.keyboard.press(end);
+    await settled();
+    L.eq(`FOCO ${label}: el foco sigue en la fila`, await focused(), "fila Fija 102");
+    L.eq(`FOCO ${label}: la fija sigue en el panel`, await row("Fija 102").count(), 1);
+  }
+  // Con el ratón, de la fila a la lista y de vuelta a su panel sin soltar: la fila se vuelve a montar (su registro en dnd-kit
+  // se perdió al quitarse la tarjeta de la lista) y se puede volver a coger, también con el teclado.
+  {
+    const a = await center(row("Fija 101"), { left: true });
+    const b = await center(L.cardLoc(page, "Tarea 2"));
+    const p = await center(L.colLoc(page, "Salto").locator("[id^=evergreen-]"));
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 12, a.y + 12, { steps: 3 });
+    await page.mouse.move(b.x, b.y, { steps: 15 });
+    L.check("FOCO ratón: la fija pasa a la lista mientras se arrastra", await L.waitFor(async () => (await list(page, "Salto").locator("[data-task-card]").count()) === 5));
+    await page.mouse.move(p.x, p.y, { steps: 15 });
+    await sleep(250);
+    await page.mouse.up();
+    await settled();
+  }
+  L.eq("FOCO ratón: vuelve a su panel, fija", JSON.stringify(await copyRow("Fija 101")), JSON.stringify([{ columnId: "r55e_r", evergreen: true, evergreenEvery: 1 }]));
+  await row("Fija 101").focus();
+  await page.keyboard.press(" ");
+  L.check("FOCO ratón: después, Espacio la vuelve a coger", await L.waitFor(() => page.evaluate(() => document.documentElement.hasAttribute("data-card-drag"))));
+  await sleep(200);
+  await page.keyboard.press("Escape");
+  await settled();
+  L.eq("FOCO ratón: y Escape deja el foco en su fila", await focused(), "fila Fija 101");
+  // Y se puede volver a arrastrar con el ratón (el registro en dnd-kit sigue vivo): a la lista, deja de ser fija.
+  await drag(page, row("Fija 101"), L.cardLoc(page, "Tarea 2"), { ctrl: false, row: true });
+  await L.eqEventually("FOCO: después, la fila se arrastra a la lista con el ratón", async () => JSON.stringify(await copyRow("Fija 101")), JSON.stringify([{ columnId: "r55e_r", evergreen: false, evergreenEvery: 1 }]));
+  L.assertNoErrors("FOCO", [s]);
   await s.ctx.close();
 }
 
