@@ -496,7 +496,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
    * ¿Un pegado de una tarea en JSON en esta caja de texto rellena el formulario? Sí en el título vacío (el foco está ahí al
    * abrir «Nueva tarea») y en cualquier caja mientras el formulario está sin tocar; si no, se pega como texto.
    */
-  const pasteFillsForm = (target: EventTarget | null) => (target instanceof Node && !!titleRef.current?.contains(target) && !title.trim()) || !isDirty();
+  // Un título que solo trae la plantilla del tipo (sin tocar) cuenta como vacío: pegar ahí una tarea la importa.
+  const pasteFillsForm = (target: EventTarget | null) => (target instanceof Node && !!titleRef.current?.contains(target) && (!title.trim() || (init.templated && title === init.title))) || !isDirty();
   const pasteFillsRef = useRef(pasteFillsForm);
   useEffect(() => {
     importRef.current = importForm;
