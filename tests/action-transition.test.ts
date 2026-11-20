@@ -1,6 +1,6 @@
 // Acciones de servidor lanzadas dentro de una transición: sin red lanzan, y dentro de startTransition ese error llegaba a
 // la pantalla «Algo ha fallado». Guarda: un componente que llama a acciones con useTransition() debe recoger el error
-// (useActionTransition o `.catch((e) => actionThrowResult(e, t))`). Prueba en navegador: e2e/r49-infra-e2e.mjs.
+// (useActionTransition o `.catch((e) => actionThrowResult(e, t))`). Prueba en navegador: e2e/red-formularios-e2e.mjs.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
