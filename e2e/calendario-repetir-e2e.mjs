@@ -194,6 +194,21 @@ if (only.includes("ics")) {
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), icsBtn.click()]);
   L.check("ICS: el botón de la columna descarga el .ics con su nombre", download.suggestedFilename().endsWith(".ics"), download.suggestedFilename());
   L.check("ICS: …sin salir del tablero", page.url().endsWith(`/p/${p.id}`), page.url());
+  // Red lenta: tres clics seguidos mientras llega la respuesta bajan un solo fichero (antes, uno por clic).
+  let icsRequests = 0, icsDownloads = 0;
+  const onDownload = () => icsDownloads++;
+  page.on("download", onDownload);
+  await page.route(/\/columns\/[^/]+\/ics$/, async (route) => {
+    icsRequests++;
+    await sleep(1500);
+    await route.continue();
+  });
+  for (let i = 0; i < 3; i++) await icsBtn.click();
+  await L.eqEventually("ICS: con la red lenta, tres clics bajan un solo .ics", () => icsDownloads, 1, { timeout: 10000 });
+  await sleep(1000);
+  L.eq("ICS: …y piden el fichero una sola vez", [icsRequests, icsDownloads], [1, 1]);
+  page.off("download", onDownload);
+  await page.unroute(/\/columns\/[^/]+\/ics$/);
   L.assertNoErrors("ICS", [s]);
   // Después de comprobar la consola: el 429 simulado deja su «Failed to load resource» (esperado).
   await page.route(/\/columns\/[^/]+\/ics$/, (route) => route.fulfill({ status: 429, body: "Demasiadas peticiones" }));

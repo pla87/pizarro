@@ -61,11 +61,16 @@ type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget";
 const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
 /** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
 const weekPdf = (projectId: string, columnId: string, by: "day" | "person") => window.open(columnUrl(projectId, columnId, `week?by=${by}`), "_blank", "noopener");
+/** Columnas cuyo .ics se está descargando. */
+const icsInFlight = new Set<string>();
 /**
  * Rol «Agenda»: descarga el .ics sin salir del tablero (fetch → blob → <a download>). Antes se navegaba a la ruta y, con
  * un 429, 401 o 404, el tablero se sustituía por una página de texto; ahora el motivo sale en un aviso.
  */
 async function agendaIcs(projectId: string, columnId: string, t: ReturnType<typeof useT>, toast: ReturnType<typeof useToast>) {
+  // Una descarga por columna a la vez (botón y menú): con la red lenta, cada clic bajaba otro fichero igual.
+  if (icsInFlight.has(columnId)) return;
+  icsInFlight.add(columnId);
   try {
     const res = await fetch(columnUrl(projectId, columnId, "ics"), { cache: "no-store" });
     if (!res.ok) {
@@ -84,6 +89,8 @@ async function agendaIcs(projectId: string, columnId: string, t: ReturnType<type
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch {
     toast(t("Sin conexión: no se ha podido exportar el calendario."), "error");
+  } finally {
+    icsInFlight.delete(columnId);
   }
 }
 const deliveryPdf = (projectId: string, columnId: string) => window.open(columnUrl(projectId, columnId, "delivery"), "_blank", "noopener");
@@ -608,7 +615,10 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
             key={r}
             role="menuitemradio"
             aria-checked={column.role === r}
-            onClick={() => setRole(r)}
+            onClick={() => {
+              // El rol que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
+              if (column.role !== r) setRole(r);
+            }}
             icon={ROLE_ICON[r]}
             title={t(COLUMN_ROLE_HINT[r])}
             className={cn("py-1.5 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}

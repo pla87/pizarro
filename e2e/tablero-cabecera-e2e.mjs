@@ -239,6 +239,27 @@ if (only.includes("kind")) {
   await U.dialog(page).waitFor();
   L.eq("KIND: tras recargar, sigue el último tipo", await checkedKind(), second);
   await page.keyboard.press("Escape");
+  await U.dialog(page).waitFor({ state: "detached" });
+  // Ronda 57: el tipo preseleccionado trae su automatización (título, descripción y subtareas de plantilla), como al
+  // elegirlo en el selector; y lo que pone la plantilla no cuenta como escrito (Escape cierra sin preguntar).
+  const [kindRow] = await L.q(`SELECT id, "titleTemplate" tt, "descriptionTemplate" dt, "subtaskTemplate" st FROM "TaskKind" WHERE name=$1 AND ("projectId" IS NULL OR "projectId"=$2) ORDER BY "projectId" NULLS LAST LIMIT 1`, [second, p.id]);
+  await L.q(`UPDATE "TaskKind" SET "titleTemplate"='Plantilla del tipo', "descriptionTemplate"='Pasos para reproducir:', "subtaskTemplate"=ARRAY['Revisar','Probar'] WHERE id=$1`, [kindRow.id]);
+  try {
+    await page.reload();
+    await L.board(page);
+    await page.keyboard.press("Alt+N");
+    await U.dialog(page).waitFor();
+    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo");
+    // La descripción puede ser un textarea o el editor con formato (según el perfil): se lee lo que haya en el diálogo.
+    const dialogText = () => U.dialog(page).evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + el.innerText);
+    L.check("KIND: y su descripción de plantilla", (await dialogText()).includes("Pasos para reproducir:"));
+    const items = (await U.dialog(page).locator("ul li").allInnerTexts()).map((x) => x.trim());
+    L.check("KIND: y sus subtareas", items.some((x) => x.includes("Revisar")) && items.some((x) => x.includes("Probar")), items.join(" | "));
+    await page.keyboard.press("Escape");
+    L.check("KIND: lo que puso la plantilla no pide confirmar al cerrar", await U.dialog(page).waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false));
+  } finally {
+    await L.q(`UPDATE "TaskKind" SET "titleTemplate"=$2, "descriptionTemplate"=$3, "subtaskTemplate"=$4 WHERE id=$1`, [kindRow.id, kindRow.tt, kindRow.dt, kindRow.st]);
+  }
   L.assertNoErrors("KIND", [s]);
   await s.ctx.close();
   const other = await L.session();

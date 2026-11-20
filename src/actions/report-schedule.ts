@@ -74,14 +74,14 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
       }
       throw new AppError(NOT_ALLOWED);
     }
-    // Solo al activarlo: cambiar el día o la hora después del envío de esta semana no lo repite (reportDue).
-    const reset = data.enabled && !prev?.enabled;
+    // lastSentAt no se reinicia: cambiar el día o la hora, o desactivarlo y volver a activarlo, después del envío de esta
+    // semana no lo repite (reportDue). Uno de una semana anterior (o ninguno) ya cuenta como pendiente.
     const row = { enabled: data.enabled, recipient, weekday: data.weekday, hour: data.hour };
     await db.reportSchedule.upsert({
       where: { projectId: pid },
       create: { projectId: pid, ...row, createdById: user.id },
       // Quien guarda pasa a ser quien «firma» el informe (su acceso al proyecto es el que se comprueba al enviar).
-      update: { ...row, createdById: user.id, ...(reset ? { lastSentAt: null } : {}) },
+      update: { ...row, createdById: user.id },
     });
     describeAction(data.enabled ? "Programó el informe semanal por email" : "Desactivó el informe semanal por email", { weekday: data.weekday, hour: data.hour });
   });
