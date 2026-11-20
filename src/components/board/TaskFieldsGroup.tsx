@@ -4,7 +4,7 @@ import { useId } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { fieldsError, type FieldsForm } from "@/lib/fields-form";
-import { HOURS_STEP, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskFieldKey } from "@/lib/task-fields";
+import { HOURS_STEP, loneHalfBeforeCost, MAX_CLIENT, PRIORITY_LABEL, TASK_PRIORITIES, type TaskFieldKey } from "@/lib/task-fields";
 
 export { fieldsError, fieldsForCreate, fieldsFormOf, fieldsPatch, type FieldsForm } from "@/lib/fields-form";
 
@@ -72,10 +72,14 @@ export function TaskFieldsGroup({
     onCommit?.({ ...value, ...patch });
   };
   const label = cn("label", inline && "md:mb-0.5");
+  // El de media columna que se quedaría solo antes del Coste ocupa la fila entera (en el detalle cuenta la fecha límite,
+  // que va delante en la misma rejilla: si es ella, la ensancha el detalle con loneHalfBeforeCost).
+  const lone = loneHalfBeforeCost(enabled, inline ? { before: ["due"], startFirst: true } : {});
+  const cell = (k: TaskFieldKey) => cn("min-w-0", lone === k && "col-span-2");
   // Como los demás campos de la columna: más altos en el móvil (dedo), compactos en escritorio.
   const input = inline ? "input md:px-2 md:py-1" : "input py-1";
   const startDate = has("startDate") && (
-    <div className="min-w-0">
+    <div className={cell("startDate")}>
       <label className={label} htmlFor={`${uid}-start`}>{t("Fecha de inicio")}</label>
       <input id={`${uid}-start`} type="date" className={input} value={value.startDate} max={dueDate || undefined} onChange={(e) => {
         // Al teclear el año, Chrome emite 0002, 0020…: solo se guarda una fecha completa y válida.
@@ -91,7 +95,7 @@ export function TaskFieldsGroup({
       <div className={inline ? "contents" : "grid grid-cols-2 gap-x-3 gap-y-2"}>
         {inline && startDate}
         {has("priority") && (
-          <div className="min-w-0">
+          <div className={cell("priority")}>
             <label className={label} htmlFor={`${uid}-priority`}>{t("Prioridad")}</label>
             <select id={`${uid}-priority`} className={input} value={value.priority} onChange={(e) => change({ priority: e.target.value })}>
               <option value="">{t("Sin prioridad")}</option>
@@ -100,7 +104,7 @@ export function TaskFieldsGroup({
           </div>
         )}
         {has("client") && (
-          <div className="min-w-0">
+          <div className={cell("client")}>
             <label className={label} htmlFor={`${uid}-client`}>{t("Cliente")}</label>
             <input id={`${uid}-client`} className={input} value={value.client} maxLength={MAX_CLIENT} list={`${uid}-clients`} autoComplete="off" onChange={(e) => onChange({ client: e.target.value })} />
             <datalist id={`${uid}-clients`}>{clients.map((c) => <option key={c} value={c} />)}</datalist>

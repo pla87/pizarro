@@ -63,6 +63,7 @@ import { normalizeLinkUrl } from "@/lib/link-url";
 import { sortByFileName } from "@/lib/attachment-sort";
 import { subtaskBatch, subtaskLines } from "@/lib/subtask-lines";
 import { fieldsError, fieldsFormOf, fieldsPatch, TaskFieldsGroup, type FieldsForm } from "./TaskFieldsGroup";
+import { loneHalfBeforeCost } from "@/lib/task-fields";
 import { draftKey, readCommentDraft, readDraft, useDraftAutosave, type EditTaskDraft } from "./drafts";
 import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
@@ -1223,6 +1224,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           </Field>
           <Field
             label={t("Fecha límite")}
+            // Sola antes del Coste (que ocupa la fila entera), a lo ancho: si no, quedaba una celda vacía a su derecha.
+            wide={loneHalfBeforeCost(enabledFields, { before: ["due"], startFirst: true }) === "due"}
             // Quitar la fecha, junto al rótulo: así el campo cabe entero en media columna.
             aside={task.dueDate && (
               <button type="button" className="btn-icon -my-1 h-5 w-5 shrink-0" onClick={() => save({ dueDate: null }, { dueDate: null })} aria-label={t("Quitar fecha límite")} title={t("Quitar fecha límite")}>

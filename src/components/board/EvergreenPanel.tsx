@@ -14,6 +14,7 @@ import { MentionText } from "../ui/MentionText";
 import { mentionsToPlain } from "@/lib/mentions";
 import { nextEvergreenEvery } from "@/lib/release";
 import { draggingCard } from "./nearCards";
+import { isPendingCopy } from "./groupDrag";
 
 /** Prefijo del id del droppable del panel (el resto es el id de su columna: la de la release o una de plan para IA). */
 export const EVERGREEN_DROPPABLE_PREFIX = "evergreen:";
@@ -232,9 +233,12 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
   const { kindById, openTask, dragHandle, setEvergreenEvery } = useBoard();
   const t = useT();
   // Rol que lee el lector de pantalla (dnd-kit dice «draggable»).
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, attributes: { roleDescription: t("arrastrable") } });
+  // Copia provisional de un arrastre con Ctrl (aún sin respuesta del servidor): se ve, pero no se arrastra, ni cambia de
+  // cadencia, ni admite teclado ni archivos hasta que la sustituya la de verdad.
+  const pending = isPendingCopy(id);
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, disabled: pending, attributes: { roleDescription: t("arrastrable") } });
   // Archivos soltados sobre la tarea: se adjuntan a ella (y no abren la tarea nueva del panel).
-  const fileDrop = useCardFileDrop(id, true);
+  const fileDrop = useCardFileDrop(id, !pending);
   const task = useTask(id);
   if (!task) return null;
   // En táctil solo arrastra el asa (igual que las tarjetas normales).
@@ -253,7 +257,10 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
       data-file-target={id}
       {...fileDrop.handlers}
       onClick={() => openTask(id)}
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
       onKeyDown={(e) => {
+        if (pending) return;
         // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
         if (e.key === "Enter" && e.target === e.currentTarget) {
           e.stopPropagation();
@@ -282,6 +289,7 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
         aria-label={everyHint}
         title={everyHint}
         data-testid="evergreen-every"
+        disabled={pending}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
         onClick={(e) => {

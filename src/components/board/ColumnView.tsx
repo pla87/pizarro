@@ -17,17 +17,20 @@ import { useConfirm } from "../ui/ConfirmDialog";
 import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
-import { AiPlanDialog } from "./AiPlanDialog";
-import { BudgetSummaryDialog } from "./BudgetSummaryDialog";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { columnGateSnapshot } from "./columnGate";
-import { ChecklistDialog } from "./ChecklistDialog";
-import { ProgramDialog } from "./ProgramDialog";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
 import { useFileZone } from "./useFileZone";
+import { lazyDialog } from "../lazyDialog";
+
+// Diálogos de las columnas especiales: fuera del código inicial del tablero, se cargan al abrirlos.
+const AiPlanDialog = lazyDialog(() => import("./AiPlanDialog"), (m) => m.AiPlanDialog);
+const BudgetSummaryDialog = lazyDialog(() => import("./BudgetSummaryDialog"), (m) => m.BudgetSummaryDialog);
+const ChecklistDialog = lazyDialog(() => import("./ChecklistDialog"), (m) => m.ChecklistDialog);
+const ProgramDialog = lazyDialog(() => import("./ProgramDialog"), (m) => m.ProgramDialog);
 
 interface Props {
   column: BoardColumn;
@@ -210,7 +213,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             className={cn("min-h-10 flex-1 rounded-lg transition-colors lg:group-data-[fits]/list:-mt-2 lg:group-data-[fits]/list:min-h-0", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
             {taskIds.length === 0 && (
-              <p className="py-6 text-center text-xs text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
+              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
             )}
           </div>
         </div>

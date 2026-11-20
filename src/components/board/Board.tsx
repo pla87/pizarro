@@ -3,7 +3,8 @@
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
-import { importWhenOnline, isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { lazyDialog } from "../lazyDialog";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -11,9 +12,8 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
-import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
@@ -53,7 +53,7 @@ import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from 
 import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
 import { TransferButton } from "./TaskTransfer";
-import { strictJsonFormat } from "@/lib/task-json";
+import { strictJsonFormat } from "@/lib/task-json-core";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
@@ -67,38 +67,22 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
 import { cardCount } from "./count-texts";
 
-/**
- * Un diálogo cargado aparte, con su propio Suspense sin nada que mostrar mientras llega su código. next/dynamic (con
- * ssr, como aquí) no pone ninguno: la carga suspendía hasta el del loading.tsx del proyecto y, al abrir un diálogo en un
- * tablero recién abierto, el tablero se cambiaba un instante por el esqueleto de columnas. Así el tablero sigue a la
- * vista y el diálogo aparece en cuanto llega; cada uno con el suyo, para que abrir el segundo no esconda el primero.
- */
-function ownSuspense<P extends object>(Dialog: ComponentType<P>): ComponentType<P> {
-  function WithSuspense(props: P) {
-    return (
-      <Suspense fallback={null}>
-        <Dialog {...props} />
-      </Suspense>
-    );
-  }
-  return WithSuspense;
-}
-
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre. Si al abrirlos no hay red, esperan a que vuelva
-// (importWhenOnline) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red.
+// (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
+// Suspense (lazyDialog): al abrir uno en un tablero recién abierto el tablero no se cambia por el esqueleto de columnas.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
 const loadReleaseDialog = () => import("./ReleaseDialog");
 const loadBulkTaskDialog = () => import("./BulkTaskDialog");
 const loadArchivedDialog = () => import("./ArchivedDialog");
 const loadImportTasksDialog = () => import("./ImportTasksDialog");
-const TaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadTaskDialog).then((m) => m.TaskDialog)));
-const NewTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadNewTaskDialog).then((m) => m.NewTaskDialog)));
-const ReleaseDialog = ownSuspense(dynamic(() => importWhenOnline(loadReleaseDialog).then((m) => m.ReleaseDialog)));
-const BulkTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadBulkTaskDialog).then((m) => m.BulkTaskDialog)));
-const ArchivedDialog = ownSuspense(dynamic(() => importWhenOnline(loadArchivedDialog).then((m) => m.ArchivedDialog)));
-const ImportTasksDialog = ownSuspense(dynamic(() => importWhenOnline(loadImportTasksDialog).then((m) => m.ImportTasksDialog)));
+const TaskDialog = lazyDialog(loadTaskDialog, (m) => m.TaskDialog);
+const NewTaskDialog = lazyDialog(loadNewTaskDialog, (m) => m.NewTaskDialog);
+const ReleaseDialog = lazyDialog(loadReleaseDialog, (m) => m.ReleaseDialog);
+const BulkTaskDialog = lazyDialog(loadBulkTaskDialog, (m) => m.BulkTaskDialog);
+const ArchivedDialog = lazyDialog(loadArchivedDialog, (m) => m.ArchivedDialog);
+const ImportTasksDialog = lazyDialog(loadImportTasksDialog, (m) => m.ImportTasksDialog);
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */

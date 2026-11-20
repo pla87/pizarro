@@ -4,14 +4,15 @@
 // en el panel nace fija en ese panel (el de la release y el de «Siempre en el plan», y la de una fija en su propio panel),
 // con un solo paso de deshacer; y arrastrar con Ctrl entre la lista y el panel abierto, con la columna llena, no acaba en
 // «Algo ha fallado» (error #185 de React, «Maximum update depth exceeded»); y coger con Espacio una fija del panel y soltarla
-// o cancelar deja el foco en su fila. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs      # PART=scroll,copia,vaiven,foco
+// o cancelar deja el foco en su fila; con la red lenta, la copia provisional de un arrastre con Ctrl no llega nunca al
+// servidor (ni por atajos, ni por la selección, ni como vecina al soltar otra junto a ella). Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs      # PART=scroll,copia,vaiven,foco,provisional
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "scroll,copia,vaiven,foco").split(",");
+const only = (process.env.PART || "scroll,copia,vaiven,foco,provisional").split(",");
 
 await L.prepareUsers();
 const PID = "r55_project";
@@ -330,6 +331,48 @@ if (only.includes("foco")) {
   await drag(page, row("Fija 101"), L.cardLoc(page, "Tarea 2"), { ctrl: false, row: true });
   await L.eqEventually("FOCO: después, la fila se arrastra a la lista con el ratón", async () => JSON.stringify(await copyRow("Fija 101")), JSON.stringify([{ columnId: "r55e_r", evergreen: false, evergreenEvery: 1 }]));
   L.assertNoErrors("FOCO", [s]);
+  await s.ctx.close();
+}
+
+// --- Copia provisional con la red lenta ----------------------------------------------------------------------------------------
+if (only.includes("provisional")) {
+  L.scenario("provisional: con la red lenta, la copia provisional de un arrastre con Ctrl no se envía nunca al servidor");
+  await seed();
+  await addTasks("r55e_o", 3, "Origen");
+  await addTasks("r55e_r", 4, "Tarea");
+  const s = await session(false);
+  const { page } = s;
+  await openBoard(page);
+  // Las acciones de servidor (POST con la cabecera Next-Action) tardan 2,5 s en salir; se anotan las que llevan el id provisional.
+  const leaked = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && /pending-copy-/.test(r.postData() ?? "")) leaked.push(r.postData().slice(0, 200));
+  });
+  await page.route("**/*", async (route) => {
+    if (route.request().method() === "POST" && route.request().headers()["next-action"]) await sleep(2500);
+    await route.continue().catch(() => {});
+  });
+  const pendingCard = () => page.locator("[data-card-list] [data-task-card^=pending-copy-]");
+  await drag(page, L.cardLoc(page, "Origen 1"), L.cardLoc(page, "Tarea 3"));
+  L.check("PROVISIONAL: la copia aparece en el acto", await L.waitFor(async () => (await pendingCard().count()) === 1, { timeout: 2000 }));
+  L.eq("PROVISIONAL: marcada como ocupada y no disponible", await pendingCard().evaluate((el) => [el.getAttribute("aria-busy"), el.getAttribute("aria-disabled")]), ["true", "true"]);
+  // Atajos sobre la provisional (asignarme, renombrar, subir, seleccionar, duplicar): nada.
+  await pendingCard().focus();
+  for (const key of ["Alt+m", "F2", "Alt+ArrowUp", " ", "Alt+Shift+D"]) await page.keyboard.press(key);
+  L.eq("PROVISIONAL: F2 no abre el renombrado", await page.locator("[data-card-list] [data-task-card^=pending-copy-] input, [data-card-list] [data-task-card^=pending-copy-] textarea").count(), 0);
+  L.eq("PROVISIONAL: Espacio no la selecciona", await page.locator("[data-selection-bar]").count(), 0);
+  // Otra tarjeta soltada sobre la provisional (antes iba con nextId = pending-copy-1 y acababa al final).
+  await drag(page, L.cardLoc(page, "Origen 2"), pendingCard(), { ctrl: false });
+  await L.eqEventually("PROVISIONAL: la copia de verdad sustituye a la provisional", async () => (await pendingCard().count()) === 0 && (await L.cardLoc(page, "Origen 1 (copia)").count()) === 1, true, { timeout: 12000 });
+  await L.eqEventually("PROVISIONAL: «Origen 2» pasa a «Salto»", async () => (await copyRow("Origen 2"))[0]?.columnId, "r55e_r", { timeout: 12000 });
+  await sleep(3000);
+  L.eq("PROVISIONAL: ninguna petición llevó el id provisional", leaked, []);
+  const order = await L.q(`SELECT title FROM "Task" WHERE "columnId"='r55e_r' AND "archivedAt" IS NULL ORDER BY position`);
+  L.check("PROVISIONAL: «Origen 2» no acaba al final de la columna", order.at(-1)?.title !== "Origen 2", JSON.stringify(order.map((r) => r.title)));
+  // Sin tarjetas fantasma: las que se ven en «Salto» son las de la BD.
+  L.eq("PROVISIONAL: en pantalla, las mismas tarjetas que en la BD", await list(page, "Salto").locator("[data-task-card]").count(), order.length);
+  await page.unroute("**/*");
+  L.assertNoErrors("PROVISIONAL", [s]);
   await s.ctx.close();
 }
 
