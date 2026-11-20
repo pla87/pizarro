@@ -24,8 +24,11 @@ interface LiveStream {
   userId: string;
   name: string;
   openedAt: number;
-  /** Tareas que tiene abiertas el diálogo de esa pestaña. */
-  tasks: Set<string>;
+  /**
+   * Tareas que tiene abiertas el diálogo de esa pestaña, con el id de cada montaje del diálogo que la anunció (cerrar y
+   * reabrir deprisa la misma tarea, o StrictMode, monta dos veces: el cierre del primero no quita la del segundo).
+   */
+  tasks: Map<string, Set<string>>;
 }
 const liveStreams = (globalThis as unknown as { __pzPresenceStreams?: Map<string, LiveStream> }).__pzPresenceStreams ??= new Map();
 // Los canales de cada proyecto (ids de `liveStreams`): el estado de un proyecto no recorre los canales de los demás.
@@ -127,7 +130,7 @@ export function subscribePresence(projectId: string, listener: PresenceListener)
 export function openPresenceStream(projectId: string, userId: string, name: string, now = Date.now()): string {
   const id = randomUUID();
   const fresh = !isPresent(projectId, userId, now);
-  addLiveStream(id, { projectId, userId, name, openedAt: now, tasks: new Set() });
+  addLiveStream(id, { projectId, userId, name, openedAt: now, tasks: new Map() });
   if (fresh) notifyPresence(projectId);
   return id;
 }
@@ -144,8 +147,9 @@ export function closePresenceStream(id: string, now = Date.now()): void {
 }
 
 /**
- * Cierres de tarea que llegaron antes que su anuncio (abrir y cerrar muy deprisa: el DELETE puede adelantar al GET).
- * Clave `canal:tarea`; el anuncio que llega poco después no la retiene (si no, quedaría abierta mientras dure el canal).
+ * Cierres de tarea que llegaron antes que su anuncio (abrir y cerrar muy deprisa: el DELETE puede adelantar al GET, o el
+ * GET falló). Clave `canal:tarea:montaje`; el anuncio de ese mismo montaje que llega poco después no la retiene (si no,
+ * quedaría abierta mientras dure el canal). El de otro montaje (reabrir la tarea) no lo consume.
  */
 const earlyReleases = (globalThis as unknown as { __pzEarlyReleases?: Map<string, number> }).__pzEarlyReleases ??= new Map();
 const EARLY_RELEASE_MS = 10_000;
@@ -155,35 +159,44 @@ function sweepEarlyReleases(now: number): void {
 }
 
 /**
- * La pestaña de ese canal tiene abierta la tarea (del mismo proyecto que el canal). false si el canal no existe o no es
- * de ese usuario y proyecto: entonces se usa el aviso con caducidad (`noteTaskViewer`). Si ese canal ya cerró la tarea
- * hace un momento (el cierre llegó antes que este anuncio), gana el cierre: devuelve true sin retenerla.
+ * El montaje `openId` del diálogo de la pestaña de ese canal tiene abierta la tarea (del mismo proyecto que el canal).
+ * false si el canal no existe o no es de ese usuario y proyecto: entonces se usa el aviso con caducidad
+ * (`noteTaskViewer`). Si ese montaje ya la cerró hace un momento (el cierre llegó antes que este anuncio), gana el
+ * cierre: devuelve true sin retenerla. Solo avisa a los canales si la tarea no estaba ya abierta en esa pestaña.
  */
-export function holdTaskView(streamId: string, userId: string, taskId: string, projectId: string, now = Date.now()): boolean {
+export function holdTaskView(streamId: string, userId: string, taskId: string, projectId: string, openId: string, now = Date.now()): boolean {
   const s = liveStreams.get(streamId);
   if (!s || s.userId !== userId || s.projectId !== projectId) return false;
-  const key = `${streamId}:${taskId}`;
+  const key = `${streamId}:${taskId}:${openId}`;
   const released = earlyReleases.get(key);
   if (released !== undefined) {
     earlyReleases.delete(key);
     if (now - released <= EARLY_RELEASE_MS) return true;
   }
-  if (!s.tasks.has(taskId)) {
-    s.tasks.add(taskId);
+  const opens = s.tasks.get(taskId);
+  if (opens) opens.add(openId);
+  else {
+    s.tasks.set(taskId, new Set([openId]));
     notifyPresence(projectId);
   }
   return true;
 }
 
-/** La pestaña de ese canal ha cerrado la tarea. Si aún no la había anunciado, se apunta para que el anuncio no la retenga. */
-export function releaseTaskView(streamId: string, userId: string, taskId: string, now = Date.now()): void {
+/**
+ * El montaje `openId` del diálogo de la pestaña de ese canal ha cerrado la tarea. Si aún no la había anunciado, se
+ * apunta para que su anuncio no la retenga. Solo avisa cuando la cierra el último montaje que la tenía abierta.
+ */
+export function releaseTaskView(streamId: string, userId: string, taskId: string, openId: string, now = Date.now()): void {
   const s = liveStreams.get(streamId);
   if (!s || s.userId !== userId) return;
-  if (!s.tasks.delete(taskId)) {
+  const opens = s.tasks.get(taskId);
+  if (!opens?.delete(openId)) {
     if (earlyReleases.size > 1000) sweepEarlyReleases(now);
-    earlyReleases.set(`${streamId}:${taskId}`, now);
+    earlyReleases.set(`${streamId}:${taskId}:${openId}`, now);
     return;
   }
+  if (opens.size > 0) return;
+  s.tasks.delete(taskId);
   notifyPresence(s.projectId);
 }
 
@@ -199,7 +212,7 @@ export function presenceSnapshot(projectId: string, now = Date.now()): { users: 
     if (!m) byTask.set(taskId, (m = new Map()));
     m.set(id, name);
   };
-  for (const s of projectStreams(projectId)) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
+  for (const s of projectStreams(projectId)) for (const taskId of s.tasks.keys()) add(taskId, s.userId, s.name);
   for (const taskId of viewersByProject.get(projectId) ?? []) {
     const v = viewers.get(taskId);
     if (!v) continue;
@@ -342,7 +355,7 @@ export function openTaskViewers(projectId: string, exceptUserId: string, now = D
     }
     if (v.users.size === 0) deleteViewers(taskId);
   }
-  for (const s of projectStreams(projectId)) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
+  for (const s of projectStreams(projectId)) for (const taskId of s.tasks.keys()) add(taskId, s.userId, s.name);
   return new Map([...out].map(([taskId, m]) => [taskId, [...m].map(([id, name]) => ({ id, name }))]));
 }
 

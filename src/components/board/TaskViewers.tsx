@@ -22,7 +22,10 @@ export function TaskViewers({ taskId }: { taskId: string }) {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | null = null;
-    const url = `/api/tasks/${taskId}/viewers${stream ? `?stream=${stream}` : ""}`;
+    // Cada montaje del diálogo con su id: cerrar y reabrir la misma tarea con el primer aviso aún en vuelo (o StrictMode)
+    // hace que el servidor reciba GET1, GET2 y DELETE1 en cualquier orden; con el id, DELETE1 solo cierra el primero.
+    const open = Math.random().toString(36).slice(2, 12) || "0";
+    const url = `/api/tasks/${taskId}/viewers${stream ? `?stream=${stream}&open=${open}` : ""}`;
     const ping = async () => {
       if (document.visibilityState !== "visible") return;
       try {
@@ -37,9 +40,8 @@ export function TaskViewers({ taskId }: { taskId: string }) {
         // Sin conexión: se mantiene lo último conocido.
       }
     };
-    // El cierre (DELETE) sale después de que el primer aviso haya terminado: abriendo y cerrando muy deprisa, el DELETE
-    // podía llegar antes y la tarea quedaba abierta mientras durase el canal.
-    const first = ping();
+    // Si el cierre (DELETE) adelanta al aviso, el servidor lo apunta para ese montaje y su aviso ya no la retiene.
+    void ping();
     // Con canal basta el primer aviso (se reanuncia si el canal se reabre: cambia `stream`).
     if (!stream) {
       timer = setInterval(ping, POLL_MS);
@@ -49,7 +51,7 @@ export function TaskViewers({ taskId }: { taskId: string }) {
       cancelled = true;
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", ping);
-      void first.finally(() => fetch(url, { method: "DELETE", keepalive: true }).catch(() => {}));
+      void fetch(url, { method: "DELETE", keepalive: true }).catch(() => {});
     };
   }, [taskId, stream]);
 
