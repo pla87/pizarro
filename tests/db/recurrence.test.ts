@@ -178,7 +178,7 @@ describe("muchas apariciones a la vez", () => {
     await db.task.createMany({
       data: Array.from({ length: PROGRAM_MAX_SESSIONS }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `S${i}`, position: (i + 1) * 1000 })),
     });
-    const reps = [];
+    const reps: { id: string }[] = [];
     for (let i = 0; i < 3; i++) reps.push(await makeTask(f, { title: `Rep ${i}`, columnId: f.columns.done, recurrence: "DAILY" }));
     // Con la columna bloqueada (como setColumnRole), el reparto espera al candado; entonces la columna pasa a PROGRAM.
     let spawning: ReturnType<typeof spawnRecurrences> | undefined;

@@ -40,7 +40,7 @@ import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
-import { placeBlock, sameOrder, selectionGroup, type BlockPlacement } from "./groupDrag";
+import { PENDING_COPY_PREFIX, isPendingCopy, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
 import { createMoveTurns } from "./moveTurns";
 import { useReviewGuard } from "./reviewGuard";
@@ -103,8 +103,6 @@ const COLUMN_PREFIX = "col:";
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
 const PINGPONG_MS = 60;
-/** Id de la copia provisional de un arrastre con Ctrl mientras responde el servidor (ver dropCopy). */
-const PENDING_COPY_PREFIX = "pending-copy-";
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -876,8 +874,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
    * en `placement`, en el orden del tablero, con una sola acción (moveTasks con vecinas) y un solo paso de deshacer. La
    * selección se mantiene: se ve dónde han quedado y se pueden volver a mover (Alt+flechas seguidas, otro arrastre).
    */
-  const moveBlock = async (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => {
-    if (sameOrder(itemsNow()[columnId] ?? NO_IDS, placement.list)) return;
+  const moveBlock = async (asked: string[], columnId: string, askedPlacement: BlockPlacement, focusId?: string) => {
+    // Las vecinas que van al servidor son tareas de verdad: una copia provisional (dropCopy) junto al hueco se salta.
+    const { placement, group } = realPlacement(askedPlacement, asked);
+    if (!group.length || sameOrder(withoutPendingCopies(itemsNow()[columnId] ?? NO_IDS), placement.list)) return;
     if (!(await confirmLeaveReview(group, columnId))) {
       if (focusId) focusCard(focusId);
       return;
@@ -966,7 +966,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setColumns,
       openTask: (id) => {
         // La copia provisional de un arrastre con Ctrl aún no existe en el servidor: se abre la de verdad cuando llegue.
-        if (id.startsWith(PENDING_COPY_PREFIX)) return;
+        if (isPendingCopy(id)) return;
         prefetchTaskDetail(id);
         // Un borrador guardado de ESTA tarea (archivar o borrar desde el detalle lo cierra al momento; si falla, sin red,
         // lo escrito y sin guardar queda en el borrador): se recupera al volver a abrirla, como al recargar la página.
@@ -979,8 +979,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
         const { baseItems: base, evergreenByColumn: evergreen } = latest.current;
-        const fixed = evergreen[columnId] ?? [];
-        const ids = [...(base[columnId] ?? []), ...fixed];
+        // Sin las copias provisionales (aún no existen en el servidor).
+        const fixed = withoutPendingCopies(evergreen[columnId] ?? []);
+        const ids = [...withoutPendingCopies(base[columnId] ?? []), ...fixed];
         const selected = stores.selection.get();
         const pre = ids.filter((id) => selected.has(id));
         setRelease({ taskIds: ids, preselected: pre.length ? [...new Set([...pre, ...fixed])] : ids });
@@ -990,7 +991,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setSelectedMany: (ids, on) =>
         stores.selection.set((prev) => {
           const next = new Set(prev);
-          for (const id of ids) {
+          // Una copia provisional no se selecciona (las acciones en bloque la enviarían al servidor).
+          for (const id of withoutPendingCopies(ids)) {
             if (on) next.add(id);
             else next.delete(id);
           }
@@ -998,6 +1000,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         }),
       toggleSelected: (id) =>
         stores.selection.set((prev) => {
+          if (isPendingCopy(id)) return prev;
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
           else next.add(id);
@@ -1316,7 +1319,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !current || !origin) return;
     const id = String(active.id);
     // Una copia provisional (dropCopy) aún no existe en el servidor: no se puede mover ni copiar hasta que llegue.
-    if (id.startsWith(PENDING_COPY_PREFIX)) return;
+    if (isPendingCopy(id)) return;
     const overId = String(over.id);
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
       const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
@@ -1340,16 +1343,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
+    // Vecinas para el servidor: sin las copias provisionales (si se suelta junto a una, la siguiente de verdad o ninguna).
+    const real = withoutPendingCopies(list, id);
     // La copia se suelta donde quedaría la tarjeta (también en su mismo sitio: justo detrás de la original).
     if (copy) {
-      const at = neighboursOf(list, id);
+      const at = neighboursOf(real, id);
       return dropCopy(id, col, at.prevId, at.nextId);
     }
     // Una selección: todas seguidas en el hueco de la cogida (si ya estaban así, moveBlock no hace nada).
     if (group) return moveBlock(group, col, placeBlock(list, id, group));
     if (col === origin.columnId && index === origin.index) return;
 
-    const { prevId, nextId } = neighboursOf(list, id);
+    const { prevId, nextId } = neighboursOf(real, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
     if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;

@@ -71,3 +71,32 @@ export function keyboardBlock(items: ColumnItems, columnOrder: readonly string[]
 export function sameOrder(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, i) => id === b[i]);
 }
+
+/**
+ * Id de la copia provisional de un arrastre con Ctrl mientras responde el servidor (Board.tsx, dropCopy). No existe en el
+ * servidor: no se envía nunca como vecina, ni se mueve, archiva, borra o selecciona hasta que llegue la de verdad.
+ */
+export const PENDING_COPY_PREFIX = "pending-copy-";
+
+export function isPendingCopy(id: string): boolean {
+  return id.startsWith(PENDING_COPY_PREFIX);
+}
+
+/** La lista sin las copias provisionales (salvo `keep`, la tarjeta que se mueve): de aquí salen las vecinas reales. */
+export function withoutPendingCopies(list: readonly string[], keep?: string): string[] {
+  return list.filter((id) => id === keep || !isPendingCopy(id));
+}
+
+/**
+ * La colocación de un bloque con las vecinas reales: si junto al hueco hay una copia provisional, la vecina es la
+ * siguiente tarea de verdad (o ninguna). El grupo no lleva provisionales (no se pueden seleccionar); si llegara alguna,
+ * se quita. El bloque va seguido en `list` (blockAt), así que sigue seguido sin las provisionales.
+ */
+export function realPlacement(placement: BlockPlacement, group: readonly string[]): { placement: BlockPlacement; group: string[] } {
+  const realGroup = group.filter((id) => !isPendingCopy(id));
+  const list = withoutPendingCopies(placement.list);
+  const first = list.indexOf(realGroup[0] ?? "");
+  const last = list.indexOf(realGroup.at(-1) ?? "");
+  if (first < 0 || last < 0) return { placement: { ...placement, list }, group: realGroup };
+  return { placement: { list, prevId: list[first - 1] ?? null, nextId: list[last + 1] ?? null }, group: realGroup };
+}
