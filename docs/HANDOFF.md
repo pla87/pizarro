@@ -114,7 +114,7 @@ Guardas que conviene conocer:
   adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
 - Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
   (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). No hay ficheros
-  ni dependencias sin uso. Aún marca unos 60 `export` que solo usa su propio módulo, casi todos de las copias de
+  ni dependencias sin uso. Aún marca unos 45 `export` y 29 tipos que solo usa su propio módulo (y `hasTaskCapacity`, sin uso desde la ronda 55; retirarlos está pendiente de que lo apruebe el propietario), casi todos de las copias de
   seguridad (`backup-*.ts`) y de la mensajería (`messaging-core.ts`, `telegram*.ts`), y unos pocos alias o re-exports
   que se usan a través de otro módulo: quitar el `export` de los primeros está pendiente. Un `export` nuevo que nadie
   importa no debe sumarse a esa lista (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
@@ -222,6 +222,18 @@ Guardas que conviene conocer:
 - Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
   `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
   una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.
+- Subidas (ronda 55): `acquireUploadSlot(userId, waitMs, { declaredBytes })` reparte los 3 huecos del servidor; con más
+  de una persona activa (`user-activity.ts`, en memoria, la anota `querySessionUser`) cada una tiene uno. Las rutas de
+  subida envuelven su `POST` con `withUploadCapHeader` (cabecera `X-Pizarro-Upload-Per-User`) y el navegador ajusta la cola
+  (`uploadCap`, `uploadGate` y `runQueue({ limit })` en `upload-queue.ts`). Una ruta de subida nueva debe hacer lo mismo.
+- Copia provisional del tablero (Ctrl al soltar): id con `PENDING_COPY_PREFIX` (`groupDrag.ts`). Nunca debe llegar al
+  servidor: las vecinas se calculan con `withoutPendingCopies`/`realPlacement`, y TaskCard, `cardActions` y la fila del
+  panel de fijas la ignoran. Una acción nueva sobre tarjetas debe saltarla.
+- Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
+  huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
+  (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
+- Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
+  sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -362,16 +374,34 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.58.0):**
+**Preguntas abiertas al propietario (tras la v1.59.0):**
 
-- Exportar un proyecto con muchos adjuntos mantiene abierta una transacción `RepeatableRead` mientras calcula la huella
-  SHA-256 de cada fichero (`buildInSnapshot`, `src/lib/project-export/export.ts`): si a la vez se despliega una migración
-  con `ALTER TABLE "Task"`, la app se queda esperando hasta que termina la exportación. Propuesta: leer las filas dentro
-  de la transacción y calcular las huellas después (reestructuración moderada; recomendado en una ronda tranquila).
-- Huecos de subida (3 en todo el servidor, compartidos por adjuntos, documentos e importaciones): ¿limitar a uno por
-  persona a la vez? Evita que una sola persona los ocupe todos; contra: sus subidas simultáneas irían en fila.
-- Las cabeceras y claves de los formatos de otros Kanban (`src/lib/foreign-import/tasks.ts`) salen de la documentación
-  de cada herramienta: confirmarlas con exportaciones reales (`PRUEBAS.pdf` §7.3) y ajustar el lector con lo que falle.
+- Recarga de respaldo del tablero cada 2 min (`REFRESH_MS`, `Board.tsx`) aunque el canal en vivo funcione: propuesta de
+  saltarla (o pasarla a 15 min) mientras lleguen pings del canal. Ahorra casi todo ese tráfico.
+- Presencia («quién está aquí») por el canal en vivo en vez de sondeos cada 15–20 s (`Presence.tsx`, `TaskViewers.tsx`).
+- ZIP de adjuntos de una release armado entero en memoria (`release-zip.ts` con `zip.ts`): pasarlo a flujo
+  (`zip-stream.ts`) a cambio de leer dos veces los ficheros.
+- Espaciar a 60 s el barrido de transferencias (`transfer-jobs.ts`) y los avisos de fecha (`due-notices.ts`).
+- Imagen arm64 en runners arm nativos (más rápido) y pasar en cada ronda solo las suites e2e afectadas (todas al publicar).
+- Un miembro puede comprobar si un email es de alguien del proyecto (informe semanal, cambio de email) y ve el destinatario
+  del informe que puso otro: ¿enmascararlo y elegir por nombre?
+- Calendario en el móvil: ¿abrir el mes actual en el día de hoy?
+- Tarjeta del tablero con controles dentro (axe `nested-interactive`): ¿ronda para rehacer su estructura accesible?
+- Releases y plantillas de Mi perfil pintan el Markdown en el navegador (~40 KB): ¿pasarlo al servidor?
+- Duplicar una tarea repetitiva pierde la repetición (copiar como JSON la conserva): ¿debe conservarla?
+- Candidatos a retirar (nada se ha borrado sin permiso): `hasTaskCapacity` (`src/lib/caps.ts`, sin uso desde las
+  repeticiones por lotes), la constante `IMAGE` (`src/lib/product.ts`), unos 45 `export` que solo usa su propio módulo
+  (lista en knip), el índice redundante `ReleaseAttachment_releaseId_idx` (lo cubre el único `(releaseId, fileName)`) y
+  agrupar por tema las suites e2e `bhNN`/`rNN` antiguas.
+- Pendiente técnico conocido: en el móvil el tablero tiene un CLS de ~0,1 porque el asa táctil de las tarjetas aparece al
+  hidratarse (`useCoarsePointer`, falso en el servidor) y estrecha el título.
+- React #185 («Maximum update depth») visto en producción en el tablero: no se ha reproducido; se endureció el arrastre
+  lista↔panel de fijas (freno de 60 ms en `onDragOver`, panel sin `useDndContext`). Si vuelve a salir, anotar qué se hacía.
+
+**Decisiones de la ronda 55 (ya aplicadas):** exportar sin transacción abierta mientras se leen los ficheros; una
+subida a la vez por persona solo si hay más de una persona activa en los últimos 5 minutos (`user-activity.ts`; cualquier
+petición con sesión cuenta como actividad); la zona horaria no se fija en la conexión (un parámetro `options` lo rechazan
+poolers como PgBouncer): los `NOW()` propios se pasan desde la app y el disparador convierte a UTC.
 
 **Decisiones de la ronda 54 (ya aplicadas):** importar no avisa a las personas mencionadas, sí al responsable; emails
 ajenos al exportar un proyecto solo para administradores; caché de 60 s del calendario suscrito y de 3 s de
@@ -408,7 +438,7 @@ en el título.
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 - Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
   `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
-  `SEED_ADMIN_EMAIL="admin@example.com"` y `SEED_ADMIN_PASSWORD="cambia-esta-clave"` en el `.env` local, y
+  `SEED_ADMIN_EMAIL="admin@example.com"`, `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y `SEED_ADMIN_NAME="Administrador"` en el `.env` local, y
   `tests/db/task-json-paste.test.ts` espera `APP_URL="http://localhost:3000"` en el `.env` (los servidores de prueba en
   otro puerto, con `PORT` y `APP_URL` en la línea de comandos). Si PostgreSQL no arranca tras reiniciarse el contenedor:
   `pg_ctlcluster 16 main start` (usuario `postgres`, contraseña `postgres`). Los worktrees de los agentes quedan en
