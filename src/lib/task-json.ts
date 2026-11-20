@@ -224,7 +224,7 @@ export interface TaskJsonInput {
   info?: { id?: string; projectId?: string };
 }
 
-export type TaskJsonParse =
+type TaskJsonParse =
   /** No es un JSON de tarea (texto normal, otro JSON): el pegado sigue su curso. */
   | { kind: "none" }
   /** Quiere ser una tarea (lleva el marcador o es JSON con título) pero no se puede leer. */

@@ -104,7 +104,7 @@ export async function defaultFeedScope(user: CurrentUser): Promise<CalendarFeedS
  * .ics con las tareas no archivadas ni terminadas con fecha límite y los entregables con fecha. Las tareas que se repiten
  * llevan además sus apariciones futuras previstas como una serie (RRULE). Los permisos se evalúan aquí, cada vez que se hace (la ruta lo guarda un minuto: cachedFeedIcs).
  */
-export async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number; repeats: number }> {
+async function buildFeedIcs(user: FeedOwner, scope: CalendarFeedScope, now: Date = new Date()): Promise<{ ics: string; tasks: number; deliverables: number; repeats: number }> {
   const locale = toLocale(user.locale);
   const t = makeT(locale);
   const base = appUrl();

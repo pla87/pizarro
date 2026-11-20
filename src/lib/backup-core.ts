@@ -14,7 +14,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
 
-export const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_VERSION = 1;
 const MAGIC = Buffer.from("PZBK1\n", "utf8");
 const IV_LEN = 12;
 const TAG_LEN = 16;
@@ -161,7 +161,7 @@ function finalOrExplain(decipher: DecipherGCM): Buffer {
 }
 
 /** Descifra un fichero .pzbak. Lanza al terminar si la etiqueta GCM no cuadra (clave incorrecta o fichero alterado). */
-export async function* decryptFile(file: string, key: Buffer): AsyncGenerator<Buffer> {
+async function* decryptFile(file: string, key: Buffer): AsyncGenerator<Buffer> {
   const handle = await open(file, "r");
   let size: number;
   const tag = Buffer.alloc(TAG_LEN);
@@ -216,7 +216,7 @@ export async function* readLines(file: string, key: Buffer): AsyncGenerator<stri
 // --- Escritura --------------------------------------------------------------------------
 
 /** Línea de datos de una fila; `rowJson` es el JSON de la fila tal cual. */
-export function dataLine(table: string, rowJson: string): string {
+function dataLine(table: string, rowJson: string): string {
   return `{"t":${JSON.stringify(table)},"r":${rowJson}}\n`;
 }
 

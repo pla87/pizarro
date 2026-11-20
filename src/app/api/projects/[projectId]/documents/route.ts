@@ -18,6 +18,7 @@ import { uploadWriteError } from "@/lib/disk-space";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
 import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
@@ -109,7 +110,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     }
     const document = created.document;
     logEvent({
-      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${Math.round(stored.length / 1024)} KB)`,
+      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(stored.length)})`,
       userId: user.id, userName: user.name, path: `/api/projects/${projectId}/documents`, ip, durationMs: performance.now() - start,
       details: { projectId, documentId: document.id, original: fileInfo, storedBytes: stored.length, kind, mime: mimeType, sizeMb: roundMb(stored.length) },
     });

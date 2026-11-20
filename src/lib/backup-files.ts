@@ -18,9 +18,9 @@ import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { decryptChunks, encryptChunks, encryptionOverhead, fileSha256, type BackupManifest } from "./backup-core";
 
-export const MANIFEST_VERSION = 1;
-export const MANIFEST_MAGIC = Buffer.from("PZMF1\n", "utf8");
-export const OBJECT_MAGIC = Buffer.from("PZFO1\n", "utf8");
+const MANIFEST_VERSION = 1;
+const MANIFEST_MAGIC = Buffer.from("PZMF1\n", "utf8");
+const OBJECT_MAGIC = Buffer.from("PZFO1\n", "utf8");
 export const FILES_PREFIX = "files/";
 
 /** Un fichero de la copia: ruta relativa a UPLOAD_DIR (con «/»), tamaño, sha256 del contenido e id del objeto. */
@@ -113,7 +113,7 @@ export function fileNameKey(key: Buffer): Buffer {
 }
 
 /** Id del objeto de un contenido (sha256 en hex). */
-export function objectId(nameKey: Buffer, sha256: string): string {
+function objectId(nameKey: Buffer, sha256: string): string {
   return createHmac("sha256", nameKey).update(sha256).digest("hex");
 }
 
@@ -123,7 +123,7 @@ export function objectKey(id: string): string {
 }
 
 /** Id del objeto a partir de su clave, o null si la clave no es de un objeto del almacén. */
-export function objectIdFromKey(key: string): string | null {
+function objectIdFromKey(key: string): string | null {
   const m = /^files\/([0-9a-f]{2})\/([0-9a-f]{64})$/.exec(key);
   return m && m[2]!.startsWith(m[1]!) ? m[2]! : null;
 }
@@ -172,11 +172,11 @@ export function safeRelPath(p: string): boolean {
 }
 
 /** ¿Fichero temporal que no se copia? (subidas a medias, ficheros ocultos). */
-export function isTempName(name: string): boolean {
+function isTempName(name: string): boolean {
   return /\.(tmp|part|partial)$/i.test(name) || name.startsWith(".");
 }
 
-export interface ScannedFile {
+interface ScannedFile {
   rel: string;
   abs: string;
   size: number;
@@ -218,7 +218,7 @@ export async function scanFiles(root: string, exclude: string[] = []): Promise<S
 }
 
 /** Caché de hashes: ruta → [tamaño, mtime, sha256]. Así solo se leen los ficheros nuevos o cambiados. */
-export type HashIndex = Record<string, [number, number, string]>;
+type HashIndex = Record<string, [number, number, string]>;
 
 export async function loadHashIndex(file: string): Promise<HashIndex> {
   try {

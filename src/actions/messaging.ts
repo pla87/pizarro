@@ -130,7 +130,7 @@ export async function testTelegram() {
 
 // --- Administración: WhatsApp ---
 
-export interface WhatsappForm extends WhatsappSettingsInput {
+interface WhatsappForm extends WhatsappSettingsInput {
   /** Token nuevo; vacío o ausente = conservar el guardado. */
   token?: string;
   /** Borrar el token guardado (vuelve a usarse WHATSAPP_TOKEN, si el servidor la define). */

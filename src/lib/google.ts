@@ -26,7 +26,7 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 
-export const GOOGLE_MIME: Record<GoogleFileKind, string> = {
+const GOOGLE_MIME: Record<GoogleFileKind, string> = {
   GOOGLE_DOC: "application/vnd.google-apps.document",
   GOOGLE_SHEET: "application/vnd.google-apps.spreadsheet",
   GOOGLE_SLIDES: "application/vnd.google-apps.presentation",

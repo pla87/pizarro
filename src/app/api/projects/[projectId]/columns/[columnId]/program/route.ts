@@ -8,6 +8,7 @@ import { quotaError } from "@/lib/quota-message";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { intlLocale, type T } from "@/i18n/core";
 import { getT } from "@/i18n/server";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `Programa PDF generado de «${project.name}» (${Math.round(report.pdf.length / 1024)} KB)`,
+    category: "api", action: "report.pdf", message: `Programa PDF generado de «${project.name}» (${logSize(report.pdf.length)})`,
     userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers), durationMs: performance.now() - start,
     details: { tasks: report.taskCount, bytes: report.pdf.length, withAssignee, ...(report.omitted ? { omitted: report.omitted } : {}) },
   });
@@ -64,7 +65,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
       headers["X-Pizarro-Document-Name"] = encodeURIComponent(saved.document.name);
       headers["X-Pizarro-Document-Version"] = String(version);
       logEvent({
-        category: "api", action: "documents.upload", message: `Documento «${saved.document.name}» guardado desde «Publicar programa» (${Math.round(report.pdf.length / 1024)} KB)`,
+        category: "api", action: "documents.upload", message: `Documento «${saved.document.name}» guardado desde «Publicar programa» (${logSize(report.pdf.length)})`,
         userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers),
         details: { projectId, documentId: saved.document.id, storedBytes: report.pdf.length, kind: "PDF", source: "program", version },
       });

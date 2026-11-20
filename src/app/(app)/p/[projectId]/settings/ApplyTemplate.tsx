@@ -21,7 +21,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useActionTransition } from "@/components/useActionTransition";
 
 /** Último cambio de plantilla que aún se puede deshacer (lo lee la página). */
-export interface LastTemplateChange {
+interface LastTemplateChange {
   templateName: string;
   mode: ApplyMode;
   createdAt: string;

@@ -109,7 +109,7 @@ export function ReleaseEntry({ release }: Props) {
   };
 
   const remove = async () => {
-    if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.", { title: release.title }), confirmLabel: t("Borrar"), danger: true }))) return;
+    if (!(await confirm({ title: t("Borrar release"), message: t("¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. No se puede deshacer. Las tareas no cambian: conservan su código R{number} y la siguiente release no reutilizará ese número.", { title: release.title, number: release.number }), confirmLabel: t("Borrar"), danger: true }))) return;
     setBusy(true);
     // Sin red la acción lanza: sin el catch el botón se quedaba ocupado para siempre y sin aviso.
     const res = await deleteRelease(release.id).catch((e) => actionThrowResult(e, t));

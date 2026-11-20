@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { forgetReleaseNumbers } from "./release-number";
 import { revokeProject } from "./revoke";
 import { discardProjectTransfers } from "./transfer-jobs";
 import { discardUndo } from "./undo";
@@ -16,6 +17,7 @@ export async function purgeProject(projectId: string): Promise<void> {
   const documents = await db.projectDocument.findMany({ where: { projectId }, select: { id: true } });
   await db.$transaction([db.task.deleteMany({ where: { projectId } }), db.project.delete({ where: { id: projectId } })]);
   revokeProject(projectId);
+  await forgetReleaseNumbers(projectId);
   await removeAttachmentFiles(attachments.map((a) => a.id));
   await removeReleaseAttachmentFiles(releaseAttachments.map((a) => a.id));
   await removeDocumentFiles(documents.map((d) => d.id));

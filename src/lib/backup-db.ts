@@ -32,7 +32,7 @@ export function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
-export async function listTables(sql: RawSql): Promise<string[]> {
+async function listTables(sql: RawSql): Promise<string[]> {
   const rows = await sql.$queryRawUnsafe<{ t: string }[]>(
     "SELECT table_name AS t FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name",
   );

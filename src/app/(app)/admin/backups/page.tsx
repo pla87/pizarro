@@ -1,5 +1,6 @@
 import { backupDestinationsInfo, backupKeyProblem, backupKeyState, backupPaused, externalCopyRunning, listBackupsCached, readStatus } from "@/lib/backup";
 import { getBackupAlert } from "@/lib/backup-alert";
+import { maskDestinationLabel, maskHostIn } from "@/lib/backup-label";
 import { db } from "@/lib/db";
 import { listJobRuns } from "@/lib/jobs";
 import { SCHEDULED_JOBS } from "@/lib/maintenance";
@@ -22,18 +23,37 @@ export default async function BackupsPage() {
   };
   jobs.sort((a, b) => rank(a.name) - rank(b.name));
   // Quien entra con Google y no conoce su contraseña puede confirmar la descarga con un código de su app (TOTP).
+  // El host de un almacenamiento S3 (con el id de la cuenta en R2) se recorta antes de llegar al navegador.
+  const masked = maskForView(status, backupDestinationsInfo());
   return (
     <BackupsAdmin
       keyState={backupKeyState()}
       keyProblem={backupKeyProblem()}
       alert={alert}
-      status={status}
+      status={masked.status}
       files={files}
       canUseCode={me?.twoFactorMethod === "TOTP"}
       jobs={jobs}
-      destinations={backupDestinationsInfo()}
+      destinations={masked.destinations}
       externalRunning={externalCopyRunning()}
       paused={backupPaused()}
     />
   );
+}
+
+function maskForView(status: Awaited<ReturnType<typeof readStatus>>, destinations: ReturnType<typeof backupDestinationsInfo>) {
+  const external = Object.fromEntries(
+    Object.entries(status.external ?? {}).map(([id, st]) => {
+      const last = st?.last;
+      return [id, last ? { ...st, last: { ...last, label: maskDestinationLabel(last.label), ...(last.error ? { error: maskHostIn(last.error, last.label) } : {}) } } : st];
+    }),
+  ) as typeof status.external;
+  return {
+    status: { ...status, ...(status.external ? { external } : {}) },
+    destinations: {
+      ...destinations,
+      external: destinations.external.map((d) => ({ ...d, label: maskDestinationLabel(d.label) })),
+      errors: destinations.errors.map((e) => destinations.external.reduce((text, d) => maskHostIn(text, d.label), e)),
+    },
+  };
 }
