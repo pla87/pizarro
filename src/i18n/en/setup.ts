@@ -22,7 +22,7 @@ export const setup: Record<string, string> = {
     "The server has email sending configured (SMTP). You can check it now with a test email to {email}.",
   "Enviar email de prueba": "Send test email",
   "Email de prueba enviado a {email}. Comprueba tu bandeja de entrada.": "Test email sent to {email}. Check your inbox.",
-  "El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Ajustes.": "Email sending is not set up: without it there are no email invitations or “Forgot your password?”. You can set it up later in Administration → Settings.",
+  "El envío de emails no está configurado: sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?». Podrás configurarlo después en Administración → Integraciones.": "Email sending is not set up: without it there are no email invitations or “Forgot your password?”. You can set it up later in Administration → Integrations.",
   "Terminar configuración": "Finish setup",
   "Todo listo": "All done",
   "Pizarro está configurado. Entra con tu email y tu contraseña; te pedirá activar la verificación en dos pasos.":

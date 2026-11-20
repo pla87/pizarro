@@ -136,7 +136,7 @@ el idioma **Inglés** (`en`, mismas opciones) y ponlo en **Idioma en inglés de 
 
 ## Paso 7. Configúralo en Pizarro
 
-1. En Pizarro, ve a **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
+1. En Pizarro, ve a **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
 2. Rellena:
    - **Token de acceso**: el token permanente del paso 4.
    - **Identificador del número (Phone number ID)**: el del paso 3.
@@ -168,7 +168,7 @@ El token se guarda cifrado y no se vuelve a mostrar (solo sus 4 últimos caracte
 5. Elige qué avisos quieres por WhatsApp y pulsa **Guardar**. Por defecto, menciones y asignaciones.
 
 El código va en la plantilla de verificación `codigo_pizarro` (paso 6). Si Meta no la tiene o no está aprobada, la
-persona ve que tiene que avisar al administrador y **Administración → Ajustes** muestra el motivo. Caduca a
+persona ve que tiene que avisar al administrador y **Administración → Integraciones** muestra el motivo. Caduca a
 los **15 minutos** y admite **5 intentos**; si caduca o se agotan, pulsa **Enviar otro código** (el anterior deja de
 valer). Sin el código nadie recibe avisos: así no se puede apuntar el número de otra persona y mandarle avisos de pago.
 La persona puede desconectarse en cualquier momento.
@@ -180,22 +180,22 @@ los avisos hay que marcar la casilla de consentimiento y confirmarlo con el cód
 
 Las instalaciones que ya configuraban WhatsApp con variables del servidor siguen funcionando sin tocar nada:
 `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` y
-`WHATSAPP_API_VERSION` (por defecto `v23.0`). La plantilla de verificación no tiene variable: se configura en Ajustes
+`WHATSAPP_API_VERSION` (por defecto `v23.0`). La plantilla de verificación no tiene variable: se configura en Integraciones
 y, si no, es `codigo_pizarro`.
 
 Si ya enviabas avisos por WhatsApp con una versión anterior, crea la plantilla `codigo_pizarro` (paso 6): hasta entonces
 nadie puede conectar un número nuevo. Quien ya estaba conectado sigue recibiendo avisos.
 
-Precedencia: **lo que se guarda en Administración → Ajustes manda, campo a campo**; los campos vacíos usan esas
+Precedencia: **lo que se guarda en Administración → Integraciones manda, campo a campo**; los campos vacíos usan esas
 variables. Mientras no pulses Activar ni Desactivar, WhatsApp está activo si la configuración está completa.
 
 Antes, la plantilla solo podía configurarse con `WHATSAPP_TEMPLATE_NAME` y tenía **cuatro variables** (quien menciona,
 la tarea, el proyecto y el enlace), se llamara como se llamara. Por eso, **mientras la plantilla salga de esa variable**,
-Pizarro usa ese formato antiguo y solo envía **menciones** (Ajustes lo indica). Lo mismo con la plantilla
+Pizarro usa ese formato antiguo y solo envía **menciones** (Integraciones lo indica). Lo mismo con la plantilla
 `mencion_pizarro`, venga de donde venga. Para enviar todos los tipos de aviso, crea `aviso_pizarro` (paso 5, tres
-variables), escribe su nombre en **Nombre de la plantilla** en Administración → Ajustes y guarda: lo guardado ahí manda
+variables), escribe su nombre en **Nombre de la plantilla** en Administración → Integraciones y guarda: lo guardado ahí manda
 sobre la variable. Si tu plantilla con otro nombre ya tiene las tres variables de `aviso_pizarro`, basta con escribir
-su nombre en Ajustes.
+su nombre en Integraciones.
 
 ## Problemas frecuentes
 

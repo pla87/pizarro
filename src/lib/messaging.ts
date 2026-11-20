@@ -6,7 +6,7 @@ import { DEFAULT_CHANNEL_PREFS, DEFAULT_WHATSAPP_CODE_TEMPLATE, DEFAULT_WHATSAPP
 import { telegramStatus, webhookInfo } from "./telegram";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 
-// Lo que ven las pantallas de Telegram y WhatsApp: Administración → Ajustes («Telegram y WhatsApp») y Mi perfil → Avisos.
+// Lo que ven las pantallas de Telegram y WhatsApp: Administración → Integraciones («Telegram y WhatsApp») y Mi perfil → Avisos.
 // Nunca llevan un token: como mucho, sus 4 últimos caracteres.
 
 export interface MessagingAdminView {

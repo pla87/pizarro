@@ -226,7 +226,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 </label>
               );
             })}
-            {!google.domain && <p className="text-xs text-slate-500">{t("Sin opciones de dominio: falta el dominio de Workspace (Administración → Ajustes → Acceso con Google).")}</p>}
+            {!google.domain && <p className="text-xs text-slate-500">{t("Sin opciones de dominio: falta el dominio de Workspace (Administración → Integraciones → Acceso con Google).")}</p>}
             {isPrivateProject && <p className="text-xs text-slate-500">{t("Un proyecto privado nunca se comparte con todo el dominio.")}</p>}
             <button className="btn-primary" disabled={pending}>{t("Guardar")}</button>
           </form>

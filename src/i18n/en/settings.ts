@@ -217,7 +217,7 @@ export const settings: Record<string, string> = {
   "Todo el dominio puede leer": "The whole domain can read",
   "Solo las personas del proyecto (editores)": "Only the people in the project (editors)",
   "No compartir (solo quien lo crea)": "Do not share (only the creator)",
-  "Sin opciones de dominio: falta el dominio de Workspace (Administración → Ajustes → Acceso con Google).": "No domain options: the Workspace domain is missing (Administration → Settings → Google sign-in).",
+  "Sin opciones de dominio: falta el dominio de Workspace (Administración → Integraciones → Acceso con Google).": "No domain options: the Workspace domain is missing (Administration → Integrations → Google sign-in).",
   "Un proyecto privado nunca se comparte con todo el dominio.": "A private project is never shared with the whole domain.",
   "Si el documento no se puede compartir, se crea igualmente y se avisa en la tarea de que solo lo ve quien lo crea.": "If the document cannot be shared, it is still created and the task warns that only its creator can see it.",
   "Secciones del proyecto": "Project sections",

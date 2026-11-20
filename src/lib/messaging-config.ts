@@ -9,7 +9,7 @@ import {
   type CodeTemplateError, type TelegramConfig, type TelegramSettings, type WhatsappConfig, type WhatsappSettings, type WhatsappSettingsInput,
 } from "./messaging-core";
 
-// Configuración de Telegram y WhatsApp guardada en Administración → Ajustes (AppState, con los tokens cifrados con
+// Configuración de Telegram y WhatsApp guardada en Administración → Integraciones (AppState, con los tokens cifrados con
 // ENCRYPTION_KEY). Como el email (lib/mail-config.ts): copia en memoria de 30 s en globalThis, que se rehace al guardar.
 // Las variables WHATSAPP_* del servidor rellenan lo que no se haya guardado (lib/messaging-core.ts, resolveWhatsappConfig).
 
@@ -42,7 +42,7 @@ function open(enc: string, what: string): string {
   try {
     return decryptSecret(enc);
   } catch {
-    console.error(`[messaging] No se pudo descifrar ${what} (¿cambió ENCRYPTION_KEY?). Vuelve a guardarlo en Administración → Ajustes.`);
+    console.error(`[messaging] No se pudo descifrar ${what} (¿cambió ENCRYPTION_KEY?). Vuelve a guardarlo en Administración → Integraciones.`);
     return "";
   }
 }

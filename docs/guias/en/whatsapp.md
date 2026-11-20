@@ -137,7 +137,7 @@ the notices' “English language”: if the verification template lacks that tra
 
 ## Step 7. Set it up in Pizarro
 
-1. In Pizarro, go to **Administration → Settings → 3. Telegram and WhatsApp notices → WhatsApp**.
+1. In Pizarro, go to **Administration → Integrations → 3. Telegram and WhatsApp notices → WhatsApp**.
 2. Fill in:
    - **Access token**: the permanent token from step 4.
    - **Phone number ID**: the one from step 3.
@@ -172,7 +172,7 @@ The token is stored encrypted and never shown again (only its last 4 characters)
 5. Choose which notices you want on WhatsApp and press **Save**. By default, mentions and assignments.
 
 The code goes in the `codigo_pizarro` verification template (step 6). If Meta doesn't have it or it isn't approved,
-the person is told to let the administrator know and **Administration → Settings** shows the reason. It expires
+the person is told to let the administrator know and **Administration → Integrations** shows the reason. It expires
 after **15 minutes** and allows **5 attempts**; if it expires or they run out, press **Send another code** (the previous
 one stops working). Without the code nobody gets notices: that way nobody can enter someone else's number and send them
 paid notices. People can disconnect at any time.
@@ -184,20 +184,20 @@ notices on, tick the consent box and confirm it with the code (or press **Delete
 
 Installations that already set up WhatsApp with server variables keep working without changes: `WHATSAPP_TOKEN`,
 `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` and `WHATSAPP_API_VERSION` (default
-`v23.0`). The verification template has no variable: it is set in Settings and, otherwise, it is `codigo_pizarro`.
+`v23.0`). The verification template has no variable: it is set in Integrations and, otherwise, it is `codigo_pizarro`.
 
 If you already sent WhatsApp notices with an earlier version, create the `codigo_pizarro` template (step 6): until then
 nobody can connect a new number. People who were already connected keep getting notices.
 
-Precedence: **what you save in Administration → Settings wins, field by field**; empty fields use those variables. Until
+Precedence: **what you save in Administration → Integrations wins, field by field**; empty fields use those variables. Until
 you press Enable or Turn off, WhatsApp is on if the settings are complete.
 
 Before, the template could only be set with `WHATSAPP_TEMPLATE_NAME` and had **four variables** (who mentions, the task,
 the project and the link), whatever its name. That is why, **as long as the template comes from that variable**,
-Pizarro uses that old format and only sends **mentions** (Settings says so). The same goes for the `mencion_pizarro`
+Pizarro uses that old format and only sends **mentions** (Integrations says so). The same goes for the `mencion_pizarro`
 template, wherever it comes from. To send every kind of notice, create `aviso_pizarro` (step 5, three variables), type
-its name in **Template name** in Administration → Settings and save: what is saved there wins over the variable. If
-your template with another name already has the three variables of `aviso_pizarro`, just type its name in Settings.
+its name in **Template name** in Administration → Integrations and save: what is saved there wins over the variable. If
+your template with another name already has the three variables of `aviso_pizarro`, just type its name in Integrations.
 
 ## Common problems
 

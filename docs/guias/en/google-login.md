@@ -19,7 +19,7 @@ You need:
 
 Choose the address your people will use, because every value Google asks for comes from it: the server's address (for example, `https://something.up.railway.app`) or your own domain (`https://pizarro.example.com`, the recommended option). If you change it later, you will have to update Google.
 
-In Pizarro, **Administration → Settings → Sign in with Google** shows "Pizarro's public address" at the top and warns you if you are using a different one. Below it there is a collapsible guide with this guide's addresses already worked out and a button to copy each one.
+In Pizarro, **Administration → Integrations → Sign in with Google** shows "Pizarro's public address" at the top and warns you if you are using a different one. Below it there is a collapsible guide with this guide's addresses already worked out and a button to copy each one.
 
 ## 2. Create the project in Google Cloud
 
@@ -60,10 +60,10 @@ Click **Add or remove scopes**, tick `openid`, `email` and `profile` (the basic 
 
 ## 7. Paste it into Pizarro
 
-In **Administration → Settings → Sign in with Google**, paste the ID and the secret and click **Save**. Within seconds the status changes to "Active", with no restart.
+In **Administration → Integrations → Sign in with Google**, paste the ID and the secret and click **Save**. Within seconds the status changes to "Active", with no restart.
 
 - **Allowed Workspace domain** (optional): if you fill it in (`example.com`), only accounts from that domain are accepted. Left empty, any Google account works.
-- If you prefer to set it up on the server, use the `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and, optionally, `GOOGLE_WORKSPACE_DOMAIN` variables. They take precedence over what is saved in Settings.
+- If you prefer to set it up on the server, use the `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and, optionally, `GOOGLE_WORKSPACE_DOMAIN` variables. They take precedence over what is saved in Integrations.
 - To allow signing in **only** with Google, set `AUTH_GOOGLE_ONLY=true`. With `AUTH_ALLOW_ADMIN_PASSWORD=true`, administrators keep their password as emergency access.
 
 ## 8. Try it

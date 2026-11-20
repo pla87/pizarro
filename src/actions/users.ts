@@ -114,7 +114,7 @@ export async function resendInvite(userId: string) {
       await sendInviteMail(user, `${appUrl()}/reset/${token}`, admin.name);
     } catch (err) {
       logMailError("[users] reenviar invitación", err);
-      throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Ajustes.");
+      throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.");
     }
     describeAction(`Reenvió la invitación a «${user.name}»`);
   });

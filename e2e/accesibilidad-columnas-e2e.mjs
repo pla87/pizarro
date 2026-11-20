@@ -171,7 +171,7 @@ if (only.includes("mail")) {
   const { page } = s;
   await L.q(`UPDATE "User" SET role='ADMIN' WHERE id=$1`, [adm.id]); // tras entrar: el administrador pide 2FA al iniciar sesión
   try {
-    await page.goto(`${L.BASE}/admin/settings`);
+    await page.goto(`${L.BASE}/admin/integrations`);
     const group = page.getByRole("radiogroup", { name: "Cómo se envían los emails" });
     await group.waitFor({ timeout: 15000 });
     const radios = group.locator("[role=radio]");

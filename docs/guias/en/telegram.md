@@ -28,7 +28,7 @@ Optional: `/setdescription` and `/setuserpic` in BotFather let you give the bot 
 
 ## Step 2. Paste the token into Pizarro
 
-1. In Pizarro, go to **Administration → Settings → 3. Telegram and WhatsApp notices**.
+1. In Pizarro, go to **Administration → Integrations → 3. Telegram and WhatsApp notices**.
 2. Under **Telegram (free)**, paste the token into **Bot token**.
 3. Press **Save and turn on**.
 
@@ -37,7 +37,7 @@ see “On: bot @…”.
 
 ## Step 3. Test the bot
 
-1. In **Administration → Settings**, press **Test**. Pizarro checks that the bot answers.
+1. In **Administration → Integrations**, press **Test**. Pizarro checks that the bot answers.
 2. If you've also connected your own Telegram (step 4), you get a “Pizarro test message”.
 
 ## Step 4. Each person connects their Telegram
@@ -85,7 +85,7 @@ has already processed, so the next instance doesn't repeat them.
   with `/revoke`, the old one no longer works.
 - **I connect Telegram but Pizarro keeps waiting**: make sure you pressed **Start** in the bot's chat. If the link
   expired, press **Connect Telegram** again.
-- **“Telegram replied with an error” in Settings**: with the webhook, the https address usually isn't reachable from the
+- **“Telegram replied with an error” in Integrations**: with the webhook, the https address usually isn't reachable from the
   Internet or the certificate isn't valid. Check `APP_URL` and the certificate.
 - **Someone stopped getting them**: if they blocked the bot or deleted the chat, Pizarro disconnects them automatically.
   They just press **Connect Telegram** again.

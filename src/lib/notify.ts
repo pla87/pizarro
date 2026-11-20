@@ -20,7 +20,7 @@ import { rateLimit } from "./rate-limit";
 
 // Avisos (menciones, asignaciones, cambios de fecha, comentarios y respuestas): en la app (tabla Notification), por
 // email (SMTP) y por los canales que cada persona conecta en Mi perfil → Avisos (Telegram y WhatsApp, si el
-// administrador los ha activado en Administración → Ajustes). Los envíos externos se hacen tras responder al usuario
+// administrador los ha activado en Administración → Integraciones). Los envíos externos se hacen tras responder al usuario
 // (after), para que avisar no añada espera.
 
 export { emailEnabled };

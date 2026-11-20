@@ -68,7 +68,7 @@ export function configFlags(env: Env = process.env) {
 }
 
 /**
- * Telegram y WhatsApp (Administración → Ajustes y variables WHATSAPP_*), sin valores: si están configurados y activos,
+ * Telegram y WhatsApp (Administración → Integraciones y variables WHATSAPP_*), sin valores: si están configurados y activos,
  * de dónde sale cada dato de WhatsApp y cómo recibe Pizarro los mensajes del bot (webhook o sondeo).
  */
 export function messagingFlags(env: Env, rows: { key: string; value: string }[], channels: { telegram: number; whatsapp: number; whatsappPending: number } | null = null) {

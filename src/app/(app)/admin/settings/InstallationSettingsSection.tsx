@@ -13,7 +13,7 @@ export interface InstallationView {
   orgName: string;
   locale: Locale;
   timeZone: string;
-  /** APP_TIMEZONE manda: la zona se muestra, pero no se puede cambiar aquí. */
+  /** APP_TIMEZONE manda: la zona se muestra como texto, sin selector (y `zones` va vacía). */
   zoneLocked: boolean;
   zones: string[];
 }
@@ -63,13 +63,21 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
             <option value="en">English</option>
           </select>
         </label>
-        <label className="block text-sm">
-          <span className="font-medium">{t("Zona horaria")}</span>
-          <select id="instance-tz" className="input mt-1 w-full" value={timeZone} disabled={view.zoneLocked} onChange={(e) => setTimeZone(e.target.value)}>
-            {zones.map((z) => <option key={z} value={z}>{z}</option>)}
-          </select>
-          {view.zoneLocked && <span className="mt-1 block text-xs text-slate-500">{t("Fijada por la variable APP_TIMEZONE del servidor.")}</span>}
-        </label>
+        {view.zoneLocked ? (
+          // Fijada por APP_TIMEZONE: no se puede cambiar aquí, así que se muestra como texto (sin la lista de ~400 zonas).
+          <div className="text-sm">
+            <span className="font-medium">{t("Zona horaria")}</span>
+            <p id="instance-tz" className="mt-1 py-1.5 font-mono text-sm">{timeZone}</p>
+            <span className="block text-xs text-slate-500">{t("Fijada por la variable APP_TIMEZONE del servidor.")}</span>
+          </div>
+        ) : (
+          <label className="block text-sm">
+            <span className="font-medium">{t("Zona horaria")}</span>
+            <select id="instance-tz" className="input mt-1 w-full" value={timeZone} onChange={(e) => setTimeZone(e.target.value)}>
+              {zones.map((z) => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </label>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName}>

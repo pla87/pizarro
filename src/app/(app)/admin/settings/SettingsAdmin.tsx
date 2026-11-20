@@ -6,26 +6,21 @@ import { saveMaxCommentsPerTask } from "@/actions/settings";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
-import type { MailSettingsView } from "@/lib/mail-config";
 import { actionThrowResult } from "@/lib/stale-action";
-import { MailSettingsSection } from "./MailSettingsSection";
 import { StorageSettingsSection } from "./StorageSettingsSection";
 import type { StorageAdminView } from "@/lib/storage-stats";
-import { GoogleSettingsSection } from "./GoogleSettingsSection";
 import { TechInfoButton } from "./TechInfoButton";
-import type { GoogleSettingsView } from "@/lib/google-config";
-import type { MessagingAdminView } from "@/lib/messaging";
-import { MessagingSettingsSection } from "./MessagingSettingsSection";
 import { InstallationSettingsSection, type InstallationView } from "./InstallationSettingsSection";
 import { AppIconSettingsSection } from "./AppIconSettingsSection";
+import { MovedSectionRedirect } from "./MovedSectionRedirect";
 import type { AppIconAccent } from "@/lib/app-icon-core";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
 const MIN = 1;
 const MAX = 1000;
 
-/** «Ajustes»: parámetros generales de la aplicación. */
-export function SettingsAdmin({ maxComments, mail, google, storage, messaging, installation, appIcon }: { maxComments: number; mail: MailSettingsView; google: GoogleSettingsView; storage: StorageAdminView; messaging: MessagingAdminView; installation: InstallationView; appIcon: AppIconAccent }) {
+/** «Ajustes»: la instalación y los parámetros generales de la aplicación (las integraciones van en su pestaña). */
+export function SettingsAdmin({ maxComments, storage, installation, appIcon }: { maxComments: number; storage: StorageAdminView; installation: InstallationView; appIcon: AppIconAccent }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -67,6 +62,7 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
 
   return (
     <div className="space-y-4">
+      <MovedSectionRedirect />
       <InstallationSettingsSection view={installation} />
       <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} />
       <section className="card space-y-3 p-5">
@@ -99,9 +95,6 @@ export function SettingsAdmin({ maxComments, mail, google, storage, messaging, i
         </div>
       </section>
       <StorageSettingsSection view={storage} />
-      <MailSettingsSection initial={mail.settings} env={mail.env} outbox={mail.outbox} />
-      <GoogleSettingsSection view={google} />
-      <MessagingSettingsSection view={messaging} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="flex items-center gap-1 text-sm font-semibold">

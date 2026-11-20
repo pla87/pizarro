@@ -11,7 +11,7 @@ export const legal: Record<string, string> = {
   "Responsable y contacto": "Controller and contact",
   "Nombre del responsable": "Controller name",
   "Quien opera esta instalación. Sustituye a {responsable}.": "Whoever runs this installation. Replaces {responsable}.",
-  "Sustituye a {email}. Es el de Ajustes → Acceso con Google.": "Replaces {email}. Same as in Settings → Sign in with Google.",
+  "Sustituye a {email}. Es el de Integraciones → Acceso con Google.": "Replaces {email}. Same as in Integrations → Sign in with Google.",
   "Sin valor, ambos se muestran como «el administrador de esta instalación».": "If empty, both are shown as “this installation's administrator”.",
   "Guardado.": "Saved.",
   "Ver página pública": "View public page",

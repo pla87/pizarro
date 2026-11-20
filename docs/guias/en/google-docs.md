@@ -39,11 +39,11 @@ Follow steps 2 to 6 of [Sign in with Google](google-login.md). Under **Authorize
 https://pizarro.example.com/api/google/callback
 ```
 
-If you also use Sign in with Google, put both addresses in the same client. Then paste the **Client ID** and the **Client secret** in **Administration → Settings → Sign in with Google** (or in the server's `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` variables).
+If you also use Sign in with Google, put both addresses in the same client. Then paste the **Client ID** and the **Client secret** in **Administration → Integrations → Sign in with Google** (or in the server's `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` variables).
 
 ## 4. Decide who the files are shared with
 
-- **Allowed Workspace domain** (in Settings, or the `GOOGLE_WORKSPACE_DOMAIN` variable): with it, every file from a team project is shared with the whole domain, so anyone can open it from the card. Without a domain, only its creator can see it until they share it.
+- **Allowed Workspace domain** (in Integrations, or the `GOOGLE_WORKSPACE_DOMAIN` variable): with it, every file from a team project is shared with the whole domain, so anyone can open it from the card. Without a domain, only its creator can see it until they share it.
 - Each project can choose in **Project settings → General → Google documents**: the whole domain can edit, the whole domain can read, only the people in the project, or do not share. A private project is never shared with the domain.
 
 ## 5. Each person connects their account
