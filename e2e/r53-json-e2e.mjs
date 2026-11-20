@@ -270,6 +270,9 @@ if (only.includes("menu")) {
   const copyBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Copiar tarea", exact: true });
   const importBtn = (pg) => U.dialog(pg).getByRole("button", { name: "Importar tarea", exact: true });
   L.eq("BOTONES: en escritorio, los dos iconos y no el menú «Más opciones de la tarea» (solo en pantallas estrechas)", await U.dialog(page).getByRole("button", { name: "Más opciones de la tarea" }).count(), 0);
+  // La barra de progreso de las subtareas solo sale si hay alguna (vacía no decía nada).
+  const subs = Number((await L.q(`SELECT count(*) AS n FROM "Subtask" s JOIN "Task" t ON t.id=s."taskId" WHERE t.title='Origen'`))[0].n);
+  L.eq("SUBTAREAS: barra de progreso solo con subtareas", await U.dialog(page).getByRole("progressbar", { name: "Progreso de las subtareas" }).count(), subs > 0 ? 1 : 0);
   L.check("BOTONES: «Copiar tarea» e «Importar tarea» con tooltip y su atajo", (await copyBtn(page).getAttribute("title")).includes("Ctrl+C") && !!(await importBtn(page).getAttribute("title")));
   await copyBtn(page).click();
   L.check("BOTONES: «Copiar tarea» copia y lo dice el indicador", await statusShows(page, "Tarea copiada") && (await clip(page)).includes('"title": "Origen"'));

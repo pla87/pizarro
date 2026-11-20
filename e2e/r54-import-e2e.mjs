@@ -229,6 +229,14 @@ if (only.includes("nueva")) {
   await page.getByRole("button", { name: "Nueva tarea" }).first().click();
   const dlg = page.getByRole("dialog", { name: "Nueva tarea" });
   await dlg.waitFor();
+  // Como en el detalle: «Copiar tarea», «Importar tarea» y la X, seguidos en la cabecera (no junto al campo «Título»).
+  const [cb, ib, xb, tb] = await Promise.all([
+    dlg.getByRole("button", { name: "Copiar tarea", exact: true }).boundingBox(),
+    dlg.getByRole("button", { name: "Importar tarea", exact: true }).boundingBox(),
+    dlg.getByRole("button", { name: "Cerrar", exact: true }).boundingBox(),
+    dlg.getByRole("textbox", { name: "Título", exact: true }).boundingBox(),
+  ]);
+  L.check("CABECERA: copiar, importar y cerrar seguidos, en la fila de la X y por encima del campo «Título»", !!cb && !!ib && !!xb && !!tb && cb.x < ib.x && ib.x < xb.x && xb.x - (ib.x + ib.width) <= 12 && Math.abs(cb.y - xb.y) <= 2 && cb.y + cb.height < tb.y - 20, JSON.stringify([cb, ib, xb, tb]));
   await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Escrita en el formulario");
   await dlg.getByPlaceholder("Añadir subtarea…").fill("Primer paso");
   await dlg.getByPlaceholder("Añadir subtarea…").press("Enter");
@@ -511,12 +519,23 @@ if (only.includes("extras")) {
     const b = await loc.boundingBox();
     L.check(`390: «${name}» cabe`, !!b && b.x >= 0 && b.x + b.width <= 390, JSON.stringify(b));
   }
+  // Pantalla táctil: los chips de tipo y el «+» de subtareas tienen zona de toque de 40 px (::after), sin cambiar su tamaño.
+  const touch = (loc) => loc.evaluate((el) => { const r = el.getBoundingClientRect(); const a = getComputedStyle(el, "::after"); return [Math.round(r.height), a.content !== "none" ? Math.round(Math.max(r.height, parseFloat(a.height))) : 0]; });
+  const chip = await touch(nt.getByRole("radio", { name: "Funcionalidad" }));
+  L.check("TÁCTIL: chip de tipo de 24 px con zona de toque de 40", chip[0] <= 26 && chip[1] >= 40, JSON.stringify(chip));
+  const plus = await touch(nt.getByRole("button", { name: "Añadir subtarea" }));
+  L.check("TÁCTIL: «+» de subtareas con zona de toque de 40", plus[1] >= 40, JSON.stringify(plus));
+  // Desplegables: flecha propia a 6 px del borde y relleno derecho para que el texto no la pise.
+  const sel = await nt.getByLabel("Columna").evaluate((el) => { const c = getComputedStyle(el); return [c.appearance, c.backgroundPositionX, parseFloat(c.paddingRight)]; });
+  L.check("SELECT: flecha propia a 6 px del borde y texto con sitio", sel[0] === "none" && sel[1] === "calc(100% - 6px)" && sel[2] >= 20, JSON.stringify(sel));
   const bg = await nt.getByLabel("Enlace externo (opcional)").evaluate((el) => getComputedStyle(el).backgroundColor);
   L.check("OSCURO: el enlace no es una caja blanca", bg !== "rgb(255, 255, 255)", bg);
   const off = await nt.getByRole("button", { name: "Otra" }).evaluate((el) => getComputedStyle(el).backgroundColor);
   L.check("OSCURO: una etiqueta sin marcar no es clara", off !== "rgb(241, 245, 249)", off);
   await nt.getByRole("button", { name: "Otra" }).tap();
   await nt.getByRole("button", { name: /^Color: / }).tap();
+  const swatch = await touch(page.getByRole("radio", { name: "Color Celeste" }));
+  L.check("TÁCTIL: muestra de color de 28 px con zona de toque de 40", swatch[0] === 28 && swatch[1] >= 40, JSON.stringify(swatch));
   await page.getByRole("radio", { name: "Color Celeste" }).tap();
   await nt.getByLabel("Enlace externo (opcional)").fill("https://example.com/movil");
   await nt.getByRole("button", { name: "Crear tarea" }).tap();
@@ -566,15 +585,18 @@ if (only.includes("movil")) {
   await setClip(page, "antes");
   await page.getByRole("menuitem", { name: "Copiar" }).tap();
   await L.checkEventually("SELECCIÓN: «Copiar» deja la tarea marcada en el portapapeles", async () => { try { return JSON.parse(await clip(page)).tasks.map((t) => t.title).join() === "Móvil 1"; } catch { return false; } });
-  // «Nueva tarea» a 390 px: los botones caben junto al título.
+  // «Nueva tarea» a 390 px: como en el detalle, copiar e importar van juntos en «⋯», junto a la X, y caben.
   await page.getByRole("button", { name: "Limpiar selección" }).tap();
   await page.getByRole("button", { name: "Nueva tarea o captura" }).tap();
   const nt = page.getByRole("dialog", { name: "Nueva tarea" });
   await nt.waitFor();
-  for (const name of ["Copiar tarea", "Importar tarea"]) {
-    const b = await nt.getByRole("button", { name, exact: true }).boundingBox();
-    L.check(`NUEVA: «${name}» cabe a 390 px`, !!b && b.x >= 0 && b.x + b.width <= 390, JSON.stringify(b));
-  }
+  const more = await nt.getByRole("button", { name: "Más opciones de la tarea", exact: true }).boundingBox();
+  const closeBox = await nt.getByRole("button", { name: "Cerrar", exact: true }).boundingBox();
+  L.check("NUEVA: «⋯» cabe a 390 px, justo a la izquierda de la X", !!more && !!closeBox && more.x >= 0 && more.x + more.width <= closeBox.x && closeBox.x - (more.x + more.width) <= 12 && Math.abs(more.y - closeBox.y) <= 2, JSON.stringify([more, closeBox]));
+  L.eq("NUEVA: a 390 px los iconos sueltos no se ven", await nt.getByRole("button", { name: "Copiar tarea", exact: true }).count(), 0);
+  await nt.getByRole("button", { name: "Más opciones de la tarea", exact: true }).tap();
+  L.eq("NUEVA: «⋯» tiene copiar e importar", (await page.getByRole("menuitem").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Copiar tarea", "Importar desde el portapapeles", "Importar desde un fichero"]);
+  await page.keyboard.press("Escape");
   m.errors.length = 0;
   await m.ctx.close();
 }

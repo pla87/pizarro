@@ -98,6 +98,7 @@ if (only.includes("dup")) {
   await L.eqEventually("DUP: nace «Original (copia)»", () => countTitle("Original (copia)"), 1);
   const copied = await sameAttachments(page, "DUP", "Original", "Original (copia)");
   L.eq("DUP: sin aviso de adjuntos no copiados", await page.getByText(/No se ha(n)? copiado/).count(), 0);
+  L.eq("DUP: la original no se repite: sin aviso de repetición", await page.getByText("Copia creada sin repetición", { exact: false }).count(), 0);
   const [copy] = await L.q(`SELECT id FROM "Task" WHERE title='Original (copia)'`);
   L.eq("DUP: el documento de Google enlazado va con la copia (mismo documento)", (await L.q(`SELECT url,"externalId" FROM "TaskLink" WHERE "taskId"=$1`, [copy.id])).map((l) => [l.url, l.externalId]), [["https://docs.google.com/document/d/r49doc/edit", "r49doc"]]);
   L.eq("DUP: subtareas copiadas sin marcar", (await L.q(`SELECT title,done FROM "Subtask" WHERE "taskId"=$1`, [copy.id])).map((x) => [x.title, x.done]), [["Paso uno", false]]);
@@ -140,7 +141,8 @@ if (only.includes("dup")) {
 if (only.includes("drag")) {
   L.scenario("drag: Ctrl al soltar en otra columna copia los adjuntos");
   await L.cleanBoard();
-  await L.seedTasks(COL.backlog, ["Arrastrada"]);
+  const [dragged] = await L.seedTasks(COL.backlog, ["Arrastrada"]);
+  await L.q(`UPDATE "Task" SET recurrence='WEEKLY' WHERE id=$1`, [dragged]);
   await L.seedTasks(COL.doing, ["X"]);
   const s = await L.session({ viewport: { width: 1400, height: 900 } });
   const page = s.page;
@@ -158,6 +160,9 @@ if (only.includes("drag")) {
   await page.mouse.up();
   await page.keyboard.up("Control");
   await L.eqEventually("DRAG: la copia queda en «En progreso»", async () => (await L.q(`SELECT c.name FROM "Task" t JOIN "Column" c ON c.id=t."columnId" WHERE t.title='Arrastrada (copia)'`)).map((r) => r.name), [COL.doing]);
+  // Se repetía: la copia nace sin repetición y el aviso de «duplicada» lo dice.
+  await L.checkEventually("DRAG: la original se repite: el aviso dice que la copia va sin repetición", async () => (await page.getByText("Copia creada sin repetición: la repetición no se copia").count()) > 0);
+  L.eq("DRAG: la copia no se repite y la original sí", (await L.q(`SELECT title,recurrence FROM "Task" WHERE title LIKE 'Arrastrada%' ORDER BY title`)).map((r) => [r.title, r.recurrence]), [["Arrastrada", "WEEKLY"], ["Arrastrada (copia)", "NONE"]]);
   await L.waitFor(async () => (await attachmentsOf("Arrastrada (copia)")).length === 2, { timeout: 8000 });
   await sameAttachments(page, "DRAG", "Arrastrada", "Arrastrada (copia)");
   L.assertNoErrors("DRAG", [s]);
@@ -168,15 +173,27 @@ if (only.includes("drag")) {
 if (only.includes("keys")) {
   L.scenario("keys: Alt+Mayús+D copia los adjuntos");
   await L.cleanBoard();
-  await L.seedTasks(COL.backlog, ["Por atajo"]);
+  const [byKey] = await L.seedTasks(COL.backlog, ["Por atajo"]);
+  await L.q(`UPDATE "Task" SET recurrence='DAILY' WHERE id=$1`, [byKey]);
   const s = await L.session();
   const page = s.page;
   await attachBoth(page, "Por atajo");
   await L.cardLoc(page, "Por atajo").focus();
   await page.keyboard.press("Alt+Shift+D");
   await L.eqEventually("KEYS: nace la copia", () => countTitle("Por atajo (copia)"), 1);
+  await L.checkEventually("KEYS: la original se repite: el aviso dice que la copia va sin repetición", async () => (await page.getByText("Copia creada sin repetición: la repetición no se copia").count()) > 0);
   await L.waitFor(async () => (await attachmentsOf("Por atajo (copia)")).length === 2, { timeout: 8000 });
   await sameAttachments(page, "KEYS", "Por atajo", "Por atajo (copia)");
+  // Y con el botón «Duplicar» del detalle, el mismo aviso.
+  await L.cleanBoard();
+  const [fromDetail] = await L.seedTasks(COL.backlog, ["Semanal"]);
+  await L.q(`UPDATE "Task" SET recurrence='WEEKLY' WHERE id=$1`, [fromDetail]);
+  await L.reload(page);
+  await U.openTask(page, "Semanal");
+  await U.dialog(page).getByRole("button", { name: "Duplicar", exact: true }).click();
+  await L.checkEventually("DETALLE: la original se repite: el aviso dice que la copia va sin repetición", async () => (await page.getByText("Copia creada sin repetición: la repetición no se copia").count()) > 0);
+  L.eq("DETALLE: la copia nace sin repetición", (await L.q(`SELECT recurrence FROM "Task" WHERE title='Semanal (copia)'`)).map((r) => r.recurrence), ["NONE"]);
+  await U.closeDialog(page);
   L.assertNoErrors("KEYS", [s]);
   await s.ctx.close();
 }
