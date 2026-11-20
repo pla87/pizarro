@@ -10,7 +10,7 @@ import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE, onColor } from "@/lib/constan
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
@@ -35,13 +35,13 @@ type Listeners = NonNullable<DraggableSyntheticListeners>;
  * la vista de su columna o cerca (ver nearCards.ts): con cientos de tarjetas, el arrastre redibujaba y medía todas en
  * cada cambio. El nodo y su contenido son los mismos se apunte o no (nada se vuelve a montar ni pierde el foco).
  */
-export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: string }) {
+export const SortableTaskCard = memo(function SortableTaskCard({ id, eager = false }: { id: string; /** Entre las primeras de su columna: nunca se salta al pintar (ver `lazy`). */ eager?: boolean }) {
   const { dragHandle } = useBoard();
   const t = useT();
   const task = useTask(id);
   const [near, nearRef, bindNow] = useNearCard(id);
   const node = useRef<HTMLDivElement | null>(null);
-  const handle = useRef<HTMLButtonElement | null>(null);
+  const handle = useRef<HTMLSpanElement | null>(null);
   // Los manejadores de los sensores (pulsar con el puntero, teclas) los da useSortable; aquí se llaman los últimos. Si la
   // tarjeta aún no está apuntada (acaba de entrar en la vista), se apunta en el acto y el arrastre empieza igual.
   const listeners = useRef<Listeners | null>(null);
@@ -59,6 +59,29 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
     },
     [nearRef],
   );
+  // El asa se pinta siempre y el CSS la muestra solo en pantallas táctiles (`pointer-coarse:`): así su hueco está desde
+  // el primer pintado. Con estado de React (false en el servidor) aparecía al hidratar y estrechaba el título (la tarjeta
+  // crecía y movía todo lo de debajo: CLS ~0,1 en el móvil). Lo que arrastra sigue decidiéndolo `dragHandle` (la tarjeta
+  // entera con ratón; solo el asa en táctil). Memorizada: un elemento nuevo en cada dibujo repintaría la tarjeta.
+  const handleEl = useMemo(
+    () => (
+      // Un <span> y no un <button>: dentro de la tarjeta (un botón) sería un control anidado.
+      <span
+        data-drag-handle
+        ref={handle}
+        onClick={(e) => e.stopPropagation()}
+        {...(dragHandle ? relay : {})}
+        className="-my-1 -mr-1.5 hidden h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600 pointer-coarse:flex"
+        aria-label={t("Arrastrar para reordenar")}
+        // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
+        // Fuera del árbol accesible: dentro de la tarjeta (role=button) no se puede anunciar aparte.
+        aria-hidden
+      >
+        <GripVertical size={16} />
+      </span>
+    ),
+    [dragHandle, relay, t],
+  );
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
@@ -74,23 +97,11 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
         <TaskViewerBubbles taskId={id} />
         <TaskCard
           task={task}
-          lazy={!near}
-          handle={dragHandle ? (
-            <button
-              type="button"
-              ref={handle}
-              {...relay}
-              onClick={(e) => e.stopPropagation()}
-              className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
-              aria-label={t("Arrastrar para reordenar")}
-              // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
-              // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
-              tabIndex={-1}
-              aria-hidden
-            >
-              <GripVertical size={16} />
-            </button>
-          ) : null}
+          // Las primeras de cada columna (las que se ven al abrir el tablero) no se saltan nunca: en el primer pintado del HTML
+          // del servidor aún no se sabe cuáles están cerca, y el navegador les daba primero el alto aproximado y luego el
+          // real, con lo que todo lo de debajo se movía (CLS en el móvil).
+          lazy={!near && !eager}
+          handle={handleEl}
         />
       </div>
       {/* Detrás del nodo y no dentro: React fija los refs de un elemento después de los efectos de sus hijos, así que dentro,
@@ -109,7 +120,7 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
 function SortableBinding({ id, nodeRef, handleRef, listenersRef, withHandle }: {
   id: string;
   nodeRef: RefObject<HTMLDivElement | null>;
-  handleRef: RefObject<HTMLButtonElement | null>;
+  handleRef: RefObject<HTMLSpanElement | null>;
   listenersRef: RefObject<Listeners | null>;
   withHandle: boolean;
 }) {
@@ -313,29 +324,30 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       {!overlay && <span id={descId} hidden>{description}</span>}
       {task.color && !filled && <span className="absolute inset-y-0 left-0 w-1 ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} aria-hidden />}
       <div className="flex items-start gap-2">
-        <button
-          type="button"
+        {/* Casilla para el ratón y el dedo: un <span> y no un <button> (un control dentro de la tarjeta, que ya es un botón,
+            sería un control anidado aunque vaya fuera del Tab). */}
+        <span
           onClick={(e) => {
             e.stopPropagation();
             if (!pending) toggleSelected(task.id);
           }}
-          disabled={pending}
           onPointerDown={(e) => e.stopPropagation()}
-          // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
-          tabIndex={-1}
           className={cn(
             // En el móvil la zona que se puede tocar crece 10 px por cada lado (36×36 px; se ven 16×16) sin mover nada.
-            "relative mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
+            "relative mt-0.5 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded border transition-opacity max-md:after:absolute max-md:after:-inset-2.5 max-md:after:content-['']",
             isSelected
               ? "border-brand-600 bg-brand-600 text-on-brand"
               : "border-slate-300 opacity-60 group-hover:opacity-100 max-md:opacity-100 dark:border-slate-600",
           )}
-          aria-label={isSelected ? t("Quitar de la selección") : t("Seleccionar")}
-          // Para el lector de pantalla la selección la expone la tarjeta (aria-pressed) y se alterna con Espacio.
+          // Fuera del árbol accesible: para el lector de pantalla la selección la expone la propia tarjeta (aria-pressed,
+          // «botón pulsado») y se alterna con Espacio, así la tarjeta sigue siendo una sola parada de tabulador. Nombre fijo
+          // (el estado lo dice la tarjeta; lo usan las pruebas) y `data-selected` con el estado.
+          aria-label={t("Seleccionar")}
+          data-selected={isSelected || undefined}
           aria-hidden
         >
           {isSelected && <Check size={12} strokeWidth={3} />}
-        </button>
+        </span>
         {renaming ? (
           <RenameInput
             title={task.title}
@@ -443,20 +455,31 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
           </span>
         )}
         {task.linkUrl && (
-          <a
-            href={task.linkUrl}
-            target="_blank"
-            rel="noopener noreferrer nofollow"
-            onClick={(e) => e.stopPropagation()}
+          // Atajo para el ratón (un <span>, no un enlace: dentro de la tarjeta, que es un botón, sería un control anidado). Con
+          // teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona). Clic, Ctrl/⌘+clic y clic
+          // central abren el enlace en una pestaña nueva, como un enlace (el central sin el desplazamiento automático).
+          <span
+            data-external-link
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(task.linkUrl!, "_blank", "noopener,noreferrer");
+            }}
+            onAuxClick={(e) => {
+              if (e.button !== 1) return;
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(task.linkUrl!, "_blank", "noopener,noreferrer");
+            }}
+            onMouseDown={(e) => {
+              if (e.button === 1) e.preventDefault();
+            }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="hover:text-brand-600"
-            aria-label={t("Abrir enlace externo")}
-            // Atajo para el ratón: con teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona).
-            tabIndex={-1}
-            aria-hidden
+            className="cursor-pointer hover:text-brand-600"
+            title={t("Abrir enlace externo")}
           >
             <ExternalLink size={13} />
-          </a>
+          </span>
         )}
         <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Asignada a {name}", { name: assignee.name })} />}</span>
       </div>

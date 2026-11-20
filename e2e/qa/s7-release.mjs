@@ -41,7 +41,7 @@ export async function run() {
   L.scenario("7. Generar y desplegar una release");
   await L.cleanBoard();
   // Este escenario prueba el paso 2 con el campo de Markdown (Editar / Vista previa); con la preferencia «Con barra de
-  // formato» (la de serie) sale el editor con barra, que prueba r49-copy-e2e.mjs.
+  // formato» (la de serie) sale el editor con barra, que prueba copias-adjuntos-e2e.mjs.
   await L.q(`UPDATE "User" SET "editorMode"='MARKDOWN' WHERE email=$1`, [L.ADMIN]);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pzqa-"));
   const png = path.join(dir, "captura.png"); fs.writeFileSync(png, makePng(320, 200));
@@ -146,9 +146,11 @@ export async function run() {
   const [histDl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), histZipBtn.click()]);
   L.eq("Releases: el botón descarga el ZIP con el mismo nombre que el diálogo", histDl.suggestedFilename(), zipName);
   const href = `/api/releases/${rel.id}/attachments`;
-  const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type") }; }, href);
+  const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type"), cl: r.headers.get("content-length") }; }, href);
   L.eq("ZIP del histórico: 200, application/zip, PK", [z.status, z.ct, z.pk], [200, "application/zip", true]);
   L.check("ZIP del histórico: no vacío", z.len > 100, String(z.len));
+  // Next quita el Content-Length de las rutas; se vuelve a poner (src/lib/response-length.ts) para que se vea el progreso.
+  L.eq("ZIP del histórico: con Content-Length (el navegador enseña el progreso)", z.cl, String(z.len));
 
   // --- deshacer el despliegue ---
   await L.goto(p, `${L.BASE}/p/${proj.id}`); await L.reload(p);
@@ -176,7 +178,7 @@ export async function run() {
 
   // --- segunda release con selección y destino «archivar» ---
   await L.reload(p);
-  for (const t of ["Alpha", "Gamma"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["Alpha", "Gamma"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Release con selección" }).click();
   const d2 = U.dialog(p);
   await d2.getByText("Paso 1 de 2").waitFor();
@@ -274,7 +276,7 @@ export async function run() {
   });
   // Lo mismo con «Release con selección» (tareas de varias columnas).
   await L.reload(p);
-  for (const t of ["Movida", "Quieta"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["Movida", "Quieta"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Release con selección" }).click();
   const d6 = U.dialog(p);
   await d6.getByText("Paso 1 de 2").waitFor();

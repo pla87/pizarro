@@ -19,4 +19,11 @@ export const releases: Record<string, string> = {
   // Topes de una release (RELEASE_MAX_TASKS y RELEASE_MAX_ATTACHMENT_TASKS en src/lib/release.ts)
   "Una release admite como mucho 500 tareas: quita alguna de la selección.": "A release holds at most 500 tasks: remove some from the selection.",
   "Una release admite como mucho 200 tareas con adjuntos: quita alguna de la selección.": "A release holds at most 200 tasks with attachments: remove some from the selection.",
+  // Historial de la tarea al desplegar una release
+  "Movió la tarea a «{to}» al desplegar la release «{title}»": "Moved the task to “{to}” when deploying the release “{title}”",
+  "Archivó la tarea al desplegar la release «{title}»": "Archived the task when deploying the release “{title}”",
+
+  // «Generar Release» con un filtro activo en el tablero
+  "El filtro del tablero no se aplica aquí: la lista incluye 1 tarea que el filtro oculta.": "The board filter doesn't apply here: the list includes 1 task the filter hides.",
+  "El filtro del tablero no se aplica aquí: la lista incluye {n} tareas que el filtro oculta.": "The board filter doesn't apply here: the list includes {n} tasks the filter hides.",
 };

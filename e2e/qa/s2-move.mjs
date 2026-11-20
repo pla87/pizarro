@@ -87,7 +87,7 @@ export async function run() {
 
   // --- selección múltiple ---
   await L.reload(p);
-  const pick = (t) => L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  const pick = (t) => L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await pick("B"); await pick("C"); await pick("X");
   const bar = p.getByText("3 seleccionadas");
   L.check("selección: la barra indica «3 seleccionadas»", await bar.isVisible());

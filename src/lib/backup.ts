@@ -19,6 +19,7 @@ import { withAdvisoryLock } from "./jobs";
 import { logEvent } from "./log";
 import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
+import { logSize } from "./format-size";
 
 // Copias de seguridad automáticas: cada día, la base de datos (volcado cifrado) y los ficheros de UPLOAD_DIR
 // (almacén incremental cifrado, ver backup-files.ts) en UPLOAD_DIR/backups y, si está configurado, en un destino
@@ -116,8 +117,6 @@ export function backupKeyState(): "ok" | "missing" | "invalid" {
   return backupKey() ? "ok" : "invalid";
 }
 
-export { localFilesEnabled } from "./backup-dest";
-
 /**
  * BACKUP_PAUSE=1: detiene las tareas automáticas de copia (la diaria, la subida al destino externo y la prueba de
  * restauración), p. ej. mientras se restaura tras perder la base de datos o el volumen, para que la primera copia de
@@ -127,7 +126,7 @@ export function backupPaused(env: Record<string, string | undefined> = process.e
   return /^(1|true|yes|on)$/i.test(env.BACKUP_PAUSE?.trim() ?? "");
 }
 
-export function localDestination(): DirDestination {
+function localDestination(): DirDestination {
   return new DirDestination("local", backupsDir(), localFilesEnabled(), "UPLOAD_DIR/backups");
 }
 
@@ -325,7 +324,7 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     logEvent({
       category: "system",
       action: "backup.created",
-      message: `Copia de seguridad creada: ${name} (${Math.round(bytes / 1024)} KB, ${dbManifest.totalRows} filas, ${manifest.fileCount} ficheros)`,
+      message: `Copia de seguridad creada: ${name} (${logSize(bytes)}, ${dbManifest.totalRows} filas, ${manifest.fileCount} ficheros)`,
       durationMs: run.durationMs,
       details: { file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: run.filesNew, pruned: pruned.removedBackups, objectsRemoved: pruned.removedObjects, tempRemoved: pruned.removedTemp ?? 0 },
     });
@@ -515,7 +514,7 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
         run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, durationMs: Date.now() - started, warning };
         logEvent({
           level: warning ? "warn" : "info", category: "system", action: "backup.external",
-          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${Math.round(sync.bytes / 1024)} KB)${warning ? `. ${warning}` : ""}`,
+          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${logSize(sync.bytes)})${warning ? `. ${warning}` : ""}`,
           durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null },
         });
       } catch (err) {

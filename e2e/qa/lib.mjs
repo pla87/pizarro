@@ -226,7 +226,8 @@ export async function login(page, email) {
   await board(page);
 }
 export async function board(page) {
-  await page.locator(`[aria-label="${COL.backlog}"]`).first().waitFor({ timeout: 20000 });
+  // En el móvil la columna a la vista puede ser otra (se recuerda la última vista por proyecto): basta con que esté.
+  await page.locator(`[aria-label="${COL.backlog}"]`).first().waitFor({ state: "attached", timeout: 20000 });
   await sleep(500); // hidratación de React (los atajos se registran al montar)
 }
 /**

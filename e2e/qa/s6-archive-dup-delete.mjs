@@ -98,7 +98,7 @@ export async function run() {
   await U.openTask(p, "T2");
   await U.dialog(p).getByRole("button", { name: "Borrar", exact: true }).first().click();
   const confirm = p.locator("[role=dialog]").last();
-  await confirm.getByText("¿Borrar definitivamente esta tarea y sus adjuntos?").waitFor();
+  await confirm.getByText("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después.").waitFor();
   // Cancelar no borra
   await confirm.getByRole("button", { name: /Cancelar/ }).click();
   await L.sleep(400);
@@ -124,13 +124,13 @@ export async function run() {
 
   // --- archivar y borrar varias a la vez (barra de selección) ---
   await L.reload(p);
-  for (const t of ["T1", "T3"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["T1", "T3"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Archivar", exact: true }).last().click();
   await L.eqEventually("archivar varias: ambas archivadas", async () => (await full("T1"))[0].archived && (await full("T3"))[0].archived, true);
   await L.eqEventually("archivar varias: UI", () => U.uiOrder(p, COL.doing), ["T2", "T4"]);
   await U.undoKey(p, "Control+z");
   await L.eqEventually("deshacer archivar varias: ambas activas en su sitio", () => L.dbOrder(COL.doing), ["T1", "T2", "T3", "T4"]);
-  for (const t of ["T2", "T4"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").click();
+  for (const t of ["T2", "T4"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Borrar", exact: true }).last().click();
   await p.locator("[role=dialog]").last().getByRole("button", { name: "Borrar", exact: true }).click();
   await L.eqEventually("borrar varias: ambas borradas", async () => (await count("T2")) + (await count("T4")), 0);

@@ -1,6 +1,93 @@
 {
   "versions": [
     {
+      "version": "1.60.0",
+      "date": "2026-11-20",
+      "releasedAt": "2026-11-20T12:55:35+01:00",
+      "summary": "Tablero en vivo más barato (presencia por el canal y recarga cada 15 min), iconos de Nueva tarea junto a la X, auditorías de escritorio y móvil, ZIP de releases en flujo, emails ajenos ocultos, calendario y Administración en el móvil, accesibilidad y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Calendario: las tareas vencidas llevan borde rojo y, arriba, «N vencidas de antes de este mes» las lista; en el móvil el mes actual se abre en el día de hoy (o en ese aviso, con «Ir a hoy»).",
+          "Página «No encontrado» propia y avisos al pedir una pestaña de Ajustes que no existe; las pestañas se pueden abrir por su nombre (`?tab=plantillas`), también con ancla.",
+          "Administración → Usuarios en el móvil: las acciones de cada persona en un botón «⋯»."
+        ],
+        "mejoras": [
+          "«Copiar tarea» e «Importar tarea» de «Nueva tarea» van junto a la X, como en el detalle (en el móvil, en «⋯»).",
+          "La flecha de los desplegables se separa un poco del borde.",
+          "Duplicar una tarea que se repite crea la copia sin repetición y lo avisa.",
+          "Quién está en el tablero y quién tiene abierta cada tarea se actualiza al momento por la conexión en vivo, y el tablero solo se recarga entero cada 15 minutos mientras esa conexión funciona: mucho menos trabajo de servidor.",
+          "Filtros: el panel no se mueve al activar uno, las columnas sin resultados dicen «Ninguna tarjeta coincide», con un aviso si no coincide nada, y «Generar Release» avisa de que incluye lo oculto por el filtro.",
+          "Móvil: la lupa abre el buscador con el cursor puesto, salta a la columna con resultados, recuerda la última columna vista, muestra la columna recién creada, indica con un degradado que hay más pestañas y las tarjetas ya no saltan al cargar.",
+          "Con una tarea abierta, los botones flotantes no tapan el diálogo; en Documentación (móvil) «Nueva tarea» va en el pie del visor.",
+          "El informe semanal se dirige a una persona del proyecto por su nombre; las direcciones ajenas se ven enmascaradas y el cambio de email no permite averiguar qué emails tienen cuenta.",
+          "Borrar una release avisa de que no se puede deshacer y su número no se reutiliza; al desplegar, el historial de cada tarea lo apunta.",
+          "Descargar adjuntos en ZIP: lo descarga el propio navegador, con su progreso, y el servidor apenas usa memoria aunque el paquete sea grande.",
+          "Mis tareas: el rojo solo marca las vencidas; plurales correctos.",
+          "Barra de estado de la app instalada con el tema elegido; pestañas con el nombre del proyecto; zonas de toque más grandes en el detalle y Nueva tarea; textos de borrar tarea que recuerdan que se puede deshacer; uso de adjuntos en KB."
+        ],
+        "correcciones": [
+          "Error «Algo ha fallado» de hidratación (#418) en Mi perfil y Administración → Usuarios cuando un proxy (como Cloudflare) reescribe los emails.",
+          "El informe semanal seguía yendo al email antiguo cuando la persona cambiaba de email.",
+          "Al abrir y cerrar una tarea muy deprisa, otras personas podían seguir viendo que la tenías abierta.",
+          "Una conexión en vivo cortada al abrirse dejaba a la persona como presente y ocupaba memoria.",
+          "Dos personas que borran a la vez la misma release ya no ven un error.",
+          "Con la búsqueda activa en el móvil, los cambios de otras personas ya no te cambian de columna.",
+          "Una columna cuya única coincidencia es una tarea fija ya no dice «Ninguna tarjeta coincide».",
+          "Alt+P abre el selector de proyectos también desde el buscador; la rueda del ratón sobre el detalle ya no desplaza la columna de detrás.",
+          "Recuento de tarjetas anunciado dos veces y controles anidados en las tarjetas y en las tareas fijas (lectores de pantalla)."
+        ],
+        "tecnicos": [
+          "Canal en vivo con `event: ping` cada 25 s y eventos `presence` calculados una vez por proyecto; comprobación de acceso del canal cada 5 min.",
+          "ZIP de releases en flujo (de +806 MB a +37 MB con 400 MB), vales de descarga, `Content-Length` conservado y huecos que se sueltan tras 60 s sin lectura.",
+          "Tareas de fondo cada 60 s; retirados `hasTaskCapacity`, `IMAGE`, `zip.ts`, 43 exports y 29 tipos sin uso fuera de su módulo, y un índice redundante (migración nueva).",
+          "Imagen arm64 en máquinas ARM nativas; suites e2e renombradas por tema, mapa e2e/suites.json y `AFFECTED=1 scripts/e2e-all.sh`.",
+          "Diálogos con `inert` en el fondo; `EmailSafe`; mensajes de validación por defecto traducidos («Datos no válidos.»)."
+        ]
+      },
+      "en": {
+        "summary": "Cheaper live board (presence over the live channel and full reload every 15 min), New task icons next to the X, desktop and mobile audits, streamed release ZIPs, other people's emails hidden, calendar and Administration on mobile, accessibility and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Calendar: overdue tasks have a red border and «N overdue from before this month» lists them at the top; on mobile the current month opens on today (or on that notice, with «Go to today»).",
+            "Own «Not found» page and a notice when asking for a Settings tab that doesn't exist; tabs can be opened by name (`?tab=templates`), also with an anchor.",
+            "Administration → Users on mobile: each person's actions in a «⋯» button."
+          ],
+          "mejoras": [
+            "«Copy task» and «Import task» in «New task» sit next to the X, as in the task detail (on mobile, under «⋯»).",
+            "The dropdown arrow moves slightly away from the edge.",
+            "Duplicating a repeating task creates the copy without repetition and says so.",
+            "Who is on the board and who has each task open update instantly over the live connection, and the board only fully reloads every 15 minutes while that connection works: much less server work.",
+            "Filters: the panel no longer moves when one is turned on, columns without results say «No card matches», with a notice if nothing matches, and «Generate release» warns that it includes what the filter hides.",
+            "Mobile: the search icon opens search with the cursor in place, jumps to the column with results, remembers the last column viewed, shows a newly created column, hints with a fade that there are more tabs, and cards no longer jump on load.",
+            "With a task open, floating buttons don't cover the dialog; in Documentation (mobile) «New task» sits in the viewer footer.",
+            "The weekly report goes to a project person chosen by name; other people's addresses are masked and changing your email no longer reveals which emails have an account.",
+            "Deleting a release warns that it can't be undone and its number isn't reused; deploying records it in each task's history.",
+            "Download attachments as ZIP: the browser downloads it itself, with progress, and the server barely uses memory even for large packages.",
+            "My tasks: red only marks overdue tasks; correct plurals.",
+            "Installed app status bar follows the chosen theme; tabs show the project name; larger touch targets in the detail and New task; delete texts remind that it can be undone; attachment usage in KB."
+          ],
+          "correcciones": [
+            "«Something went wrong» hydration error (#418) in My profile and Administration → Users when a proxy (such as Cloudflare) rewrites emails.",
+            "The weekly report kept going to the old email after the person changed it.",
+            "Opening and closing a task very quickly could leave others seeing that you had it open.",
+            "A live connection cut while opening left the person as present and used memory.",
+            "Two people deleting the same release at once no longer get an error.",
+            "With search active on mobile, other people's changes no longer switch your column.",
+            "A column whose only match is a fixed task no longer says «No card matches».",
+            "Alt+P opens the project picker from the search box too; the mouse wheel over the task detail no longer scrolls the column behind.",
+            "Card count announced twice and nested controls in cards and fixed tasks (screen readers)."
+          ],
+          "tecnicos": [
+            "Live channel with `event: ping` every 25 s and `presence` events computed once per project; channel access check every 5 min.",
+            "Streamed release ZIPs (from +806 MB to +37 MB for 400 MB), download tickets, preserved `Content-Length` and slots released after 60 s without reading.",
+            "Background jobs every 60 s; removed `hasTaskCapacity`, `IMAGE`, `zip.ts`, 43 exports and 29 types unused outside their module, and a redundant index (new migration).",
+            "Native ARM machines for the arm64 image; e2e suites renamed by topic, e2e/suites.json map and `AFFECTED=1 scripts/e2e-all.sh`.",
+            "Dialogs make the background `inert`; `EmailSafe`; default validation messages translated («Invalid data.»)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.59.0",
       "date": "2026-11-20",
       "releasedAt": "2026-11-20T02:51:23+01:00",

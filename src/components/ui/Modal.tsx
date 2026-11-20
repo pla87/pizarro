@@ -21,6 +21,8 @@ interface ModalProps {
   bodyClassName?: string;
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
+  /** Botones de la cabecera estándar, justo a la izquierda de la X (p. ej. «Copiar tarea» e «Importar tarea»). */
+  headerActions?: React.ReactNode;
   /** Nombre accesible del diálogo cuando no hay `title` que lo dé (p. ej. con `header` propio). */
   ariaLabel?: string;
   /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
@@ -39,7 +41,7 @@ interface ModalProps {
   onAddSecond?: () => void;
   /** Escritorio (lg+): con `onAddSecond`, un segundo botón encima del «+» que abre «Varias tareas» al lado. */
   onAddSecondBulk?: () => void;
-  /** Con `onAddSecond`, muestra también en móvil los dos botones redondos flotantes (como los del tablero). */
+  /** Con `onAddSecond`, muestra también en móvil y tableta los dos botones redondos del tablero, en el pie de la hoja. */
   mobileAdd?: boolean;
 }
 
@@ -88,12 +90,48 @@ export const PairLeftWidthContext = createContext<string | undefined>(undefined)
 const PAIR_RIGHT = "44rem";
 
 /** Botones redondos de «Nueva tarea» (grande, relleno) y «Varias tareas» (más pequeño): los mismos en móvil y escritorio. */
-const NEW_BTN = "h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
-const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
+const NEW_BTN_LOOK = "items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
+const BULK_BTN_LOOK = "items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
+const NEW_BTN = `h-14 w-14 ${NEW_BTN_LOOK}`;
+const BULK_BTN = `h-11 w-11 ${BULK_BTN_LOOK}`;
 
 const noopSubscribe = () => () => {};
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+/** Veces que cada elemento de <body> está «inert» por un Modal abierto (varios modales pueden dejar fuera el mismo). */
+const inertCounts = new Map<HTMLElement, number>();
+
+/**
+ * Con un Modal abierto, lo de debajo deja de existir para el teclado y los lectores de pantalla: cada hijo de <body> que
+ * no contiene el modal pasa a `inert` (aria-modal solo no basta: el resto seguía en el árbol de accesibilidad). Se salvan
+ * las regiones vivas (los avisos emergentes y el de sin conexión: `aria-live`), lo marcado con `data-pz-layer` y, en una
+ * pareja de modales (side «left»/«right»), el otro modal. Lo que se abra después desde el propio modal (un menú, el visor
+ * de imágenes, otro modal) se pinta en <body> más tarde y no queda dentro. Devuelve la función que lo deshace.
+ */
+function inertBackground(keep: HTMLElement, keepModals: boolean): () => void {
+  const touched: HTMLElement[] = [];
+  for (const el of Array.from(document.body.children)) {
+    if (!(el instanceof HTMLElement) || el === keep || el.contains(keep)) continue;
+    if (el.tagName === "SCRIPT" || el.tagName === "STYLE" || el.tagName === "TEMPLATE" || el.tagName === "NEXT-ROUTE-ANNOUNCER") continue;
+    if (el.hasAttribute("aria-live") || el.hasAttribute("data-pz-layer") || (keepModals && el.hasAttribute("data-pz-modal"))) continue;
+    const n = inertCounts.get(el) ?? 0;
+    if (n === 0 && el.inert) continue; // ya lo estaba por otro motivo: no se toca
+    if (n === 0) el.inert = true;
+    inertCounts.set(el, n + 1);
+    touched.push(el);
+  }
+  return () => {
+    for (const el of touched) {
+      const n = (inertCounts.get(el) ?? 1) - 1;
+      if (n > 0) inertCounts.set(el, n);
+      else {
+        inertCounts.delete(el);
+        el.inert = false;
+      }
+    }
+  };
+}
+
+export function Modal({ open, onClose, title, children, footer, size = "md", header, headerActions, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
   const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
@@ -101,6 +139,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -135,6 +174,15 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       setVv(null);
     };
   }, [open]);
+
+  // Fondo «inert» mientras está abierto (ver inertBackground). Va antes que el efecto que devuelve el foco al cerrar: React
+  // deshace los efectos en este orden, y un elemento «inert» no puede recibir el foco. Espera al portal (`hydrated`).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!open || !hydrated || !root) return;
+    return inertBackground(root, side !== "center");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `side` no cambia mientras está abierto
+  }, [open, hydrated]);
 
   useEffect(() => {
     if (!open) return;
@@ -178,9 +226,26 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           "--wr": `min(${PAIR_RIGHT}, calc(100% - 3rem - var(--wl)))`,
           "--x0": "calc((100% - var(--wl) - var(--wr) - 1rem) / 2)",
         } as React.CSSProperties);
+  // Móvil y tableta (`mobileAdd`): los mismos dos botones que el tablero («Crear varias tareas» y «Nueva tarea»), en el pie
+  // de la hoja y no flotando encima: flotantes tapaban lo que se estaba viendo (la vista previa de un documento) y los botones
+  // del pie. En escritorio van al lado del panel (abajo).
+  const mobileButtons = mobileAdd && onAddSecond && side === "center" ? (
+    <span className="ml-auto flex items-center gap-2 lg:hidden">
+      {onAddSecondBulk && (
+        <button type="button" onClick={onAddSecondBulk} className={cn(BULK_BTN_LOOK, "flex h-10 w-10")} aria-label={t("Crear varias tareas")}>
+          <PlusStack size={20} />
+        </button>
+      )}
+      <button type="button" onClick={onAddSecond} className={cn(NEW_BTN_LOOK, "flex h-11 w-11")} aria-label={t("Nueva tarea o captura")}>
+        <Plus size={22} />
+      </button>
+    </span>
+  ) : null;
   if (!open || !hydrated) return null;
   return createPortal(
     <div
+      ref={rootRef}
+      data-pz-modal=""
       className={cn(
         "fixed inset-0 z-50 flex justify-center overscroll-contain sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",
@@ -224,15 +289,26 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         {header ?? (
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
             <h2 id={titleId} className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-            <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
-              <X size={18} />
-            </button>
+            {headerActions ? (
+              // Como en la cabecera del detalle de una tarea: los botones y la X juntos, con la misma separación.
+              <div className="flex shrink-0 items-center gap-2">
+                {headerActions}
+                <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
+                <X size={18} />
+              </button>
+            )}
           </div>
         )}
         <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [--sticky-top:-1rem]", bodyClassName)}>{children}</div>
-        {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
+        {(footer || mobileButtons) && (
+          <div className={cn("flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800", !footer && "lg:hidden")}>
             {footer}
+            {mobileButtons}
           </div>
         )}
         {onAddSecond && onAddSecondBulk && side === "center" && (
@@ -258,19 +334,6 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           </button>
         )}
       </div>
-      {/* Móvil: los mismos dos botones redondos que el tablero, por encima de la hoja (no hay hueco al lado). */}
-      {mobileAdd && onAddSecond && side === "center" && (
-        <>
-          {onAddSecondBulk && (
-            <button type="button" onClick={onAddSecondBulk} className={cn("fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+9.5rem)]", BULK_BTN, "flex lg:hidden")} aria-label={t("Crear varias tareas")}>
-              <PlusStack size={22} />
-            </button>
-          )}
-          <button type="button" onClick={onAddSecond} className={cn("fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]", NEW_BTN, "flex lg:hidden")} aria-label={t("Nueva tarea o captura")}>
-            <Plus size={26} />
-          </button>
-        </>
-      )}
     </div>,
     document.body,
   );

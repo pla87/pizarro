@@ -20,7 +20,8 @@ interface BoardShortcutHandlers {
 /**
  * Atajos de teclado del tablero (escritorio). Se usa `e.code` con `altKey` porque en Mac Option+letra
  * produce otro carácter; con Ctrl/⌘ pulsados no se dispara nada. Los atajos de una tecla (/, ?) y los
- * de Alt ignoran los campos de texto, salvo Alt+N y Alt+Shift+N dentro de un modal (para abrir el segundo al lado).
+ * de Alt ignoran los campos de texto, salvo Alt+N y Alt+Shift+N dentro de un modal (para abrir el segundo al lado) y Alt+P
+ * fuera de los diálogos (el selector de proyectos se abre también con el foco en el buscador).
  * Alt+S/Alt+A (diálogos de tarea), Alt+Z y Alt+Shift+Z (UndoButton) y los de la tarjeta enfocada (Alt+M, Alt+←/→, Alt+D,
  * Alt+Shift+D, F2; en TaskCard) viven junto a lo que accionan.
  */
@@ -51,11 +52,13 @@ export function useBoardShortcuts(handlers: BoardShortcutHandlers): void {
           // Con un diálogo de tarea abierto, los dos abren su hueco al lado (como los botones de junto al diálogo).
           if (e.shiftKey) h.bulk();
           else h.newTask();
-        } else if (e.shiftKey || typing || open) {
-          return;
-        } else if (e.code === "KeyP") {
+        } else if (e.code === "KeyP" && !e.shiftKey && !open) {
+          // También desde el buscador (o cualquier campo fuera de un diálogo): sin preventDefault el campo recibía la letra
+          // («p», o «π» con Option en Mac) y el selector no se abría.
           e.preventDefault();
           window.dispatchEvent(new Event(OPEN_PROJECT_MENU_EVENT));
+        } else if (e.shiftKey || typing || open) {
+          return;
         } else if (e.code === "KeyR") {
           e.preventDefault();
           h.release();

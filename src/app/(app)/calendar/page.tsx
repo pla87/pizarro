@@ -29,6 +29,10 @@ const MAX_REPEAT_SOURCES = 300;
 const MAX_REPEATS = 500;
 /** Proyectos que se aceptan en `?project=`. */
 const MAX_PROJECT_FILTER = 50;
+/** Vencidas de antes de la cuadrícula que se listan arriba («N vencidas»); el total se cuenta aparte. */
+const MAX_OVERDUE = 50;
+const OVERDUE_SELECT = { id: true, title: true, dueDate: true, project: { select: { id: true, name: true } }, kind: { select: { id: true, name: true, color: true } } } satisfies Prisma.TaskSelect;
+type OverdueRow = Prisma.TaskGetPayload<{ select: typeof OVERDUE_SELECT }>;
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUserPage();
@@ -109,8 +113,23 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     : {};
   // También las tareas con rango que terminan después del mes mostrado pero empiezan dentro (solo si el proyecto tiene fecha de inicio).
   const overlapsEnd: Prisma.TaskWhereInput = { project: { AND: [projectWhere, { taskFields: { has: "startDate" } }] }, archivedAt: null, startDate: { lte: range.lte }, dueDate: { gt: range.lte } };
-  // Las tareas del mes y las que se repiten no dependen una de otra: las dos consultas en paralelo.
-  const [rows, repeatRows] = await Promise.all([
+  // Vencidas sin terminar de antes de lo que se ve (mes actual o siguientes): si no, quedan fuera de la vista sin aviso.
+  const overdueWhere: Prisma.TaskWhereInput | null = month >= today.slice(0, 7)
+    ? { AND: [{ project: projectWhere, archivedAt: null, column: { isDone: false }, dueDate: { lt: isoToDate(grid.start < today ? grid.start : today) } }, personWhere] }
+    : null;
+  // Las tareas del mes, las que se repiten y las vencidas no dependen unas de otras: todas en paralelo.
+  const overduePromise = overdueWhere
+    ? Promise.all([
+        db.task.findMany({
+          where: overdueWhere,
+          take: MAX_OVERDUE,
+          orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+          select: OVERDUE_SELECT,
+        }),
+        db.task.count({ where: overdueWhere }),
+      ])
+    : Promise.resolve([[] as OverdueRow[], 0] as const);
+  const [rows, repeatRows, [overdueRows, overdueTotal]] = await Promise.all([
     db.task.findMany({
       where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
       take: MAX_TASKS,
@@ -143,6 +162,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         kind: { select: { id: true, name: true, color: true } },
       },
     }),
+    overduePromise,
   ]);
   const locale = await getLocale();
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
@@ -175,6 +195,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     done: r.column.isDone,
   }));
 
+  const overdue: CalendarTask[] = overdueRows.map((r) => ({
+    id: r.id,
+    title: mentionsToPlain(r.title),
+    due: dateToIso(r.dueDate)!,
+    start: null,
+    projectId: r.project.id,
+    projectName: r.project.name,
+    kind: { name: localizeGeneralKind(r.kind, locale).name, color: r.kind.color },
+    done: false,
+  }));
+
   const deliverables: CalendarDeliverable[] = deliverableRows.map((d) => ({
     id: d.id,
     name: d.name,
@@ -191,6 +222,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       today={today}
       weeks={grid.weeks}
       tasks={tasks}
+      overdue={{ tasks: overdue, total: overdueTotal }}
       repeats={repeats}
       deliverables={deliverables}
       projects={options}

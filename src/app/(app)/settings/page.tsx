@@ -14,7 +14,8 @@ import { deviceLabel } from "@/lib/user-agent";
 import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
-import { parseProfileTab } from "./profile-tabs";
+import { resolveProfileTab } from "./profile-tabs";
+import { CanonicalTabParam } from "@/components/CanonicalTabParam";
 import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
@@ -48,7 +49,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const t = await getT();
   const { google, tab: tabParam, delete: deleteParam } = await searchParams;
   // El aviso de vuelta de Google se muestra en «Cuenta», donde está esa sección.
-  const tab = google ? "cuenta" : parseProfileTab(tabParam);
+  const asked = resolveProfileTab(tabParam);
+  // Otro nombre de una pestaña («?tab=account», «?tab=Notificaciones»): se pinta la suya y el cliente pasa la dirección a su
+  // id (el de los enlaces de las pestañas) conservando el resto y el ancla, que un redirect del servidor perdía.
+  const canonicalTab = !google && asked.kind === "alias" ? asked.tab : null;
+  const tab = google ? "cuenta" : asked.tab;
   const row = await db.user.findUniqueOrThrow({
     where: { id: user.id },
     select: {
@@ -92,6 +97,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   if (googleMessage) googleMessage = { ...googleMessage, text: t(googleMessage.text) };
   return (
     <>
+      {canonicalTab && <CanonicalTabParam tab={canonicalTab} />}
       <ProfileSettings
         name={row.name}
         email={row.email}
@@ -119,6 +125,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </>
         }
         tab={tab}
+        unknownTab={!google && asked.kind === "unknown" ? asked.asked : undefined}
         preferencesExtra={
           user.role === "ADMIN" ? <ProjectPicksSection projects={pickProjects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate, picked: p.adminPicks.length > 0 }))} /> : null
         }

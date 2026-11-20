@@ -56,7 +56,7 @@ export async function telegramCall<T>(token: string, method: string, body: Recor
   return json.result as T;
 }
 
-export interface BotInfo {
+interface BotInfo {
   id: string;
   username: string;
   name: string;
@@ -326,7 +326,7 @@ export async function createTelegramLinkCode(userId: string, now = new Date()): 
 }
 
 /** Gasta un código: devuelve la persona (activa) a la que pertenece, o null si no existe, caducó o ya se usó. */
-export async function consumeTelegramLinkCode(code: string, now = new Date()): Promise<{ id: string; name: string; locale: string } | null> {
+async function consumeTelegramLinkCode(code: string, now = new Date()): Promise<{ id: string; name: string; locale: string } | null> {
   const row = await db.telegramLinkCode.findFirst({ where: { hash: { in: labelledHmacCandidates("telegram-link", code) }, expiresAt: { gt: now } }, select: { hash: true, userId: true } });
   if (!row) return null;
   // Solo quien lo borra lo gasta: dos /start con el mismo código a la vez no enlazan dos veces.

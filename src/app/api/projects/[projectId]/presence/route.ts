@@ -1,5 +1,4 @@
 import { canAccessProject } from "@/lib/access-cache";
-import { db } from "@/lib/db";
 import { activeUsers, notePresence, openTaskViewers } from "@/lib/presence";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -26,12 +25,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   const project = { id: parsed.data };
   notePresence(project.id, user.id, user.name);
   const users = activeUsers(project.id).map(({ id, name }) => ({ id, name }));
-  // Tareas abiertas por otras personas, solo las de este proyecto (una consulta, y solo si hay alguna).
-  const open = openTaskViewers(user.id);
-  const taskViewers: Record<string, { id: string; name: string }[]> = {};
-  if (open.size > 0) {
-    const tasks = await db.task.findMany({ where: { id: { in: [...open.keys()] }, projectId: project.id }, select: { id: true } });
-    for (const task of tasks) taskViewers[task.id] = open.get(task.id)!;
-  }
+  // Tareas abiertas por otras personas, solo las de este proyecto (cada aviso se anotó con el proyecto de su tarea, ya
+  // comprobado: se filtra en memoria, sin consulta).
+  const taskViewers = Object.fromEntries(openTaskViewers(project.id, user.id));
   return Response.json({ users, viewers: taskViewers }, { headers: { "Cache-Control": "no-store" } });
 }

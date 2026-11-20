@@ -62,7 +62,7 @@ export function ColorPicker({ value, onChange, allowNone = true, label, colors =
             aria-checked={current === null}
             tabIndex={i === tabIndexOf ? 0 : -1}
             onClick={() => onChange(null)}
-            className={cn("h-7 w-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600", base, current === null && selectedRing)}
+            className={cn("touch-target h-7 w-7 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600", base, current === null && selectedRing)}
             aria-label={name}
             title={name}
           />
@@ -74,7 +74,7 @@ export function ColorPicker({ value, onChange, allowNone = true, label, colors =
             aria-checked={current === c}
             tabIndex={i === tabIndexOf ? 0 : -1}
             onClick={() => onChange(c)}
-            className={cn("flex h-7 w-7 items-center justify-center rounded-full", swatchBorder(c), base, current === c && selectedRing)}
+            className={cn("touch-target flex h-7 w-7 items-center justify-center rounded-full", swatchBorder(c), base, current === c && selectedRing)}
             style={{ backgroundColor: c }}
             aria-label={t("Color {name}", { name })}
             title={name}
@@ -85,7 +85,7 @@ export function ColorPicker({ value, onChange, allowNone = true, label, colors =
       })}
     </div>
       {allowCustom && (
-        <label className={cn("relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus", value && checked < 0 && selectedRing)} title={t("Otro color")}>
+        <label className={cn("touch-target relative h-7 w-7 cursor-pointer rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus", value && checked < 0 && selectedRing)} title={t("Otro color")}>
           <input type="color" value={value ?? "#6366f1"} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={t("Elegir otro color")} />
         </label>
       )}

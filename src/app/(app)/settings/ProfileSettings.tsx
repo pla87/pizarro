@@ -22,6 +22,8 @@ import type { ProfileTab } from "./profile-tabs";
 import type { CardStyleValue, EditorModeValue, TemplateOption } from "@/lib/types";
 import { useActionTransition } from "@/components/useActionTransition";
 import { actionThrowResult } from "@/lib/stale-action";
+import { EmailSafe } from "@/components/ui/EmailSafe";
+import { applyThemeColor } from "@/lib/theme-color";
 
 const USER_TEMPLATE_ACTIONS = { create: createReleaseTemplate, update: updateReleaseTemplate, move: moveReleaseTemplate, remove: deleteReleaseTemplate };
 
@@ -60,6 +62,8 @@ interface Props {
   /** Bloque extra bajo «Avisos» (Telegram y WhatsApp, avisos por email de más tipos y resumen diario). */
   notificationExtras?: React.ReactNode;
   tab: ProfileTab;
+  /** `?tab=` pedido que no es ninguna pestaña (se abre «Cuenta» y se avisa). */
+  unknownTab?: string;
   /** Pestaña «Cuenta»: cambio de email, verificación en dos pasos y sesiones (secciones del servidor). */
   accountExtra?: React.ReactNode;
   /** Pestaña «Cuenta», al final (tras Google): «Borrar mi cuenta». */
@@ -84,7 +88,7 @@ export function ProfileSettings(props: Props) {
     <div className="mx-auto max-w-3xl space-y-5 p-4 md:p-6">
       <h1 className="text-xl font-semibold">{t("Mi perfil")}</h1>
 
-      <ProfileTabs active={props.tab} />
+      <ProfileTabs active={props.tab} unknown={props.unknownTab} />
 
       {props.tab === "preferencias" && (
         <>
@@ -147,7 +151,7 @@ export function ProfileSettings(props: Props) {
           >
             <div>
               <div className="label">Email</div>
-              <p className="text-sm">{props.email}</p>
+              <p className="text-sm"><EmailSafe text={props.email} /></p>
             </div>
             <div>
               <label className="label" htmlFor="pf-name">{t("Nombre visible")}</label>
@@ -311,7 +315,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
           <p className="text-sm text-slate-500">{t("Un administrador debe configurar el acceso con Google en Administración → Ajustes.")}</p>
         ) : google.email ? (
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-sm">{t("Conectada como")} <strong>{google.email}</strong></span>
+            <span className="text-sm">{t("Conectada como")} <strong><EmailSafe text={google.email} /></strong></span>
             <button
               className="btn-secondary"
               disabled={pending}
@@ -377,6 +381,7 @@ function applyTheme(value: ThemeValue) {
   const root = document.documentElement;
   if (value === "SYSTEM") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", value.toLowerCase());
+  applyThemeColor(value === "SYSTEM" ? undefined : value === "DARK" ? "dark" : "light");
 }
 
 /** Aplica el acento al instante en <html> (BLUE = sin atributo). */

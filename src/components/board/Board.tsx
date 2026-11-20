@@ -14,7 +14,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
@@ -40,14 +40,15 @@ import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit"
 import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
-import { useCardActions } from "./cardActions";
+import { duplicatedMessage, useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
 import { PENDING_COPY_PREFIX, isPendingCopy, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
 import { createMoveTurns } from "./moveTurns";
 import { useReviewGuard } from "./reviewGuard";
 import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanitizeFilters, searchTerms, taskMatchesFilters, taskSearchText, type BoardFilters, type SearchNames } from "./filters";
-import { Presence } from "./Presence";
+import { Presence, setLivePresence, setLiveProject } from "./Presence";
+import { setLiveStream } from "./taskPresence";
 import { ListView } from "./ListView";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
 import { ViewToggle } from "./ViewToggle";
@@ -64,7 +65,7 @@ import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./uplo
 import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
-import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, shouldRefreshOnFocus } from "@/lib/focus-refresh";
 import { cardCount } from "./count-texts";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
@@ -123,6 +124,42 @@ function usePageVisible(): boolean {
   );
 }
 
+/**
+ * Marca `data-more-left` / `data-more-right` en el envoltorio de una fila con scroll lateral (su primer `[data-mobile-tabs]`)
+ * mientras quedan elementos por ese lado: el CSS pinta un degradado en el borde. Sin estado de React (atributos), con el
+ * scroll de la fila y un ResizeObserver sobre la fila y su contenido (pestañas que se añaden o cambian de ancho).
+ */
+function scrollEdges(wrapper: HTMLElement | null): (() => void) | undefined {
+  const row = wrapper?.querySelector<HTMLElement>("[data-mobile-tabs]");
+  if (!wrapper || !row) return;
+  let frame = 0;
+  const measure = () => {
+    frame = 0;
+    const max = row.scrollWidth - row.clientWidth;
+    wrapper.toggleAttribute("data-more-left", row.scrollLeft > 1);
+    wrapper.toggleAttribute("data-more-right", max - row.scrollLeft > 1);
+  };
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(measure);
+  };
+  measure();
+  row.addEventListener("scroll", schedule, { passive: true });
+  const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+  ro?.observe(row);
+  const mo = new MutationObserver(() => {
+    schedule();
+    for (const child of row.children) ro?.observe(child);
+  });
+  mo.observe(row, { childList: true });
+  for (const child of row.children) ro?.observe(child);
+  return () => {
+    if (frame) cancelAnimationFrame(frame);
+    row.removeEventListener("scroll", schedule);
+    ro?.disconnect();
+    mo.disconnect();
+  };
+}
+
 /** Quita `?task=` de la dirección sin pedir la página otra vez (ni recargar el tablero). */
 function dropTaskParam(): void {
   const url = new URL(window.location.href);
@@ -167,8 +204,6 @@ function MobileTab({ active, onClick, over = false, title, children }: { active:
     </button>
   );
 }
-// Respaldo del canal en vivo (SSE), que ya avisa de cada cambio: no hace falta refrescar más a menudo.
-const REFRESH_MS = 120_000;
 
 type Items = Record<string, string[]>;
 /** Lista vacía compartida: un `[]` nuevo en cada dibujo haría repintar columnas memorizadas que no han cambiado. */
@@ -278,6 +313,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const mobileSearchRef = useRef<HTMLInputElement>(null);
+  const tabsEdgeRef = useCallback((el: HTMLDivElement | null) => scrollEdges(el), []);
   // Móvil: el buscador y los filtros se despliegan desde un icono (ver más abajo).
   const [mobileSearch, setMobileSearch] = useState(false);
   // Filtros rápidos: se recuerdan por persona y proyecto (localStorage; si no está disponible, solo dura la sesión).
@@ -427,7 +463,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // estado del canal en vivo (abierto ahora; cortado desde la última sincronización, con avisos que pudieron perderse).
   const lastSyncAt = useRef(0); // se rellena al montar (efecto de datos)
   // `paused`: cerrado por tener la pestaña oculta (al volver a verse se reabre y su saludo decide si refrescar).
-  const channel = useRef({ open: false, gap: false, paused: false });
+  // `heardAt`: último mensaje del servidor por el canal (el `ping` llega cada 25 s): sin él hace un minuto, el canal no está sano.
+  const channel = useRef({ open: false, gap: false, paused: false, heardAt: 0 });
   // Refresco escalonado pendiente por un cambio de otra persona (ver foreignRefreshDelay): cualquier refresco lo cubre.
   const foreignTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doRefresh = useCallback(() => {
@@ -626,7 +663,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
     source.addEventListener("open", () => {
       live.open = true;
+      live.heardAt = performance.now();
       root?.setAttribute("data-live", "open");
+    });
+    const heard = () => {
+      live.heardAt = performance.now();
+    };
+    // Evento periódico del servidor: el canal está sano (la recarga de respaldo se espacia: ver más abajo).
+    source.addEventListener("ping", heard);
+    // Quién está en el tablero y quién tiene abierta cada tarea: estado completo al conectar y después cada cambio.
+    source.addEventListener("presence", (e) => {
+      heard();
+      try {
+        const p = JSON.parse((e as MessageEvent<string>).data) as { users?: { id: string; name: string }[]; viewers?: Record<string, { id: string; name: string }[]> };
+        const viewers: Record<string, { id: string; name: string }[]> = {};
+        for (const [taskId, list] of Object.entries(p.viewers ?? {})) {
+          const others = list.filter((u) => u.id !== data.currentUserId);
+          if (others.length) viewers[taskId] = others;
+        }
+        setLiveProject(data.project.id);
+        setLivePresence(data.project.id, p.users ?? [], viewers);
+      } catch {
+        // Ilegible: se mantiene lo último conocido.
+      }
     });
     // EventSource reconecta solo, pero lo ocurrido mientras estuvo cortado no llega por el canal. Si el servidor respondió
     // con un error (p. ej. 503 mientras se apaga en un despliegue), el navegador da el canal por cerrado y no reintenta:
@@ -636,18 +695,30 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       live.open = false;
       root?.removeAttribute("data-live");
       live.gap = true;
+      // Sin canal, la presencia vuelve a preguntarse cada pocos segundos (Presence.tsx, TaskViewers.tsx).
+      setLiveStream(null);
+      setLiveProject(null);
       // Sin canal, el respaldo (al volver a la ventana, cada 2 minutos) vuelve a decidir los refrescos.
       live.paused = false;
       if (source.readyState === EventSource.CLOSED && !retry) retry = setTimeout(() => setSseEpoch((n) => n + 1), 5000);
     });
     // Saludo del servidor al conectar (también al reconectar solo): si se perdió algún aviso, se refresca.
     source.addEventListener("hello", (e) => {
-      const missed = missedWhileClosed(liveCursor, (e as MessageEvent<string>).data);
+      heard();
+      const raw = (e as MessageEvent<string>).data;
+      try {
+        const stream = (JSON.parse(raw) as { stream?: unknown }).stream;
+        setLiveStream(typeof stream === "string" ? stream : null);
+      } catch {
+        setLiveStream(null);
+      }
+      const missed = missedWhileClosed(liveCursor, raw);
       live.paused = false;
       if (missed) refresh();
       else live.gap = false;
     });
     source.addEventListener("change", (e) => {
+      heard();
       let cid: string | null = null;
       let change: unknown = null;
       try {
@@ -681,27 +752,40 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
+      setLiveStream(null);
+      setLiveProject(null);
       root?.removeAttribute("data-live");
       // Lo que llegue mientras está cerrado no se ve: al reabrir decide el saludo del servidor (o, sin él, el respaldo).
       live.gap = true;
     };
   }, [data.project.id, data.currentUserId, drainIncoming, refresh, sseEpoch, visible]);
 
-  // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Al volver no se recarga cada
-  // vez: se espacia según el estado del canal en vivo (reglas en lib/focus-refresh.ts).
+  // Refresco ligero de respaldo (por si el canal de avisos no llega) y al volver a la ventana. Con el canal sano (su `ping`
+  // llegó hace menos de un minuto) la recarga periódica es cada 15 minutos; sin él, cada 2. Al volver no se recarga cada
+  // vez: se espacia según el estado del canal en vivo. Reglas en lib/focus-refresh.ts.
   useEffect(() => {
     const idle = () => document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]");
+    const healthy = () => channelHealthy({ open: channel.current.open, sinceMessageMs: performance.now() - channel.current.heardAt });
     const tick = () => {
-      if (idle()) refresh();
+      // Canal abierto pero mudo (un proxy que no deja pasar nada): no da error, así que la presencia se quedaba congelada.
+      // Se da por caído: vuelven los sondeos de la presencia y se abre otro canal.
+      if (channelStalled({ open: channel.current.open, sinceMessageMs: performance.now() - channel.current.heardAt })) {
+        channel.current.open = false;
+        channel.current.gap = true;
+        setLiveStream(null);
+        setLiveProject(null);
+        setSseEpoch((n) => n + 1);
+      }
+      if (idle() && backupRefreshDue({ sinceSyncMs: performance.now() - lastSyncAt.current, healthy: healthy() })) refresh();
     };
     const onFocus = () => {
       if (!idle()) return;
-      const { open, gap, paused } = channel.current;
+      const { gap, paused } = channel.current;
       // Canal cerrado por tener la pestaña oculta y reabriéndose: decide su saludo (no se refresca dos veces).
       if (paused && typeof EventSource !== "undefined") return;
-      if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: open, channelGap: gap })) refresh();
+      if (shouldRefreshOnFocus({ sinceSyncMs: performance.now() - lastSyncAt.current, channelOpen: healthy(), channelGap: gap })) refresh();
     };
-    const timer = setInterval(tick, REFRESH_MS);
+    const timer = setInterval(tick, BACKUP_CHECK_MS);
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
     return () => {
@@ -797,7 +881,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   /** Tarjetas no archivadas de la columna (sin filtrar, con las fijas): la cifra que se compara con su límite. */
   const columnCardCount = (columnId: string) => (baseItems[columnId]?.length ?? 0) + (evergreenByColumn[columnId]?.length ?? 0);
   const nextReleaseColumn = sortedColumns.find((c) => c.role === "NEXT_RELEASE");
-  const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id ?? sortedColumns[0]?.id;
+  // Sin columna elegida (al abrir el tablero), la primera con tarjetas: la misma en el servidor y en el navegador. La última
+  // vista en este proyecto se recupera al montar (ver «Columna visible en móvil»).
+  const activeMobileColumn = sortedColumns.find((c) => c.id === mobileColumn)?.id
+    ?? sortedColumns.find((c) => (baseItems[c.id]?.length ?? 0) + (evergreenByColumn[c.id]?.length ?? 0) > 0)?.id
+    ?? sortedColumns[0]?.id;
 
   // Pegar una imagen en el tablero (sin diálogo abierto) crea una tarea con ella. Pegar EXACTAMENTE una tarea o varias en
   // JSON (con su marcador «pizarro.task» / «pizarro.tasks», sin nada alrededor) abre «Importar tareas» con el texto.
@@ -1081,7 +1169,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!ids.length) return;
     const ok = await confirm({
       title: ids.length === 1 ? t("Borrar tarea") : t("Borrar tareas"),
-      message: ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }),
+      message: ids.length === 1 ? t("¿Borrar la tarea seleccionada y sus adjuntos? Puedes deshacerlo justo después.") : t("¿Borrar las {n} tareas seleccionadas y sus adjuntos? Puedes deshacerlo justo después.", { n: ids.length }),
       confirmLabel: t("Borrar"),
       danger: true,
     });
@@ -1109,6 +1197,29 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+  // La última columna vista en el móvil se recuerda por persona y proyecto (localStorage; sin él, solo dura la visita).
+  const mobileColumnKey = `pz:board-mobile-column:${data.currentUserId}:${data.project.id}`;
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      // Si se vuelve con «atrás» a una columna del historial, manda esa.
+      let saved = (window.history.state as { pzColumn?: string } | null)?.pzColumn ?? null;
+      try {
+        saved ??= window.localStorage.getItem(mobileColumnKey);
+      } catch {
+        // Sin almacenamiento: la primera con tarjetas.
+      }
+      if (saved && columnsNow.current.some((c) => c.id === saved)) setMobileColumn(saved);
+    });
+    return () => cancelAnimationFrame(frame);
+    // Solo al abrir el tablero (o al cambiar de proyecto).
+  }, [mobileColumnKey]);
+  const rememberMobileColumn = (columnId: string) => {
+    try {
+      window.localStorage.setItem(mobileColumnKey, columnId);
+    } catch {
+      // Sin almacenamiento: vale en esta visita.
+    }
+  };
   const showMobileColumn = (columnId: string) => {
     if (columnId === activeMobileColumn) return;
     const state = (window.history.state ?? {}) as { pzColumn?: string; pzDepth?: number };
@@ -1117,7 +1228,23 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (depth < MAX_COLUMN_HISTORY) window.history.pushState(next, "");
     else window.history.replaceState(next, "");
     setMobileColumn(columnId);
+    rememberMobileColumn(columnId);
   };
+  // Al filtrar o buscar en el móvil, si la columna a la vista se queda sin resultados se salta a la primera que tenga
+  // alguno (sin añadir una entrada al historial ni recordarla: es un salto automático). Solo cuando cambia la búsqueda o
+  // los filtros, no al elegir a mano una pestaña sin resultados (que dice «Ninguna tarjeta coincide») ni cuando llega un
+  // cambio de otra persona o una recarga (matchingIds es un Set nuevo con cada cambio de las tareas).
+  const searchKey = useMemo(() => JSON.stringify([terms, activeFilters]), [terms, activeFilters]);
+  useEffect(() => {
+    if (!matchingIds || matchingIds.size === 0 || !window.matchMedia("(max-width: 767px)").matches) return;
+    const has = (id: string | undefined) => !!id && ((items[id]?.length ?? 0) > 0 || (shownEvergreen[id]?.length ?? 0) > 0);
+    if (has(activeMobileColumn)) return;
+    const target = sortedColumns.find((c) => has(c.id));
+    if (!target) return;
+    const frame = requestAnimationFrame(() => setMobileColumn(target.id));
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchKey]);
   useEffect(() => {
     showColumnRef.current = showMobileColumn;
   });
@@ -1126,7 +1253,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const onSwipeStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (e.touches.length !== 1 || activeId || target.closest(`button[aria-label='${t("Arrastrar para reordenar")}'], input, textarea, select`)) {
+    if (e.touches.length !== 1 || activeId || target.closest(`[data-drag-handle], input, textarea, select`)) {
       swipe.current = null;
       return;
     }
@@ -1306,13 +1433,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setTasks((prev) => prev.filter((x) => x.id !== tempId));
       return toast(res.error, "error");
     }
-    const { copyNotice, ...copy } = res.data;
+    const { copyNotice, repeatDropped, ...copy } = res.data;
     // La provisional y la de verdad se cambian a la vez (un solo dibujo).
     setTasks((prev) => {
       const rest = prev.filter((x) => x.id !== tempId && x.id !== copy.id);
       return [...rest, copy];
     });
-    toast(t("Tarea duplicada"), "undo");
+    toast(duplicatedMessage({ repeatDropped }, t), "undo");
     if (copyNotice) toast(copyNotice, "error");
   };
 
@@ -1554,7 +1681,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   return (
     <BoardContext.Provider value={api}>
-      <div ref={rootRef} className="flex h-full flex-col">
+      <div ref={rootRef} className="flex h-full flex-col" data-filtering={filtering || undefined}>
+        {/* Recuento para lectores de pantalla, uno solo: la cabecera de escritorio y la fila del móvil y la tableta lo pintan
+            cada una a su manera (una de las dos oculta por CSS), y con el aviso en las dos se anunciaba dos veces. */}
+        <span className="sr-only" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
         {/* Contenedor de consulta: la cabecera se adapta al ancho que le deja la barra lateral, no al de la ventana. */}
         <div className="@container max-lg:hidden">
         {/* Nunca se sale de la pantalla: el nombre se trunca (entero en el tooltip) y, si así le queda poco sitio, los botones
@@ -1564,7 +1694,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
           <span
             className="shrink-0 text-sm text-slate-500"
-            aria-live="polite"
             title={filtering ? undefined : cardCount(t, tasks.length)}
           >
             {filtering ? (
@@ -1578,7 +1707,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </span>
           <Presence projectId={data.project.id} />
-          <div data-fit-basis="144" className="relative ml-auto w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56">
+          {/* «Limpiar filtros» a la izquierda del buscador y con el hueco libre de la cabecera delante (ml-auto): al aparecer
+              no mueve el buscador, el botón de filtros ni su panel abierto (antes iba a la derecha y lo desplazaba ~75 px, y
+              el segundo clic caía fuera del panel y lo cerraba). */}
+          {filterCount > 0 && (
+            <button type="button" className="ml-auto text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
+              {t("Limpiar filtros")}
+            </button>
+          )}
+          <div data-fit-basis="144" className={cn("relative w-36 min-w-16 shrink transition-[width] @min-[1000px]:focus-within:w-56", filterCount === 0 && "ml-auto")}>
             <Search size={14} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" aria-hidden />
             <input
               ref={searchRef}
@@ -1604,13 +1741,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             )}
           </div>
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="-ml-1.5 shrink-0" />
-          {/* Justo a la derecha del filtro y antes de «Limpiar filtros» (que aparece y desaparece): no se mueve al cambiar de vista. */}
+          {/* Justo a la derecha del filtro: no se mueve al cambiar de vista. */}
           <ViewToggle view={view} onChange={changeView} className="-ml-1" />
-          {filterCount > 0 && (
-            <button type="button" className="-ml-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline dark:hover:text-slate-300" onClick={() => changeFilters(EMPTY_FILTERS)}>
-              {t("Limpiar filtros")}
-            </button>
-          )}
           <ReportButton projectId={data.project.id} variant="header" />
           <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
             <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
@@ -1659,6 +1791,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               <button
                 type="button"
                 tabIndex={-1}
+                // Fuera del `inert` del modal (Modal.tsx): es el acceso a la segunda tarea por encima del fondo.
+                data-pz-layer
                 className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "opacity-60")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondOpen && addSecond()}
@@ -1680,7 +1814,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <button
             type="button"
             className={cn("btn-icon relative h-8 w-8 shrink-0", query.trim() && "text-brand-600")}
-            onClick={() => setMobileSearch((o) => !o)}
+            onClick={() => {
+              const opening = !mobileSearch;
+              // El campo está oculto (display: none) hasta que se pinta abierto: se pinta en el acto y se le da el foco dentro
+              // del mismo toque (en el móvil, el teclado solo se abre así). Antes había que tocarlo otra vez.
+              flushSync(() => setMobileSearch(opening));
+              if (opening) mobileSearchRef.current?.focus();
+            }}
             aria-label={t("Buscar")}
             aria-expanded={mobileSearch || filtering}
           >
@@ -1690,7 +1830,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="shrink-0" />
           <ViewToggle view={view} onChange={changeView} className="ml-0.5" />
           {view === "board" && (
-          <div data-mobile-tabs className="no-scrollbar ml-0.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
+          // Degradado en el borde por el que quedan más pestañas (data-more-left / data-more-right, useScrollEdges).
+          <div ref={tabsEdgeRef} className="group/tabs relative ml-0.5 flex min-w-0 flex-1">
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-linear-to-r from-white opacity-0 transition-opacity group-data-[more-left]/tabs:opacity-100 dark:from-slate-900" />
+          <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-linear-to-l from-white opacity-0 transition-opacity group-data-[more-right]/tabs:opacity-100 dark:from-slate-900" />
+          <div data-mobile-tabs className="no-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-3">
             {sortedColumns.map((c) => (
               <MobileTab
                 key={c.id}
@@ -1703,6 +1847,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               </MobileTab>
             ))}
             <NewColumnButton variant="mobile" onCreated={showMobileColumn} />
+          </div>
           </div>
           )}
         </div>
@@ -1722,7 +1867,6 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
                   e.currentTarget.blur();
                 }
               }}
-              autoFocus={mobileSearch && !filtering}
               placeholder={t("Filtrar tarjetas")}
               aria-label={t("Filtrar tarjetas")}
               className="input h-8 w-full [&::-webkit-search-cancel-button]:hidden pr-3 pl-8 text-sm"
@@ -1731,7 +1875,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           {/* En móvil los filtros ya están en la barra de pestañas. */}
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="max-md:hidden" />
           <ViewToggle view={view} onChange={changeView} className="max-md:hidden" />
-          <span className="shrink-0 text-xs text-slate-500" aria-live="polite">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
+          <span className="shrink-0 text-xs text-slate-500">{filtering ? t("{shown} de {total}", { shown: shownCount, total: tasks.length }) : cardCount(t, tasks.length)}</span>
           {(mobileSearch || filtering) && (
             <button
               type="button"
@@ -1747,9 +1891,28 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
             </button>
           )}
         </div>
+        {/* Ningún resultado en todo el tablero: aviso con la salida a mano (las columnas dicen «Ninguna tarjeta coincide»). */}
+        {view === "board" && filtering && shownCount === 0 && (
+          <div role="status" data-no-matches className="mx-3 mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600 md:mx-4 dark:bg-slate-800 dark:text-slate-300">
+            {t("Ninguna tarjeta coincide con el filtro.")}
+            <button
+              type="button"
+              className="font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-300"
+              onClick={() => {
+                setQuery("");
+                changeFilters(EMPTY_FILTERS);
+              }}
+            >
+              {t("Limpiar filtros")}
+            </button>
+          </div>
+        )}
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
         <FloatingCreateButtons
+          // Con un diálogo de tarea abierto no se pintan: el diálogo ya tiene sus propios accesos y los flotantes no deben
+          // quedar nunca encima de su pie («Crear tarea», «Guardar»).
+          hidden={primaryOpen}
           onBulk={() => setBulk({ columnId: activeMobileColumn })}
           onNew={() => setNewTask({ columnId: activeMobileColumn })}
           fullReason={mobileColumnFull}
@@ -1827,6 +1990,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <ReleaseDialog
             tasks={release.taskIds.map((id) => taskById.get(id)).filter((t): t is BoardTask => !!t)}
             preselected={release.preselected}
+            hiddenByFilter={matchingIds ? release.taskIds.filter((id) => !matchingIds.has(id)).length : 0}
             templates={data.templates}
             projectTemplates={data.projectTemplates}
             onClose={() => setRelease(null)}
@@ -1857,10 +2021,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
  * toque: en vez de abrir «Nueva tarea» (que el servidor rechazaría al crear) dice por qué (`onFull`). «Crear varias
  * tareas» sigue disponible: su diálogo deja elegir otra columna.
  */
-function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull }: { onBulk: () => void; onNew: () => void; fullReason: string | null; onFull: (reason: string) => void }) {
+function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull, hidden }: { onBulk: () => void; onNew: () => void; fullReason: string | null; onFull: (reason: string) => void; hidden: boolean }) {
   const t = useT();
   const selecting = useSelectionSize() > 0;
-  if (selecting) return null;
+  if (selecting || hidden) return null;
   return (
     <>
       <button

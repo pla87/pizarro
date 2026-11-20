@@ -92,11 +92,19 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
-Pruebas en navegador: todas las suites de `e2e/` (QA, tablero, pegado, las de cada ronda `rNN-*` y las de las cazas de
-bugs `bhNN*`). `scripts/e2e-all.sh` las lanza todas seguidas contra la build de producción, cada una con su servidor
-recién arrancado (base `pz_qa`; instrucciones en su cabecera); `SUITES="board-e2e r53-json-e2e" scripts/e2e-all.sh`
-lanza solo esas. La de instalación va aparte. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md`
-(las cifras solo se apuntan allí). Si cambias el rol o la
+Pruebas en navegador (suites de `e2e/`, nombradas por tema: `tablero-*`, `importar-*`, `plantillas-*`…), contra la
+build de producción con `scripts/e2e-all.sh` (cada suite con su servidor recién arrancado; base `pz_qa` o `E2E_DB`,
+puerto 3231 o `E2E_PORT`; instrucciones en su cabecera):
+
+- **En cada ronda, antes de fusionar:** las afectadas, `AFFECTED=1 scripts/e2e-all.sh` (la QA siempre, y las que
+  cubren los ficheros cambiados respecto a `origin/main` según `e2e/suites.json`; `DRY_RUN=1` dice cuáles y por qué).
+- **Antes de publicar una versión:** todas, `scripts/e2e-all.sh` (la de instalación incluida, al final).
+- `SUITES="board-e2e importar-json-detalle-e2e" scripts/e2e-all.sh` lanza solo esas.
+
+Termina con `Total: N/M comprobaciones OK`. Una suite nueva va con el prefijo de su tema y con su entrada en
+`e2e/suites.json` (lo comprueba `tests/e2e-affected.test.ts`); si una pieza nueva de la app la prueba una suite, añade
+su ruta a esa entrada. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md` (las cifras solo se
+apuntan allí). Si cambias el rol o la
 etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
 tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
 instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
@@ -114,10 +122,10 @@ Guardas que conviene conocer:
   adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
 - Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
   (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). No hay ficheros
-  ni dependencias sin uso. Aún marca unos 45 `export` y 29 tipos que solo usa su propio módulo (y `hasTaskCapacity`, sin uso desde la ronda 55; retirarlos está pendiente de que lo apruebe el propietario), casi todos de las copias de
-  seguridad (`backup-*.ts`) y de la mensajería (`messaging-core.ts`, `telegram*.ts`), y unos pocos alias o re-exports
-  que se usan a través de otro módulo: quitar el `export` de los primeros está pendiente. Un `export` nuevo que nadie
-  importa no debe sumarse a esa lista (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
+  ni dependencias sin uso, y desde la ronda 56 tampoco `export` ni tipos sin uso (se quitó el `export` de los ~45
+  valores y 29 tipos que solo usaba su propio módulo, y los re-exports que nadie importaba por esa ruta): `npx --yes
+  knip@5` no lista nada. Un `export` nuevo que nadie importa fuera de su módulo no debe volver a aparecer
+  (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
   ruta knip no lo ve: márcalo con `@public` en su comentario. Antes de quitar un `export`, busca el nombre en `src`,
   `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`, no
   `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
@@ -205,7 +213,7 @@ Guardas que conviene conocer:
   lugar de `useTransition()`. Si la acción lanza (sin red, servidor caído, versión nueva) muestra «Sin conexión: no se ha
   guardado» o el aviso que toque (en un aviso emergente o, con `onError`, en el formulario) en vez de la pantalla «Algo ha
   fallado». Una llamada suelta (`await accion()` fuera de una transición) lleva `.catch((e) => actionThrowResult(e, t))`;
-  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/r49-infra-e2e.mjs`.
+  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/red-formularios-e2e.mjs`.
 - Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
   `parseTasksText` lineal, `strictJsonFormat` para Ctrl+V), resolución de nombres común a pegar e importar en
   `src/lib/task-json-resolve.ts`, importación en `src/lib/task-import.ts` servida por la ruta
@@ -232,6 +240,24 @@ Guardas que conviene conocer:
 - Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
   huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
   (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
+- Capas sobre un diálogo (ronda 56): con un `Modal` abierto, `inertBackground` deja `inert` todo lo que cuelga de
+  `<body>` salvo las regiones `aria-live`, lo marcado con `data-pz-layer` y los otros modales de la pareja. Un botón
+  portado que deba seguir usable encima del diálogo (Deshacer/Rehacer, la copia flotante de «Nueva tarea», el
+  `<input type=file>` de importar) lleva `data-pz-layer=""`; si no, el clic lo atraviesa y cierra el diálogo.
+- Presencia (ronda 56): `src/lib/presence.ts`, en memoria y por proceso. El canal en vivo manda `event: ping` cada 25 s
+  y `presence` (JSON calculado una vez por proyecto) al cambiar; el detalle anuncia la tarea con
+  `/api/tasks/[id]/viewers?stream=…&open=…`. Sin canal sano (más de 60 s sin mensajes) se vuelve al sondeo de respaldo y
+  se reabre el canal. Las revocaciones cortan el canal en el mismo proceso; la comprobación de acceso del canal es cada
+  5 min. Una ruta de larga duración nueva debe comprobar `req.signal.aborted` antes de registrar nada.
+- Tarjetas del tablero: las 15 primeras de cada columna no llevan `content-visibility` (evita el salto al cargar) y el asa
+  táctil se pinta siempre y se muestra con `pointer-coarse:`; la casilla, el asa y el enlace externo son `<span>` (la
+  tarjeta es un `role=button` con `aria-pressed`).
+- Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
+  un vale (`src/lib/zip-ticket.ts`, en memoria, por persona y proyecto) y la página consulta su estado. El
+  `Content-Length` lo pone `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera
+  interna `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
+- Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
+  errores de hidratación.
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
@@ -252,7 +278,10 @@ llevan enlaces de sesión ni nombres de modelos.
    etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público. El mismo
    workflow mueve la rama `stable` al commit publicado (job «Rama stable», el único con permiso para escribir en el
    repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
-   GitHub, hay que permitir que la mueva GitHub Actions. La imagen se construye con `OFFICIAL_BUILD=1` y
+   GitHub, hay que permitir que la mueva GitHub Actions. Cada arquitectura de la imagen se construye en su máquina
+   nativa de GitHub (job «Imagen amd64» en `ubuntu-latest` e «Imagen arm64» en `ubuntu-24.04-arm`, sin emular con QEMU),
+   se sube a GHCR solo por su digest y el job «Imagen Docker» las une con `docker buildx imagetools create` en
+   `:X.Y.Z` (y `:latest`) y comprueba que la imagen publicada tiene las dos. La imagen se construye con `OFFICIAL_BUILD=1` y
    `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error» (en Railway, también
    si el código viene del repositorio oficial y de la rama `stable`; lógica en `src/lib/bug-report-core.ts`). El
    botón abre el formulario `.github/ISSUE_TEMPLATE/bug_report.yml` con datos técnicos rellenos (versión, commit,
@@ -374,29 +403,41 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.59.0):**
+**Preguntas abiertas al propietario (tras la v1.60.0):**
 
-- Recarga de respaldo del tablero cada 2 min (`REFRESH_MS`, `Board.tsx`) aunque el canal en vivo funcione: propuesta de
-  saltarla (o pasarla a 15 min) mientras lleguen pings del canal. Ahorra casi todo ese tráfico.
-- Presencia («quién está aquí») por el canal en vivo en vez de sondeos cada 15–20 s (`Presence.tsx`, `TaskViewers.tsx`).
-- ZIP de adjuntos de una release armado entero en memoria (`release-zip.ts` con `zip.ts`): pasarlo a flujo
-  (`zip-stream.ts`) a cambio de leer dos veces los ficheros.
-- Espaciar a 60 s el barrido de transferencias (`transfer-jobs.ts`) y los avisos de fecha (`due-notices.ts`).
-- Imagen arm64 en runners arm nativos (más rápido) y pasar en cada ronda solo las suites e2e afectadas (todas al publicar).
-- Un miembro puede comprobar si un email es de alguien del proyecto (informe semanal, cambio de email) y ve el destinatario
-  del informe que puso otro: ¿enmascararlo y elegir por nombre?
-- Calendario en el móvil: ¿abrir el mes actual en el día de hoy?
-- Tarjeta del tablero con controles dentro (axe `nested-interactive`): ¿ronda para rehacer su estructura accesible?
-- Releases y plantillas de Mi perfil pintan el Markdown en el navegador (~40 KB): ¿pasarlo al servidor?
-- Duplicar una tarea repetitiva pierde la repetición (copiar como JSON la conserva): ¿debe conservarla?
-- Candidatos a retirar (nada se ha borrado sin permiso): `hasTaskCapacity` (`src/lib/caps.ts`, sin uso desde las
-  repeticiones por lotes), la constante `IMAGE` (`src/lib/product.ts`), unos 45 `export` que solo usa su propio módulo
-  (lista en knip), el índice redundante `ReleaseAttachment_releaseId_idx` (lo cubre el único `(releaseId, fileName)`) y
-  agrupar por tema las suites e2e `bhNN`/`rNN` antiguas.
-- Pendiente técnico conocido: en el móvil el tablero tiene un CLS de ~0,1 porque el asa táctil de las tarjetas aparece al
-  hidratarse (`useCoarsePointer`, falso en el servidor) y estrecha el título.
-- React #185 («Maximum update depth») visto en producción en el tablero: no se ha reproducido; se endureció el arrastre
-  lista↔panel de fijas (freno de 60 ms en `onDragOver`, panel sin `useDndContext`). Si vuelve a salir, anotar qué se hacía.
+De las auditorías del propietario (escritorio y móvil, v1.58.0) quedan para decidir:
+- Crear tareas: hay muchas entradas (Nueva tarea, flotantes +/✨, «+» de columna, Varias tareas, Importar, Añadir en
+  fijas). ¿Juntar «Varias tareas» e «Importar» en un desplegable de «Nueva tarea»?
+- Dos selectores de proyecto (barra lateral y cabecera): ¿quitar uno?
+- Menú «⋯» de columna con unos 30 elementos: ¿roles en un submenú «Rol de la columna ›»?
+- Tipo preseleccionado en una tarea nueva: ¿recordar el último usado o no preseleccionar?
+- «Nueva tarea» y el detalle no se parecen (editor, rejilla, color): ¿unificarlos?
+- Botones peligrosos junto a los de uso frecuente (Borrar release/adjuntos en Releases, papelera siempre visible en
+  Documentación): ¿llevarlos a un menú «⋯»?
+- Informe PDF: las tareas fijas cuentan como pendientes y bajan el % de avance: ¿excluirlas o ponerlas aparte?
+- *Administración → Ajustes* muy larga: ¿subpestañas? (y ocultar el selector de zona con `APP_TIMEZONE` fijada).
+- Copias: los adjuntos solo están en el destino externo si `BACKUP_LOCAL_FILES=0`: ¿segunda copia o versionado del bucket?
+- Ctrl+Z solo funciona en el tablero (no en Documentación, Releases ni Ajustes) y el historial guarda 10 acciones: ¿ampliar
+  el deshacer a esas pantallas o subir el límite?
+- Móvil: avisos arriba tapando la cabecera (¿abajo?), lista sin tipo/subtareas/adjuntos, comentarios no editables,
+  archivadas que no se pueden abrir para leer, «Guardar» y «Cancelar» con guardado automático (¿«Revertir cambios»?),
+  y «Compartir → Pizarro» desde el móvil (`share_target`) para crear una tarea con una captura.
+- Releases y plantillas de *Mi perfil* pintan el Markdown en el navegador (~40 KB): ¿pasarlo al servidor?
+
+De esta ronda:
+- Sondeo de respaldo de la presencia (`/api/projects/[id]/presence` y `/viewers` sin `stream`): se mantiene para cuando
+  no hay canal en vivo; ¿retirarlo más adelante o espaciarlo a 60 s?
+- Número de release retirado (`release-number:<proyecto>` en `AppState`): no viaja al exportar/importar un proyecto.
+- Alt+P mientras se renombra una tarjeta (F2) abre el selector y guarda el título al perder el foco: ¿así?
+- Detrás de Cloudflare conviene desactivar *Scrape Shield → Email Address Obfuscation* (Pizarro ya protege sus emails
+  con `EmailSafe`; era la causa más probable del error de hidratación #418).
+- En el móvil, recuperar la columna recordada mueve la vista tras el primer pintado (no medido): ¿leerla en el servidor?
+- React #185 («Maximum update depth») visto una vez en la ronda 55: no se ha vuelto a ver; si sale, anotar qué se hacía.
+
+**Decisiones de la ronda 56 (ya aplicadas):** recarga de respaldo a 15 min con el canal sano; presencia por el canal en
+vivo; ZIP de release en flujo; tareas de fondo a 60 s; destinatario del informe por nombre y emails ajenos ocultos;
+duplicar una repetitiva no copia la repetición pero lo avisa; calendario del móvil en hoy; retiradas aprobadas (hecho);
+e2e solo de las suites afectadas en cada ronda y todas al publicar; imagen arm64 en máquinas ARM nativas.
 
 **Decisiones de la ronda 55 (ya aplicadas):** exportar sin transacción abierta mientras se leen los ficheros; una
 subida a la vez por persona solo si hay más de una persona activa en los últimos 5 minutos (`user-activity.ts`; cualquier

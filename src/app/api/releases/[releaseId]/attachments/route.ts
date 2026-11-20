@@ -5,12 +5,17 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, buildZipPart, planZipEntries, sizedZipEntries, zipBodyStream, zipPlanBody, zipRateKey, zipRequestMode, zipVersionConflict } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipHeadResponse, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict } from "@/lib/release-zip";
+import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
-import { readReleaseAttachmentFile, releaseAttachmentFileSize } from "@/lib/uploads";
+import { releaseAttachmentFileSize, releaseAttachmentStream } from "@/lib/uploads";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
+
+/** HEAD no se sirve: derivado de GET, reservaba el hueco del ZIP y leía los ficheros (ver zipHeadResponse). */
+export const HEAD = () => zipHeadResponse("GET");
 
 /** ZIP con las copias compactas de los adjuntos guardadas al desplegar una release. */
 export async function GET(req: Request, ctx: { params: Promise<{ releaseId: string }> }) {
@@ -33,32 +38,34 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   });
   if (!release) return new Response(t("No encontrado"), { status: 404 });
 
-  // Tope del proyecto (su valor actual): cada paquete se arma en memoria hasta ese tamaño.
+  // Tope del proyecto (su valor actual): cada paquete pesa como mucho ese tamaño.
   const maxMb = release.project.releaseZipMaxMb;
   // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
   const entries = await sizedZipEntries(
-    release.attachments.map((a) => ({ id: a.id, name: a.fileName, read: () => readReleaseAttachmentFile(a.id) })),
+    release.attachments.map((a) => ({ id: a.id, name: a.fileName, open: () => releaseAttachmentStream(a.id) })),
     (c) => releaseAttachmentFileSize(c.id),
   );
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   const packages = planZipEntries(entries, maxMb);
-  if (mode.kind === "plan") return Response.json(zipPlanBody(packages, maxMb, entries), { headers: { "Cache-Control": "private, no-store" } });
+  // `busy`: la página avisa antes de lanzar la descarga directa si ahora tocaría «Ya se está preparando otro ZIP».
+  if (mode.kind === "plan") return Response.json({ ...zipPlanBody(packages, maxMb, entries), busy: zipSlotBusy(user.id) }, { headers: { "Cache-Control": "private, no-store" } });
   const conflict = zipVersionConflict(mode, entries, maxMb, t("Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos."));
   if (conflict) return conflict;
   const pkg = packages[mode.part - 1];
   if (!pkg) return new Response(t("No encontrado"), { status: 404 });
-  // Uno a la vez por persona y pocos en todo el servidor (cada paquete se arma en memoria).
+  // Uno a la vez por persona y pocos en todo el servidor (cada paquete se lee dos veces del disco y se envía en flujo).
   const releaseSlot = acquireZipSlot(user.id);
   if (!releaseSlot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
-  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de armarlo.
-  let built: Awaited<ReturnType<typeof buildZipPart>>;
+  // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de prepararlo.
+  // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria.
+  let zipPart: Awaited<ReturnType<typeof prepareZipPart>>;
   try {
-    built = await buildZipPart(entries, pkg);
+    zipPart = await prepareZipPart(entries, pkg, req.signal);
   } catch (err) {
     releaseSlot();
     throw err;
   }
-  const { zip, files: fileCount } = built;
+  const fileCount = zipPart.entries.length;
   if (fileCount === 0) {
     releaseSlot();
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
@@ -67,14 +74,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   // El mismo nombre que da la página (y el diálogo de generarla): fecha, número y proyecto.
   const name = releaseZipName({ day: isoDate(release.deployedAt, appTimeZone()), number: release.number, project: release.project.name }, mode.part, packages.length, await getLocale());
   logEvent({
-    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de la release «${release.title}» (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zip.length / 1024)} KB)`,
+    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de la release «${release.title}» (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${logSize(zipPart.bytes)})`,
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),
-    durationMs: performance.now() - start, details: { releaseId, part: mode.part, parts: packages.length, files: fileCount, bytes: zip.length },
+    durationMs: performance.now() - start, details: { releaseId, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });
-  return new Response(zipBodyStream(zip, releaseSlot, { signal: req.signal }), {
+  return new Response(zipPartBody(zipPart, releaseSlot, { signal: req.signal }), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Length": String(zip.length),
+      "Content-Length": String(zipPart.bytes),
+      // Next quita el Content-Length; con este vuelve a salir y el navegador enseña el progreso (lib/response-length.ts).
+      [DECLARED_LENGTH_HEADER]: String(zipPart.bytes),
       "Content-Disposition": `attachment; filename="${name.replace(/[^\x20-\x7e]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
       "Cache-Control": "private, no-store",
       "X-Zip-Parts": String(packages.length),

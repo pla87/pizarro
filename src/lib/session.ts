@@ -72,8 +72,10 @@ export async function destroySession(): Promise<void> {
   const token = store.get(sessionCookieName())?.value;
   if (token && token.length <= 100) {
     const id = sessionIdFromToken(token);
+    const gone = await db.session.findUnique({ where: { id }, select: { userId: true } });
     await db.session.deleteMany({ where: { id } });
-    revokeSession(id);
+    // Sus canales se cortan y deja de salir en «Quién está» (no 5 minutos más).
+    revokeSession(id, gone ?? undefined);
   }
   // Borrado con los mismos atributos (Secure incluido): un __Host- sin Secure lo rechazaría el navegador.
   store.set(sessionCookieName(), "", { ...sessionCookieOptions(), maxAge: 0 });

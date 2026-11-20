@@ -191,7 +191,13 @@ export async function changePassword(current: string, next: string) {
   });
 }
 
-/** Pide cambiar el email: se confirma desde un enlace enviado a la dirección NUEVA y se avisa a la antigua. */
+/**
+ * Pide cambiar el email: se confirma desde un enlace enviado a la dirección NUEVA y se avisa a la antigua. La respuesta
+ * es siempre la misma, exista o no una cuenta con esa dirección: si ya es de otra persona no se le envía nada (ni el
+ * enlace, que no podría usarse, ni un aviso, que dejaría escribir a cualquier dirección de la instalación desde aquí) y
+ * solo sale el aviso de siempre a la dirección actual de quien lo pide. Los dos emails salen tras responder
+ * (sendMailInBackground), así que tampoco el tiempo de respuesta delata nada; un fallo de envío queda en el registro.
+ */
 export async function requestEmailChange(newEmail: string, currentPassword: string) {
   return runAction({ name: "profile.requestEmailChange", args: [] }, async () => {
     const user = await requireUser();
@@ -202,16 +208,13 @@ export async function requestEmailChange(newEmail: string, currentPassword: stri
     const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { passwordHash: true } });
     if (!(await verifyPasswordCounted(z.string().max(200).parse(currentPassword), row.passwordHash, rateKey))) throw new AppError("La contraseña actual no es correcta.");
     if (email === user.email) throw new AppError("Ese ya es tu email.");
-    if (await db.user.count({ where: { email } })) throw new AppError("Ya existe un usuario con ese email.");
-    const token = await issueAuthToken(user.id, "EMAIL_CHANGE", { newEmail: email });
-    try {
-      await sendEmailChangeMail(user, email, `${appUrl()}/confirm/${token}`);
-    } catch (err) {
-      logMailError("[profile] email de confirmación", err);
-      throw new AppError("No se pudo enviar el email de confirmación. Inténtalo más tarde.");
+    const taken = (await db.user.count({ where: { email: { equals: email, mode: "insensitive" } } })) > 0;
+    if (!taken) {
+      const token = await issueAuthToken(user.id, "EMAIL_CHANGE", { newEmail: email });
+      sendMailInBackground("confirmar el email nuevo", () => sendEmailChangeMail(user, email, `${appUrl()}/confirm/${token}`));
     }
     // Aviso a la dirección actual; si falla, el cambio sigue pendiente de confirmar.
-    await sendEmailChangeRequestedMail(user, email).catch((err) => logMailError("[profile] aviso al email antiguo", err));
+    sendMailInBackground("aviso al email antiguo", () => sendEmailChangeRequestedMail(user, email));
   });
 }
 

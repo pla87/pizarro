@@ -7,6 +7,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { EmailSafe } from "@/components/ui/EmailSafe";
 
 /** Cambio de email: se confirma desde un enlace enviado a la dirección nueva. */
 export function EmailChangeSection({ email }: { email: string }) {
@@ -20,7 +21,7 @@ export function EmailChangeSection({ email }: { email: string }) {
     <section className="card p-5">
       <h2 className="font-semibold">{t("Cambiar email")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        {t("Tu email actual es {email}. El cambio se hace al confirmar el enlace que enviaremos a la dirección nueva.", { email })}{" "}
+        <EmailSafe text={t("Tu email actual es {email}. El cambio se hace al confirmar el enlace que enviaremos a la dirección nueva.", { email })} />{" "}
         <InfoTip topic={t("Cambiar email")}>{t("El enlace caduca en 30 minutos. A la dirección actual le llega un aviso del cambio.")}</InfoTip>
       </p>
       <form

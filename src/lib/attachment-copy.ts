@@ -10,6 +10,7 @@ import { getQuotaLimits } from "./quota-settings";
 import { storageUsage } from "./storage-usage";
 import { uploadDir } from "./upload-dir";
 import { attachmentPath, newFileId, removeAttachmentFiles } from "./uploads";
+import { logSize } from "./format-size";
 
 // Copia de los adjuntos de una tarea en otra (Duplicar, también al soltar con Ctrl/Alt en otra columna).
 //
@@ -148,7 +149,7 @@ export async function copyTaskAttachments(fromTaskId: string, toTaskId: string):
       diskFull = true;
       logEvent({
         level: "error", category: "system", action: "attachments.noSpace",
-        message: `Disco lleno: no se han copiado los adjuntos al duplicar la tarea (${Math.round(wanted / 1024)} KB)`,
+        message: `Disco lleno: no se han copiado los adjuntos al duplicar la tarea (${logSize(wanted)})`,
         details: { fromTaskId, toTaskId, bytes: wanted },
       });
     }

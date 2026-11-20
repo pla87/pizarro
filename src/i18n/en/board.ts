@@ -6,8 +6,8 @@ export const board: Record<string, string> = {
   "{n} tarjetas movidas": "{n} cards moved",
   "1 tarea archivada": "1 task archived",
   "{n} tareas archivadas": "{n} tasks archived",
-  "¿Borrar definitivamente la tarea seleccionada y sus adjuntos?": "Permanently delete the selected task and its attachments?",
-  "¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?": "Permanently delete the {n} selected tasks and their attachments?",
+  "¿Borrar la tarea seleccionada y sus adjuntos? Puedes deshacerlo justo después.": "Delete the selected task and its attachments? You can undo it right after.",
+  "¿Borrar las {n} tareas seleccionadas y sus adjuntos? Puedes deshacerlo justo después.": "Delete the {n} selected tasks and their attachments? You can undo it right after.",
   "1 tarea borrada": "1 task deleted",
   "{n} tareas borradas": "{n} tasks deleted",
   "Arrastrar para reordenar": "Drag to reorder",
@@ -54,7 +54,6 @@ export const board: Record<string, string> = {
   "Borrar columna": "Delete column",
   "Borrar (debe estar vacía)": "Delete (must be empty)",
   // TaskCard
-  "Quitar de la selección": "Remove from selection",
   "Seleccionar": "Select",
   "Plazo vencido": "Overdue",
   "Fecha límite": "Due date",
@@ -363,4 +362,10 @@ export const board: Record<string, string> = {
 
   // Detalle de tarea: columna derecha sin «(opcional)»
   "Asignada a": "Assigned to",
+
+  // Duplicar una tarea que se repite: la copia no conserva la repetición
+  "Copia creada sin repetición: la repetición no se copia": "Copy created without repeat: repeat settings are not copied",
+
+  // Tablero con un filtro o una búsqueda activos: columna sin resultados
+  "Ninguna tarjeta coincide": "No cards match",
 };

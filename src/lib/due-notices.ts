@@ -12,8 +12,8 @@ import { isShuttingDown } from "./shutdown";
 
 /** Tiempo sin nuevos cambios de fecha tras el cual se envía el aviso. */
 export const DUE_NOTIFY_DELAY_MS = 5 * 60_000;
-/** Cada cuánto mira el planificador si hay avisos que enviar. */
-const DUE_NOTIFY_POLL_MS = 30_000;
+/** Cada cuánto mira el planificador si hay avisos que enviar (el aviso sale entre 5 y 6 min después del último cambio). */
+const DUE_NOTIFY_POLL_MS = 60_000;
 
 /**
  * Anota (o actualiza) el cambio de fecha pendiente de avisar a `recipientId`. Conserva la fecha original del

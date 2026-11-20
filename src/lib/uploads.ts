@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { forgetAttachments } from "./attachment-cache";
@@ -193,13 +193,16 @@ function releaseAttachmentPath(id: string, kind: "webp" | "bin" = "webp"): strin
   return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.${kind}`);
 }
 
-/** Lee la copia de histórico de un adjunto, sea imagen compacta (.webp) o fichero tal cual (.bin). */
-export async function readReleaseAttachmentFile(id: string): Promise<Buffer> {
+/** La copia de histórico de un adjunto en flujo (imagen compacta .webp o fichero .bin), sin leerla entera en memoria. */
+export async function* releaseAttachmentStream(id: string): AsyncGenerator<Buffer> {
+  let handle;
   try {
-    return await readFile(releaseAttachmentPath(id, "webp"));
+    handle = await open(releaseAttachmentPath(id, "webp"));
   } catch {
-    return await readFile(releaseAttachmentPath(id, "bin"));
+    handle = await open(releaseAttachmentPath(id, "bin"));
   }
+  // createReadStream cierra el descriptor al terminar o al interrumpirse la lectura.
+  yield* handle.createReadStream();
 }
 
 /** Tamaño en disco de la copia de histórico de un adjunto; null si falta el fichero. */

@@ -39,7 +39,7 @@ export function invalidateMemo(key: string): void {
 }
 
 /** Memoria con caducidad y tope de entradas (las menos usadas salen primero). */
-export interface BoundedMemo {
+interface BoundedMemo {
   /** Como `memo`: valor guardado, consulta compartida si está en marcha, y un error no se guarda. */
   get<T>(key: string, fn: () => Promise<T>, now?: number): Promise<T>;
   delete(key: string): void;

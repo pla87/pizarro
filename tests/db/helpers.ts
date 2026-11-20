@@ -90,7 +90,7 @@ export async function assign(f: { project: { id: string } }, user: { id: string 
   await db.projectMember.upsert({ where: { projectId_userId: { projectId: f.project.id, userId: user.id } }, create: { projectId: f.project.id, userId: user.id }, update: {} });
 }
 
-export type Visibility = "TEAM" | "PRIVATE";
+type Visibility = "TEAM" | "PRIVATE";
 
 export interface Fixture {
   project: { id: string; name: string };

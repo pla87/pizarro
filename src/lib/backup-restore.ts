@@ -89,7 +89,7 @@ export async function applyMigrations(sql: PgSql, dir: string, opts: { upTo?: st
 
 // --- Estado de la base de datos de destino -------------------------------------------------------
 
-export async function databaseState(sql: PgSql): Promise<{ tables: string[]; hasUserData: boolean }> {
+async function databaseState(sql: PgSql): Promise<{ tables: string[]; hasUserData: boolean }> {
   const tables = (await sql.$queryRawUnsafe<{ t: string }[]>("SELECT tablename AS t FROM pg_tables WHERE schemaname = 'public'")).map((r) => r.t);
   let hasUserData = false;
   for (const name of ["User", "Project"]) {
@@ -110,7 +110,7 @@ async function isPizarroDatabase(sql: PgSql, tables: string[], migrationsDir: st
 }
 
 /** Borra tablas, vistas, secuencias, funciones y tipos del esquema public (lo que crean las migraciones). */
-export async function wipeDatabase(sql: PgSql): Promise<void> {
+async function wipeDatabase(sql: PgSql): Promise<void> {
   const list = async (q: string) => (await sql.$queryRawUnsafe<{ n: string }[]>(q)).map((r) => quoteIdent(r.n));
   const views = await list("SELECT viewname AS n FROM pg_views WHERE schemaname = 'public'");
   if (views.length) await sql.exec(`DROP VIEW IF EXISTS ${views.join(", ")} CASCADE`);
@@ -181,7 +181,7 @@ export async function resolveStem(src: Source): Promise<StemInfo> {
 
 // --- Restauración -------------------------------------------------------------------------------
 
-export interface RestoreOptions {
+interface RestoreOptions {
   databaseUrl: string;
   source: Source;
   key: Buffer;
@@ -198,7 +198,7 @@ export interface RestoreOptions {
   log?: Log;
 }
 
-export interface RestoreResult {
+interface RestoreResult {
   stem: string;
   manifest: FullManifest | null;
   db: BackupManifest | null;

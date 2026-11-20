@@ -46,6 +46,8 @@ interface Props {
 }
 
 const NO_IDS: string[] = [];
+/** Tarjetas del principio de cada columna que siempre se pintan enteras (las que se ven al abrir el tablero). */
+const EAGER_CARDS = 15;
 
 /** Icono de cada rol en el selector del menú de la columna (la explicación sale al pasar por encima: COLUMN_ROLE_HINT). */
 const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
@@ -204,8 +206,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           )}
           {...fileZone.handlers}
         >
-          {taskIds.map((id) => (
-            <SortableTaskCard key={id} id={id} />
+          {taskIds.map((id, i) => (
+            <SortableTaskCard key={id} id={id} eager={i < EAGER_CARDS} />
           ))}
           {/* Único hueco que acepta archivos para crear una tarea: lo que queda libre bajo la última tarjeta (los huecos entre tarjetas no). */}
           <div
@@ -213,7 +215,17 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             className={cn("min-h-10 flex-1 rounded-lg transition-colors lg:group-data-[fits]/list:-mt-2 lg:group-data-[fits]/list:min-h-0", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
             {taskIds.length === 0 && (
-              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">{fileZone.over ? t("Suelta para crear tarea") : t("Arrastra tarjetas aquí")}</p>
+              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                {fileZone.over ? t("Suelta para crear tarea") : (
+                  // Con un filtro o una búsqueda activos (data-filtering en la raíz del tablero) el texto es otro. Por CSS: la
+                  // columna (memorizada dentro de DndContext) no se vuelve a dibujar al escribir en el buscador.
+                  <>
+                    <span className="[[data-filtering]_&]:hidden">{t("Arrastra tarjetas aquí")}</span>
+                    {/* Si coincide alguna tarea fija del panel de esta columna, no se dice que no coincide ninguna. */}
+                    {evergreenIds.length === 0 && <span className="hidden [[data-filtering]_&]:inline">{t("Ninguna tarjeta coincide")}</span>}
+                  </>
+                )}
+              </p>
             )}
           </div>
         </div>

@@ -2,6 +2,51 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.60.0 — 2026-11-20 12:55
+
+Tablero en vivo más barato (presencia por el canal y recarga cada 15 min), iconos de Nueva tarea junto a la X, auditorías de escritorio y móvil, ZIP de releases en flujo, emails ajenos ocultos, calendario y Administración en el móvil, accesibilidad y caza de bugs
+
+### Nuevas funcionalidades
+
+- Calendario: las tareas vencidas llevan borde rojo y, arriba, «N vencidas de antes de este mes» las lista; en el móvil el mes actual se abre en el día de hoy (o en ese aviso, con «Ir a hoy»).
+- Página «No encontrado» propia y avisos al pedir una pestaña de Ajustes que no existe; las pestañas se pueden abrir por su nombre (`?tab=plantillas`), también con ancla.
+- Administración → Usuarios en el móvil: las acciones de cada persona en un botón «⋯».
+
+### Mejoras
+
+- «Copiar tarea» e «Importar tarea» de «Nueva tarea» van junto a la X, como en el detalle (en el móvil, en «⋯»).
+- La flecha de los desplegables se separa un poco del borde.
+- Duplicar una tarea que se repite crea la copia sin repetición y lo avisa.
+- Quién está en el tablero y quién tiene abierta cada tarea se actualiza al momento por la conexión en vivo, y el tablero solo se recarga entero cada 15 minutos mientras esa conexión funciona: mucho menos trabajo de servidor.
+- Filtros: el panel no se mueve al activar uno, las columnas sin resultados dicen «Ninguna tarjeta coincide», con un aviso si no coincide nada, y «Generar Release» avisa de que incluye lo oculto por el filtro.
+- Móvil: la lupa abre el buscador con el cursor puesto, salta a la columna con resultados, recuerda la última columna vista, muestra la columna recién creada, indica con un degradado que hay más pestañas y las tarjetas ya no saltan al cargar.
+- Con una tarea abierta, los botones flotantes no tapan el diálogo; en Documentación (móvil) «Nueva tarea» va en el pie del visor.
+- El informe semanal se dirige a una persona del proyecto por su nombre; las direcciones ajenas se ven enmascaradas y el cambio de email no permite averiguar qué emails tienen cuenta.
+- Borrar una release avisa de que no se puede deshacer y su número no se reutiliza; al desplegar, el historial de cada tarea lo apunta.
+- Descargar adjuntos en ZIP: lo descarga el propio navegador, con su progreso, y el servidor apenas usa memoria aunque el paquete sea grande.
+- Mis tareas: el rojo solo marca las vencidas; plurales correctos.
+- Barra de estado de la app instalada con el tema elegido; pestañas con el nombre del proyecto; zonas de toque más grandes en el detalle y Nueva tarea; textos de borrar tarea que recuerdan que se puede deshacer; uso de adjuntos en KB.
+
+### Correcciones
+
+- Error «Algo ha fallado» de hidratación (#418) en Mi perfil y Administración → Usuarios cuando un proxy (como Cloudflare) reescribe los emails.
+- El informe semanal seguía yendo al email antiguo cuando la persona cambiaba de email.
+- Al abrir y cerrar una tarea muy deprisa, otras personas podían seguir viendo que la tenías abierta.
+- Una conexión en vivo cortada al abrirse dejaba a la persona como presente y ocupaba memoria.
+- Dos personas que borran a la vez la misma release ya no ven un error.
+- Con la búsqueda activa en el móvil, los cambios de otras personas ya no te cambian de columna.
+- Una columna cuya única coincidencia es una tarea fija ya no dice «Ninguna tarjeta coincide».
+- Alt+P abre el selector de proyectos también desde el buscador; la rueda del ratón sobre el detalle ya no desplaza la columna de detrás.
+- Recuento de tarjetas anunciado dos veces y controles anidados en las tarjetas y en las tareas fijas (lectores de pantalla).
+
+### Cambios técnicos / DB
+
+- Canal en vivo con `event: ping` cada 25 s y eventos `presence` calculados una vez por proyecto; comprobación de acceso del canal cada 5 min.
+- ZIP de releases en flujo (de +806 MB a +37 MB con 400 MB), vales de descarga, `Content-Length` conservado y huecos que se sueltan tras 60 s sin lectura.
+- Tareas de fondo cada 60 s; retirados `hasTaskCapacity`, `IMAGE`, `zip.ts`, 43 exports y 29 tipos sin uso fuera de su módulo, y un índice redundante (migración nueva).
+- Imagen arm64 en máquinas ARM nativas; suites e2e renombradas por tema, mapa e2e/suites.json y `AFFECTED=1 scripts/e2e-all.sh`.
+- Diálogos con `inert` en el fondo; `EmailSafe`; mensajes de validación por defecto traducidos («Datos no válidos.»).
+
 ## v1.59.0 — 2026-11-20 02:51
 
 Panel de fijas sin scroll de más y copia con Ctrl en el panel, detalle de tarea más compacto, subidas repartidas entre personas, exportar sin frenar despliegues, auditoría de seguridad, rendimiento y accesibilidad, y caza de bugs

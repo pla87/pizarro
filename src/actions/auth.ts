@@ -18,6 +18,7 @@ import { requestContext } from "@/lib/request-context";
 import { dummyVerify, hashPassword, isPasswordBusy, passwordSchema, verifyPassword, verifyPasswordCounted } from "@/lib/password";
 import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateIp, rateLimit, rateLimitReached, releaseRateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
+import { retargetReportSchedules } from "@/lib/report-recipient";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
 import { isTrustedDevice } from "@/lib/devices";
@@ -197,11 +198,14 @@ export async function confirmAccountChange(token: string) {
     if (await db.user.count({ where: { email: data.newEmail, id: { not: row.userId } } })) throw new AppError("Ya existe un usuario con ese email.");
     if (!(await consumeToken(row.id))) throw new AppError(INVALID_LINK);
     const oldEmail = row.user.email;
-    await db.$transaction([
+    const newEmail = data.newEmail;
+    await db.$transaction(async (tx) => {
       // La cuenta de Google vinculada era la de la dirección anterior; los enlaces enviados allí dejan de valer.
-      db.user.update({ where: { id: row.userId }, data: { email: data.newEmail, googleSub: null } }),
-      db.authToken.deleteMany({ where: { userId: row.userId, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
-    ]);
+      await tx.user.update({ where: { id: row.userId }, data: { email: newEmail, googleSub: null } });
+      await tx.authToken.deleteMany({ where: { userId: row.userId, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
+      // Los informes semanales que le llegaban siguen llegándole, ahora a la dirección nueva.
+      await retargetReportSchedules(tx, oldEmail, newEmail);
+    });
     sendMailInBackground("aviso de email cambiado", () => sendEmailChangedMail(row.user, oldEmail, data.newEmail!));
     logEvent({ category: "auth", action: "auth.emailChanged", message: `${row.user.name} ha confirmado su nuevo email`, userId: row.userId, userName: row.user.name, ip });
     return { kind: "EMAIL" as const };

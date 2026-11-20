@@ -1,5 +1,6 @@
 import "server-only";
-import { buildZip } from "./zip";
+import { crc32 } from "node:zlib";
+import { streamZip, streamZipSize, type StreamZipEntry } from "./zip-stream";
 import { zipPlanToken } from "./zip-token";
 import { planPackages, zipEntryOverhead, type ZipPackage } from "./zip-plan";
 import { runQueue } from "./upload-queue";
@@ -10,7 +11,8 @@ export interface ZipEntry {
   id: string;
   name: string;
   size: number;
-  read: () => Promise<Uint8Array>;
+  /** Contenido en flujo (se lee dos veces: una para el CRC y otra al enviar). */
+  open: () => AsyncIterable<Buffer | Uint8Array>;
 }
 
 /** Consultas de tamaño en disco a la vez al preparar un ZIP (antes, una tras otra: cientos de adjuntos tardaban). */
@@ -25,8 +27,8 @@ export async function sizedZipEntries<C extends Omit<ZipEntry, "size">>(candidat
   const entries: ZipEntry[] = [];
   for (const [i, r] of sizes.entries()) {
     if (r.status === "rejected") throw r.reason;
-    const { id, name, read } = candidates[i]!;
-    if (r.value !== null) entries.push({ id, name, size: r.value, read });
+    const { id, name, open } = candidates[i]!;
+    if (r.value !== null) entries.push({ id, name, size: r.value, open });
   }
   return entries;
 }
@@ -44,26 +46,61 @@ export function zipPlanBody(packages: ZipPackage[], maxMb: number, entries: ZipE
   return { maxMb, v: zipPlanToken(entries, maxMb), parts: packages.map((p) => ({ files: p.items.length, bytes: p.bytes, oversize: p.oversize })) };
 }
 
-/** Arma en memoria solo un paquete (nunca más que el tope, salvo un fichero suelto mayor). Los ficheros que ya no están se omiten. */
-export async function buildZipPart(entries: ZipEntry[], pkg: ZipPackage): Promise<{ zip: Buffer; files: number }> {
-  const files: { name: string; data: Uint8Array }[] = [];
-  for (const i of pkg.items) {
-    const e = entries[i]!;
-    try {
-      files.push({ name: e.name, data: await e.read() });
-    } catch {
-      // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
-    }
-  }
-  return { zip: files.length ? buildZip(files) : Buffer.alloc(0), files: files.length };
+/** Un paquete listo para enviarse en flujo: sus entradas con tamaño y CRC ya medidos y lo que ocupará el ZIP. */
+interface ZipPart {
+  entries: StreamZipEntry[];
+  /** Bytes exactos del ZIP (Content-Length). */
+  bytes: number;
 }
 
-// Cada paquete se arma entero en memoria (hasta el tope del proyecto, unos 2× al comprimir): uno a la vez por
-// persona y como mucho dos en todo el servidor, para que varias descargas en paralelo no agoten la RAM.
+/** Lee una vez en flujo el contenido de una entrada para medir su tamaño real y su CRC-32; null si no se puede leer. */
+async function measure(e: ZipEntry, signal?: AbortSignal): Promise<{ size: number; crc: number } | null> {
+  try {
+    let size = 0;
+    let crc = 0;
+    for await (const chunk of e.open()) {
+      if (signal?.aborted) return null;
+      size += chunk.byteLength;
+      crc = crc32(chunk, crc);
+    }
+    return { size, crc: crc >>> 0 };
+  } catch {
+    // Fichero ausente en disco (o ilegible): se omite en lugar de romper toda la descarga.
+    return null;
+  }
+}
+
+/**
+ * Prepara un paquete sin juntarlo en memoria: una primera pasada en flujo mide el tamaño y el CRC de cada fichero
+ * (los que ya no están se omiten) y después `zipPartBody` lo envía en flujo. La memoria no depende del tamaño del paquete.
+ * Si se aborta la petición (`signal`) mientras se mide, deja de leer y devuelve el paquete vacío.
+ */
+export async function prepareZipPart(entries: ZipEntry[], pkg: ZipPackage, signal?: AbortSignal): Promise<ZipPart> {
+  const out: StreamZipEntry[] = [];
+  for (const i of pkg.items) {
+    if (signal?.aborted) return { entries: [], bytes: 0 };
+    const e = entries[i]!;
+    const m = await measure(e, signal);
+    if (m) out.push({ name: e.name, size: m.size, crc: m.crc, body: e.open });
+  }
+  return { entries: out, bytes: out.length ? streamZipSize(out) : 0 };
+}
+
+// Cada paquete se lee dos veces del disco (CRC y envío) y su envío puede durar minutos: uno a la vez por persona y
+// como mucho dos en todo el servidor, para que varias descargas en paralelo no saturen el disco ni la red.
 const zipSlots = ((globalThis as unknown as { __pzZipSlots?: { users: Set<string>; active: number } }).__pzZipSlots ??= { users: new Set(), active: 0 });
 const MAX_ZIPS_AT_ONCE = 2;
 
-/** Reserva un hueco para armar un ZIP; null si esa persona ya tiene uno en curso o el servidor está lleno. Llama a la función devuelta al terminar. */
+/**
+ * ¿Pediría ahora un paquete y recibiría «Ya se está preparando otro ZIP»? Lo dice el plan, para que el navegador lo avise
+ * antes de lanzar la descarga directa (que, si falla, solo sale como descarga fallida). Orientativo: el hueco se reserva
+ * al pedir el paquete.
+ */
+export function zipSlotBusy(userId: string): boolean {
+  return zipSlots.users.has(userId) || zipSlots.active >= MAX_ZIPS_AT_ONCE;
+}
+
+/** Reserva un hueco para preparar y enviar un ZIP; null si esa persona ya tiene uno en curso o el servidor está lleno. Llama a la función devuelta al terminar. */
 export function acquireZipSlot(userId: string): (() => void) | null {
   if (zipSlots.users.has(userId) || zipSlots.active >= MAX_ZIPS_AT_ONCE) return null;
   zipSlots.users.add(userId);
@@ -77,46 +114,144 @@ export function acquireZipSlot(userId: string): (() => void) | null {
   };
 }
 
-/** Tamaño de cada trozo con que se envía un ZIP ya armado. */
+/** Tamaño de cada trozo con que se envía un ZIP que ya está en memoria. */
 const ZIP_SEND_CHUNK = 1024 * 1024;
 /** Por si la descarga ni termina ni se cancela (conexión abandonada sin aviso): el hueco se suelta igualmente. */
 const ZIP_SEND_MAX_MS = 15 * 60 * 1000;
+/**
+ * Sin pedir ningún trozo durante este tiempo (el cliente no lee y el búfer del socket está lleno), se corta la respuesta
+ * y se suelta el hueco: con solo 2 en el servidor, dos clientes que leen muy despacio bloqueaban todas las descargas ZIP
+ * hasta 15 min. Como la ventana mínima de las subidas.
+ */
+const ZIP_SEND_IDLE_MS = 60 * 1000;
+
+/** Cómo acabó el envío de un ZIP: entero, con un error (fichero cambiado, cliente que no lee, tope de tiempo) o cortado. */
+export type ZipSendOutcome = "ok" | "error" | "aborted";
 
 /**
- * Cuerpo de respuesta que entrega el ZIP armado a trozos de 1 MB, según los pide el cliente, y suelta el hueco de
- * acquireZipSlot al dar el último trozo, si se cancela la descarga o se aborta la petición (o, como muy tarde, a los
- * 15 min): mientras se envía, el ZIP sigue ocupando memoria y debe seguir contando como uno en curso.
+ * Cuerpo de respuesta que entrega el ZIP según lo pide el cliente (un buffer, a trozos de 1 MB, o un flujo de trozos)
+ * y suelta el hueco de acquireZipSlot al dar el último trozo, si falla, si se cancela la descarga o se aborta la
+ * petición (o, como muy tarde, a los 15 min, o tras 60 s sin que el cliente lea nada, cortando la respuesta): mientras
+ * se envía, el ZIP debe seguir contando como uno en curso. `release` recibe cómo acabó: "ok" solo si se envió entero.
  */
-export function zipBodyStream(zip: Uint8Array, release: () => void, opts: { signal?: AbortSignal; chunk?: number } = {}): ReadableStream<Uint8Array> {
+export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, release: (outcome: ZipSendOutcome) => void, opts: { signal?: AbortSignal; chunk?: number; idleMs?: number } = {}): ReadableStream<Uint8Array> {
   const chunk = opts.chunk ?? ZIP_SEND_CHUNK;
+  const idleMs = opts.idleMs ?? ZIP_SEND_IDLE_MS;
   let pos = 0;
-  const timer = setTimeout(() => done(), ZIP_SEND_MAX_MS);
+  const iterator = zip instanceof Uint8Array ? null : zip[Symbol.asyncIterator]();
+  const timer = setTimeout(() => {
+    if (finished) return;
+    stop("error");
+    try {
+      ctrl?.error(new Error("ZIP: tiempo máximo de envío"));
+    } catch {
+      // Ya cerrado.
+    }
+  }, ZIP_SEND_MAX_MS);
   timer.unref?.();
-  const done = () => {
-    clearTimeout(timer);
-    opts.signal?.removeEventListener("abort", done);
-    release();
+  let finished = false;
+  let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+  // Se arma al terminar cada trozo (y al empezar) y se desarma al pedir el siguiente: mientras se lee del disco no cuenta.
+  let idle: ReturnType<typeof setTimeout> | null = null;
+  const disarm = () => {
+    if (idle) clearTimeout(idle);
+    idle = null;
   };
-  if (opts.signal?.aborted) done();
-  else opts.signal?.addEventListener("abort", done, { once: true });
+  const arm = () => {
+    disarm();
+    if (finished) return;
+    idle = setTimeout(() => {
+      if (finished) return;
+      stop("error");
+      try {
+        ctrl?.error(new Error("ZIP: el cliente no lee la descarga"));
+      } catch {
+        // Ya cerrado.
+      }
+    }, idleMs);
+    idle.unref?.();
+  };
+  const done = (outcome: ZipSendOutcome) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    disarm();
+    opts.signal?.removeEventListener("abort", onAbort);
+    release(outcome);
+  };
+  // Descarga cancelada, petición abortada o corte por tiempo: además se cierra el fichero que se estuviera leyendo.
+  const stop = (outcome: ZipSendOutcome) => {
+    done(outcome);
+    void iterator?.return?.()?.catch(() => {});
+  };
+  const onAbort = () => stop("aborted");
+  if (opts.signal?.aborted) onAbort();
+  else opts.signal?.addEventListener("abort", onAbort, { once: true });
   return new ReadableStream<Uint8Array>(
     {
-      pull(controller) {
-        const end = Math.min(pos + chunk, zip.length);
-        if (end > pos) controller.enqueue(zip.subarray(pos, end));
-        pos = end;
-        if (pos >= zip.length) {
-          done();
-          controller.close();
+      start(controller) {
+        ctrl = controller;
+        arm();
+      },
+      async pull(controller) {
+        disarm();
+        try {
+          await pullChunk(controller);
+        } finally {
+          arm();
         }
       },
       cancel() {
-        done();
+        stop("aborted");
       },
     },
-    // Sin cola: cada trozo se lee del buffer solo cuando el cliente pide el siguiente.
+    // Sin cola: cada trozo se lee solo cuando el cliente pide el siguiente.
     { highWaterMark: 0 },
   );
+
+  async function pullChunk(controller: ReadableStreamDefaultController<Uint8Array>) {
+    if (iterator) {
+      let next: IteratorResult<Uint8Array>;
+      try {
+        next = await iterator.next();
+      } catch (err) {
+        done("error");
+        controller.error(err);
+        return;
+      }
+      try {
+        if (next.done) {
+          done("ok");
+          controller.close();
+        } else controller.enqueue(next.value);
+      } catch {
+        // El flujo ya se canceló mientras se leía el trozo.
+      }
+      return;
+    }
+    const buf = zip as Uint8Array;
+    const end = Math.min(pos + chunk, buf.length);
+    if (end > pos) controller.enqueue(buf.subarray(pos, end));
+    pos = end;
+    if (pos >= buf.length) {
+      done("ok");
+      controller.close();
+    }
+  }
+}
+
+/** Cuerpo de respuesta de un paquete preparado con prepareZipPart: se escribe en flujo, fichero a fichero. */
+export function zipPartBody(part: ZipPart, release: (outcome: ZipSendOutcome) => void, opts: { signal?: AbortSignal; now?: Date } = {}): ReadableStream<Uint8Array> {
+  return zipBodyStream(streamZip(part.entries, opts.now), release, opts);
+}
+
+/**
+ * Respuesta a HEAD de las rutas que sirven ZIP. Sin un HEAD propio, Next lo deriva de GET y lo ejecuta entero: reservaba
+ * el hueco (uno por persona), marcaba el paquete en el vale y leía los ficheros, y el GET de verdad recibía «Ya se está
+ * preparando otro ZIP». Se responde sin hacer nada.
+ */
+export function zipHeadResponse(allow: string): Response {
+  return new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "private, no-store" } });
 }
 
 /** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes pedidos por número otro. */

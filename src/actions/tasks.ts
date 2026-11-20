@@ -362,7 +362,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       select: {
         title: true, description: true, kindId: true, color: true, linkUrl: true, assigneeId: true, dueDate: true, deliverableId: true,
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
-        columnId: true, blockedById: true, evergreen: true, evergreenEvery: true,
+        columnId: true, blockedById: true, evergreen: true, evergreenEvery: true, recurrence: true,
         labels: { select: { labelId: true } },
         subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
         links: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { kind: true, title: true, url: true, externalId: true, createdById: true, shareStatus: true, shareFailed: true, createdAt: true } },
@@ -428,8 +428,10 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     const description = remapAttachmentRefs(src.description, copied.ids);
     if (description !== src.description) await db.task.updateMany({ where: { id: copy.id, description: src.description }, data: { description } });
     const notice = await copyNoticeText(copied, projectId, user.role === "ADMIN");
-    const row: BoardTask & { copyNotice?: string } = await loadBoardTask(copy.id);
-    return notice ? { ...row, copyNotice: notice } : row;
+    const row: BoardTask & { copyNotice?: string; repeatDropped?: true } = await loadBoardTask(copy.id);
+    // La repetición no se copia (decisión: una copia que también se repitiera duplicaría cada aparición); quien duplica lo
+    // ve en el aviso de «Tarea duplicada» (duplicatedMessage, cardActions.ts).
+    return { ...row, ...(notice ? { copyNotice: notice } : {}), ...(src.recurrence !== "NONE" ? { repeatDropped: true as const } : {}) };
   });
 }
 

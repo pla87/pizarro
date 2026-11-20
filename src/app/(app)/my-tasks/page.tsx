@@ -74,7 +74,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold">{t("Mis tareas asignadas")}</h1>
-      <p className="mb-4 text-sm text-slate-500">{t("{n} tarea(s) en todos tus proyectos.", { n: total })}</p>
+      <p className="mb-4 text-sm text-slate-500">{total === 1 ? t("1 tarea en todos tus proyectos.") : t("{n} tareas en todos tus proyectos.", { n: total })}</p>
       {total > tasks.length && (
         <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
           {t("Se muestran las primeras {shown} de {total}, por fecha límite. Abre cada proyecto para ver el resto.", { shown: tasks.length, total })}
@@ -113,9 +113,12 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
               {group.tasks.map((task) => {
                 const done = task.subtasks.filter((s) => s.done).length;
                 const projectId = task.project.id;
+                // El borde rojo de la izquierda solo marca las vencidas; el color propio de la tarea (el de la franja de su
+                // tarjeta en el tablero) va en un punto junto al título, para no confundirse con él aunque sea rojo.
+                const late = !!task.due && dueStatus(task.due, task.column.isDone, today) === "overdue";
                 return (
-                  <li key={task.id} className="relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-                    {task.color && <span className="absolute inset-y-1 left-0 w-1 rounded-r" style={{ backgroundColor: task.color }} aria-hidden />}
+                  <li key={task.id} data-overdue={late || undefined} className="relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+                    {late && <span className="absolute inset-y-1 left-0 w-1 rounded-r bg-red-600 dark:bg-red-500" aria-hidden />}
                     {/* Proyecto como chip al principio de la fila: lo primero que se lee. */}
                     <Link
                       href={`/p/${projectId}`}
@@ -126,8 +129,9 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                       <span className="truncate">{task.project.name}</span>
                     </Link>
                     <TypeBadge kind={localizeGeneralKind(task.kind, uiLocale)} />
-                    <Link href={`/p/${projectId}?task=${task.id}`} className="min-w-0 flex-1 basis-40 truncate text-sm font-medium hover:text-brand-600">
-                      <MentionText text={task.title} />
+                    <Link href={`/p/${projectId}?task=${task.id}`} className="flex min-w-0 flex-1 basis-40 items-center gap-1.5 text-sm font-medium hover:text-brand-600">
+                      {task.color && <span data-task-color className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} title={t("Color de la tarea")} aria-hidden />}
+                      <span className="min-w-0 truncate"><MentionText text={task.title} /></span>
                     </Link>
                     {task.due && (() => {
                       const st = dueStatus(task.due, task.column.isDone, today);

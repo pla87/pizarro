@@ -84,7 +84,7 @@ export async function run() {
   await U.undoKey(p, "Control+z");
   await L.eqEventually("diálogo: deshacer quita la copia", async () => (await copies("Informe semanal")).length, 1);
   await L.reload(p);
-  await L.cardLoc(p, "Informe semanal").locator("button[aria-label='Seleccionar']").click();
+  await L.cardLoc(p, "Informe semanal").locator("[aria-label='Seleccionar']").click();
   await p.getByRole("button", { name: "Mover a…" }).or(p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) })).first().selectOption({ label: COL.closed });
   await L.eqEventually("selección múltiple: también nace la copia", async () => (await copies("Informe semanal")).length, 2);
   const c3 = await copies("Informe semanal");

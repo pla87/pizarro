@@ -37,7 +37,7 @@ function safeKey(key: string): string {
 }
 
 /** Antigüedad a partir de la cual un temporal de una carpeta de copias se da por abandonado. */
-export const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export class DirDestination implements BackupDestination {
   /**
@@ -191,7 +191,7 @@ export class S3Destination implements BackupDestination {
 
 // --- Configuración ------------------------------------------------------------------------------
 
-export interface ExternalConfig {
+interface ExternalConfig {
   destinations: BackupDestination[];
   /** Problemas de configuración (sin secretos), para mostrarlos en Administración. */
   errors: string[];
@@ -294,7 +294,7 @@ export async function listObjectKeys(dest: BackupDestination): Promise<Set<strin
 }
 
 /** Dónde sacar el contenido cifrado de un objeto: de otro destino que ya lo tenga o cifrando el fichero de UPLOAD_DIR. */
-export interface ObjectSources {
+interface ObjectSources {
   key: Buffer;
   uploadRoot: string;
   /** Destino con los objetos ya cifrados (el local, si guarda ficheros), y las claves que tiene. */
@@ -322,9 +322,9 @@ async function* streamFrom(open: () => Promise<AsyncIterable<Buffer>>): AsyncGen
 // --- Copia mucho menor que la del destino ------------------------------------------------------
 
 /** Por debajo de estos tamaños, la copia del destino es tan pequeña que no se compara (instalación recién empezada). */
-export const SHRINK_MIN_ROWS = 500;
+const SHRINK_MIN_ROWS = 500;
 const SHRINK_MIN_CORE_ROWS = 50;
-export const SHRINK_MIN_FILES = 20;
+const SHRINK_MIN_FILES = 20;
 
 /**
  * Tablas que dicen cuánto contenido hay (personas, proyectos y tareas). El total de filas no sirve: lo inflan los
@@ -431,7 +431,7 @@ export function lastGoodCopy(copies: CopySummary[], accepted?: string | null): {
   return { good: good?.stem ?? null, shrink };
 }
 
-export interface SyncResult {
+interface SyncResult {
   /** Ficheros del manifiesto que ya no existían al subirlos (borrados después de la copia). */
   missing?: number;
   uploaded: number;
@@ -487,7 +487,7 @@ export async function syncBackup(
   return result;
 }
 
-export interface PruneResult {
+interface PruneResult {
   /** Copias borradas por la retención (y copias cortadas de más de 24 h). */
   removedBackups: number;
   removedObjects: number;

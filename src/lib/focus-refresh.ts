@@ -23,3 +23,31 @@ export function shouldRefreshOnFocus({ sinceSyncMs, channelOpen, channelGap }: F
   if (channelGap) return sinceSyncMs >= FOCUS_REFRESH_GAP_MS;
   return sinceSyncMs >= (channelOpen ? FOCUS_REFRESH_LIVE_MS : FOCUS_REFRESH_MIN_MS);
 }
+
+// Recarga de respaldo periódica (con la pestaña a la vista y sin diálogos ni acciones en curso). El servidor manda un
+// evento `ping` por el canal cada 25 s: si llegó uno (o cualquier otro mensaje) hace menos de LIVE_HEALTHY_MS, el canal
+// está sano y los cambios ya llegan al momento, así que basta una recarga cada 15 minutos. Sin canal, o con el canal
+// caído o mudo (un proxy que lo deja abierto sin pasar nada), cada 2 minutos, como antes.
+export const BACKUP_REFRESH_MS = 2 * 60_000;
+export const BACKUP_REFRESH_LIVE_MS = 15 * 60_000;
+export const LIVE_HEALTHY_MS = 60_000;
+/** Cada cuánto se mira si toca la recarga de respaldo. */
+export const BACKUP_CHECK_MS = 30_000;
+
+/** ¿El canal en vivo está sano? Abierto y con un mensaje del servidor hace menos de un minuto. */
+export function channelHealthy({ open, sinceMessageMs }: { open: boolean; sinceMessageMs: number }): boolean {
+  return open && sinceMessageMs < LIVE_HEALTHY_MS;
+}
+
+/**
+ * ¿Canal abierto pero mudo? Abierto y sin ningún mensaje (ni el `ping` periódico) en el tiempo en que cuenta como sano: lo
+ * deja así un proxy que no deja pasar nada, sin que el navegador dé error. Entonces se da por caído y se reabre.
+ */
+export function channelStalled({ open, sinceMessageMs }: { open: boolean; sinceMessageMs: number }): boolean {
+  return open && !channelHealthy({ open, sinceMessageMs });
+}
+
+/** ¿Toca la recarga de respaldo? */
+export function backupRefreshDue({ sinceSyncMs, healthy }: { sinceSyncMs: number; healthy: boolean }): boolean {
+  return sinceSyncMs >= (healthy ? BACKUP_REFRESH_LIVE_MS : BACKUP_REFRESH_MS);
+}

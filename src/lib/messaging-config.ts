@@ -76,7 +76,7 @@ export async function loadMessagingConfig(opts: { fresh?: boolean } = {}): Promi
   return refreshMessagingConfig();
 }
 
-export function refreshMessagingConfig(): Promise<MessagingConfig> {
+function refreshMessagingConfig(): Promise<MessagingConfig> {
   const s = store();
   s.loading ??= (async () => {
     try {

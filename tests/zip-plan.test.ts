@@ -86,7 +86,7 @@ describe("zipPlanToken", () => {
 });
 
 describe("zipRequestMode y conflicto de versión", () => {
-  const entries = [{ id: "a1", name: "x", size: 10, read: async () => new Uint8Array() }];
+  const entries = [{ id: "a1", name: "x", size: 10, open: async function* () {} }];
   const v = zipPlanToken(entries, 25);
   const part = (q: string) => zipRequestMode(`http://x/api?${q}`)!;
 
@@ -100,7 +100,7 @@ describe("zipRequestMode y conflicto de versión", () => {
     assert.equal(zipVersionConflict(part("part=1"), entries, 25, "m"), null);
     assert.equal(zipVersionConflict(part(`part=1&v=${v}`), entries, 25, "m"), null);
     assert.equal(zipVersionConflict({ kind: "plan" }, entries, 25, "m"), null);
-    const changed = [...entries, { id: "b2", name: "y", size: 5, read: async () => new Uint8Array() }];
+    const changed = [...entries, { id: "b2", name: "y", size: 5, open: async function* () {} }];
     const res = zipVersionConflict(part(`part=1&v=${v}`), changed, 25, "Cambiaron");
     assert.equal(res?.status, 409);
     assert.equal(await res?.text(), "Cambiaron");
@@ -147,6 +147,31 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
     await body.body?.cancel();
   });
 
+  test("un cliente que deja de leer: a los idleMs sin pedir nada se corta la respuesta y se suelta el hueco", async () => {
+    const release = acquireZipSlot("zs-5")!;
+    const reader = zipBodyStream(zip, release, { idleMs: 80 }).getReader();
+    // Leyendo a buen ritmo (más deprisa que idleMs entre trozos) no se corta.
+    await reader.read();
+    await new Promise((r) => setTimeout(r, 40));
+    await reader.read();
+    assert.equal(held("zs-5"), true, "sigue leyendo: hueco ocupado");
+    // Deja de leer: pasado idleMs, hueco libre y el siguiente read falla (la descarga se corta).
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(held("zs-5"), false, "sin leer: hueco libre");
+    await assert.rejects(reader.read(), /no lee/);
+
+    // Con un flujo de trozos (como el ZIP de verdad): un trozo lento de leer del disco no cuenta como cliente parado.
+    const release2 = acquireZipSlot("zs-6")!;
+    async function* slow() {
+      yield new Uint8Array(10);
+      await new Promise((r) => setTimeout(r, 200));
+      yield new Uint8Array(10);
+    }
+    const got = Buffer.from(await new Response(zipBodyStream(slow(), release2, { idleMs: 80 })).arrayBuffer());
+    assert.equal(got.length, 20);
+    assert.equal(held("zs-6"), false);
+  });
+
   test("como cuerpo de Response, llega entero", async () => {
     const release = acquireZipSlot("zs-4")!;
     const got = Buffer.from(await new Response(zipBodyStream(zip, release)).arrayBuffer());
@@ -155,9 +180,62 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
   });
 });
 
+describe("zipBodyStream: cómo acabó el envío (el vale solo da por terminado el paquete enviado entero)", () => {
+  const zip = Buffer.alloc(2.5 * 1024 * 1024, 7);
+  const outcomeOf = (user: string) => {
+    const slot = acquireZipSlot(user)!;
+    const seen: string[] = [];
+    return { release: (o: string) => { seen.push(o); slot(); }, seen };
+  };
+
+  test("entero: ok (una sola vez)", async () => {
+    const r = outcomeOf("zo-1");
+    await new Response(zipBodyStream(zip, r.release)).arrayBuffer();
+    assert.deepEqual(r.seen, ["ok"]);
+    async function* parts() {
+      yield new Uint8Array(3);
+      yield new Uint8Array(4);
+    }
+    const r2 = outcomeOf("zo-1b");
+    await new Response(zipBodyStream(parts(), r2.release)).arrayBuffer();
+    assert.deepEqual(r2.seen, ["ok"]);
+  });
+
+  test("cancelada o abortada a medias: aborted", async () => {
+    const r = outcomeOf("zo-2");
+    const reader = zipBodyStream(zip, r.release).getReader();
+    await reader.read();
+    await reader.cancel();
+    assert.deepEqual(r.seen, ["aborted"]);
+    const ac = new AbortController();
+    const r2 = outcomeOf("zo-3");
+    const body = zipBodyStream(zip, r2.release, { signal: ac.signal });
+    ac.abort();
+    assert.deepEqual(r2.seen, ["aborted"]);
+    await body.cancel();
+    assert.deepEqual(r2.seen, ["aborted"], "una sola vez");
+  });
+
+  test("un fichero que falla a medias (ha cambiado) o un cliente que no lee: error", async () => {
+    async function* broken() {
+      yield new Uint8Array(5);
+      throw new Error("El fichero ha cambiado");
+    }
+    const r = outcomeOf("zo-4");
+    await assert.rejects(new Response(zipBodyStream(broken(), r.release)).arrayBuffer());
+    assert.deepEqual(r.seen, ["error"]);
+    const r2 = outcomeOf("zo-5");
+    const reader = zipBodyStream(zip, r2.release, { idleMs: 50 }).getReader();
+    await reader.read();
+    await new Promise((res) => setTimeout(res, 150));
+    assert.deepEqual(r2.seen, ["error"]);
+    await reader.read().catch(() => {});
+  });
+});
+
 describe("sizedZipEntries", () => {
   test("consulta los tamaños en paralelo (como mucho 16 a la vez), conserva el orden y omite los ausentes", async () => {
-    const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, read: async () => new Uint8Array() }));
+    const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, open: async function* () {} }));
     let active = 0;
     let peak = 0;
     const entries = await sizedZipEntries(candidates, async (c) => {
