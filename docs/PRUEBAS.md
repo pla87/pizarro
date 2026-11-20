@@ -528,3 +528,33 @@ En *Releases*, abre una release con adjuntos y pulsa **Descargar adjuntos**: la 
 
 1. En *Ajustes del proyecto → Informes*, elige destinatario por nombre. Con una cuenta de miembro, mira que una dirección externa puesta por un administrador sale enmascarada.
 2. Cambia el email de la persona destinataria: el informe le sigue llegando a la nueva dirección.
+
+## 10. Novedades de la v1.61.0
+
+### 10.1 Compartir con Pizarro (móvil)
+
+**Necesitas:** la app instalada en un Android (o Chrome/Edge en el ordenador) con la versión nueva (si ya estaba instalada, ábrela una vez para que se actualice el manifiesto).
+
+1. Desde la galería, *Compartir → Pizarro* con una o dos fotos; desde el navegador, comparte un enlace; desde una app de notas, un texto.
+2. Cambia el proyecto en el selector antes de *Crear tarea*.
+3. Repite sin sesión iniciada.
+
+**Qué debe pasar:** se abre *Nueva tarea* con el texto, el enlace y los archivos; al crear vas al tablero del proyecto elegido. Sin sesión, pide entrar y conserva los textos (los archivos hay que volver a compartirlos).
+
+### 10.2 Plantillas de serie
+
+Crea un proyecto con *Mantenimiento e instalaciones*, *Ventas* y alguna revisada (*Negocio*, *Reformas y obras*, *Tareas familiares*) y úsalo un rato como lo usarías en real. Anota columnas, tipos o etiquetas que sobren o falten.
+
+### 10.3 Cabecera, menú de columna y Nueva tarea
+
+1. En el ordenador, cambia de proyecto desde la barra lateral (también con Alt+P); el informe PDF está en el menú lateral.
+2. En el menú ⋯ de una columna, *Rol de la columna ›*.
+3. Crea una tarea con un tipo y abre otra vez *Nueva tarea*: propone ese tipo, con su título y subtareas si los tiene.
+
+### 10.4 Móvil
+
+Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *Descartar cambios* pregunta antes; *Editar* en tus comentarios.
+
+### 10.5 Administración
+
+*Administración → Integraciones*: email, Google, Telegram y WhatsApp siguen configurados como estaban. Abre `/robots.txt` de tu instalación: debe decir `Disallow: /`.
