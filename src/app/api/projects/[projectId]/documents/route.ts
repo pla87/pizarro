@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertProjectAccess } from "@/lib/access";
-import { AppError } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
+import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
@@ -40,7 +41,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
-    const { projectId } = await ctx.params;
+    // Un id con caracteres que PostgreSQL no admite (el nulo) es «no encontrado», no un 500 (22021) en los logs.
+    const parsedId = v.id.safeParse((await ctx.params).projectId);
+    if (!parsedId.success) throw notFound();
+    const projectId = parsedId.data;
     await assertProjectAccess(user, projectId);
     // Tope de subidas por persona (el mismo cubo y el mismo tope que los adjuntos de tareas): evita llenar disco o memoria con un bucle.
     if (!rateLimit(`upload:${user.id}`, 300, 60_000)) {

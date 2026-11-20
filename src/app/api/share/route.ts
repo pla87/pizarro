@@ -4,7 +4,7 @@ import { uploadWriteError } from "@/lib/disk-space";
 import { cleanFileName } from "@/lib/file-name";
 import { logSize } from "@/lib/format-size";
 import { logEvent } from "@/lib/log";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { SHARE_FIELDS, SHARE_MAX_FILES, SHARE_NO_SESSION_MAX_BYTES, shareRequestAllowed, sharedText, shareTextQuery, type ShareError } from "@/lib/share-core";
@@ -42,7 +42,7 @@ async function handlePost(req: Request): Promise<Response> {
   if (!user) {
     // Sin sesión no se guarda ningún archivo: solo los textos de un envío pequeño, en la dirección de vuelta.
     let next = "/share?sesion=1";
-    if (length !== null && length <= SHARE_NO_SESSION_MAX_BYTES && rateLimit(`share-anon:${ip ?? "?"}`, 20, 60_000)) {
+    if (length !== null && length <= SHARE_NO_SESSION_MAX_BYTES && rateLimit(`share-anon:${rateIp(ip ?? "?")}`, 20, 60_000)) {
       const form = await readBodyLimited(req, SHARE_NO_SESSION_MAX_BYTES, "formData").catch(() => null);
       if (form) {
         const files = form.getAll(SHARE_FIELDS.files).filter((f) => f instanceof File && f.size > 0).length;

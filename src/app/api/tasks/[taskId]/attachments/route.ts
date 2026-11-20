@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertNotArchivedRow, loadTaskWithAccess } from "@/lib/access";
-import { AppError } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
+import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
@@ -50,7 +51,11 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
-    const { taskId } = await ctx.params;
+    const { taskId: rawTaskId } = await ctx.params;
+    // Un id con caracteres que PostgreSQL no admite (el nulo) es «no encontrado», no un 500 (22021) en los logs.
+    const parsedId = v.id.safeParse(rawTaskId);
+    if (!parsedId.success) throw notFound();
+    const taskId = parsedId.data;
     const task = await loadTaskWithAccess(user, taskId, { archivedAt: true, project: { select: { fileMaxMb: true } } });
     assertNotArchivedRow(task);
     const { projectId } = task;
