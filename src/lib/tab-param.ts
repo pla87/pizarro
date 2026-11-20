@@ -2,7 +2,7 @@
 // esperables (alias: «plantillas» para la que se llama así pero cuyo id es «releases», el nombre en inglés…), sin
 // distinguir mayúsculas ni tildes. Un valor que no es de ninguna no cae en silencio en la primera: la página lo avisa.
 
-export interface TabSpec<T extends string> {
+interface TabSpec<T extends string> {
   id: T;
   aliases?: readonly string[];
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { forgetAttachments } from "./attachment-cache";
@@ -191,15 +191,6 @@ export async function removeAttachmentFiles(ids: string[]): Promise<void> {
 function releaseAttachmentPath(id: string, kind: "webp" | "bin" = "webp"): string {
   if (!/^[a-z0-9]+$/i.test(id)) throw new AppError("Identificador no válido.");
   return path.join(/*turbopackIgnore: true*/ uploadDir(), "releases", `${id}.${kind}`);
-}
-
-/** Lee la copia de histórico de un adjunto, sea imagen compacta (.webp) o fichero tal cual (.bin). */
-export async function readReleaseAttachmentFile(id: string): Promise<Buffer> {
-  try {
-    return await readFile(releaseAttachmentPath(id, "webp"));
-  } catch {
-    return await readFile(releaseAttachmentPath(id, "bin"));
-  }
 }
 
 /** La copia de histórico de un adjunto en flujo (imagen compacta .webp o fichero .bin), sin leerla entera en memoria. */

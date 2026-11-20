@@ -25,10 +25,6 @@ export function resolveProjectSettingsTab(value: unknown, canManage: boolean): T
   return resolveTabParam<ProjectSettingsTab>(value, availableProjectTabs(canManage));
 }
 
-export function parseProjectSettingsTab(value: unknown, canManage: boolean): ProjectSettingsTab {
-  return resolveProjectSettingsTab(value, canManage).tab;
-}
-
 /** Secciones con ancla (`#labels`…) y la pestaña donde viven, para que los enlaces antiguos abran la correcta. */
 export const SECTION_TAB: Record<string, ProjectSettingsTab> = {
   labels: "tablero",

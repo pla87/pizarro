@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "./cn";
 
-export interface ScrollTab {
+interface ScrollTab {
   key: string;
   href: string;
   label: string;

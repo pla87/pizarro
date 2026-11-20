@@ -10,7 +10,7 @@ import { db } from "../db";
 import { AppError } from "../errors";
 import { appTimeZone } from "../format";
 import { slugify } from "../search-accents";
-import { attachmentPath, documentPath, readReleaseAttachmentFile } from "../uploads";
+import { attachmentPath, documentPath, releaseAttachmentStream } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
 import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
@@ -379,7 +379,7 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
     const attachments: ProjectExportData["releases"][number]["attachments"] = [];
     if (options.attachments) {
       for (const a of r.attachments) {
-        const open = () => (async function* () { yield await readReleaseAttachmentFile(a.id); })();
+        const open = () => releaseAttachmentStream(a.id);
         const info = await addFile(files, open, async () => true, onFile);
         if (!info) {
           missingFiles++;

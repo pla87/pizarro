@@ -128,6 +128,7 @@ export function TaskJsonButtons({ onCopy, onImport, shortcuts = {}, compactOnMob
         <input
           ref={fileRef}
           type="file"
+          data-pz-layer=""
           accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain"
           className="sr-only"
           tabIndex={-1}
