@@ -189,7 +189,7 @@ export async function resolvePositionTies(taskIds: string[]): Promise<void> {
         await rebalanceColumn(tx, r.columnId);
         continue;
       }
-      await tx.task.update({ where: { id: r.id }, data: { position: positionBetween(lo, r.position) } });
+      await tx.task.update({ where: { id: r.id }, data: { position: positionBetween(lo, r.position) }, select: { id: true } });
     }
   });
 }

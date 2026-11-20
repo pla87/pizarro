@@ -51,6 +51,25 @@ describe("deshacer acciones propias", () => {
     assert.equal(back.labels.length, 0);
   });
 
+  // updateTask solo lee la descripción (hasta 20 KB) si se edita: el deshacer de otro campo no la lleva.
+  test("editar solo el título no guarda la descripción en el deshacer; editarla sí, y deshacer la devuelve", async () => {
+    const { user, f } = await setup();
+    const task = await makeTask(f, { title: "Original" });
+    await db.task.update({ where: { id: task.id }, data: { description: "texto largo ".repeat(500) }, select: { id: true } });
+    const lastOps = async () => (await db.undoEntry.findFirstOrThrow({ where: { userId: user.id, projectId: f.project.id }, orderBy: { createdAt: "desc" }, select: { ops: true } })).ops as { t: string; data?: Record<string, unknown> }[];
+
+    expectOk(await updateTask(task.id, { title: "Cambiado" }));
+    assert.deepEqual(Object.keys((await lastOps())[0]!.data!).sort(), ["contentUpdatedAt", "contentUpdatedById", "title"]);
+    expectOk(await updateTask(task.id, { description: "nueva" }));
+    assert.equal((await lastOps())[0]!.data!.description, "texto largo ".repeat(500));
+
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).description, "texto largo ".repeat(500));
+    expectOk(await undoLast(f.project.id));
+    const back = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([back.title, back.description], ["Original", "texto largo ".repeat(500)]);
+  });
+
   test("mover: deshacer devuelve la tarea a su columna y posición", async () => {
     const { f } = await setup();
     const a = await makeTask(f, { position: 1000 });
