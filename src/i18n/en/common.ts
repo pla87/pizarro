@@ -165,4 +165,6 @@ export const common: Record<string, string> = {
   "1 tarea en todos tus proyectos.": "1 task across all your projects.",
   "{n} tareas en todos tus proyectos.": "{n} tasks across all your projects.",
   "Color de la tarea": "Task color",
+  // Botón «⋯» de acciones secundarias (título)
+  "Más acciones": "More actions",
 };

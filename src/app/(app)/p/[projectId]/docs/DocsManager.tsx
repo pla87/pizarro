@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, Code2, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, Code2, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
@@ -9,6 +9,7 @@ import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
 import { HtmlPreview } from "@/components/docs/HtmlPreview";
 import { ZoomImage } from "@/components/docs/ZoomImage";
 import { Markdown } from "@/components/ui/Markdown";
+import { Menu, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import { MODAL_SIZE_REM, Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { MessageWithLinks, useToast } from "@/components/ui/Toast";
@@ -340,17 +341,32 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                         </span>
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className="btn-icon mx-2 shrink-0"
-                      aria-label={t("Enviar «{name}» a la papelera", { name: d.name })}
-                      title={t("Enviar a la papelera")}
-                      disabled={busyId === d.id}
-                      data-testid="doc-trash-btn"
-                      onClick={() => void trashFromList(d)}
+                    {/* Acciones secundarias en «⋯» (la papelera, siempre a la vista, se pulsaba sin querer); abrir sigue siendo la fila. */}
+                    <Menu
+                      align="end"
+                      className="mx-2 shrink-0"
+                      label={t("Más acciones de «{name}»", { name: d.name })}
+                      panelClassName="w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+                      trigger={({ props }) => (
+                        <button type="button" className="btn-icon" aria-label={t("Más acciones de «{name}»", { name: d.name })} title={t("Más acciones")} data-testid="doc-menu-btn" {...props}>
+                          <MoreHorizontal size={18} aria-hidden />
+                        </button>
+                      )}
                     >
-                      <Trash2 size={16} aria-hidden />
-                    </button>
+                      <a
+                        role="menuitem"
+                        tabIndex={-1}
+                        href={`/api/documents/${d.id}?download=1`}
+                        download
+                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
+                      >
+                        <Download size={15} aria-hidden /> {t("Descargar")}
+                      </a>
+                      <MenuSeparator />
+                      <MenuItem icon={Trash2} danger disabled={busyId === d.id} data-testid="doc-trash-btn" onClick={() => void trashFromList(d)}>
+                        {t("Enviar a la papelera")}
+                      </MenuItem>
+                    </Menu>
                   </li>
                 );
               })}

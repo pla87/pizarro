@@ -172,14 +172,18 @@ if (only.includes("reldel")) {
   const { page, ctx } = s;
   await page.goto(`${L.BASE}/p/${p.id}/releases`);
   await page.getByText("Release bh49").first().waitFor({ timeout: 20000 });
-  const del = page.getByRole("button", { name: "Borrar release" }).first();
-  if (!(await del.isVisible())) await page.getByText("Release bh49").first().click();
+  // «Borrar release» va en el menú «⋯» (Más acciones) de la fila de Copiar/.md/.txt.
+  const more = page.getByRole("button", { name: "Más acciones de la release R1" });
+  if (!(await more.isVisible())) await page.getByText("Release bh49").first().click();
+  const del = page.getByRole("menuitem", { name: "Borrar release" });
+  await more.click();
   await del.click();
   const confirmDlg = page.locator("[role=dialog]").filter({ hasText: "Release bh49" });
   await confirmDlg.waitFor();
   await ctx.setOffline(true);
   await confirmDlg.getByRole("button", { name: "Borrar", exact: true }).click();
   await L.eqEventually("RELDEL: sin red sale «Sin conexión: no se ha guardado»", async () => (await bodyText(page)).includes(OFFLINE), true, { timeout: 10000 });
+  await more.click();
   L.check("RELDEL: el botón no se queda ocupado", await del.isEnabled());
   L.eq("RELDEL: la release sigue", (await L.q(`SELECT count(*)::int n FROM "Release" WHERE id='bh49_rel'`))[0].n, 1);
   await ctx.setOffline(false);
