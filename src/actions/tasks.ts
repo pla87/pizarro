@@ -476,7 +476,7 @@ const updateSchema = z.object({
 /** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
 async function recordUpdateEvents(
   taskId: string,
-  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number; blockedById: string | null },
+  prev: { title: string; description?: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number; blockedById: string | null },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
   optional: Record<string, unknown> = {},
@@ -581,10 +581,13 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
     // fija, repetición, valores para deshacer y valores anteriores para el historial y los avisos.
     // Las relaciones (etiquetas) van en una consulta aparte en paralelo: como relación, Prisma la haría después.
     const id = v.id.parse(taskId);
-    const [task, labels] = await Promise.all([
-      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT }),
+    // La descripción (hasta 20 KB) solo si se edita: es lo único que la usa (deshacer, conflicto e historial).
+    const editsDescription = data.description !== undefined;
+    const [loaded, labels] = await Promise.all([
+      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT, description: editsDescription }),
       data.labelIds !== undefined ? db.taskLabel.findMany({ where: { taskId: id }, select: { labelId: true } }) : undefined,
     ]);
+    const task = loaded as Omit<typeof loaded, "description"> & { description?: string };
     const { projectId } = task;
     assertNotArchivedRow(task);
     const editsText = data.title !== undefined || data.description !== undefined;
@@ -632,7 +635,8 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       ...(editsText ? { contentUpdatedAt: new Date(), contentUpdatedById: user.id } : {}),
     };
     const changed = Object.keys(fields).filter((k) => k !== "labelIds") as TaskField[];
-    addUndo(taskSetOp(task, changed, labels));
+    // `changed` solo incluye la descripción si se edita, y entonces se ha leído.
+    addUndo(taskSetOp(task as typeof loaded, changed, labels));
     const prev = task;
     const newMentions = await db.$transaction(async (tx) => {
       // Bloqueo: la comprobación de antes vale para el mensaje rápido, pero la definitiva va aquí, con el candado del
@@ -647,14 +651,15 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       // la de fuera, pero aquí el segundo ya ve el texto del primero y recibe el 409.
       let added: string[] = [];
       if (data.description !== undefined || checkConflict) {
-        const [before] = await tx.$queryRaw<{ title: string; description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "title", "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        const description = editsDescription ? Prisma.sql`, "description"` : Prisma.empty;
+        const [before] = await tx.$queryRaw<{ title: string; description?: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "title"${description}, "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
         if (checkConflict && before) await assertNoTextConflict(id, before, user.id, since, data, tx);
         if (data.description !== undefined) {
           const old = new Set(extractMentionIds(before?.description ?? ""));
           added = extractMentionIds(data.description).filter((id) => !old.has(id));
         }
       }
-      await tx.task.update({ where: { id: taskId }, data: fields });
+      await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
@@ -731,7 +736,7 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       const undoPosition = placed.rebalanced && fromColumnId === columnId
         ? (await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position
         : task.position;
-      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
+      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 }, select: { id: true } });
       return { position: placed.position, undoPosition };
     });
     addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}) } });
@@ -854,7 +859,7 @@ export async function archiveTask(taskId: string) {
     const { columnId } = task;
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 } });
+    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 }, select: { id: true } });
     return { spawned: await spawnRecurrences([taskId], user.id) };
   });
 }
@@ -1478,7 +1483,7 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await lockBlocking(tx, projectId);
         if (await blockProblem(id, fields.blockedById, projectId, tx)) delete fields.blockedById;
       }
-      if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields });
+      if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields, select: { id: true } });
       if (labelsChanged) {
         await tx.taskLabel.deleteMany({ where: { taskId: id } });
         await tx.taskLabel.createMany({ data: wantedLabels.map((labelId) => ({ taskId: id, labelId })) });
@@ -1540,7 +1545,7 @@ export async function restoreTask(taskId: string) {
       await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
-      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null } });
+      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
     });
     describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };

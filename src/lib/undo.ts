@@ -864,7 +864,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
               await lockBlocking(tx, projectId);
               if (await blockProblem(op.id, data.blockedById, projectId, tx)) data.blockedById = null;
             }
-            await tx.task.update({ where: { id: op.id }, data: taskUpdateData(data) });
+            await tx.task.update({ where: { id: op.id }, data: taskUpdateData(data), select: { id: true } });
             if (labelRows) {
               await tx.taskLabel.deleteMany({ where: { taskId: op.id } });
               await tx.taskLabel.createMany({ data: labelRows.map((l) => ({ taskId: op.id, labelId: l.id })) });
@@ -918,7 +918,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
             await tx.taskLink.createMany({ data: s.links.map((l) => ({ ...l, kind: l.kind as Prisma.TaskLinkCreateManyInput["kind"], createdById: known(l.createdById), createdAt: new Date(l.createdAt) })) });
             await tx.releaseTask.updateMany({ where: { id: { in: s.releaseTaskIds } }, data: { taskId: t.id } });
             if (blockedById && !(await blockProblem(t.id, blockedById, projectId, tx))) {
-              await tx.task.update({ where: { id: t.id }, data: { blockedById } });
+              await tx.task.update({ where: { id: t.id }, data: { blockedById }, select: { id: true } });
               linked = true;
             }
           });
