@@ -3,7 +3,8 @@
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
-import { importWhenOnline, isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { lazyDialog } from "../lazyDialog";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -11,15 +12,16 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
-import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
+import { msUntilNextDay, todayIso } from "@/lib/dates";
+import { appTimeZone } from "@/lib/format";
 import { FilterMenu } from "./FilterMenu";
 import { ProjectMenu } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
@@ -36,11 +38,11 @@ import { ColumnView } from "./ColumnView";
 import { wipExceeded } from "@/lib/wip";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { boardDragA11y } from "./drag-a11y";
-import { EVERGREEN_DROPPABLE_PREFIX } from "./EvergreenPanel";
+import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
 import { useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
-import { placeBlock, sameOrder, selectionGroup, type BlockPlacement } from "./groupDrag";
+import { PENDING_COPY_PREFIX, isPendingCopy, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
 import { createMoveTurns } from "./moveTurns";
 import { useReviewGuard } from "./reviewGuard";
@@ -51,7 +53,7 @@ import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from 
 import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
 import { TransferButton } from "./TaskTransfer";
-import { strictJsonFormat } from "@/lib/task-json";
+import { strictJsonFormat } from "@/lib/task-json-core";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
@@ -65,46 +67,30 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { shouldRefreshOnFocus } from "@/lib/focus-refresh";
 import { cardCount } from "./count-texts";
 
-/**
- * Un diálogo cargado aparte, con su propio Suspense sin nada que mostrar mientras llega su código. next/dynamic (con
- * ssr, como aquí) no pone ninguno: la carga suspendía hasta el del loading.tsx del proyecto y, al abrir un diálogo en un
- * tablero recién abierto, el tablero se cambiaba un instante por el esqueleto de columnas. Así el tablero sigue a la
- * vista y el diálogo aparece en cuanto llega; cada uno con el suyo, para que abrir el segundo no esconda el primero.
- */
-function ownSuspense<P extends object>(Dialog: ComponentType<P>): ComponentType<P> {
-  function WithSuspense(props: P) {
-    return (
-      <Suspense fallback={null}>
-        <Dialog {...props} />
-      </Suspense>
-    );
-  }
-  return WithSuspense;
-}
-
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
 // se cargan al abrirlos y se precargan cuando el navegador está libre. Si al abrirlos no hay red, esperan a que vuelva
-// (importWhenOnline) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red.
+// (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
+// Suspense (lazyDialog): al abrir uno en un tablero recién abierto el tablero no se cambia por el esqueleto de columnas.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
 const loadReleaseDialog = () => import("./ReleaseDialog");
 const loadBulkTaskDialog = () => import("./BulkTaskDialog");
 const loadArchivedDialog = () => import("./ArchivedDialog");
 const loadImportTasksDialog = () => import("./ImportTasksDialog");
-const TaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadTaskDialog).then((m) => m.TaskDialog)));
-const NewTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadNewTaskDialog).then((m) => m.NewTaskDialog)));
-const ReleaseDialog = ownSuspense(dynamic(() => importWhenOnline(loadReleaseDialog).then((m) => m.ReleaseDialog)));
-const BulkTaskDialog = ownSuspense(dynamic(() => importWhenOnline(loadBulkTaskDialog).then((m) => m.BulkTaskDialog)));
-const ArchivedDialog = ownSuspense(dynamic(() => importWhenOnline(loadArchivedDialog).then((m) => m.ArchivedDialog)));
-const ImportTasksDialog = ownSuspense(dynamic(() => importWhenOnline(loadImportTasksDialog).then((m) => m.ImportTasksDialog)));
+const TaskDialog = lazyDialog(loadTaskDialog, (m) => m.TaskDialog);
+const NewTaskDialog = lazyDialog(loadNewTaskDialog, (m) => m.NewTaskDialog);
+const ReleaseDialog = lazyDialog(loadReleaseDialog, (m) => m.ReleaseDialog);
+const BulkTaskDialog = lazyDialog(loadBulkTaskDialog, (m) => m.BulkTaskDialog);
+const ArchivedDialog = lazyDialog(loadArchivedDialog, (m) => m.ArchivedDialog);
+const ImportTasksDialog = lazyDialog(loadImportTasksDialog, (m) => m.ImportTasksDialog);
 
 const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
 const PINGPONG_MS = 60;
-/** Id de la copia provisional de un arrastre con Ctrl mientras responde el servidor (ver dropCopy). */
-const PENDING_COPY_PREFIX = "pending-copy-";
+/** Margen tras la medianoche antes de refrescar «hoy» (el reloj del servidor puede ir unos segundos detrás). */
+const MIDNIGHT_MARGIN_MS = 5_000;
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -458,6 +444,27 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
   // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
   const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
+  // «Hoy» (data.today, del servidor: plazos, «vence hoy», filtros por fecha) cambia a medianoche en la zona de la app aunque
+  // el tablero siga abierto: al empezar el día siguiente se refresca. Se espera como mucho una hora de cada vez y se vuelve
+  // a mirar el día (los cambios de hora alargan o acortan el día); unos segundos de margen por si el reloj del servidor va
+  // algo detrás. Si tras refrescar el servidor aún dice el día anterior, se reintenta un par de veces. Sin estado: el
+  // temporizador no vuelve a dibujar nada (ni DndContext) hasta que llegan los datos nuevos.
+  useEffect(() => {
+    const tz = appTimeZone();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let retries = 0;
+    const check = () => {
+      if (todayIso(tz) === data.today) {
+        timer = setTimeout(check, Math.min(msUntilNextDay(tz) + MIDNIGHT_MARGIN_MS, 3_600_000));
+      } else if (retries++ < 3) {
+        refresh();
+        timer = setTimeout(check, 60_000);
+      }
+    };
+    // Con el día del navegador ya distinto al abrir (reloj del equipo desajustado) no se refresca en bucle.
+    if (todayIso(tz) === data.today) check();
+    return () => clearTimeout(timer);
+  }, [data.today, refresh]);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;
@@ -876,8 +883,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
    * en `placement`, en el orden del tablero, con una sola acción (moveTasks con vecinas) y un solo paso de deshacer. La
    * selección se mantiene: se ve dónde han quedado y se pueden volver a mover (Alt+flechas seguidas, otro arrastre).
    */
-  const moveBlock = async (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => {
-    if (sameOrder(itemsNow()[columnId] ?? NO_IDS, placement.list)) return;
+  const moveBlock = async (asked: string[], columnId: string, askedPlacement: BlockPlacement, focusId?: string) => {
+    // Las vecinas que van al servidor son tareas de verdad: una copia provisional (dropCopy) junto al hueco se salta.
+    const { placement, group } = realPlacement(askedPlacement, asked);
+    if (!group.length || sameOrder(withoutPendingCopies(itemsNow()[columnId] ?? NO_IDS), placement.list)) return;
     if (!(await confirmLeaveReview(group, columnId))) {
       if (focusId) focusCard(focusId);
       return;
@@ -966,7 +975,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setColumns,
       openTask: (id) => {
         // La copia provisional de un arrastre con Ctrl aún no existe en el servidor: se abre la de verdad cuando llegue.
-        if (id.startsWith(PENDING_COPY_PREFIX)) return;
+        if (isPendingCopy(id)) return;
         prefetchTaskDetail(id);
         // Un borrador guardado de ESTA tarea (archivar o borrar desde el detalle lo cierra al momento; si falla, sin red,
         // lo escrito y sin guardar queda en el borrador): se recupera al volver a abrirla, como al recargar la página.
@@ -979,8 +988,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       openRelease: (columnId) => {
         // Las evergreen van siempre incluidas y preseleccionadas (se pueden desmarcar en el diálogo).
         const { baseItems: base, evergreenByColumn: evergreen } = latest.current;
-        const fixed = evergreen[columnId] ?? [];
-        const ids = [...(base[columnId] ?? []), ...fixed];
+        // Sin las copias provisionales (aún no existen en el servidor).
+        const fixed = withoutPendingCopies(evergreen[columnId] ?? []);
+        const ids = [...withoutPendingCopies(base[columnId] ?? []), ...fixed];
         const selected = stores.selection.get();
         const pre = ids.filter((id) => selected.has(id));
         setRelease({ taskIds: ids, preselected: pre.length ? [...new Set([...pre, ...fixed])] : ids });
@@ -990,7 +1000,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setSelectedMany: (ids, on) =>
         stores.selection.set((prev) => {
           const next = new Set(prev);
-          for (const id of ids) {
+          // Una copia provisional no se selecciona (las acciones en bloque la enviarían al servidor).
+          for (const id of withoutPendingCopies(ids)) {
             if (on) next.add(id);
             else next.delete(id);
           }
@@ -998,6 +1009,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         }),
       toggleSelected: (id) =>
         stores.selection.set((prev) => {
+          if (isPendingCopy(id)) return prev;
           const next = new Set(prev);
           if (next.has(id)) next.delete(id);
           else next.add(id);
@@ -1174,6 +1186,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     setSkipDropAnimation(false);
     // La tarjeta arrastrada sigue apuntada a dnd-kit aunque cambie de columna; las demás no se desapuntan hasta soltar.
     draggingCard.set(id);
+    evergreenLeftPanel.clear();
     const col = findContainer(baseItems, id);
     // Una tarjeta seleccionada con otras se lleva toda la selección; una sin seleccionar (o una fija), solo ella.
     const group = col ? selectionGroup(stores.selection.get(), id, sortedColumns.map((c) => c.id), baseItems) : null;
@@ -1219,6 +1232,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const last = lastContainerMove.current;
     if (last && last.to === from && last.from === to && performance.now() - last.at < PINGPONG_MS) return;
     lastContainerMove.current = { from, to, at: performance.now() };
+    // Una fija que sale de su panel a una lista: su fila se vuelve a montar al terminar (ver EvergreenPanel, `remounts`).
+    if (from === EVERGREEN_ORIGIN && to !== EVERGREEN_ORIGIN) evergreenLeftPanel.add(id);
     const dest = to;
     setDragItems((prev) => {
       if (!prev || findContainer(prev, id) !== from) return prev;
@@ -1316,7 +1331,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!over || !current || !origin) return;
     const id = String(active.id);
     // Una copia provisional (dropCopy) aún no existe en el servidor: no se puede mover ni copiar hasta que llegue.
-    if (id.startsWith(PENDING_COPY_PREFIX)) return;
+    if (isPendingCopy(id)) return;
     const overId = String(over.id);
     if (overId.startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
       const evergreenColumn = overId.slice(EVERGREEN_DROPPABLE_PREFIX.length);
@@ -1340,16 +1355,18 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
+    // Vecinas para el servidor: sin las copias provisionales (si se suelta junto a una, la siguiente de verdad o ninguna).
+    const real = withoutPendingCopies(list, id);
     // La copia se suelta donde quedaría la tarjeta (también en su mismo sitio: justo detrás de la original).
     if (copy) {
-      const at = neighboursOf(list, id);
+      const at = neighboursOf(real, id);
       return dropCopy(id, col, at.prevId, at.nextId);
     }
     // Una selección: todas seguidas en el hueco de la cogida (si ya estaban así, moveBlock no hace nada).
     if (group) return moveBlock(group, col, placeBlock(list, id, group));
     if (col === origin.columnId && index === origin.index) return;
 
-    const { prevId, nextId } = neighboursOf(list, id);
+    const { prevId, nextId } = neighboursOf(real, id);
     const position = positionBetween(prevId ? taskById.get(prevId)?.position : null, nextId ? taskById.get(nextId)?.position : null);
     const previous = taskById.get(id)!;
     if (col !== origin.columnId && !(await confirmLeaveReview([id], col))) return;

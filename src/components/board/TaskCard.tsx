@@ -20,6 +20,7 @@ import { TypeBadge } from "../ui/TypeBadge";
 import { useBoard, useIsSelected, useTask } from "./context";
 import { useCardFileDrop } from "./useCardFileDrop";
 import { useNearCard } from "./nearCards";
+import { isPendingCopy } from "./groupDrag";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
 import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
@@ -210,8 +211,11 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
   const [renaming, setRenaming] = useState(false);
   const [dueAnchor, setDueAnchor] = useState<HTMLElement | null>(null);
+  // Copia provisional de un arrastre con Ctrl (aún sin respuesta del servidor; Board.tsx, dropCopy): se ve, pero no admite
+  // teclado, selección ni archivos hasta que la sustituya la de verdad (su id no existe en el servidor).
+  const pending = !overlay && isPendingCopy(task.id);
   // Soltar archivos sobre la tarjeta (escritorio) los adjunta a la tarea.
-  const fileDrop = useCardFileDrop(task.id, !overlay);
+  const fileDrop = useCardFileDrop(task.id, !overlay && !pending);
   // Movida a otra columna con el teclado: se vuelve a montar allí y recoge el foco al montarse (focusCard, shortcuts.ts).
   const cardRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -219,6 +223,14 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   }, [task.id, overlay]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (pending) {
+      // Ni abrir, ni seleccionar, ni atajos; tampoco el arrastre con teclado ni el scroll de Espacio.
+      if (e.key === "Enter" || e.key === " " || e.altKey || e.code === "F2") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
     if (e.key === "Enter") {
       // Evita que el KeyboardSensor de dnd-kit empiece además un arrastre.
       e.stopPropagation();
@@ -268,7 +280,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
       aria-describedby={overlay ? undefined : descId}
       // Selección múltiple (Espacio): botón que se queda pulsado mientras está seleccionada.
       aria-pressed={overlay ? undefined : isSelected}
-      aria-keyshortcuts={overlay ? undefined : CARD_SHORTCUTS}
+      aria-keyshortcuts={overlay || pending ? undefined : CARD_SHORTCUTS}
+      aria-disabled={pending || undefined}
+      aria-busy={pending || undefined}
       onClick={() => openTask(task.id)}
       onKeyDown={onKeyDown}
       {...(overlay ? {} : fileDrop.handlers)}
@@ -303,8 +317,9 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            toggleSelected(task.id);
+            if (!pending) toggleSelected(task.id);
           }}
+          disabled={pending}
           onPointerDown={(e) => e.stopPropagation()}
           // Fuera del Tab (se alterna con Espacio sobre la tarjeta); sigue siendo pulsable con ratón y táctil.
           tabIndex={-1}

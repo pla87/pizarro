@@ -9,6 +9,18 @@ export function todayIso(timeZone?: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
+/**
+ * Milisegundos que faltan, según la hora de pared de esa zona, para que empiece el día siguiente. Un día con cambio de
+ * hora puede durar una hora más o menos de lo que dice la hora de pared antes del cambio: quien lo use vuelve a comprobar
+ * el día al vencer (y conviene no esperar de una vez más de una hora).
+ */
+export function msUntilNextDay(timeZone?: string, now: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(now);
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const elapsed = ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000 + (((now.getTime() % 1000) + 1000) % 1000);
+  return Math.max(0, 86_400_000 - elapsed);
+}
+
 /** Día natural (YYYY-MM-DD) de un instante en la zona horaria indicada (no el día UTC). */
 export const isoInZone = (date: Date, timeZone?: string): string => todayIso(timeZone, date);
 

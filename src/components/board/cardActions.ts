@@ -9,7 +9,7 @@ import type { BoardColumn, BoardTask } from "@/lib/types";
 import type { T } from "@/i18n/core";
 import type { useToast } from "../ui/Toast";
 import { focusCard } from "./shortcuts";
-import { keyboardBlock, selectionGroup, type BlockMove, type BlockPlacement } from "./groupDrag";
+import { isPendingCopy, keyboardBlock, selectionGroup, withoutPendingCopies, type BlockMove, type BlockPlacement } from "./groupDrag";
 import type { MoveTurns } from "./moveTurns";
 
 type Toast = ReturnType<typeof useToast>;
@@ -49,11 +49,18 @@ export function useCardActions(deps: Deps) {
   });
 
   return useMemo(() => {
+    /**
+     * Ids por columna sin las copias provisionales de un arrastre con Ctrl (aún no existen en el servidor): las vecinas
+     * que se envían son siempre tareas de verdad.
+     */
+    const realItems = () => Object.fromEntries(Object.entries(ref.current.getItems()).map(([c, ids]) => [c, withoutPendingCopies(ids)]));
+
     /** Guarda campos con cambio optimista; si el servidor lo rechaza, vuelve a como estaba. */
     const saveFields = async (id: string, patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, since?: string | null): Promise<boolean> => {
       const { getTask, patchTask, upsertTask, track, toast } = ref.current;
       const before = getTask(id);
-      if (!before) return false;
+      // Una copia provisional no se guarda: aún no existe en el servidor.
+      if (!before || isPendingCopy(id)) return false;
       patchTask(id, optimistic);
       const res = await track(updateTask(id, patch, since));
       if (!res.ok) {
@@ -73,8 +80,8 @@ export function useCardActions(deps: Deps) {
      * ha hecho (o no había adónde ir); `false` si la tarjeta no forma parte de una selección de varias.
      */
     const moveGroup = async (id: string, move: BlockMove): Promise<boolean> => {
-      const { getSelected, sortedColumns, getItems, moveBlock } = ref.current;
-      const baseItems = getItems();
+      const { getSelected, sortedColumns, moveBlock } = ref.current;
+      const baseItems = realItems();
       const columnOrder = sortedColumns.map((c) => c.id);
       const group = selectionGroup(getSelected(), id, columnOrder, baseItems);
       if (!group) return false;
@@ -98,15 +105,16 @@ export function useCardActions(deps: Deps) {
       },
 
       moveToAdjacentColumn: async (id: string, dir: -1 | 1) => {
+        if (isPendingCopy(id)) return;
         if (await moveGroup(id, dir < 0 ? "left" : "right")) return;
-        const { getTask, sortedColumns, getItems, moveTurns, patchTask, upsertTask, track, toast, t } = ref.current;
+        const { getTask, sortedColumns, moveTurns, patchTask, upsertTask, track, toast, t } = ref.current;
         const task = getTask(id);
         if (!task) return;
         const target = sortedColumns[sortedColumns.findIndex((c) => c.id === task.columnId) + dir];
         if (!target) return;
         if (!(await ref.current.confirmLeaveReview([id], target.id))) return focusCard(id);
         // Al final de la columna destino.
-        const prevId = getItems()[target.id]?.at(-1) ?? null;
+        const prevId = realItems()[target.id]?.at(-1) ?? null;
         const position = positionBetween(prevId ? getTask(prevId)?.position : null, null);
         patchTask(id, { columnId: target.id, position, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() });
         focusCard(id);
@@ -126,12 +134,13 @@ export function useCardActions(deps: Deps) {
       },
 
       moveWithinColumn: async (id: string, dir: -1 | 1) => {
+        if (isPendingCopy(id)) return;
         if (await moveGroup(id, dir < 0 ? "up" : "down")) return;
-        const { getTask, getItems, moveTurns, patchTask, upsertTask, track, toast } = ref.current;
+        const { getTask, moveTurns, patchTask, upsertTask, track, toast } = ref.current;
         const task = getTask(id);
         if (!task) return;
-        // Lista completa de la columna (sin filtrar): los vecinos enviados al servidor son los reales.
-        const list = getItems()[task.columnId] ?? [];
+        // Lista completa de la columna (sin filtrar, salvo las copias provisionales): los vecinos enviados al servidor son los reales.
+        const list = realItems()[task.columnId] ?? [];
         const index = list.indexOf(id);
         const target = index + dir;
         if (index < 0 || target < 0 || target >= list.length) return;
@@ -160,6 +169,7 @@ export function useCardActions(deps: Deps) {
 
       renameTask: async (id: string, title: string) => {
         const task = ref.current.getTask(id);
+        if (isPendingCopy(id)) return true;
         // Más largo que el máximo: se guarda recortado (sin partir emojis ni menciones) y se avisa.
         const { value, clipped, limit } = clampTitle(title.trim());
         if (!task || !value || value === task.title) return true;
@@ -170,6 +180,7 @@ export function useCardActions(deps: Deps) {
       },
 
       duplicateTask: async (id: string) => {
+        if (isPendingCopy(id)) return;
         const { upsertTask, track, toast, t } = ref.current;
         const res = await track(duplicateTask(id));
         if (!res.ok) return toast(res.error, "error");

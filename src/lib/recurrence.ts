@@ -115,10 +115,15 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     const columnId = routine ? routine.targetId : src.column.isDone || opts.asDone ? (firstOpen.get(src.projectId) ?? src.columnId) : src.columnId;
     return { src, routine, columnId };
   });
-  // Solo las columnas «Programa del curso» tienen tope de sesiones: las demás no necesitan la comprobación.
+  // Solo las columnas «Programa del curso» tienen tope de sesiones: las demás van en lote. Leído fuera de la transacción,
+  // solo sirve para repartir: el tope lo deciden createOne y createMany con la columna bloqueada (una columna puede pasar
+  // a PROGRAM entre esta lectura y el alta).
   const programCols = new Set(
     (await db.column.findMany({ where: { id: { in: [...new Set(plan.map((p) => p.columnId))] }, role: "PROGRAM" }, select: { id: true } })).map((c) => c.id),
   );
+
+  /** Centinela de createMany: una columna del lote es ya «Programa del curso» (se repite una a una). */
+  const PROGRAM_SINCE_READ = new Error("program-column");
 
   type Item = (typeof plan)[number] & { data: Omit<Prisma.TaskCreateManyInput, "position"> };
 
@@ -128,8 +133,9 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       // Al final de la columna, con la columna bloqueada (sin compartir posición con otra tarea).
       const next = await db.$transaction(async (tx) => {
         await lockColumns(tx, [columnId]);
-        // Columna «Programa del curso» en el tope de sesiones: tampoco nace (igual que con el tope del proyecto).
-        if (programCols.has(columnId) && (await columnRoomProblem(tx, columnId, 1))) return null;
+        // Columna «Programa del curso» en el tope de sesiones: tampoco nace (igual que con el tope del proyecto). El rol se
+        // lee aquí, con la columna bloqueada (no vale programCols, leído antes y fuera de la transacción).
+        if (await columnRoomProblem(tx, columnId, 1)) return null;
         const last = await lastPositionIn(tx, columnId);
         return tx.task.create({
           data: {
@@ -161,13 +167,15 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
    * Varias apariciones (de columnas sin tope de sesiones) en una transacción: las columnas bloqueadas, una posición
    * final por columna y tres INSERT para todas (tareas, etiquetas y subtareas), en el orden del lote. Si otra petición
    * ha creado a la vez la siguiente de alguna (índice único de `recurrenceFromId`), no se crea ninguna del grupo y se
-   * repite una a una, que salta solo esa.
+   * repite una a una, que salta solo esa. Igual si alguna columna ha pasado a «Programa del curso» desde que se leyó
+   * programCols: una a una, cada una con su comprobación del tope.
    */
   const createMany = async (items: Item[]): Promise<(string | null)[]> => {
     try {
       return await db.$transaction(async (tx) => {
         const cols = [...new Set(items.map((i) => i.columnId))];
         await lockColumns(tx, cols);
+        if (await tx.column.count({ where: { id: { in: cols }, role: "PROGRAM" } })) throw PROGRAM_SINCE_READ;
         const pos = new Map<string, number>();
         for (const c of cols) pos.set(c, (await lastPositionIn(tx, c)) ?? 0);
         const rows = await tx.task.createManyAndReturn({
@@ -186,7 +194,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
         return items.map((i) => idOf.get(i.src.id) ?? null);
       });
     } catch (err) {
-      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
+      if (err !== PROGRAM_SINCE_READ && !(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
       const out: (string | null)[] = [];
       for (const item of items) out.push(await createOne(item));
       return out;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { taskClient, taskCost, taskHours, taskPriority, linkUrl } from "../src/lib/validation";
-import { budgetSummary, centsToAmount, formatEuro, normalizeTaskFields, startAfterDue, sumCents } from "../src/lib/task-fields";
+import { budgetSummary, centsToAmount, formatEuro, loneHalfBeforeCost, normalizeTaskFields, startAfterDue, sumCents } from "../src/lib/task-fields";
 import { templateTaskFields } from "../src/lib/project-templates";
 import { buildReport, type ReportInput } from "../src/lib/report";
 import { EMPTY_FILTERS, taskMatchesFilters } from "../src/components/board/filters";
@@ -123,4 +123,18 @@ test("informe: sin campos activados no hay sección; con ellos, totales y filas 
   // Prioridad y cliente están guardados pero desactivados: no salen.
   assert.equal(r.rows[0]!.priority, null);
   assert.equal(r.rows[1]!.client, null);
+});
+
+test("campo de media columna sin pareja antes del Coste: ocupa la fila entera", () => {
+  const detail = { before: ["due"], startFirst: true };
+  // Detalle: fecha límite + Prioridad + Cliente (tres medias) y Coste: Cliente se quedaba solo con la celda derecha vacía.
+  assert.equal(loneHalfBeforeCost(["priority", "client", "cost"], detail), "client");
+  // Con fecha de inicio son cuatro: van de dos en dos.
+  assert.equal(loneHalfBeforeCost(["startDate", "priority", "client", "cost"], detail), null);
+  // Solo el Coste: la fecha límite se quedaba sola.
+  assert.equal(loneHalfBeforeCost(["cost"], detail), "due");
+  assert.equal(loneHalfBeforeCost(["priority", "client", "hours"], detail), null);
+  // Recuadro de «Nueva tarea» (la fecha de inicio va al final).
+  assert.equal(loneHalfBeforeCost(["startDate", "priority", "cost"]), "priority");
+  assert.equal(loneHalfBeforeCost(["priority", "client", "cost"]), null);
 });

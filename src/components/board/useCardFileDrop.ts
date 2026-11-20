@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { isPendingCopy } from "./groupDrag";
 import { batchErrorMessage, cardsAcceptFiles, filesFrom, hasFiles, monotonicTotals, skippedMessage, uploadBatch } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
 
@@ -41,7 +42,8 @@ export function useCardFileDrop(taskId: string, enabled: boolean) {
     };
   }, [over]);
 
-  const accepts = (e: React.DragEvent) => enabled && hasFiles(e) && cardsAcceptFiles();
+  // Una copia provisional (arrastre con Ctrl aún sin respuesta) no admite archivos: no existe en el servidor.
+  const accepts = (e: React.DragEvent) => enabled && !isPendingCopy(taskId) && hasFiles(e) && cardsAcceptFiles();
 
   const upload = async (list: File[]) => {
     // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
