@@ -6,7 +6,7 @@
 // así que valga el que valga, sale el del tema; con «Sistema», cada uno el suyo. Al cambiar de tema solo se cambia su
 // `content`: los <meta> los pinta Next y no deben quitarse ni añadirse a mano.
 
-export const THEME_COLOR = { light: "#f8fafc", dark: "#020617" } as const;
+const THEME_COLOR = { light: "#f8fafc", dark: "#020617" } as const;
 
 const MEDIA = { light: "(prefers-color-scheme: light)", dark: "(prefers-color-scheme: dark)" } as const;
 

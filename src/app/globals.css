@@ -404,7 +404,7 @@ body {
  * Flecha de los desplegables (<select> de una sola línea), dibujada por la app y no por el navegador: la nativa de Chromium
  * quedaba a 4 px del borde derecho y no se puede mover. Esta es igual (8×5 px, del color del texto) pero a 6 px del borde,
  * y el relleno derecho deja sitio para que un texto largo no la pise. Fuera de @layer: gana a `px-3` de `.input` y a los
- * `pr-*` sueltos. En alto contraste (forced-colors) las imágenes de fondo no se pintan: vuelve la flecha del sistema.
+ * `pr-*` sueltos. En alto contraste (forced-colors) se quita la flecha propia (las imágenes url() sí se pintan) y vuelve la del sistema.
  */
 select:not([multiple], [size]) {
   appearance: none;
@@ -425,6 +425,7 @@ select:not([multiple], [size]) {
   @media (forced-colors: active) {
     appearance: auto;
     padding-right: revert-layer;
+    background-image: none;
   }
 }
 
