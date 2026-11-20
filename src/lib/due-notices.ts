@@ -40,7 +40,12 @@ export async function dropPendingDueChanges(taskId: string, exceptRecipientId?: 
   await db.pendingDueNotice.deleteMany({ where: { taskId, ...(exceptRecipientId ? { recipientId: { not: exceptRecipientId } } : {}) } });
 }
 
-const BATCH = 100;
+/**
+ * Filas que se reclaman de una vez. Pocas: se envían en serie y cada aviso puede tardar lo que el SMTP (o Telegram) en
+ * contestar; con 100, un servidor de correo lento pasaba de DUE_NOTICE_CLAIM_MS antes de llegar a las últimas y otra
+ * pasada (otra instancia) las volvía a reclamar y a enviar.
+ */
+const BATCH = 10;
 /**
  * Al reclamar una fila se retrasa su `sendAfter` este tiempo (el «reclamo»), y se borra cuando su aviso ya ha salido.
  * Si el proceso cae a medias o notifyTask falla, la fila sigue ahí y vuelve a estar vencida al pasar el reclamo: otra
@@ -70,8 +75,10 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
   let sent = 0;
   let failed = 0;
   let lastError = "";
-  const claimUntil = new Date(now.getTime() + DUE_NOTICE_CLAIM_MS);
-  for (;;) {
+  const started = Date.now();
+  for (let batch = 0; ; batch++) {
+    // El reclamo cuenta desde que se reclama cada lote, no desde el principio de la pasada.
+    const claimUntil = new Date(now.getTime() + (batch ? Date.now() - started : 0) + DUE_NOTICE_CLAIM_MS);
     const rows = await db.$queryRaw<ClaimedNotice[]>`
       UPDATE "PendingDueNotice" SET "sendAfter" = ${claimUntil}, "claimedAt" = COALESCE("claimedAt", ${now}) WHERE "id" IN (
         SELECT "id" FROM "PendingDueNotice" WHERE "sendAfter" <= ${now} ORDER BY "sendAfter" LIMIT ${BATCH} FOR UPDATE SKIP LOCKED
@@ -93,7 +100,8 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
         lastError = err instanceof Error ? err.message : String(err);
       }
     }
-    if (rows.length < BATCH) break;
+    // Con el apagado en marcha no se reclaman más lotes (siguen pendientes para el proceso nuevo).
+    if (rows.length < BATCH || isShuttingDown()) break;
   }
   if (sent) logEvent({ category: "notify", action: "notify.dueGrouped", message: `${sent} aviso(s) de cambio de fecha enviados tras esperar`, details: { count: sent } });
   // Un solo error por pasada en el registro (además del console.error de cada fallo), para verlo en Administración → Logs.

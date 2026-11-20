@@ -137,6 +137,9 @@ const sleep = (ms: number, signal?: AbortSignal) =>
     signal?.addEventListener("abort", done, { once: true });
   });
 
+/** Cada cuánto vuelve a leer de la BD la configuración el bucle de sondeo (cada vuelta dura unos 25 s). */
+const POLL_CONFIG_MAX_AGE_MS = 10 * 60_000;
+
 const tokenKeyOf = (token: string) => labelledHmac("telegram-poll", token);
 
 /**
@@ -156,7 +159,9 @@ function startPolling(token: string): void {
     let backoff = 0;
     let last: MessagingConfig | null = null;
     while (gen === p.gen && !isShuttingDown()) {
-      const cfg = await loadMessagingConfig().catch(() => null);
+      // La copia en memoria (la rehace al momento guardar en Administración, que además reinicia o para este bucle);
+      // de la BD, con su descifrado, solo cada POLL_CONFIG_MAX_AGE_MS y no en cada vuelta de la espera larga.
+      const cfg = await loadMessagingConfig({ maxAgeMs: POLL_CONFIG_MAX_AGE_MS }).catch(() => null);
       // Mientras se leía la configuración se pudo parar o reiniciar el sondeo: este bucle ya no manda.
       if (gen !== p.gen || isShuttingDown()) break;
       if (!cfg?.telegram.active || telegramMode(process.env.APP_URL).mode !== "polling") break;

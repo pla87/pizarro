@@ -3,6 +3,7 @@
 
 import type { JobDef } from "./jobs";
 import { LOCK_MAIL, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } from "./advisory-locks";
+import { appTimeZone } from "./format";
 import { isShuttingDown } from "./shutdown";
 import { logSize } from "./format-size";
 
@@ -249,12 +250,48 @@ export function runMail(): Promise<void> {
   return runLocked("mail", MAIL_JOBS);
 }
 
-/** Arranca el temporizador una sola vez por proceso: primera pasada al minuto, luego cada hora. */
+/** Margen tras la hora en punto para la pasada del correo (que «las 08:00» ya hayan llegado en todos los relojes). */
+const MAIL_AFTER_HOUR_MS = 60 * 1000;
+
+/**
+ * Milisegundos hasta la próxima hora en punto (en la zona horaria `timeZone`) más MAIL_AFTER_HOUR_MS. En la zona de la
+ * app y no en UTC: en una zona con media hora (Asia/Kolkata, UTC+5:30) la hora en punto local no lo es en UTC.
+ */
+export function msUntilMailPass(now: Date, timeZone: string): number {
+  let minute = now.getUTCMinutes();
+  try {
+    minute = Number(new Intl.DateTimeFormat("en-US", { timeZone, minute: "2-digit" }).format(now)) % 60;
+  } catch {
+    // zona no válida: la de UTC
+  }
+  const intoHour = minute * 60_000 + now.getUTCSeconds() * 1000 + now.getUTCMilliseconds();
+  const wait = EVERY_MS - intoHour + MAIL_AFTER_HOUR_MS;
+  // Justo después de la hora en punto (dentro del margen) toca en este mismo minuto, no dentro de una hora.
+  return wait > EVERY_MS ? wait - EVERY_MS : wait;
+}
+
+/**
+ * Programa la pasada del correo a la hora en punto (+1 min) de la zona de la app, y la siguiente al terminar el plazo: un
+ * resumen «a las 08:00» sale a las 08:01, no en cualquier minuto hasta las 08:59 según cuándo arrancó el proceso. Con
+ * setTimeout encadenado y no setInterval, para no ir desviándose ni seguir con una zona horaria cambiada en Ajustes.
+ */
+function scheduleMailOnTheHour(): void {
+  const wait = msUntilMailPass(new Date(), appTimeZone());
+  setTimeout(() => {
+    void runMail();
+    scheduleMailOnTheHour();
+  }, wait).unref?.();
+}
+
+/**
+ * Arranca los temporizadores una sola vez por proceso. Mantenimiento: primera pasada al minuto, luego cada hora. Correo:
+ * una pasada al minuto (para lo que tocaba mientras el servidor estaba parado) y después a cada hora en punto (+1 min).
+ */
 export function startMaintenance(): void {
   const g = globalThis as unknown as { __pzMaintenance?: boolean };
   if (g.__pzMaintenance) return;
   g.__pzMaintenance = true;
-  // Avisos de cambio de fecha agrupados: se revisan cada 30 s (ver due-notices.ts).
+  // Avisos de cambio de fecha agrupados: se revisan cada minuto (DUE_NOTIFY_POLL_MS, ver due-notices.ts).
   void import("@/lib/due-notices").then((m) => m.startDueNoticeScheduler()).catch((err) => console.error("[maintenance] avisos de fecha", err));
   // Exportaciones e importaciones de proyectos en segundo plano: cola propia y recuperación de las interrumpidas.
   void import("@/lib/transfer-jobs").then((m) => m.startTransferWorker()).catch((err) => console.error("[maintenance] transferencias de proyectos", err));
@@ -264,9 +301,7 @@ export function startMaintenance(): void {
   setTimeout(() => {
     void runMail();
     void runMaintenance();
-    setInterval(() => {
-      void runMail();
-      void runMaintenance();
-    }, EVERY_MS).unref?.();
+    setInterval(() => void runMaintenance(), EVERY_MS).unref?.();
   }, FIRST_RUN_MS).unref?.();
+  scheduleMailOnTheHour();
 }

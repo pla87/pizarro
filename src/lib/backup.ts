@@ -669,7 +669,10 @@ export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
   const lastFile = (await latestBackupTime()) ?? 0;
   const failedSince = status.lastBackup?.ok === false && Date.parse(status.lastBackup.at) >= lastFile;
   if (!failedSince && now - Math.max(last, lastFile) < BACKUP_EVERY_MS) return;
-  await createBackup();
+  // createBackup no lanza: el fallo se pasa a la tarea para que conste en Tareas de mantenimiento (JobRun). Que otra copia
+  // esté en curso (el botón, otro proceso) no es un fallo de la tarea.
+  const run = await createBackup();
+  if (!run.ok && run.error !== BUSY) throw new Error(run.error ?? "Error");
 }
 
 /** Tarea horaria: sube a los destinos externos la última copia si aún no la tienen (o reintenta si falló). Lanza si falla alguno. */
@@ -687,5 +690,7 @@ export async function monthlyRestoreTestJob(now: number = Date.now()): Promise<v
   const last = status.lastRestoreTest ? Date.parse(status.lastRestoreTest.at) : 0;
   // Si la última prueba falló se repite al día siguiente en vez de esperar un mes.
   if (now - last < (status.lastRestoreTest?.ok === false ? DAY_MS : RESTORE_TEST_EVERY_MS)) return;
-  await runRestoreTest();
+  // runRestoreTest no lanza: el fallo se pasa a la tarea (JobRun), como en la copia diaria.
+  const run = await runRestoreTest();
+  if (!run.ok) throw new Error(run.error ?? "Error");
 }
