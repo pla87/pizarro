@@ -53,6 +53,7 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/r52-plan-e2e.mjs` | 101 | ~1 min |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/r50-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/r55-tablero-e2e.mjs` | 75 | ~1 min |
+| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/r56-ui-e2e.mjs` | 63 | ~3 min |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/r51-programa-e2e.mjs` | 38 | ~1 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 
@@ -631,4 +632,30 @@ encima mandan su id al servidor; al responder no quedan tarjetas fantasma. Misma
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r55-tablero-e2e.mjs   # PART=scroll,copia,vaiven,foco,provisional
+```
+
+### Auditoría de escritorio y móvil (ronda 56)
+
+`r56-ui-e2e.mjs`. **hyd**: recorre las páginas principales (tablero, detalle con `?task=`, releases, documentación, las
+pestañas de Ajustes del proyecto y de Mi perfil, Mis tareas, calendario, avisos, historial y todas las de Administración)
+como administrador, en escritorio y a 393 px, con el navegador en Europe/Madrid y es-ES o en America/New_York y en-US (el
+servidor, en UTC), y con un proxy delante que cambia cada email del HTML por un enlace «[email protected]» (lo que hace la
+«Email Address Obfuscation» de Cloudflare): falla con cualquier error de hidratación de React (#418 y compañía). También
+el acceso y las páginas legales sin sesión. **tabs**: `?tab=plantillas` y `?tab=Board` llevan a su pestaña (la dirección
+pasa al id), una desconocida abre la primera con un aviso y una de gestión, para quien no gestiona, dice por qué; igual
+en Mi perfil. **informe**: un miembro ve las personas por su nombre, ni el email de otra ni el externo entero (sale
+enmascarado) y sin «Otra dirección…»; guarda eligiendo a otra persona y un administrador pone una dirección externa.
+**cal**: «1 vencida de antes de este mes» con su enlace; una vencida del mes lleva el mismo rojo que «Mis tareas»; a
+393 px, el mes actual se abre con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una tarea roja de
+«Más adelante» sin marca de vencida (su color, en un punto) y la vencida con el borde rojo. **movil**: en Usuarios a
+393 px el nombre y el email tienen sitio, las acciones están en «⋯» (y abren su diálogo) y en el escritorio siguen los
+iconos; en las pestañas de Administración, el indicador de que hay más a la derecha (y a la izquierda al final); el pie
+del menú lateral se ve entero. **tema**: con el sistema claro y Pizarro oscuro, theme-color oscuro, y cambia al momento
+al elegir otro tema. **a11y**: «Ver como lista» con aria-pressed y el mismo nombre; «Avisos» dice cuántos hay sin leer;
+con «Nueva tarea» abierta el resto queda inert (fuera del árbol de accesibilidad de Chromium) salvo los avisos
+emergentes, con la confirmación de descartar encima también «Nueva tarea», y al cerrarla vuelve con el foco dentro; axe
+sin botones ni enlaces sin nombre; «Abrir menú» con aria-expanded.
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r56-ui-e2e.mjs   # PART=hyd,tabs,informe,cal,mis,movil,tema,a11y
 ```

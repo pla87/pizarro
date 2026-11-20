@@ -317,7 +317,12 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <NavLink href="/notifications" icon={Bell} active={pathname === "/notifications"}>
           <span className="flex-1">{t("Avisos")}</span>
           {unread > 0 && (
-            <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-label={unread > 99 ? t("Más de 99 sin leer") : t("{n} sin leer", { n: unread })}>{unread > 99 ? "99+" : unread}</span>
+            <>
+              {/* Un aria-label en un <span> sin rol no cuenta para el nombre del enlace (quedaba «Avisos» a secas): el número
+                  se ve, y el texto para el lector de pantalla va aparte. */}
+              <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white" aria-hidden>{unread > 99 ? "99+" : unread}</span>
+              <span className="sr-only">{unread > 99 ? t("Más de 99 sin leer") : t("{n} sin leer", { n: unread })}</span>
+            </>
           )}
         </NavLink>
         <NavLink href="/my-tasks" icon={ListChecks} active={pathname === "/my-tasks"}>{t("Mis tareas asignadas")}</NavLink>
