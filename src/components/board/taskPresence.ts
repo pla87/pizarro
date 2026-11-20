@@ -2,8 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 
-// Quién tiene abierta cada tarea (otras personas): lo alimenta el sondeo de presencia del tablero
-// (Presence.tsx, cada ~20 s) y lo leen las tarjetas sin que cada una haga su propia petición.
+// Quién tiene abierta cada tarea (otras personas): lo alimenta el canal en vivo del tablero (evento `presence`) o, sin
+// él, el sondeo de presencia (Presence.tsx, cada ~20 s), y lo leen las tarjetas y el detalle sin hacer su propia petición.
 
 export interface TaskViewer {
   id: string;
@@ -30,4 +30,26 @@ function subscribe(listener: () => void) {
 
 export function useTaskViewers(taskId: string): TaskViewer[] {
   return useSyncExternalStore(subscribe, () => current[taskId] ?? EMPTY, () => EMPTY);
+}
+
+// Id del canal en vivo abierto ahora por el tablero (lo da su saludo): el detalle de una tarea lo usa para anunciarla una
+// sola vez en vez de repetir el aviso. null sin canal.
+let liveStream: string | null = null;
+const streamListeners = new Set<() => void>();
+
+export function setLiveStream(id: string | null): void {
+  if (id === liveStream) return;
+  liveStream = id;
+  streamListeners.forEach((l) => l());
+}
+
+function subscribeStream(listener: () => void) {
+  streamListeners.add(listener);
+  return () => {
+    streamListeners.delete(listener);
+  };
+}
+
+export function useLiveStream(): string | null {
+  return useSyncExternalStore(subscribeStream, () => liveStream, () => null);
 }

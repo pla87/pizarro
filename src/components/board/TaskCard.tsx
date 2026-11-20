@@ -10,7 +10,7 @@ import { DEFAULT_WAITING_DAYS, isWhite, MAX_TITLE, onColor } from "@/lib/constan
 import { formatEuro, PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import { daysBetween, dueStatus, formatDay, isoInZone } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { BoardTask } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
@@ -35,7 +35,7 @@ type Listeners = NonNullable<DraggableSyntheticListeners>;
  * la vista de su columna o cerca (ver nearCards.ts): con cientos de tarjetas, el arrastre redibujaba y medía todas en
  * cada cambio. El nodo y su contenido son los mismos se apunte o no (nada se vuelve a montar ni pierde el foco).
  */
-export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: string }) {
+export const SortableTaskCard = memo(function SortableTaskCard({ id, eager = false }: { id: string; /** Entre las primeras de su columna: nunca se salta al pintar (ver `lazy`). */ eager?: boolean }) {
   const { dragHandle } = useBoard();
   const t = useT();
   const task = useTask(id);
@@ -59,6 +59,29 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
     },
     [nearRef],
   );
+  // El asa se pinta siempre y el CSS la muestra solo en pantallas táctiles (`pointer-coarse:`): así su hueco está desde
+  // el primer pintado. Con estado de React (false en el servidor) aparecía al hidratar y estrechaba el título (la tarjeta
+  // crecía y movía todo lo de debajo: CLS ~0,1 en el móvil). Lo que arrastra sigue decidiéndolo `dragHandle` (la tarjeta
+  // entera con ratón; solo el asa en táctil). Memorizada: un elemento nuevo en cada dibujo repintaría la tarjeta.
+  const handleEl = useMemo(
+    () => (
+      <button
+        type="button"
+        ref={handle}
+        onClick={(e) => e.stopPropagation()}
+        {...(dragHandle ? relay : {})}
+        className="-my-1 -mr-1.5 hidden h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600 pointer-coarse:flex"
+        aria-label={t("Arrastrar para reordenar")}
+        // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
+        // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
+        tabIndex={-1}
+        aria-hidden
+      >
+        <GripVertical size={16} />
+      </button>
+    ),
+    [dragHandle, relay, t],
+  );
   if (!task) return null;
   // En táctil solo arrastra el asa: el resto de la tarjeta deja hacer scroll y abrirla con un toque.
   return (
@@ -74,23 +97,11 @@ export const SortableTaskCard = memo(function SortableTaskCard({ id }: { id: str
         <TaskViewerBubbles taskId={id} />
         <TaskCard
           task={task}
-          lazy={!near}
-          handle={dragHandle ? (
-            <button
-              type="button"
-              ref={handle}
-              {...relay}
-              onClick={(e) => e.stopPropagation()}
-              className="-my-1 -mr-1.5 flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-slate-400 active:text-brand-600"
-              aria-label={t("Arrastrar para reordenar")}
-              // Solo para el dedo: con teclado se mueve con Alt+flechas sobre la propia tarjeta (que anuncia esos atajos).
-              // Fuera del Tab y del árbol accesible: un botón dentro de la tarjeta (role=button) no se puede anunciar aparte.
-              tabIndex={-1}
-              aria-hidden
-            >
-              <GripVertical size={16} />
-            </button>
-          ) : null}
+          // Las primeras de cada columna (las que se ven al abrir el tablero) no se saltan nunca: en el primer pintado del HTML
+          // del servidor aún no se sabe cuáles están cerca, y el navegador les daba primero el alto aproximado y luego el
+          // real, con lo que todo lo de debajo se movía (CLS en el móvil).
+          lazy={!near && !eager}
+          handle={handleEl}
         />
       </div>
       {/* Detrás del nodo y no dentro: React fija los refs de un elemento después de los efectos de sus hijos, así que dentro,

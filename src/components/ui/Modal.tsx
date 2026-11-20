@@ -39,7 +39,7 @@ interface ModalProps {
   onAddSecond?: () => void;
   /** Escritorio (lg+): con `onAddSecond`, un segundo botón encima del «+» que abre «Varias tareas» al lado. */
   onAddSecondBulk?: () => void;
-  /** Con `onAddSecond`, muestra también en móvil los dos botones redondos flotantes (como los del tablero). */
+  /** Con `onAddSecond`, muestra también en móvil y tableta los dos botones redondos del tablero, en el pie de la hoja. */
   mobileAdd?: boolean;
 }
 
@@ -88,8 +88,10 @@ export const PairLeftWidthContext = createContext<string | undefined>(undefined)
 const PAIR_RIGHT = "44rem";
 
 /** Botones redondos de «Nueva tarea» (grande, relleno) y «Varias tareas» (más pequeño): los mismos en móvil y escritorio. */
-const NEW_BTN = "h-14 w-14 items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
-const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
+const NEW_BTN_LOOK = "items-center justify-center rounded-full bg-brand-600 text-on-brand shadow-lg shadow-brand-600/30 hover:bg-brand-700 active:scale-95";
+const BULK_BTN_LOOK = "items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300";
+const NEW_BTN = `h-14 w-14 ${NEW_BTN_LOOK}`;
+const BULK_BTN = `h-11 w-11 ${BULK_BTN_LOOK}`;
 
 const noopSubscribe = () => () => {};
 
@@ -178,6 +180,21 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           "--wr": `min(${PAIR_RIGHT}, calc(100% - 3rem - var(--wl)))`,
           "--x0": "calc((100% - var(--wl) - var(--wr) - 1rem) / 2)",
         } as React.CSSProperties);
+  // Móvil y tableta (`mobileAdd`): los mismos dos botones que el tablero («Crear varias tareas» y «Nueva tarea»), en el pie
+  // de la hoja y no flotando encima: flotantes tapaban lo que se estaba viendo (la vista previa de un documento) y los botones
+  // del pie. En escritorio van al lado del panel (abajo).
+  const mobileButtons = mobileAdd && onAddSecond && side === "center" ? (
+    <span className="ml-auto flex items-center gap-2 lg:hidden">
+      {onAddSecondBulk && (
+        <button type="button" onClick={onAddSecondBulk} className={cn(BULK_BTN_LOOK, "flex h-10 w-10")} aria-label={t("Crear varias tareas")}>
+          <PlusStack size={20} />
+        </button>
+      )}
+      <button type="button" onClick={onAddSecond} className={cn(NEW_BTN_LOOK, "flex h-11 w-11")} aria-label={t("Nueva tarea o captura")}>
+        <Plus size={22} />
+      </button>
+    </span>
+  ) : null;
   if (!open || !hydrated) return null;
   return createPortal(
     <div
@@ -230,9 +247,10 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           </div>
         )}
         <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [--sticky-top:-1rem]", bodyClassName)}>{children}</div>
-        {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
+        {(footer || mobileButtons) && (
+          <div className={cn("flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800", !footer && "lg:hidden")}>
             {footer}
+            {mobileButtons}
           </div>
         )}
         {onAddSecond && onAddSecondBulk && side === "center" && (
@@ -258,19 +276,6 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           </button>
         )}
       </div>
-      {/* Móvil: los mismos dos botones redondos que el tablero, por encima de la hoja (no hay hueco al lado). */}
-      {mobileAdd && onAddSecond && side === "center" && (
-        <>
-          {onAddSecondBulk && (
-            <button type="button" onClick={onAddSecondBulk} className={cn("fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+9.5rem)]", BULK_BTN, "flex lg:hidden")} aria-label={t("Crear varias tareas")}>
-              <PlusStack size={22} />
-            </button>
-          )}
-          <button type="button" onClick={onAddSecond} className={cn("fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+5.25rem)]", NEW_BTN, "flex lg:hidden")} aria-label={t("Nueva tarea o captura")}>
-            <Plus size={26} />
-          </button>
-        </>
-      )}
     </div>,
     document.body,
   );

@@ -19,3 +19,15 @@ test("canal que estuvo desconectado: se refresca al volver (con una pausa mínim
   assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_GAP_MS, channelOpen: true, channelGap: true }), true);
   assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_GAP_MS, channelOpen: false, channelGap: true }), true);
 });
+
+test("recarga de respaldo: cada 15 minutos con el canal sano, cada 2 sin él", async () => {
+  const { BACKUP_REFRESH_LIVE_MS, BACKUP_REFRESH_MS, LIVE_HEALTHY_MS, backupRefreshDue, channelHealthy } = await import("../src/lib/focus-refresh");
+  assert.equal(channelHealthy({ open: true, sinceMessageMs: 1_000 }), true);
+  assert.equal(channelHealthy({ open: true, sinceMessageMs: LIVE_HEALTHY_MS }), false, "abierto pero mudo");
+  assert.equal(channelHealthy({ open: false, sinceMessageMs: 1_000 }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS, healthy: true }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS - 1, healthy: true }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS, healthy: true }), true);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS - 1, healthy: false }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS, healthy: false }), true);
+});

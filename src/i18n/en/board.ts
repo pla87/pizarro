@@ -363,4 +363,7 @@ export const board: Record<string, string> = {
 
   // Detalle de tarea: columna derecha sin «(opcional)»
   "Asignada a": "Assigned to",
+
+  // Tablero con un filtro o una búsqueda activos: columna sin resultados
+  "Ninguna tarjeta coincide": "No cards match",
 };

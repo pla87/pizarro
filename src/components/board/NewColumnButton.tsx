@@ -1,12 +1,13 @@
 "use client";
 
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createColumn } from "@/actions/columns";
 import { useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { afterModalHistory } from "../ui/useBackToClose";
 import { useBoard } from "./context";
 
 /**
@@ -20,6 +21,20 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  // Columna recién creada: se muestra (móvil) cuando el diálogo ya se ha cerrado y ha retirado su entrada del historial.
+  // Antes se hacía al momento: la vista saltaba a la columna nueva y el «atrás» silencioso del diálogo al cerrarse se
+  // llevaba esa entrada, de modo que se volvía a la primera columna.
+  const created = useRef<string | null>(null);
+  const onCreatedRef = useRef(onCreated);
+  useEffect(() => {
+    onCreatedRef.current = onCreated;
+  });
+  useEffect(() => {
+    const id = created.current;
+    if (!id || open) return;
+    created.current = null;
+    afterModalHistory(() => onCreatedRef.current?.(id));
+  }, [open]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +46,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     setColumns((cols) => [...cols, res.data]);
     setName("");
     setOpen(false);
-    onCreated?.(res.data.id);
+    created.current = res.data.id;
   };
 
   return (

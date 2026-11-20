@@ -14,8 +14,10 @@ type ActiveUser = { id: string; name: string };
 const NONE: ActiveUser[] = [];
 
 /**
- * Un solo sondeo por proyecto, compartido por todos los círculos montados (la cabecera de escritorio y la móvil
- * están siempre montadas, una oculta por CSS): empieza con el primero que se suscribe y para con el último.
+ * Quién está en cada tablero. Lo normal es que llegue por el canal en vivo del tablero (evento `presence`, Board.tsx:
+ * `setLivePresence`), con el estado completo al conectar y después cada cambio. Sin canal (no soportado, aún sin conectar
+ * o caído) se pregunta como antes, cada 20 s y al volver a la ventana: un solo sondeo por proyecto, compartido por todos
+ * los círculos montados (la cabecera de escritorio y la móvil están siempre montadas, una oculta por CSS).
  */
 interface Feed {
   users: ActiveUser[];
@@ -23,19 +25,46 @@ interface Feed {
   stop: () => void;
 }
 const feeds = new Map<string, Feed>();
+/** Proyecto cuyo canal en vivo está abierto ahora (entonces no se sondea). */
+let liveProject: string | null = null;
+/** Último estado recibido por el canal, por si llega antes de que se monten los círculos. */
+const liveUsers = new Map<string, ActiveUser[]>();
+
+function notify(projectId: string) {
+  const feed = feeds.get(projectId);
+  if (feed) for (const l of feed.listeners) l();
+}
+
+/** El canal en vivo del proyecto se ha abierto (con su primer estado) o se ha cerrado (`null`). */
+export function setLiveProject(projectId: string | null): void {
+  if (liveProject && liveProject !== projectId) liveUsers.delete(liveProject);
+  liveProject = projectId;
+}
+
+/** Estado de presencia recibido por el canal en vivo del tablero (los demás que tienen abierta cada tarea, ya sin la propia persona). */
+export function setLivePresence(projectId: string, users: ActiveUser[], viewers: Record<string, TaskViewer[]>): void {
+  liveUsers.set(projectId, users);
+  setTaskViewers(viewers);
+  const feed = feeds.get(projectId);
+  if (feed && JSON.stringify(feed.users) !== JSON.stringify(users)) {
+    feed.users = users;
+    notify(projectId);
+  }
+}
 
 function startFeed(projectId: string): Feed {
   let cancelled = false;
-  const feed: Feed = { users: NONE, listeners: new Set(), stop: () => {} };
+  const feed: Feed = { users: liveUsers.get(projectId) ?? NONE, listeners: new Set(), stop: () => {} };
   const load = async () => {
-    if (document.visibilityState !== "visible") return;
+    if (cancelled || document.visibilityState !== "visible" || liveProject === projectId) return;
     try {
       const res = await fetch(`/api/projects/${projectId}/presence`, { cache: "no-store" });
-      if (res.ok && !cancelled) {
+      // Si mientras tanto se ha abierto el canal, manda lo que llegue por él.
+      if (res.ok && !cancelled && liveProject !== projectId) {
         const json = (await res.json()) as { users: ActiveUser[]; viewers?: Record<string, TaskViewer[]> };
         feed.users = json.users;
         setTaskViewers(json.viewers ?? {});
-        for (const l of feed.listeners) l();
+        notify(projectId);
       }
     } catch {
       // Sin conexión: se mantiene lo último conocido.
@@ -48,7 +77,8 @@ function startFeed(projectId: string): Feed {
     clearInterval(timer);
     window.removeEventListener("focus", load);
   };
-  void load();
+  // Al montar, el canal aún se está abriendo: se le da un momento antes de preguntar.
+  setTimeout(() => void load(), 3000);
   return feed;
 }
 

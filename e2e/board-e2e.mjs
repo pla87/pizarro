@@ -340,6 +340,8 @@ if (only.includes("dlg")) {
   const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
   const mp = m.page;
   watchNative(mp);
+  // El móvil abre la primera columna con tarjetas («En progreso»): se pasa a Backlog.
+  await mp.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
   await openColMenu(mp, COL.backlog, /^Límite de tarjetas/, true);
   d = await promptDialog(mp, "Límite de tarjetas");
   const box = await d.boundingBox();
