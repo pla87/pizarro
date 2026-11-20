@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeUser } from "./helpers";
-import { createTask } from "../../src/actions/tasks";
+import { createTask, createTasks } from "../../src/actions/tasks";
 
 async function setup() {
   const user = await makeUser();
@@ -45,5 +45,34 @@ describe("createTask: etiquetas, color y enlace", () => {
     const { other, labels } = await setup();
     expectOk(await createTask({ ...base(other), labelIds: [labels.foreign.id] }));
     expectFail(await createTask({ ...base(other), labelIds: [labels.a.id] }), /Etiqueta no válida/);
+  });
+});
+
+// Las comprobaciones van a la vez (antes, una detrás de otra): con varios datos mal, el error sigue siendo el primero
+// en el orden de siempre (columna, etiquetas, responsable, entregable, tipo, campos), y sin acceso, «no encontrado».
+describe("createTask y createTasks: orden de los errores con las comprobaciones a la vez", () => {
+  test("gana la primera comprobación que falla, en el orden de siempre", async () => {
+    const { f, other, labels } = await setup();
+    const stranger = await makeUser();
+    const foreignColumn = other.columns.todo;
+    const wrong = { columnId: foreignColumn, labelIds: [labels.foreign.id], assigneeId: stranger.id, deliverableId: "no-existe-0000000000000", kindId: other.kindId, priority: "ALTA" as const };
+    const steps: [Partial<typeof wrong>, RegExp][] = [
+      [wrong, /La columna no existe/],
+      [{ ...wrong, columnId: undefined }, /Etiqueta no válida/],
+      [{ ...wrong, columnId: undefined, labelIds: undefined }, /No encontrado o sin acceso/],
+      [{ ...wrong, columnId: undefined, labelIds: undefined, assigneeId: undefined }, /El entregable no existe/],
+      [{ ...wrong, columnId: undefined, labelIds: undefined, assigneeId: undefined, deliverableId: undefined }, /El tipo de tarea no existe/],
+      [{ priority: "ALTA" }, /no está activado en este proyecto/],
+    ];
+    for (const [patch, error] of steps) {
+      const input = { ...base(f), ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) };
+      expectFail(await createTask(input), error);
+      const { title: _title, kindId, ...rest } = input;
+      expectFail(await createTasks({ ...rest, tasks: [{ title: "Una", kindId }] }), error);
+    }
+    assert.equal(await db.task.count({ where: { projectId: f.project.id } }), 0);
+    // Sin acceso al proyecto: «no encontrado» antes que cualquier otra comprobación.
+    await loginAs(stranger);
+    expectFail(await createTask({ ...base(f), columnId: foreignColumn }), /No encontrado o sin acceso/);
   });
 });

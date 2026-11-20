@@ -151,19 +151,25 @@ export async function createTask(input: z.input<typeof createSchema>) {
     const user = await requireUser();
     const data = createSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    await assertColumnInProject(data.columnId, data.projectId);
-    await assertLabelsInProject(data.labelIds, data.projectId);
-    if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
-    await assertDeliverableInProject(data.deliverableId, data.projectId);
-    await assertKindsInProject([data.kindId], data.projectId);
     const optional = pickTaskFields(data);
-    if (patchedFieldKeys(optional).length) {
-      const enabled = await enabledTaskFields(data.projectId);
-      await assertFieldsEnabled(enabled, optional);
-      assertStartBeforeDue(enabled, data.startDate, data.dueDate);
-    }
     // Solo se admite evergreen en la columna de la release o en una de plan de trabajo para IA.
-    const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } })) > 0;
+    const evergreenColumn = data.evergreen ? db.column.count({ where: { id: data.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } }) : Promise.resolve(0);
+    // Con el acceso ya comprobado, las comprobaciones van a la vez (como en updateTask); si fallan varias, gana la
+    // primera en el orden de siempre.
+    const checks = await Promise.allSettled([
+      assertColumnInProject(data.columnId, data.projectId),
+      assertLabelsInProject(data.labelIds, data.projectId),
+      data.assigneeId ? assertAssignable(data.projectId, data.assigneeId) : null,
+      assertDeliverableInProject(data.deliverableId, data.projectId),
+      assertKindsInProject([data.kindId], data.projectId),
+      patchedFieldKeys(optional).length ? enabledTaskFields(data.projectId).then(async (enabled) => {
+        await assertFieldsEnabled(enabled, optional);
+        assertStartBeforeDue(enabled, data.startDate, data.dueDate);
+      }) : null,
+      evergreenColumn,
+    ]);
+    for (const c of checks) if (c.status === "rejected") throw c.reason;
+    const evergreen = data.evergreen && (await evergreenColumn) > 0;
     const repeat = normalizeRecurrence(data.recurrence, data.recurrenceDay, data.dueDate, todayIso(appTimeZone()));
     assertTaskCreateRate(user.id);
     const task = await db.$transaction(async (tx) => {
@@ -264,20 +270,25 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const user = await requireUser();
     const data = createManySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    await assertColumnInProject(data.columnId, data.projectId);
-    await assertLabelsInProject(data.labelIds, data.projectId);
-    if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
-    await assertDeliverableInProject(data.deliverableId, data.projectId);
-    await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
     const optional = pickTaskFields({ priority: data.priority, client: data.client });
-    if (patchedFieldKeys(optional).length) await assertFieldsEnabled(await enabledTaskFields(data.projectId), optional);
+    const kindTemplates = data.applySubtaskTemplates
+      ? db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } })
+      : Promise.resolve([]);
+    // A la vez, como en createTask; si fallan varias, gana la primera en el orden de siempre.
+    const checks = await Promise.allSettled([
+      assertColumnInProject(data.columnId, data.projectId),
+      assertLabelsInProject(data.labelIds, data.projectId),
+      data.assigneeId ? assertAssignable(data.projectId, data.assigneeId) : null,
+      assertDeliverableInProject(data.deliverableId, data.projectId),
+      assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId),
+      patchedFieldKeys(optional).length ? enabledTaskFields(data.projectId).then((enabled) => assertFieldsEnabled(enabled, optional)) : null,
+      kindTemplates,
+    ]);
+    for (const c of checks) if (c.status === "rejected") throw c.reason;
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const templates = new Map<string, string[]>();
-    if (data.applySubtaskTemplates) {
-      const kinds = await db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } });
-      for (const k of kinds) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
-    }
+    for (const k of await kindTemplates) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
     assertTaskCreateRate(user.id, data.tasks.length);
     const ids = await db.$transaction(async (tx) => {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
