@@ -238,6 +238,13 @@ for v in POSTGRES_PASSWORD SESSION_SECRET BACKUP_KEY DOMAIN APP_URL; do
 done
 
 # --- Kit de recuperación --------------------------------------------------------
+# Opciones de get.sh para preparar el servidor nuevo: las de esta instalación (dominio o red local, y carpeta).
+kit_get_opts() {
+  case "$(get_var DOMAIN)" in :*|"") o="--local" ;; *) o="--domain $(get_var DOMAIN)" ;; esac
+  [ "$(dirname "$DIR")" = /opt/pizarro ] || o="$o --dir $(dirname "$DIR")"
+  echo "$o --no-start"
+}
+
 write_kit() {
   {
     echo "KIT DE RECUPERACIÓN DE PIZARRO"
@@ -253,7 +260,6 @@ write_kit() {
     if [ -n "$(get_var TOKEN_SECRET)" ]; then echo "TOKEN_SECRET=\"$(get_var TOKEN_SECRET)\""; else echo "TOKEN_SECRET: no definida (se deriva de SESSION_SECRET)"; fi
     if [ -n "$(get_var ENCRYPTION_KEY)" ]; then echo "ENCRYPTION_KEY=\"$(get_var ENCRYPTION_KEY)\""; else echo "ENCRYPTION_KEY: no definida (se deriva de SESSION_SECRET)"; fi
     echo "BACKUP_KEY=\"$(get_var BACKUP_KEY)\""
-    echo "POSTGRES_PASSWORD=\"$(get_var POSTGRES_PASSWORD)\""
     echo
     echo "Para qué sirve cada uno:"
     echo "  BACKUP_KEY         Descifra las copias de seguridad diarias. Sin ella las copias no se pueden leer."
@@ -261,13 +267,20 @@ write_kit() {
     echo "  TOKEN_SECRET       Firma los enlaces de los emails y los códigos de recuperación."
     echo "  ENCRYPTION_KEY     Cifra los secretos de la verificación en dos pasos y las conexiones con Google."
     echo "                     Si se pierde, todos tienen que configurar de nuevo su segundo paso y reconectar Google."
-    echo "  POSTGRES_PASSWORD  Contraseña de la base de datos (solo la usan los contenedores entre sí)."
     echo
-    echo "Si pierdes el servidor:"
-    echo "  1. Instala Docker en el nuevo servidor y clona el repositorio de Pizarro."
-    echo "  2. Ejecuta deploy/install.sh y detén la app (docker compose stop app)."
-    echo "  3. Pon en deploy/.env los valores de arriba (BACKUP_KEY y ENCRYPTION_KEY son imprescindibles)."
-    echo "  4. Restaura la base de datos y los adjuntos desde tu copia externa (docs/INSTALL.md, sección 6)."
+    echo "La contraseña de PostgreSQL no hace falta: el servidor nuevo crea la suya y la copia se carga en esa base."
+    echo
+    echo "Si pierdes el servidor (necesitas este kit y tu destino externo de copias):"
+    echo "  1. Prepara el servidor nuevo sin arrancar Pizarro (instala Docker si falta):"
+    echo "       curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- $(kit_get_opts)"
+    echo "  2. En $DIR/.env, sustituye SESSION_SECRET, TOKEN_SECRET, ENCRYPTION_KEY y BACKUP_KEY por las de arriba"
+    echo "     (si alguna pone «no definida», borra su línea) y añade las variables BACKUP_S3_* de tu destino externo"
+    echo "     (o BACKUP_EXTERNAL_DIR, si es una carpeta montada)."
+    echo "  3. Restaura y arranca (docs/INSTALL.md, sección 6.3; con una carpeta, external:latest en vez de s3:latest):"
+    echo "       cd $DIR"
+    echo "       docker compose up -d --wait postgres"
+    echo "       docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files"
+    echo "       docker compose up -d"
   } >"$KIT"
   chmod 600 "$KIT"
 }
@@ -282,13 +295,17 @@ fi
 # --- Arranque -----------------------------------------------------------------
 cd "$DIR"
 say ""
+# Se descargan todas las imágenes, no solo la de Pizarro: así Caddy y PostgreSQL también reciben sus
+# actualizaciones (caddy:2-alpine y postgres:16-alpine, sin cambiar de versión mayor).
 if [ "$BUILD" = 1 ]; then
+  say "Descargando las imágenes de Caddy y PostgreSQL..."
+  docker compose pull caddy postgres || say "AVISO: no se pudieron descargar las imágenes de Caddy y PostgreSQL; se usan las que ya hay."
   say "Arrancando Pizarro (construye la imagen aquí: unos minutos)..."
   docker compose up -d --build
 else
-  say "Descargando la imagen de Pizarro..."
-  if ! docker compose pull app; then
-    die "No se pudo descargar la imagen $(get_var PIZARRO_IMAGE | grep . || echo "$IMAGE_REPO:latest"). Comprueba la conexión y la versión, o construye la imagen aquí con:  ./install.sh --build"
+  say "Descargando las imágenes de Pizarro, Caddy y PostgreSQL..."
+  if ! docker compose pull; then
+    die "No se pudieron descargar las imágenes (Pizarro: $(get_var PIZARRO_IMAGE | grep . || echo "$IMAGE_REPO:latest")). Comprueba la conexión y la versión, o construye la imagen de Pizarro aquí con:  ./install.sh --build"
   fi
   say "Arrancando Pizarro..."
   docker compose up -d
