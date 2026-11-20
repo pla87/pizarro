@@ -4,7 +4,7 @@ import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { lazyDialog } from "../lazyDialog";
-import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh, saveDataOn } from "@/lib/connection";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, reportServerHeard, safeRefresh, saveDataOn } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -372,18 +372,20 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
 
   // Precarga de los diálogos cuando el navegador queda libre: abrirlos es instantáneo, también si luego se va la red. Si
   // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos. Con «Ahorro de datos» no se precargan:
-  // cada uno llega al abrirlo.
+  // cada uno llega al abrirlo. El editor con barra (TipTap, unos 170 KB gz) solo para quien lo usa: con el editor
+  // Markdown no se abre nunca.
+  const richEditor = data.editorMode === "WYSIWYG";
   useEffect(() => {
     if (saveDataOn()) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      for (const load of [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog, () => import("@/components/ui/RichTextEditor")]) {
-        load().catch(() => {});
-      }
+      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      if (richEditor) loads.push(() => import("@/components/ui/RichTextEditor"));
+      for (const load of loads) load().catch(() => {});
     });
     return () => cancel(id);
-  }, []);
+  }, [richEditor]);
 
   // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
   useEffect(() => {
@@ -662,14 +664,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     let timer: ReturnType<typeof setTimeout> | null = null;
     const root = rootRef.current;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
-    source.addEventListener("open", () => {
-      live.open = true;
-      live.heardAt = performance.now();
-      root?.setAttribute("data-live", "open");
-    });
+    // Cada mensaje del canal dice además que el servidor responde (reportServerHeard): el refresco que provoca un aviso no
+    // vuelve a preguntárselo a /api/health.
     const heard = () => {
       live.heardAt = performance.now();
+      reportServerHeard();
     };
+    source.addEventListener("open", () => {
+      live.open = true;
+      heard();
+      root?.setAttribute("data-live", "open");
+    });
     // Evento periódico del servidor: el canal está sano (la recarga de respaldo se espacia: ver más abajo).
     source.addEventListener("ping", heard);
     // Quién está en el tablero y quién tiene abierta cada tarea: estado completo al conectar y después cada cambio.
@@ -1619,6 +1624,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const mobileColumnFull = mobileTarget && columnAtSessionLimit(mobileTarget.role, cardCounts[mobileTarget.id] ?? 0)
     ? t("La columna «{name}» admite como mucho {max} sesiones.", { name: mobileTarget.name, max: PROGRAM_MAX_SESSIONS })
     : null;
+  // Con las columnas estables (stableColumns): cada refresco trae un array nuevo de columnas aunque sean iguales, y con
+  // sortedColumns se volvían a dibujar DndContext y todas las columnas.
   const dndBoard = useMemo(
     () => (
       <DndContext
@@ -1636,7 +1643,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onTouchStart={dndHandlers.onTouchStart}
           onTouchEnd={dndHandlers.onTouchEnd}
         >
-          {sortedColumns.map((column, i) => (
+          {stableColumns.map((column, i) => (
             <ColumnView
               key={column.id}
               column={column}
@@ -1644,7 +1651,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               evergreenIds={shownEvergreen[column.id] ?? NO_IDS}
               cardCount={cardCounts[column.id] ?? 0}
               index={i}
-              total={sortedColumns.length}
+              total={stableColumns.length}
               droppableId={COLUMN_PREFIX + column.id}
               mobileHidden={column.id !== activeMobileColumn}
             />
@@ -1674,7 +1681,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </DragOverlay>
       </DndContext>
     ),
-    [sensors, dragAccessibility, dndHandlers, sortedColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
+    [sensors, dragAccessibility, dndHandlers, stableColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
   );
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);
