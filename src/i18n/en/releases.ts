@@ -28,4 +28,6 @@ export const releases: Record<string, string> = {
   "El filtro del tablero no se aplica aquí: la lista incluye {n} tareas que el filtro oculta.": "The board filter doesn't apply here: the list includes {n} tasks the filter hides.",
   // Menú «⋯» de una release del histórico (Borrar adjuntos, Borrar release)
   "Más acciones de la release R{number}": "More actions for release R{number}",
+  // ZIP de adjuntos: un POST sin ?plan=1 (el envío directo de antes de la v1.60) ya no se sirve
+  "Pide primero el plan de descarga (?plan=1); si la página es de antes de actualizar Pizarro, recárgala.": "Request the download plan first (?plan=1); if the page was opened before Pizarro was updated, reload it.",
 };

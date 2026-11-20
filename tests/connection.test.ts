@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
   importWhenOnline, isNetworkError, isOffline, isOfflineMessage, loadWhenOnline, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline,
-  reportReachable, resetConnectionForTests, safeRefresh, subscribeConnection,
+  reportReachable, resetConnectionForTests, safeRefresh, saveDataOn, subscribeConnection,
 } from "../src/lib/connection";
 import { actionThrowMessage } from "../src/lib/stale-action";
 
@@ -226,5 +226,30 @@ describe("lecturas y código que llegan al volver la red (loadWhenOnline, import
       throw chunkError;
     }), chunkError);
     assert.equal(isOffline(), false);
+  });
+});
+
+describe("saveDataOn: ahorro de datos del navegador (sin precargas por adelantado)", () => {
+  test("solo con navigator.connection.saveData === true", () => {
+    assert.equal(saveDataOn({ connection: { saveData: true, effectiveType: "4g" } }), true);
+    assert.equal(saveDataOn({ connection: { saveData: false } }), false);
+    assert.equal(saveDataOn({ connection: { effectiveType: "2g" } }), false, "una red lenta sin ahorro de datos no cuenta");
+    assert.equal(saveDataOn({ connection: { saveData: "true" } }), false);
+    assert.equal(saveDataOn({ connection: null }), false);
+    assert.equal(saveDataOn({}), false, "sin la API (Firefox, Safari)");
+    assert.equal(saveDataOn(null), false, "fuera del navegador");
+  });
+
+  test("sin argumento lee el navigator global", () => {
+    const prev = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    try {
+      Object.defineProperty(globalThis, "navigator", { configurable: true, value: { connection: { saveData: true } } });
+      assert.equal(saveDataOn(), true);
+      Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: true } });
+      assert.equal(saveDataOn(), false);
+    } finally {
+      if (prev) Object.defineProperty(globalThis, "navigator", prev);
+      else delete (globalThis as Record<string, unknown>).navigator;
+    }
   });
 });

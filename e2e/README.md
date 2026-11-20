@@ -43,9 +43,9 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Tareas que se repiten (calendario, .ics —una descarga por columna a la vez— y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 50 | ~1 min |
 | **Releases** | | **55** | |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
-| **Plan de trabajo para IA** | | **282** | |
+| **Plan de trabajo para IA** | | **283** | |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 154 | ~1 min |
-| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 101 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 102 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 27 | ~40 s |
 | **Plantillas y programa del curso** | | **182** | |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/plantillas-aplicar-e2e.mjs` | 39 | ~1 min |
@@ -73,7 +73,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **3209** | |
+| **Total** | | **3210** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en

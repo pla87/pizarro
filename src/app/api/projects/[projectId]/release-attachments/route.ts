@@ -38,9 +38,9 @@ const bodySchema = z.object({
     .max(RELEASE_MAX_ATTACHMENT_TASKS),
 });
 
-type Items = z.infer<typeof bodySchema>["items"];
+type ZipItem = z.infer<typeof bodySchema>["items"][number];
 type User = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
-type Mode = NonNullable<ReturnType<typeof zipRequestMode>>;
+type PartMode = Extract<NonNullable<ReturnType<typeof zipRequestMode>>, { kind: "part" }>;
 type Ticket = NonNullable<ReturnType<typeof findZipTicket>>;
 
 /** Nombre del fichero que pide la página (fecha, número o versión y proyecto); si no vale, el de serie. */
@@ -50,8 +50,8 @@ const ZIP_FILE_NAME = /^[^\u0000-\u001f\u007f/\\"]{1,200}\.zip$/;
  * ZIP con los adjuntos de las tareas de una release, renombrados `${código}_${nombre}.webp`, o de un plan de trabajo
  * (carpetas `adjuntos/NN-titulo/`). Los nombres se recalculan aquí con el mismo helper que el texto.
  * `POST ?plan=1` con la lista de tareas devuelve el reparto en paquetes y un vale (`ticket`, `src/lib/zip-ticket.ts`);
- * cada paquete lo descarga el propio navegador con `GET ?ticket=…&part=N&v=…`. `POST ?part=N` sigue sirviendo el
- * paquete en la respuesta.
+ * cada paquete lo descarga el propio navegador con `GET ?ticket=…&part=N&v=…`. Un POST sin `?plan=1` (el envío directo
+ * del ZIP en la respuesta, de antes de la v1.60) responde 400.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const t = await getT();
@@ -59,9 +59,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const user = await getCurrentUser();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   const mode = zipRequestMode(req.url);
-  if (!mode) return new Response(t("Datos no válidos"), { status: 400 });
-  // Una release pide un plan y luego cada paquete: el plan (o la petición sin paquete) cuenta como la descarga;
-  // los paquetes tienen su propio tope, más holgado.
+  if (mode?.kind !== "plan") return new Response(t("Pide primero el plan de descarga (?plan=1); si la página es de antes de actualizar Pizarro, recárgala."), { status: 400, headers: { "Cache-Control": "private, no-store" } });
+  // Una release pide un plan y luego cada paquete (GET con el vale): el plan cuenta como la descarga; los paquetes
+  // tienen su propio tope, más holgado.
   const rate = zipRateKey(mode, user.id);
   if (!rateLimit(rate.key, rate.limit, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
 
@@ -77,7 +77,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   // Un plan está en un solo idioma: todas sus carpetas cuelgan de la misma raíz («adjuntos/» o «attachments/»), no de las dos.
   if (planZip && new Set(items.map((i) => aiPlanZipRoot(i.folder!))).size !== 1) return new Response(t("Datos no válidos"), { status: 400 });
   const { projectId } = await ctx.params;
-  return serveZip(req, t, user, projectId, items, mode, { issueTicket: mode.kind === "plan" });
+  const zip = await loadZip(t, user, projectId, items);
+  if (zip instanceof Response) return zip;
+  const ticket = issueZipTicket(user.id, projectId, items);
+  return Response.json(
+    { ...zipPlanBody(zip.packages, zip.maxMb, zip.entries), busy: zipSlotBusy(user.id), ticket },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }
 
 /**
@@ -105,7 +111,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   let res: Response;
   try {
     res = rateLimit(rate.key, rate.limit, 60_000)
-      ? await serveZip(req, t, user, projectId, ticket.items, mode, { name: name && ZIP_FILE_NAME.test(name) ? name : null, ticket })
+      ? await servePart(req, t, user, projectId, ticket, mode, name && ZIP_FILE_NAME.test(name) ? name : null)
       : new Response(t("Demasiadas peticiones"), { status: 429 });
   } catch (err) {
     ticket.failed(mode.part, 500, t("No se pudieron descargar los adjuntos"));
@@ -116,12 +122,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   return res;
 }
 
-async function serveZip(
-  req: Request, t: Awaited<ReturnType<typeof getT>>, user: User, projectId: string, items: Items, mode: Mode,
-  opts: { issueTicket?: boolean; name?: string | null; ticket?: Ticket },
-): Promise<Response> {
-  const start = performance.now();
-  const planZip = items[0]!.folder !== undefined;
+/** Adjuntos de esas tareas (visibles para esta persona) con su tamaño en disco y su reparto en paquetes. */
+async function loadZip(t: Awaited<ReturnType<typeof getT>>, user: User, projectId: string, items: readonly ZipItem[]): Promise<Response | { entries: ZipEntry[]; packages: ReturnType<typeof planZipEntries>; maxMb: number }> {
   const ids = new Set(items.map((i) => i.taskId));
   const tasks = await db.task.findMany({
     where: { id: { in: [...ids] }, projectId, project: visibleProjectsWhere(user) },
@@ -148,14 +150,17 @@ async function serveZip(
   // Fichero ausente en disco: se omite en lugar de romper toda la descarga.
   const entries = await sizedZipEntries(candidates, (c) => stat(c.file).then((st) => st.size, () => null));
   if (entries.length === 0) return new Response(t("No hay adjuntos disponibles"), { status: 404 });
-  const packages = planZipEntries(entries, releaseZipMaxMb);
-  if (mode.kind === "plan") {
-    const ticket = opts.issueTicket ? issueZipTicket(user.id, projectId, items) : undefined;
-    return Response.json(
-      { ...zipPlanBody(packages, releaseZipMaxMb, entries), busy: zipSlotBusy(user.id), ...(ticket ? { ticket } : {}) },
-      { headers: { "Cache-Control": "private, no-store" } },
-    );
-  }
+  return { entries, packages: planZipEntries(entries, releaseZipMaxMb), maxMb: releaseZipMaxMb };
+}
+
+/** Un paquete del vale, en descarga directa del navegador: el vale apunta si empezó, si terminó entero o si falló. */
+async function servePart(req: Request, t: Awaited<ReturnType<typeof getT>>, user: User, projectId: string, ticket: Ticket, mode: PartMode, fileName: string | null): Promise<Response> {
+  const start = performance.now();
+  const items = ticket.items;
+  const planZip = items[0]!.folder !== undefined;
+  const zip = await loadZip(t, user, projectId, items);
+  if (zip instanceof Response) return zip;
+  const { entries, packages, maxMb: releaseZipMaxMb } = zip;
   const conflict = zipVersionConflict(mode, entries, releaseZipMaxMb, t("Los adjuntos han cambiado mientras se descargaban. Vuelve a descargarlos."));
   if (conflict) return conflict;
   const pkg = packages[mode.part - 1];
@@ -164,14 +169,14 @@ async function serveZip(
   const slot = acquireZipSlot(user.id);
   if (!slot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
   const part = mode.part;
-  opts.ticket?.started(part);
-  // Con vale, el paquete cuenta como terminado solo si se envió entero (la página pide entonces el siguiente); si se
+  ticket.started(part);
+  // El paquete cuenta como terminado solo si se envió entero (la página pide entonces el siguiente); si se
   // cortó, falló a medias (un fichero cambió) o se canceló, queda como fallido y la página lo avisa.
   const failedText = t("No se pudieron descargar los adjuntos");
   const releaseSlot = (outcome: ZipSendOutcome) => {
     slot();
-    if (outcome === "ok") opts.ticket?.finished(part);
-    else opts.ticket?.failed(part, 500, failedText);
+    if (outcome === "ok") ticket.finished(part);
+    else ticket.failed(part, 500, failedText);
   };
   // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de prepararlo.
   // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria. Si falla aquí, el error lo
@@ -193,7 +198,7 @@ async function serveZip(
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });
-  const name = opts.name ?? (planZip ? aiPlanZipName : releaseZipName)({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale());
+  const name = fileName ?? (planZip ? aiPlanZipName : releaseZipName)({ day: isoDate(new Date(), appTimeZone()) }, mode.part, packages.length, await getLocale());
   return new Response(zipPartBody(zipPart, releaseSlot, { signal: req.signal }), {
     headers: {
       "Content-Type": "application/zip",
