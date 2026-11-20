@@ -1,5 +1,6 @@
 "use client";
 
+import { useMidnightRefresh } from "@/components/useMidnightRefresh";
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
@@ -20,8 +21,6 @@ import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
-import { msUntilNextDay, todayIso } from "@/lib/dates";
-import { appTimeZone } from "@/lib/format";
 import { FilterMenu } from "./FilterMenu";
 import { PrivateIcon, ProjectsContext } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
@@ -89,8 +88,6 @@ const COLUMN_PREFIX = "col:";
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
 const PINGPONG_MS = 60;
-/** Margen tras la medianoche antes de refrescar «hoy» (el reloj del servidor puede ir unos segundos detrás). */
-const MIDNIGHT_MARGIN_MS = 5_000;
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -484,27 +481,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
   // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
   const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
-  // «Hoy» (data.today, del servidor: plazos, «vence hoy», filtros por fecha) cambia a medianoche en la zona de la app aunque
-  // el tablero siga abierto: al empezar el día siguiente se refresca. Se espera como mucho una hora de cada vez y se vuelve
-  // a mirar el día (los cambios de hora alargan o acortan el día); unos segundos de margen por si el reloj del servidor va
-  // algo detrás. Si tras refrescar el servidor aún dice el día anterior, se reintenta un par de veces. Sin estado: el
-  // temporizador no vuelve a dibujar nada (ni DndContext) hasta que llegan los datos nuevos.
-  useEffect(() => {
-    const tz = appTimeZone();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let retries = 0;
-    const check = () => {
-      if (todayIso(tz) === data.today) {
-        timer = setTimeout(check, Math.min(msUntilNextDay(tz) + MIDNIGHT_MARGIN_MS, 3_600_000));
-      } else if (retries++ < 3) {
-        refresh();
-        timer = setTimeout(check, 60_000);
-      }
-    };
-    // Con el día del navegador ya distinto al abrir (reloj del equipo desajustado) no se refresca en bucle.
-    if (todayIso(tz) === data.today) check();
-    return () => clearTimeout(timer);
-  }, [data.today, refresh]);
+  // «Hoy» (data.today: plazos, «vence hoy», filtros por fecha) cambia a medianoche aunque el tablero siga abierto; sin
+  // estado, así que no vuelve a dibujar DndContext hasta que llegan los datos nuevos (useMidnightRefresh).
+  useMidnightRefresh(data.today, refresh);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;

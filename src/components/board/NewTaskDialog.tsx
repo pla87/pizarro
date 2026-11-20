@@ -25,7 +25,7 @@ import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
 import { copyText } from "../ui/clipboard";
-import { appTimeZone } from "@/lib/format";
+import { appTimeZone, formatDate } from "@/lib/format";
 import { parseTasksText, strictJsonFormat, stringifyTaskJson } from "@/lib/task-json";
 import { fillNewTaskForm, foldName, newTaskFormJson, type FormProject } from "@/lib/task-json-form";
 import { acceptsPastedText, eventIsFor } from "./taskClipboard";
@@ -85,7 +85,7 @@ let subtaskSeq = 0;
 const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, text });
 
 function captureTitle(t: T, locale: string): string {
-  return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+  return t("Captura") + " " + formatDate(new Date(), "dateTimeShort", locale);
 }
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
