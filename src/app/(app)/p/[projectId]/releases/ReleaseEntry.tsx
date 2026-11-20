@@ -1,7 +1,7 @@
 "use client";
 
 import { appTimeZone } from "@/lib/format";
-import { ChevronDown, ClipboardCopy, Download, FileArchive, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Download, FileArchive, MoreHorizontal, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
@@ -9,6 +9,7 @@ import { startDownload } from "@/components/board/attachments-zip";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Markdown } from "@/components/ui/Markdown";
+import { Menu, MenuItem } from "@/components/ui/Menu";
 import { useToast } from "@/components/ui/Toast";
 import { blankEmptyParagraphs } from "@/lib/markdown-entities";
 import { isoDate, releaseFileName, releaseZipName } from "@/lib/release";
@@ -155,7 +156,7 @@ export function ReleaseEntry({ release }: Props) {
       </div>
       {open && (
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <button className="btn-secondary py-1.5" onClick={async () => { if (await copyText(text)) toast(t("Copiado al portapapeles")); else toast(t("No se pudo copiar"), "error"); }}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
@@ -165,9 +166,23 @@ export function ReleaseEntry({ release }: Props) {
             <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
               <Download size={15} /> .txt
             </button>
-            <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400 sm:ml-auto" disabled={busy} onClick={remove}>
-              <Trash2 size={15} /> {t("Borrar release")}
-            </button>
+            {/* Borrar va aparte, en «⋯» al final de la fila: junto a Copiar/.md/.txt se pulsaba sin querer. */}
+            <Menu
+              align="end"
+              className="ml-auto"
+              label={t("Más acciones de la release R{number}", { number: release.number })}
+              panelClassName="w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+              trigger={({ props }) => (
+                <button type="button" className="btn-icon" aria-label={t("Más acciones de la release R{number}", { number: release.number })} title={t("Más acciones")} {...props}>
+                  <MoreHorizontal size={18} aria-hidden />
+                </button>
+              )}
+            >
+              {attachments.length > 0 && (
+                <MenuItem icon={Trash2} danger disabled={busy} onClick={() => void removeAttachments()}>{t("Borrar adjuntos")}</MenuItem>
+              )}
+              <MenuItem icon={Trash2} danger disabled={busy} onClick={() => void remove()}>{t("Borrar release")}</MenuItem>
+            </Menu>
           </div>
           {attachments.length > 0 && (
             <div className="mb-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
@@ -179,9 +194,6 @@ export function ReleaseEntry({ release }: Props) {
                       <FileArchive size={15} /> {parts > 1 ? t("Descargar adjuntos ({part}/{total})", { part: i + 1, total: parts }) : t("Descargar adjuntos")}
                     </button>
                   ))}
-                  <button className="btn-secondary py-1.5 text-red-600 dark:text-red-400" disabled={busy} onClick={removeAttachments}>
-                    <Trash2 size={15} /> {t("Borrar adjuntos")}
-                  </button>
                 </div>
               </div>
               <p className="mt-1 break-words text-xs text-slate-500">{attachments.join(", ")}</p>

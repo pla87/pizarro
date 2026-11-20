@@ -26,7 +26,6 @@ export const documentacion: Record<string, string> = {
   "El nombre no puede estar vacío.": "The name cannot be empty.",
   "Renombró un documento a «{name}»": "Renamed a document to “{name}”",
   "Documento enviado a la papelera": "Document moved to the trash",
-  "Enviar «{name}» a la papelera": "Move “{name}” to the trash",
   "Enviar a la papelera": "Move to the trash",
   "Documento restaurado": "Document restored",
   "Papelera ({n})": "Trash ({n})",
@@ -54,4 +53,6 @@ export const documentacion: Record<string, string> = {
   // Enlace «?doc=» a un documento que ya no está
   "Ese documento está en la papelera": "That document is in the trash",
   "Ese documento ya no está en la Documentación": "That document is no longer in Documentation",
+  // Menú «⋯» de cada documento de la lista (Descargar, Enviar a la papelera)
+  "Más acciones de «{name}»": "More actions for “{name}”",
 };

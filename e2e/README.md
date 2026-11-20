@@ -67,13 +67,13 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 35 | ~1 min |
 | Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 67 | ~3 min |
-| **Accesibilidad** | | **68** | |
+| **Accesibilidad** | | **90** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
-| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla» y `otro.md#apartado` (caza de bugs 54) | `e2e/accesibilidad-releases-e2e.mjs` | 32 | ~30 s |
+| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 54 | ~30 s |
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **3187** | |
+| **Total** | | **3209** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -761,10 +761,15 @@ sigue abriéndola) y, sin portapapeles, «No se pudo copiar» sale como error. E
 cierra. En el calendario, «Proyectos» y «Persona» se llaman «Proyectos: <lo elegido>» (axe sin
 `label-content-name-mismatch`) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió (con clic
 fuera, no). En «Aplicar plantilla», el rol de la columna de destino va tras « · ». Un enlace de un HTML a
-`guia.md#instalacion-rapida` (o con tildes) abre el Markdown en ese apartado. Misma base y servidor:
+`guia.md#instalacion-rapida` (o con tildes) abre el Markdown en ese apartado. Y borrar va en un menú «⋯» (`PART=borrar`):
+en el histórico, «Más acciones de la release R<n>» al final de la fila de Copiar/.md/.txt con «Borrar adjuntos» (solo si
+hay adjuntos) y «Borrar release», cada uno con su confirmación; en la Documentación, «Más acciones de «<nombre>»» por
+documento con «Descargar» y «Enviar a la papelera»; con teclado (Intro, ↓, Escape devuelve el foco) y a 390 px (el
+botón y el menú caben aunque el nombre sea largo; al enviar a la papelera el foco pasa al otro documento). Misma base y
+servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs   # PART=release,menu,cal,plantilla,md
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs   # PART=release,menu,cal,plantilla,md,borrar
 ```
 
 ## Red, sin conexión y formularios

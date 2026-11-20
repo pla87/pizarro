@@ -4,8 +4,10 @@
 // del menú lateral cierra el menú; (3) en el calendario, el nombre accesible de «Proyectos» y «Persona» incluye lo elegido
 // (axe: label-content-name-mismatch) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió;
 // (4) «Aplicar plantilla» ya no pone un paréntesis dentro de otro («Siguiente release (Siguiente salto (genera
-// releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md
+// releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown; (6) borrar va en un menú «⋯»: «Borrar
+// release» y «Borrar adjuntos» del histórico (este, solo con adjuntos) y la papelera de cada documento de la Documentación
+// (con «Descargar»), con teclado y a 390 px. Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md,borrar
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +15,7 @@ import { createRequire } from "node:module";
 import * as L from "./qa/lib.mjs";
 const { sleep, COL } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "release,menu,cal,plantilla,md").split(",");
+const only = (process.env.PART || "release,menu,cal,plantilla,md,borrar").split(",");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "bh54-"));
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
@@ -229,6 +231,111 @@ if (only.includes("md")) {
   L.check("MD: sin apartado, arriba", await page.getByTestId("doc-markdown").getByRole("heading", { name: "Guía" }).evaluate((el) => el.getBoundingClientRect().top < window.innerHeight));
   L.assertNoErrors("MD", [{ errors: s.errors.filter((e) => !/Content Security Policy|Refused to/i.test(e)) }]);
   await s.ctx.close();
+}
+
+// --- Borrar, en un menú «⋯» (releases y documentos) --------------------------------------------------------------------
+if (only.includes("borrar")) {
+  L.scenario("borrar: «Borrar release», «Borrar adjuntos» y la papelera de un documento van en «⋯»");
+  await L.q(`DELETE FROM "Release" WHERE "projectId"=$1`, [p.id]);
+  await L.q(`INSERT INTO "Release"(id,"projectId",number,title,content,"deployedAt") VALUES ('bh54_rm2',$1,2,'Con adjunto menú',$2,NOW()), ('bh54_rm1',$1,1,'Sin adjuntos menú',$2,NOW() - interval '1 day')`, [p.id, "# Notas"]);
+  await L.q(`INSERT INTO "ReleaseAttachment"(id,"releaseId","fileName",size,position) VALUES ('bh54_rma','bh54_rm2','copia-menu.webp',4096,0)`);
+  const s = await L.session();
+  const { page } = s;
+  await page.goto(`${L.BASE}/p/${p.id}/releases`);
+  const withAtt = page.locator("article").filter({ hasText: "Con adjunto menú" });
+  await withAtt.waitFor({ timeout: 15000 });
+  await withAtt.getByRole("button", { name: "R2 Con adjunto menú" }).click();
+  const more = withAtt.getByRole("button", { name: "Más acciones de la release R2" });
+  await more.waitFor();
+  L.eq("BORRAR: en la fila ya no hay botones de borrar", await withAtt.getByRole("button", { name: /^Borrar/ }).count(), 0);
+  const [copyBox, moreBox] = await Promise.all([withAtt.getByRole("button", { name: "Copiar", exact: true }).boundingBox(), more.boundingBox()]);
+  L.check("BORRAR: «⋯» va al final de la fila de Copiar/.md/.txt", Math.abs(moreBox.y + moreBox.height / 2 - (copyBox.y + copyBox.height / 2)) < 4 && moreBox.x > copyBox.x, JSON.stringify({ copyBox, moreBox }));
+  // Teclado: Intro abre el menú con el foco en la primera opción; ↓ pasa a la siguiente; Escape cierra y vuelve al botón.
+  await more.focus();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("menu", { name: "Más acciones de la release R2" });
+  await menu.waitFor();
+  L.eq("BORRAR: con adjuntos, el menú tiene «Borrar adjuntos» y «Borrar release»", (await menu.getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Borrar adjuntos", "Borrar release"]);
+  L.eq("BORRAR: al abrir con Intro, el foco va a la primera opción", await page.evaluate(() => document.activeElement?.textContent?.trim()), "Borrar adjuntos");
+  await page.keyboard.press("ArrowDown");
+  L.eq("BORRAR: ↓ pasa a «Borrar release»", await page.evaluate(() => document.activeElement?.textContent?.trim()), "Borrar release");
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+  L.eq("BORRAR: Escape cierra y devuelve el foco a «⋯»", await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Más acciones de la release R2");
+  // «Borrar adjuntos» pide confirmación (como antes) y, cancelada, no borra nada.
+  await page.keyboard.press("Enter");
+  await menu.getByRole("menuitem", { name: "Borrar adjuntos" }).click();
+  const confirmDlg = page.getByRole("dialog").filter({ hasText: "¿Borrar el adjunto de esta release?" });
+  await confirmDlg.waitFor();
+  await confirmDlg.getByRole("button", { name: "Cancelar" }).click();
+  await confirmDlg.waitFor({ state: "detached" });
+  L.eq("BORRAR: cancelar la confirmación no borra el adjunto", (await L.q(`SELECT count(*)::int n FROM "ReleaseAttachment" WHERE "releaseId"='bh54_rm2'`))[0].n, 1);
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Borrar adjuntos" }).click();
+  await confirmDlg.waitFor();
+  await confirmDlg.getByRole("button", { name: "Borrar", exact: true }).click();
+  await L.eqEventually("BORRAR: confirmado, se borran los adjuntos", async () => (await L.q(`SELECT count(*)::int n FROM "ReleaseAttachment" WHERE "releaseId"='bh54_rm2'`))[0].n, 0, { timeout: 10000 });
+  await more.click();
+  L.eq("BORRAR: sin adjuntos, el menú solo tiene «Borrar release»", (await menu.getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Borrar release"]);
+  await menu.getByRole("menuitem", { name: "Borrar release" }).click();
+  const confirmRel = page.getByRole("dialog").filter({ hasText: "¿Borrar la release «Con adjunto menú»" });
+  await confirmRel.waitFor();
+  await confirmRel.getByRole("button", { name: "Borrar", exact: true }).click();
+  await L.eqEventually("BORRAR: «Borrar release» confirmado la borra", async () => (await L.q(`SELECT count(*)::int n FROM "Release" WHERE id='bh54_rm2'`))[0].n, 0, { timeout: 10000 });
+  // La release sin adjuntos: el menú no ofrece «Borrar adjuntos».
+  const noAtt = page.locator("article").filter({ hasText: "Sin adjuntos menú" });
+  await noAtt.getByRole("button", { name: "R1 Sin adjuntos menú" }).click();
+  await noAtt.getByRole("button", { name: "Más acciones de la release R1" }).click();
+  L.eq("BORRAR: release sin adjuntos: solo «Borrar release»", (await page.getByRole("menu", { name: "Más acciones de la release R1" }).getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Borrar release"]);
+  await page.keyboard.press("Escape");
+  // El adjunto es solo la fila (sin fichero en disco): el plan del ZIP, que se pide al abrir la release, responde 404.
+  L.assertNoErrors("BORRAR releases", [{ errors: s.errors.filter((e) => !/Failed to load resource: .*404/.test(e)) }]);
+  await s.ctx.close();
+  await L.q(`DELETE FROM "Release" WHERE "projectId"=$1`, [p.id]);
+
+  // Documentación en el móvil (390 px): «⋯» por documento con «Descargar» y «Enviar a la papelera».
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  const mp = m.page;
+  await mp.goto(`${L.BASE}/p/${p.id}/docs`);
+  await mp.getByRole("heading", { name: /Documentación/ }).first().waitFor({ timeout: 15000 });
+  await mp.waitForLoadState("networkidle").catch(() => {});
+  for (const name of ["menu-uno-bh54.txt", "menu-dos-bh54-con-un-nombre-bastante-largo-para-el-movil.txt"]) {
+    const file = path.join(TMP, name);
+    fs.writeFileSync(file, `hola ${name}`);
+    await mp.locator("input[type=file][aria-label='Subir archivos']").setInputFiles(file);
+    await L.waitFor(async () => (await L.q(`SELECT 1 FROM "ProjectDocument" WHERE "projectId"=$1 AND name=$2`, [p.id, name])).length === 1, { timeout: 15000 });
+  }
+  await mp.reload();
+  const longName = "menu-dos-bh54-con-un-nombre-bastante-largo-para-el-movil.txt";
+  const docMore = mp.getByRole("button", { name: `Más acciones de «${longName}»` });
+  await docMore.waitFor({ timeout: 15000 });
+  L.eq("DOCS: la fila ya no tiene la papelera a la vista", await mp.getByTestId("docs-list").getByRole("button", { name: /papelera/ }).count(), 0);
+  const box = await docMore.boundingBox();
+  L.check("DOCS 390 px: «⋯» se ve entero, aunque el nombre sea largo", box && box.x >= 0 && box.x + box.width <= 390 && box.width >= 32, JSON.stringify(box));
+  L.check("DOCS 390 px: sin scroll horizontal", await mp.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await docMore.tap();
+  const docMenu = mp.getByRole("menu", { name: `Más acciones de «${longName}»` });
+  await docMenu.waitFor();
+  L.eq("DOCS: el menú tiene «Descargar» y «Enviar a la papelera»", (await docMenu.getByRole("menuitem").allInnerTexts()).map((x) => x.trim()), ["Descargar", "Enviar a la papelera"]);
+  const menuBox = await docMenu.boundingBox();
+  L.check("DOCS 390 px: el menú cabe en la pantalla", menuBox.x >= 0 && menuBox.x + menuBox.width <= 390, JSON.stringify(menuBox));
+  const [dl] = await Promise.all([mp.waitForEvent("download", { timeout: 15000 }), docMenu.getByRole("menuitem", { name: "Descargar" }).tap()]);
+  L.eq("DOCS: «Descargar» del menú descarga el documento", dl.suggestedFilename(), longName);
+  // Teclado: Intro abre, ↓ hasta la papelera, Intro la envía; el foco pasa al documento siguiente (o al anterior).
+  await docMenu.waitFor({ state: "detached" });
+  await docMore.focus();
+  await mp.keyboard.press("Enter");
+  await docMenu.waitFor();
+  await mp.keyboard.press("ArrowDown");
+  L.eq("DOCS: ↓ llega a «Enviar a la papelera»", await mp.evaluate(() => document.activeElement?.textContent?.trim()), "Enviar a la papelera");
+  await mp.keyboard.press("Enter");
+  await L.eqEventually("DOCS: va a la papelera", async () => (await L.q(`SELECT count(*)::int n FROM "ProjectDocument" WHERE "projectId"=$1 AND name=$2 AND "deletedAt" IS NOT NULL`, [p.id, longName]))[0].n, 1, { timeout: 10000 });
+  await mp.getByRole("button", { name: "Deshacer" }).last().waitFor({ timeout: 10000 });
+  await L.checkEventually("DOCS: el foco pasa al otro documento", async () => (await mp.evaluate(() => document.activeElement?.textContent ?? "")).includes("menu-uno-bh54.txt"));
+  L.assertNoErrors("BORRAR docs", [m]);
+  await m.ctx.close();
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
 }
 
 await L.closeBrowser(); await L.closeDb();
