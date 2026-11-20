@@ -313,4 +313,7 @@ export const server: Record<string, string> = {
   "El ejemplo ya no existe.": "The example no longer exists.",
   // Copia con Ctrl soltada en el panel de fijas (ronda 55)
   "Duplicó «{title}» como fija en «{col}»": "Duplicated “{title}” as pinned in “{col}”",
+  // Informe semanal: destinatario (ronda 56)
+  "Elige a una persona del proyecto.": "Choose someone in the project.",
+  "El destinatario guardado ya no vale: elige a una persona del proyecto.": "The saved recipient is no longer valid: choose someone in the project.",
 };

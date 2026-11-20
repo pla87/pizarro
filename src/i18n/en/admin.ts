@@ -327,4 +327,6 @@ export const admin: Record<string, string> = {
   "Cambió los ajustes de la instalación": "Changed the installation settings",
   // Avisos por email: por qué no se puede enviar la prueba
   "Guarda antes una configuración de email para poder enviar la prueba.": "Save an email configuration first to send the test.",
+  // Administración → Usuarios en el móvil: menú «⋯» (ronda 56)
+  "Acciones de {name}": "Actions for {name}",
 };

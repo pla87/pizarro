@@ -61,6 +61,10 @@ interface Props {
   /** Cabeceras y pies del plan de trabajo para IA del proyecto. */
   planTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   tab: ProjectSettingsTab;
+  /** `?tab=` pedido que no es ninguna de las pestañas de esta persona (se abre la primera y se avisa). */
+  unknownTab?: string;
+  /** …y es una pestaña de gestión que esta persona no tiene. */
+  restrictedTab?: ProjectSettingsTab;
 }
 
 const PROJECT_TEMPLATE_ACTIONS = (projectId: string) => ({
@@ -89,7 +93,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, applyTemplate }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -127,7 +131,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <Link href={`/p/${project.id}`} className="btn-primary">{t("Ir al tablero")}</Link>
       </div>
 
-      <ProjectSettingsTabs projectId={project.id} active={tab} canManage={canManage} />
+      <ProjectSettingsTabs projectId={project.id} active={tab} canManage={canManage} unknown={unknownTab} restricted={restrictedTab} />
 
       {tab === "general" && (
         <>

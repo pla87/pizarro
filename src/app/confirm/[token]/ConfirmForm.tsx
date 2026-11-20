@@ -5,6 +5,7 @@ import { useState } from "react";
 import { confirmAccountChange } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { EmailSafe } from "@/components/ui/EmailSafe";
 
 export function ConfirmForm({ token, kind, newEmail }: { token: string; kind: "EMAIL" | "PASSWORD"; newEmail: string | null }) {
   const t = useT();
@@ -25,7 +26,7 @@ export function ConfirmForm({ token, kind, newEmail }: { token: string; kind: "E
     <div className="space-y-4 text-sm">
       <p>
         {kind === "EMAIL"
-          ? t("El email de tu cuenta de Pizarro pasará a ser {email}.", { email: newEmail ?? "" })
+          ? <EmailSafe text={t("El email de tu cuenta de Pizarro pasará a ser {email}.", { email: newEmail ?? "" })} />
           : t("Se aplicará la contraseña nueva que elegiste en tu perfil y se cerrarán todas las sesiones abiertas.")}
       </p>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}

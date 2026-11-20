@@ -119,6 +119,8 @@ interface Props {
   today: string;
   weeks: CalendarDay[][];
   tasks: CalendarTask[];
+  /** Vencidas sin terminar de antes de la cuadrícula (solo en el mes actual y los siguientes): las primeras y el total. */
+  overdue?: { tasks: CalendarTask[]; total: number };
   /** Apariciones futuras previstas de las tareas que se repiten (solo días posteriores a hoy). */
   repeats: CalendarRepeat[];
   deliverables: CalendarDeliverable[];
@@ -175,7 +177,12 @@ function LinkSpinner() {
   return pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null;
 }
 
-export function CalendarView({ month, today, weeks, tasks, repeats, deliverables, projects, people, meId, filters, truncated, feed }: Props) {
+/** Vencida: sin terminar y con la fecha límite ya pasada. Se marca con el mismo rojo que «Vencidas» en «Mis tareas». */
+const isOverdue = (task: { done: boolean; due: string }, today: string) => !task.done && task.due < today;
+/** Marca de vencida en los chips y filas del calendario (borde izquierdo rojo, como las filas vencidas de «Mis tareas»). */
+const OVERDUE_MARK = "border-l-[3px] border-l-red-600 dark:border-l-red-500";
+
+export function CalendarView({ month, today, weeks, tasks, overdue, repeats, deliverables, projects, people, meId, filters, truncated, feed }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
@@ -211,6 +218,19 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
     document.querySelector<HTMLElement>(`[data-chip="${focusAfter.current}"], [data-band="${focusAfter.current}"]`)?.focus();
     focusAfter.current = null;
   });
+
+  // Móvil, mes actual: al abrirlo se baja hasta hoy (o hasta el primer día con algo a partir de hoy). Solo al cambiar de
+  // mes, no en cada refresco de los datos, y no si ya se ha desplazado la página.
+  useEffect(() => {
+    if (month !== today.slice(0, 7) || !window.matchMedia("(max-width: 767px)").matches) return;
+    const days = [...document.querySelectorAll<HTMLElement>("[data-mobile-day]")];
+    const target = days.find((el) => (el.dataset.mobileDay ?? "") >= today);
+    if (!target || target === days[0]) return;
+    const scroller = target.closest("main");
+    if ((scroller ? scroller.scrollTop : window.scrollY) > 0) return;
+    target.scrollIntoView({ block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al llegar al mes
+  }, [month]);
 
   const items = useMemo(
     () =>
@@ -552,11 +572,14 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
       className={cn(
         "kind-badge flex w-full min-w-0 cursor-grab items-center gap-1 rounded px-1.5 py-0.5 text-left text-xs leading-5 outline-offset-1 focus-visible:outline-3 focus-visible:outline-focus active:cursor-grabbing",
         task.done && "opacity-55 line-through",
+        isOverdue(task, today) && OVERDUE_MARK,
         dragging === task.id && "opacity-40",
       )}
+      data-overdue={isOverdue(task, today) || undefined}
     >
       {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
       <span className="truncate">{task.title}</span>
+      {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
     </Link>
   );
 
@@ -710,6 +733,8 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
         </div>
       )}
 
+      {overdue && overdue.total > 0 && <OverdueList overdue={overdue} today={today} showProject={showProject} />}
+
       {/* Escritorio: cuadrícula mensual */}
       <div className={cn("hidden md:block", navigating && "opacity-60 transition-opacity", empty && "hidden!")}>
         <div className={cn("card overflow-visible", preview && "cursor-grabbing select-none")}>
@@ -843,7 +868,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                       <div
                         key={day.iso}
                         role="group"
-                        aria-label={`${dayLabel(day.iso)}${list.length ? `, ${t("{n} tarea(s)", { n: list.length })}` : ""}`}
+                        aria-label={`${dayLabel(day.iso)}${list.length ? `, ${list.length === 1 ? t("1 tarea") : t("{n} tareas", { n: list.length })}` : ""}`}
                         onDragOver={(e) => {
                           if (!dragging) return;
                           e.preventDefault();
@@ -935,7 +960,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
             <h3 className="mb-2 text-sm font-semibold text-slate-600 dark:text-slate-300">{weekLabel(w.start, w.end)}</h3>
             <div className="card divide-y divide-slate-200 dark:divide-slate-800">
               {w.days.map((iso) => (
-                <div key={iso} className="px-3 py-2">
+                <div key={iso} data-mobile-day={iso} className="scroll-mt-3 px-3 py-2">
                   <div className={cn("mb-1.5 text-xs font-semibold first-letter:uppercase", iso === today ? "text-brand-600" : "text-slate-500")}>
                     {dayLabel(iso)}
                     {iso === today && ` · ${t("Hoy")}`}
@@ -956,9 +981,11 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                         <Link
                           href={`/p/${task.projectId}?task=${task.id}`}
                           style={kindBadgeStyle(task.kind.color)}
-                          className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", task.done && "opacity-55 line-through")}
+                          className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", task.done && "opacity-55 line-through", isOverdue(task, today) && OVERDUE_MARK)}
+                          data-overdue={isOverdue(task, today) || undefined}
                         >
                           <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                          {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
                           {isRange(task.start, task.due) && <span className="shrink-0 text-xs tabular-nums opacity-80">{shortDay(task.start!)} → {shortDay(task.due)}</span>}
                           {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
                         </Link>
@@ -976,6 +1003,42 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
         {repeats.length > 0 && !mobileEmpty && <RepeatLegend />}
       </div>
     </div>
+  );
+}
+
+/**
+ * «N vencidas de antes de este mes»: tareas sin terminar con la fecha límite anterior a la cuadrícula (no salen en ella ni
+ * en la lista del móvil). Plegado; al abrirlo, la lista con su fecha, cada una abre la tarea.
+ */
+function OverdueList({ overdue, today, showProject }: { overdue: { tasks: CalendarTask[]; total: number }; today: string; showProject: boolean }) {
+  const t = useT();
+  const locale = useIntlLocale();
+  const n = overdue.total;
+  return (
+    <details data-testid="cal-overdue" className="mb-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+      <summary className="cursor-pointer select-none px-3 py-2 font-semibold">
+        {n === 1 ? t("1 vencida de antes de este mes") : t("{n} vencidas de antes de este mes", { n })}
+      </summary>
+      <ul className="space-y-1 px-3 pb-3">
+        {overdue.tasks.map((task) => (
+          <li key={task.id}>
+            <Link
+              href={`/p/${task.projectId}?task=${task.id}`}
+              style={kindBadgeStyle(task.kind.color)}
+              className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", OVERDUE_MARK)}
+            >
+              <span className="min-w-0 flex-1 truncate">{task.title}</span>
+              {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
+              <span className="shrink-0 text-xs font-semibold tabular-nums">
+                <span className="sr-only">{`${t("Plazo vencido")}: `}</span>
+                {formatDay(task.due, today, locale)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {n > overdue.tasks.length && <p className="px-3 pb-3 text-xs">{t("Se muestran las {shown} más antiguas.", { shown: overdue.tasks.length })}</p>}
+    </details>
   );
 }
 

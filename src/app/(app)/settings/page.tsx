@@ -14,7 +14,8 @@ import { deviceLabel } from "@/lib/user-agent";
 import { getT } from "@/i18n/server";
 import { EmailChangeSection } from "./EmailChangeSection";
 import { ProfileSettings } from "./ProfileSettings";
-import { parseProfileTab } from "./profile-tabs";
+import { resolveProfileTab } from "./profile-tabs";
+import { redirect } from "next/navigation";
 import { ProjectPicksSection } from "./ProjectPicksSection";
 import { SessionsSection } from "./SessionsSection";
 import { TwoFactorSection } from "./TwoFactorSection";
@@ -48,7 +49,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const t = await getT();
   const { google, tab: tabParam, delete: deleteParam } = await searchParams;
   // El aviso de vuelta de Google se muestra en «Cuenta», donde está esa sección.
-  const tab = google ? "cuenta" : parseProfileTab(tabParam);
+  const asked = resolveProfileTab(tabParam);
+  // Otro nombre de una pestaña («?tab=account», «?tab=Notificaciones»): se pasa a su id, el de los enlaces de las pestañas.
+  if (!google && asked.kind === "alias") redirect(`/settings?tab=${asked.tab}${deleteParam ? `&delete=${encodeURIComponent(deleteParam)}` : ""}`);
+  const tab = google ? "cuenta" : asked.tab;
   const row = await db.user.findUniqueOrThrow({
     where: { id: user.id },
     select: {
@@ -119,6 +123,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </>
         }
         tab={tab}
+        unknownTab={!google && asked.kind === "unknown" ? asked.asked : undefined}
         preferencesExtra={
           user.role === "ADMIN" ? <ProjectPicksSection projects={pickProjects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate, picked: p.adminPicks.length > 0 }))} /> : null
         }

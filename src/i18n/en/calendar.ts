@@ -29,4 +29,8 @@ export const calendar: Record<string, string> = {
   // Calendario: contadores con 1
   "+1 entregable más": "+1 more deliverable",
   "+1 tarea con rango más": "+1 more ranged task",
+  // Calendario: vencidas de antes del mes (ronda 56)
+  "1 vencida de antes de este mes": "1 overdue from before this month",
+  "{n} vencidas de antes de este mes": "{n} overdue from before this month",
+  "Se muestran las {shown} más antiguas.": "Showing the {shown} oldest.",
 };

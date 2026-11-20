@@ -5,7 +5,6 @@ export const settings: Record<string, string> = {
   "Plantillas": "Templates",
   "Secciones del perfil": "Profile sections",
   "Mis tareas": "My tasks",
-  "{n} tarea(s) en todos tus proyectos.": "{n} task(s) across all your projects.",
   "Se muestran las primeras {shown} de {total}, por fecha límite. Abre cada proyecto para ver el resto.": "Showing the first {shown} of {total}, by due date. Open each project to see the rest.",
   "No tienes tareas asignadas.": "You have no assigned tasks.",
   "Enlace externo": "External link",
@@ -237,8 +236,15 @@ export const settings: Record<string, string> = {
 
   // Ajustes del proyecto → Informe semanal: a quién puede ir (report-recipient.ts)
   "Hora de la app ({tz}).": "App time ({tz}).",
-  "Vale la dirección de un miembro del proyecto, la de un administrador o una externa.": "A project member's address, an administrator's or an external one.",
   "El informe se genera con tus permisos: deja de enviarse si pierdes el acceso al proyecto.": "The report is generated with your permissions: it stops being sent if you lose access to the project.",
-  "Vale la dirección de un miembro del proyecto o la de un administrador (una externa solo la pone un administrador).": "A project member's address or an administrator's (only an administrator can set an external one).",
-  "Proyecto privado: solo vale la dirección de uno de sus miembros.": "Private project: only one of its members' addresses.",
+  // Informe semanal: destinatario elegido de la lista de personas (ronda 56)
+  "Elige a una persona del proyecto o, con «Otra dirección…», escribe una externa.": "Choose someone in the project or, with “Another address…”, type an external one.",
+  "Elige a un miembro del proyecto o a un administrador (una dirección externa solo la pone un administrador).": "Choose a project member or an administrator (only an administrator can set an external address).",
+  "Proyecto privado: elige a uno de sus miembros.": "Private project: choose one of its members.",
+  "{name} (tú)": "{name} (you)",
+  "Dirección externa: {email}": "External address: {email}",
+  "Otra dirección…": "Another address…",
+  "Dirección externa": "External address",
+  "No hay ninguna sección «{tab}»: se muestra «{shown}».": "There is no “{tab}” section: showing “{shown}”.",
+  "«{tab}» solo la ve quien gestiona el proyecto: se muestra «{shown}».": "“{tab}” is only for those who manage the project: showing “{shown}”.",
 };

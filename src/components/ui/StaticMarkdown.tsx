@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import type { T } from "@/i18n/core";
 import { safeMarkdownUrl } from "@/lib/safe-url";
 import { markdownComponents, markdownSource } from "./markdown-parts";
+import { rehypeEmailSafe } from "./EmailSafe";
 
 /**
  * Markdown seguro pintado en el servidor (componente de servidor): el mismo HTML que <Markdown>, pero react-markdown,
@@ -12,7 +13,7 @@ import { markdownComponents, markdownSource } from "./markdown-parts";
 export function StaticMarkdown({ children, t }: { children: string; t: T }) {
   return (
     <div className="prose-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownUrl} components={markdownComponents(t)}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeEmailSafe]} urlTransform={safeMarkdownUrl} components={markdownComponents(t)}>
         {markdownSource(children)}
       </ReactMarkdown>
     </div>

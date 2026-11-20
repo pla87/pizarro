@@ -29,6 +29,8 @@ const MAX_REPEAT_SOURCES = 300;
 const MAX_REPEATS = 500;
 /** Proyectos que se aceptan en `?project=`. */
 const MAX_PROJECT_FILTER = 50;
+/** Vencidas de antes de la cuadrícula que se listan arriba («N vencidas»); el total se cuenta aparte. */
+const MAX_OVERDUE = 50;
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUserPage();
@@ -144,6 +146,21 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       },
     }),
   ]);
+  // Vencidas sin terminar de antes de lo que se ve (mes actual o siguientes): si no, quedan fuera de la vista sin aviso.
+  const overdueWhere: Prisma.TaskWhereInput | null = month >= today.slice(0, 7)
+    ? { AND: [{ project: projectWhere, archivedAt: null, column: { isDone: false }, dueDate: { lt: isoToDate(grid.start < today ? grid.start : today) } }, personWhere] }
+    : null;
+  const [overdueRows, overdueTotal] = overdueWhere
+    ? await Promise.all([
+        db.task.findMany({
+          where: overdueWhere,
+          take: MAX_OVERDUE,
+          orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+          select: { id: true, title: true, dueDate: true, project: { select: { id: true, name: true } }, kind: { select: { id: true, name: true, color: true } } },
+        }),
+        db.task.count({ where: overdueWhere }),
+      ])
+    : [[], 0];
   const locale = await getLocale();
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
   const repeats: CalendarRepeat[] = [];
@@ -175,6 +192,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     done: r.column.isDone,
   }));
 
+  const overdue: CalendarTask[] = overdueRows.map((r) => ({
+    id: r.id,
+    title: mentionsToPlain(r.title),
+    due: dateToIso(r.dueDate)!,
+    start: null,
+    projectId: r.project.id,
+    projectName: r.project.name,
+    kind: { name: localizeGeneralKind(r.kind, locale).name, color: r.kind.color },
+    done: false,
+  }));
+
   const deliverables: CalendarDeliverable[] = deliverableRows.map((d) => ({
     id: d.id,
     name: d.name,
@@ -191,6 +219,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       today={today}
       weeks={grid.weeks}
       tasks={tasks}
+      overdue={{ tasks: overdue, total: overdueTotal }}
       repeats={repeats}
       deliverables={deliverables}
       projects={options}

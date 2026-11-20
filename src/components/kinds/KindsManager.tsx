@@ -90,7 +90,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <TypeBadge kind={k} />
-                  <span className="text-xs text-slate-500">{t("{n} tarea(s)", { n: k.taskCount })}</span>
+                  <span className="text-xs text-slate-500">{k.taskCount === 1 ? t("1 tarea") : t("{n} tareas", { n: k.taskCount })}</span>
                 </div>
                 {(() => {
                   const text = describeKindAutomation({ titleTemplate: k.titleTemplate, descriptionTemplate: stripMarkdown(k.descriptionTemplate) }, t);
@@ -203,7 +203,7 @@ export function KindsManager({ kinds, projectId, otherKinds = [], embedded = fal
         <Modal open onClose={() => setDeleting(null)} title={t("Borrar «{name}»", { name: deleting.name })} size="sm">
           <div className="space-y-3">
             <p className="text-sm">
-              {deleting.taskCount ? t("Sus {n} tarea(s) pasarán al tipo:", { n: deleting.taskCount }) : t("No tiene tareas. Elige igualmente el tipo de destino:")}
+              {deleting.taskCount === 1 ? t("Su única tarea pasará al tipo:") : deleting.taskCount ? t("Sus {n} tareas pasarán al tipo:", { n: deleting.taskCount }) : t("No tiene tareas. Elige igualmente el tipo de destino:")}
             </p>
             <select className="input" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label={t("Tipo de destino")}>
               {targets(deleting).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
