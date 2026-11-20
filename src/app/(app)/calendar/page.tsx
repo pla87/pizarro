@@ -1,6 +1,5 @@
 import { listVisibleProjects, projectUsersWhere, visibleProjectsWhere, workingProjectsWhere } from "@/lib/access";
 import { appTimeZone } from "@/lib/board";
-import { defaultFeedScope } from "@/lib/calendar-feed";
 import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
@@ -182,9 +181,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     if (repeats.length >= MAX_REPEATS) break;
   }
 
+  // Sin suscripción, la opción que se marca (según si en sus proyectos las tareas suelen tener responsable) se calcula al
+  // abrir «Suscribirse» (suggestedCalendarFeedScope): eran dos recuentos de tareas en cada visita.
   const feedRow = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } });
-  // Sin suscripción, la opción marcada depende de si en sus proyectos las tareas suelen tener responsable.
-  const feedScope = feedRow?.scope ?? (await defaultFeedScope(user));
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
     title: mentionsToPlain(r.title),
@@ -231,7 +230,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       people={people}
       meId={user.id}
       filters={{ project: projectIds, person: personIds, hideDone }}
-      feed={{ active: !!feedRow, scope: feedScope }}
+      feed={{ active: !!feedRow, scope: feedRow?.scope ?? null }}
       truncated={rows.length >= MAX_TASKS || deliverableRows.length >= MAX_DELIVERABLES || repeatsCut}
     />
   );

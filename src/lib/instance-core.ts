@@ -1,6 +1,6 @@
 // Parte pura (sin base de datos) de los ajustes de la instalación.
 import type { Locale } from "@/i18n/core";
-import { validTimeZone } from "./setup-core";
+import { validTimeZone } from "./format";
 
 export const INSTANCE_ORG_KEY = "instance.orgName";
 export const INSTANCE_LOCALE_KEY = "instance.locale";

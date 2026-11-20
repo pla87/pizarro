@@ -1,4 +1,4 @@
-import { cachedFeedIcs, resolveFeedToken } from "@/lib/calendar-feed";
+import { cachedFeedIcs, feedMaxAgeSec, resolveFeedToken } from "@/lib/calendar-feed";
 import { FEED_LOG_EVERY_MS, feedLogDue, feedRateKey, tokenFromFilename } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { ifNoneMatchHas } from "@/lib/etag";
@@ -81,7 +81,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
   }
 
   // Guardado un minuto por enlace (cachedFeedIcs): un calendario que consulta a menudo, o varios a la vez, no lo rehacen.
-  const { ics, etag, tasks, deliverables, repeats } = await cachedFeedIcs(feed);
+  const { ics, etag, builtAt, tasks, deliverables, repeats } = await cachedFeedIcs(feed);
   // Aviso de uso: como mucho una escritura por hora y enlace (y, en este proceso, ni siquiera la consulta entre medias).
   // Por hash del token: al regenerar el enlace (lastUsedAt vuelve a null) el nuevo se anota en su primera consulta.
   if (usedLogDue(feed.tokenHash)) {
@@ -100,7 +100,8 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
   const headers = {
     "Content-Type": "text/calendar; charset=utf-8",
     "Content-Disposition": 'inline; filename="pizarro.ics"',
-    "Cache-Control": "private, max-age=300",
+    // Lo que le queda en la memoria del servidor (≤ 60 s; antes 300 s fijos): entre las dos, como mucho un minuto.
+    "Cache-Control": `private, max-age=${feedMaxAgeSec(builtAt)}`,
     ETag: etag,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",

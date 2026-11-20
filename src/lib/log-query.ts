@@ -49,6 +49,7 @@ export const READ_ACTIONS = [
   "admin.techInfo",
   "templateApply.listApplicableTemplates",
   "templateApply.previewTemplateChange",
+  "calendarFeed.suggestedScope",
 ];
 
 type Params = Record<string, string | string[] | undefined>;

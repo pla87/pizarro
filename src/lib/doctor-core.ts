@@ -1,5 +1,6 @@
 import { parseBackupKey } from "./backup-core";
 import { trustProxy } from "./client-ip";
+import { validTimeZone } from "./format";
 import { parseWhatsappSettings, resolveWhatsappConfig, TELEGRAM_ENABLED_KEY, TELEGRAM_TOKEN_KEY, telegramMode } from "./messaging-core";
 
 // Parte pura del diagnóstico para soporte (Administración → Ajustes → «Descargar diagnóstico» y node dist/doctor.mjs):
@@ -40,6 +41,8 @@ export function envPresence(env: Env = process.env): Record<string, EnvPresence>
     if (v === undefined || v.trim() === "") out[name] = "unset";
     else if (MIN32.has(name) && v.length < 32) out[name] = "invalid";
     else if (name === "BACKUP_KEY" && !parseBackupKey(v)) out[name] = "invalid";
+    // Mal escrita, la app la ignora (lib/format.ts): sin esta marca no se vería por qué no manda la variable.
+    else if (name === "APP_TIMEZONE" && !validTimeZone(v.trim())) out[name] = "invalid";
     else out[name] = "set";
   }
   return out;

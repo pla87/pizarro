@@ -1,7 +1,7 @@
 // Lógica pura del asistente de primer arranque: cuándo está pendiente, código de un solo uso y ajustes.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { resolveTimeZone } from "../src/lib/format";
+import { envTimeZone, formatDate, resolveTimeZone, validTimeZone } from "../src/lib/format";
 import { parseInstance } from "../src/lib/instance-core";
 import {
   SETUP_CODE_TTL_MS,
@@ -12,7 +12,6 @@ import {
   parseStoredCode,
   setupCodeSource,
   setupPending,
-  validTimeZone,
   verifySetupCode,
 } from "../src/lib/setup-core";
 
@@ -88,6 +87,32 @@ describe("ajustes de la instalación", () => {
     assert.equal(resolveTimeZone(undefined, "Asia/Tokyo"), "Asia/Tokyo");
     assert.equal(resolveTimeZone("", ""), "Europe/Madrid");
     assert.equal(resolveTimeZone(undefined, undefined), "Europe/Madrid");
+  });
+
+  test("una zona mal escrita no se usa: ni en la variable, ni en lo guardado ni en data-tz", () => {
+    const warned: string[] = [];
+    const warn = (tz: string) => warned.push(tz);
+    assert.equal(resolveTimeZone("Europe/Madird", "Asia/Tokyo", warn), "Asia/Tokyo");
+    assert.equal(resolveTimeZone("Europe/Madird", "Mars/Olympus", warn), "Europe/Madrid");
+    assert.equal(resolveTimeZone(" America/Lima ", undefined, warn), "America/Lima");
+    assert.equal(resolveTimeZone(undefined, "No/Existe", warn), "Europe/Madrid");
+    assert.deepEqual(warned, ["Europe/Madird", "Europe/Madird"]);
+    assert.equal(envTimeZone({ APP_TIMEZONE: "Europe/Madird" }), null);
+    assert.equal(envTimeZone({ APP_TIMEZONE: "" }), null);
+    assert.equal(envTimeZone({}), null);
+    assert.equal(envTimeZone({ APP_TIMEZONE: "Europe/Lisbon" }), "Europe/Lisbon");
+    // Con la variable mal escrita, formatear una fecha no lanza RangeError (antes tumbaba cada página).
+    const prev = process.env.APP_TIMEZONE;
+    process.env.APP_TIMEZONE = "Europe/Madird";
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+      assert.equal(formatDate(new Date("2026-03-01T12:00:00Z"), "dateNumeric"), "01/03/2026");
+    } finally {
+      console.warn = origWarn;
+      if (prev === undefined) delete process.env.APP_TIMEZONE;
+      else process.env.APP_TIMEZONE = prev;
+    }
   });
 
   test("parseInstance descarta valores no válidos", () => {

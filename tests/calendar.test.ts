@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bandsForWeek, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
+import { midnightStep, msUntilNextDay } from "../src/lib/dates";
+import { readFileSync } from "node:fs";
 
 test("parseMonth valida y cae al mes de hoy", () => {
   assert.equal(parseMonth("2026-03", "2026-10-23"), "2026-03");
@@ -154,4 +156,27 @@ test("columnAt reparte la fila en columnas iguales y se ajusta a los extremos", 
   assert.equal(columnAt(50, 100, 700), 0);
   assert.equal(columnAt(5000, 100, 700), 6);
   assert.equal(columnAt(10, 0, 0), 0);
+});
+
+test("«Hoy» a medianoche (useMidnightRefresh): espera al día siguiente, refresca y reintenta como mucho 3 veces", () => {
+  // Mismo día: esperar a la medianoche (con 5 s de margen), nunca más de una hora de una vez.
+  assert.deepEqual(midnightStep("2026-11-20", "2026-11-20", 0, 120_000), { refresh: false, waitMs: 125_000 });
+  assert.deepEqual(midnightStep("2026-11-20", "2026-11-20", 0, 10 * 3_600_000), { refresh: false, waitMs: 3_600_000 });
+  // Ya es otro día: refrescar y volver a mirar al minuto; si el servidor sigue en el anterior, tres veces y basta.
+  assert.deepEqual(midnightStep("2026-11-21", "2026-11-20", 0, 0), { refresh: true, waitMs: 60_000 });
+  assert.deepEqual(midnightStep("2026-11-21", "2026-11-20", 2, 0), { refresh: true, waitMs: 60_000 });
+  assert.equal(midnightStep("2026-11-21", "2026-11-20", 3, 0), null);
+  // Medianoche en la zona de la app, no la del equipo.
+  assert.equal(msUntilNextDay("Europe/Madrid", new Date("2026-11-20T22:59:00Z")), 60_000);
+  // El calendario y Mis tareas lo usan (antes solo el tablero cambiaba de día a medianoche).
+  assert.match(readFileSync("src/components/calendar/CalendarView.tsx", "utf8"), /useMidnightRefresh\(today, /);
+  assert.match(readFileSync("src/app/(app)/my-tasks/page.tsx", "utf8"), /<MidnightRefresh today=\{today\} \/>/);
+});
+
+test("el Calendario no cuenta tareas en cada visita para «Suscribirse» y las fechas de exportar/importar van en la zona de la app", () => {
+  const page = readFileSync("src/app/(app)/calendar/page.tsx", "utf8");
+  assert.ok(!page.includes("defaultFeedScope"), "la opción propuesta se pide al abrir el menú (suggestedCalendarFeedScope)");
+  assert.match(readFileSync("src/components/calendar/CalendarSubscribe.tsx", "utf8"), /suggestedCalendarFeedScope\(\)/);
+  const jobs = readFileSync("src/components/transfer/TransferJobs.tsx", "utf8");
+  assert.ok(!/toLocale(String|DateString|TimeString)\(/.test(jobs), "TransferJobs: formatDate (con timeZone), no toLocaleString");
 });
