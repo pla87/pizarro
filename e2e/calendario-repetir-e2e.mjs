@@ -194,13 +194,14 @@ if (only.includes("ics")) {
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), icsBtn.click()]);
   L.check("ICS: el botón de la columna descarga el .ics con su nombre", download.suggestedFilename().endsWith(".ics"), download.suggestedFilename());
   L.check("ICS: …sin salir del tablero", page.url().endsWith(`/p/${p.id}`), page.url());
+  L.assertNoErrors("ICS", [s]);
+  // Después de comprobar la consola: el 429 simulado deja su «Failed to load resource» (esperado).
   await page.route(/\/columns\/[^/]+\/ics$/, (route) => route.fulfill({ status: 429, body: "Demasiadas peticiones" }));
   await icsBtn.click();
   await L.checkEventually("ICS: con un 429, aviso emergente", async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes("Demasiadas peticiones, espera un momento."), { timeout: 5000 });
   L.check("ICS: …y el tablero sigue a la vista", page.url().endsWith(`/p/${p.id}`) && (await L.colLoc(page, L.COL.backlog).isVisible()));
   await page.unroute(/\/columns\/[^/]+\/ics$/);
   await L.q(`UPDATE "Column" SET role='NONE' WHERE id=$1`, [cols[L.COL.backlog]]);
-  L.assertNoErrors("ICS", [s]);
   await s.ctx.close();
 }
 

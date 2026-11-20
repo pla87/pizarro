@@ -240,7 +240,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             className={cn("min-h-10 flex-1 rounded-lg transition-colors lg:group-data-[fits]/list:-mt-2 lg:group-data-[fits]/list:min-h-0", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
             {taskIds.length === 0 && (
-              <p className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+              <p className="py-6 text-center text-xs text-slate-600 dark:text-slate-400">
                 {fileZone.over ? t("Suelta para crear tarea") : (
                   // Con un filtro o una búsqueda activos (data-filtering en la raíz del tablero) el texto es otro. Por CSS: la
                   // columna (memorizada dentro de DndContext) no se vuelve a dibujar al escribir en el buscador.
