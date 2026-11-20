@@ -208,6 +208,23 @@ describe("deshacer un despliegue", () => {
     assert.deepEqual(res.storageWarning, { usedMb: 1.2, limitMb: 1 });
     assert.ok(res.storageWarning!.usedMb > res.storageWarning!.limitMb);
   });
+
+  test("aviso de cuota: solo cuenta los adjuntos que se van a copiar (tareas de la release y de su proyecto)", async () => {
+    const { f } = await setup();
+    await db.project.update({ where: { id: f.project.id }, data: { storageQuotaMb: 1 } });
+    const a = await makeTask(f, { columnId: f.columns.done });
+    // El navegador manda la lista de adjuntos: una tarea que no está en la release (aquí, de otro proyecto) no se copia
+    // y no debe sumar al aviso (antes salía «supera su cuota (1,5 de 1 MB)»).
+    const other = await makeProject();
+    const x = await makeTask(other);
+    await db.taskAttachment.create({ data: { taskId: x.id, originalName: "ajeno.pdf", isImage: false, mimeType: "application/pdf", size: Math.round(1.5 * 1024 * 1024) } });
+    const res = expectOk(await deployRelease({
+      projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id],
+      attachments: [{ taskId: a.id, code: "F1" }, { taskId: x.id, code: "F2" }],
+    }));
+    await afterDone();
+    assert.equal(res.storageWarning, undefined);
+  });
 });
 
 describe("topes de la release", () => {

@@ -69,10 +69,9 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
       try {
         const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
         const data = att.isImage ? await compactImage(raw) : raw;
-        const row = await db.releaseAttachment.create({
-          data: { releaseId, fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ },
-          select: { id: true },
-        });
+        const row = await createIfStillPending(releaseId, { fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ });
+        // «Borrar adjuntos» (quita el pendiente) o release borrada mientras se copiaba: no se copia nada más.
+        if (!row) break outer;
         rowId = row.id;
         await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
         saved.push(row.id);
@@ -98,6 +97,21 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
     const gone = saved.filter((id) => !alive.has(id));
     if (gone.length) await removeReleaseAttachmentFiles(gone);
   }
+}
+
+/**
+ * Crea la fila de un adjunto copiado solo si la copia sigue pendiente (`attachmentsPending`), con la release bloqueada:
+ * «Borrar adjuntos» quita el pendiente y borra las filas en una transacción que también la bloquea, así que una fila
+ * nunca se cuela después del borrado (antes, los adjuntos que se estaban copiando volvían a aparecer). null: ya no hay
+ * que copiar (pendiente quitado o release borrada).
+ */
+function createIfStillPending(releaseId: string, data: { fileName: string; size: number; isImage: boolean; position: number }) {
+  return db.$transaction(async (tx) => {
+    const live = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Release" WHERE "id" = ${releaseId} AND "attachmentsPending" IS NOT NULL FOR UPDATE`;
+    if (!live.length) return null;
+    return tx.releaseAttachment.create({ data: { releaseId, ...data }, select: { id: true } });
+  });
 }
 
 /** Lanza la copia registrando en el log cualquier fallo global (nunca lanza). */

@@ -26,4 +26,6 @@ export const releases: Record<string, string> = {
   // «Generar Release» con un filtro activo en el tablero
   "El filtro del tablero no se aplica aquí: la lista incluye 1 tarea que el filtro oculta.": "The board filter doesn't apply here: the list includes 1 task the filter hides.",
   "El filtro del tablero no se aplica aquí: la lista incluye {n} tareas que el filtro oculta.": "The board filter doesn't apply here: the list includes {n} tasks the filter hides.",
+  // Histórico de releases: como mucho LIST_MAX en la página; las más antiguas, buscando
+  "Hay releases más antiguas: búscalas por su título o su contenido.": "There are older releases: search for them by title or content.",
 };

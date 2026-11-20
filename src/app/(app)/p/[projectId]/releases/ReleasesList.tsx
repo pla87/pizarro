@@ -15,11 +15,14 @@ export function ReleasesList({
   query,
   resultCount,
   moreHref,
+  olderHidden = false,
 }: {
   releases: Release[];
   query: string;
   resultCount: number | null;
   moreHref: string | null;
+  /** Ya se muestran todas las que caben (LIST_MAX) y hay más antiguas: se encuentran buscando. */
+  olderHidden?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -67,6 +70,7 @@ export function ReleasesList({
           <Link href={moreHref} scroll={false} className="btn-secondary">{t("Cargar más")}</Link>
         </div>
       )}
+      {olderHidden && <p className="mt-4 text-center text-xs text-slate-500">{t("Hay releases más antiguas: búscalas por su título o su contenido.")}</p>}
     </div>
   );
 }
