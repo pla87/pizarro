@@ -21,6 +21,18 @@ export const INSTALL_URL = `${SITE_URL}/instalar/`;
 /** @public (scripts/build-site.mjs comprueba que coincide con la guía en inglés) */
 export const INSTALL_URL_EN = `${SITE_URL}/en/install/`;
 export const installUrl = (locale: string = "es"): string => (locale === "en" ? INSTALL_URL_EN : INSTALL_URL);
+/**
+ * Secciones de la guía que enlaza la app: sus identificadores fijos ({#…}) en docs/web/instalar.md y
+ * docs/web/en/install.md. @public (scripts/build-site.mjs comprueba que existen en las dos guías)
+ */
+export const INSTALL_SECTIONS = {
+  email: { es: "email", en: "email" },
+  backups: { es: "copias-de-seguridad", en: "backups" },
+  restore: { es: "restaurar", en: "restore" },
+  troubleshooting: { es: "problemas", en: "troubleshooting" },
+} as const;
+export const installSectionUrl = (section: keyof typeof INSTALL_SECTIONS, locale: string = "es"): string =>
+  `${installUrl(locale)}#${INSTALL_SECTIONS[section][locale === "en" ? "en" : "es"]}`;
 /** @public (scripts/build-site.mjs) */
 export const IMAGE_URL = `${REPO_URL}/pkgs/container/pizarro`;
 

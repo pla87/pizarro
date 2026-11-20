@@ -1191,7 +1191,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </ul>
             )}
             {detail && detail.attachments.length === 0 && uploading === 0 && (
-              <p className="text-xs text-slate-400">{t("Sin adjuntos.")}</p>
+              <p className="text-xs text-slate-500">{t("Sin adjuntos.")}</p>
             )}
           </section>
           {/* Sin Google configurado no se pueden crear documentos: la sección solo sale si la tarea ya tiene alguno enlazado. */}
@@ -1724,7 +1724,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
         </div>
       ) : (
         <button
-          className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-400 hover:border-brand-500 dark:border-slate-700"
+          className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700"
           onClick={() => setEditing(true)}
           onFocus={(e) => {
             if (e.currentTarget.matches(":focus-visible")) setEditing(true);

@@ -57,7 +57,7 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
           </label>
           <label className="block text-sm">
             <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
-            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} placeholder="privacidad@example.com" autoComplete="off" />
+            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} placeholder={t("privacidad@example.com")} autoComplete="off" />
             <span className="mt-1 block text-xs text-slate-500">{t("Sustituye a {email}. Es el de Integraciones → Acceso con Google.")}</span>
           </label>
         </div>

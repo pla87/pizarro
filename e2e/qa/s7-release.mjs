@@ -103,7 +103,7 @@ export async function run() {
 
   // --- desplegar ---
   await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("release registrada en BD", async () => (await rels()).length, 1);
   const [rel] = await rels();
   L.eq("release: número 1 y título", [rel.number, rel.title], [1, "Release QA uno"]);
@@ -188,7 +188,7 @@ export async function run() {
   await d2.getByLabel("Archivar tarjetas").check();
   await d2.getByRole("button", { name: "Marcar como desplegado" }).click();
   await p.locator("[role=dialog]").last().getByText(/pasarán al archivo/).waitFor();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("release con selección: número 1 (la anterior se deshizo)", async () => (await rels()).map((r) => r.number), [1]);
   await L.eqEventually("archivar: Alpha y Gamma archivadas (con el código de la release en el título)", async () => (await L.q(`SELECT title FROM "Task" WHERE "archivedAt" IS NOT NULL ORDER BY title`)).map((r) => r.title), ["R1F1: Alpha", "R1F2: Gamma"]);
   L.eq("archivar: archivedFromColumnId = Siguiente salto", (await L.q(`SELECT DISTINCT c.name FROM "Task" t JOIN "Column" c ON c.id=t."archivedFromColumnId" WHERE t."archivedAt" IS NOT NULL`)).map((r) => r.name), [COL.next]);
@@ -205,7 +205,7 @@ export async function run() {
   await d3.getByRole("button", { name: /Generar con 4 tarea/ }).click();
   await d3.getByText("Paso 2 de 2").waitFor();
   await d3.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("Alt+R: release desplegada (número 1 otra vez, sin releases previas)", async () => (await rels()).length, 1);
   const [r3] = await rels();
   L.check("Alt+R: título del mismo día sin sufijo al ser la primera del día", /^Release \d{4}-\d{2}-\d{2} · /.test(r3.title), r3.title);
@@ -262,7 +262,7 @@ export async function run() {
   await d5.getByText("Paso 2 de 2").waitFor();
   await moveAs("Movida", COL.doing);
   await d5.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   const moved5 = p.getByText("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.");
   await moved5.first().waitFor({ timeout: 8000 }).catch(() => {});
   L.check("tarea movida entretanto: se avisa para volver a generar la release", (await moved5.count()) > 0);
@@ -284,7 +284,7 @@ export async function run() {
   await d6.getByText("Paso 2 de 2").waitFor();
   await moveAs("Quieta", COL.backlog);
   await d6.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   const moved6 = p.getByText("Una de las tareas se ha movido a otra columna mientras tanto: vuelve a generar la release.");
   await moved6.first().waitFor({ timeout: 8000 }).catch(() => {});
   L.check("con selección, tarea movida entretanto: se avisa", (await moved6.count()) > 0);

@@ -138,7 +138,7 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
           <>
             <section className={section}>
               <h3 className={heading}>{t("Descripción")}</h3>
-              {detail.description.trim() ? <Markdown>{detail.description}</Markdown> : <p className="text-sm text-slate-400">{t("Sin descripción.")}</p>}
+              {detail.description.trim() ? <Markdown>{detail.description}</Markdown> : <p className="text-sm text-slate-500">{t("Sin descripción.")}</p>}
             </section>
             {detail.subtasks.length > 0 && (
               <section className={section}>
@@ -189,7 +189,7 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
                 </button>
               )}
               {comments.length === 0 ? (
-                <p className="text-sm text-slate-400">{t("Sin comentarios.")}</p>
+                <p className="text-sm text-slate-500">{t("Sin comentarios.")}</p>
               ) : (
                 <ul className="space-y-3">
                   {roots.map((c) => {

@@ -8,7 +8,7 @@ import type { Locale } from "@/i18n/shared";
 // pantalla no puede depender de otro fragmento (el del diccionario de inglés). Solo estas cinco frases.
 const EN: Record<string, string> = {
   "Algo ha fallado": "Something went wrong",
-  "El error ha quedado registrado. Prueba a recargar.": "The error has been recorded. Try reloading.",
+  "El error ha quedado registrado. Prueba a recargar y, si se repite, avisa a quien administra Pizarro.": "The error has been recorded. Try reloading and, if it keeps happening, tell whoever runs Pizarro.",
   Reintentar: "Retry",
   Recargar: "Reload",
   "Volver a iniciar sesión": "Back to sign in",
@@ -43,7 +43,7 @@ function Content({ reset, locale }: { reset: () => void; locale: Locale }) {
   return (
     <div style={{ textAlign: "center" }}>
       <p style={{ fontSize: 18, fontWeight: 600 }}>{t("Algo ha fallado")}</p>
-      <p style={{ color: "#64748b", fontSize: 14 }}>{t("El error ha quedado registrado. Prueba a recargar.")}</p>
+      <p style={{ color: "#64748b", fontSize: 14 }}>{t("El error ha quedado registrado. Prueba a recargar y, si se repite, avisa a quien administra Pizarro.")}</p>
       <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
         <button onClick={reset} style={{ padding: "8px 14px", borderRadius: 8, border: 0, background: "#4f46e5", color: "#fff" }}>{t("Reintentar")}</button>
         <button onClick={() => window.location.reload()} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "transparent", color: "inherit" }}>{t("Recargar")}</button>

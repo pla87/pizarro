@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { ClientErrorReporter } from "@/components/ClientErrorReporter";
 import { VersionWatcher } from "@/components/VersionWatcher";
 import { I18nProvider } from "@/i18n/client";
-import { getLocale } from "@/i18n/server";
+import { getLocale, getT } from "@/i18n/server";
 import { appTimeZone } from "@/lib/format";
 import { themeColors } from "@/lib/theme-color";
 import { getInstanceSettings } from "@/lib/instance";
@@ -13,11 +13,12 @@ import { appIconUrl, appNames } from "@/lib/app-icon-core";
 
 export async function generateMetadata(): Promise<Metadata> {
   // Nombre de la organización elegido en el asistente de primer arranque (si no, solo «Pizarro»).
-  const [{ orgName }, appIcon] = await Promise.all([getInstanceSettings(), getAppIcon()]);
+  const [{ orgName }, appIcon, t] = await Promise.all([getInstanceSettings(), getAppIcon(), getT()]);
   const { name, shortName } = appNames(orgName);
   return {
     title: { default: name, template: `%s · ${name}` },
-    description: "Kanban ligero y generador de release notes para equipos pequeños.",
+    // La misma frase que el manifiesto de la app (web-manifest.ts), en el idioma de la petición (sin sesión, el de la instalación).
+    description: t("Kanban ligero y generador de release notes."),
     robots: { index: false, follow: false },
     // Safari de iOS convierte en enlaces lo que parece un teléfono, una dirección o un email (una IP de «Sesiones abiertas»,
     // un número de tarea): cambia el HTML antes de que React lo hidrate y da el error #418.

@@ -650,7 +650,7 @@ function Deliverables({ projectId, initial }: { projectId: string; initial: Deli
               <div className="text-sm font-medium">{d.name}</div>
               <div className="flex flex-wrap gap-x-3 text-xs text-slate-500">
                 <span className="inline-flex items-center gap-1"><CalendarClock size={12} /> {d.dueDate ? formatDay(d.dueDate, undefined, locale) : t("Sin fecha")}</span>
-                <span>{t("{n} tarjeta(s)", { n: d.taskCount })}</span>
+                <span>{d.taskCount === 1 ? t("1 tarjeta") : t("{n} tarjetas", { n: d.taskCount })}</span>
               </div>
               {d.description && <p className="mt-0.5 text-xs text-slate-500">{d.description}</p>}
             </div>

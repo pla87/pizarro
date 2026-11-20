@@ -283,7 +283,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loading}>
-              {loading && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
+              {loading && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
             </button>
           </>
         ) : (

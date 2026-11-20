@@ -73,7 +73,7 @@ async function readManifest(zip: ZipFile): Promise<ExportManifest> {
   const projectEntry = zip.find("project.json");
   if (!manifestEntry || !projectEntry) throw new AppError("No es un archivo de proyecto de Pizarro (falta manifest.json o project.json).");
 
-  if (projectEntry.size > MAX_PROJECT_JSON_BYTES) throw new AppError("El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».");
+  if (projectEntry.size > MAX_PROJECT_JSON_BYTES) throw new AppError("El contenido del proyecto (project.json) supera el máximo de 64 MB. Prueba con «Solo el tablero».");
 
   // Formato y versión antes que nada: así un archivo de otra aplicación o de una versión futura da un mensaje claro.
   const rawManifest = parseJson(await zip.readAll(manifestEntry, MAX_MANIFEST_BYTES), "manifest.json");
