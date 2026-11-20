@@ -1,5 +1,5 @@
 import "server-only";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SHARE_MAX_PENDING, SHARE_TTL_MS, type SharedText } from "./share-core";
 import { uploadDir } from "./upload-dir";
@@ -125,7 +125,8 @@ export async function purgeShares(now = Date.now()): Promise<number> {
       await rm(dir, { recursive: true, force: true });
       removed++;
     }
-    if (!(await readdir(userDir).catch(() => [])).length) await rm(userDir, { recursive: true, force: true });
+    // rmdir solo borra la carpeta si está vacía: un envío que llegue justo ahora no se pierde.
+    await rmdir(userDir).catch(() => {});
   }
   return removed;
 }
