@@ -3,7 +3,7 @@
 import { ExternalLink, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveLegalIdentity, saveLegalPage } from "@/actions/legal";
-import { Markdown } from "@/components/ui/Markdown";
+import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
@@ -128,7 +128,7 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
       </p>
       {preview ? (
         <div className="rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800" data-testid={`legal-preview-${kind}`}>
-          <Markdown>{previewMd}</Markdown>
+          <LazyMarkdown>{previewMd}</LazyMarkdown>
         </div>
       ) : (
         <div key={lang}>

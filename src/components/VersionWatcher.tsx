@@ -6,6 +6,8 @@ import { useT } from "@/i18n/client";
 import { NEW_VERSION_EVENT } from "@/lib/stale-action";
 
 const CHECK_MS = 5 * 60_000;
+/** Al volver a la pestaña: como mucho una comprobación cada 30 s (fuera de la periódica). */
+const RETURN_MIN_MS = 30_000;
 const BUILD = process.env.NEXT_PUBLIC_BUILD_ID ?? "";
 
 /** ¿Hay algo a medias (un modal abierto o un campo con foco)? Entonces no se recarga sola. */
@@ -29,8 +31,8 @@ export function reloadForNewVersion(): boolean {
 
 /**
  * Tras un despliegue, una pestaña abierta tiene el código anterior y sus acciones ya no existen en
- * el servidor. Se comprueba la versión al volver a la pestaña y cada 5 minutos: si ha cambiado, se
- * recarga sola cuando no hay nada a medias o se ofrece un botón para hacerlo.
+ * el servidor. Se comprueba la versión al volver a la pestaña (como mucho una vez cada 30 s) y cada 5 minutos: si ha
+ * cambiado, se recarga sola cuando no hay nada a medias o se ofrece un botón para hacerlo.
  */
 export function VersionWatcher() {
   const t = useT();
@@ -39,31 +41,41 @@ export function VersionWatcher() {
   useEffect(() => {
     if (!BUILD || BUILD.endsWith("-dev")) return;
     let stale = false;
-    const check = async () => {
+    // Al volver a la pestaña llegan dos eventos seguidos (visibilitychange y focus), y alternar ventanas los repite: una
+    // sola petición a la vez y, al volver, no más de una cada 30 s desde la última respuesta.
+    let checking = false;
+    let answeredAt = -Infinity;
+    const check = async (onReturn = false) => {
       if (document.visibilityState !== "visible") return;
       if (!stale) {
+        if (checking || (onReturn && performance.now() - answeredAt < RETURN_MIN_MS)) return;
+        checking = true;
         try {
           const res = await fetch("/api/version", { cache: "no-store" });
           const { build } = (await res.json()) as { build: string };
+          answeredAt = performance.now();
           stale = !!build && build !== BUILD;
         } catch {
           return;
+        } finally {
+          checking = false;
         }
       }
       if (!stale) return;
       if (!busy()) reloadForNewVersion();
       else setOutdated(true);
     };
+    const onReturn = () => void check(true);
     // Una acción ha fallado por ser de una versión anterior: se avisa ya, sin recargar (puede haber texto sin guardar).
     const onStale = () => setOutdated(true);
     window.addEventListener(NEW_VERSION_EVENT, onStale);
-    const timer = setInterval(check, CHECK_MS);
-    document.addEventListener("visibilitychange", check);
-    window.addEventListener("focus", check);
+    const timer = setInterval(() => void check(), CHECK_MS);
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
     return () => {
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
       window.removeEventListener(NEW_VERSION_EVENT, onStale);
     };
   }, []);

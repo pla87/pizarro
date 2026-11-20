@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
   importWhenOnline, isNetworkError, isOffline, isOfflineMessage, loadWhenOnline, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline,
-  reportReachable, resetConnectionForTests, safeRefresh, saveDataOn, subscribeConnection,
+  reportReachable, reportServerHeard, resetConnectionForTests, safeRefresh, saveDataOn, subscribeConnection,
 } from "../src/lib/connection";
 import { actionThrowMessage } from "../src/lib/stale-action";
 
@@ -106,6 +106,20 @@ describe("refresco seguro (safeRefresh)", () => {
     reportReachable();
     assert.equal(isOffline(), false);
     assert.equal(n, 1);
+  });
+
+  test("un mensaje del canal en vivo vale como sondeo: el refresco que provoca no pide /api/health", async () => {
+    reportServerHeard();
+    let n = 0;
+    assert.equal(await safeRefresh(() => n++), true);
+    assert.equal(n, 1);
+    assert.equal(probes, 0);
+    // Y si se daba la conexión por perdida, ha vuelto (con los refrescos pendientes).
+    reportOffline();
+    refreshWhenOnline(() => n++, "tablero");
+    reportServerHeard();
+    assert.equal(isOffline(), false);
+    assert.equal(n, 2);
   });
 });
 

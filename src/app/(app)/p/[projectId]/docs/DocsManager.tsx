@@ -8,7 +8,7 @@ import { uploadDocument, documentUploadName } from "@/components/docs/uploadDocu
 import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
 import { HtmlPreview } from "@/components/docs/HtmlPreview";
 import { ZoomImage } from "@/components/docs/ZoomImage";
-import { Markdown } from "@/components/ui/Markdown";
+import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui/Menu";
 import { MODAL_SIZE_REM, Modal } from "@/components/ui/Modal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -535,10 +535,22 @@ function MarkdownPreview({ text, fromLink }: { text: string; fromLink?: boolean 
   useEffect(() => {
     if (!fromLink) return;
     const id = headingIdForHash(window.location.hash);
-    const target = id ? box.current?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) : null;
-    target?.scrollIntoView({ block: "start" });
+    const el = box.current;
+    if (!id || !el) return;
+    const scroll = () => {
+      const target = el.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
+      target?.scrollIntoView({ block: "start" });
+      return !!target;
+    };
+    if (scroll()) return;
+    // El Markdown llega aparte (LazyMarkdown): si el apartado aún no está, se espera a que aparezca.
+    const watch = new MutationObserver(() => {
+      if (scroll()) watch.disconnect();
+    });
+    watch.observe(el, { childList: true, subtree: true });
+    return () => watch.disconnect();
   }, [fromLink]);
-  return <div ref={box} data-testid="doc-markdown"><Markdown headingIds>{text}</Markdown></div>;
+  return <div ref={box} data-testid="doc-markdown"><LazyMarkdown headingIds>{text}</LazyMarkdown></div>;
 }
 
 /** Vista previa de un documento de la papelera: solo se puede ver, descargar o restaurar. */

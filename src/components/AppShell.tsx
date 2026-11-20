@@ -158,9 +158,9 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
           </div>
           {current && inProject && <Presence projectId={current.id} compact />}
           {unread > 0 && (
-            <Link href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread > 99 ? t("Más de 99 avisos sin leer") : unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
+            <HoverPrefetchLink href="/notifications" className="ml-auto flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white" aria-label={unread > 99 ? t("Más de 99 avisos sin leer") : unread === 1 ? t("1 aviso sin leer") : t("{n} avisos sin leer", { n: unread })}>
               <Bell size={13} /> {unread > 99 ? "99+" : unread}
-            </Link>
+            </HoverPrefetchLink>
           )}
         </header>
         {nudgeHref && <LicenseNudge buyHref={nudgeHref} />}

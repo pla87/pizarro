@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Check, Eye, Pencil, Plus, Trash2, X } from "lucide-
 import { Fragment, useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui/cn";
 import { DescriptionField } from "@/components/ui/DescriptionField";
-import { Markdown } from "@/components/ui/Markdown";
+import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -171,7 +171,7 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
       </div>
       )}
       {preview && editorMode === "MARKDOWN" ? (
-        <div className="min-h-24 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"><Markdown>{form.content}</Markdown></div>
+        <div className="min-h-24 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"><LazyMarkdown>{form.content}</LazyMarkdown></div>
       ) : (
         <DescriptionField mode={editorMode} textareaClassName="input field-sizing-content min-h-28 font-mono text-[13px]" value={form.content} onValueChange={(content) => setForm((f) => ({ ...f, content: content.slice(0, 20000) }))} users={NO_USERS} placeholder={placeholder} />
       )}

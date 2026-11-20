@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { moveTask } from "../../src/actions/tasks";
+import { addSubtask, addSubtasks, deleteSubtask, deleteTaskLink, moveTask, reorderSubtask, updateSubtask } from "../../src/actions/tasks";
 import { canAccessProject, projectOfTask } from "../../src/lib/access-cache";
 import { revokeProject, revokeUser } from "../../src/lib/revoke";
 import { subscribeProject } from "../../src/lib/realtime";
@@ -61,6 +61,42 @@ describe("id de cambio (cid)", () => {
       expectOk(res2);
       assert.equal(res2.ok && res2.cid, undefined);
       assert.equal(seen.length, 2);
+    } finally {
+      off();
+    }
+  });
+
+  test("subtareas y quitar un enlace devuelven el cid (la pestaña que las lanza no se refresca con su propio aviso)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    await loginAs(user);
+    const seen: string[] = [];
+    const off = subscribeProject(f.project.id, (ch) => seen.push(ch.cid));
+    try {
+      const cids: (string | undefined)[] = [];
+      const one = await addSubtask(task.id, "Uno");
+      expectOk(one);
+      cids.push(one.ok ? one.cid : undefined);
+      const many = await addSubtasks(task.id, ["Dos", "Tres"]);
+      expectOk(many);
+      cids.push(many.ok ? many.cid : undefined);
+      const [two] = many.ok ? many.data.created : [];
+      const done = await updateSubtask(one.ok ? one.data.id : "", { done: true });
+      expectOk(done);
+      cids.push(done.ok ? done.cid : undefined);
+      const moved = await reorderSubtask(two!.id, null, one.ok ? one.data.id : null);
+      expectOk(moved);
+      cids.push(moved.ok ? moved.cid : undefined);
+      const gone = await deleteSubtask(two!.id);
+      expectOk(gone);
+      cids.push(gone.ok ? gone.cid : undefined);
+      const link = await db.taskLink.create({ data: { taskId: task.id, kind: "GOOGLE_DOC", title: "Doc", url: "https://docs.google.com/document/d/x" } });
+      const unlinked = await deleteTaskLink(link.id);
+      expectOk(unlinked);
+      cids.push(unlinked.ok ? unlinked.cid : undefined);
+      assert.ok(cids.every((c) => typeof c === "string"), JSON.stringify(cids));
+      assert.deepEqual(seen, cids);
     } finally {
       off();
     }
