@@ -101,7 +101,7 @@ Guía completa, con los textos exactos: [docs/guias/whatsapp.md](guias/whatsapp.
 
 **Necesitas:** las dos plantillas aprobadas, el token y el **Phone number ID**.
 
-1. **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
+1. **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → WhatsApp**.
 2. Rellena **Token de acceso**, **Identificador del número (Phone number ID)**, **Nombre de la plantilla** (`aviso_pizarro`), **Idioma** (`es`, o el código exacto con el que se aprobó) y **Plantilla de verificación** (`codigo_pizarro`).
 3. Pulsa **Guardar** y después **Activar**.
 4. Escribe un número en formato internacional (`+34600111222`) y pulsa **Probar**. Con el número de prueba de Meta, tiene que ser uno de los 5 verificados.
@@ -138,7 +138,7 @@ Guía completa: [docs/guias/telegram.md](guias/telegram.md). Es gratis.
 **Necesitas:** la app de Telegram.
 
 1. En Telegram, abre **@BotFather** (el verificado) y escribe `/newbot`. Dale un nombre y un usuario que termine en `bot`. Copia el token.
-2. En Pizarro: **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp → Telegram (gratis)**. Pega el token en **Token del bot** y pulsa **Guardar y activar**.
+2. En Pizarro: **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → Telegram (gratis)**. Pega el token en **Token del bot** y pulsa **Guardar y activar**.
 3. Pulsa **Probar**.
 
 **Qué debe pasar:** aparece «Activo: bot @…» con el usuario de tu bot y el modo (webhook o sondeo). **Probar** confirma que el bot responde. El token no se vuelve a mostrar.
@@ -153,7 +153,7 @@ Guía completa: [docs/guias/telegram.md](guias/telegram.md). Es gratis.
 2. Pulsa **Abrir Telegram** (o escanea el código QR con el móvil).
 3. En Telegram, pulsa **Iniciar**.
 4. Vuelve a Pizarro, elige qué avisos quieres y pulsa **Guardar**.
-5. En **Administración → Ajustes**, pulsa otra vez **Probar**.
+5. En **Administración → Integraciones**, pulsa otra vez **Probar**.
 6. Con la otra persona, asígnate una tarea o menciónate.
 
 **Qué debe pasar:** el bot responde «Listo…» y Pizarro muestra «Conectado». Tras el paso 5 llega «Mensaje de prueba de Pizarro». Tras el paso 6 llega el aviso con el enlace a la tarea.
@@ -177,7 +177,7 @@ Pizarro elige solo, según `APP_URL`. Prueba el que te toque (o los dos, si tien
 
 ### 4.1 Configurar y «Enviar email de prueba»
 
-**Necesitas:** una de las dos opciones de **Administración → Ajustes → 1. Avisos por email**:
+**Necesitas:** una de las dos opciones de **Administración → Integraciones → 1. Avisos por email**:
 
 - **Gmail de un administrador (uso familiar):** en esa cuenta de Google activa la verificación en 2 pasos y crea una **contraseña de aplicación** en `myaccount.google.com/apppasswords`.
 - **Correo de la empresa:** los datos SMTP de tu proveedor (Google Workspace, Brevo, SendGrid, Amazon SES, Mailgun…).
@@ -288,7 +288,7 @@ Cómo está hoy el código:
 
 **Necesitas:** el cliente OAuth creado según [docs/guias/google-login.md](guias/google-login.md), con la dirección de redirección `https://pizarro.example.com/api/auth/google/callback`.
 
-1. **Administración → Ajustes → Acceso con Google**: pega el ID y el secreto y pulsa **Guardar**. El estado pasa a «Activo».
+1. **Administración → Integraciones → Acceso con Google**: pega el ID y el secreto y pulsa **Guardar**. El estado pasa a «Activo».
 2. Cierra la sesión y pulsa **Iniciar sesión con Google** con una cuenta cuyo email ya existe en Pizarro.
 3. Prueba con una cuenta de Google que **no** existe en Pizarro.
 4. Prueba con tu cuenta de administrador.

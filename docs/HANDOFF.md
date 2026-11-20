@@ -469,7 +469,7 @@ en el título.
 
 **Otros:**
 
-- Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Ajustes → Avisos por
+- Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Integraciones → Avisos por
   Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`;
   manual §3.9, §3.16 y §4.7b). Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa
   WhatsApp en su instalación (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
