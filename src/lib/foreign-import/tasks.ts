@@ -125,7 +125,7 @@ function cardsAsBoard(cards: Obj[]): Obj {
 }
 
 function readTrello(data: Obj, t: T, timeZone: string | undefined, kind: "board" | "cards"): ForeignTasksRead {
-  const board = parseTrello(JSON.stringify(data), { t, timeZone });
+  const board = parseTrello(data, { t, timeZone });
   const { tasks, warnings } = fromBoard(board, t, { skipArchived: kind === "board" });
   return { source: kind === "board" ? t("Trello (tablero)") : tasks.length === 1 ? t("Trello (tarjeta)") : t("Trello (tarjetas)"), tasks, warnings };
 }
@@ -555,14 +555,19 @@ export function compactTrelloBoard(raw: string): string | null {
   }
   if (!isTrelloBoard(data)) return null;
   const pick = (o: Obj, keys: string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
-  return JSON.stringify({
-    name: data.name,
-    lists: objs(data.lists).map((l) => pick(l, ["id", "name", "closed", "pos"])),
-    labels: objs(data.labels).map((l) => pick(l, ["id", "name", "color"])),
-    members: objs(data.members).map((m) => pick(m, ["id", "fullName", "username"])),
-    checklists: objs(data.checklists).map((c) => ({ ...pick(c, ["idCard", "name", "pos"]), checkItems: objs(c.checkItems).map((i) => pick(i, ["name", "state", "pos"])) })),
-    cards: objs(data.cards).map((c) => (c.closed === true
-      ? pick(c, ["id", "idList", "name", "closed"])
-      : { ...pick(c, ["id", "idList", "name", "desc", "closed", "pos", "due", "idLabels", "labels", "idMembers", "shortUrl"]), attachments: objs(c.attachments).filter((a) => a.isUpload !== true).map((a) => pick(a, ["name", "url"])) })),
-  });
+  // Un anidamiento tan profundo que JSON.stringify agota la pila (RangeError; JSON.parse sí lo lee): no se puede importar.
+  try {
+    return JSON.stringify({
+      name: data.name,
+      lists: objs(data.lists).map((l) => pick(l, ["id", "name", "closed", "pos"])),
+      labels: objs(data.labels).map((l) => pick(l, ["id", "name", "color"])),
+      members: objs(data.members).map((m) => pick(m, ["id", "fullName", "username"])),
+      checklists: objs(data.checklists).map((c) => ({ ...pick(c, ["idCard", "name", "pos"]), checkItems: objs(c.checkItems).map((i) => pick(i, ["name", "state", "pos"])) })),
+      cards: objs(data.cards).map((c) => (c.closed === true
+        ? pick(c, ["id", "idList", "name", "closed"])
+        : { ...pick(c, ["id", "idList", "name", "desc", "closed", "pos", "due", "idLabels", "labels", "idMembers", "shortUrl"]), attachments: objs(c.attachments).filter((a) => a.isUpload !== true).map((a) => pick(a, ["name", "url"])) })),
+    });
+  } catch {
+    return null;
+  }
 }

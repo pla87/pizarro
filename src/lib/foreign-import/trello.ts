@@ -37,14 +37,20 @@ interface TrelloOptions {
   fileName?: string;
 }
 
-export function parseTrello(text: string, opts: TrelloOptions): ForeignBoard {
+/**
+ * Lee un tablero de Trello: el texto del JSON o el objeto ya leído (así quien ya lo tiene no lo vuelve a convertir en
+ * texto: con un anidamiento muy profundo JSON.stringify agota la pila aunque JSON.parse lo haya leído).
+ */
+export function parseTrello(input: string | Obj, opts: TrelloOptions): ForeignBoard {
   const { t } = opts;
   const tz = opts.timeZone ?? "UTC";
-  let data: unknown;
-  try {
-    data = JSON.parse(text.replace(/^﻿/, ""));
-  } catch {
-    throw new AppError("El archivo no es un JSON válido.");
+  let data: unknown = input;
+  if (typeof input === "string") {
+    try {
+      data = JSON.parse(input.replace(/^﻿/, ""));
+    } catch {
+      throw new AppError("El archivo no es un JSON válido.");
+    }
   }
   if (!looksLikeTrello(data)) throw new AppError("El JSON no parece una exportación de un tablero de Trello (faltan «lists» y «cards»).");
 

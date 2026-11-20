@@ -34,19 +34,25 @@ export const LIMITS = {
   perTask: 2000,
   releases: 20_000,
   events: 2_000_000,
-  files: 50_000,
+  files: 50_000, // lo cita el aviso de exportar (export.ts, addFile)
   users: 5_000,
 } as const;
 
 const ref = z.string().min(1).max(40);
-const iso = z.string().datetime({ offset: true });
-/** Día real del calendario (no «2026-02-31»). */
+/**
+ * Años que PostgreSQL guarda y que se escriben con cuatro cifras: el año 0000 (o una fecha del año 1 que con su
+ * desfase cae en el 0) lo rechazaba la base de datos al final, con un error genérico y después de copiar los ficheros.
+ * Sin acotar más: la exportación valida con este mismo esquema y no debe fallar por una fecha antigua ya guardada.
+ */
+const storableYear = (d: Date) => !Number.isNaN(d.getTime()) && d.getUTCFullYear() >= 1 && d.getUTCFullYear() <= 9999;
+const iso = z.string().datetime({ offset: true }).refine((s) => storableYear(new Date(s)), "fecha fuera de rango");
+/** Día real del calendario (no «2026-02-31» ni «0000-01-01»). */
 const day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
   .refine((s) => {
     const d = new Date(`${s}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+    return storableYear(d) && d.toISOString().slice(0, 10) === s;
   }, "día no válido");
 /** Entero que cabe en una columna Int de PostgreSQL. */
 const INT_MAX = 2147483647;

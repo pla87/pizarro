@@ -13,6 +13,7 @@ import { assertSupportedVersion, upgrade } from "../src/lib/project-export/upgra
 import { isSafeEntryName, ZipFile, ZipReadError } from "../src/lib/zip-read";
 import { streamZip, streamZipSize, type StreamZipEntry } from "../src/lib/zip-stream";
 import { personLine } from "../src/lib/person-line";
+import { assertFast } from "./timing";
 
 const dir = mkdtempSync(path.join(tmpdir(), "pz-pexport-"));
 
@@ -54,6 +55,22 @@ test("una entrada que no cuadra con lo declarado corta el flujo", async () => {
   await assert.rejects(collect([{ name: "a", size: 10, crc: crc32(b), body: b }]), /ha cambiado/);
   await assert.rejects(collect([{ name: "a", size: 4, crc: 123, body: b }]), /ha cambiado/);
   await assert.rejects(collect([{ name: "a", size: 2, crc: 0, body: async function* () { yield b; } }]), /ha crecido/);
+});
+
+test("buscar una entrada por su nombre no recorre el directorio entero (50.000 ficheros: de ~8 s a milisegundos)", async () => {
+  const entries = Array.from({ length: 30_000 }, (_, i) => buf(String(i)));
+  const file = path.join(dir, "muchas.zip");
+  writeFileSync(file, await collect(entries));
+  const z = await ZipFile.open(file);
+  try {
+    const names = entries.map((e) => e.name);
+    const found = assertFast(300, () => names.filter((n) => z.find(n)?.name === n).length, "buscar 30.000 entradas");
+    assert.equal(found, names.length);
+    assert.equal(z.find("f/no-existe.txt"), undefined);
+    assert.equal((await z.readAll(z.find("f/29999.txt")!, 100)).toString(), "29999");
+  } finally {
+    await z.close();
+  }
 });
 
 test("el lector rechaza nombres peligrosos, duplicados, cifrado y CRC erróneo", async () => {

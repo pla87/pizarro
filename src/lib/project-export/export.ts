@@ -15,7 +15,7 @@ import { streamZipSize, type StreamZipEntry } from "../zip-stream";
 import { remapAttachmentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import {
-  EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, projectDataSchema, TRASH_EXPORT_MAX,
+  EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, LIMITS, projectDataSchema, TRASH_EXPORT_MAX,
   type ExportCounts, type ExportManifest, type ExportOptions, type ProjectExportData,
 } from "./types";
 
@@ -86,17 +86,20 @@ const diskStream = (file: string) => () => createReadStream(file) as unknown as 
 /** Registra un fichero y devuelve su huella; null si ya no está en disco. `tick` avisa de cada fichero examinado (progreso). */
 async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>, tick?: () => void | Promise<void>): Promise<FileInfo | null> {
   await tick?.();
+  let hashed: Omit<FileInfo, "open">;
   try {
     if (!(await exists())) return null;
-    const { sha, size, crc } = await hashSource(open);
-    const prev = files.get(sha);
-    if (prev) return prev;
-    const info = { sha, size, crc, open };
-    files.set(sha, info);
-    return info;
+    hashed = await hashSource(open);
   } catch {
     return null;
   }
+  const prev = files.get(hashed.sha);
+  if (prev) return prev;
+  // El importador rechaza un archivo con más ficheros: mejor decirlo ahora que entregar uno que no se puede importar.
+  if (files.size >= LIMITS.files) throw new AppError("El proyecto tiene más de 50.000 ficheros adjuntos distintos y el archivo no se podría importar. Expórtalo sin adjuntos o con «Solo el tablero».", 413);
+  const info = { ...hashed, open };
+  files.set(hashed.sha, info);
+  return info;
 }
 
 const iso = (d: Date) => d.toISOString();

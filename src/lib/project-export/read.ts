@@ -10,6 +10,11 @@ import { assertSupportedVersion, upgrade } from "./upgrade";
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 const MAX_PROJECT_JSON_BYTES = 64 * 1024 * 1024;
 const FILE_ENTRY = /^files\/([0-9a-f]{64})$/;
+/**
+ * Cuánto puede inflarse un fichero de files/ respecto a lo que ocupa comprimido. Pizarro los guarda sin comprimir; un
+ * ZIP vuelto a comprimir con otra herramienta rara vez pasa de esto, y una bomba (×1000 hasta 8 GB) sí.
+ */
+const FILE_MAX_RATIO = 10;
 
 export interface ProjectArchive {
   zip: ZipFile;
@@ -113,6 +118,7 @@ async function validateArchive(zip: ZipFile, onProgress?: (done: number, total: 
     if (e.name === "manifest.json" || e.name === "project.json") continue;
     const m = FILE_ENTRY.exec(e.name);
     if (!m) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
+    if (e.method !== 0 && e.size > e.compressedSize * FILE_MAX_RATIO + 1024) throw new ArchiveError("Un fichero del archivo está comprimido de forma sospechosa.", e.name.slice(0, 20));
     files.set(m[1]!, e);
   }
   if (files.size > LIMITS.files) throw new AppError("El archivo tiene demasiados ficheros.");

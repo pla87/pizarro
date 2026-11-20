@@ -152,4 +152,9 @@ export const proyectos: Record<string, string> = {
   // Inicio sin proyectos: cuántos de equipo hay (singular y plural)
   "Hay 1 proyecto de equipo.": "There is 1 team project.",
   "Hay {n} proyectos de equipo.": "There are {n} team projects.",
+  // Importar y exportar un proyecto: respuestas en círculo, ficheros demasiado comprimidos y demasiados adjuntos
+  "1 respuesta se respondía a sí misma (directa o indirectamente) y se ha importado como comentario suelto.": "1 reply was a reply to itself (directly or indirectly) and was imported as a standalone comment.",
+  "{n} respuestas se respondían a sí mismas (directa o indirectamente) y se han importado como comentarios sueltos.": "{n} replies were replies to themselves (directly or indirectly) and were imported as standalone comments.",
+  "Un fichero del archivo está comprimido de forma sospechosa.": "A file inside the archive is suspiciously compressed.",
+  "El proyecto tiene más de 50.000 ficheros adjuntos distintos y el archivo no se podría importar. Expórtalo sin adjuntos o con «Solo el tablero».": "The project has more than 50,000 distinct attached files and the archive could not be imported. Export it without attachments or with “Board only”.",
 };
