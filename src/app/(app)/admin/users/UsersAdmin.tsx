@@ -1,7 +1,7 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Link2, Link2Off, MailPlus, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { Menu, MenuItem } from "@/components/ui/Menu";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { copyText } from "@/components/ui/clipboard";
@@ -102,8 +103,20 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
         </p>
       )}
       <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
-        {users.map((u) => (
-          <li key={u.id} className={cn("flex items-center gap-3 px-4 py-3", !u.active && "opacity-50")}>
+        {users.map((u) => {
+          // Acciones de la fila: en el escritorio, iconos en la misma línea; en el móvil, en el menú «⋯» (con los cinco
+          // iconos y las insignias en la fila, el nombre y el email se quedaban sin sitio).
+          const actions: { key: string; icon: typeof Pencil; label: string; title?: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] = [
+            ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
+            { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
+            ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
+            ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
+            ...(u.id !== meId && u.googleLinked ? [{ key: "unlink", icon: Link2Off, label: t("Desvincular Google de {name}", { name: u.name }), title: t("Desvincular Google"), onClick: () => void unlink(u) }] : []),
+            ...(u.googleRelinkBlocked ? [{ key: "relink", icon: Link2, label: t("Permitir Google a {name}", { name: u.name }), title: t("Permitir Google"), onClick: () => void allow(u) }] : []),
+            ...(u.id !== meId ? [{ key: "delete", icon: Trash2, label: t("Borrar {name}", { name: u.name }), title: t("Borrar"), onClick: () => setDeleting(u), danger: true }] : []),
+          ];
+          return (
+          <li key={u.id} data-user-row={u.id} className={cn("flex items-center gap-3 px-4 py-3 max-sm:flex-wrap max-sm:gap-y-1.5", !u.active && "opacity-50")}>
             <Avatar id={u.id} name={u.name} size="md" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">
@@ -111,39 +124,48 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
               </div>
               <div className="truncate text-xs text-slate-500"><EmailSafe text={u.email} /></div>
             </div>
-            <span className={cn("badge", u.role === "ADMIN" ? "bg-brand-50 text-brand-700 ring-brand-500/20" : "bg-slate-100 text-slate-600 ring-slate-500/20")}>
-              {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
-            </span>
-            {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
-            {u.invitePending ? (
-              <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>
-            ) : (
-              u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>
-            )}
-            {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
-            {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
-            {u.googleRelinkBlocked && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Google desvinculado: no se vuelve a enlazar solo")}>{t("Google bloqueado")}</span>}
-            {u.id !== meId && u.invitePending && u.active && emailAvailable && (
-              <button className="btn-icon" onClick={() => void resend(u)} disabled={resending === u.id} aria-label={t("Reenviar invitación a {name}", { name: u.name })} title={t("Reenviar invitación")}><MailPlus size={16} /></button>
-            )}
-            <button className="btn-icon" onClick={() => setEditing(u)} aria-label={t("Editar {name}", { name: u.name })}><Pencil size={16} /></button>
-            {u.id !== meId && (
-              <button className="btn-icon" onClick={() => setResetting(u)} aria-label={t("Forzar cambio de contraseña de {name}", { name: u.name })} title={t("Forzar cambio de contraseña")}><KeyRound size={16} /></button>
-            )}
-            {u.id !== meId && u.twoFactor && (
-              <button className="btn-icon" onClick={() => setResetting2fa(u)} aria-label={t("Restablecer la verificación en dos pasos de {name}", { name: u.name })} title={t("Restablecer la verificación en dos pasos")}><ShieldOff size={16} /></button>
-            )}
-            {u.id !== meId && u.googleLinked && (
-              <button className="btn-icon" onClick={() => void unlink(u)} aria-label={t("Desvincular Google de {name}", { name: u.name })} title={t("Desvincular Google")}><Link2Off size={16} /></button>
-            )}
-            {u.googleRelinkBlocked && (
-              <button className="btn-icon" onClick={() => void allow(u)} aria-label={t("Permitir Google a {name}", { name: u.name })} title={t("Permitir Google")}><Link2 size={16} /></button>
-            )}
-            {u.id !== meId && (
-              <button className="btn-icon text-red-600 dark:text-red-400" onClick={() => setDeleting(u)} aria-label={t("Borrar {name}", { name: u.name })}><Trash2 size={16} /></button>
-            )}
+            {/* Insignias: en el escritorio, en la fila; en el móvil, en una segunda línea bajo el nombre. */}
+            <div data-user-badges className="flex flex-wrap items-center gap-1.5 max-sm:order-last max-sm:basis-full max-sm:pl-12 sm:contents">
+              <span className={cn("badge", u.role === "ADMIN" ? "bg-brand-50 text-brand-700 ring-brand-500/20" : "bg-slate-100 text-slate-600 ring-slate-500/20")}>
+                {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
+              </span>
+              {!u.active && <span className="badge bg-slate-100 text-slate-500 ring-slate-400/20">{t("Inactivo")}</span>}
+              {u.invitePending ? (
+                <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>
+              ) : (
+                u.mustChangePassword && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Tiene que elegir una contraseña nueva al entrar")}>{t("Contraseña pendiente")}</span>
+              )}
+              {u.twoFactor && <span className="badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" title={t("Tiene activada la verificación en dos pasos")}>2FA</span>}
+              {u.googleLinked && <span className="badge bg-slate-100 text-slate-600 ring-slate-500/20" title={t("Ha entrado con Google")}>Google</span>}
+              {u.googleRelinkBlocked && <span className="badge bg-amber-50 text-amber-700 ring-amber-500/20" title={t("Google desvinculado: no se vuelve a enlazar solo")}>{t("Google bloqueado")}</span>}
+            </div>
+            <div className="hidden sm:contents">
+              {actions.map((a) => (
+                <button key={a.key} className={cn("btn-icon", a.danger && "text-red-600 dark:text-red-400")} onClick={a.onClick} disabled={a.disabled} aria-label={a.label} title={a.key === "edit" || a.key === "delete" ? undefined : a.title}>
+                  <a.icon size={16} />
+                </button>
+              ))}
+            </div>
+            <Menu
+              className="sm:hidden"
+              label={t("Acciones de {name}", { name: u.name })}
+              align="end"
+              panelClassName="w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl dark:border-slate-700 dark:bg-slate-900"
+              trigger={({ props }) => (
+                <button type="button" {...props} className="btn-icon" aria-label={t("Acciones de {name}", { name: u.name })}>
+                  <MoreHorizontal size={18} />
+                </button>
+              )}
+            >
+              {actions.map((a) => (
+                <MenuItem key={a.key} icon={a.icon} danger={a.danger} disabled={a.disabled} onClick={a.onClick}>
+                  {a.title ?? a.label}
+                </MenuItem>
+              ))}
+            </Menu>
           </li>
-        ))}
+          );
+        })}
       </ul>
       {creating && <UserForm emailAvailable={emailAvailable} defaultLocale={defaultLocale} onClose={() => setCreating(false)} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}

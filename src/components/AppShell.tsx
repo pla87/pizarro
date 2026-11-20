@@ -136,7 +136,7 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => setDrawerOpen(false)} aria-hidden />
           {/* Cualquier enlace del menú lo cierra: el cierre por cambio de ruta no basta para los que se quedan en la
               misma («Archivadas» es `/p/<id>?archivadas=1`, el tablero que ya se ve). */}
-          <aside ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900" onClick={(e) => { if ((e.target as Element).closest?.("a[href]")) setDrawerOpen(false); }}>
+          <aside id="app-drawer" ref={drawerRef} role="dialog" aria-modal="true" aria-label={t("Menú")} className="absolute top-0 left-0 flex h-dvh max-h-full w-72 max-w-[85vw] flex-col bg-white shadow-xl dark:bg-slate-900" onClick={(e) => { if ((e.target as Element).closest?.("a[href]")) setDrawerOpen(false); }}>
             <button ref={drawerCloseRef} className="btn-icon absolute top-3 right-3" onClick={() => setDrawerOpen(false)} aria-label={t("Cerrar menú")}>
               <X size={18} />
             </button>
@@ -147,7 +147,7 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 pt-[env(safe-area-inset-top)] lg:hidden dark:border-slate-800 dark:bg-slate-900">
-          <button ref={drawerOpenerRef} className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label={t("Abrir menú")}>
+          <button ref={drawerOpenerRef} className="btn-icon" onClick={() => setDrawerOpen(true)} aria-label={t("Abrir menú")} aria-expanded={drawerOpen} aria-haspopup="dialog" aria-controls={drawerOpen ? "app-drawer" : undefined}>
             <Menu size={20} />
           </button>
           {/* Deshacer, justo a continuación del nombre del tablero. */}
@@ -338,7 +338,9 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         <InstallApp />
       </nav>
 
-      <div className="border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
+      {/* Pie con margen seguro: en el móvil la barra de gestos o la del navegador pueden quedar encima (viewport-fit=cover);
+          el margen se suma al de siempre, y el menú mide lo visible de la pantalla (h-dvh), no la altura con la barra oculta. */}
+      <div className="border-t border-slate-200 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] dark:border-slate-800">
         <div className="flex items-center gap-2">
           <Avatar id={user.id} name={user.name} size="md" />
           <div className="min-w-0 flex-1">
