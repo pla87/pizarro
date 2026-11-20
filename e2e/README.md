@@ -170,7 +170,11 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node board-e2e.mjs
 
 La cabecera del tablero no se sale de la pantalla con nombres cortos y largos (1920 a 390 px), Alt+Mayús+N con un
 diálogo abierto, Alt+N antes de hidratar, presencia al abrir el tablero, contador del título en caracteres visibles,
-aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. Misma base y servidor:
+aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. Desde la ronda 57 también: en escritorio
+un solo selector de proyecto (el de la barra lateral; el título del tablero ya no despliega nada) y ningún «Informe PDF»
+en la cabecera, los botones de solo icono a 4 px (8 px con texto) sin perder la zona de toque, el selector de la barra
+superior en el móvil y «Nueva tarea» con el último tipo usado preseleccionado (también tras recargar). Misma base y
+servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs
@@ -369,7 +373,8 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-
 «Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
 crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
 tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
-`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda, y lo mismo a 390 px. Misma base y servidor:
+`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda (desde la ronda 57, su botón lo descarga sin
+salir del tablero y un error, como un 429, sale en un aviso), y lo mismo a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node calendario-repetir-e2e.mjs   # PART=new,cal,ics,mobile

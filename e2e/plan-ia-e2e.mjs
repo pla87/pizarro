@@ -358,6 +358,23 @@ if (only.includes("role")) {
   await openBoard(page);
   const pend = L.colLoc(page, "Pendiente");
   await pend.getByRole("button", { name: "Opciones de columna" }).click();
+  // Los roles van en el submenú «Rol de la columna ›» (ronda 57): el menú principal ya no los lista.
+  const sub = page.getByRole("menuitem", { name: /^Rol de la columna/ });
+  L.eq("ROLE: el submenú está cerrado y muestra el rol actual", [await page.getByRole("menuitemradio").count(), await sub.getAttribute("aria-haspopup"), await sub.getAttribute("aria-expanded"), (await sub.innerText()).includes("Sin rol")], [0, "menu", "false", true]);
+  L.check("ROLE: el menú principal tiene menos de 15 opciones", (await page.locator("[role=menu] > [role^=menuitem], [role=menu] > [data-menu-sub] > [role^=menuitem]").count()) < 15);
+  // Teclado: → abre y lleva el foco a la opción marcada; ← vuelve; Intro abre; Escape cierra solo el submenú.
+  await sub.focus();
+  await page.keyboard.press("ArrowRight");
+  await L.eqEventually("ROLE: → abre el submenú con el foco en el rol actual", () => page.evaluate(() => document.activeElement?.getAttribute("aria-checked") === "true" && document.activeElement.textContent.includes("Sin rol")), true);
+  await page.keyboard.press("ArrowDown");
+  L.eq("ROLE: ↓ recorre solo los roles", await page.evaluate(() => document.activeElement?.getAttribute("role")), "menuitemradio");
+  await page.keyboard.press("ArrowLeft");
+  L.eq("ROLE: ← cierra el submenú y vuelve a «Rol de la columna»", [await sub.getAttribute("aria-expanded"), await page.evaluate(() => document.activeElement?.getAttribute("aria-haspopup"))], ["false", "menu"]);
+  await page.keyboard.press("Enter");
+  await L.eqEventually("ROLE: Intro lo abre", () => sub.getAttribute("aria-expanded"), "true");
+  await page.keyboard.press("Escape");
+  L.eq("ROLE: Escape cierra el submenú pero no el menú", [await sub.getAttribute("aria-expanded"), await page.locator("[role=menu]").count()], ["false", 1]);
+  await sub.click();
   const item = page.getByRole("menuitemradio", { name: "Plan de trabajo para IA" });
   L.eq("ROLE: la opción tiene icono y explicación", [await item.locator("svg").count(), await item.getAttribute("title")], [1, "Sus tarjetas forman un plan de trabajo en Markdown para una IA (botón «Generar plan de trabajo»)."]);
   await page.screenshot({ path: `${SHOTS}/r51-rol.png` });
@@ -368,6 +385,7 @@ if (only.includes("role")) {
   L.eq("ROLE: «Plan IA» conserva sus fijas", Number((await L.q(`SELECT count(*) n FROM "Task" WHERE "columnId"='r51_plan' AND evergreen`))[0].n), 2);
   // Quitar el rol a «Plan IA»: sus fijas pasan a normales y el botón desaparece.
   await planCol(page).getByRole("button", { name: "Opciones de columna" }).click();
+  await page.getByRole("menuitem", { name: /^Rol de la columna/ }).click();
   await page.getByRole("menuitemradio", { name: "Sin rol" }).click();
   await L.eqEventually("ROLE: sin rol, sin botón", async () => planCol(page).getByRole("button", { name: "Generar plan de trabajo" }).count(), 0);
   await L.eqEventually("ROLE: y sus fijas pasan a normales", async () => Number((await L.q(`SELECT count(*) n FROM "Task" WHERE "columnId"='r51_plan' AND evergreen`))[0].n), 0);

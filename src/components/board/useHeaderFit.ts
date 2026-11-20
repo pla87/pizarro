@@ -6,7 +6,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from "react";
  * Cabecera del tablero (escritorio): nunca se sale de la pantalla. El nombre del proyecto se trunca (con el nombre
  * completo en el tooltip) y, si así le quedaría menos de NAME_MIN píxeles, los botones pasan a solo icono:
  *
- * - `full`: botones con texto («Archivadas», «Varias tareas», «Informe PDF», «Nueva tarea»).
+ * - `full`: botones con texto («Archivadas», «Importar», «Varias tareas», «Nueva tarea»).
  * - `icons`: solo iconos, salvo «Nueva» (el botón principal conserva una palabra).
  * - `tight`: todo con icono; el nombre se lleva lo que quede.
  *
@@ -26,6 +26,12 @@ const HYSTERESIS = 16;
 export const HEADER_LABEL = "hidden @min-[1240px]:inline [[data-labels=full]_&]:inline [[data-labels=icons]_&]:hidden [[data-labels=tight]_&]:hidden";
 /** «Nueva» (texto corto del botón principal): solo en `icons` (o, antes de medir, por debajo de 1240 px). */
 export const HEADER_SHORT_LABEL = "@min-[1240px]:hidden [[data-labels=full]_&]:hidden [[data-labels=icons]_&]:inline [[data-labels=tight]_&]:hidden";
+
+/**
+ * Hueco entre los botones secundarios agrupados (Archivadas, Importar/Exportar, Varias tareas): con texto, el normal
+ * (8 px); con solo iconos, 4 px, para que se lean como un grupo (cada botón conserva su tamaño de 42 × 34 px).
+ */
+export const HEADER_TOOLS_GAP = "gap-1 @min-[1240px]:gap-2 [[data-labels=full]_&]:gap-2 [[data-labels=icons]_&]:gap-1 [[data-labels=tight]_&]:gap-1";
 
 /** Ancho que ocupa un elemento en la fila, con sus márgenes (algunos son negativos para juntar iconos). */
 function outerWidth(el: Element): number {

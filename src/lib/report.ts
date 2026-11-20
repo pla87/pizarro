@@ -36,6 +36,11 @@ export interface ReportInput {
     doneAt?: string | null;
     /** Valores de los campos opcionales (si el proyecto los usa). */
     fields?: TaskFieldValues;
+    /**
+     * Tarea fija («Siempre en la release» o en el plan para IA): nunca se termina, así que no cuenta en el avance ni en
+     * las pendientes; el informe solo dice cuántas hay (`kpis.fixed`).
+     */
+    evergreen?: boolean;
   }[];
   deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
   releases: { number: number; title: string; deployedAt: string; taskCount: number }[];
@@ -96,6 +101,8 @@ export interface Report {
     unassignedOpen: number;
     withoutDueOpen: number;
     archived: number;
+    /** Tareas fijas (fuera de todos los recuentos anteriores). */
+    fixed: number;
   };
   columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[] }[];
   deliverables: { name: string; description: string; dueDate: string | null; daysLeft: number | null; total: number; done: number; pct: number; status: DeliverableStatus }[];
@@ -121,7 +128,11 @@ export function deliverableStatus(total: number, done: number, daysLeft: number 
   return "En plazo";
 }
 
-export function buildReport(input: ReportInput, tr: T = esT): Report {
+export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
+  // Las tareas fijas no son trabajo pendiente (no se terminan nunca): fuera del avance, las pendientes, los plazos, las
+  // columnas, los entregables y las personas. Los campos opcionales (coste, horas) sí las incluyen.
+  const fixed = fullInput.tasks.filter((t) => t.evergreen).length;
+  const input = fixed ? { ...fullInput, tasks: fullInput.tasks.filter((t) => !t.evergreen) } : fullInput;
   const { today } = input;
   const columnById = new Map(input.columns.map((c) => [c.id, c]));
   const isDone = (t: ReportInput["tasks"][number]) => columnById.get(t.columnId)?.isDone ?? false;
@@ -201,6 +212,7 @@ export function buildReport(input: ReportInput, tr: T = esT): Report {
       unassignedOpen: open.filter((t) => !t.assignee).length,
       withoutDueOpen: open.filter((t) => !t.dueDate).length,
       archived: input.archivedCount,
+      fixed,
     },
     columns,
     deliverables,
@@ -220,7 +232,7 @@ export function buildReport(input: ReportInput, tr: T = esT): Report {
       .slice(0, RECENT_DONE_MAX)
       .map(({ t }) => toReportTask(t)),
     releases: input.releases,
-    fields: buildReportFields(input, columnById),
+    fields: buildReportFields(fullInput, columnById),
   };
 }
 

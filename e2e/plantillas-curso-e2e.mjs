@@ -222,6 +222,7 @@ try {
     const ideas = L.colLoc(page, "Ideas");
     await ideas.waitFor({ timeout: 15000 });
     await ideas.getByRole("button", { name: "Opciones de columna" }).click();
+    await page.getByRole("menuitem", { name: /^Rol de la columna/ }).click();
     const item = page.getByRole("menuitemradio", { name: "Programa del curso (PDF)" });
     L.eq("ROLE: la opción tiene icono y explicación", [await item.locator("svg").count(), await item.getAttribute("title")], [1, "Cada tarjeta es una sesión del curso: publica el programa en PDF."]);
     L.eq("ROLE: todas las opciones de rol llevan icono y explicación", await page.getByRole("menuitemradio").evaluateAll((els) => els.every((e) => e.querySelector("svg") && e.title)), true);
@@ -230,6 +231,7 @@ try {
     await L.eqEventually("ROLE: el rol se repite: «Ideas» también publica su programa", async () => ideas.getByRole("button", { name: "Publicar programa (PDF)" }).count(), 1);
     await L.eqEventually("ROLE: «Programa» lo conserva (dos columnas PROGRAM)", async () => (await L.q(`SELECT count(*) n FROM "Column" WHERE "projectId"=$1 AND role='PROGRAM'`, [projectId]))[0].n, "2");
     await ideas.getByRole("button", { name: "Opciones de columna" }).click();
+    await page.getByRole("menuitem", { name: /^Rol de la columna/ }).click();
     await page.getByRole("menuitemradio", { name: "Sin rol" }).click();
     await L.eqEventually("ROLE: «Sin rol» quita el botón", async () => ideas.getByRole("button", { name: "Publicar programa (PDF)" }).count(), 0);
   }

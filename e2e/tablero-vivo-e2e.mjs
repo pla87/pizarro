@@ -345,6 +345,8 @@ if (only.includes("altp")) {
   await page.keyboard.press("Alt+KeyP");
   await L.checkEventually("ALTP: se abre el selector de proyectos", () => page.locator("[role=menu]:visible").first().isVisible().catch(() => false), { timeout: 3000 });
   L.eq("ALTP: el buscador no recibe la letra", await boardSearch(page).inputValue(), "");
+  // Ronda 57: en escritorio la cabecera del tablero ya no tiene selector; abre el de la barra lateral (uno solo).
+  L.eq("ALTP: abre el selector de la barra lateral", [await page.locator("[role=menu]:visible").count(), await page.locator("[role=menu]:visible").first().getAttribute("aria-label")], [1, "Selecciona proyecto"]);
   await page.keyboard.press("Escape");
   L.assertNoErrors("altp", [s]);
   await s.ctx.close();

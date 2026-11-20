@@ -178,6 +178,7 @@ try {
     await openBoard(page);
     const otra = L.colLoc(page, "Otra");
     await otra.getByRole("button", { name: "Opciones de columna" }).click();
+    await page.getByRole("menuitem", { name: /^Rol de la columna/ }).click();
     await page.getByRole("menuitemradio", { name: "Programa del curso (PDF)" }).click();
     L.check("ROL: avisa con el motivo", await toastWith(page, "La columna «Otra» tiene 101 tareas y una columna «Programa del curso» admite como mucho 100 sesiones. Mueve o archiva alguna antes de darle ese rol."));
     await sleep(500);
