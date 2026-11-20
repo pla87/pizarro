@@ -210,6 +210,7 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
             <Kv label={t("Terminadas")} value={k.done} color={C.green} />
           </View>
           {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
+          {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
           {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
         </View>
 

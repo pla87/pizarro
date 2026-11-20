@@ -23,11 +23,11 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 | **Tablero** | | **677** | |
 | Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
-| Cabecera y atajos (caza de bugs 48a) | `e2e/tablero-cabecera-e2e.mjs` | 42 | ~1 min |
+| Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo) | `e2e/tablero-cabecera-e2e.mjs` | 103 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/tablero-fijas-e2e.mjs` | 75 | ~1 min |
-| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 86 | ~1,5 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 87 | ~1,5 min |
 | **Detalle de la tarea** | | **44** | |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/detalle-comentarios-e2e.mjs` | 44 | ~1 min |
 | **Copias de tareas** | | **120** | |
@@ -39,11 +39,11 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/importar-exportar-e2e.mjs` | 155 | ~3 min |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/importar-pegar-foco-e2e.mjs` | 25 | ~1 min |
 | **Calendario** | | **44** | |
-| Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 44 | ~1 min |
+| Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 48 | ~1 min |
 | **Releases** | | **55** | |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
 | **Plan de trabajo para IA** | | **275** | |
-| Plan de trabajo para IA y botones de las columnas especiales (ronda 51) | `e2e/plan-ia-e2e.mjs` | 147 | ~1 min |
+| Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 154 | ~1 min |
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 101 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 27 | ~40 s |
 | **Plantillas y programa del curso** | | **182** | |
@@ -170,7 +170,11 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node board-e2e.mjs
 
 La cabecera del tablero no se sale de la pantalla con nombres cortos y largos (1920 a 390 px), Alt+Mayús+N con un
 diálogo abierto, Alt+N antes de hidratar, presencia al abrir el tablero, contador del título en caracteres visibles,
-aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. Misma base y servidor:
+aviso 99+ en móvil, ayuda de atajos y borrar un proyecto con espacios dobles. Desde la ronda 57 también: en escritorio
+un solo selector de proyecto (el de la barra lateral; el título del tablero ya no despliega nada) y ningún «Informe PDF»
+en la cabecera, los botones de solo icono a 4 px (8 px con texto) sin perder la zona de toque, el selector de la barra
+superior en el móvil y «Nueva tarea» con el último tipo usado preseleccionado (también tras recargar). Misma base y
+servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs
@@ -369,7 +373,8 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-
 «Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
 crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
 tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
-`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda, y lo mismo a 390 px. Misma base y servidor:
+`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda (desde la ronda 57, su botón lo descarga sin
+salir del tablero y un error, como un 429, sale en un aviso), y lo mismo a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node calendario-repetir-e2e.mjs   # PART=new,cal,ics,mobile

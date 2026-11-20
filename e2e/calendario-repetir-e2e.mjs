@@ -186,8 +186,22 @@ if (only.includes("ics")) {
   const agenda = (await r2.text()).replace(/\r\n /g, "");
   L.eq("ICS: el .ics de la columna Agenda responde", r2.status(), 200);
   L.check("ICS: y lleva la misma serie", agenda.includes(`UID:${taskId}-repeat@pizarro\r\n`) && agenda.includes(`RRULE:FREQ=WEEKLY;BYDAY=${BYDAY}\r\n`));
-  await L.q(`UPDATE "Column" SET role='NONE' WHERE id=$1`, [cols[L.COL.backlog]]);
+  // Desde el tablero (ronda 57): se descarga sin salir del tablero, y un error sale en un aviso (antes la página se
+  // sustituía por el texto de la respuesta).
+  await page.goto(`${L.BASE}/p/${p.id}`);
+  await L.board(page);
+  const icsBtn = L.colLoc(page, L.COL.backlog).getByRole("button", { name: "Exportar a calendario (.ics)" });
+  const [download] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), icsBtn.click()]);
+  L.check("ICS: el botón de la columna descarga el .ics con su nombre", download.suggestedFilename().endsWith(".ics"), download.suggestedFilename());
+  L.check("ICS: …sin salir del tablero", page.url().endsWith(`/p/${p.id}`), page.url());
   L.assertNoErrors("ICS", [s]);
+  // Después de comprobar la consola: el 429 simulado deja su «Failed to load resource» (esperado).
+  await page.route(/\/columns\/[^/]+\/ics$/, (route) => route.fulfill({ status: 429, body: "Demasiadas peticiones" }));
+  await icsBtn.click();
+  await L.checkEventually("ICS: con un 429, aviso emergente", async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes("Demasiadas peticiones, espera un momento."), { timeout: 5000 });
+  L.check("ICS: …y el tablero sigue a la vista", page.url().endsWith(`/p/${p.id}`) && (await L.colLoc(page, L.COL.backlog).isVisible()));
+  await page.unroute(/\/columns\/[^/]+\/ics$/);
+  await L.q(`UPDATE "Column" SET role='NONE' WHERE id=$1`, [cols[L.COL.backlog]]);
   await s.ctx.close();
 }
 

@@ -93,3 +93,21 @@ test("terminadas recientes: el día de cierre se cuenta en la zona horaria de la
   assert.deepEqual(withDoneAt("Europe/Madrid").recentDone.map((t) => t.title), ["Hecha vencida"]);
   assert.deepEqual(withDoneAt("UTC").recentDone, []);
 });
+
+test("tareas fijas: fuera del avance y de las pendientes, contadas aparte", () => {
+  const fixed = (id: string, extra: Partial<ReportInput["tasks"][number]> = {}) => ({
+    id, title: `Fija ${id}`, kind: "Funcionalidad", columnId: "todo", assigneeName: "Ana", dueDate: "2026-10-01", deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0, evergreen: true, ...extra,
+  });
+  const r = buildReport({ ...base, tasks: [...base.tasks, fixed("f1"), fixed("f2", { assigneeName: null, dueDate: null })] });
+  const plain = buildReport(base);
+  // Mismo avance, pendientes, plazos, columnas, entregables, personas y tipos que sin las fijas.
+  assert.deepEqual({ ...r.kpis, fixed: 0 }, plain.kpis);
+  assert.equal(r.kpis.fixed, 2);
+  assert.equal(r.kpis.progressPct, 25);
+  assert.deepEqual(r.overdue.map((t) => t.title), ["Vencida"]);
+  assert.deepEqual(r.columns, plain.columns);
+  assert.deepEqual(r.deliverables, plain.deliverables);
+  assert.deepEqual(r.people, plain.people);
+  assert.deepEqual(r.types, plain.types);
+  assert.equal(plain.kpis.fixed, 0);
+});

@@ -368,4 +368,7 @@ export const board: Record<string, string> = {
 
   // Tablero con un filtro o una búsqueda activos: columna sin resultados
   "Ninguna tarjeta coincide": "No cards match",
+  // Agenda: el .ics se descarga sin salir del tablero (ronda 57)
+  "No se pudo exportar el calendario.": "The calendar could not be exported.",
+  "Sin conexión: no se ha podido exportar el calendario.": "Offline: the calendar could not be exported.",
 };

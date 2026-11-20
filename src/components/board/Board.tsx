@@ -13,7 +13,7 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { Archive, Plus, Search, Upload, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
@@ -23,7 +23,7 @@ import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { msUntilNextDay, todayIso } from "@/lib/dates";
 import { appTimeZone } from "@/lib/format";
 import { FilterMenu } from "./FilterMenu";
-import { ProjectMenu } from "../ProjectMenu";
+import { PrivateIcon, ProjectsContext } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
 import { setBoardModalOpen } from "../undo-context";
 import { PlusStack } from "../ui/PlusStack";
@@ -58,9 +58,8 @@ import { strictJsonFormat } from "@/lib/task-json-core";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { useShortcut } from "./shortcuts";
 import { useBoardShortcuts } from "./useBoardShortcuts";
-import { HEADER_LABEL, HEADER_SHORT_LABEL, useHeaderFit } from "./useHeaderFit";
+import { HEADER_LABEL, HEADER_SHORT_LABEL, HEADER_TOOLS_GAP, useHeaderFit } from "./useHeaderFit";
 import { TaskCard } from "./TaskCard";
-import { ReportButton } from "../ReportButton";
 import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./upload";
 import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
@@ -1678,6 +1677,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);
   const headerFit = useHeaderFit(headerRowRef, headerNameRef);
+  const isPrivateProject = useContext(ProjectsContext).projects.some((p) => p.id === data.project.id && p.isPrivate);
 
   return (
     <BoardContext.Provider value={api}>
@@ -1690,7 +1690,11 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         {/* Nunca se sale de la pantalla: el nombre se trunca (entero en el tooltip) y, si así le queda poco sitio, los botones
             pasan a solo icono (useHeaderFit mide el espacio real; data-labels elige los textos). */}
         <div ref={headerRowRef} data-labels={headerFit ?? undefined} className="flex items-center gap-2 px-4 pt-4 pb-2 @min-[1000px]:gap-3 [&>*]:whitespace-nowrap [&_.btn-primary]:shrink-0 [&_.btn-secondary]:shrink-0">
-          <h1 ref={headerNameRef} className="min-w-0 shrink-[8]"><ProjectMenu textClassName="text-lg" /></h1>
+          {/* Título sin desplegable: en escritorio el proyecto se cambia en la barra lateral (Alt+P abre ese selector). */}
+          <h1 ref={headerNameRef} className="flex min-w-0 shrink-[8] items-center px-1.5 py-1" title={data.project.name}>
+            <span data-project-name className="truncate text-lg font-semibold">{data.project.name}</span>
+            {isPrivateProject && <PrivateIcon />}
+          </h1>
           <UndoButton projectId={data.project.id} shortcut className="-ml-2" />
           <span
             className="shrink-0 text-sm text-slate-500"
@@ -1743,14 +1747,16 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           <FilterMenu filters={activeFilters} onChange={changeFilters} labels={labels} kinds={data.kinds} users={data.users} currentUserId={data.currentUserId} priorityEnabled={priorityEnabled} clients={clientOptions} className="-ml-1.5 shrink-0" />
           {/* Justo a la derecha del filtro: no se mueve al cambiar de vista. */}
           <ViewToggle view={view} onChange={changeView} className="-ml-1" />
-          <ReportButton projectId={data.project.id} variant="header" />
-          <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
-            <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
-          </button>
-          <TransferButton onImport={() => setImporting({ text: "" })} />
-          <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
-            <PlusStack size={16} /> <span className={HEADER_LABEL}>{t("Varias tareas")}</span>
-          </button>
+          {/* Botones secundarios juntos: con solo iconos, 4 px entre ellos (con texto, el hueco normal). */}
+          <div data-header-tools className={cn("flex items-center", HEADER_TOOLS_GAP)}>
+            <button className="btn-secondary" onClick={() => setArchivedOpen(true)} aria-label={t("Archivadas")} title={t("Archivadas")}>
+              <Archive size={16} /> <span className={HEADER_LABEL}>{t("Archivadas")}</span>
+            </button>
+            <TransferButton onImport={() => setImporting({ text: "" })} />
+            <button className="btn-secondary" onClick={() => setBulk({})} aria-label={t("Varias tareas")} title={`${t("Crear varias tareas pegando una lista")} (${sc("Alt+Shift+N")})`}>
+              <PlusStack size={16} /> <span className={HEADER_LABEL}>{t("Varias tareas")}</span>
+            </button>
+          </div>
           <button
             ref={newTaskBtnRef}
             className={cn("btn-primary", dropNew && "bg-brand-700 ring-2 ring-brand-300 ring-offset-2")}

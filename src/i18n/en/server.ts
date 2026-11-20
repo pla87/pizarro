@@ -318,4 +318,6 @@ export const server: Record<string, string> = {
   "El destinatario guardado ya no vale: elige a una persona del proyecto.": "The saved recipient is no longer valid: choose someone in the project.",
   // Informe semanal: dirección externa que conserva quien no es administrador
   "Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto.": "Only an administrator can keep an external address: choose someone in the project.",
+  // Informe PDF: tareas fijas fuera del avance (ronda 57)
+  "Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)": "Pinned tasks: {n} (always in the release or the plan; not counted in progress or pending)",
 };

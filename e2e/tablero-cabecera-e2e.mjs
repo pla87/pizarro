@@ -1,14 +1,16 @@
 // Caza de bugs 48a: cabecera del tablero que nunca se sale de la pantalla (nombres largos, varios anchos), Alt+Mayús+N
 // con un diálogo abierto, Alt+N pulsado antes de hidratar, «Quién está trabajando» al abrir el tablero o una tarea,
 // contador del título en caracteres visibles, tope 99+ del aviso móvil, ayuda de atajos completa y borrar un proyecto
-// cuyo nombre lleva espacios dobles o duros. Misma base y servidor que board-e2e.mjs:
+// cuyo nombre lleva espacios dobles o duros. Ronda 57: en escritorio la cabecera ya no lleva selector de proyecto (está en
+// la barra lateral; en el móvil sigue el de la barra superior) ni «Informe PDF», y los botones de solo icono van juntos
+// (4 px entre ellos, cada uno con su zona de toque); «Nueva tarea» preselecciona el último tipo usado. Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "hdr,keys,early,pres,title,badge,help,del").split(",");
+const only = (process.env.PART || "hdr,keys,early,pres,title,badge,help,del,kind").split(",");
 
 await L.q(`DELETE FROM "Project" WHERE id='bh48a_proj'`); // de una pasada anterior interrumpida
 await L.prepareUsers();
@@ -24,7 +26,7 @@ if (only.includes("hdr")) {
   const LONG = 'Rediseño «Web» 👨‍👩‍👧 "Q3" مشروع التطبيق الجديد 2026 final';
   for (const name of ["Pizarro", LONG]) {
     await L.q(`UPDATE "Project" SET name=$1 WHERE id=$2`, [name, p.id]);
-    for (const width of [1920, 1500, 1280, 1100, 1024, 820, 390]) {
+    for (const width of [1920, 1500, 1440, 1280, 1100, 1024, 820, 390]) {
       const s = await L.session({ viewport: { width, height: 900 }, mobile: width < 500 });
       await s.page.goto(`${L.BASE}/p/${p.id}`);
       await L.board(s.page);
@@ -42,10 +44,31 @@ if (only.includes("hdr")) {
           if (row.scrollWidth > row.clientWidth + 1) bad.push("fila con scroll");
         }
         const text = [...document.querySelectorAll("[data-project-name]")].find(shown);
-        return { bad, truncated: text ? text.scrollWidth > text.clientWidth + 1 : false, title: text?.closest("button")?.getAttribute("title") ?? "" };
+        // Botones agrupados de la cabecera de escritorio: huecos entre ellos y tamaño de cada uno.
+        const tools = document.querySelector("[data-header-tools]");
+        const boxes = tools && shown(tools) ? [...tools.querySelectorAll("button")].filter(shown).map((b) => b.getBoundingClientRect()) : [];
+        const gaps = boxes.slice(1).map((b, i) => Math.round(b.left - boxes[i].right));
+        const labels = document.querySelector("[data-labels]")?.getAttribute("data-labels") ?? null;
+        const h1 = document.querySelector("main h1");
+        return {
+          bad, truncated: text ? text.scrollWidth > text.clientWidth + 1 : false, title: text?.closest("[title]")?.getAttribute("title") ?? "",
+          gaps, labels, minSize: boxes.length ? Math.min(...boxes.map((b) => Math.min(b.width, b.height))) : null,
+          headerSelector: h1 && shown(h1) ? h1.querySelectorAll("[aria-haspopup]").length : null,
+          sidebarSelector: [...document.querySelectorAll("aside button[aria-haspopup=menu]")].filter(shown).length,
+          topSelector: [...document.querySelectorAll("header [data-project-name]")].filter((el) => shown(el) && el.closest("button[aria-haspopup=menu]")).length,
+          headerReport: [...document.querySelectorAll("main button")].filter((b) => shown(b) && (b.getAttribute("aria-label") === "Informe PDF" || b.textContent.trim() === "Informe PDF")).length,
+        };
       });
       const label = `${name === LONG ? "nombre largo" : "nombre corto"} a ${width} px`;
       L.eq(`HDR: ${label}, ningún botón fuera de la pantalla`, r.bad, []);
+      L.eq(`HDR: ${label}, sin «Informe PDF» en el tablero`, r.headerReport, 0);
+      if (width >= 1024) {
+        L.eq(`HDR: ${label}, un solo selector de proyecto (barra lateral; el título no despliega nada)`, [r.sidebarSelector, r.headerSelector], [1, 0]);
+        L.check(`HDR: ${label}, botones agrupados: 4 px con solo iconos, 8 px con texto (${r.labels})`, r.gaps.length === 2 && r.gaps.every((g) => g === (r.labels === "full" ? 8 : 4)), JSON.stringify(r.gaps));
+        L.check(`HDR: ${label}, cada botón agrupado conserva su tamaño (42 × 34 px)`, r.minSize >= 32, String(r.minSize));
+      } else if (width < 500) {
+        L.eq(`HDR: ${label}, el selector de proyecto sigue en la barra superior del móvil`, r.topSelector, 1);
+      }
       if (r.truncated) L.check(`HDR: ${label}, el nombre truncado lleva el nombre completo en el tooltip`, r.title.startsWith(name), r.title);
       if (name === LONG && width === 1500) {
         await s.page.screenshot({ path: `${SHOTS}/bh48a-cabecera-1500.png` });
@@ -186,6 +209,43 @@ if (only.includes("del")) {
   await s.page.waitForURL((u) => !u.pathname.includes(id), { timeout: 15000 }).catch(() => {});
   L.eq("DEL: el proyecto se borra", (await L.q(`SELECT count(*)::int n FROM "Project" WHERE id=$1`, [id]))[0].n, 0);
   await s.ctx.close();
+}
+
+// --- «Nueva tarea» recuerda el último tipo usado en el proyecto (ronda 57) ------------------------------------------
+if (only.includes("kind")) {
+  L.scenario("kind: el último tipo usado se preselecciona");
+  await L.cleanBoard();
+  const s = await L.session();
+  const { page } = s;
+  const checkedKind = () => U.dialog(page).getByRole("radiogroup", { name: "Tipo" }).locator("[role=radio][aria-checked=true]").innerText().then((x) => x.trim());
+  await page.keyboard.press("Alt+N");
+  await U.dialog(page).waitFor();
+  const radios = U.dialog(page).getByRole("radiogroup", { name: "Tipo" }).locator("[role=radio]");
+  const [first, second] = [(await radios.nth(0).innerText()).trim(), (await radios.nth(1).innerText()).trim()];
+  L.eq("KIND: sin historial, el primer tipo", await checkedKind(), first);
+  await radios.nth(1).click();
+  await U.dialog(page).locator("input[required]").first().fill("Con el segundo tipo");
+  await U.dialog(page).getByRole("button", { name: "Crear tarea" }).click();
+  await U.dialog(page).waitFor({ state: "detached" });
+  await page.keyboard.press("Alt+N");
+  await U.dialog(page).waitFor();
+  await L.eqEventually("KIND: la siguiente «Nueva tarea» abre con el tipo usado", checkedKind, second);
+  await page.keyboard.press("Escape");
+  await U.dialog(page).waitFor({ state: "detached" });
+  // Tras recargar también (localStorage); otra persona u otro navegador empiezan por el primero.
+  await page.reload();
+  await L.board(page);
+  await page.keyboard.press("Alt+N");
+  await U.dialog(page).waitFor();
+  L.eq("KIND: tras recargar, sigue el último tipo", await checkedKind(), second);
+  await page.keyboard.press("Escape");
+  L.assertNoErrors("KIND", [s]);
+  await s.ctx.close();
+  const other = await L.session();
+  await other.page.keyboard.press("Alt+N");
+  await U.dialog(other.page).waitFor();
+  L.eq("KIND: en un navegador nuevo, el primer tipo", (await U.dialog(other.page).getByRole("radiogroup", { name: "Tipo" }).locator("[role=radio][aria-checked=true]").innerText()).trim(), first);
+  await other.ctx.close();
 }
 
 await L.closeBrowser(); await L.closeDb();

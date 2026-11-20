@@ -287,7 +287,10 @@ export function Popover({ trigger, children, open: controlled, onOpenChange, kin
     }
     if (!isMenu) return;
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
-    const items = Array.from(panel.querySelectorAll<HTMLElement>(MENU_ITEMS));
+    // Solo las opciones del nivel en el que está el foco (el menú o un submenú abierto, ver MenuSub en Menu.tsx).
+    const scope = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[role="menu"]');
+    const level = scope && panel.contains(scope) ? scope : panel;
+    const items = Array.from(level.querySelectorAll<HTMLElement>(MENU_ITEMS)).filter((el) => (el.parentElement?.closest('[role="menu"]') ?? panel) === level);
     if (!items.length) return;
     e.preventDefault();
     const index = items.indexOf(document.activeElement as HTMLElement);

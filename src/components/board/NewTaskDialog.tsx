@@ -30,6 +30,7 @@ import { fillNewTaskForm, foldName, newTaskFormJson, type FormProject } from "@/
 import { acceptsPastedText, eventIsFor } from "./taskClipboard";
 import { TaskJsonButtons } from "./TaskJsonButtons";
 import { applyKindTemplate, mergeSubtasks } from "@/lib/kinds-special";
+import { initialKindId, rememberKind } from "./lastKind";
 import { hasEvergreenTasks, MAX_DESCRIPTION, MAX_TASK_LABELS, MAX_TITLE, PALETTE } from "@/lib/constants";
 import { ColorPopover, TypeSelector } from "./TaskDialog";
 import { LabelToggles } from "./LabelToggles";
@@ -119,7 +120,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // Archivos de entrada (pegar / soltar sobre «Nueva tarea»): mismos límites que al añadirlos dentro del diálogo.
   const [initialPlan] = useState(() => planUploads(initialFiles ?? [], { fileMaxBytes: board.project.fileMaxMb * 1024 * 1024, remainingBytes: board.project.attachMaxMb * 1024 * 1024 }));
   const [title, setTitle] = useState(() => d?.title ?? (initialPlan.accepted.length ? captureTitle(t, locale) : ""));
-  const [kindId, setKindId] = useState(!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (board.kinds[0]?.id ?? ""));
+  // Tipo: el del borrador; si no, el último con el que esta persona creó una tarea en el proyecto (lastKind.ts); si no, el primero.
+  const [kindId, setKindId] = useState(() => (!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : initialKindId(board.currentUserId, board.project.id, board.kinds)));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
@@ -156,7 +158,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const names = keep.labelNames;
     if (names) setLabelIds(f.labels.filter((l) => names.some((n) => foldName(n) === foldName(l.name))).map((l) => l.id).slice(0, MAX_TASK_LABELS));
     else setLabelIds((ids) => ids.filter((id) => f.labels.some((l) => l.id === id)));
-    setKindId(f.kinds.some((k) => k.id === keep.kindId) ? keep.kindId : (f.kinds[0]?.id ?? ""));
+    setKindId(f.kinds.some((k) => k.id === keep.kindId) ? keep.kindId : initialKindId(board.currentUserId, f.project.id, f.kinds));
     setColumnId(f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? ""));
     setAssigneeId(f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : "");
     setDeliverableId(f.deliverables.some((x) => x.id === keep.deliverableId) ? keep.deliverableId : "");
@@ -374,6 +376,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       busyRef.current = false;
       return toast(res.error, "error");
     }
+    rememberKind(board.currentUserId, projectId, kindId);
     const { titleClipped, ...created } = res.data;
     let task: BoardTask = created;
     // En otro proyecto la tarjeta no es de este tablero: no se añade (se avisa con un enlace al proyecto).
