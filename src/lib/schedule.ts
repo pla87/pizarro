@@ -1,7 +1,7 @@
 // Cuándo toca enviar los envíos periódicos (resumen diario, informe semanal). Funciones puras.
 //
-// El mantenimiento se ejecuta cada hora, no en punto: un envío «a las 8» sale en la primera pasada a
-// partir de las 8 (hora local de la app) de ese día, y solo una vez al día.
+// La pasada del correo va a cada hora en punto (+1 min) de la zona de la app (maintenance.ts): un envío «a las 8» sale
+// en la primera pasada a partir de las 8 (hora local de la app) de ese día, y solo una vez al día.
 
 interface LocalParts {
   /** YYYY-MM-DD en la zona horaria indicada. */
