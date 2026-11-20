@@ -4,6 +4,7 @@
 // de Next (src/proxy.ts), así que nadie más pone un techo a lo que se recibe.
 
 import { forgetUserActivity, noteUserActivity, recentlyActiveUsers } from "./user-activity";
+import { UPLOAD_PER_USER_HEADER } from "./upload-queue";
 
 // Reparto entre personas: si hay más de una activa en los últimos 5 minutos (user-activity.ts; cuenta también quien tiene
 // una subida en curso o en cola), cada una tiene como mucho UNA subida a la vez y las demás suyas esperan en la cola; si
@@ -11,12 +12,18 @@ import { forgetUserActivity, noteUserActivity, recentlyActiveUsers } from "./use
 // ya está en su tope no bloquea a las de detrás: el hueco que queda libre pasa a la primera que pueda usarlo (alguien que
 // llega después sin ninguna en curso adelanta a las de otra persona que ya tiene una).
 
-type Waiter = { userId: string; grant: () => void };
+// Excepción: un cuerpo pequeño (Content-Length declarado por debajo de SMALL_BODY_BYTES, p. ej. el JSON de «Importar
+// tareas» o de pegar) no cuenta para el tope por persona, solo para el global: no espera a una subida lenta de la misma
+// persona. El servidor HTTP no deja pasar más bytes de los declarados, así que no se puede colar uno grande por aquí.
+
+type Waiter = { userId: string; grant: () => void; small: boolean };
 type Slots = { active: number; byUser: Map<string, number>; waiting: Waiter[]; recheck: ReturnType<typeof setTimeout> | null };
 const slots: Slots = ((globalThis as unknown as { __pzUploadSlotsV2?: Slots }).__pzUploadSlotsV2 ??= { active: 0, byUser: new Map(), waiting: [], recheck: null });
 export const MAX_UPLOADS_AT_ONCE = 3;
 /** Subidas a la vez de una misma persona cuando hay más de una activa. */
 const MAX_UPLOADS_PER_USER_SHARED = 1;
+/** Por debajo de este Content-Length declarado, el cuerpo no cuenta para el tope por persona (opción `declaredBytes`). */
+export const SMALL_BODY_BYTES = 256 * 1024;
 /** Cuánto espera una subida a que quede un hueco antes de rendirse (varias a la vez de una misma persona hacen cola). */
 const WAIT_MS = 60_000;
 
@@ -32,9 +39,9 @@ function perUserCap(now: number): { cap: number; nextExpiry: number | null } {
   return { cap: MAX_UPLOADS_PER_USER_SHARED, nextExpiry };
 }
 
-function take(userId: string) {
+function take(userId: string, small: boolean) {
   slots.active++;
-  slots.byUser.set(userId, (slots.byUser.get(userId) ?? 0) + 1);
+  if (!small) slots.byUser.set(userId, (slots.byUser.get(userId) ?? 0) + 1);
 }
 
 /** Da los huecos libres a las esperas que pueden usarlos, por orden de llegada. */
@@ -45,9 +52,9 @@ function pump() {
   const { cap, nextExpiry } = perUserCap(now);
   for (let i = 0; i < slots.waiting.length && slots.active < MAX_UPLOADS_AT_ONCE;) {
     const w = slots.waiting[i]!;
-    if ((slots.byUser.get(w.userId) ?? 0) < cap) {
+    if (w.small || (slots.byUser.get(w.userId) ?? 0) < cap) {
       slots.waiting.splice(i, 1);
-      take(w.userId);
+      take(w.userId, w.small);
       w.grant();
     } else i++;
   }
@@ -59,8 +66,9 @@ function pump() {
   }
 }
 
-function release(userId: string) {
+function release(userId: string, small: boolean) {
   slots.active--;
+  if (small) return pump();
   const n = (slots.byUser.get(userId) ?? 1) - 1;
   if (n > 0) slots.byUser.set(userId, n);
   else slots.byUser.delete(userId);
@@ -70,12 +78,14 @@ function release(userId: string) {
 /**
  * Reserva un hueco de subida para `userId`; si no le toca ya (todos ocupados, o ya tiene las que le corresponden),
  * espera en cola hasta `waitMs`. Devuelve la función que lo libera, o null si no quedó hueco a tiempo.
+ * `declaredBytes`: Content-Length de la petición; si es menor que SMALL_BODY_BYTES, no cuenta para el tope por persona.
  */
-export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS): Promise<(() => void) | null> {
+export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS, opts: { declaredBytes?: number | null } = {}): Promise<(() => void) | null> {
   noteUserActivity(userId);
+  const small = opts.declaredBytes !== undefined && opts.declaredBytes !== null && opts.declaredBytes < SMALL_BODY_BYTES;
   const got = await new Promise<boolean>((resolve) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const waiter: Waiter = { userId, grant: () => { if (timer) clearTimeout(timer); resolve(true); } };
+    const waiter: Waiter = { userId, small, grant: () => { if (timer) clearTimeout(timer); resolve(true); } };
     slots.waiting.push(waiter);
     pump(); // si le toca ya, grant se llama aquí mismo
     if (!slots.waiting.includes(waiter)) return;
@@ -91,8 +101,23 @@ export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS): Promi
   return () => {
     if (released) return;
     released = true;
-    release(userId);
+    release(userId, small);
   };
+}
+
+/**
+ * Subidas a la vez que admite ahora mismo el servidor a cada persona: MAX_UPLOADS_AT_ONCE si solo hay una activa, 1 si
+ * hay más. Va en la cabecera UPLOAD_PER_USER_HEADER de todas las respuestas de subida (y en GET /api/upload-limit)
+ * para que la cola del navegador (upload-queue.ts) no envíe más cuerpos a la vez de los que van a tener hueco.
+ */
+export function uploadPerUserCap(now = Date.now()): number {
+  return perUserCap(now).cap;
+}
+
+/** Pone en la respuesta la cabecera con el tope actual por persona (uploadPerUserCap). */
+export function withUploadCapHeader<R extends Response>(res: R): R {
+  res.headers.set(UPLOAD_PER_USER_HEADER, String(uploadPerUserCap()));
+  return res;
 }
 
 /** Solo para las pruebas: vacía los huecos, la cola y la actividad anotada. */

@@ -7,7 +7,7 @@ import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { getCurrentUser, getPendingUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
-import { acquireUploadSlot, BodyTooLargeError, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
+import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,9 +24,18 @@ export const dynamic = "force-dynamic";
  *
  * Respuestas: 200 con `{ ok: true, data }` o `{ ok: false, error }` (lo mismo que devolvía la acción); 401 sin sesión,
  * 403 de otro origen o con la contraseña pendiente de cambiar, 413 si el texto es demasiado grande, 429 con demasiadas
- * seguidas o sin hueco, 408 si llega demasiado despacio. En los de error, `{ error }` ya traducido.
+ * seguidas o sin hueco, 408 si llega demasiado despacio. En los de error, `{ error }` ya traducido. Todas llevan el tope
+ * actual de subidas por persona (withUploadCapHeader).
+ *
+ * Un texto pequeño (Content-Length declarado por debajo de SMALL_BODY_BYTES: lo normal al pegar o importar unas pocas
+ * tareas) no cuenta para el tope de una subida a la vez por persona, solo para el global: no espera a un adjunto lento
+ * de la misma persona.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
+  return withUploadCapHeader(await handlePost(req, ctx));
+}
+
+async function handlePost(req: Request, ctx: { params: Promise<{ projectId: string }> }): Promise<Response> {
   const t = await getT();
   const fail = (status: number, error: string, headers?: Record<string, string>) => NextResponse.json({ ok: false, error: t(error) }, { status, headers });
   if (!isSameOrigin(req)) return fail(403, "Origen no permitido.");
@@ -47,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
   const visible = pid.success && (await assertProjectAccess(user, pid.data).then(() => true, () => false));
   if (!visible) return fail(404, "No encontrado o sin acceso.");
   if (!rateLimit(`import-tasks:body:${user.id}`, 10, 60_000)) return fail(429, "Demasiadas importaciones seguidas. Espera un momento.", { "Retry-After": "60" });
-  const release = await acquireUploadSlot(user.id);
+  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: declared });
   if (!release) return fail(429, "Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", { "Retry-After": "5" });
   try {
     let text: string;
