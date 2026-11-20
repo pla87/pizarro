@@ -232,7 +232,7 @@ if (only.includes("rel")) {
     // Otra persona renombra «Rel Alpha» mientras se revisa el texto.
     await L.q(`UPDATE "Task" SET title='Rel Alpha renombrada', "updatedAt"=NOW() WHERE id=$1`, [alpha]);
     await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
-    await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+    await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
     await p.getByText(/Una de las tareas ha cambiado de título mientras tanto: vuelve a generar la release/).first().waitFor({ timeout: 10000 }).catch(() => {});
     L.check(`REL (${how}): aviso de volver a generar`, (await p.getByText(/ha cambiado de título mientras tanto/).count()) > 0);
     L.eq(`REL (${how}): no se registra la release`, (await L.q(`SELECT count(*)::int n FROM "Release"`))[0].n, 0);
@@ -248,7 +248,7 @@ if (only.includes("rel")) {
   await dlg.getByRole("button", { name: /Generar con 2 tarea/ }).click();
   await dlg.getByText("Paso 2 de 2").waitFor();
   await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await p.locator("[role=dialog]").last().getByRole("button", { name: "Continuar" }).click();
+  await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("REL: generada de nuevo, se despliega", async () => (await L.q(`SELECT count(*)::int n FROM "Release"`))[0].n, 1, { timeout: 15000 });
   await s.ctx.close();
 }

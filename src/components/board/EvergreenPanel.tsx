@@ -198,7 +198,7 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
             data-file-zone
             className={cn("space-y-1.5 rounded-md transition-colors", fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
           >
-            {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-400">{t("Sin tareas fijas")}</p>}
+            {taskIds.length === 0 && <p className="py-2 text-center text-xs text-slate-500">{t("Sin tareas fijas")}</p>}
             <button
               type="button"
               onClick={() => openNewTask(columnId, true)}

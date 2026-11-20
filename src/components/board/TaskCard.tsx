@@ -417,7 +417,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
         {waitingDays !== null && (
           <span
             className={cn("inline-flex items-center gap-0.5 rounded px-1 font-medium", waitingLate && "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300")}
-            title={t("Lleva {n} d en esta columna", { n: waitingDays })}
+            title={waitingDays === 1 ? t("Lleva 1 día en esta columna") : t("Lleva {n} días en esta columna", { n: waitingDays })}
           >
             <Hourglass size={12} /> {t("Esperando {n} d", { n: waitingDays })}
           </span>

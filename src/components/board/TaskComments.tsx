@@ -246,7 +246,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
         <span className="h-6 w-6 shrink-0" />
         <div className="min-w-0 flex-1">
           <time className="text-xs text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
-          <p className="mt-0.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm italic text-slate-400 dark:border-slate-700">{t("Comentario borrado")}</p>
+          <p className="mt-0.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm italic text-slate-500 dark:border-slate-700">{t("Comentario borrado")}</p>
         </div>
       </div>
     ) : (

@@ -400,7 +400,7 @@ if (only.includes("rel")) {
   await sleep(200);
   const final = await downloadMd(page, dlg);
   await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await page.locator("[role=dialog]").filter({ hasText: "Desplegar la release" }).getByRole("button", { name: "Continuar" }).click();
+  await page.locator("[role=dialog]").filter({ hasText: "Desplegar la release" }).getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("REL: la release guardada lleva el texto editado", async () => (await L.q(`SELECT content FROM "Release" ORDER BY number DESC LIMIT 1`))[0]?.content ?? null, final);
   L.assertNoErrors("REL", [s]);
   await s.ctx.close();

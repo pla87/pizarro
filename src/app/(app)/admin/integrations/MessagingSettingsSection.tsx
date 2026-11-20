@@ -4,6 +4,7 @@ import { Check, Copy, Loader2, MessageCircle, Send, Smartphone } from "lucide-re
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { removeTelegramBot, saveTelegramBot, saveWhatsappSettings, setTelegramActive, setWhatsappActive, testTelegram, testWhatsapp } from "@/actions/messaging";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -75,6 +76,7 @@ function ErrorBox({ children }: { children: React.ReactNode }) {
 function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
   const t = useT();
   const toast = useToast();
+  const confirm = useConfirm();
   const router = useRouter();
   const [pending, start] = useTransition();
   const [token, setToken] = useState("");
@@ -116,8 +118,9 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       if (!res.ok) return setError(res.error);
       toast(res.data.sentToYou ? t("El bot @{bot} responde y te ha enviado un mensaje de prueba.", { bot: res.data.bot }) : t("El bot @{bot} responde. Conecta tu Telegram en Mi perfil → Avisos para recibir un mensaje de prueba.", { bot: res.data.bot }), "success");
     });
-  const remove = () => {
-    if (!confirm(t("¿Quitar el bot? Se borrará el token y todas las personas dejarán de recibir avisos por Telegram."))) return;
+  const remove = async () => {
+    const message = t("¿Quitar el bot? Se borrará el token y todas las personas dejarán de recibir avisos por Telegram.");
+    if (!(await confirm({ title: t("Quitar el bot"), message, confirmLabel: t("Quitar"), danger: true }))) return;
     run(async () => {
       const res = await removeTelegramBot().catch((e) => actionThrowResult(e, t));
       if (!res.ok) return setError(res.error);
@@ -142,7 +145,7 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
       <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Send size={15} /> {t("Telegram (gratis)")}</h3>
       {view.active ? (
         <Status active>
-          {t("Activo: bot @{bot}. {n} persona(s) conectada(s).", { bot: view.botUsername, n: view.connected })} {modeText}
+          {view.connected === 1 ? t("Activo: bot @{bot}. 1 persona conectada.", { bot: view.botUsername }) : t("Activo: bot @{bot}. {n} personas conectadas.", { bot: view.botUsername, n: view.connected })} {modeText}
           {modeTip && <>{" "}<InfoTip topic={t("Telegram (gratis)")}>{modeTip}</InfoTip></>}
         </Status>
       ) : (
@@ -188,7 +191,7 @@ function TelegramAdmin({ view }: { view: MessagingAdminView["telegram"] }) {
             {view.enabled
               ? <button className="btn-secondary py-1.5" onClick={() => toggle(false)} disabled={pending}>{t("Desactivar")}</button>
               : <button className="btn-primary py-1.5" onClick={() => toggle(true)} disabled={pending}>{t("Activar")}</button>}
-            <button className="btn-secondary py-1.5" onClick={remove} disabled={pending}>{t("Quitar el bot")}</button>
+            <button className="btn-secondary py-1.5" onClick={() => void remove()} disabled={pending}>{t("Quitar el bot")}</button>
           </>
         )}
       </div>
@@ -260,7 +263,12 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
     <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800" data-testid="whatsapp-admin">
       <h3 className="flex items-center gap-1.5 text-sm font-semibold"><MessageCircle size={15} /> {t("WhatsApp (de pago, Cloud API de Meta)")}</h3>
       {view.active ? (
-        <Status active>{t("Activo: {n} persona(s) conectada(s) y {p} pendiente(s) de confirmar su número.", { n: view.connected, p: view.pending })}</Status>
+        <Status active>
+          {t("Activo: {connected} y {pending}.", {
+            connected: view.connected === 1 ? t("1 persona conectada") : t("{n} personas conectadas", { n: view.connected }),
+            pending: view.pending === 1 ? t("1 pendiente de confirmar su número") : t("{n} pendientes de confirmar su número", { n: view.pending }),
+          })}
+        </Status>
       ) : (
         <Status active={false}>{view.complete ? t("Desactivado: la configuración está completa, pero no se envían avisos.") : t("Inactivo: faltan el token, el identificador del número o la plantilla.")}</Status>
       )}

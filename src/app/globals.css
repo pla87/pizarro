@@ -582,4 +582,16 @@ select:not([multiple], [size]) {
       color: var(--color-slate-400);
     }
   }
+  /* Lo mismo para el rojo de errores y opciones de borrar (red-600: 3,8:1 en oscuro) y el acento de enlaces y opciones
+     como «Nuevo proyecto» (brand-600: 2,9:1): en oscuro, red-400 y brand-300, como los que ya traen su dark:. */
+  .text-red-600:where(:not([class*="dark:text-"])) {
+    @variant dark {
+      color: var(--color-red-400);
+    }
+  }
+  .text-brand-600:where(:not([class*="dark:text-"])) {
+    @variant dark {
+      color: var(--color-brand-300);
+    }
+  }
 }

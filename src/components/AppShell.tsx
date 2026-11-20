@@ -448,6 +448,20 @@ function splitOrigin(value: string): ["blank" | "example" | "template", string] 
   return [kind === "example" || kind === "template" ? kind : "blank", i < 0 ? "" : value.slice(i + 1)];
 }
 
+/** Botón «Nuevo proyecto» fuera del selector (la portada sin proyectos): abre el mismo diálogo. */
+export function NewProjectButton({ isAdmin }: { isAdmin: boolean }) {
+  const t = useT();
+  const [creating, setCreating] = useState(false);
+  return (
+    <>
+      <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
+        <Plus size={16} /> {t("Nuevo proyecto")}
+      </button>
+      {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
+    </>
+  );
+}
+
 function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();

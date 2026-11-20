@@ -30,6 +30,6 @@ export const textos: Record<string, string> = {
   "Admite 5 intentos. Hasta confirmarlo no recibes avisos por WhatsApp; si sigue sin llegar, pide al administrador que revise la configuración.": "You get 5 attempts. Until you confirm it you won't get WhatsApp notifications; if it still doesn't arrive, ask the administrator to check the setup.",
   "En un rango, arrastra también sus bordes. Con el teclado: Alt+←/→ lo mueve y Alt+Mayús+←/→ cambia su fin.": "In a range, you can also drag its edges. With the keyboard: Alt+←/→ moves it and Alt+Shift+←/→ changes its end.",
   "CSV de Asana, Notion, GitHub Projects, Wekan, Kanboard… El formato se reconoce solo; las personas se emparejan por email o nombre y el nombre del proyecto sale del archivo.": "CSV from Asana, Notion, GitHub Projects, Wekan, Kanboard… The format is detected automatically; people are matched by email or name and the project name comes from the file.",
-  "También con las variables SMTP_* del servidor (docs/INSTALL.md).": "Or with the server's SMTP_* variables (docs/INSTALL.md).",
+  "También con las variables SMTP_* del servidor.": "Or with the server's SMTP_* variables.",
   "No hay filtros aplicados": "No filters applied",
 };

@@ -3,7 +3,8 @@ export const importar: Record<string, string> = {
   // Panel
   "Desde un .pizarro.zip de Pizarro, un JSON de Trello o un CSV de tareas.": "From a Pizarro .pizarro.zip, a Trello JSON or a tasks CSV.",
   "Archivo (.zip, .json o .csv)": "File (.zip, .json or .csv)",
-  "{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.": "{n} user(s) were added as project members because they are assignees of some task.",
+  "1 usuario se ha añadido como miembro del proyecto por ser responsable de alguna tarea.": "1 user was added as a project member because they are the assignee of some task.",
+  "{n} usuarios se han añadido como miembros del proyecto por ser responsables de alguna tarea.": "{n} users were added as project members because they are assignees of some task.",
   "Responsables sin emparejar ({n})": "Unmatched assignees ({n})",
   "No hay un usuario activo con ese email o nombre (o el proyecto es privado), así que sus tareas quedan sin asignar y el nombre figura en la descripción.":
     "There is no active user with that email or name (or the project is private), so their tasks are left unassigned and the name appears in the description.",

@@ -145,7 +145,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
           {view.envDomain ? (
             <span className="mt-1 block text-xs text-slate-500">{t("Configurado en el servidor (GOOGLE_WORKSPACE_DOMAIN).")}</span>
           ) : (
-            <input id="google-domain" className="input mt-1 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="empresa.com" autoComplete="off" maxLength={253} />
+            <input id="google-domain" className="input mt-1 w-full" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="example.com" autoComplete="off" maxLength={253} />
           )}
           <span className="mt-1 block text-xs text-slate-500">{t("Vacío = cualquier cuenta de Google.")}</span>
         </div>
@@ -153,7 +153,7 @@ export function GoogleSettingsSection({ view }: { view: GoogleSettingsView }) {
 
       <label className="block text-sm sm:max-w-md">
         <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
-        <input className="input mt-1 w-full" type="email" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="privacidad@empresa.com" autoComplete="off" maxLength={200} />
+        <input className="input mt-1 w-full" type="email" value={contact} onChange={(e) => setContact(e.target.value)} placeholder={t("privacidad@example.com")} autoComplete="off" maxLength={200} />
         <span className="mt-1 block text-xs text-slate-500">{t("Sale en /privacy y /terms. Vacío = «el administrador de esta instalación».")}</span>
       </label>
 

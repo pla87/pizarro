@@ -44,7 +44,7 @@ export function TaskHistory({ taskId }: { taskId: string }) {
           ) : items === null ? (
             <p className="flex items-center gap-1.5 text-xs text-slate-500"><Loader2 size={13} className="animate-spin" /> {t("Cargando…")}</p>
           ) : items.length === 0 ? (
-            <p className="text-xs text-slate-400">{t("Aún no hay cambios registrados.")}</p>
+            <p className="text-xs text-slate-500">{t("Aún no hay cambios registrados.")}</p>
           ) : (
             <ul className="space-y-1.5 border-l-2 border-slate-200 pl-3 text-xs dark:border-slate-700">
               {items.map((e) => (

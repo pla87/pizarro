@@ -192,7 +192,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               <span className="font-medium">{t("Dirección de Gmail")}</span>
-              <input className="input mt-1 w-full" type="email" value={form.user} onChange={(e) => set("user", e.target.value)} placeholder="nombre@gmail.com" autoComplete="off" maxLength={200} />
+              <input className="input mt-1 w-full" type="email" value={form.user} onChange={(e) => set("user", e.target.value)} placeholder={t("nombre@gmail.com")} autoComplete="off" maxLength={200} />
             </label>
             {passwordField}
             {nameField}

@@ -62,7 +62,8 @@ export const proyectos: Record<string, string> = {
   "Importar": "Import",
   "Error de red al subir el archivo.": "Network error while uploading the file.",
   "Proyecto importado": "Project imported",
-  "{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.": "{n} user(s) were added as project members because they appear in the file.",
+  "1 usuario se ha añadido como miembro del proyecto por figurar en el archivo.": "1 user was added as a project member because they appear in the file.",
+  "{n} usuarios se han añadido como miembros del proyecto por figurar en el archivo.": "{n} users were added as project members because they appear in the file.",
   "Personas sin emparejar ({n})": "Unmatched people ({n})",
   "No hay un usuario activo con el mismo email (o el proyecto es privado), así que sus tarjetas quedan sin asignar y sus comentarios conservan el nombre original.": "There is no active user with the same email (or the project is private), so their cards are left unassigned and their comments keep the original name.",
   "Advertencias": "Warnings",
@@ -82,7 +83,7 @@ export const proyectos: Record<string, string> = {
   "No se pudo importar el proyecto.": "The project could not be imported.",
   "El archivo supera el tamaño máximo de importación ({mb} MB).": "The file exceeds the maximum import size ({mb} MB).",
   "El proyecto es demasiado grande para exportarlo (el contenido supera 64 MB). Prueba con «Solo el tablero».": "The project is too large to export (its content exceeds 64 MB). Try “Board only”.",
-  "El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Export the project without attachments or with “Board only”.",
+  "El contenido del proyecto (project.json) supera el máximo de 64 MB. Prueba con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Try “Board only”.",
   "El proyecto es demasiado grande para un único archivo (máximo 4 GB). Prueba sin adjuntos o con «Solo el tablero».": "The project is too large for a single file (4 GB maximum). Try without attachments or with “Board only”.",
   "El archivo contiene un JSON no válido.": "The file contains invalid JSON.",
   "El archivo no es válido.": "The file is not valid.",
@@ -152,4 +153,6 @@ export const proyectos: Record<string, string> = {
   // Inicio sin proyectos: cuántos de equipo hay (singular y plural)
   "Hay 1 proyecto de equipo.": "There is 1 team project.",
   "Hay {n} proyectos de equipo.": "There are {n} team projects.",
+  // Textos guardados por versiones anteriores: los errores de importar guardados en TransferJob (se traducen al leerlos)
+  "El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Export the project without attachments or with “Board only”.",
 };

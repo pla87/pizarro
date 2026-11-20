@@ -16,7 +16,7 @@ export const common: Record<string, string> = {
   "Mi perfil": "My profile",
   "Administración": "Administration",
   "Historial de versiones": "Version history",
-  "Cerrar sesión": "Log out",
+  "Cerrar sesión": "Sign out",
   "Selecciona proyecto": "Select a project",
   "No tienes proyectos.": "You have no projects.",
   "Nuevo proyecto": "New project",

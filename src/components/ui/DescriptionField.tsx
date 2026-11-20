@@ -171,7 +171,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
         }}
       />
     </div>
-    <p className="mt-1 text-xs text-slate-400">{t(MARKDOWN_HINT)}</p>
+    <p className="mt-1 text-xs text-slate-500">{t(MARKDOWN_HINT)}</p>
     </>
   );
 }
