@@ -214,7 +214,7 @@ if (only.includes("f1")) {
   await p.getByRole("button", { name: "Quitar el filtro" }).first().tap(); await sleep(300);
   L.eq("F1: quitar el filtro", (await p.locator("[data-task-card]:visible p").allTextContents()).map((x) => x.trim()), ["Mía", "Otra"]);
   // Deshacer y rehacer desde la barra superior (mover con el asa y deshacer).
-  await L.cardLoc(p, "Otra").locator("button[aria-label='Seleccionar']").tap();
+  await L.cardLoc(p, "Otra").locator("[aria-label='Seleccionar']").tap();
   await p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) }).selectOption({ label: COL.doing });
   await L.eqEventually("F1: movida", () => L.dbOrder(COL.doing), ["Otra"]);
   await sleep(400);
@@ -340,6 +340,8 @@ if (only.includes("dlg")) {
   const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
   const mp = m.page;
   watchNative(mp);
+  // El móvil abre la primera columna con tarjetas («En progreso»): se pasa a Backlog.
+  await mp.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
   await openColMenu(mp, COL.backlog, /^Límite de tarjetas/, true);
   d = await promptDialog(mp, "Límite de tarjetas");
   const box = await d.boundingBox();
@@ -360,6 +362,8 @@ if (only.includes("dlg")) {
   // Modo oscuro.
   await mp.setViewportSize({ width: 390, height: 844 });
   await mp.emulateMedia({ colorScheme: "dark" });
+  // Si un «atrás» de los diálogos ha vuelto a la entrada inicial del historial, se ve la columna inicial («En progreso»).
+  if (!(await L.colLoc(mp, COL.backlog).isVisible())) await mp.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
   await openColMenu(mp, COL.backlog, "Renombrar", true);
   d = await promptDialog(mp, "Renombrar columna");
   await mp.screenshot({ path: `${SHOTS}/board-dlg-mobile-dark.png` });
@@ -1534,7 +1538,7 @@ if (only.includes("acc")) {
   await p.keyboard.press("Space");
   a = await snap();
   L.eq("ACC: Espacio la selecciona y lo expone (aria-pressed=true)", a?.pressed, true);
-  L.eq("ACC: el botón de selección (fuera del Tab) también fuera del árbol accesible", await card.locator("button[aria-label='Quitar de la selección']").getAttribute("aria-hidden"), "true");
+  L.eq("ACC: el botón de selección (fuera del Tab) también fuera del árbol accesible", await card.locator("[aria-label='Seleccionar'][data-selected]").getAttribute("aria-hidden"), "true");
   await p.keyboard.press("Space");
   L.eq("ACC: Espacio otra vez la quita", (await snap())?.pressed, false);
   // Con teclado se sigue moviendo (Alt+→) y el foco se queda en la tarjeta.
@@ -1547,8 +1551,8 @@ if (only.includes("acc")) {
   // En móvil (asa de arrastre), el asa tampoco entra en el nombre ni en el Tab; arrastrar con el dedo sigue (QA s9).
   const m = await L.session({ viewport: { width: 390, height: 800 }, mobile: true });
   const mc = L.cardLoc(m.page, "Otra tarjeta");
-  const handle = mc.locator("button[aria-label='Arrastrar para reordenar']");
-  L.eq("ACC móvil: el asa existe, fuera del Tab y del árbol accesible", [await handle.count(), await handle.getAttribute("tabindex"), await handle.getAttribute("aria-hidden")], [1, "-1", "true"]);
+  const handle = mc.locator("[aria-label='Arrastrar para reordenar']");
+  L.eq("ACC móvil: el asa existe, fuera del Tab y del árbol accesible", [await handle.count(), await handle.evaluate((e) => e.tabIndex < 0 && e.tagName !== "BUTTON"), await handle.getAttribute("aria-hidden")], [1, true, "true"]);
   L.eq("ACC móvil: nombre de la tarjeta = título", (await m.page.accessibility.snapshot({ root: await mc.elementHandle() }))?.name, "Otra tarjeta");
   await m.ctx.close();
 

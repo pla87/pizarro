@@ -1071,7 +1071,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     >
       <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : "md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:[--sticky-top:-0.5rem]")}>
+        <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}>
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
@@ -1180,7 +1180,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         {/* El margen negativo con relleno igual deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <aside ref={setAsideEl} className="flex flex-col text-sm md:-m-2 md:min-h-0 md:p-2">
           {/* Relleno de 6 px abajo: el anillo de foco del último botón (3 px + 2 de separación) no se recorta ni crea scroll. */}
-          <div data-aside-scroll className={cn("md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:px-2 md:pt-2 md:pb-1.5", !flow && "md:overflow-y-auto")}>
+          <div data-aside-scroll className={cn("md:-mx-2 md:-mt-2 md:min-h-0 md:flex-1 md:px-2 md:pt-2 md:pb-1.5", !flow && "md:overflow-y-auto md:overscroll-contain")}>
           {/* Rejilla de dos columnas: los campos cortos (selectores y fechas) van de dos en dos; los anchos (tipo, bloqueo,
               color, etiquetas, enlace) ocupan la fila entera. Los campos opcionales del proyecto entran en la misma rejilla. */}
           <div className="grid grid-cols-2 gap-x-2 gap-y-3 md:gap-y-2">

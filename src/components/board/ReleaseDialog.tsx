@@ -36,9 +36,11 @@ interface Props {
   projectTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   onClose: () => void;
   onDeployed: (result: DeployResult) => void;
+  /** Tareas de la lista que el filtro o la búsqueda del tablero ocultan (la release es de la columna entera). */
+  hiddenByFilter?: number;
 }
 
-export function ReleaseDialog({ tasks, preselected, templates, projectTemplates, onClose, onDeployed }: Props) {
+export function ReleaseDialog({ tasks, preselected, templates, projectTemplates, onClose, onDeployed, hiddenByFilter = 0 }: Props) {
   const board = useBoard();
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
@@ -301,6 +303,14 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
               }} maxLength={200} />
           </div>
           {templatePickers}
+          {hiddenByFilter > 0 && (
+            // La release no sigue el filtro del tablero: se dice para que nadie despliegue sin querer lo que no veía.
+            <p data-release-filter-note className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+              {hiddenByFilter === 1
+                ? t("El filtro del tablero no se aplica aquí: la lista incluye 1 tarea que el filtro oculta.")
+                : t("El filtro del tablero no se aplica aquí: la lista incluye {n} tareas que el filtro oculta.", { n: hiddenByFilter })}
+            </p>
+          )}
           <TaskPickList
             tasks={tasks}
             chosen={chosen}

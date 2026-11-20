@@ -44,7 +44,7 @@ export async function run() {
   await U.drag(b.page, "C", { column: COL.closed });
   await expect2(a.page, "el movimiento de B lo ve A", async () => (await U.uiOrder(a.page, COL.closed)).join() === "C");
   // multi-selección en A
-  await L.cardLoc(a.page, "B").locator("button[aria-label='Seleccionar']").click();
+  await L.cardLoc(a.page, "B").locator("[aria-label='Seleccionar']").click();
   await a.page.getByRole("button", { name: /Mover a Siguiente salto/ }).click();
   await expect("selección múltiple: B llega a «Siguiente salto»", async () => (await U.uiOrder(b.page, COL.next)).join() === "X,B");
   // borrar

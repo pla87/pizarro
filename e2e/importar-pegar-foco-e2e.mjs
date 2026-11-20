@@ -163,7 +163,7 @@ if (only.includes("bloqueo")) {
   const { page } = s;
   for (const title of ["Bloquea bh53", "Bloqueada bh53"]) {
     await L.cardLoc(page, title).hover();
-    await L.cardLoc(page, title).locator('button[aria-label="Seleccionar"]').click();
+    await L.cardLoc(page, title).locator('[aria-label="Seleccionar"]').click();
     await L.waitFor(() => L.cardLoc(page, title).getAttribute("aria-pressed").then((v) => v === "true"), { timeout: 3000 });
   }
   const bar = page.locator("[data-selection-bar]");

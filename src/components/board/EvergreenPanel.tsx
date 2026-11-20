@@ -247,33 +247,17 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
   const everyHint = plan
     ? (every === 2 ? t("Incluir cada dos planes") : every === 3 ? t("Incluir cada tres planes") : t("Incluir en todos los planes"))
     : (every === 2 ? t("Incluir cada dos releases") : every === 3 ? t("Incluir cada tres releases") : t("Incluir en todas las releases"));
-  // div con rol de botón (y no <button>) porque lleva dentro el interruptor de cadencia.
+  // La fila (lo que se arrastra y recibe archivos) tiene dentro dos controles hermanos: la parte que abre la tarea (rol de
+  // botón, con el título; con ratón y teclado también se coge por ahí) y el interruptor de cadencia. Antes el interruptor
+  // iba dentro de la parte con rol de botón (controles anidados: el lector de pantalla no lo veía).
   return (
     <div
       ref={setNodeRef}
-      role="button"
-      tabIndex={0}
-      {...(dragHandle ? {} : { ...attributes, ...listeners })}
-      data-file-target={id}
+      data-evergreen-row
       {...fileDrop.handlers}
-      onClick={() => openTask(id)}
-      aria-disabled={pending || undefined}
-      aria-busy={pending || undefined}
-      onKeyDown={(e) => {
-        if (pending) return;
-        // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
-        if (e.key === "Enter" && e.target === e.currentTarget) {
-          e.stopPropagation();
-          openTask(id);
-          return;
-        }
-        // Las demás teclas, al sensor de teclado (Espacio coge la fila, como anuncia su descripción): antes este manejador
-        // sustituía al de dnd-kit y con el teclado no se podía arrastrar.
-        if (!dragHandle) listeners?.onKeyDown?.(e);
-      }}
       className={cn(
         fileDrop.over && "border-focus ring-2 ring-focus/50",
-        "relative flex w-full cursor-pointer touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
+        "relative flex w-full touch-manipulation items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs shadow-sm hover:shadow-md dark:border-slate-700/80 dark:bg-slate-900",
         isDragging && "opacity-40",
       )}
     >
@@ -282,11 +266,35 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
           {fileDrop.over ? t("Suelta para adjuntar") : (<><Loader2 size={13} className="animate-spin" /> {t("Subiendo…")}</>)}
         </div>
       )}
-      <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
-      {/* Cadencia: en todas / cada dos / cada tres releases. Mismo color que la barra de progreso de subtareas. */}
+      <div
+        role="button"
+        tabIndex={0}
+        {...(dragHandle ? {} : { ...attributes, ...listeners })}
+        data-file-target={id}
+        onClick={() => openTask(id)}
+        aria-disabled={pending || undefined}
+        aria-busy={pending || undefined}
+        onKeyDown={(e) => {
+          if (pending) return;
+          // Enter abre la tarea; evita que el KeyboardSensor empiece además un arrastre.
+          if (e.key === "Enter" && e.target === e.currentTarget) {
+            e.stopPropagation();
+            openTask(id);
+            return;
+          }
+          // Las demás teclas, al sensor de teclado (Espacio coge la fila, como anuncia su descripción): antes este manejador
+          // sustituía al de dnd-kit y con el teclado no se podía arrastrar.
+          if (!dragHandle) listeners?.onKeyDown?.(e);
+        }}
+        className="-my-1.5 -ml-2 flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch rounded-md py-1.5 pl-2 outline-offset-2"
+      >
+        <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
+      </div>
+      {/* Cadencia: en todas / cada dos / cada tres releases. Mismo color que la barra de progreso de subtareas. Su nombre
+          empieza por el texto que se ve («Cada dos: incluir cada dos releases»). */}
       <button
         type="button"
-        aria-label={everyHint}
+        aria-label={`${everyLabel}: ${everyHint.charAt(0).toLowerCase()}${everyHint.slice(1)}`}
         title={everyHint}
         data-testid="evergreen-every"
         disabled={pending}

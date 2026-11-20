@@ -1,0 +1,375 @@
+// Tablero en vivo, filtros, móvil y capas (ronda 56): el canal en vivo manda un evento `ping` con nombre (la recarga de respaldo se espacia con el canal
+// sano: reglas probadas en tests/focus-refresh.test.ts) y la presencia («quién está aquí» y «quién tiene abierta la tarea»)
+// llega por él, sin sondeos, con dos personas a la vez; el panel de filtros no se mueve al marcar un tipo (el segundo clic
+// sigue dentro); con un filtro o una búsqueda sin resultados las columnas dicen «Ninguna tarjeta coincide», el tablero
+// avisa con «Limpiar filtros» y «Generar Release» dice que incluye las tareas ocultas; en el móvil la lupa da el foco al
+// campo al primer toque, la búsqueda salta a la columna con resultados, la columna nueva se muestra al crearla, se recuerda
+// la última columna vista y las pestañas avisan de que hay más; los botones flotantes no tapan el diálogo de una tarea ni
+// la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS); Alt+P abre el selector de proyectos
+// con el foco en el buscador; la rueda sobre el detalle de una tarea no desplaza la columna de detrás; y axe no encuentra
+// controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
+// tarjetas se anuncia en un solo sitio.
+// Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
+//   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
+import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import * as L from "./qa/lib.mjs";
+import * as U from "./qa/ui.mjs";
+const { sleep, COL } = L;
+const only = (process.env.PART || "ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe").split(",");
+const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+const MOBILE = { viewport: { width: 390, height: 844 }, mobile: true };
+
+await L.prepareUsers();
+const p = await L.project();
+const [admin] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+const boardSearch = (page) => page.locator("input[aria-label='Filtrar tarjetas']:visible").first();
+const activeTab = (page) => page.locator("[data-mobile-tabs] [data-active]").evaluate((e) => e.textContent.replace(/[\d/\s]+$/g, "").trim());
+
+// --- Canal en vivo: `ping` con nombre, saludo con el id del canal y presencia completa al conectar ----------------------
+if (only.includes("ping")) {
+  L.scenario("ping: evento `ping` con nombre y presencia por el canal en vivo");
+  await L.cleanBoard();
+  const s = await L.session();
+  const { page } = s;
+  await L.liveOpen(page);
+  const polls = [];
+  page.on("request", (r) => { if (/\/presence\b|\/viewers\b/.test(r.url())) polls.push(r.url()); });
+  const got = await page.evaluate((pid) => new Promise((resolve) => {
+    const out = { hello: null, presence: null, ping: null };
+    const es = new EventSource(`/api/projects/${pid}/events`);
+    const done = () => { es.close(); resolve(out); };
+    es.addEventListener("hello", (e) => { out.hello = JSON.parse(e.data); });
+    es.addEventListener("presence", (e) => { out.presence ??= JSON.parse(e.data); });
+    es.addEventListener("ping", (e) => { out.ping = e.data; done(); });
+    setTimeout(done, 35000);
+  }), p.id);
+  L.check("PING: llega un evento `ping` (antes un comentario que el navegador no ve) en menos de 30 s", !!got.ping, JSON.stringify(got.ping));
+  L.check("PING: el saludo lleva el id del canal", typeof got.hello?.stream === "string" && got.hello.stream.length === 36, JSON.stringify(got.hello));
+  L.check("PING: estado completo de la presencia al conectar (con la propia persona)", got.presence?.users?.some((u) => u.id === admin.id), JSON.stringify(got.presence));
+  L.eq("PING: con el canal abierto el tablero no sondea la presencia", polls, []);
+  L.assertNoErrors("ping", [s]);
+  await s.ctx.close();
+}
+
+// --- Presencia en vivo con dos personas ---------------------------------------------------------------------------------
+if (only.includes("presencia")) {
+  L.scenario("presencia: quién está y quién tiene abierta la tarea, al momento y sin sondeos");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56", "Beta r56"]);
+  const a = await L.session();
+  await L.liveOpen(a.page);
+  const polls = [];
+  a.page.on("request", (r) => { if (/\/presence\b/.test(r.url()) || (/\/viewers\b/.test(r.url()) && !/stream=/.test(r.url()))) polls.push(r.url()); });
+  const b = await L.session({ email: L.USER2 });
+  await L.liveOpen(b.page);
+  const heads = (page) => page.locator("[aria-label^='Activos en los últimos 5 minutos']:visible").first().getAttribute("aria-label").catch(() => "");
+  await L.checkEventually("PRES: A ve a B en la cabecera en unos segundos (antes, hasta 20 s)", async () => { const h = await heads(a.page); return [/Segunda Persona/.test(h), h]; }, { timeout: 5000 });
+  await U.openTask(b.page, "Alfa r56");
+  // Los círculos van junto a la tarjeta (en su envoltorio), no dentro.
+  const bubble = L.cardLoc(a.page, "Alfa r56").locator("xpath=..").locator("[title='Segunda Persona tiene abierta esta tarea']");
+  await L.checkEventually("PRES: la tarjeta de A muestra que B tiene abierta la tarea", async () => (await bubble.count()) > 0, { timeout: 5000 });
+  await U.openTask(a.page, "Alfa r56");
+  await L.checkEventually("PRES: el detalle de A dice que B también la tiene abierta", () => U.dialog(a.page).getByText("Segunda Persona también tiene abierta esta tarea").isVisible(), { timeout: 5000 });
+  await L.checkEventually("PRES: y el de B, que A también", () => U.dialog(b.page).getByText("Administrador también tiene abierta esta tarea").isVisible(), { timeout: 5000 });
+  await b.page.keyboard.press("Escape");
+  await L.checkEventually("PRES: B cierra la tarea y el aviso de A desaparece al momento (antes, hasta 45 s)", async () => !(await U.dialog(a.page).getByText("Segunda Persona también tiene abierta esta tarea").isVisible()), { timeout: 5000 });
+  await a.page.keyboard.press("Escape");
+  L.eq("PRES: A no ha sondeado la presencia ni repetido el aviso de la tarea", polls, []);
+  // Quien no es miembro del proyecto no recibe nada: el canal responde 404.
+  await L.q(`DELETE FROM "ProjectMember" WHERE "projectId"=$1 AND "userId"='qa_user_2'`, [p.id]);
+  const status = await b.page.evaluate((pid) => fetch(`/api/projects/${pid}/events`).then((r) => { const s = r.status; r.body?.cancel(); return s; }), p.id);
+  L.eq("PRES: sin acceso al proyecto, el canal (y su presencia) no se abre", status, 404);
+  b.errors.splice(0, b.errors.length, ...b.errors.filter((e) => !/status of 404/.test(e)));
+  await L.prepareUsers();
+  L.assertNoErrors("presencia", [a, b]);
+  await a.ctx.close();
+  await b.ctx.close();
+}
+
+// --- Panel de filtros: no se mueve al marcar un tipo -------------------------------------------------------------------
+if (only.includes("filtros")) {
+  L.scenario("filtros: el panel no se desplaza al activar un filtro");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Fallo r56"], { kindId: "kind_correccion" });
+  await L.seedTasks(COL.backlog, ["Pregunta r56"], { kindId: "kind_respuesta" });
+  await L.seedTasks(COL.backlog, ["Mejora r56"]);
+  for (const width of [1500, 1100]) {
+    const s = await L.session({ viewport: { width, height: 900 } });
+    const { page } = s;
+    await page.locator("button[aria-label^='Filtros']:visible").first().click();
+    const chip = (name) => page.locator("button[aria-pressed]:visible", { hasText: new RegExp(`^${name}$`) }).first();
+    await chip("Corrección").waitFor();
+    const before = await chip("Corrección").boundingBox();
+    await chip("Corrección").click();
+    await sleep(300);
+    const after = await chip("Corrección").boundingBox().catch(() => null);
+    L.check(`FILT ${width}: el panel sigue en su sitio tras marcar un tipo`, after && Math.abs(after.x - before.x) < 1 && Math.abs(after.y - before.y) < 1, JSON.stringify({ before, after }));
+    await chip("Respuesta").click();
+    await sleep(300);
+    L.eq(`FILT ${width}: el segundo clic cae dentro del panel (marca el otro tipo)`, await chip("Respuesta").getAttribute("aria-pressed"), "true");
+    L.check(`FILT ${width}: «Limpiar filtros» a la vista en la cabecera`, await page.getByRole("button", { name: "Limpiar filtros" }).first().isVisible());
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Limpiar filtros" }).first().click();
+    L.assertNoErrors(`filtros ${width}`, [s]);
+    await s.ctx.close();
+  }
+}
+
+// --- Estado vacío al filtrar o buscar, y «Generar Release» con un filtro --------------------------------------------------
+if (only.includes("vacio")) {
+  L.scenario("vacio: «Ninguna tarjeta coincide», aviso con «Limpiar filtros» y la release con filtro");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56"]);
+  await L.seedTasks(COL.next, ["Salto uno", "Salto dos", "Salto tres"]);
+  const s = await L.session();
+  const { page } = s;
+  const backlog = L.colLoc(page, COL.backlog);
+  L.check("VACIO: sin filtro, la columna vacía dice «Arrastra tarjetas aquí»", await L.colLoc(page, COL.doing).getByText("Arrastra tarjetas aquí").isVisible());
+  await boardSearch(page).fill("zzz-nada");
+  await L.checkEventually("VACIO: con la búsqueda sin resultados, «Ninguna tarjeta coincide»", () => backlog.getByText("Ninguna tarjeta coincide").isVisible());
+  L.check("VACIO: y no «Arrastra tarjetas aquí»", !(await backlog.getByText("Arrastra tarjetas aquí").isVisible()));
+  const notice = page.locator("[data-no-matches]");
+  L.check("VACIO: aviso en el tablero sin ningún resultado", await notice.isVisible());
+  await notice.getByRole("button", { name: "Limpiar filtros" }).click();
+  await L.checkEventually("VACIO: «Limpiar filtros» del aviso quita la búsqueda", async () => (await boardSearch(page).inputValue()) === "" && (await notice.count()) === 0);
+  L.check("VACIO: las tarjetas vuelven", await L.cardLoc(page, "Alfa r56").isVisible());
+  await boardSearch(page).fill("Salto uno");
+  await sleep(300);
+  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar Release" }).click();
+  const note = U.dialog(page).locator("[data-release-filter-note]");
+  await L.checkEventually("RELEASE: con un filtro, el diálogo avisa de que incluye las ocultas", () => note.isVisible());
+  L.check("RELEASE: dice cuántas", /2 tareas que el filtro oculta/.test(await note.textContent()), await note.textContent());
+  await page.keyboard.press("Escape");
+  await U.dialog(page).waitFor({ state: "detached" }).catch(() => {});
+  await boardSearch(page).fill("");
+  await sleep(300);
+  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar Release" }).click();
+  await U.dialog(page).waitFor();
+  await sleep(400);
+  L.eq("RELEASE: sin filtro, sin aviso", await note.count(), 0);
+  await page.keyboard.press("Escape");
+  L.assertNoErrors("vacio", [s]);
+  await s.ctx.close();
+}
+
+// --- Móvil: la lupa da el foco al campo, y la búsqueda salta a la columna con resultados ---------------------------------
+if (only.includes("lupa")) {
+  L.scenario("lupa: foco al primer toque y salto a la columna con resultados (390 px)");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56", "Beta r56"]);
+  await L.seedTasks(COL.doing, ["Delta r56"]);
+  const s = await L.session({ ...MOBILE, init: "try { localStorage.clear(); } catch {}" });
+  const { page } = s;
+  await L.liveOpen(page);
+  L.eq("LUPA: se abre la primera columna con tarjetas", await activeTab(page), COL.backlog);
+  await page.getByRole("button", { name: "Buscar" }).tap();
+  L.eq("LUPA: el campo tiene el foco al primer toque", await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Filtrar tarjetas");
+  await page.keyboard.type("Delta");
+  L.eq("LUPA: lo escrito queda en el campo", await boardSearch(page).inputValue(), "Delta");
+  await L.eqEventually("LUPA: la columna a la vista sin resultados salta a la que los tiene", () => activeTab(page), COL.doing);
+  L.check("LUPA: se ve la tarjeta encontrada", await L.cardLoc(page, "Delta r56").isVisible());
+  await page.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
+  await sleep(300);
+  L.check("LUPA: elegida a mano una columna sin resultados, se queda y dice «Ninguna tarjeta coincide»", (await activeTab(page)) === COL.backlog && (await L.colLoc(page, COL.backlog).getByText("Ninguna tarjeta coincide").isVisible()));
+  await page.getByRole("button", { name: "Quitar el filtro" }).last().tap();
+  L.assertNoErrors("lupa", [s]);
+  await s.ctx.close();
+}
+
+// --- Móvil: columna nueva a la vista, última columna recordada, pestañas con degradado ----------------------------------
+if (only.includes("movil")) {
+  L.scenario("movil: columna nueva, última columna vista y degradado en las pestañas (390 px)");
+  await L.cleanBoard();
+  await L.q(`DELETE FROM "Column" WHERE name='Nueva erre'`);
+  await L.seedTasks(COL.doing, ["Delta r56"]);
+  const s = await L.session({ ...MOBILE, init: "try { if (!sessionStorage.getItem('r56')) { localStorage.clear(); sessionStorage.setItem('r56', '1'); } } catch {}" });
+  const { page } = s;
+  await L.liveOpen(page);
+  L.eq("MOVIL: sin columna recordada se abre la primera con tarjetas (no Backlog, vacía)", await activeTab(page), COL.doing);
+  const wrap = page.locator("[data-mobile-tabs]").locator("xpath=..");
+  L.check("MOVIL: degradado a la derecha (quedan pestañas)", await wrap.evaluate((e) => e.hasAttribute("data-more-right")));
+  await page.locator("[data-mobile-tabs]").evaluate((e) => { e.scrollLeft = e.scrollWidth; });
+  await L.checkEventually("MOVIL: al final, degradado a la izquierda y no a la derecha", () => wrap.evaluate((e) => e.hasAttribute("data-more-left") && !e.hasAttribute("data-more-right")));
+  await page.getByRole("button", { name: "Añadir columna" }).last().tap();
+  await U.dialog(page).locator("input").fill("Nueva erre");
+  await U.dialog(page).getByRole("button", { name: "Añadir" }).tap();
+  await L.eqEventually("MOVIL: la columna nueva se muestra al crearla", () => activeTab(page), "Nueva erre");
+  await page.locator("[data-mobile-tabs] button", { hasText: /^Cerrado/ }).tap();
+  await sleep(300);
+  await L.reload(page);
+  await L.eqEventually("MOVIL: al volver al tablero se abre la última columna vista", () => activeTab(page), COL.closed);
+  L.assertNoErrors("movil", [s]);
+  await s.ctx.close();
+  await L.q(`DELETE FROM "Column" WHERE name='Nueva erre'`);
+}
+
+// --- Capas: los flotantes no tapan el diálogo de la tarea ni la vista previa de un documento -----------------------------
+if (only.includes("capas")) {
+  L.scenario("capas: botones flotantes y diálogos");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56"]);
+  const covered = (page) => page.evaluate(() => [...document.querySelectorAll("[role=dialog] button")].filter((b) => b.getClientRects().length).flatMap((b) => {
+    const r = b.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return top && !b.contains(top) && !top.closest("[role=dialog]") ? [`${b.textContent.trim() || b.getAttribute("aria-label")} <- ${(top.closest("button") || top).getAttribute("aria-label")}`] : [];
+  }));
+  for (const [label, opts] of [["390", MOBILE], ["900", { viewport: { width: 900, height: 800 }, mobile: true }]]) {
+    const s = await L.session(opts);
+    const { page } = s;
+    await L.liveOpen(page);
+    await L.cardLoc(page, "Alfa r56").tap();
+    await U.dialog(page).waitFor();
+    await sleep(500);
+    L.eq(`CAPAS ${label}: con la tarea abierta no hay botones flotantes del tablero`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 0);
+    L.eq(`CAPAS ${label}: nada tapa los botones del diálogo`, await covered(page), []);
+    await U.dialog(page).getByRole("button", { name: "Cancelar" }).tap();
+    await U.dialog(page).waitFor({ state: "detached" });
+    L.eq(`CAPAS ${label}: al cerrarla vuelven`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 1);
+    await s.ctx.close();
+  }
+  // Escritorio: deshacer y «Nueva tarea» siguen a mano por encima del fondo (motivo de setBoardModalOpen), sin tapar el diálogo.
+  const d = await L.session();
+  await U.openTask(d.page, "Alfa r56");
+  await sleep(600);
+  L.check("CAPAS escritorio: copia de «Nueva tarea» encima del fondo (abre otra al lado)", (await d.page.locator("button[aria-label='Abrir otra tarea nueva al lado']:visible").count()) >= 1);
+  L.eq("CAPAS escritorio: nada tapa los botones del diálogo", await covered(d.page), []);
+  // Las copias flotantes van fuera del `inert` del modal (data-pz-layer): se pueden pulsar sin cerrar la tarea.
+  const floating = (name) => d.page.locator(`body > button[data-pz-layer][aria-label='${name}']`);
+  const sel = U.dialog(d.page).locator("select").first();
+  await sel.selectOption({ label: COL.doing });
+  await L.eqEventually("CAPAS escritorio: la tarea cambia de columna desde el detalle", async () => (await L.dbTask("Alfa r56")).columnName, COL.doing);
+  await floating("Deshacer la última acción en la tarea").click();
+  await L.eqEventually("CAPAS escritorio: «Deshacer» flotante deshace con la tarea abierta", async () => (await L.dbTask("Alfa r56")).columnName, COL.backlog);
+  L.eq("CAPAS escritorio: y el detalle sigue abierto", await d.page.locator("[role=dialog]").count(), 1);
+  await floating("Abrir otra tarea nueva al lado").click();
+  await L.eqEventually("CAPAS escritorio: la copia de «Nueva tarea» abre la segunda al lado", () => d.page.locator("[role=dialog]").count(), 2);
+  L.check("CAPAS escritorio: con la tarea aún abierta", await d.page.locator("[role=dialog]", { hasText: "Nueva tarea" }).count() === 1);
+  L.assertNoErrors("capas escritorio", [d]);
+  await d.ctx.close();
+  // Documentación en el móvil: «Nueva tarea» y «Varias tareas» van en el pie de la hoja, no flotando sobre la vista previa.
+  const file = path.join(os.tmpdir(), "nota-r56.md");
+  fs.writeFileSync(file, Array.from({ length: 80 }, (_, i) => `Línea ${i + 1} de la nota.`).join("\n\n"));
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1 AND name='nota-r56.md'`, [p.id]);
+  const m = await L.session(MOBILE);
+  await m.page.goto(`${L.BASE}/p/${p.id}/docs`);
+  await m.page.getByRole("heading", { name: /Documentación/ }).first().waitFor({ timeout: 15000 });
+  await m.page.locator("input[type=file][aria-label='Subir archivos']").setInputFiles(file);
+  await L.waitFor(async () => (await L.q(`SELECT 1 FROM "ProjectDocument" WHERE "projectId"=$1 AND name='nota-r56.md'`, [p.id])).length === 1, { timeout: 15000 });
+  await m.page.reload();
+  const [doc] = await L.q(`SELECT id FROM "ProjectDocument" WHERE "projectId"=$1 AND name='nota-r56.md'`, [p.id]);
+  await m.page.locator(`[data-doc-open="${doc.id}"]`).first().tap();
+  await U.dialog(m.page).waitFor();
+  await sleep(800);
+  const docBtns = await U.dialog(m.page).locator("button[aria-label='Nueva tarea o captura'], button[aria-label='Crear varias tareas']").evaluateAll((bs) => bs.filter((b) => b.getClientRects().length).map((b) => getComputedStyle(b).position));
+  L.check("CAPAS docs: «Nueva tarea» y «Varias tareas» en la hoja, sin flotar sobre la vista previa", docBtns.length === 2 && docBtns.every((x) => x !== "fixed"), JSON.stringify(docBtns));
+  await U.dialog(m.page).locator("button[aria-label='Nueva tarea o captura']").tap();
+  await L.checkEventually("CAPAS docs: y siguen abriendo «Nueva tarea»", () => m.page.getByText("Crear tarea").first().isVisible());
+  L.assertNoErrors("capas", [m]);
+  await m.ctx.close();
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1 AND name='nota-r56.md'`, [p.id]);
+}
+
+// --- CLS en el móvil: el asa táctil tiene su hueco desde el primer pintado ------------------------------------------------
+if (only.includes("cls")) {
+  L.scenario("cls: el asa de arrastre no mueve las tarjetas al hidratar (390 px, táctil)");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, Array.from({ length: 8 }, (_, i) => `Tarjeta con un título bastante largo para ocupar dos líneas ${i + 1}`));
+  const s = await L.session({ ...MOBILE, init: "window.__cls = 0; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: 'layout-shift', buffered: true }); } catch {}" });
+  const { page } = s;
+  await L.goto(page, `${L.BASE}/p/${p.id}`);
+  await L.liveOpen(page);
+  await sleep(2500);
+  const cls = await page.evaluate(() => window.__cls);
+  L.note("CLS medido al cargar el tablero", String(cls));
+  L.check("CLS: menos de 0,02 al cargar el tablero (antes ~0,1)", cls < 0.02, String(cls));
+  const handles = await page.locator("[data-task-card] [aria-label='Arrastrar para reordenar']:visible").count();
+  L.check("CLS: el asa sigue a la vista en táctil", handles > 0, String(handles));
+  await s.ctx.close();
+  const d = await L.session();
+  L.eq("CLS: en escritorio (ratón) el asa no se ve", await d.page.locator("[data-task-card] [aria-label='Arrastrar para reordenar']:visible").count(), 0);
+  await d.ctx.close();
+}
+
+// --- Alt+P con el foco en el buscador ------------------------------------------------------------------------------------
+if (only.includes("altp")) {
+  L.scenario("altp: Alt+P abre el selector de proyectos desde el buscador");
+  const s = await L.session();
+  const { page } = s;
+  await boardSearch(page).click();
+  await page.keyboard.press("Alt+KeyP");
+  await L.checkEventually("ALTP: se abre el selector de proyectos", () => page.locator("[role=menu]:visible").first().isVisible().catch(() => false), { timeout: 3000 });
+  L.eq("ALTP: el buscador no recibe la letra", await boardSearch(page).inputValue(), "");
+  await page.keyboard.press("Escape");
+  L.assertNoErrors("altp", [s]);
+  await s.ctx.close();
+}
+
+// --- La rueda sobre el detalle de una tarea no desplaza la columna de detrás ------------------------------------------------
+if (only.includes("rueda")) {
+  L.scenario("rueda: el scroll del detalle no se escapa a la columna");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, Array.from({ length: 40 }, (_, i) => `Rueda ${i + 1}`));
+  const s = await L.session({ viewport: { width: 1280, height: 720 } });
+  const { page } = s;
+  await U.openTask(page, "Rueda 2");
+  const list = L.colLoc(page, COL.backlog).locator("[data-card-list]");
+  const box = await U.dialog(page).boundingBox();
+  for (const [x, y] of [[box.x + 30, box.y + 20], [box.x + box.width * 0.3, box.y + box.height * 0.6], [box.x + box.width * 0.8, box.y + box.height * 0.5], [box.x + box.width * 0.8, box.y + box.height - 20]]) {
+    await page.mouse.move(x, y);
+    for (let i = 0; i < 4; i++) { await page.mouse.wheel(0, 500); await sleep(120); }
+  }
+  await sleep(300);
+  L.eq("RUEDA: la columna de detrás sigue arriba", await list.evaluate((e) => e.scrollTop), 0);
+  await page.keyboard.press("Escape");
+  L.assertNoErrors("rueda", [s]);
+  await s.ctx.close();
+}
+
+// --- axe: tarjetas (seleccionada), panel de fijas con su cadencia y recuento anunciado una sola vez ------------------------
+if (only.includes("axe")) {
+  L.scenario("axe: tarjetas y panel de fijas sin controles anidados; recuento en un solo aviso");
+  await L.cleanBoard();
+  await L.seedTasks(COL.backlog, ["Alfa r56", "Beta r56"]);
+  const ids = await L.seedTasks(COL.next, ["Fija r56", "Otra fija r56"]);
+  await L.q(`UPDATE "Task" SET evergreen=true, "evergreenEvery"=2 WHERE id=$1`, [ids[0]]);
+  await L.q(`UPDATE "Task" SET evergreen=true WHERE id=$1`, [ids[1]]);
+  const rules = ["nested-interactive", "label-content-name-mismatch", "aria-hidden-focus", "button-name"];
+  for (const [label, opts] of [["escritorio", {}], ["390", MOBILE]]) {
+    const s = await L.session({ ...opts, init: `try { localStorage.setItem("pizarro:evergreen-open:${p.id}", "1"); } catch {}` });
+    const { page } = s;
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Siguiente/ }).tap();
+    await L.colLoc(page, COL.next).locator("[data-testid=evergreen-every]").first().waitFor();
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
+    await L.cardLoc(page, "Alfa r56").locator("[aria-label='Seleccionar']").click();
+    if (label === "390") await page.locator("[data-mobile-tabs] button", { hasText: /^Siguiente/ }).tap();
+    await page.addScriptTag({ content: AXE });
+    // label-content-name-mismatch solo en el panel de fijas: la tarjeta se llama como su título a propósito (tipo, fecha,
+    // etiquetas… van en su descripción), y esa regla de axe (experimental) pide todo el texto visible en el nombre.
+    const found = await page.evaluate(async ([values, colName]) => {
+      const main = document.querySelector("main") ?? document;
+      const panel = document.querySelector(`[aria-label="${colName}"] [id^=evergreen-]`);
+      const a = await window.axe.run(main, { runOnly: { type: "rule", values: values.filter((v) => v !== "label-content-name-mismatch") } });
+      const b = panel ? await window.axe.run(panel, { runOnly: { type: "rule", values: ["label-content-name-mismatch"] } }) : { violations: [{ id: "sin panel", nodes: [] }] };
+      return [...a.violations, ...b.violations].map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(" | ")}`);
+    }, [rules, COL.next]);
+    L.eq(`AXE ${label}: sin ${rules.join(", ")} (esta, en el panel de fijas)`, found, []);
+    const chip = L.colLoc(page, COL.next).locator("[data-testid=evergreen-every]").first();
+    L.check(`AXE ${label}: el nombre de la cadencia empieza por lo que se ve`, /^Cada dos: incluir cada dos releases$/.test(await chip.getAttribute("aria-label")), await chip.getAttribute("aria-label"));
+    const live = await page.locator("[aria-live]").evaluateAll((els) => els.filter((e) => /tarjetas|\bde\b/.test(e.textContent)).length);
+    L.eq(`AXE ${label}: el recuento de tarjetas se anuncia en un solo sitio`, live, 1);
+    await page.locator("[data-selected]").first().click().catch(() => {});
+    L.assertNoErrors(`axe ${label}`, [s]);
+    await s.ctx.close();
+  }
+}
+
+await L.closeBrowser();
+await L.closeDb();
+const failedChecks = L.results.filter((r) => !r.pass);
+console.log(`\n${L.results.length - failedChecks.length}/${L.results.length} OK`);
+for (const f of failedChecks) console.log("FAIL", f.name, f.detail);
+process.exitCode = failedChecks.length ? 1 : 0;

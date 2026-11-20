@@ -29,7 +29,7 @@ export function useFileZone(onFiles: (files: File[]) => void) {
     // En captura: sobre una tarjeta el destino es la tarjeta, no la zona.
     onDragOverCapture: (e: React.DragEvent) => {
       if (!hasFiles(e)) return;
-      if ((e.target as HTMLElement).closest?.("[data-task-card], [data-file-target]")) setOver(false);
+      if ((e.target as HTMLElement).closest?.("[data-task-card], [data-file-target], [data-evergreen-row]")) setOver(false);
     },
     onDragOver: (e: React.DragEvent) => {
       if (!hasFiles(e)) return;

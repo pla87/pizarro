@@ -23,8 +23,8 @@ export async function run() {
   L.eq("móvil: el select muestra la columna actual", await sel.evaluate((e) => e.selectedOptions[0].textContent), COL.backlog);
   await sel.selectOption({ label: COL.doing });
   await L.eqEventually("móvil: columna cambiada en BD", async () => (await L.dbTask("A")).columnName, COL.doing);
-  const ev = await L.events("A");
-  L.check("móvil: evento «move» registrado", ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.to === COL.doing, JSON.stringify(ev));
+  // El historial se escribe al final de la acción, después del cambio en la BD.
+  await L.checkEventually("móvil: evento «move» registrado", async () => { const ev = await L.events("A"); return [ev.length === 1 && ev[0].code === "move" && JSON.parse(ev[0].label).p.to === COL.doing, JSON.stringify(ev)]; });
   L.eq("móvil: Backlog en BD", await L.dbOrder(COL.backlog), ["B", "C"]);
   L.eq("móvil: el select refleja la nueva columna", await sel.evaluate((e) => e.selectedOptions[0].textContent), COL.doing);
   await U.dialog(p).getByRole("button", { name: "Cerrar" }).first().tap();
@@ -39,6 +39,8 @@ export async function run() {
   await tab("En progreso").tap(); await L.sleep(400);
   L.check("móvil: tras recargar, A sigue en «En progreso»", (await cards()).includes("A"));
 
+  // Tras recargar se abre la última columna vista («En progreso»): se vuelve a Backlog.
+  await tab("Backlog").tap(); await L.sleep(400);
   // Deshacer desde la cabecera
   const n0 = await U.undoCount("UNDO");
   await p.getByRole("button", { name: "Deshacer la última acción" }).first().tap();
@@ -47,7 +49,8 @@ export async function run() {
 
   // Selección múltiple en móvil
   await L.reload(p);
-  for (const t of ["B", "C"]) await L.cardLoc(p, t).locator("button[aria-label='Seleccionar']").tap();
+  L.eq("móvil: tras recargar se abre la última columna vista (Backlog)", await p.locator("[data-mobile-tabs] [data-active]").evaluate((e) => e.textContent.replace(/\d+/g, "").trim()), COL.backlog);
+  for (const t of ["B", "C"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").tap();
   L.check("móvil: barra «2 seleccionadas»", await p.getByText("2 seleccionadas").isVisible());
   await p.locator("select").filter({ has: p.locator("option", { hasText: "Mover a…" }) }).selectOption({ label: COL.closed });
   await L.eqEventually("móvil: las dos pasan a «Cerrado» en orden", () => L.dbOrder(COL.closed), ["B", "C"]);
@@ -61,7 +64,7 @@ export async function run() {
 
   // Reordenar con el asa (táctil): arrastrar la asa de C sobre A
   await L.reload(p);
-  const handle = L.cardLoc(p, "C").locator("button[aria-label='Arrastrar para reordenar']");
+  const handle = L.cardLoc(p, "C").locator("[aria-label='Arrastrar para reordenar']");
   const hb = await handle.boundingBox(), ab = await L.cardLoc(p, "A").boundingBox();
   await p.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2); await p.mouse.down();
   await p.mouse.move(hb.x + hb.width / 2, hb.y - 10, { steps: 4 });

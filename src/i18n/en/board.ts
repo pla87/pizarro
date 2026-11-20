@@ -54,7 +54,6 @@ export const board: Record<string, string> = {
   "Borrar columna": "Delete column",
   "Borrar (debe estar vacía)": "Delete (must be empty)",
   // TaskCard
-  "Quitar de la selección": "Remove from selection",
   "Seleccionar": "Select",
   "Plazo vencido": "Overdue",
   "Fecha límite": "Due date",
@@ -366,4 +365,7 @@ export const board: Record<string, string> = {
 
   // Duplicar una tarea que se repite: la copia no conserva la repetición
   "Copia creada sin repetición: la repetición no se copia": "Copy created without repeat: repeat settings are not copied",
+
+  // Tablero con un filtro o una búsqueda activos: columna sin resultados
+  "Ninguna tarjeta coincide": "No cards match",
 };

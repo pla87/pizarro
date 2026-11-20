@@ -512,6 +512,27 @@
       "scripts/parent-watch.mjs",
       "prisma/migrations/**",
       "e2e/warn-hook.mjs"
+    ],
+    "tablero-vivo-e2e": [
+      "src/components/board/Board.tsx",
+      "src/components/board/TaskCard.tsx",
+      "src/components/board/ColumnView.tsx",
+      "src/components/board/FilterMenu.tsx",
+      "src/components/board/Presence.tsx",
+      "src/components/board/TaskViewers.tsx",
+      "src/components/board/TaskViewerBubbles.tsx",
+      "src/components/board/taskPresence.ts",
+      "src/components/board/NewColumnButton.tsx",
+      "src/components/board/ReleaseDialog.tsx",
+      "src/components/board/useBoardShortcuts.ts",
+      "src/components/board/TaskDialog.tsx",
+      "src/components/ui/Modal.tsx",
+      "src/app/api/projects/[projectId]/events/route.ts",
+      "src/app/api/tasks/[taskId]/viewers/route.ts",
+      "src/lib/presence.ts",
+      "src/lib/realtime.ts",
+      "src/lib/focus-refresh.ts",
+      "src/app/(app)/p/[projectId]/docs/DocsManager.tsx"
     ]
   }
 }
