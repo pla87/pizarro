@@ -11,7 +11,7 @@ import { logMailError, maskEmailsIn } from "./mask-email";
 import { trackInFlight } from "./shutdown";
 
 // Envío de emails: SMTP con nodemailer. La configuración sale de las variables SMTP_* del servidor o, si no hay, de lo
-// que un administrador guarda en Administración → Ajustes (lib/mail-config.ts). Con MAIL_OUTBOX_DIR (solo desarrollo y
+// que un administrador guarda en Administración → Integraciones (lib/mail-config.ts). Con MAIL_OUTBOX_DIR (solo desarrollo y
 // pruebas) cada email se guarda como JSON en esa carpeta en vez de enviarse.
 
 let outboxWarned = false;

@@ -47,7 +47,7 @@ export async function saveLegalIdentity(input: { responsible: string; email: str
     revalidatePath("/privacy");
     revalidatePath("/terms");
     revalidatePath("/admin/legal");
-    revalidatePath("/admin/settings");
+    revalidatePath("/admin/integrations");
     return { responsible, email };
   });
 }

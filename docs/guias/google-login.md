@@ -19,7 +19,7 @@ Necesitas:
 
 Elige con qué dirección entrará tu gente, porque de ella salen todos los valores que pide Google: la del servidor (por ejemplo, `https://algo.up.railway.app`) o un dominio propio (`https://pizarro.example.com`, lo recomendable). Si la cambias más adelante, tendrás que actualizar Google.
 
-En Pizarro, **Administración → Ajustes → Acceso con Google** muestra arriba la «Dirección pública de Pizarro» y avisa si estás entrando por otra. Debajo hay una guía desplegable con las direcciones de esta guía ya calculadas y un botón para copiar cada una.
+En Pizarro, **Administración → Integraciones → Acceso con Google** muestra arriba la «Dirección pública de Pizarro» y avisa si estás entrando por otra. Debajo hay una guía desplegable con las direcciones de esta guía ya calculadas y un botón para copiar cada una.
 
 ## 2. Crea el proyecto en Google Cloud
 
@@ -60,10 +60,10 @@ Pulsa **Add or remove scopes**, marca `openid`, `email` y `profile` (son los bá
 
 ## 7. Pégalo en Pizarro
 
-En **Administración → Ajustes → Acceso con Google**, pega el ID y el secreto y pulsa **Guardar**. En unos segundos el estado pasa a «Activo», sin reiniciar nada.
+En **Administración → Integraciones → Acceso con Google**, pega el ID y el secreto y pulsa **Guardar**. En unos segundos el estado pasa a «Activo», sin reiniciar nada.
 
 - **Dominio de Workspace permitido** (opcional): si lo rellenas (`example.com`), solo valen las cuentas de ese dominio. Vacío, vale cualquier cuenta de Google.
-- Si prefieres configurarlo en el servidor, usa las variables `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y, si quieres, `GOOGLE_WORKSPACE_DOMAIN`. Mandan sobre lo guardado en Ajustes.
+- Si prefieres configurarlo en el servidor, usa las variables `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y, si quieres, `GOOGLE_WORKSPACE_DOMAIN`. Mandan sobre lo guardado en Integraciones.
 - Para que **solo** se entre con Google, `AUTH_GOOGLE_ONLY=true`. Con `AUTH_ALLOW_ADMIN_PASSWORD=true`, los administradores conservan la contraseña como acceso de emergencia.
 
 ## 8. Pruébalo

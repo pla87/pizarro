@@ -159,3 +159,31 @@ test("NUL en la URL: los filtros de Logs lo quitan y una ruta con NUL da 404 sin
   // Lo normal sigue pasando (un %00 en la búsqueda lo limpia la página, no el proxy).
   assert.notEqual(proxy(new NextRequest("http://localhost:3000/admin/logs?q=a%00b", { headers: { cookie: "tablon_session=x" } })).status, 404);
 });
+
+test("robots.txt: público (fuera del proxy, sin ir a /login) y no deja rastrear la instalación", async () => {
+  const { getMiddlewareMatchers } = nextRequire("next/dist/build/analysis/get-page-static-info.js");
+  const { getMiddlewareRouteMatcher } = nextRequire("next/dist/shared/lib/router/utils/middleware-route-matcher.js");
+  const match = getMiddlewareRouteMatcher(getMiddlewareMatchers(proxyConfig.matcher, {})) as (path: string, req: unknown, query: unknown) => boolean;
+  assert.equal(match("/robots.txt", { headers: {} }, {}), false, "/robots.txt no pasa por el proxy");
+  assert.equal(match("/robots.txt/x", { headers: {} }, {}), true, "lo que cuelga de él, sí");
+  assert.equal(match("/robots.txtx", { headers: {} }, {}), true);
+  const { robotsRules, productPageRobots, landingIsPublic } = await import("../src/lib/robots");
+  assert.deepEqual(robotsRules(false), { rules: { userAgent: "*", disallow: "/" } });
+  // Con LANDING_AT_ROOT=1 solo la presentación y la licencia (y «/», que la muestra) se pueden rastrear.
+  assert.deepEqual(robotsRules(true), { rules: { userAgent: "*", allow: ["/$", "/presentacion", "/licencia"], disallow: "/" } });
+  assert.deepEqual(productPageRobots(false), { index: false, follow: false });
+  assert.deepEqual(productPageRobots(true), { index: true, follow: true });
+  assert.equal(landingIsPublic(undefined), false);
+  assert.equal(landingIsPublic("1"), true);
+  // El texto que sirve Next a partir de src/app/robots.ts.
+  const { resolveRobots } = nextRequire("next/dist/build/webpack/loaders/metadata/resolve-route-data.js");
+  const { default: robots } = await import("../src/app/robots");
+  const prev = process.env.LANDING_AT_ROOT;
+  delete process.env.LANDING_AT_ROOT;
+  try {
+    assert.equal(resolveRobots(robots()), "User-Agent: *\nDisallow: /\n\n");
+  } finally {
+    if (prev === undefined) delete process.env.LANDING_AT_ROOT;
+    else process.env.LANDING_AT_ROOT = prev;
+  }
+});

@@ -168,7 +168,7 @@ export async function setGoogleShareMode(projectId: string, mode: string) {
     const project = await findManageableProject(user, projectId);
     if (isDomainMode(parsed)) {
       if (project.isPrivate) throw new AppError("Un proyecto privado no se puede compartir con todo el dominio.");
-      if (!googleWorkspaceDomain()) throw new AppError("Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Ajustes → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).");
+      if (!googleWorkspaceDomain()) throw new AppError("Compartir con el dominio requiere configurar el dominio de Workspace (Administración → Integraciones → Acceso con Google, o GOOGLE_WORKSPACE_DOMAIN en el servidor).");
     }
     await db.project.update({ where: { id: project.id }, data: { googleShareMode: parsed } });
     describeAction("Cambió cómo se comparten los documentos de Google");

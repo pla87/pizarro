@@ -84,6 +84,12 @@ const nextConfig: NextConfig = {
           ...(isDev ? [] : [{ key: "Strict-Transport-Security", value: "max-age=31536000" }]),
         ],
       },
+      {
+        // Lo que no es una página (ficheros, calendario suscrito, JSON) no lleva <meta name="robots">: se dice en la
+        // cabecera. Si un enlace a un adjunto o al .ics acaba en una web pública, el buscador no lo indexa.
+        source: "/api/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
     ];
   },
 };

@@ -1,4 +1,4 @@
-// Avisos por Telegram y WhatsApp: Administración → Ajustes, Mi perfil → Avisos, mensajes del bot y errores.
+// Avisos por Telegram y WhatsApp: Administración → Integraciones, Mi perfil → Avisos, mensajes del bot y errores.
 export const mensajeria: Record<string, string> = {
   // Mensajes que se envían por Telegram y WhatsApp
   "Mensaje de prueba de Pizarro": "Pizarro test message",
@@ -8,7 +8,7 @@ export const mensajeria: Record<string, string> = {
   "Hecho: ya no recibirás avisos de Pizarro aquí. Puedes volver a conectarte desde Mi perfil → Avisos.": "Done: you won't get Pizarro notices here any more. You can connect again from My profile → Notifications.",
   "Este chat no está conectado a ninguna cuenta de Pizarro.": "This chat isn't connected to any Pizarro account.",
 
-  // Administración → Ajustes
+  // Administración → Integraciones
   "3. Avisos por Telegram y WhatsApp": "3. Telegram and WhatsApp notices",
   "Los avisos también en el móvil. Telegram es gratis; WhatsApp lo cobra Meta por mensaje.": "Notifications on your phone too. Telegram is free; Meta charges for each WhatsApp message.",
   "Bot @{bot} guardado y activado.": "Bot @{bot} saved and turned on.",
@@ -120,12 +120,12 @@ export const mensajeria: Record<string, string> = {
   "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos.": "The template name only allows lowercase letters, digits and underscores.",
   "El idioma de la plantilla no es válido (por ejemplo es, es_ES o en_US).": "The template language isn't valid (for example es, es_ES or en_US).",
 
-  // Administración → Ajustes → Telegram: guardado o activado, pero el webhook o el sondeo fallaron
+  // Administración → Integraciones → Telegram: guardado o activado, pero el webhook o el sondeo fallaron
   "Bot @{bot} guardado, pero Telegram ha respondido con un error al prepararlo.": "Bot @{bot} saved, but Telegram replied with an error while setting it up.",
   "Avisos por Telegram activados, pero Telegram ha respondido con un error al preparar el bot.": "Telegram notices turned on, but Telegram replied with an error while setting up the bot.",
   "Avisos por Telegram desactivados, pero Telegram ha respondido con un error.": "Telegram notices turned off, but Telegram replied with an error.",
 
-  // Administración → Ajustes → WhatsApp: la primera vez no se activa sola
+  // Administración → Integraciones → WhatsApp: la primera vez no se activa sola
   "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Enable” to start sending notices (paid).",
 
   // Mi perfil → Avisos: la prueba falla porque el bot está bloqueado
@@ -140,7 +140,7 @@ export const mensajeria: Record<string, string> = {
   "Este enlace ya no vale: el administrador ha cambiado el bot de Telegram o se ha pedido otro enlace. Vuelve a pulsar «Conectar Telegram».":
     "This link is no longer valid: the administrator changed the Telegram bot or another link was requested. Press “Connect Telegram” again.",
 
-  // Administración → Ajustes → WhatsApp: idioma en inglés de la plantilla de verificación
+  // Administración → Integraciones → WhatsApp: idioma en inglés de la plantilla de verificación
   "Idioma en inglés de la verificación": "English verification language",
   "Los idiomas en inglés se usan con quien tiene Pizarro en inglés (añade esa traducción a la plantilla en Meta). Vacíos, todos reciben el idioma principal.": "The English languages are used for people who have Pizarro in English (add that translation to the template in Meta). If empty, everyone gets the main language.",
 
@@ -171,10 +171,10 @@ export const mensajeria: Record<string, string> = {
   "Borrar el número": "Delete the number",
   "Número borrado.": "Number deleted.",
 
-  // Administración → Ajustes → WhatsApp: plantilla configurada por variables
+  // Administración → Integraciones → WhatsApp: plantilla configurada por variables
   "La plantilla sale de la variable WHATSAPP_TEMPLATE_NAME: se usa el formato antiguo (4 variables) y solo se envían menciones. Si tu plantilla ya es la nueva (3 variables, abajo), escribe su nombre en «Nombre de la plantilla» y guarda.": "The template comes from the WHATSAPP_TEMPLATE_NAME variable: the old format (4 variables) is used and only mentions are sent. If your template is already the new one (3 variables, below), type its name in “Template name” and save.",
 
-  // Plantilla de autenticación de WhatsApp (codigo_pizarro): Administración → Ajustes y su «Probar»
+  // Plantilla de autenticación de WhatsApp (codigo_pizarro): Administración → Integraciones y su «Probar»
   "Plantilla de verificación": "Verification template",
   "Idioma de la verificación": "Verification language",
   "Lleva el código de 6 cifras con el que cada persona conecta su WhatsApp; Meta exige la categoría Autenticación (no vale aviso_pizarro). Vacía = codigo_pizarro, en el idioma de los avisos.": "It carries the 6-digit code each person uses to connect WhatsApp; Meta requires the Authentication category (aviso_pizarro won't do). Empty = codigo_pizarro, in the notification language.",

@@ -384,6 +384,7 @@
       "src/lib/upload-size.ts",
       "src/lib/quota*.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/api/upload-limit/**"
     ],
     "interfaz-esqueletos-e2e": [
@@ -398,6 +399,7 @@
       "src/app/manifest.ts",
       "src/app/app-icon/**",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/admin/backups/**",
       "src/app/api/admin/app-icon/**"
     ],
@@ -451,6 +453,7 @@
       "src/actions/mail-settings.ts",
       "src/lib/mail-settings-core.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/p/[projectId]/docs/**"
     ],
     "accesibilidad-releases-e2e": [
@@ -508,6 +511,7 @@
       "src/lib/builtin-templates*.ts",
       "src/lib/changelog*.ts",
       "src/app/(app)/admin/settings/**",
+      "src/app/(app)/admin/integrations/**",
       "src/app/(app)/admin/users/**",
       "src/app/(app)/settings/**",
       "scripts/boot.ts",

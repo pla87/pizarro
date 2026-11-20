@@ -8,7 +8,7 @@ import {
 } from "./google-config-core";
 
 // Configuración de Google (acceso con Google y Docs/Sheets/Slides): variables GOOGLE_* del servidor (mandan) o lo que un
-// administrador guarda en Administración → Ajustes (AppState, con el secreto cifrado). googleEnabled() es síncrona y la
+// administrador guarda en Administración → Integraciones (AppState, con el secreto cifrado). googleEnabled() es síncrona y la
 // usan muchas páginas: lee una copia en memoria que se carga al arrancar (instrumentation), se rehace al guardar y se
 // refresca sola cada 30 s en segundo plano. Vive en globalThis porque Next puede cargar este módulo más de una vez.
 
@@ -39,7 +39,7 @@ function openSecret(secretEnc: string): string {
   try {
     return decryptSecret(secretEnc);
   } catch {
-    console.error("[google] No se pudo descifrar el secreto de cliente guardado (¿cambió ENCRYPTION_KEY?). Vuelve a guardarlo en Administración → Ajustes.");
+    console.error("[google] No se pudo descifrar el secreto de cliente guardado (¿cambió ENCRYPTION_KEY?). Vuelve a guardarlo en Administración → Integraciones.");
     return "";
   }
 }

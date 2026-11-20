@@ -39,11 +39,11 @@ Sigue los pasos 2 a 6 de [Iniciar sesión con Google](google-login.md). En **Aut
 https://pizarro.example.com/api/google/callback
 ```
 
-Si también usas el inicio de sesión con Google, pon las dos direcciones en el mismo cliente. Después pega el **Client ID** y el **Client secret** en **Administración → Ajustes → Acceso con Google** (o en las variables `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` del servidor).
+Si también usas el inicio de sesión con Google, pon las dos direcciones en el mismo cliente. Después pega el **Client ID** y el **Client secret** en **Administración → Integraciones → Acceso con Google** (o en las variables `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` del servidor).
 
 ## 4. Decide con quién se comparten los archivos
 
-- **Dominio de Workspace permitido** (en Ajustes, o la variable `GOOGLE_WORKSPACE_DOMAIN`): con él, cada archivo de un proyecto de equipo se comparte con todo el dominio, para que cualquiera pueda abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta.
+- **Dominio de Workspace permitido** (en Integraciones, o la variable `GOOGLE_WORKSPACE_DOMAIN`): con él, cada archivo de un proyecto de equipo se comparte con todo el dominio, para que cualquiera pueda abrirlo desde la tarjeta. Sin dominio, solo lo ve quien lo crea hasta que lo comparta.
 - Cada proyecto puede elegir en **Ajustes del proyecto → General → Documentos de Google**: todo el dominio puede editar, todo el dominio puede leer, solo las personas del proyecto, o no compartir. Un proyecto privado nunca se comparte con el dominio.
 
 ## 5. Cada persona conecta su cuenta

@@ -7,6 +7,7 @@ import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
 import { getPublicContactEmail } from "@/lib/google-config";
 import { pickLandingLocale } from "@/lib/landing-locale";
+import { landingIsPublic, productPageRobots } from "@/lib/robots";
 import { db } from "@/lib/db";
 import { isSetupPending } from "@/lib/setup";
 import { getCurrentUser } from "@/lib/session";
@@ -31,7 +32,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   return {
     title: t("Pizarro: Kanban y release notes en tu propio servidor"),
     description: t("Tablero Kanban con notas de release generadas y documentación del proyecto. Autoalojado, privado y sin cuota por usuario."),
-    robots: { index: true, follow: true },
+    // Solo se indexa si la instalación hace de web del producto (LANDING_AT_ROOT=1); si no, noindex como todo.
+    robots: productPageRobots(landingIsPublic()),
   };
 }
 

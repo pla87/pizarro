@@ -29,7 +29,7 @@ Opcional: con `/setdescription` y `/setuserpic` en BotFather puedes poner una de
 
 ## Paso 2. Pega el token en Pizarro
 
-1. En Pizarro, ve a **Administración → Ajustes → 3. Avisos por Telegram y WhatsApp**.
+1. En Pizarro, ve a **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp**.
 2. En **Telegram (gratis)**, pega el token en **Token del bot**.
 3. Pulsa **Guardar y activar**.
 
@@ -38,7 +38,7 @@ Verás «Activo: bot @…».
 
 ## Paso 3. Prueba el bot
 
-1. En **Administración → Ajustes**, pulsa **Probar**. Pizarro comprueba que el bot responde.
+1. En **Administración → Integraciones**, pulsa **Probar**. Pizarro comprueba que el bot responde.
 2. Si además has conectado tu propio Telegram (paso 4), te llega un «Mensaje de prueba de Pizarro».
 
 ## Paso 4. Cada persona conecta su Telegram
@@ -87,7 +87,7 @@ que ya ha procesado, para que la instancia siguiente no los repita.
   `/revoke`, el anterior ya no vale.
 - **Conecto Telegram pero Pizarro sigue esperando**: comprueba que pulsaste **Iniciar** en el chat del bot. Si el enlace
   caducó, vuelve a pulsar **Conectar Telegram**.
-- **«Telegram ha respondido con un error» en Ajustes**: con webhook, suele ser que la dirección https no es accesible
+- **«Telegram ha respondido con un error» en Integraciones**: con webhook, suele ser que la dirección https no es accesible
   desde Internet o el certificado no es válido. Revisa `APP_URL` y el certificado.
 - **A alguien le dejaron de llegar**: si bloqueó el bot o borró el chat, Pizarro lo desconecta solo. Que vuelva a pulsar
   **Conectar Telegram**.

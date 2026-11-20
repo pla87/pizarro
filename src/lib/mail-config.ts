@@ -8,7 +8,7 @@ import {
 } from "./mail-settings-core";
 
 // Configuración del envío de emails: variables SMTP_* del servidor (mandan) o lo que un administrador guarda en
-// Administración → Ajustes (AppState, con la contraseña cifrada). emailEnabled() es síncrona y la usan muchas páginas:
+// Administración → Integraciones (AppState, con la contraseña cifrada). emailEnabled() es síncrona y la usan muchas páginas:
 // lee una copia en memoria que se carga al arrancar (instrumentation), se rehace al guardar y se refresca sola cada
 // 30 s en segundo plano (por si otro proceso la cambia). Vive en globalThis porque Next puede cargar este módulo
 // más de una vez (páginas, acciones, instrumentación) y todos deben ver la misma copia.
@@ -39,7 +39,7 @@ function openPassword(passEnc: string): string {
   try {
     return decryptSecret(passEnc);
   } catch {
-    console.error("[mail] No se pudo descifrar la contraseña SMTP guardada (¿cambió ENCRYPTION_KEY?). Vuelve a guardarla en Administración → Ajustes.");
+    console.error("[mail] No se pudo descifrar la contraseña SMTP guardada (¿cambió ENCRYPTION_KEY?). Vuelve a guardarla en Administración → Integraciones.");
     return "";
   }
 }
@@ -95,7 +95,7 @@ function invalidateMailConfig(): void {
 }
 
 /** Lo que ve la pantalla de administración: sin contraseña, y si manda el servidor, sus valores (sin usuario ni contraseña). */
-export interface MailSettingsView {
+interface MailSettingsView {
   settings: MailSettings;
   /** Las variables SMTP_* del servidor mandan: la pantalla es de solo lectura. */
   env: { host: string; port: number; secure: boolean; hasUser: boolean; from: string } | null;

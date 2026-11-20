@@ -6,6 +6,7 @@ import { I18nProvider } from "@/i18n/client";
 import { makeT } from "@/i18n/core";
 import { getLocale } from "@/i18n/server";
 import { pickLandingLocale } from "@/lib/landing-locale";
+import { landingIsPublic, productPageRobots } from "@/lib/robots";
 import { LICENSE_EN, LICENSE_ES } from "@/lib/license-text";
 import { SITE_URL } from "@/lib/product";
 import { getCurrentUser } from "@/lib/session";
@@ -30,7 +31,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   return {
     title: t("Licencia de Pizarro"),
     description: t("Licencia de código disponible: gratis para uso personal y educativo, y de pago único por servidor para empresas y profesionales."),
-    robots: { index: true, follow: true },
+    // Solo se indexa si la instalación hace de web del producto (LANDING_AT_ROOT=1); si no, noindex como todo.
+    robots: productPageRobots(landingIsPublic()),
   };
 }
 

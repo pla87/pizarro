@@ -278,7 +278,7 @@ export const admin: Record<string, string> = {
   "Desactivar el acceso con Google": "Turn off Google sign-in",
   "No se pudo copiar. Selecciónala y cópiala a mano.": "Could not copy. Select it and copy it by hand.",
   "Copiada": "Copied",
-  "Un administrador debe configurar el acceso con Google en Administración → Ajustes.": "An administrator must set up Google sign-in in Administration → Settings.",
+  "Un administrador debe configurar el acceso con Google en Administración → Integraciones.": "An administrator must set up Google sign-in in Administration → Integrations.",
   "Dirección pública de Pizarro": "Pizarro's public address",
   "Es el APP_URL del servidor; de él salen todas las direcciones que pide Google (ver el «Paso 0» de la guía).": "This is the server's APP_URL; every address Google asks for comes from it (see “Step 0” of the guide).",
   "Entras por {current} pero APP_URL es {app}. Si ya usas tu dominio propio, cambia APP_URL en el servidor (Railway → Variables) a {current} y redespliega.": "You are visiting {current} but APP_URL is {app}. If you already use your own domain, change APP_URL on the server (Railway → Variables) to {current} and redeploy.",
@@ -329,4 +329,6 @@ export const admin: Record<string, string> = {
   "Guarda antes una configuración de email para poder enviar la prueba.": "Save an email configuration first to send the test.",
   // Administración → Usuarios en el móvil: menú «⋯» (ronda 56)
   "Acciones de {name}": "Actions for {name}",
+  // Administración → Integraciones: email, Google, Telegram y WhatsApp (ronda 57)
+  "Integraciones": "Integrations",
 };

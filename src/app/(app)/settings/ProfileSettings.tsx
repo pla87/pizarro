@@ -312,7 +312,7 @@ function GoogleSection({ google }: { google: Props["google"] }) {
       )}
       <div className="mt-4">
         {!google.enabled ? (
-          <p className="text-sm text-slate-500">{t("Un administrador debe configurar el acceso con Google en Administración → Ajustes.")}</p>
+          <p className="text-sm text-slate-500">{t("Un administrador debe configurar el acceso con Google en Administración → Integraciones.")}</p>
         ) : google.email ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">{t("Conectada como")} <strong><EmailSafe text={google.email} /></strong></span>
