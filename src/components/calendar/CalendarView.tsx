@@ -868,7 +868,7 @@ export function CalendarView({ month, today, weeks, tasks, repeats, deliverables
                           dragOver === day.iso && "bg-brand-50 ring-2 ring-inset ring-brand-500 dark:bg-brand-500/20",
                         )}
                       >
-                        <div className={cn("mb-1 flex h-5 items-center justify-end text-xs", day.inMonth ? "text-slate-600 dark:text-slate-300" : "text-slate-400 dark:text-slate-600")}>
+                        <div className={cn("mb-1 flex h-5 items-center justify-end text-xs", day.inMonth ? "text-slate-600 dark:text-slate-300" : "text-slate-500 dark:text-slate-400")}>
                           <span className={cn("inline-flex min-w-5 items-center justify-center rounded-full px-1 tabular-nums", isToday && "bg-brand-600 font-semibold text-on-brand")}>{Number(day.iso.slice(8))}</span>
                         </div>
                         <div className="space-y-0.5">
