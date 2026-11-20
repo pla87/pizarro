@@ -285,3 +285,32 @@ test("nombres de adjuntos en el ZIP: «.» y «..» no quedan como rutas especia
   for (const n of names) assert.ok(!/^\.+$/.test(n) && !n.includes("/"), n);
   assert.equal(names[0], "adjunto");
 });
+
+test("nombres de adjuntos: como mucho ~200 bytes en UTF-8 (se descomprimen en cualquier sistema) y con el -2 de los repetidos", async () => {
+  const { plainAttachmentFileNames } = await import("../src/lib/release");
+  const { cleanFileName } = await import("../src/lib/file-name");
+  // Un nombre de 120 caracteres chinos (lo máximo que guarda una subida) ocupaba 360 bytes: «File name too long».
+  const long = cleanFileName("报".repeat(200) + ".png", "x");
+  const emoji = cleanFileName("😀".repeat(200) + ".pdf", "x");
+  const coded = attachmentFileNames("R12F3", [{ originalName: long, isImage: true }, { originalName: long, isImage: true }, { originalName: emoji, isImage: false }]);
+  const plain = plainAttachmentFileNames([{ originalName: long, isImage: true }, { originalName: long, isImage: true }]);
+  for (const n of [...coded, ...plain]) assert.ok(Buffer.byteLength(n) <= 200, `${n.length} caracteres, ${Buffer.byteLength(n)} bytes`);
+  assert.ok(coded[0]!.startsWith("R12F3_报") && coded[0]!.endsWith(".webp"));
+  assert.ok(coded[1]!.endsWith("-2.webp") && coded[1]!.slice(0, -7) === coded[0]!.slice(0, -5), coded[1]);
+  // Sin partir ningún carácter (un emoji a medias no sobrevive a pasar por UTF-8).
+  assert.ok(coded[2]!.endsWith(".pdf") && Buffer.from(coded[2]!).toString() === coded[2], coded[2]);
+  assert.ok(plain[1]!.endsWith("-2.webp"));
+  // Los nombres cortos, como siempre.
+  assert.deepEqual(plainAttachmentFileNames([{ originalName: "captura.png", isImage: true }]), ["captura.webp"]);
+});
+
+test("nombres de adjuntos: los reservados de Windows (CON, NUL, LPT1…) llevan «_» delante", async () => {
+  const { plainAttachmentFileNames } = await import("../src/lib/release");
+  assert.deepEqual(
+    plainAttachmentFileNames(["CON.txt", "nul", "Aux.tar.gz", "com1.pdf", "LPT9", "prn.png"].map((originalName) => ({ originalName, isImage: originalName.endsWith(".png") }))),
+    ["_CON.txt", "_nul", "_Aux.tar.gz", "_com1.pdf", "_LPT9", "_prn.webp"],
+  );
+  // Solo el nombre exacto: «console», «com10» o «nul_1» no están reservados; con código delante, tampoco.
+  assert.deepEqual(plainAttachmentFileNames(["console.txt", "com10.txt", "nul_1.txt"].map((originalName) => ({ originalName, isImage: false }))), ["console.txt", "com10.txt", "nul_1.txt"]);
+  assert.deepEqual(attachmentFileNames("F1", [{ originalName: "CON.txt", isImage: false }]), ["F1_CON.txt"]);
+});

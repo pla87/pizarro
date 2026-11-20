@@ -127,6 +127,22 @@ describe("texto del plan de trabajo para IA", () => {
     assert.match(md, /sin cerrar\n```\n\n### 2\. Dos/);
   });
 
+  test("planDescription: una línea que abriría un bloque HTML sin fin empieza con «\\<» (no se traga el resto del plan)", () => {
+    // Comentario, instrucción de proceso, declaración, CDATA y pre/script/style/textarea (sin distinguir mayúsculas).
+    for (const line of ["<!-- nota", "<?php echo 1;", "<!DOCTYPE html>", "<![CDATA[ x", "<pre>", "<pre", "<script src=x>", "<STYLE>", "<textarea rows=3>"]) {
+      assert.equal(planDescription(`Antes\n\n${line}\nsigue`), `Antes\n\n\\${line}\nsigue`, line);
+      assert.equal(planDescription(`   ${line}`), `   \\${line}`, line);
+    }
+    // Lo demás no se toca: HTML que acaba en la línea en blanco, etiquetas que solo empiezan igual, sangría de código,
+    // texto en medio de la línea y lo que va dentro de un bloque de código.
+    for (const same of ["<div>hola</div>", "<prefijo>", "<scripts>", "<b>negrita</b>", "    <!-- código", "a <!-- b", "```\n<!-- en código\n```"]) {
+      assert.equal(planDescription(same), same, same);
+    }
+    // Con el plan entero: la tarea siguiente y el pie siguen fuera del comentario.
+    const md = buildAiPlanMarkdown(base({ tasks: [{ id: "a", title: "Una", description: "texto\n\n<!-- nota sin cerrar" }, { id: "b", title: "Otra" }] }));
+    assert.match(md, /\n\\<!-- nota sin cerrar\n\n### 2\. Otra/);
+  });
+
   test("planDescription: un bloque de código sin cerrar se cierra (no se traga el resto del plan)", () => {
     assert.equal(planDescription("```\nsin cerrar\n# hola"), "```\nsin cerrar\n# hola\n```");
     assert.equal(planDescription("~~~~\nx\n~~~"), "~~~~\nx\n~~~\n~~~~");

@@ -53,40 +53,78 @@ export const PDF_MAX_WAITING = 5;
 export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
 let waitingRenders = 0;
 
-/** Errores esperables de la cola (tiempo agotado 504, cola llena 503): las rutas los traducen y devuelven con su estado. */
+/**
+ * Quien pidió el PDF ya no lo espera (cerró la pestaña, canceló la descarga): su render sale de la cola o, si ya se
+ * estaba pintando, se para. Nadie recibe la respuesta; el estado 499 solo queda para los registros.
+ */
+export class PdfAbortedError extends AppError {
+  constructor() {
+    super("Petición cancelada", 499, "pdf_aborted");
+  }
+}
+
+/**
+ * Errores esperables de la cola (tiempo agotado 504, cola llena 503, petición cancelada 499): las rutas los traducen y
+ * devuelven con su estado.
+ */
 export function isPdfQueueError(err: unknown): err is AppError {
-  return err instanceof PdfTimeoutError || (err instanceof AppError && err.code === "pdf_busy");
+  return err instanceof PdfTimeoutError || err instanceof PdfAbortedError || (err instanceof AppError && err.code === "pdf_busy");
 }
 
 /**
  * Ejecuta un render en la cola (de uno en uno) con tiempo máximo; `timeoutMs` es inyectable para los tests. Al
- * agotarse se aborta `signal` (el worker se termina) y se rechaza con PdfTimeoutError.
+ * agotarse se aborta la señal del render (el worker se termina) y se rechaza con PdfTimeoutError.
+ *
+ * `request`: la señal de la petición (`req.signal`). Si se aborta mientras espera turno, el render sale de la cola sin
+ * pintarse (deja libre su sitio entre los PDF_MAX_WAITING); si ya se estaba pintando, se para igual que al agotarse el
+ * tiempo (se termina el worker y el siguiente PDF arranca otro). En ambos casos se rechaza con PdfAbortedError.
  */
-export function queuedRender<T>(render: (signal: AbortSignal) => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS): Promise<T> {
+export function queuedRender<T>(
+  render: (signal: AbortSignal) => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS, request?: AbortSignal,
+): Promise<T> {
+  if (request?.aborted) return Promise.reject(new PdfAbortedError());
   if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
   waitingRenders++;
-  const run = reportQueue.then(
-    () =>
-      new Promise<T>((resolve, reject) => {
-        waitingRenders--;
-        const abort = new AbortController();
-        const timer = setTimeout(() => {
-          const err = new PdfTimeoutError();
-          reject(err);
-          abort.abort(err);
-        }, timeoutMs);
-        render(abort.signal).then(
-          (v) => { clearTimeout(timer); resolve(v); },
-          (e) => { clearTimeout(timer); reject(e); },
-        );
-      }),
-  );
-  reportQueue = run.catch(() => {});
+  let waiting = true;
+  let started: ((err: unknown) => void) | null = null; // para el render en curso (si lo hay) con este error
+  let rejectWaiting!: (err: unknown) => void;
+  const cancelled = new Promise<never>((_, reject) => { rejectWaiting = reject; });
+  const onRequestAbort = () => {
+    const err = new PdfAbortedError();
+    if (waiting) {
+      waiting = false;
+      waitingRenders--;
+      rejectWaiting(err);
+    } else started?.(err);
+  };
+  request?.addEventListener("abort", onRequestAbort, { once: true });
+  const turn = reportQueue.then(() => {
+    if (!waiting) return cancelled; // cancelado mientras esperaba: no ocupa turno
+    waiting = false;
+    waitingRenders--;
+    return new Promise<T>((resolve, reject) => {
+      const abort = new AbortController();
+      const stop = (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+        abort.abort(err);
+      };
+      const timer = setTimeout(() => stop(new PdfTimeoutError()), timeoutMs);
+      started = stop;
+      render(abort.signal).then(
+        (v) => { clearTimeout(timer); resolve(v); },
+        (e) => { clearTimeout(timer); reject(e); },
+      );
+    });
+  });
+  const run = Promise.race([turn, cancelled]).finally(() => request?.removeEventListener("abort", onRequestAbort));
+  reportQueue = turn.catch(() => {});
   return run;
 }
 
-/** Genera un PDF en el worker, en la cola y con tiempo máximo. */
-const renderPdf = (job: PdfJob): Promise<Uint8Array> => queuedRender((signal) => renderInWorker(job, signal));
+/** Genera un PDF en el worker, en la cola y con tiempo máximo; `request` cancela si la petición se aborta. */
+const renderPdf = (job: PdfJob, request?: AbortSignal): Promise<Uint8Array> =>
+  queuedRender((signal) => renderInWorker(job, signal), PDF_RENDER_TIMEOUT_MS, request);
 
 /**
  * Añade a cada release su número de tareas con un groupBy filtrado por sus ids (un `_count` de relación agruparía todas
@@ -100,11 +138,17 @@ async function withReleaseTaskCounts<R extends { id: string }>(releases: R[]): P
   return releases.map((r) => ({ ...r, taskCount: count.get(r.id) ?? 0 }));
 }
 
-export function generateProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
+/** Opciones comunes de los PDF: `signal`, la de la petición (req.signal), cancela el render si se aborta. */
+interface PdfRequestOpts {
+  locale: Locale;
+  signal?: AbortSignal;
+}
+
+export function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
   return buildProjectReportPdf(projectId, opts);
 }
 
-async function buildProjectReportPdf(projectId: string, opts: { generatedBy: string; locale: Locale }): Promise<ProjectReportPdf | null> {
+async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
@@ -186,7 +230,7 @@ async function buildProjectReportPdf(projectId: string, opts: { generatedBy: str
     taskFields: normalizeTaskFields(project.taskFields),
   }, t);
 
-  const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report });
+  const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);
   const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
 }
@@ -195,7 +239,7 @@ const slugOf = (name: string, fallback: string) => slugify(name) || fallback;
 
 /** PDF de la lista consolidada de una columna CHECKLIST (por tarjeta o por tipo de tarea). */
 export function generateChecklistPdf(
-  projectId: string, columnId: string, opts: { locale: Locale; by: ChecklistGroupBy },
+  projectId: string, columnId: string, opts: PdfRequestOpts & { by: ChecklistGroupBy },
 ): Promise<{ pdf: Uint8Array; filename: string; itemCount: number } | null> {
   return (async () => {
     const t = makeT(opts.locale);
@@ -204,14 +248,14 @@ export function generateChecklistPdf(
     const locale = intlLocale(opts.locale);
     const today = todayIso(appTimeZone());
     const groups = groupChecklist(data.items, opts.by, locale);
-    const pdf = await renderPdf({ kind: "checklist", locale: opts.locale, input: { project: data.column.projectName, column: data.column.name, today, by: opts.by, groups } });
+    const pdf = await renderPdf({ kind: "checklist", locale: opts.locale, input: { project: data.column.projectName, column: data.column.name, today, by: opts.by, groups } }, opts.signal);
     return { pdf, filename: `${t("lista")}-${slugOf(data.column.name, t("columna"))}-${today}.pdf`, itemCount: data.items.length };
   })();
 }
 
 /** PDF «Resumen para el cliente» de una columna DELIVERY: sin comentarios, descripciones ni personas. */
 export function generateDeliveryPdf(
-  projectId: string, columnId: string, opts: { locale: Locale },
+  projectId: string, columnId: string, opts: PdfRequestOpts,
 ): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
   return (async () => {
     const t = makeT(opts.locale);
@@ -233,14 +277,14 @@ export function generateDeliveryPdf(
         title: mentionsToPlain(x.title, false), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
         subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title, false)),
       })),
-    } });
+    } }, opts.signal);
     return { pdf, filename: `${t("entrega")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
 
 /** PDF de la planificación de la semana de una columna con rol WEEKLY_PLAN (por día o por persona). */
 export function generateWeekPlanPdf(
-  projectId: string, columnId: string, opts: { generatedBy: string; locale: Locale; groupBy: WeekPlanGroupBy },
+  projectId: string, columnId: string, opts: PdfRequestOpts & { generatedBy: string; groupBy: WeekPlanGroupBy },
 ): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
   return (async () => {
     const t = makeT(opts.locale);
@@ -258,7 +302,7 @@ export function generateWeekPlanPdf(
       tasks.map((x) => ({ title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, assigneeName: x.assignee?.name ?? null, dueDate: dateToIso(x.dueDate) })),
       today, opts.groupBy, t, locale,
     );
-    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } });
+    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
@@ -271,7 +315,7 @@ export function generateWeekPlanPdf(
  * se guarda en la Documentación del proyecto.
  */
 export function generateProgramPdf(
-  projectId: string, columnId: string, opts: { locale: Locale; withAssignee: boolean },
+  projectId: string, columnId: string, opts: PdfRequestOpts & { withAssignee: boolean },
 ): Promise<{ pdf: Uint8Array; filename: string; documentName: (version: number) => string; taskCount: number; omitted: number } | null> {
   return (async () => {
     const t = makeT(opts.locale);
@@ -290,7 +334,7 @@ export function generateProgramPdf(
       tasks.map((x) => ({ title: x.title, titlePrefix: x.kind?.titleTemplate ?? "", description: x.description, startDate: dateToIso(x.startDate), dueDate: dateToIso(x.dueDate), assignee: x.assignee?.name ?? null })),
       { locale: intlLocale(opts.locale), t, withAssignee: opts.withAssignee, useStartDate: normalizeTaskFields(column.project.taskFields).includes("startDate") },
     );
-    const pdf = await renderPdf({ kind: "program", locale: opts.locale, input: { project: column.project.name, today, withAssignee: opts.withAssignee, sessions } });
+    const pdf = await renderPdf({ kind: "program", locale: opts.locale, input: { project: column.project.name, today, withAssignee: opts.withAssignee, sessions } }, opts.signal);
     return {
       pdf,
       filename: `${t("programa")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`,

@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { deployRelease } from "../../src/actions/releases";
+import { deleteReleaseAttachments, deployRelease } from "../../src/actions/releases";
 import { moveTask, updateTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
-import { resumePendingReleaseAttachments, type PendingJob } from "../../src/lib/release-attachments";
+import { resumePendingReleaseAttachments, runReleaseAttachmentsJob, type PendingJob } from "../../src/lib/release-attachments";
 import { attachmentPath } from "../../src/lib/uploads";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-resume-"));
@@ -109,6 +109,27 @@ describe("reanudar copias de adjuntos de una release", () => {
       assert.equal(rel.attachmentsPending, null);
       assert.equal(rel._count.attachments, 0);
     }
+  });
+
+  test("«Borrar adjuntos» mientras se copian: se cancela la copia y no vuelve a aparecer ninguno", async () => {
+    const { user, f } = await setup();
+    const a = await makeTask(f, { title: "A" });
+    await fileAttachment(a.id, "uno.pdf");
+    await fileAttachment(a.id, "dos.pdf");
+    const release = await db.release.create({ data: { projectId: f.project.id, number: 1, title: "R", content: "x" } });
+    const job: PendingJob = { items: [{ taskId: a.id, code: "F1" }], allowed: [a.id], projectId: f.project.id, userId: user.id, userName: user.name };
+    await db.release.update({ where: { id: release.id }, data: { attachmentsPending: job } });
+    // La copia ya llevaba uno cuando se pulsa «Borrar adjuntos».
+    await db.releaseAttachment.create({ data: { releaseId: release.id, fileName: "F1_uno.pdf", size: 3, isImage: false, position: 0 } });
+    expectOk(await deleteReleaseAttachments(release.id));
+    let rel = await db.release.findUniqueOrThrow({ where: { id: release.id }, select: { attachmentsPending: true, _count: { select: { attachments: true } } } });
+    assert.equal(rel.attachmentsPending, null);
+    assert.equal(rel._count.attachments, 0);
+    // La copia, que seguía en marcha, sigue con lo que le faltaba: ya no crea nada (antes reaparecían los dos).
+    await runReleaseAttachmentsJob(release.id, job);
+    rel = await db.release.findUniqueOrThrow({ where: { id: release.id }, select: { attachmentsPending: true, _count: { select: { attachments: true } } } });
+    assert.equal(rel.attachmentsPending, null);
+    assert.equal(rel._count.attachments, 0);
   });
 });
 

@@ -156,14 +156,40 @@ export function plainAttachmentFileNames(attachments: ReleaseAttachmentInput[]):
   return namedAttachmentFiles("", attachments);
 }
 
+/**
+ * Bytes (UTF-8) que puede ocupar un nombre de adjunto sin su extensión ni el «-2», «-3»… de los repetidos. Con la
+ * extensión (como mucho 12 caracteres) y el número queda por debajo de los 255 bytes por nombre de casi todos los sistemas
+ * de ficheros (el nombre original admite 120 caracteres, que en chino o con emojis pasaban de 360 bytes: «File name too
+ * long» al descomprimir el ZIP).
+ */
+const NAME_BASE_BYTES = 180;
+
+/** Nombres que Windows reserva para dispositivos (también con extensión: «CON.txt»): no se pueden crear allí. */
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+/** Corta un texto a `max` bytes en UTF-8 sin partir ningún carácter. */
+function cutUtf8(text: string, max: number): string {
+  let bytes = 0;
+  let out = "";
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    if (bytes > max) break;
+    out += ch;
+  }
+  return out;
+}
+
 function namedAttachmentFiles(prefix: string, attachments: ReleaseAttachmentInput[]): string[] {
   const taken = new Set<string>();
   return attachments.map((a) => {
     const isImage = a.isImage ?? true;
     const base = a.originalName.replace(/\.[^.]+$/, "");
-    const cleaned = `${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_");
+    const cleaned = cutUtf8(`${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_"), NAME_BASE_BYTES);
     // «.» o «..» (o solo puntos) serían rutas especiales dentro del ZIP («adjuntos/03-x/..»): se sustituyen.
-    const clean = cleaned && !/^\.+$/.test(cleaned) ? cleaned : "adjunto";
+    const safe = cleaned && !/^\.+$/.test(cleaned) ? cleaned : "adjunto";
+    // CON, NUL, LPT1…: con «_» delante, para que el ZIP se pueda descomprimir en Windows.
+    const clean = WINDOWS_RESERVED.test(safe.split(".")[0]!) ? `_${safe}` : safe;
     // Extensión original (saneada) para los no imagen; .webp para las imágenes.
     const ext = isImage ? "webp" : (/\.([^.]+)$/.exec(a.originalName)?.[1] ?? "").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 12);
     const suffix = ext ? `.${ext}` : "";

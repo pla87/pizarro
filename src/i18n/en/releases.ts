@@ -30,4 +30,6 @@ export const releases: Record<string, string> = {
   "Más acciones de la release R{number}": "More actions for release R{number}",
   // ZIP de adjuntos: un POST sin ?plan=1 (el envío directo de antes de la v1.60) ya no se sirve
   "Pide primero el plan de descarga (?plan=1); si la página es de antes de actualizar Pizarro, recárgala.": "Request the download plan first (?plan=1); if the page was opened before Pizarro was updated, reload it.",
+  // Histórico de releases: como mucho LIST_MAX en la página; las más antiguas, buscando
+  "Hay releases más antiguas: búscalas por su título o su contenido.": "There are older releases: search for them by title or content.",
 };

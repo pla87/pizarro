@@ -5,6 +5,7 @@ import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, ma
 import { setGoogleShareMode } from "../../src/actions/projects";
 import { createGoogleFile } from "../../src/actions/tasks";
 import { encryptSecret } from "../../src/lib/crypto";
+import { MAX_TASK_DOCS } from "../../src/lib/task-json-resolve";
 
 process.env.GOOGLE_WORKSPACE_DOMAIN = "empresa.test";
 delete process.env.GOOGLE_SHARE_ROLE;
@@ -177,5 +178,31 @@ describe("createGoogleFile según el modo del proyecto", () => {
     assert.equal(stored.externalId, "pres1");
     // Un tipo desconocido se rechaza.
     expectFail(await createGoogleFile(task.id, "GOOGLE_FORM" as never, "Formulario"));
+  });
+});
+
+describe("createGoogleFile: tope de documentos por tarea", () => {
+  test("con MAX_TASK_DOCS documentos enlazados no crea otro (ni lo pide a Google); al quitar uno, sí", async () => {
+    const creator = await makeUser();
+    await connectGoogle(creator.id);
+    const f = await makeProject({ members: [creator] });
+    const task = await makeTask(f);
+    await db.taskLink.createMany({
+      data: Array.from({ length: MAX_TASK_DOCS }, (_, i) => ({ taskId: task.id, kind: "GOOGLE_DOC" as const, title: `Doc ${i}`, url: `https://docs.google.com/document/d/d${i}/edit`, createdById: creator.id })),
+    });
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      throw new Error("no debería llamar a Google");
+    }) as typeof fetch;
+    await loginAs(creator);
+    expectFail(await createGoogleFile(task.id, "GOOGLE_DOC", "Uno más"), new RegExp(`máximo de ${MAX_TASK_DOCS} documentos de Google`));
+    assert.equal(calls, 0);
+    assert.equal(await db.taskLink.count({ where: { taskId: task.id } }), MAX_TASK_DOCS);
+    const one = await db.taskLink.findFirstOrThrow({ where: { taskId: task.id } });
+    await db.taskLink.delete({ where: { id: one.id } });
+    mockDrive();
+    expectOk(await createGoogleFile(task.id, "GOOGLE_DOC", "Ahora sí"));
+    assert.equal(await db.taskLink.count({ where: { taskId: task.id } }), MAX_TASK_DOCS);
   });
 });

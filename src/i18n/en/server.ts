@@ -39,6 +39,7 @@ export const server: Record<string, string> = {
   "Cambió el máximo de comentarios por tarea de {from} a {to}": "Changed the maximum comments per task from {from} to {to}",
   "Demasiados comentarios seguidos. Espera un momento.": "Too many comments in a row. Please wait a moment.",
   "Demasiados documentos creados seguidos. Espera un minuto.": "Too many documents created in a row. Please wait a minute.",
+  "Esta tarea ya tiene el máximo de {max} documentos de Google.": "This task already has the maximum of {max} Google documents.",
   "Error inesperado. Inténtalo de nuevo.": "Unexpected error. Please try again.",
   "Datos no válidos.": "Invalid data.",
   "Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.": "The data has changed in the meantime. Reload and try again.",
@@ -321,4 +322,6 @@ export const server: Record<string, string> = {
   "Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto.": "Only an administrator can keep an external address: choose someone in the project.",
   // Informe PDF: tareas fijas fuera del avance (ronda 57)
   "Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)": "Pinned tasks: {n} (always in the release or the plan; not counted in progress or pending)",
+  // PDF: la petición se canceló mientras esperaba turno o se pintaba
+  "Petición cancelada": "Request cancelled",
 };

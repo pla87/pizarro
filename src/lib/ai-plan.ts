@@ -182,13 +182,20 @@ const ATX_HEADING = /^ {0,3}(#{1,6})(?=\s|$)(.*)$/;
 const SETEXT_UNDERLINE = /^ {0,3}(=+|-+)\s*$/;
 /** Línea que no puede ser texto de un título setext: en blanco, lista, cita, tabla, título, bloque de código o con sangría de código. */
 const NOT_PARAGRAPH = /^(?:\s*$| {4}|\t| {0,3}(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|>|\||#|`{3}|~{3}|(?:[-*_] *){3,}$))/;
+/**
+ * Comienzo de un bloque HTML de los que no acaban en una línea en blanco (CommonMark, tipos 1 a 5): `<!--`, `<?`, `<!X`,
+ * `<![CDATA[`, `<pre`, `<script`, `<style` y `<textarea`. Uno que no se cierra se traga el resto del plan (las demás
+ * tareas y el pie) en la vista previa y en cualquier visor de Markdown.
+ */
+const HTML_BLOCK_START = /^( {0,3})(<(?:!--|\?|!\[CDATA\[|![A-Za-z]|(?:pre|script|style|textarea)(?=[\s>]|$)))/i;
 
 /**
  * Descripción de una tarea tal como entra en el plan: menciones en texto plano, entidades decodificadas (descripciones
  * antiguas con `&gt;`), enlaces a adjuntos absolutos y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan),
  * también los setext («Texto» subrayado con === o ---), que pasan a «####». Dentro de los bloques de código no se toca
- * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Sin líneas
- * en blanco repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
+ * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Por lo mismo,
+ * una línea que abriría un bloque HTML sin fin (`<!-- nota`, `<pre`, `<script`…) empieza con «\<». Sin líneas en blanco
+ * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
  */
 export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   let text = decodeEntities(mentionsToPlain(description ?? ""));
@@ -234,7 +241,8 @@ export function planDescription(description: string | null | undefined, origin?:
       continue;
     }
     paragraph = NOT_PARAGRAPH.test(raw) ? 0 : paragraph + 1;
-    out.push(raw);
+    // Fuera de los bloques de código, «\<» al principio: se ve igual (un «<») y no abre un bloque HTML.
+    out.push(raw.replace(HTML_BLOCK_START, "$1\\$2"));
   }
   while (out.at(-1) === "") out.pop();
   if (fence) out.push(fence);

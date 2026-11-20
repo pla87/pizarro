@@ -38,7 +38,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
   const withAssignee = url.searchParams.get("assignee") === "1";
   const save = method === "POST" && url.searchParams.get("save") === "1";
   const path = `/api/projects/${projectId}/columns/${columnId}/program`;
-  const report = await generateProgramPdf(projectId, columnId, { locale, withAssignee }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
+  const report = await generateProgramPdf(projectId, columnId, { locale, withAssignee, signal: req.signal }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
