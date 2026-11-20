@@ -439,7 +439,7 @@ Gmail, la contraseña debe ser una contraseña de aplicación, no la de la cuent
 Añade tu zona horaria a `/opt/pizarro/deploy/.env`, por ejemplo `APP_TIMEZONE="Europe/Madrid"`, y aplica el cambio
 con `docker compose up -d`.
 
-### Nadie puede entrar como administrador
+### Nadie puede entrar como administrador {#sin-acceso}
 
 Si se olvidó la contraseña o se perdió el móvil de la verificación en dos pasos, genera un enlace de un solo uso desde
 el servidor:

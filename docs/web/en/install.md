@@ -440,7 +440,7 @@ Gmail, the password must be an app password, not the account's.
 Add your time zone to `/opt/pizarro/deploy/.env`, for example `APP_TIMEZONE="Europe/London"`, and apply the change with
 `docker compose up -d`.
 
-### No administrator can sign in
+### No administrator can sign in {#locked-out}
 
 If the password was forgotten or the two-step verification phone was lost, generate a one-time link from the server:
 

@@ -158,8 +158,8 @@ describe("guía de instalación de la web (docs/web)", () => {
   // Las anclas que enlazan la portada (#railway, #email), la app (UPDATE_DOCS_URL) y las notas de cada versión.
   // También las secciones que enlaza la app desde sus pantallas (INSTALL_SECTIONS, src/lib/product.ts).
   const anchors = {
-    "docs/web/instalar.md": ["railway", "email", "actualizar", "copias-de-seguridad", "restaurar", "problemas"],
-    "docs/web/en/install.md": ["railway", "email", "update", "backups", "restore", "troubleshooting"],
+    "docs/web/instalar.md": ["railway", "email", "actualizar", "copias-de-seguridad", "restaurar", "problemas", "sin-acceso"],
+    "docs/web/en/install.md": ["railway", "email", "update", "backups", "restore", "troubleshooting", "locked-out"],
   };
   test("existe en español y en inglés, con título, descripción, las mismas secciones y sus anclas fijas", () => {
     const sections: number[] = [];

@@ -29,9 +29,9 @@ export default async function ForgotPasswordPage() {
             <li>{t("Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.")}</li>
             <li>
               {t("Si eres quien administra el servidor, genera el enlace desde su terminal:")}{" "}
-              <code className="break-all rounded bg-slate-100 px-1 py-0.5 font-mono text-xs dark:bg-slate-800">docker compose exec app node dist/reset-link.mjs &lt;email&gt;</code>{" "}
+              <code className="break-all rounded bg-slate-100 px-1 py-0.5 font-mono text-xs dark:bg-slate-800">cd /opt/pizarro/deploy && docker compose exec app node dist/reset-link.mjs &lt;email&gt;</code>{" "}
               {t("(en Railway, en la terminal del servicio). También puedes configurar el envío de emails (SMTP).")}{" "}
-              <a href={installSectionUrl("troubleshooting", locale)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">{t("Guía de instalación")}</a>
+              <a href={installSectionUrl("lockedOut", locale)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">{t("Guía de instalación")}</a>
             </li>
           </ul>
           {googleEnabled() && <a href="/api/auth/google/start" className="btn-secondary w-full">{t("Iniciar sesión con Google")}</a>}

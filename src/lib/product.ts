@@ -30,6 +30,7 @@ export const INSTALL_SECTIONS = {
   backups: { es: "copias-de-seguridad", en: "backups" },
   restore: { es: "restaurar", en: "restore" },
   troubleshooting: { es: "problemas", en: "troubleshooting" },
+  lockedOut: { es: "sin-acceso", en: "locked-out" },
 } as const;
 export const installSectionUrl = (section: keyof typeof INSTALL_SECTIONS, locale: string = "es"): string =>
   `${installUrl(locale)}#${INSTALL_SECTIONS[section][locale === "en" ? "en" : "es"]}`;

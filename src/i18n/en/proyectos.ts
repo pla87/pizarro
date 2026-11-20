@@ -2,7 +2,8 @@
 export const proyectos: Record<string, string> = {
   "Proyectos de equipo y quién está asignado. Los privados no salen aquí.": "Team projects and who is assigned. Private ones are not listed here.",
   "No hay proyectos de equipo.": "There are no team projects.",
-  "{n} asignado(s)": "{n} assigned",
+  "1 asignado": "1 assigned",
+  "{n} asignados": "{n} assigned",
   "Quitar a {name}": "Remove {name}",
   "Quitar del proyecto": "Remove from project",
   "¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.": "Remove {name} from “{project}”? They will no longer see it and their cards will be unassigned.",
