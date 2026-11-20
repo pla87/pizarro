@@ -92,6 +92,10 @@ npm run test:db          # con base de datos (crea y borra pizarro_test_*)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
+`npm run build` (el que usan el `Dockerfile` y Railway) también compila con `--webpack`, el mismo empaquetador que
+prueban las suites. Con Turbopack (el de Next 16 por defecto) el standalone arrastraba todo el proyecto (`src/`,
+`tests/`, `docs/`…) por un `stat()` dinámico y el JS de cada página pesaba 7–18 KB más; no lo cambies sin probarlo todo.
+
 Pruebas en navegador (suites de `e2e/`, nombradas por tema: `tablero-*`, `importar-*`, `plantillas-*`…), contra la
 build de producción con `scripts/e2e-all.sh` (cada suite con su servidor recién arrancado; base `pz_qa` o `E2E_DB`,
 puerto 3231 o `E2E_PORT`; instrucciones en su cabecera):

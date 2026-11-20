@@ -41,11 +41,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const month = parseMonth(one(sp.month), today);
   const grid = monthGrid(month, 1);
 
-  const projects = await listVisibleProjects(user);
   // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
-  // sin ninguno válido equivale a «todos».
+  // sin ninguno válido equivale a «todos». Las dos consultas no dependen una de otra: en paralelo.
   const requested = [...new Set(one(sp.project).split(",").map((x) => x.trim()).filter(Boolean))].slice(0, MAX_PROJECT_FILTER);
-  const picked = requested.length ? await db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true, isPrivate: true } }) : [];
+  const [projects, picked] = await Promise.all([
+    listVisibleProjects(user),
+    requested.length ? db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true, isPrivate: true } }) : Promise.resolve([]),
+  ]);
   const projectIds = requested.filter((id) => picked.some((p) => p.id === id));
   // Un proyecto elegido que no está entre los de trabajo (p. ej. un enlace) también debe poder verse en el selector.
   const options = [...projects.map((p) => ({ id: p.id, name: p.name })), ...picked.filter((p) => !projects.some((x) => x.id === p.id))];
