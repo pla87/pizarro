@@ -220,12 +220,13 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   });
 
   // Móvil, mes actual: al abrirlo se baja hasta hoy (o hasta el primer día con algo a partir de hoy). Solo al cambiar de
-  // mes, no en cada refresco de los datos, y no si ya se ha desplazado la página.
+  // mes, no en cada refresco de los datos, y no si ya se ha desplazado la página. Con vencidas de meses anteriores no se
+  // baja: su aviso va arriba y quedaría fuera de la vista; el aviso lleva «Ir a hoy» para bajar a mano.
+  const hasOverdue = (overdue?.total ?? 0) > 0;
   useEffect(() => {
-    if (month !== today.slice(0, 7) || !window.matchMedia("(max-width: 767px)").matches) return;
-    const days = [...document.querySelectorAll<HTMLElement>("[data-mobile-day]")];
-    const target = days.find((el) => (el.dataset.mobileDay ?? "") >= today);
-    if (!target || target === days[0]) return;
+    if (hasOverdue || month !== today.slice(0, 7) || !window.matchMedia("(max-width: 767px)").matches) return;
+    const target = mobileTodayRow(today);
+    if (!target) return;
     const scroller = target.closest("main");
     if ((scroller ? scroller.scrollTop : window.scrollY) > 0) return;
     target.scrollIntoView({ block: "start" });
@@ -733,7 +734,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
         </div>
       )}
 
-      {overdue && overdue.total > 0 && <OverdueList overdue={overdue} today={today} showProject={showProject} />}
+      {overdue && overdue.total > 0 && <OverdueList overdue={overdue} today={today} showProject={showProject} jumpToToday={month === today.slice(0, 7) && !empty && !mobileEmpty} />}
 
       {/* Escritorio: cuadrícula mensual */}
       <div className={cn("hidden md:block", navigating && "opacity-60 transition-opacity", empty && "hidden!")}>
@@ -1008,38 +1009,62 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
 
 /**
  * «N vencidas de antes de este mes»: tareas sin terminar con la fecha límite anterior a la cuadrícula (no salen en ella ni
- * en la lista del móvil). Plegado; al abrirlo, la lista con su fecha, cada una abre la tarea.
+ * en la lista del móvil). Plegado; al abrirlo, la lista con su fecha, cada una abre la tarea. En el móvil, en el mes
+ * actual, lleva «Ir a hoy» (con vencidas no se baja solo hasta hoy, para que se vea este aviso).
  */
-function OverdueList({ overdue, today, showProject }: { overdue: { tasks: CalendarTask[]; total: number }; today: string; showProject: boolean }) {
+function OverdueList({ overdue, today, showProject, jumpToToday }: { overdue: { tasks: CalendarTask[]; total: number }; today: string; showProject: boolean; jumpToToday: boolean }) {
   const t = useT();
   const locale = useIntlLocale();
   const n = overdue.total;
   return (
-    <details data-testid="cal-overdue" className="mb-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-      <summary className="cursor-pointer select-none px-3 py-2 font-semibold">
-        {n === 1 ? t("1 vencida de antes de este mes") : t("{n} vencidas de antes de este mes", { n })}
-      </summary>
-      <ul className="space-y-1 px-3 pb-3">
-        {overdue.tasks.map((task) => (
-          <li key={task.id}>
-            <Link
-              href={`/p/${task.projectId}?task=${task.id}`}
-              style={kindBadgeStyle(task.kind.color)}
-              className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", OVERDUE_MARK)}
-            >
-              <span className="min-w-0 flex-1 truncate">{task.title}</span>
-              {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
-              <span className="shrink-0 text-xs font-semibold tabular-nums">
-                <span className="sr-only">{`${t("Plazo vencido")}: `}</span>
-                {formatDay(task.due, today, locale)}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-      {n > overdue.tasks.length && <p className="px-3 pb-3 text-xs">{t("Se muestran las {shown} más antiguas.", { shown: overdue.tasks.length })}</p>}
-    </details>
+    <div className="mb-3 flex items-start gap-2">
+      <details data-testid="cal-overdue" className="min-w-0 flex-1 rounded-lg border border-red-200 bg-red-50 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+        <summary className="cursor-pointer select-none px-3 py-2 font-semibold">
+          {n === 1 ? t("1 vencida de antes de este mes") : t("{n} vencidas de antes de este mes", { n })}
+        </summary>
+        <ul className="space-y-1 px-3 pb-3">
+          {overdue.tasks.map((task) => (
+            <li key={task.id}>
+              <Link
+                href={`/p/${task.projectId}?task=${task.id}`}
+                style={kindBadgeStyle(task.kind.color)}
+                className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", OVERDUE_MARK)}
+              >
+                <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
+                <span className="shrink-0 text-xs font-semibold tabular-nums">
+                  <span className="sr-only">{`${t("Plazo vencido")}: `}</span>
+                  {formatDay(task.due, today, locale)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {n > overdue.tasks.length && <p className="px-3 pb-3 text-xs">{t("Se muestran las {shown} más antiguas.", { shown: overdue.tasks.length })}</p>}
+      </details>
+      {jumpToToday && (
+        <button
+          type="button"
+          data-testid="cal-go-today"
+          onClick={() => mobileTodayRow(today, true)?.scrollIntoView({ block: "start" })}
+          className="btn-secondary shrink-0 px-3 py-2 text-sm md:hidden"
+        >
+          {t("Ir a hoy")}
+        </button>
+      )}
+    </div>
   );
+}
+
+/**
+ * Fila de hoy en la lista del móvil (o la del primer día con algo a partir de hoy). Sin `always`, null si es la primera
+ * (no hay nada que bajar); con `always`, si no queda ninguno a partir de hoy, la última.
+ */
+function mobileTodayRow(today: string, always = false): HTMLElement | null {
+  const days = [...document.querySelectorAll<HTMLElement>("[data-mobile-day]")];
+  const target = days.find((el) => (el.dataset.mobileDay ?? "") >= today);
+  if (always) return target ?? days.at(-1) ?? null;
+  return !target || target === days[0] ? null : target;
 }
 
 /** Leyenda de las apariciones previstas (solo si hay alguna a la vista). */

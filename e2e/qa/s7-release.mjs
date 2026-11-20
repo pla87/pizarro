@@ -146,9 +146,11 @@ export async function run() {
   const [histDl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), histZipBtn.click()]);
   L.eq("Releases: el botón descarga el ZIP con el mismo nombre que el diálogo", histDl.suggestedFilename(), zipName);
   const href = `/api/releases/${rel.id}/attachments`;
-  const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type") }; }, href);
+  const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type"), cl: r.headers.get("content-length") }; }, href);
   L.eq("ZIP del histórico: 200, application/zip, PK", [z.status, z.ct, z.pk], [200, "application/zip", true]);
   L.check("ZIP del histórico: no vacío", z.len > 100, String(z.len));
+  // Next quita el Content-Length de las rutas; se vuelve a poner (src/lib/response-length.ts) para que se vea el progreso.
+  L.eq("ZIP del histórico: con Content-Length (el navegador enseña el progreso)", z.cl, String(z.len));
 
   // --- deshacer el despliegue ---
   await L.goto(p, `${L.BASE}/p/${proj.id}`); await L.reload(p);

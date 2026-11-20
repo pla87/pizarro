@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { actionContext, type ActionContext } from "./action-context";
-import { AppError } from "./errors";
+import { AppError, zodIssueMessage } from "./errors";
 import { logEvent } from "./log";
 import { READ_ACTIONS } from "./log-query";
 import { publishChange } from "./realtime";
@@ -80,7 +80,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
       result = { ok: false, error: err.message };
     } else if (err instanceof z.ZodError) {
       level = "warn";
-      result = { ok: false, error: err.issues[0]?.message ?? "Datos no válidos." };
+      result = { ok: false, error: zodIssueMessage(err.issues[0]?.message) };
     } else if (err && typeof err === "object" && "code" in err && (err.code === "P2003" || err.code === "P2002" || err.code === "P2025")) {
       // Clave foránea o única violada, o fila desaparecida: otra persona cambió los datos a la vez.
       level = "warn";

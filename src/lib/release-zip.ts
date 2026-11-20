@@ -91,6 +91,15 @@ export async function prepareZipPart(entries: ZipEntry[], pkg: ZipPackage, signa
 const zipSlots = ((globalThis as unknown as { __pzZipSlots?: { users: Set<string>; active: number } }).__pzZipSlots ??= { users: new Set(), active: 0 });
 const MAX_ZIPS_AT_ONCE = 2;
 
+/**
+ * ¿Pediría ahora un paquete y recibiría «Ya se está preparando otro ZIP»? Lo dice el plan, para que el navegador lo avise
+ * antes de lanzar la descarga directa (que, si falla, solo sale como descarga fallida). Orientativo: el hueco se reserva
+ * al pedir el paquete.
+ */
+export function zipSlotBusy(userId: string): boolean {
+  return zipSlots.users.has(userId) || zipSlots.active >= MAX_ZIPS_AT_ONCE;
+}
+
 /** Reserva un hueco para preparar y enviar un ZIP; null si esa persona ya tiene uno en curso o el servidor está lleno. Llama a la función devuelta al terminar. */
 export function acquireZipSlot(userId: string): (() => void) | null {
   if (zipSlots.users.has(userId) || zipSlots.active >= MAX_ZIPS_AT_ONCE) return null;
@@ -109,23 +118,53 @@ export function acquireZipSlot(userId: string): (() => void) | null {
 const ZIP_SEND_CHUNK = 1024 * 1024;
 /** Por si la descarga ni termina ni se cancela (conexión abandonada sin aviso): el hueco se suelta igualmente. */
 const ZIP_SEND_MAX_MS = 15 * 60 * 1000;
+/**
+ * Sin pedir ningún trozo durante este tiempo (el cliente no lee y el búfer del socket está lleno), se corta la respuesta
+ * y se suelta el hueco: con solo 2 en el servidor, dos clientes que leen muy despacio bloqueaban todas las descargas ZIP
+ * hasta 15 min. Como la ventana mínima de las subidas.
+ */
+const ZIP_SEND_IDLE_MS = 60 * 1000;
 
 /**
  * Cuerpo de respuesta que entrega el ZIP según lo pide el cliente (un buffer, a trozos de 1 MB, o un flujo de trozos)
  * y suelta el hueco de acquireZipSlot al dar el último trozo, si falla, si se cancela la descarga o se aborta la
- * petición (o, como muy tarde, a los 15 min): mientras se envía, el ZIP debe seguir contando como uno en curso.
+ * petición (o, como muy tarde, a los 15 min, o tras 60 s sin que el cliente lea nada, cortando la respuesta): mientras
+ * se envía, el ZIP debe seguir contando como uno en curso.
  */
-export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, release: () => void, opts: { signal?: AbortSignal; chunk?: number } = {}): ReadableStream<Uint8Array> {
+export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, release: () => void, opts: { signal?: AbortSignal; chunk?: number; idleMs?: number } = {}): ReadableStream<Uint8Array> {
   const chunk = opts.chunk ?? ZIP_SEND_CHUNK;
+  const idleMs = opts.idleMs ?? ZIP_SEND_IDLE_MS;
   let pos = 0;
   const iterator = zip instanceof Uint8Array ? null : zip[Symbol.asyncIterator]();
   const timer = setTimeout(() => done(), ZIP_SEND_MAX_MS);
   timer.unref?.();
   let finished = false;
+  let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+  // Se arma al terminar cada trozo (y al empezar) y se desarma al pedir el siguiente: mientras se lee del disco no cuenta.
+  let idle: ReturnType<typeof setTimeout> | null = null;
+  const disarm = () => {
+    if (idle) clearTimeout(idle);
+    idle = null;
+  };
+  const arm = () => {
+    disarm();
+    if (finished) return;
+    idle = setTimeout(() => {
+      if (finished) return;
+      stop();
+      try {
+        ctrl?.error(new Error("ZIP: el cliente no lee la descarga"));
+      } catch {
+        // Ya cerrado.
+      }
+    }, idleMs);
+    idle.unref?.();
+  };
   const done = () => {
     if (finished) return;
     finished = true;
     clearTimeout(timer);
+    disarm();
     opts.signal?.removeEventListener("abort", stop);
     release();
   };
@@ -138,33 +177,16 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
   else opts.signal?.addEventListener("abort", stop, { once: true });
   return new ReadableStream<Uint8Array>(
     {
+      start(controller) {
+        ctrl = controller;
+        arm();
+      },
       async pull(controller) {
-        if (iterator) {
-          let next: IteratorResult<Uint8Array>;
-          try {
-            next = await iterator.next();
-          } catch (err) {
-            done();
-            controller.error(err);
-            return;
-          }
-          try {
-            if (next.done) {
-              done();
-              controller.close();
-            } else controller.enqueue(next.value);
-          } catch {
-            // El flujo ya se canceló mientras se leía el trozo.
-          }
-          return;
-        }
-        const buf = zip as Uint8Array;
-        const end = Math.min(pos + chunk, buf.length);
-        if (end > pos) controller.enqueue(buf.subarray(pos, end));
-        pos = end;
-        if (pos >= buf.length) {
-          done();
-          controller.close();
+        disarm();
+        try {
+          await pullChunk(controller);
+        } finally {
+          arm();
         }
       },
       cancel() {
@@ -174,6 +196,36 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
     // Sin cola: cada trozo se lee solo cuando el cliente pide el siguiente.
     { highWaterMark: 0 },
   );
+
+  async function pullChunk(controller: ReadableStreamDefaultController<Uint8Array>) {
+    if (iterator) {
+      let next: IteratorResult<Uint8Array>;
+      try {
+        next = await iterator.next();
+      } catch (err) {
+        done();
+        controller.error(err);
+        return;
+      }
+      try {
+        if (next.done) {
+          done();
+          controller.close();
+        } else controller.enqueue(next.value);
+      } catch {
+        // El flujo ya se canceló mientras se leía el trozo.
+      }
+      return;
+    }
+    const buf = zip as Uint8Array;
+    const end = Math.min(pos + chunk, buf.length);
+    if (end > pos) controller.enqueue(buf.subarray(pos, end));
+    pos = end;
+    if (pos >= buf.length) {
+      done();
+      controller.close();
+    }
+  }
 }
 
 /** Cuerpo de respuesta de un paquete preparado con prepareZipPart: se escribe en flujo, fichero a fichero. */

@@ -19,7 +19,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
 | **Generales** | | **437** | |
-| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 388 | ~5 min |
+| QA (9 escenarios) | `e2e/qa/run-all.mjs` | 389 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 | **Tablero** | | **587** | |
 | Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
@@ -64,7 +64,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 29 | ~1 min |
-| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 63 | ~3 min |
+| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 67 | ~3 min |
 | **Accesibilidad** | | **68** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
 | Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla» y `otro.md#apartado` (caza de bugs 54) | `e2e/accesibilidad-releases-e2e.mjs` | 32 | ~30 s |
@@ -667,11 +667,12 @@ como administrador, en escritorio y a 393 px, con el navegador en Europe/Madrid 
 servidor, en UTC), y con un proxy delante que cambia cada email del HTML por un enlace «[email protected]» (lo que hace la
 «Email Address Obfuscation» de Cloudflare): falla con cualquier error de hidratación de React (#418 y compañía). También
 el acceso y las páginas legales sin sesión. **tabs**: `?tab=plantillas` y `?tab=Board` llevan a su pestaña (la dirección
-pasa al id), una desconocida abre la primera con un aviso y una de gestión, para quien no gestiona, dice por qué; igual
+pasa al id en el cliente, y `?tab=board#labels` conserva el ancla), una desconocida abre la primera con un aviso y una de gestión, para quien no gestiona, dice por qué; igual
 en Mi perfil. **informe**: un miembro ve las personas por su nombre, ni el email de otra ni el externo entero (sale
 enmascarado) y sin «Otra dirección…»; guarda eligiendo a otra persona y un administrador pone una dirección externa.
 **cal**: «1 vencida de antes de este mes» con su enlace; una vencida del mes lleva el mismo rojo que «Mis tareas»; a
-393 px, el mes actual se abre con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una tarea roja de
+393 px, con vencidas de antes el aviso queda a la vista y «Ir a hoy» deja hoy arriba; sin ellas, el mes actual se abre
+con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una tarea roja de
 «Más adelante» sin marca de vencida (su color, en un punto) y la vencida con el borde rojo. **movil**: en Usuarios a
 393 px el nombre y el email tienen sitio, las acciones están en «⋯» (y abren su diálogo) y en el escritorio siguen los
 iconos; en las pestañas de Administración, el indicador de que hay más a la derecha (y a la izquierda al final); el pie

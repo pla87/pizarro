@@ -58,11 +58,12 @@ if (only.includes("zip")) {
   await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
   const btn = dlg.getByRole("button", { name: "Descargar adjuntos (1)" });
   await btn.waitFor({ timeout: 10000 });
-  // Primer paquete: 409 (los adjuntos cambiaron). Al reintentar, el paquete tarda: se ve el estado ocupado.
-  let parts = 0;
-  await page.route("**/release-attachments?part=*", async (route) => {
-    parts++;
-    if (parts === 1) return route.fulfill({ status: 409, contentType: "text/plain", body: "Los adjuntos han cambiado mientras se descargaban." });
+  // El paquete lo descarga el navegador y su resultado se lee del estado del vale (`?ticket=…&status=1`). Primera
+  // consulta: 409 (los adjuntos cambiaron). Al reintentar, el estado tarda: se ve el botón ocupado.
+  let polls = 0;
+  await page.route("**/release-attachments?ticket=*&status=1", async (route) => {
+    polls++;
+    if (polls === 1) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ started: [], done: [], errors: { 1: { status: 409, message: "Los adjuntos han cambiado mientras se descargaban." } } }) });
     await sleep(2500);
     return route.continue();
   });

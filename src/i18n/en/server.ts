@@ -316,4 +316,6 @@ export const server: Record<string, string> = {
   // Informe semanal: destinatario (ronda 56)
   "Elige a una persona del proyecto.": "Choose someone in the project.",
   "El destinatario guardado ya no vale: elige a una persona del proyecto.": "The saved recipient is no longer valid: choose someone in the project.",
+  // Informe semanal: dirección externa que conserva quien no es administrador
+  "Solo un administrador puede mantener una dirección externa: elige a una persona del proyecto.": "Only an administrator can keep an external address: choose someone in the project.",
 };

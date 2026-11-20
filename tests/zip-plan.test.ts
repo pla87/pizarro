@@ -147,6 +147,31 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
     await body.body?.cancel();
   });
 
+  test("un cliente que deja de leer: a los idleMs sin pedir nada se corta la respuesta y se suelta el hueco", async () => {
+    const release = acquireZipSlot("zs-5")!;
+    const reader = zipBodyStream(zip, release, { idleMs: 80 }).getReader();
+    // Leyendo a buen ritmo (más deprisa que idleMs entre trozos) no se corta.
+    await reader.read();
+    await new Promise((r) => setTimeout(r, 40));
+    await reader.read();
+    assert.equal(held("zs-5"), true, "sigue leyendo: hueco ocupado");
+    // Deja de leer: pasado idleMs, hueco libre y el siguiente read falla (la descarga se corta).
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(held("zs-5"), false, "sin leer: hueco libre");
+    await assert.rejects(reader.read(), /no lee/);
+
+    // Con un flujo de trozos (como el ZIP de verdad): un trozo lento de leer del disco no cuenta como cliente parado.
+    const release2 = acquireZipSlot("zs-6")!;
+    async function* slow() {
+      yield new Uint8Array(10);
+      await new Promise((r) => setTimeout(r, 200));
+      yield new Uint8Array(10);
+    }
+    const got = Buffer.from(await new Response(zipBodyStream(slow(), release2, { idleMs: 80 })).arrayBuffer());
+    assert.equal(got.length, 20);
+    assert.equal(held("zs-6"), false);
+  });
+
   test("como cuerpo de Response, llega entero", async () => {
     const release = acquireZipSlot("zs-4")!;
     const got = Buffer.from(await new Response(zipBodyStream(zip, release)).arrayBuffer());

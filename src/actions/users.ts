@@ -16,6 +16,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
+import { retargetReportSchedules } from "@/lib/report-recipient";
 import { eraseUser } from "@/lib/user-delete";
 import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
@@ -185,6 +186,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
       // Al desactivar, ningún enlace pendiente debe «revivir» si se reactiva antes de que caduque.
       if (emailChanged || !data.active) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
+      // Los informes semanales que iban a su dirección anterior pasan a la nueva.
+      if (emailChanged) await retargetReportSchedules(tx, user.email, data.email);
       for (const op of roleSwitch) await op(tx);
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       // Y los accesos a medio completar: al reactivar no deben «revivir», y con otro rol cambia si se exige el segundo paso.

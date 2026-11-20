@@ -306,15 +306,24 @@ export async function deleteRelease(releaseId: string) {
   return runAction({ name: "releases.deleteRelease", args: [releaseId] }, async () => {
     const user = await requireUser();
     const { releaseId: id } = releaseIdSchema.parse({ releaseId });
-    const release = await loadAccessibleRelease(user, id);
+    // Otra persona la acaba de borrar (dos a la vez, o una pestaña sin refrescar): ya está borrada, que es lo que se
+    // pedía; la lista la quita igual. Un id que no existe no dice nada de ningún proyecto.
+    const release = await loadAccessibleRelease(user, id).catch((err) => {
+      if (err instanceof AppError && err.message === "La release no existe.") return null;
+      throw err;
+    });
+    if (!release) return { id };
     // Los ids se leen antes de borrar: las filas caen en cascada con la release.
     const ids = (await db.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } })).map((a) => a.id);
-    await db.$transaction(async (tx) => {
+    const deleted = await db.$transaction(async (tx) => {
       // Con el proyecto bloqueado, como el despliegue: uno a la vez no puede leer el número antes de que se retire.
       await lockProject(tx, release.projectId);
-      await tx.release.delete({ where: { id } });
+      // Si la borró otra persona mientras se esperaba el candado, no queda nada que hacer (ni número que retirar).
+      if ((await tx.release.deleteMany({ where: { id } })).count === 0) return false;
       await retireReleaseNumber(tx, release.projectId, release.number);
+      return true;
     });
+    if (!deleted) return { id };
     describeAction(`Borró del histórico la release «${release.title}»`, { releaseId: id });
     await removeReleaseAttachmentFiles(ids);
     return { id: release.id };
