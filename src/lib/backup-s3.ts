@@ -9,7 +9,7 @@ import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
 
-export interface S3Config {
+interface S3Config {
   endpoint: string;
   bucket: string;
   region: string;
@@ -49,7 +49,7 @@ export function parseS3Env(env: Record<string, string | undefined> = process.env
 // --- Firma AWS Signature V4 ------------------------------------------------------------------
 
 export const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-export const UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
+const UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
 
 export const sha256Hex = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
 const hmac = (key: Buffer | string, data: string) => createHmac("sha256", key).update(data, "utf8").digest();
@@ -79,7 +79,7 @@ export function canonicalQuery(query: [string, string][]): string {
     .join("&");
 }
 
-export interface SignInput {
+interface SignInput {
   method: string;
   /** Ruta ya codificada tal cual va en la petición (p. ej. «/bucket/clave%24rara»). */
   path: string;
@@ -89,7 +89,7 @@ export interface SignInput {
   payloadHash: string;
 }
 
-export interface Credentials {
+interface Credentials {
   accessKeyId: string;
   secretAccessKey: string;
   region: string;
@@ -110,7 +110,7 @@ export function signRequest(req: SignInput, cred: Credentials): { authorization:
 }
 
 /** 20261025T031500Z */
-export function amzDate(at: Date = new Date()): string {
+function amzDate(at: Date = new Date()): string {
   return at.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
@@ -119,7 +119,7 @@ export function amzDate(at: Date = new Date()): string {
 /** Cuerpo de una subida: un Buffer o un flujo que se puede volver a crear (para reintentar) con su tamaño exacto. */
 export type UploadBody = Buffer | { size: number; stream: () => AsyncIterable<Buffer> };
 
-export class S3Error extends Error {
+class S3Error extends Error {
   constructor(message: string, readonly status: number, readonly code: string | null) {
     super(message);
   }

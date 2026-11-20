@@ -241,7 +241,7 @@ model Project {
   isPrivate   Boolean  @default(false)
   /// Quien creó el proyecto privado (informativo; pasa a null si se borra ese usuario).
   privateOwnerId String?
-  /// Tamaño máximo (MB) de cada paquete ZIP de adjuntos de una release (se arma en memoria). Nunca menor que taskAttachMaxMb.
+  /// Tamaño máximo (MB) de cada paquete ZIP de adjuntos de una release (se envía en flujo). Nunca menor que taskAttachMaxMb.
   releaseZipMaxMb Int    @default(80)
   /// Tamaño máximo (MB) de la suma de adjuntos de una tarea.
   taskAttachMaxMb Int    @default(80)
@@ -547,8 +547,8 @@ model ReleaseAttachment {
   createdAt DateTime @default(now())
   release   Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
 
+  // El índice único (releaseId, fileName) ya sirve para buscar por releaseId (el índice suelto se quitó en la ronda 56).
   @@unique([releaseId, fileName])
-  @@index([releaseId])
 }
 
 /// Instantánea de cada tarea incluida en una release (se conserva aunque la tarea se borre).

@@ -26,7 +26,7 @@ import { rateLimit } from "./rate-limit";
 export { emailEnabled };
 
 /** Datos de un aviso para el email y los mensajes (mismo contenido en todos los canales). */
-export type MentionMessage = NoticeMessage;
+type MentionMessage = NoticeMessage;
 
 /** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
 export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {

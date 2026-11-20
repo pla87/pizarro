@@ -118,7 +118,7 @@ export async function buildProjectExport(projectId: string, options: ExportOptio
 }
 
 /** Quién exporta: de ello depende qué emails lleva el archivo. */
-export interface ProjectExporter {
+interface ProjectExporter {
   userId: string;
   isAdmin: boolean;
 }

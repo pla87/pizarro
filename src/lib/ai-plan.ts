@@ -52,12 +52,12 @@ export interface AiPlanInput {
 }
 
 /** Idioma del plan: decide el nombre de la carpeta raíz del ZIP y el de una tarea sin letras en el título. */
-export type AiPlanLocale = "es" | "en";
+type AiPlanLocale = "es" | "en";
 /**
  * Carpeta raíz del ZIP de adjuntos del plan, en el idioma del plan: dentro, una carpeta por tarea
  * («adjuntos/03-titulo-de-la-tarea», «attachments/03-task-title»).
  */
-export const AI_PLAN_ZIP_ROOTS: Record<AiPlanLocale, string> = { es: "adjuntos", en: "attachments" };
+const AI_PLAN_ZIP_ROOTS: Record<AiPlanLocale, string> = { es: "adjuntos", en: "attachments" };
 /** Nombre de la carpeta de una tarea cuyo título no deja ninguna letra ni cifra («03-tarea», «03-task»). */
 const FOLDER_FALLBACK: Record<AiPlanLocale, string> = { es: "tarea", en: "task" };
 /** Forma de la carpeta de una tarea en el ZIP (el servidor solo admite esta, con una de las dos raíces). */

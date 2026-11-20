@@ -19,6 +19,7 @@ import type { ExportOptions } from "./project-export/types";
 import { writeProjectExport } from "./project-export/write";
 import { uploadDir } from "./upload-dir";
 import { ZipReadError } from "./zip-read";
+import { logSize } from "./format-size";
 
 // Exportaciones e importaciones de proyectos en segundo plano. La petición solo crea una fila (cola FIFO propia,
 // separada de los huecos de ZIP de releases y de subida) y un trabajador del servidor las va ejecutando, anotando el
@@ -397,7 +398,7 @@ async function runExport(job: JobRow, user: { id: string; role: "ADMIN" | "MEMBE
   const u = await db.user.findUnique({ where: { id: job.userId }, select: { name: true } });
   logEvent({
     category: "api", action: "projects.export",
-    message: `Proyecto «${project.name}» exportado (${built.manifest.counts.tasks} tareas, ${Math.round(size / 1024)} KB)`,
+    message: `Proyecto «${project.name}» exportado (${built.manifest.counts.tasks} tareas, ${logSize(size)})`,
     userId: job.userId, userName: u?.name ?? null, projectId: project.id, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, options: built.manifest.options, counts: built.manifest.counts, bytes: size, missingFiles: built.missingFiles },
   });
@@ -421,7 +422,7 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
     : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id });
   logEvent({
     category: "api", action: "projects.import",
-    message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${Math.round((opts.bytes ?? 0) / 1024)} KB)`,
+    message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${logSize((opts.bytes ?? 0))})`,
     userId: user.id, userName: user.name, projectId: summary.projectId, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, bytes: opts.bytes, isPrivate: !!opts.isPrivate, counts: summary.counts, unmappedUsers: summary.unmappedUsers.length, addedMembers: summary.addedMembers, warnings: summary.warnings.length },
   });

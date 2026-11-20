@@ -90,7 +90,7 @@ export function appNames(orgName: string): { name: string; shortName: string } {
 }
 
 /** Largo máximo del nombre bajo el icono: el móvil lo corta (o lo escribe en dos líneas) a partir de unos 12 caracteres. */
-export const SHORT_NAME_MAX = 12;
+const SHORT_NAME_MAX = 12;
 
 /** Nombre corto: el entero si cabe; si no, la primera palabra si cabe y tiene 4 o más letras o cifras (no «La» ni un emoji); si no, un recorte con «…» (sin pasar del máximo). */
 export function shortAppName(orgName: string, max: number = SHORT_NAME_MAX): string {

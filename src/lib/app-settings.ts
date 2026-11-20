@@ -8,7 +8,7 @@ export const COMMENT_LIMIT_MAX = 1000;
 export const COMMENT_LIMIT_KEY = "maxCommentsPerTask";
 
 /** Un valor guardado vale solo si es un entero dentro de los márgenes; si no, se usa el predeterminado. */
-export function parseCommentLimit(raw: string | null | undefined): number {
+function parseCommentLimit(raw: string | null | undefined): number {
   const n = Number(raw);
   return raw != null && Number.isInteger(n) && n >= COMMENT_LIMIT_MIN && n <= COMMENT_LIMIT_MAX ? n : COMMENT_LIMIT_DEFAULT;
 }

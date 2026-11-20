@@ -14,6 +14,7 @@ import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
 import { attachmentPath } from "@/lib/uploads";
 import * as v from "@/lib/validation";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
@@ -112,7 +113,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ projectId: str
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
   logEvent({
-    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${Math.round(zipPart.bytes / 1024)} KB)`,
+    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${logSize(zipPart.bytes)})`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });

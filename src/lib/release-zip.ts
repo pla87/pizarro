@@ -47,7 +47,7 @@ export function zipPlanBody(packages: ZipPackage[], maxMb: number, entries: ZipE
 }
 
 /** Un paquete listo para enviarse en flujo: sus entradas con tamaño y CRC ya medidos y lo que ocupará el ZIP. */
-export interface ZipPart {
+interface ZipPart {
   entries: StreamZipEntry[];
   /** Bytes exactos del ZIP (Content-Length). */
   bytes: number;
