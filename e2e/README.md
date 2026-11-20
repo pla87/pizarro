@@ -21,13 +21,13 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **438** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 389 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
-| **Tablero** | | **665** | |
+| **Tablero** | | **667** | |
 | Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/tablero-cabecera-e2e.mjs` | 42 | ~1 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/tablero-fijas-e2e.mjs` | 75 | ~1 min |
-| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 84 | ~1,5 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 86 | ~1,5 min |
 | **Detalle de la tarea** | | **44** | |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/detalle-comentarios-e2e.mjs` | 44 | ~1 min |
 | **Copias de tareas** | | **120** | |
@@ -72,7 +72,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **3048** | |
+| **Total** | | **3050** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en

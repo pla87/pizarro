@@ -25,11 +25,21 @@ function streamParam(req: Request): string | null {
 }
 
 /**
+ * Id del montaje del diálogo (`?open=`, lo elige el diálogo al abrirse): el GET y el DELETE de un mismo montaje llevan el
+ * mismo, así el cierre de uno no quita la tarea que ha vuelto a abrir otro. Sin él (una pestaña con la versión anterior),
+ * todos sus montajes cuentan como uno, como antes.
+ */
+function openParam(req: Request): string {
+  const s = new URL(req.url).searchParams.get("open");
+  return s && /^[A-Za-z0-9]{1,16}$/.test(s) ? s : "";
+}
+
+/**
  * El diálogo de la tarea avisa de que está abierta y recibe quién más la tiene abierta. No se registra en los logs, pero
  * cuenta como actividad en el tablero («Quién está trabajando»).
  *
- * Con `?stream=<id del canal en vivo de la pestaña>` basta un aviso al abrir: la tarea cuenta como abierta hasta que se
- * cierra el diálogo (DELETE) o el canal, y los cambios llegan por el canal (evento `presence`). Sin canal (no soportado o
+ * Con `?stream=<id del canal en vivo de la pestaña>&open=<id del montaje del diálogo>` basta un aviso al abrir: la tarea
+ * cuenta como abierta hasta que se cierra ese montaje del diálogo (DELETE con los mismos parámetros) o el canal, y los cambios llegan por el canal (evento `presence`). Sin canal (no soportado o
  * caído), el diálogo repite el aviso cada 15 s y cada aviso vale 45 s.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
@@ -37,7 +47,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ taskId: string 
   if (!found) return new Response((await getT())("No encontrado"), { status: 404 });
   notePresence(found.projectId, found.user.id, found.user.name);
   const stream = streamParam(req);
-  const held = stream !== null && holdTaskView(stream, found.user.id, found.taskId, found.projectId);
+  const held = stream !== null && holdTaskView(stream, found.user.id, found.taskId, found.projectId, openParam(req));
   const others = held
     ? taskViewersExcept(found.taskId, found.projectId, found.user.id)
     : noteTaskViewer(found.taskId, found.projectId, found.user.id, found.user.name);
@@ -51,7 +61,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: stri
   const found = await load(ctx);
   if (found) {
     const stream = streamParam(req);
-    if (stream) releaseTaskView(stream, found.user.id, found.taskId);
+    if (stream) releaseTaskView(stream, found.user.id, found.taskId, openParam(req));
     // También el aviso con caducidad: con `?stream=` el GET pudo caer en él (canal desconocido, p. ej. ya cerrado).
     // Solo avisa a los canales si la persona estaba anotada.
     leaveTask(found.taskId, found.user.id);

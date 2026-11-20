@@ -9,7 +9,7 @@
 // con el foco en el buscador; la rueda sobre el detalle de una tarea no desplaza la columna de detrás; y axe no encuentra
 // controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
 // tarjetas se anuncia en un solo sitio. Además: con red lenta, abrir y cerrar una tarea deprisa no deja la burbuja
-// fantasma; una columna cuya única coincidencia es una fija del panel no dice «Ninguna tarjeta coincide»; y en el móvil un
+// fantasma (y reabrirla deprisa sigue mostrando la burbuja); una columna cuya única coincidencia es una fija del panel no dice «Ninguna tarjeta coincide»; y en el móvil un
 // cambio de otra pestaña no saca de la columna elegida a mano con la búsqueda activa.
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
@@ -92,6 +92,15 @@ if (only.includes("presencia")) {
   await b.page.keyboard.press("Escape");
   await sleep(3500);
   L.eq("PRES: con red lenta, abrir y cerrar deprisa no deja la burbuja fantasma en la tarjeta", await beta.count(), 0);
+  // Cerrar y reabrir la misma tarea con el primer anuncio aún en vuelo: el cierre del primer diálogo no quita el
+  // segundo (antes llegaban GET1, GET2 y DELETE1, y la tarea quedaba sin anunciar mientras durase el canal).
+  await U.openTask(b.page, "Beta r56");
+  await b.page.keyboard.press("Escape");
+  await U.openTask(b.page, "Beta r56");
+  await sleep(3500);
+  L.eq("PRES: reabrir deprisa la misma tarea sigue mostrando la burbuja a la otra persona", await beta.count(), 1);
+  await b.page.keyboard.press("Escape");
+  await L.checkEventually("PRES: y al cerrarla de nuevo, la burbuja se va", async () => (await beta.count()) === 0, { timeout: 5000 });
   await b.page.unroute(/\/viewers\?stream=/);
   // Quien no es miembro del proyecto no recibe nada: el canal responde 404.
   await L.q(`DELETE FROM "ProjectMember" WHERE "projectId"=$1 AND "userId"='qa_user_2'`, [p.id]);

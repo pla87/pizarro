@@ -36,13 +36,13 @@ test("un canal abierto cuenta como presencia y, al cerrarse, la persona sigue 5 
 test("la tarea anunciada con el canal: solo del mismo usuario y proyecto, hasta cerrarla o cerrar el canal", () => {
   const a = openPresenceStream("pp-2", "ua", "Ana");
   const b = openPresenceStream("pp-2", "ub", "Bea");
-  assert.equal(holdTaskView(a, "ub", "t1", "pp-2"), false, "el canal de otra persona no vale");
-  assert.equal(holdTaskView(a, "ua", "t1", "otro"), false, "una tarea de otro proyecto no vale");
-  assert.equal(holdTaskView(a, "ua", "t1", "pp-2"), true);
-  assert.equal(holdTaskView(b, "ub", "t1", "pp-2"), true);
+  assert.equal(holdTaskView(a, "ub", "t1", "pp-2", "m1"), false, "el canal de otra persona no vale");
+  assert.equal(holdTaskView(a, "ua", "t1", "otro", "m1"), false, "una tarea de otro proyecto no vale");
+  assert.equal(holdTaskView(a, "ua", "t1", "pp-2", "m1"), true);
+  assert.equal(holdTaskView(b, "ub", "t1", "pp-2", "m1"), true);
   assert.deepEqual(taskViewersExcept("t1", "pp-2", "ua"), [{ id: "ub", name: "Bea" }]);
   assert.deepEqual(presenceSnapshot("pp-2").viewers, { t1: [{ id: "ua", name: "Ana" }, { id: "ub", name: "Bea" }] });
-  releaseTaskView(b, "ub", "t1");
+  releaseTaskView(b, "ub", "t1", "m1");
   assert.deepEqual(taskViewersExcept("t1", "pp-2", "ua"), []);
   closePresenceStream(a);
   assert.deepEqual(presenceSnapshot("pp-2").viewers, {}, "al cerrarse el canal deja de tenerla abierta");
@@ -62,7 +62,7 @@ test("los cambios avisan a los canales del proyecto (agrupados) y quitar a algui
   const off = subscribePresence("pp-4", () => calls++);
   const s1 = openPresenceStream("pp-4", "ud", "Dani");
   const s2 = openPresenceStream("pp-4", "ud", "Dani"); // otra pestaña de la misma persona: nada nuevo
-  holdTaskView(s1, "ud", "t4", "pp-4");
+  holdTaskView(s1, "ud", "t4", "pp-4", "m1");
   await settle();
   assert.equal(calls, 1, "varios cambios seguidos, un solo aviso");
   dropUserPresence("ud");
@@ -77,18 +77,57 @@ test("los cambios avisan a los canales del proyecto (agrupados) y quitar a algui
 test("abrir y cerrar muy deprisa: si el cierre llega antes que el anuncio, gana el cierre", () => {
   const now = Date.now();
   const a = openPresenceStream("pp-5", "ue", "Eva", now);
-  releaseTaskView(a, "ue", "t5", now); // el DELETE adelanta al GET
-  assert.equal(holdTaskView(a, "ue", "t5", "pp-5", now + 50), true, "el canal es válido: no se cae al aviso con caducidad");
+  releaseTaskView(a, "ue", "t5", "o1", now); // el DELETE adelanta al GET
+  assert.equal(holdTaskView(a, "ue", "t5", "pp-5", "o1", now + 50), true, "el canal es válido: no se cae al aviso con caducidad");
   assert.deepEqual(presenceSnapshot("pp-5", now + 100).viewers, {}, "la tarea no queda retenida");
-  // Volver a abrirla después sí cuenta (el cierre adelantado solo vale para un anuncio).
-  assert.equal(holdTaskView(a, "ue", "t5", "pp-5", now + 200), true);
+  // Volver a abrirla después sí cuenta (otro montaje del diálogo, otro id).
+  assert.equal(holdTaskView(a, "ue", "t5", "pp-5", "o2", now + 200), true);
   assert.deepEqual(presenceSnapshot("pp-5", now + 300).viewers, { t5: [{ id: "ue", name: "Eva" }] });
   // Un cierre adelantado antiguo (más de unos segundos) no impide abrirla.
-  releaseTaskView(a, "ue", "t5", now + 400);
-  releaseTaskView(a, "ue", "t6", now + 400);
-  assert.equal(holdTaskView(a, "ue", "t6", "pp-5", now + 60_000), true);
+  releaseTaskView(a, "ue", "t5", "o2", now + 400);
+  releaseTaskView(a, "ue", "t6", "o3", now + 400);
+  assert.equal(holdTaskView(a, "ue", "t6", "pp-5", "o3", now + 60_000), true);
   assert.deepEqual(Object.keys(presenceSnapshot("pp-5", now + 60_000).viewers), ["t6"]);
   closePresenceStream(a, now + 60_000);
+});
+
+test("cerrar y reabrir la misma tarea con el primer anuncio en vuelo (GET1, GET2, DELETE1): sigue abierta", () => {
+  const now = Date.now();
+  const a = openPresenceStream("pp-13", "ul", "Lola", now);
+  holdTaskView(a, "ul", "t13", "pp-13", "m1", now);
+  holdTaskView(a, "ul", "t13", "pp-13", "m2", now + 1);
+  releaseTaskView(a, "ul", "t13", "m1", now + 2);
+  assert.deepEqual(presenceSnapshot("pp-13", now + 3).viewers, { t13: [{ id: "ul", name: "Lola" }] });
+  releaseTaskView(a, "ul", "t13", "m2", now + 4);
+  assert.deepEqual(presenceSnapshot("pp-13", now + 5).viewers, {}, "cerrados los dos montajes, deja de estar abierta");
+  closePresenceStream(a, now + 6);
+});
+
+test("el cierre adelantado de un montaje no se lo come el anuncio del siguiente", () => {
+  const now = Date.now();
+  const a = openPresenceStream("pp-14", "um", "Mar", now);
+  releaseTaskView(a, "um", "t14", "m1", now); // GET1 falló: su DELETE llega sin anuncio
+  holdTaskView(a, "um", "t14", "pp-14", "m2", now + 100);
+  assert.deepEqual(presenceSnapshot("pp-14", now + 200).viewers, { t14: [{ id: "um", name: "Mar" }] });
+  closePresenceStream(a, now + 300);
+});
+
+test("con varios montajes de la misma tarea solo avisa al abrirse el primero y al cerrarse el último", async () => {
+  let calls = 0;
+  const a = openPresenceStream("pp-15", "un", "Nora");
+  const off = subscribePresence("pp-15", () => calls++);
+  holdTaskView(a, "un", "t15", "pp-15", "m1");
+  await settle();
+  assert.equal(calls, 1);
+  holdTaskView(a, "un", "t15", "pp-15", "m2");
+  releaseTaskView(a, "un", "t15", "m1");
+  await settle();
+  assert.equal(calls, 1, "sigue abierta: no cambia nada");
+  releaseTaskView(a, "un", "t15", "m2");
+  await settle();
+  assert.equal(calls, 2);
+  off();
+  closePresenceStream(a);
 });
 
 test("los canales reciben el estado ya en JSON, el mismo para todos los del proyecto", async () => {
@@ -130,7 +169,7 @@ test("tareas abiertas del sondeo de respaldo: solo las del proyecto pedido", () 
   noteTaskViewer("t11a", "pp-11", "uj", "Juan");
   noteTaskViewer("t11b", "pp-12", "uj", "Juan");
   const s = openPresenceStream("pp-11", "uk", "Kira");
-  holdTaskView(s, "uk", "t11c", "pp-11");
+  holdTaskView(s, "uk", "t11c", "pp-11", "m1");
   assert.deepEqual([...openTaskViewers("pp-11", "nadie").keys()].sort(), ["t11a", "t11c"]);
   assert.deepEqual([...openTaskViewers("pp-11", "uk").keys()], ["t11a"], "sin la propia persona");
   closePresenceStream(s);
