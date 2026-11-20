@@ -6,6 +6,7 @@ import { dateToIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { projectSectionMetadata } from "../project-title";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { emailEnabled } from "@/lib/mail";
 import { googleEnabled } from "@/lib/google";
@@ -20,9 +21,9 @@ import { ApplyTemplate } from "./ApplyTemplate";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
-export async function generateMetadata() {
+export async function generateMetadata({ params }: { params: Promise<{ projectId: string }> }) {
   const t = await getT();
-  return { title: t("Ajustes del proyecto") };
+  return projectSectionMetadata(params, t("Ajustes del proyecto"));
 }
 
 export default async function ProjectSettingsPage({ params, searchParams }: { params: Promise<{ projectId: string }>; searchParams: Promise<{ tab?: string }> }) {
