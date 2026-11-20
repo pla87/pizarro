@@ -300,10 +300,6 @@ Guardas que conviene conocer:
   `same-site`, un `Origin` ajeno y la ausencia de ambas cabeceras, y guardar no tiene efectos: la tarea y sus adjuntos solo
   se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
   la dirección de vuelta del acceso).
-- Compartir con Pizarro (ronda 57): `share_target` del manifiesto → `POST /api/share` (fuera del proxy; acepta
-  `Sec-Fetch-Site: none|same-origin` o un Origin propio) guarda lo compartido en `UPLOAD_DIR/shared/<usuario>/<envío>/`
-  (`src/lib/share-inbox.ts`, 30 min, 3 envíos por persona, fuera de las copias, lo limpia la tarea `sharedFiles`) y
-  redirige a `/share`, que abre el «Nueva tarea» normal. Guardar no tiene efectos: nada se crea hasta «Crear tarea».
 - Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
   Telegram y WhatsApp). Las anclas antiguas (`#avisos-email`, `#acceso-google`, `#mensajeria`) redirigen. Las guías de
   `docs/guias/` y los textos de la app dicen «Administración → Integraciones».
