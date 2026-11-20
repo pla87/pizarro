@@ -74,8 +74,8 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
       }
       throw new AppError(NOT_ALLOWED);
     }
-    // lastSentAt no se reinicia: cambiar el día o la hora, o desactivarlo y volver a activarlo, después del envío de esta
-    // semana no lo repite (reportDue). Uno de una semana anterior (o ninguno) ya cuenta como pendiente.
+    // lastSentAt no se reinicia: cambiar el día o la hora, o desactivarlo y volver a activarlo, no lo repite si el último
+    // salió hace menos de 3 días (reportDue). Uno más antiguo (o ninguno) ya cuenta como pendiente.
     const row = { enabled: data.enabled, recipient, weekday: data.weekday, hour: data.hour };
     await db.reportSchedule.upsert({
       where: { projectId: pid },

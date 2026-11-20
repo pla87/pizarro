@@ -220,13 +220,13 @@ Se hace desde su panel web, sin terminal.
 
 ## Configuración opcional {#configuracion}
 
-Todo esto se activa desde la propia app, en *Administración → Ajustes*, sin tocar el servidor. Nada es obligatorio:
+Todo esto se activa desde la propia app, en *Administración → Integraciones*, sin tocar el servidor. Nada es obligatorio:
 Pizarro funciona sin ello.
 
 ### Email {#email}
 
 Con el email, Pizarro envía las invitaciones, los avisos, los resúmenes y el enlace de «¿Olvidaste tu contraseña?».
-Se configura en *Administración → Ajustes → Avisos por email* de una de estas dos formas:
+Se configura en *Administración → Integraciones → Avisos por email* de una de estas dos formas:
 
 - **Con el Gmail de un administrador** (lo más sencillo para una familia o un equipo pequeño): activa la verificación
   en dos pasos en esa cuenta de Google, crea una contraseña de aplicación en <https://myaccount.google.com/apppasswords>
@@ -423,7 +423,7 @@ el contenedor de la base de datos está en marcha (`docker compose ps`) o, en Ra
 
 ### No llegan los emails
 
-Revisa *Administración → Ajustes → Avisos por email*, envía un email de prueba y mira *Administración → Logs*. Con
+Revisa *Administración → Integraciones → Avisos por email*, envía un email de prueba y mira *Administración → Logs*. Con
 Gmail, la contraseña debe ser una contraseña de aplicación, no la de la cuenta.
 
 ### Las fechas salen con otra hora

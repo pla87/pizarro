@@ -221,13 +221,13 @@ from its web dashboard, with no terminal.
 
 ## Optional settings {#settings}
 
-All of this is turned on from the app itself, in *Administration → Settings*, without touching the server. None of it
+All of this is turned on from the app itself, in *Administration → Integrations*, without touching the server. None of it
 is required: Pizarro works without it.
 
 ### Email {#email}
 
 With email, Pizarro sends invitations, notifications, digests and the "Forgot your password?" link. Set it up in
-*Administration → Settings → Email notifications* in one of two ways:
+*Administration → Integrations → Email notifications* in one of two ways:
 
 - **With an administrator's Gmail** (the simplest for a family or a small team): turn on two-step verification in that
   Google account, create an app password at <https://myaccount.google.com/apppasswords> and paste it into Pizarro
@@ -424,7 +424,7 @@ or no such name). Check that the database container is running (`docker compose 
 
 ### Emails don't arrive
 
-Check *Administration → Settings → Email notifications*, send a test email and look at *Administration → Logs*. With
+Check *Administration → Integrations → Email notifications*, send a test email and look at *Administration → Logs*. With
 Gmail, the password must be an app password, not the account's.
 
 ### Dates show the wrong time
