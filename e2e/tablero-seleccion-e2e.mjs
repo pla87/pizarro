@@ -115,7 +115,7 @@ if (only.includes("drag")) {
   L.check("DRAG: aviso «Has soltado 3 tarjetas…»", (await announced(page)).includes("Has soltado 3 tarjetas en la columna Cerrado."), await announced(page));
   L.eq("DRAG: la raíz ya no marca el arrastre", await rootGroup(page), null);
   L.check("DRAG: la selección se mantiene (3 seleccionadas)", /3 seleccionadas/.test(await selectedCount(page)));
-  L.check("DRAG: aviso «3 tarjetas movidas a «Cerrado»»", await page.getByText("3 tarjetas movidas a «Cerrado»").first().isVisible().catch(() => false));
+  await L.checkEventually("DRAG: aviso «3 tarjetas movidas a «Cerrado»»", () => page.getByText("3 tarjetas movidas a «Cerrado»").first().isVisible().catch(() => false), { timeout: 8000 });
   await L.eqEventually("DRAG: un solo paso de deshacer", undoRows, undoBefore + 1);
   await U.undoKey(page, "Alt+z");
   await L.eqEventually("DRAG: deshacer devuelve las tres a su sitio (Backlog)", () => L.dbOrder(COL.backlog), ["Sel A", "Sel B", "Sel C"]);
