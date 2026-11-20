@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertNotArchivedRow, loadTaskWithAccess } from "@/lib/access";
-import { AppError } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
+import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
@@ -50,7 +51,11 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
-    const { taskId } = await ctx.params;
+    const { taskId: rawTaskId } = await ctx.params;
+    // Un id con caracteres que PostgreSQL no admite (el nulo) es «no encontrado», no un 500 (22021) en los logs.
+    const parsedId = v.id.safeParse(rawTaskId);
+    if (!parsedId.success) throw notFound();
+    const taskId = parsedId.data;
     const task = await loadTaskWithAccess(user, taskId, { archivedAt: true, project: { select: { fileMaxMb: true } } });
     assertNotArchivedRow(task);
     const { projectId } = task;
@@ -73,7 +78,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = await acquireUploadSlot(user.id);
+    release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
     // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
     const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
@@ -86,12 +91,12 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     if (file.size > maxBytes) throw await tooBig();
     if (file.size === 0) throw new AppError("El archivo está vacío.");
 
-    const buffer = Buffer.from(await file.arrayBuffer());
     // Imágenes (salvo SVG, que puede llevar scripts): WebP + miniatura. Si sharp no puede
-    // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera.
+    // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera. Solo sharp necesita el contenido en un
+    // Buffer; el resto se escribe en flujo desde el File, sin una segunda copia en memoria.
     let image: Awaited<ReturnType<typeof processImage>> | null = null;
     if (/^image\//i.test(file.type) && !/svg/i.test(file.type)) {
-      image = await processImage(buffer).catch((err) => {
+      image = await processImage(Buffer.from(await file.arrayBuffer())).catch((err) => {
         if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
         return null;
       });
@@ -99,7 +104,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Como lo escribió la persona (paréntesis, comas, &…); si es muy largo se recorta el nombre, no la extensión.
     const originalName = cleanFileName(file.name, "captura");
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
-    const storedBytes = image ? image.full.length : buffer.length;
+    const storedBytes = image ? image.full.length : file.size;
     // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
     // con el mismo mensaje antes de escribir nada en el disco.
     const early = await attachmentLimitProblem(taskId, storedBytes);
@@ -109,7 +114,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const id = newFileId();
     try {
       if (image) await saveAttachmentFiles(id, image);
-      else await saveRawAttachmentFile(id, buffer);
+      else await saveRawAttachmentFile(id, file);
     } catch (err) {
       await removeAttachmentFiles([id]);
       throw uploadWriteError(err, { action: "attachments.noSpace", bytes: storedBytes, details: { taskId, projectId } });

@@ -1,11 +1,11 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { Prisma } from "../generated/prisma/client";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { attachmentFileNames } from "./release";
-import { attachmentPath, compactImage, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
+import { attachmentPath, compactImage, copyReleaseAttachmentFile, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
 
 /** Trabajo de copiar los adjuntos de las tareas de una release al histórico; se guarda en `Release.attachmentsPending`. */
 export const pendingJobSchema = z.object({
@@ -67,14 +67,18 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
       if (done.has(names[i]!)) continue;
       let rowId: string | null = null;
       try {
-        const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
-        const data = att.isImage ? await compactImage(raw) : raw;
+        // Las imágenes se compactan (son pequeñas: 1280 px como mucho); el resto, hasta el tope de un archivo (cientos de
+        // MB), se copia tal cual sin pasar por la memoria.
+        const source = attachmentPath(att.id, att.isImage ? "full" : "file");
+        const data = att.isImage ? await compactImage(await readFile(source)) : null;
+        const size = data ? data.length : (await stat(source)).size;
         const row = await db.releaseAttachment.create({
-          data: { releaseId, fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ },
+          data: { releaseId, fileName: names[i]!, size, isImage: att.isImage, position: position++ },
           select: { id: true },
         });
         rowId = row.id;
-        await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
+        if (data) await saveReleaseAttachmentFile(row.id, data, "webp");
+        else await copyReleaseAttachmentFile(row.id, source);
         saved.push(row.id);
       } catch (err) {
         // Otro proceso (el contenedor anterior durante un despliegue) ya la copió: misma release y nombre.

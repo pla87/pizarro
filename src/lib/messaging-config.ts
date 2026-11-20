@@ -67,12 +67,12 @@ const EMPTY = (): MessagingConfig => {
 };
 
 /**
- * Configuración efectiva (con caché de 30 s; `fresh` lee la BD siempre). Si la BD falla, conserva la última conocida
- * (o solo las variables del servidor).
+ * Configuración efectiva (con caché de 30 s, o de `maxAgeMs`; `fresh` lee la BD siempre). Si la BD falla, conserva la
+ * última conocida (o solo las variables del servidor).
  */
-export async function loadMessagingConfig(opts: { fresh?: boolean } = {}): Promise<MessagingConfig> {
+export async function loadMessagingConfig(opts: { fresh?: boolean; maxAgeMs?: number } = {}): Promise<MessagingConfig> {
   const s = store();
-  if (!opts.fresh && s.config && Date.now() - s.at < TTL_MS) return s.config;
+  if (!opts.fresh && s.config && Date.now() - s.at < (opts.maxAgeMs ?? TTL_MS)) return s.config;
   return refreshMessagingConfig();
 }
 

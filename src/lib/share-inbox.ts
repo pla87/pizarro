@@ -1,6 +1,10 @@
 import "server-only";
+import { createWriteStream } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeWebStream } from "node:stream/web";
 import { SHARE_MAX_PENDING, SHARE_TTL_MS, type SharedText } from "./share-core";
 import { uploadDir } from "./upload-dir";
 import { newFileId } from "./uploads";
@@ -51,14 +55,19 @@ async function shareAge(dir: string, now: number): Promise<number> {
  * Guarda un envío y devuelve su id. Primero los archivos y al final meta.json (con un nombre temporal y `rename`): un
  * envío a medias no se puede abrir y lo borra la limpieza. Retira los envíos anteriores de la persona que pasen del tope.
  */
-export async function stageShare(userId: string, text: SharedText, files: { name: string; type: string; data: Buffer }[], now = Date.now()): Promise<string> {
+export async function stageShare(userId: string, text: SharedText, files: { name: string; type: string; data: Buffer | Blob }[], now = Date.now()): Promise<string> {
   const shareId = newFileId();
   const dir = shareDir(userId, shareId);
   if (!dir) throw new Error("share: id no válido");
   await mkdir(dir, { recursive: true });
   try {
-    for (const [i, f] of files.entries()) await writeFile(path.join(dir, `${i}.bin`), f.data);
-    const meta: ShareMeta = { ...text, createdAt: now, files: files.map((f) => ({ name: f.name, type: f.type, size: f.data.length })) };
+    // Un Blob (el File del multipart) se escribe en flujo, sin copiarlo antes a otro Buffer.
+    for (const [i, f] of files.entries()) {
+      const file = path.join(dir, `${i}.bin`);
+      if (Buffer.isBuffer(f.data)) await writeFile(file, f.data);
+      else await pipeline(Readable.fromWeb(f.data.stream() as NodeWebStream<Uint8Array>), createWriteStream(file));
+    }
+    const meta: ShareMeta = { ...text, createdAt: now, files: files.map((f) => ({ name: f.name, type: f.type, size: Buffer.isBuffer(f.data) ? f.data.length : f.data.size })) };
     await writeFile(path.join(dir, "meta.json.tmp"), JSON.stringify(meta));
     await rename(path.join(dir, "meta.json.tmp"), path.join(dir, "meta.json"));
   } catch (err) {

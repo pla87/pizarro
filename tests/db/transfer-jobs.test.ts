@@ -1,7 +1,7 @@
 // Exportaciones e importaciones de proyectos en segundo plano: ciclo de vida de los trabajos, cola propia con su
 // concurrencia, tope por persona, permisos de estado y descarga, caducidad y recuperación tras un reinicio.
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, test } from "node:test";
@@ -16,7 +16,7 @@ import { strongEtag } from "../../src/lib/http-range";
 import { writeProjectExport } from "../../src/lib/project-export/write";
 import {
   MAX_JOBS_PER_USER, claimNextJob, listRecentJobs, createExportJob, createImportJob, executeJob, exportsDir, getJobFor, purgeTransferJobs, recoverInterruptedJobs,
-  runNextTransferJob, startTransferWorker, stopTransferWorkerForTests, transferConcurrency, dropPreviousExports,
+  runNextTransferJob, startTransferWorker, stopTransferWorkerForTests, transferConcurrency, transferSweep, dropPreviousExports,
 } from "../../src/lib/transfer-jobs";
 import { purgeProject } from "../../src/lib/project-delete";
 
@@ -468,6 +468,31 @@ describe("reinicios", () => {
     await recoverInterruptedJobs();
     assert.equal(await runNextTransferJob(), job.id);
     assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: job.id } })).status, "DONE");
+  });
+});
+
+describe("barrido periódico", () => {
+  // Cada minuto: en reposo una sola consulta, sin recuperar trabajos ni leer la carpeta de registros de importación.
+  test("en reposo no hace nada más; con trabajos en marcha recupera los muertos; los registros, al arrancar o con trabajo", async () => {
+    const dir = path.join(process.env.UPLOAD_DIR!, "imports");
+    await mkdir(dir, { recursive: true });
+    const journal = path.join(dir, `barrido${++seq}.import-journal`);
+    await writeFile(journal, "p cnoexiste00000000000000\n");
+    const old = new Date(Date.now() - 10 * 60_000);
+    await utimes(journal, old, old);
+    assert.equal(await transferSweep(), false);
+    assert.equal(await exists(journal), true, "en reposo no se lee la carpeta de registros");
+    // En los primeros barridos tras arrancar, sí (un registro abandonado por el proceso anterior).
+    assert.equal(await transferSweep(true), false);
+    assert.equal(await exists(journal), false);
+
+    const u = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    const stale = new Date(Date.now() - 5 * 60_000);
+    const job = await db.projectTransferJob.create({ data: { userId: u.id, kind: "EXPORT", status: "RUNNING", projectId: f.project.id, startedAt: stale, updatedAt: stale, options: { attachments: false, scope: "board" } } as never });
+    assert.equal(await transferSweep(), true);
+    assert.equal((await db.projectTransferJob.findUniqueOrThrow({ where: { id: job.id } })).status, "QUEUED");
+    await db.projectTransferJob.deleteMany({ where: { userId: u.id } });
   });
 });
 

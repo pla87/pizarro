@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import sharp from "sharp";
 import { AppError } from "../src/lib/errors";
-import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, MAX_WAITING, processImage } from "../src/lib/uploads";
+import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, MAX_WAITING, processImage, processImportedImage } from "../src/lib/uploads";
 
 test("redimensiona a 1280px de ancho y convierte a WebP", async () => {
   const png = await sharp({ create: { width: 3000, height: 1500, channels: 3, background: "#123456" } }).png().toBuffer();
@@ -11,6 +11,22 @@ test("redimensiona a 1280px de ancho y convierte a WebP", async () => {
   assert.equal(out.height, 640);
   assert.equal((await sharp(out.full).metadata()).format, "webp");
   assert.ok((await sharp(out.thumb).metadata()).width! <= 480);
+});
+
+// La Documentación y los adjuntos de releases importados solo guardan la imagen completa: la miniatura sobraba.
+test("sin miniatura cuando no se va a guardar ({ thumb: false }), también al importar", async () => {
+  const png = await sharp({ create: { width: 3000, height: 1500, channels: 3, background: "#123456" } }).png().toBuffer();
+  const out = await processImage(png, { thumb: false });
+  assert.equal(out.width, 1280);
+  assert.equal("thumb" in out, false);
+  const webp = await sharp({ create: { width: 800, height: 600, channels: 3, background: "#654321" } }).webp().toBuffer();
+  const kept = await processImportedImage(webp, { thumb: false });
+  assert.equal(kept.full, webp, "el WebP exportado se conserva tal cual");
+  assert.equal("thumb" in kept, false);
+  const converted = await processImportedImage(png, { thumb: false });
+  assert.equal(converted.width, 1280);
+  assert.equal("thumb" in converted, false);
+  assert.ok((await processImportedImage(webp)).thumb.length > 0, "por defecto, con miniatura");
 });
 
 test("no amplía imágenes pequeñas", async () => {

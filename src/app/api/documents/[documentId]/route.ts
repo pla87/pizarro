@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { findDocumentForUser } from "@/lib/documents";
 import { documentDownloadName } from "@/lib/document-kind";
+import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -18,7 +19,19 @@ export const runtime = "nodejs";
  * aislado sin scripts), las imágenes ya son WebP recodificado, el PDF se muestra con el visor del navegador y el resto
  * siempre se descarga como octet-stream. Descargado, el HTML también va como octet-stream (y como adjunto).
  */
-export async function GET(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+export function GET(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  return serve(req, ctx, false);
+}
+
+/**
+ * HEAD: las mismas cabeceras que GET sin abrir el fichero ni registrar una descarga (derivado de GET, Next abría el
+ * flujo del fichero y el descriptor no se cerraba nunca).
+ */
+export function HEAD(req: Request, ctx: { params: Promise<{ documentId: string }> }) {
+  return serve(req, ctx, true);
+}
+
+async function serve(req: Request, ctx: { params: Promise<{ documentId: string }> }, head: boolean): Promise<Response> {
   const t = await getT();
   const user = await getCurrentUser();
   if (!user) return new Response(t("No autorizado"), { status: 401 });
@@ -41,7 +54,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
   const url = new URL(req.url);
   // Solo se vuelve a descargar lo explícito o lo que no tiene vista previa; ver un documento no deja rastro en el log.
   const download = doc.kind === "OTHER" || url.searchParams.has("download");
-  if (download) {
+  if (download && !head) {
     logEvent({
       category: "api", action: "documents.download", message: `Descarga de «${doc.name}»`,
       userId: user.id, userName: user.name, projectId: doc.projectId, path: url.pathname, ip: clientIp(req.headers), details: { documentId: doc.id, size },
@@ -72,24 +85,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ documentId: str
     : doc.kind === "IMAGE" ? "image/webp"
     : "application/octet-stream"; // OTHER: siempre descarga, sin fiarse del tipo que declaró quien lo subió
   const filename = encodeURIComponent(documentDownloadName(doc.name, doc.kind)).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const fullHeaders = {
+    ...headers,
+    "Content-Type": contentType,
+    "Content-Length": String(size),
+    // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
+    [DECLARED_LENGTH_HEADER]: String(size),
+    "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
+  };
+  if (head) return new Response(null, { headers: fullHeaders });
   const stream = Readable.toWeb(createReadStream(file)) as ReadableStream;
-  return new Response(stream, {
-    headers: {
-      ...headers,
-      "Content-Type": contentType,
-      "Content-Length": String(size),
-      // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
-      [DECLARED_LENGTH_HEADER]: String(size),
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
-    },
-  });
-}
-
-/** `If-None-Match` puede traer varios ETags (o `*`); la comparación débil basta para decidir el 304. */
-function ifNoneMatchHas(header: string | null, etag: string): boolean {
-  if (!header) return false;
-  return header.split(",").some((x) => {
-    const v = x.trim().replace(/^W\//, "");
-    return v === "*" || v === etag;
-  });
+  return new Response(stream, { headers: fullHeaders });
 }

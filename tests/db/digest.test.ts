@@ -1,9 +1,13 @@
 // Resumen diario por email, contra PostgreSQL real: lo que entra en cada apartado.
 import assert from "node:assert/strict";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { updateCollabPrefs } from "../../src/actions/collab-prefs";
-import { gatherDigest } from "../../src/lib/periodic-mail";
+import { gatherDigest, sendDueDigests } from "../../src/lib/periodic-mail";
+import { resetShutdownForTests, runShutdown } from "../../src/lib/shutdown";
 import { digestDue } from "../../src/lib/schedule";
 
 describe("resumen diario", () => {
@@ -66,6 +70,72 @@ describe("preferencias del resumen diario", () => {
       const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { dailyDigest: true, digestHour: true, lastDigestAt: true } });
       assert.equal(row.dailyDigest, true);
       assert.equal(digestDue(now, "UTC", { hour: row.digestHour, lastSentAt: row.lastDigestAt }), true, String(last));
+    }
+  });
+});
+
+describe("resumen diario y apagado ordenado", () => {
+  // Antes se reservaba el día (lastDigestAt) y se reunían los datos fuera del trabajo en curso: un reinicio a mitad salía
+  // sin esperar y ese día no llegaba resumen.
+  test("el apagado espera al resumen que se está preparando y no reserva ninguno más", async () => {
+    const outbox = await mkdtemp(path.join(tmpdir(), "pz-digest-outbox-"));
+    const prevOutbox = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = outbox;
+    let release!: () => void;
+    let lockTx: Promise<unknown> | null = null;
+    try {
+      const a = await makeUser();
+      const b = await makeUser();
+      const other = await makeUser();
+      const f = await makeProject({ members: [a, b, other] });
+      await makeTask(f, { title: "Novedad", createdById: other.id });
+      // Solo estas dos personas tienen el resumen pendiente (las de otras pruebas, no).
+      await db.user.updateMany({ where: { id: { notIn: [a.id, b.id] } }, data: { dailyDigest: false } });
+      await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null } });
+      // Con «Task» bloqueada, el primer resumen se queda reuniendo los datos (ya reservado).
+      const locked = new Promise<void>((resolve) => (release = resolve));
+      let lockedReady!: () => void;
+      const ready = new Promise<void>((r) => (lockedReady = r));
+      lockTx = db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`LOCK TABLE "Task" IN ACCESS EXCLUSIVE MODE`);
+        lockedReady();
+        await locked;
+      }, { timeout: 30_000 });
+      await ready;
+      const now = new Date();
+      const pass = sendDueDigests(now);
+      await waitForLockWaiter();
+      const exits: number[] = [];
+      const shutdown = runShutdown("SIGTERM", {
+        flushLogs: async () => {},
+        logEvent: () => {},
+        closeStreams: () => 0,
+        stopListening: async () => ({ closed: 1, drained: async () => 0 }),
+        exit: (code) => void exits.push(code),
+        graceMs: 15_000,
+        flushMs: 100,
+      });
+      await new Promise((r) => setTimeout(r, 300));
+      assert.deepEqual(exits, [], "el apagado espera al resumen en curso");
+      release();
+      await lockTx;
+      assert.equal(await pass, 1);
+      await shutdown;
+      assert.deepEqual(exits, [143]);
+      const rows = await db.user.findMany({ where: { id: { in: [a.id, b.id] } }, select: { email: true, lastDigestAt: true } });
+      const sent = rows.filter((r) => r.lastDigestAt?.getTime() === now.getTime());
+      assert.equal(sent.length, 1, "uno enviado");
+      assert.equal(rows.filter((r) => r.lastDigestAt === null).length, 1, "el otro, sin reservar: sale en el proceso nuevo");
+      const mails = (await readdir(outbox)).filter((n) => n.endsWith(".json"));
+      assert.equal(mails.length, 1);
+      assert.equal(JSON.parse(await readFile(path.join(outbox, mails[0]!), "utf8")).to, sent[0]!.email);
+    } finally {
+      release?.();
+      await lockTx?.catch(() => {});
+      resetShutdownForTests();
+      if (prevOutbox === undefined) delete process.env.MAIL_OUTBOX_DIR;
+      else process.env.MAIL_OUTBOX_DIR = prevOutbox;
+      await rm(outbox, { recursive: true, force: true });
     }
   });
 });

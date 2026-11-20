@@ -4,8 +4,10 @@ import { calendarDaysSince } from "./dates";
 import { appTimeZone } from "./format";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
+import { getInstanceSettings } from "./instance";
 import { logEvent } from "./log";
 import { notifyTask } from "./notify";
+import { isShuttingDown, trackInFlight } from "./shutdown";
 
 // Recordatorio de tareas que esperan a alguien: en una columna con rol WAITING, cuando una tarea lleva
 // `waitingDays` días (por defecto 3) desde que entró (Task.columnEnteredAt, que mantiene un disparador de la
@@ -19,13 +21,15 @@ const RUN_CAP = 5000;
 /** Envía los recordatorios que toquen (`now` inyectable para los tests); devuelve cuántos avisos ha creado. */
 export async function deliverWaitingReminders(now: Date = new Date()): Promise<number> {
   let sent = 0;
+  // La zona horaria guardada en Ajustes (appTimeZone la lee de la copia en memoria que rellena getInstanceSettings).
+  await getInstanceSettings();
   const tz = appTimeZone();
   // Solo se piden a la BD las tareas que ya cumplen el plazo (así las recientes no ocupan sitio y no hay inanición),
   // en lotes y con un cursor (columnEnteredAt, id): una tarea que falla y queda libre no se repite en la misma pasada.
   let cursor: { at: string; id: string } | null = null;
   let seen = 0;
   const failures: Failures = { count: 0, lastError: "" };
-  while (seen < RUN_CAP) {
+  while (seen < RUN_CAP && !isShuttingDown()) {
     const want = Math.min(BATCH, RUN_CAP - seen);
     const due: { id: string; at: Date }[] = await dueWaitingIds(now, tz, cursor, want);
     if (!due.length) break;
@@ -80,23 +84,33 @@ async function remindBatch(
     // Días naturales en la zona de la app: la misma cuenta que resalta la tarjeta del tablero.
     const days = calendarDaysSince(task.columnEnteredAt, now, tz);
     if (days < (task.column.waitingDays ?? DEFAULT_WAITING_DAYS)) continue;
-    let claimed = false;
-    try {
-      // Se reclama la tarea antes de avisar: dos procesos a la vez (o una pasada solapada) no envían dos veces.
-      const claim = await db.task.updateMany({ where: { id: task.id, columnId: task.columnId, waitingNotifiedAt: null }, data: { waitingNotifiedAt: now } });
-      if (!claim.count) continue;
-      claimed = true;
-      const recipient = task.assigneeId ?? task.createdById;
-      if (!recipient) continue;
-      const r = await notifyTask({ type: "WAITING", actorId: null, taskId: task.id, projectId: task.projectId, recipientIds: [recipient], excerpt: String(days), immediate: true });
-      sent += r.recipients.length;
-    } catch (err) {
-      console.error("[waiting]", err);
-      failures.count++;
-      failures.lastError = err instanceof Error ? err.message : String(err);
-      // Si el aviso falló, se libera la reclamación para reintentarlo en la siguiente pasada.
-      if (claimed) await db.task.updateMany({ where: { id: task.id, columnId: task.columnId, waitingNotifiedAt: now }, data: { waitingNotifiedAt: null } }).catch(() => {});
-    }
+    // Con el apagado en marcha no se reclama nada más (lo que quede sale en la primera pasada del proceso nuevo).
+    if (isShuttingDown()) break;
+    // Reclamar, avisar y, si falla, liberar: juntos como trabajo en curso, para que un apagado a mitad lo espere (dentro de
+    // su plazo) en vez de salir con la tarea marcada como avisada sin haber avisado.
+    sent += await trackInFlight(() => remindOne(task, days, now, failures));
   }
   return sent;
+}
+
+/** Reclama la tarea, avisa y devuelve a cuántos; si falla, libera la reclamación para la siguiente pasada. */
+async function remindOne(task: { id: string; projectId: string; columnId: string; assigneeId: string | null; createdById: string | null }, days: number, now: Date, failures: Failures): Promise<number> {
+  let claimed = false;
+  try {
+    // Se reclama la tarea antes de avisar: dos procesos a la vez (o una pasada solapada) no envían dos veces.
+    const claim = await db.task.updateMany({ where: { id: task.id, columnId: task.columnId, waitingNotifiedAt: null }, data: { waitingNotifiedAt: now } });
+    if (!claim.count) return 0;
+    claimed = true;
+    const recipient = task.assigneeId ?? task.createdById;
+    if (!recipient) return 0;
+    const r = await notifyTask({ type: "WAITING", actorId: null, taskId: task.id, projectId: task.projectId, recipientIds: [recipient], excerpt: String(days), immediate: true });
+    return r.recipients.length;
+  } catch (err) {
+    console.error("[waiting]", err);
+    failures.count++;
+    failures.lastError = err instanceof Error ? err.message : String(err);
+    // Si el aviso falló, se libera la reclamación para reintentarlo en la siguiente pasada.
+    if (claimed) await db.task.updateMany({ where: { id: task.id, columnId: task.columnId, waitingNotifiedAt: now }, data: { waitingNotifiedAt: null } }).catch(() => {});
+    return 0;
+  }
 }

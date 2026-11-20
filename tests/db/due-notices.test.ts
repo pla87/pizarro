@@ -219,4 +219,31 @@ describe("avisos de fecha obsoletos", () => {
     assert.equal(await deliverDueNotices(new Date(Date.now() + DUE_NOTIFY_DELAY_MS + 30_000)), 0);
     assert.equal(await db.notification.count({ where: { taskId: task.id, type: "DUE_CHANGED" } }), 0);
   });
+
+  // Se envían en serie: con 100 reclamadas de golpe y un SMTP lento, las últimas pasaban de su reclamo (10 min) antes de
+  // salir y otra pasada las volvía a reclamar y a enviar.
+  test("se reclaman en lotes pequeños: nunca hay más de 10 reclamadas sin terminar", async () => {
+    const { actor, f } = await setup();
+    const rows = [];
+    for (let i = 0; i < 25; i++) {
+      const who = await makeUser();
+      const task = await makeTask(f, { dueDate: new Date("2026-11-03T00:00:00Z") });
+      await db.task.update({ where: { id: task.id }, data: { assigneeId: who.id } });
+      rows.push({ taskId: task.id, recipientId: who.id, actorId: actor.id, fromDue: "2026-11-01", toDue: "2026-11-03", sendAfter: new Date(Date.now() - 60_000) });
+    }
+    await db.pendingDueNotice.createMany({ data: rows });
+    const now = new Date();
+    let calls = 0;
+    let maxClaimed = 0;
+    const counting: typeof notifyTask = async () => {
+      calls++;
+      // Reclamadas y aún sin terminar (las terminadas se borran).
+      maxClaimed = Math.max(maxClaimed, await db.pendingDueNotice.count({ where: { sendAfter: { gt: now } } }));
+      return { recipients: [] };
+    };
+    await deliverDueNotices(now, counting);
+    assert.equal(calls, 25);
+    assert.ok(maxClaimed <= 10, `reclamadas a la vez: ${maxClaimed}`);
+    assert.equal(await db.pendingDueNotice.count(), 0);
+  });
 });

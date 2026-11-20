@@ -139,6 +139,31 @@ describe("acquireUploadSlot", () => {
     for (const r of again) r!();
   });
 
+  test("si el cliente se va mientras espera (señal abortada), sale de la cola en el acto y no recibe el hueco", async () => {
+    const held = await Promise.all(Array.from({ length: MAX_UPLOADS_AT_ONCE }, () => acquireUploadSlot("a", 20)));
+    assert.ok(held.every(Boolean));
+    const ac = new AbortController();
+    const gone = track(acquireUploadSlot("a", 60_000, { signal: ac.signal }));
+    await tick();
+    assert.equal(gone.done, false);
+    const started = Date.now();
+    ac.abort();
+    assert.equal(await gone.p, null);
+    assert.ok(Date.now() - started < 1000, "no espera los 60 s");
+    // Ya abortada: ni entra en la cola.
+    assert.equal(await acquireUploadSlot("a", 60_000, { signal: ac.signal }), null);
+    // El hueco liberado es para la siguiente que espera, no para la que se fue.
+    const next = track(acquireUploadSlot("a", 1000));
+    held[0]!();
+    const got = await next.p;
+    assert.ok(got);
+    got();
+    for (const r of held.slice(1)) r!();
+    const free = await Promise.all(Array.from({ length: MAX_UPLOADS_AT_ONCE }, () => acquireUploadSlot("a", 20)));
+    assert.ok(free.every(Boolean), "no queda ningún hueco ocupado por la que se fue");
+    for (const r of free) r!();
+  });
+
   test("la actividad caduca a los 5 minutos: alguien que dejó de usar la app no limita a quien sube", async () => {
     noteUserActivity("viejo", Date.now() - ACTIVE_WINDOW_MS - 1);
     assert.equal(ACTIVE_WINDOW_MS, 5 * 60_000);

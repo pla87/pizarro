@@ -54,7 +54,8 @@ test("rateLimit: inundar claves normales no borra los bloqueos de seguridad (log
   let now = realNow();
   Date.now = () => now;
   try {
-    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com", "2fa:user:u1", "setup:fail:all"];
+    // También borrar la cuenta y la confirmación para descargar la copia de seguridad (intentos de contraseña o código).
+    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com", "2fa:user:u1", "setup:fail:all", "account-delete:u1", "backup-dl:u1"];
     for (const k of locked) {
       resetRateLimit(k);
       for (let i = 0; i < 6; i++) rateLimit(k, 6, 15 * 60_000);
@@ -100,8 +101,8 @@ test("las claves por IP pasan por rateIp (IPv6 agrupada por /64), también las d
     }
   };
   walk("src");
-  // Una IP sin agrupar en la clave: `${ip}`, `${clientIp(...)}`, `${req.ip}`…
-  const raw = /rateLimit[A-Za-z]*\(\s*`[^`]*\$\{\s*(?:[\w.]*\bip|clientIp\([^)]*\))\s*\}/i;
+  // Una IP sin agrupar en la clave: `${ip}`, `${ip ?? "?"}`, `${clientIp(...)}`, `${req.ip}`…
+  const raw = /rateLimit[A-Za-z]*\(\s*`[^`]*\$\{\s*(?:[\w.]*\bip|clientIp\([^)]*\))\s*(?:\?\?\s*(?:"[^"]*"|'[^']*'))?\s*\}/i;
   const offenders = files.filter((f) => raw.test(readFileSync(f, "utf8")));
   assert.deepEqual(offenders, []);
   assert.match(readFileSync("src/app/api/telegram/webhook/route.ts", "utf8"), /telegram:webhook:bad:\$\{rateIp\(ip\)\}/);

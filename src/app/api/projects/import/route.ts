@@ -96,7 +96,7 @@ async function handlePost(req: Request): Promise<Response> {
     // Antes de recibir nada: el temporal y la importación (lib/transfer-jobs, IMPORT_FACTOR) deben caber en el disco.
     // Sin Content-Length se cuenta con el máximo admitido.
     await assertDiskRoom(uploadDir(), Math.ceil((length ?? max) * 1.5));
-    release = await acquireUploadSlot(user.id);
+    release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
 
     const dir = path.join(/*turbopackIgnore: true*/ uploadDir(), "imports");

@@ -1,7 +1,7 @@
 // Documentación del proyecto contra PostgreSQL real: acceso (miembros, ajenos, privados), límites (número, cuota,
 // tamaño de archivo), subida por la ruta API, descarga y borrado (acción y borrado del proyecto).
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -18,6 +18,7 @@ import { GET as fileRoute } from "../../src/app/api/documents/[documentId]/route
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-docs-"));
 const MB = 1024 * 1024;
+const LONG_TEXT = Buffer.concat([Buffer.alloc(64 * 1024 - 1, 0x61), Buffer.from("ñ"), Buffer.alloc(100_000, 0x62)]);
 
 const row = (projectId: string, createdById: string, size = 10, name = "nota.txt") =>
   ({ projectId, name, mimeType: "text/plain", size, kind: "TEXT" as const, createdById });
@@ -109,6 +110,10 @@ describe("documentación: subida por la ruta API", () => {
       [new File([new Uint8Array(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<p>Camión</p>", "utf16le")]))], "utf16.html", { type: "text/html" }), "HTML"],
       [new File(["PK\u0003\u0004 docx"], "tema.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), "OTHER"],
       [new File(["PK\u0003\u0004 pptx"], "clase.pptx", { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }), "OTHER"],
+      // Más grandes que la muestra con la que se confirma el tipo (el principio del fichero, unos 64 KB): una «ñ» partida
+      // justo en el límite sigue siendo texto, y el fichero se guarda entero (se escribe en flujo desde el File).
+      [new File([new Uint8Array(LONG_TEXT)], "largo.txt", { type: "text/plain" }), "TEXT"],
+      [new File([new Uint8Array(Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(300_000, 0x20)]))], "grande.pdf", { type: "application/pdf" }), "PDF"],
     ];
     const ids: Record<string, string> = {};
     for (const [file, kind] of files) {
@@ -122,6 +127,7 @@ describe("documentación: subida por la ruta API", () => {
     const names = await readdir(path.join(process.env.UPLOAD_DIR!, "documents"));
     for (const id of Object.values(ids)) assert.ok(names.includes(`${id}.bin`));
     assert.ok(!names.some((n) => /nota|guia|doc\.pdf|img/.test(n)));
+    assert.deepEqual(await readFile(documentPath(ids["largo.txt"]!)), LONG_TEXT);
 
     const get = (id: string, q = "", headers: Record<string, string> = {}) =>
       fileRoute(new Request(`http://localhost/api/documents/${id}${q}`, { headers }), { params: Promise.resolve({ documentId: id }) });

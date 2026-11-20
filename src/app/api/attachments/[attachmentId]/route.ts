@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { canAccessProject } from "@/lib/access-cache";
 import type { Variant } from "@/lib/attachment-cache";
 import { attachmentFileStat, getAttachmentMeta } from "@/lib/attachment-lookup";
+import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -23,7 +24,20 @@ async function fail(status: number, text: (t: Awaited<ReturnType<typeof getT>>) 
  * revoke.ts vacía al quitar el acceso) + metadatos del adjunto en caché de 5 s (attachment-cache.ts). El permiso se
  * comprueba siempre en cada petición; lo que se guarda en memoria es solo «a qué proyecto pertenece este adjunto».
  */
-export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: string }> }) {
+export function GET(req: Request, ctx: { params: Promise<{ attachmentId: string }> }) {
+  return serve(req, ctx, false);
+}
+
+/**
+ * HEAD: las mismas cabeceras que GET (tipo, longitud, ETag, Content-Disposition) sin abrir el fichero ni registrar una
+ * descarga. Sin él, Next lo derivaba de GET: abría el flujo del fichero, descartaba el cuerpo y el descriptor no se
+ * cerraba nunca.
+ */
+export function HEAD(req: Request, ctx: { params: Promise<{ attachmentId: string }> }) {
+  return serve(req, ctx, true);
+}
+
+async function serve(req: Request, ctx: { params: Promise<{ attachmentId: string }> }, head: boolean): Promise<Response> {
   const user = await getCurrentUser();
   if (!user) return fail(401, (t) => t("No autorizado"));
   const { attachmentId } = await ctx.params;
@@ -50,7 +64,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   // Solo se registran las descargas explícitas (también si el navegador revalida con 304); ver una imagen
   // (en línea, miniatura o visor) no deja rastro.
   const logDownload = () => {
-    if (!download) return;
+    if (!download || head) return;
     logEvent({
       category: "api", action: "attachments.download", message: `Descarga de «${attachment.originalName}»`,
       userId: user.id, userName: user.name, projectId: attachment.projectId, path: url.pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },
@@ -65,8 +79,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff",
   };
-  const ifNoneMatch = req.headers.get("if-none-match");
-  if (ifNoneMatchHas(ifNoneMatch, etag)) {
+  if (ifNoneMatchHas(req.headers.get("if-none-match"), etag)) {
     logDownload();
     return new Response(null, { status: 304, headers });
   }
@@ -80,29 +93,20 @@ export async function GET(req: Request, ctx: { params: Promise<{ attachmentId: s
   headers.ETag = etag;
   logDownload();
   const filename = encodeURIComponent(attachment.isImage ? attachment.originalName.replace(/\.[^.]+$/, "") + ".webp" : attachment.originalName).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const fullHeaders = {
+    ...headers,
+    "Content-Type": attachment.isImage ? "image/webp" : safeDownloadMime(attachment.mimeType),
+    "Content-Length": String(size),
+    // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
+    [DECLARED_LENGTH_HEADER]: String(size),
+    "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
+  };
+  if (head) return new Response(null, { headers: fullHeaders });
   const stream = Readable.toWeb(createReadStream(attachmentPath(attachment.id, variant))) as ReadableStream;
-  return new Response(stream, {
-    headers: {
-      ...headers,
-      "Content-Type": attachment.isImage ? "image/webp" : safeDownloadMime(attachment.mimeType),
-      "Content-Length": String(size),
-      // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone.
-      [DECLARED_LENGTH_HEADER]: String(size),
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename*=UTF-8''${filename}`,
-    },
-  });
+  return new Response(stream, { headers: fullHeaders });
 }
 
 /** ETag fuerte a partir de la identidad del fichero guardado (id, variante, tamaño y fecha de modificación), sin leerlo. */
 function makeEtag(id: string, variant: Variant, size: number, mtimeMs: number): string {
   return `"${id}-${variant}-${size.toString(36)}-${Math.floor(mtimeMs).toString(36)}"`;
-}
-
-/** `If-None-Match` puede traer varios ETags (o `*`); la comparación débil basta para decidir el 304. */
-function ifNoneMatchHas(header: string | null, etag: string): boolean {
-  if (!header) return false;
-  return header.split(",").some((x) => {
-    const v = x.trim().replace(/^W\//, "");
-    return v === "*" || v === etag;
-  });
 }

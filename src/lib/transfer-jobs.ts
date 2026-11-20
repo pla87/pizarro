@@ -564,12 +564,36 @@ export function stopTransferWorkerForTests(): void {
   state.started = false;
 }
 
+/**
+ * Barridos del principio en los que se revisan siempre los registros de importación (import-journal.ts): los de una
+ * importación que murió con el proceso anterior quedan abandonados a los 2 min (JOURNAL_STALE_MS), así que los primeros
+ * minutos tras arrancar los recogen. Después, solo con trabajos en marcha o en cola (y a diario, en orphanFiles).
+ */
+const JOURNAL_SWEEPS_AFTER_START = 5;
+
+/**
+ * Barrido periódico (cada minuto). En reposo, lo normal, una sola consulta: sin trabajos en marcha ni en cola no hay
+ * trabajos muertos que recuperar ni cola que atender, y no se lee la carpeta de registros. Devuelve si había trabajo.
+ */
+export async function transferSweep(withJournals = false): Promise<boolean> {
+  const busy = await db.projectTransferJob.findFirst({ where: { status: { in: ["RUNNING", "QUEUED"] } }, select: { id: true } });
+  if (busy) await recoverInterruptedJobs();
+  // Además, los ficheros de una importación que murió con su proceso (import-journal.ts).
+  if (busy || withJournals) await recoverImportJournals();
+  if (busy) await pump();
+  return !!busy;
+}
+
 /** Arranca el trabajador una vez por proceso: retoma lo pendiente, vigila los trabajos muertos y atiende la cola. */
 export function startTransferWorker(): void {
   if (state.started) return;
   state.started = true;
-  // Además, los ficheros de una importación que murió con su proceso (import-journal.ts).
-  const sweep = () => isShuttingDown() ? undefined : void recoverInterruptedJobs().then(() => recoverImportJournals()).then(() => pump()).catch((err) => console.error("[transfer] barrido", err));
+  let sweeps = 0;
+  const sweep = () => {
+    if (isShuttingDown()) return;
+    const n = ++sweeps;
+    void transferSweep(n <= JOURNAL_SWEEPS_AFTER_START).catch((err) => console.error("[transfer] barrido", err));
+  };
   setTimeout(() => {
     sweep();
     setInterval(sweep, SWEEP_EVERY_MS).unref?.();

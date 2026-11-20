@@ -1011,7 +1011,12 @@ describe("importar: endurecimiento (ronda 15)", () => {
     for (const n of got) assert.ok(!/[\\/\0]/.test(n) && n !== ".." && n !== "." && n.length > 0 && n.length <= 200, n);
     assert.ok(got.includes("a_b") && got.includes("a_b (2)"));
     assert.equal(safeFileName(".."), "archivo");
-    assert.equal(safeFileName("a\0b/c"), "a_b_c");
+    // El mismo saneado que al subir (cleanFileName): controles fuera, incluidos los de dirección del texto (con U+202E
+    // «exe.pdf» se veía como «fdp.exe»), y lo que no admite un nombre de archivo pasa a «_».
+    assert.equal(safeFileName("a\0b/c"), "ab_c");
+    assert.equal(safeFileName("factura\u202Efdp.exe"), "facturafdp.exe");
+    assert.equal(safeFileName("a<b>:c?.txt"), "a_b__c_.txt");
+    assert.equal(safeFileName("\u202E"), "archivo");
   });
 
   test("enlaces de Google que no son de Google, títulos largos y fechas con desfase", async () => {

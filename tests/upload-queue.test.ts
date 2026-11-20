@@ -104,8 +104,24 @@ describe("withRetry", () => {
     const ac = new AbortController();
     ac.abort();
     calls = 0;
-    await assert.rejects(withRetry(async () => { calls++; throw err; }, { sleep, signal: ac.signal }));
+    // Ya abortada: ni el primer intento.
+    await assert.rejects(withRetry(async () => { calls++; throw err; }, { sleep, signal: ac.signal }), QueueStopped);
+    assert.equal(calls, 0);
+  });
+  // Antes la espera (hasta 65 s con Retry-After) seguía aunque se pulsara «Descartar cambios» y después se enviaba igual.
+  test("abortar durante la espera la corta y no vuelve a intentarlo", async () => {
+    const err = Object.assign(new Error("ocupado"), { status: 429, retryAfterSec: 60 });
+    const ac = new AbortController();
+    let calls = 0;
+    const started = Date.now();
+    const run = withRetry(async () => {
+      calls++;
+      if (calls === 1) setTimeout(() => ac.abort(), 20);
+      throw err;
+    }, { signal: ac.signal });
+    await assert.rejects(run, QueueStopped);
     assert.equal(calls, 1);
+    assert.ok(Date.now() - started < 5_000, "la espera de 60 s se corta");
   });
   test("runQueue con señal abortada deja el resto sin empezar", async () => {
     const ac = new AbortController();
@@ -245,5 +261,49 @@ describe("tope por persona que indica el servidor", () => {
     answer = null; // la pregunta falla: se queda con lo que sabía
     assert.equal(await cap.refresh(), 3);
     assert.equal(asked, 2);
+  });
+});
+
+describe("subidas y «Descartar cambios»", () => {
+  test("createGate: con la señal abortada no se ejecuta lo que esperaba turno ni lo nuevo", async () => {
+    const gate = createGate(() => 1);
+    let release!: () => void;
+    const busy = gate.run(() => new Promise<void>((r) => (release = r)));
+    const ac = new AbortController();
+    let ran = 0;
+    const waiting = gate.run(async () => void ran++, ac.signal);
+    ac.abort();
+    await assert.rejects(waiting, QueueStopped);
+    await assert.rejects(gate.run(async () => void ran++, ac.signal), QueueStopped);
+    release();
+    await busy;
+    assert.equal(ran, 0);
+    // El paso sigue libre para los demás.
+    assert.equal(await gate.run(async () => 7), 7);
+  });
+
+  // Como uploadFile (components/board/upload.ts, que no se puede importar aquí: usa hooks de React y las pruebas corren
+  // con la condición react-server): withRetry → puerta → fetch, con la señal de la tanda en las dos.
+  test("tras abortar en la espera de un 429 no hay más fetch", async () => {
+    const realFetch = globalThis.fetch;
+    const ac = new AbortController();
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: string | URL) => {
+      urls.push(String(input));
+      setTimeout(() => ac.abort(), 20);
+      return new Response(JSON.stringify({ error: "ocupado" }), { status: 429, headers: { "Retry-After": "30" } });
+    }) as typeof fetch;
+    try {
+      const gate = createGate(() => 3);
+      const send = withRetry(() => gate.run(async () => {
+        const res = await fetch("/api/tasks/tarea1/attachments", { method: "POST" });
+        throw Object.assign(new Error("ocupado"), { status: res.status, retryAfterSec: Number(res.headers.get("Retry-After")) });
+      }, ac.signal), { signal: ac.signal });
+      await assert.rejects(send, QueueStopped);
+      await new Promise((r) => setTimeout(r, 50));
+      assert.deepEqual(urls, ["/api/tasks/tarea1/attachments"], "un solo envío: el reintento no sale");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

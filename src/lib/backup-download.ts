@@ -28,3 +28,9 @@ export function consumeBackupDownloadToken(token: string, userId: string): boole
   tokens.delete(k);
   return row.userId === userId && row.expiresAt >= Date.now();
 }
+
+/** ¿Vale el token (sin gastarlo)? Para HEAD: comprobar la descarga no debe impedir hacerla después. */
+export function backupDownloadTokenValid(token: string, userId: string): boolean {
+  const row = tokens.get(key(token.slice(0, 100)));
+  return !!row && row.userId === userId && row.expiresAt >= Date.now();
+}
