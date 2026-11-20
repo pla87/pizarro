@@ -8,7 +8,9 @@
 // la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS); Alt+P abre el selector de proyectos
 // con el foco en el buscador; la rueda sobre el detalle de una tarea no desplaza la columna de detrás; y axe no encuentra
 // controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
-// tarjetas se anuncia en un solo sitio.
+// tarjetas se anuncia en un solo sitio. Además: con red lenta, abrir y cerrar una tarea deprisa no deja la burbuja
+// fantasma; una columna cuya única coincidencia es una fija del panel no dice «Ninguna tarjeta coincide»; y en el móvil un
+// cambio de otra pestaña no saca de la columna elegida a mano con la búsqueda activa.
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
 //   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
@@ -79,6 +81,18 @@ if (only.includes("presencia")) {
   await L.checkEventually("PRES: B cierra la tarea y el aviso de A desaparece al momento (antes, hasta 45 s)", async () => !(await U.dialog(a.page).getByText("Segunda Persona también tiene abierta esta tarea").isVisible()), { timeout: 5000 });
   await a.page.keyboard.press("Escape");
   L.eq("PRES: A no ha sondeado la presencia ni repetido el aviso de la tarea", polls, []);
+  // Red lenta: B abre y cierra la tarea antes de que llegue su anuncio. El cierre sale tras el anuncio (y en el servidor,
+  // si llegara antes, gana): la tarjeta de A no se queda con la burbuja de B (antes, mientras durase el canal).
+  await b.page.route(/\/viewers\?stream=/, async (r) => {
+    if (r.request().method() === "GET") await sleep(1500);
+    await r.continue().catch(() => {});
+  });
+  const beta = L.cardLoc(a.page, "Beta r56").locator("xpath=..").locator("[title='Segunda Persona tiene abierta esta tarea']");
+  await U.openTask(b.page, "Beta r56");
+  await b.page.keyboard.press("Escape");
+  await sleep(3500);
+  L.eq("PRES: con red lenta, abrir y cerrar deprisa no deja la burbuja fantasma en la tarjeta", await beta.count(), 0);
+  await b.page.unroute(/\/viewers\?stream=/);
   // Quien no es miembro del proyecto no recibe nada: el canal responde 404.
   await L.q(`DELETE FROM "ProjectMember" WHERE "projectId"=$1 AND "userId"='qa_user_2'`, [p.id]);
   const status = await b.page.evaluate((pid) => fetch(`/api/projects/${pid}/events`).then((r) => { const s = r.status; r.body?.cancel(); return s; }), p.id);
@@ -152,6 +166,14 @@ if (only.includes("vacio")) {
   await sleep(400);
   L.eq("RELEASE: sin filtro, sin aviso", await note.count(), 0);
   await page.keyboard.press("Escape");
+  // La única coincidencia de una columna es una tarea fija de su panel: no dice «Ninguna tarjeta coincide».
+  const [fixed] = await L.seedTasks(COL.next, ["Fija r56"]);
+  await L.q(`UPDATE "Task" SET evergreen=true WHERE id=$1`, [fixed]);
+  await L.reload(page);
+  await boardSearch(page).fill("Fija r56");
+  await L.checkEventually("VACIO: la búsqueda se aplica (el backlog no tiene resultados)", () => backlog.getByText("Ninguna tarjeta coincide").isVisible());
+  L.check("VACIO: la columna cuya única coincidencia es una fija del panel no dice «Ninguna tarjeta coincide»", !(await L.colLoc(page, COL.next).getByText("Ninguna tarjeta coincide").isVisible()));
+  await boardSearch(page).fill("");
   L.assertNoErrors("vacio", [s]);
   await s.ctx.close();
 }
@@ -175,6 +197,17 @@ if (only.includes("lupa")) {
   await page.locator("[data-mobile-tabs] button", { hasText: /^Backlog/ }).tap();
   await sleep(300);
   L.check("LUPA: elegida a mano una columna sin resultados, se queda y dice «Ninguna tarjeta coincide»", (await activeTab(page)) === COL.backlog && (await L.colLoc(page, COL.backlog).getByText("Ninguna tarjeta coincide").isVisible()));
+  // Un cambio de otra pestaña (o una recarga) no la saca de la columna elegida a mano: el salto es solo al cambiar la
+  // búsqueda o los filtros (antes, matchingIds era un Set nuevo con cada cambio de las tareas).
+  const other = await L.session();
+  await L.liveOpen(other.page);
+  const refreshed = page.waitForResponse((r) => r.request().headers()["rsc"] === "1", { timeout: 10000 }).then(() => true, () => false);
+  await U.drag(other.page, "Beta r56", { column: COL.doing }, COL.backlog);
+  await L.eqEventually("LUPA: la otra pestaña mueve una tarjeta", async () => (await L.dbTask("Beta r56"))?.columnName, COL.doing);
+  L.check("LUPA: el móvil recibe el cambio (recarga el tablero)", await refreshed);
+  await sleep(1000);
+  L.eq("LUPA: tras un cambio de otra pestaña sigue en la columna elegida a mano", await activeTab(page), COL.backlog);
+  await other.ctx.close();
   await page.getByRole("button", { name: "Quitar el filtro" }).last().tap();
   L.assertNoErrors("lupa", [s]);
   await s.ctx.close();

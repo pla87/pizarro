@@ -221,7 +221,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
                   // columna (memorizada dentro de DndContext) no se vuelve a dibujar al escribir en el buscador.
                   <>
                     <span className="[[data-filtering]_&]:hidden">{t("Arrastra tarjetas aquí")}</span>
-                    <span className="hidden [[data-filtering]_&]:inline">{t("Ninguna tarjeta coincide")}</span>
+                    {/* Si coincide alguna tarea fija del panel de esta columna, no se dice que no coincide ninguna. */}
+                    {evergreenIds.length === 0 && <span className="hidden [[data-filtering]_&]:inline">{t("Ninguna tarjeta coincide")}</span>}
                   </>
                 )}
               </p>

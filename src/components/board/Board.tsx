@@ -65,7 +65,7 @@ import { filesFrom, hasFiles, isImageFile, useBlockStrayFileDrops } from "./uplo
 import { claimPaste, isTextTarget, pastedFiles, pasteClaimed, recoverEmptyImages } from "../ui/pasteFiles";
 import { draftKey, readDraft, type EditTaskDraft, type NewTaskDraft } from "./drafts";
 import { mentionsToPlain } from "@/lib/mentions";
-import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, shouldRefreshOnFocus } from "@/lib/focus-refresh";
+import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, shouldRefreshOnFocus } from "@/lib/focus-refresh";
 import { cardCount } from "./count-texts";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
@@ -767,6 +767,15 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const idle = () => document.visibilityState === "visible" && pending.current === 0 && !document.querySelector("[role=dialog]");
     const healthy = () => channelHealthy({ open: channel.current.open, sinceMessageMs: performance.now() - channel.current.heardAt });
     const tick = () => {
+      // Canal abierto pero mudo (un proxy que no deja pasar nada): no da error, así que la presencia se quedaba congelada.
+      // Se da por caído: vuelven los sondeos de la presencia y se abre otro canal.
+      if (channelStalled({ open: channel.current.open, sinceMessageMs: performance.now() - channel.current.heardAt })) {
+        channel.current.open = false;
+        channel.current.gap = true;
+        setLiveStream(null);
+        setLiveProject(null);
+        setSseEpoch((n) => n + 1);
+      }
       if (idle() && backupRefreshDue({ sinceSyncMs: performance.now() - lastSyncAt.current, healthy: healthy() })) refresh();
     };
     const onFocus = () => {
@@ -1222,8 +1231,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     rememberMobileColumn(columnId);
   };
   // Al filtrar o buscar en el móvil, si la columna a la vista se queda sin resultados se salta a la primera que tenga
-  // alguno (sin añadir una entrada al historial ni recordarla: es un salto automático). Solo cuando cambian los resultados,
-  // no al elegir a mano una pestaña sin resultados (que dice «Ninguna tarjeta coincide»).
+  // alguno (sin añadir una entrada al historial ni recordarla: es un salto automático). Solo cuando cambia la búsqueda o
+  // los filtros, no al elegir a mano una pestaña sin resultados (que dice «Ninguna tarjeta coincide») ni cuando llega un
+  // cambio de otra persona o una recarga (matchingIds es un Set nuevo con cada cambio de las tareas).
+  const searchKey = useMemo(() => JSON.stringify([terms, activeFilters]), [terms, activeFilters]);
   useEffect(() => {
     if (!matchingIds || matchingIds.size === 0 || !window.matchMedia("(max-width: 767px)").matches) return;
     const has = (id: string | undefined) => !!id && ((items[id]?.length ?? 0) > 0 || (shownEvergreen[id]?.length ?? 0) > 0);
@@ -1233,7 +1244,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     const frame = requestAnimationFrame(() => setMobileColumn(target.id));
     return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchingIds]);
+  }, [searchKey]);
   useEffect(() => {
     showColumnRef.current = showMobileColumn;
   });

@@ -8,7 +8,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { AI_PLAN_ZIP_FOLDER, aiPlanZipRoot } from "@/lib/ai-plan";
 import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict, type ZipEntry } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipHeadResponse, zipSlotBusy, zipVersionConflict, type ZipEntry, type ZipSendOutcome } from "@/lib/release-zip";
 import { findZipTicket, issueZipTicket } from "@/lib/zip-ticket";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
@@ -19,6 +19,9 @@ import * as v from "@/lib/validation";
 import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
+
+/** HEAD no se sirve: derivado de GET, reservaba el hueco del ZIP, marcaba el paquete en el vale y leía los ficheros. */
+export const HEAD = () => zipHeadResponse("GET, POST");
 
 const bodySchema = z.object({
   items: z
@@ -162,23 +165,27 @@ async function serveZip(
   if (!slot) return new Response(t("Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos."), { status: 429, headers: { "Retry-After": "5" } });
   const part = mode.part;
   opts.ticket?.started(part);
-  // Con vale, el paquete cuenta como terminado al soltar el hueco: la página pide entonces el siguiente.
-  const releaseSlot = () => {
+  // Con vale, el paquete cuenta como terminado solo si se envió entero (la página pide entonces el siguiente); si se
+  // cortó, falló a medias (un fichero cambió) o se canceló, queda como fallido y la página lo avisa.
+  const failedText = t("No se pudieron descargar los adjuntos");
+  const releaseSlot = (outcome: ZipSendOutcome) => {
     slot();
-    opts.ticket?.finished(part);
+    if (outcome === "ok") opts.ticket?.finished(part);
+    else opts.ticket?.failed(part, 500, failedText);
   };
   // El hueco se suelta cuando se ha enviado el ZIP entero (o se cancela la descarga), no al terminar de prepararlo.
-  // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria.
+  // Primera pasada en flujo: tamaño y CRC de cada fichero; el ZIP no se junta en memoria. Si falla aquí, el error lo
+  // apunta en el vale quien llama (GET), con la respuesta que corresponda.
   let zipPart: Awaited<ReturnType<typeof prepareZipPart>>;
   try {
     zipPart = await prepareZipPart(entries, pkg, req.signal);
   } catch (err) {
-    releaseSlot();
+    slot();
     throw err;
   }
   const fileCount = zipPart.entries.length;
   if (fileCount === 0) {
-    releaseSlot();
+    slot();
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
   logEvent({

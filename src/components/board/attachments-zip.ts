@@ -23,20 +23,26 @@ const START_TIMEOUT_MS = 45_000;
 
 type TicketStatus = { started: number[]; done: number[]; errors: Record<string, { status: number; message: string }> };
 
+/** Pausa entre consultas del vale: cada segundo los primeros 5 s (los errores rápidos) y luego cada 3 s. */
+export function zipPollDelay(elapsedMs: number): number {
+  return elapsedMs < 5000 ? 1000 : 3000;
+}
+
 /**
- * Espera a que el paquete `part` empiece a enviarse (el último) o termine (los demás: cada persona descarga un ZIP a la
- * vez, así que el siguiente se pide cuando acaba el anterior), consultando el vale cada segundo. Devuelve su error, si falla.
+ * Espera a que el paquete `part` termine de enviarse entero (cada persona descarga un ZIP a la vez, así que el siguiente
+ * se pide cuando acaba el anterior; y el último también, para avisar solo si de verdad ha llegado), consultando el vale.
+ * Devuelve su error, si falla (también si se corta o se cancela la descarga).
  */
-async function waitForPart(statusUrl: string, part: number, untilDone: boolean): Promise<{ status: number; message: string } | null> {
+async function waitForPart(statusUrl: string, part: number): Promise<{ status: number; message: string } | null> {
   const since = Date.now();
   for (;;) {
-    await pause(1000);
+    await pause(zipPollDelay(Date.now() - since));
     const res = await fetch(statusUrl, { cache: "no-store" });
     if (!res.ok) return { status: res.status, message: "" };
     const st = (await res.json()) as TicketStatus;
     const error = st.errors[String(part)];
     if (error) return error;
-    if (st.done.includes(part) || (!untilDone && st.started.includes(part))) return null;
+    if (st.done.includes(part)) return null;
     if (!st.started.includes(part) && Date.now() - since > START_TIMEOUT_MS) return { status: 0, message: "" };
   }
 }
@@ -72,7 +78,7 @@ export async function downloadAttachmentsZip(opts: {
     for (let part = 1; part <= total; part++) {
       const name = fileName(part, total);
       startDownload(`${url}?ticket=${ticket}&part=${part}${plan.v ? `&v=${plan.v}` : ""}&name=${encodeURIComponent(name)}`, name);
-      const error = await waitForPart(`${url}?ticket=${ticket}&status=1`, part, part < total);
+      const error = await waitForPart(`${url}?ticket=${ticket}&status=1`, part);
       if (error) {
         changed = error.status === 409;
         throw new Error(error.message);

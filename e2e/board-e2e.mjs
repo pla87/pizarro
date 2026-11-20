@@ -796,6 +796,19 @@ if (only.includes("det")) {
   await sleep(500);
   await p.mouse.click(5, 5);
   L.check("R43: sin cambios en la descripción cierra sin preguntar", await d.waitFor({ state: "detached", timeout: 4000 }).then(() => true, () => false));
+  // El icono del enlace externo de la tarjeta (un <span>, no un enlace anidado): clic central y Ctrl+clic abren una
+  // pestaña nueva con el enlace, sin abrir el detalle.
+  {
+    await s.ctx.route("https://example.com/**", (r) => r.fulfill({ status: 200, contentType: "text/html", body: "<title>r43</title>" }));
+    const ext = L.cardLoc(p, "Detalle R43 editado").locator("[data-external-link]");
+    for (const [label, click] of [["clic central", () => ext.click({ button: "middle" })], ["Ctrl+clic", () => ext.click({ modifiers: ["Control"] })]]) {
+      const [tab] = await Promise.all([s.ctx.waitForEvent("page", { timeout: 5000 }).catch(() => null), click()]);
+      await tab?.waitForURL(/example\.com\/r43/, { timeout: 5000 }).catch(() => {});
+      L.check(`R56: ${label} en el enlace de la tarjeta abre una pestaña nueva`, tab !== null && tab.url().includes("example.com/r43"), tab?.url() ?? "sin pestaña");
+      await tab?.close();
+      L.eq(`R56: ${label} en el enlace no abre el detalle`, await p.locator("[role=dialog]").count(), 0);
+    }
+  }
   // El editor con barra reescribe «* a» como «- a» al abrir: eso no cuenta como cambio (ni tras hacer clic dentro).
   await L.q(`UPDATE "Task" SET description=$1 WHERE id=$2`, ["* uno\n* dos\n\nTexto con **negrita**", tid]);
   await L.reload(p);

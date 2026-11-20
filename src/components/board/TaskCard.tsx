@@ -456,12 +456,23 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
         )}
         {task.linkUrl && (
           // Atajo para el ratón (un <span>, no un enlace: dentro de la tarjeta, que es un botón, sería un control anidado). Con
-          // teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona).
+          // teclado o lector de pantalla, el enlace está en el detalle (la tarjeta lo menciona). Clic, Ctrl/⌘+clic y clic
+          // central abren el enlace en una pestaña nueva, como un enlace (el central sin el desplazamiento automático).
           <span
             data-external-link
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               window.open(task.linkUrl!, "_blank", "noopener,noreferrer");
+            }}
+            onAuxClick={(e) => {
+              if (e.button !== 1) return;
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(task.linkUrl!, "_blank", "noopener,noreferrer");
+            }}
+            onMouseDown={(e) => {
+              if (e.button === 1) e.preventDefault();
             }}
             onPointerDown={(e) => e.stopPropagation()}
             className="cursor-pointer hover:text-brand-600"

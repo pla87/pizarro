@@ -52,7 +52,9 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: stri
   if (found) {
     const stream = streamParam(req);
     if (stream) releaseTaskView(stream, found.user.id, found.taskId);
-    else leaveTask(found.taskId, found.user.id);
+    // También el aviso con caducidad: con `?stream=` el GET pudo caer en él (canal desconocido, p. ej. ya cerrado).
+    // Solo avisa a los canales si la persona estaba anotada.
+    leaveTask(found.taskId, found.user.id);
   }
   return new Response(null, { status: 204 });
 }

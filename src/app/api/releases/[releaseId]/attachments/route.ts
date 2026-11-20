@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipHeadResponse, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict } from "@/lib/release-zip";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -13,6 +13,9 @@ import { releaseAttachmentFileSize, releaseAttachmentStream } from "@/lib/upload
 import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
+
+/** HEAD no se sirve: derivado de GET, reservaba el hueco del ZIP y leía los ficheros (ver zipHeadResponse). */
+export const HEAD = () => zipHeadResponse("GET");
 
 /** ZIP con las copias compactas de los adjuntos guardadas al desplegar una release. */
 export async function GET(req: Request, ctx: { params: Promise<{ releaseId: string }> }) {
