@@ -78,7 +78,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = await acquireUploadSlot(user.id);
+    release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
     if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
     // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
     const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {

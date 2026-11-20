@@ -79,22 +79,38 @@ function release(userId: string, small: boolean) {
  * Reserva un hueco de subida para `userId`; si no le toca ya (todos ocupados, o ya tiene las que le corresponden),
  * espera en cola hasta `waitMs`. Devuelve la función que lo libera, o null si no quedó hueco a tiempo.
  * `declaredBytes`: Content-Length de la petición; si es menor que SMALL_BODY_BYTES, no cuenta para el tope por persona.
+ * `signal` (la de la petición): si el cliente se va mientras espera (cerró la pestaña, «Descartar cambios»), deja la cola
+ * en el acto y devuelve null; antes seguía en ella hasta 60 s y, al tocarle, ocupaba un hueco con una subida muerta.
  */
-export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS, opts: { declaredBytes?: number | null } = {}): Promise<(() => void) | null> {
+export async function acquireUploadSlot(userId: string, waitMs = WAIT_MS, opts: { declaredBytes?: number | null; signal?: AbortSignal } = {}): Promise<(() => void) | null> {
+  const { signal } = opts;
+  if (signal?.aborted) return null;
   noteUserActivity(userId);
   const small = opts.declaredBytes !== undefined && opts.declaredBytes !== null && opts.declaredBytes < SMALL_BODY_BYTES;
   const got = await new Promise<boolean>((resolve) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const waiter: Waiter = { userId, small, grant: () => { if (timer) clearTimeout(timer); resolve(true); } };
-    slots.waiting.push(waiter);
-    pump(); // si le toca ya, grant se llama aquí mismo
-    if (!slots.waiting.includes(waiter)) return;
-    timer = setTimeout(() => {
+    const giveUp = () => {
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", giveUp);
       const i = slots.waiting.indexOf(waiter);
       if (i >= 0) slots.waiting.splice(i, 1);
       resolve(false);
       pump();
-    }, waitMs);
+    };
+    const waiter: Waiter = {
+      userId,
+      small,
+      grant: () => {
+        if (timer) clearTimeout(timer);
+        signal?.removeEventListener("abort", giveUp);
+        resolve(true);
+      },
+    };
+    slots.waiting.push(waiter);
+    pump(); // si le toca ya, grant se llama aquí mismo
+    if (!slots.waiting.includes(waiter)) return;
+    timer = setTimeout(giveUp, waitMs);
+    signal?.addEventListener("abort", giveUp, { once: true });
   });
   if (!got) return null;
   let released = false;

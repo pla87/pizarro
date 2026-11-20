@@ -58,7 +58,7 @@ async function handlePost(req: Request): Promise<Response> {
   const biggest = await db.project.aggregate({ _max: { fileMaxMb: true }, where: visibleProjectsWhere(user) });
   const maxBytes = effectiveFileMaxMb(biggest._max.fileMaxMb ?? FILE_MAX_DEFAULT_MB) * 1024 * 1024;
   if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) return failed("too_big");
-  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: length });
+  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: length, signal: req.signal });
   if (!release) return failed("busy");
   try {
     let form: FormData;

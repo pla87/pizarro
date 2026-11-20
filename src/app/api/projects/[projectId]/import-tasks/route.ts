@@ -56,7 +56,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
   const visible = pid.success && (await assertProjectAccess(user, pid.data).then(() => true, () => false));
   if (!visible) return fail(404, "No encontrado o sin acceso.");
   if (!rateLimit(`import-tasks:body:${user.id}`, 10, 60_000)) return fail(429, "Demasiadas importaciones seguidas. Espera un momento.", { "Retry-After": "60" });
-  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: declared });
+  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: declared, signal: req.signal });
   if (!release) return fail(429, "Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", { "Retry-After": "5" });
   try {
     let text: string;
