@@ -7,6 +7,7 @@ import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { toLocale } from "@/i18n/core";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   }
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${Math.round(report.pdf.length / 1024)} KB)`,
+    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${logSize(report.pdf.length)})`,
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
     details: { tasks: report.taskCount, bytes: report.pdf.length },
   });

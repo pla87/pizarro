@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
+import { countReleasesOn, deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
 import { RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS } from "../../src/lib/release";
 import { redoLast, undoLast } from "../../src/actions/undo";
 
@@ -124,6 +124,53 @@ describe("deployRelease", () => {
     now = await titles();
     assert.deepEqual(now, { [a.id]: "Uno", [b.id]: "R1F9: Dos", [fija.id]: "Fija" });
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, f.columns.done);
+  });
+});
+
+describe("numeración y historial de un despliegue", () => {
+  test("borrar la release más reciente no libera su número (sus tareas conservan el código); deshacer un despliegue sí", async () => {
+    const { f } = await setup();
+    const day = new Date().toISOString().slice(0, 10);
+    const next = async () => expectOk(await countReleasesOn({ projectId: f.project.id, dayIso: day })).nextNumber;
+    const deploy = async (title: string) => {
+      const t = await makeTask(f, { title, columnId: f.columns.done });
+      return expectOk(await deployRelease({ projectId: f.project.id, title, content: "x", destination: "IN_PRODUCTION", taskIds: [t.id] }));
+    };
+    await deploy("Uno");
+    const second = await deploy("Dos");
+    assert.equal(await next(), 3);
+    expectOk(await deleteRelease(second.releaseId));
+    assert.equal(await next(), 3, "el 2 ya está en los títulos de sus tareas");
+    // Un número con el que se generó el texto antes de borrar (2) ya no vale.
+    const t = await makeTask(f, { title: "Tres", columnId: f.columns.done });
+    expectFail(await deployRelease({ projectId: f.project.id, title: "Tres", content: "x", destination: "IN_PRODUCTION", taskIds: [t.id], number: 2 }), /vuelve a generar el texto/);
+    expectOk(await deployRelease({ projectId: f.project.id, title: "Tres", content: "x", destination: "IN_PRODUCTION", taskIds: [t.id], number: 3 }));
+    assert.match((await db.task.findUniqueOrThrow({ where: { id: t.id } })).title, /^R3[A-Z]+1: Tres$/);
+    // Deshacer el despliegue quita la release y el código de los títulos: el 3 vuelve a estar libre.
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await next(), 3);
+    // Borrar una release anterior a la última no cambia nada.
+    const rows = await db.release.findMany({ where: { projectId: f.project.id }, orderBy: { number: "asc" } });
+    assert.deepEqual(rows.map((r) => r.number), [1]);
+    expectOk(await deleteRelease(rows[0]!.id));
+    assert.equal(await next(), 3);
+  });
+
+  test("cada tarea que sale apunta en su historial el movimiento a «En producción» o el archivado; deshacer lo quita", async () => {
+    const { f, prod } = await setup();
+    const a = await makeTask(f, { title: "A", columnId: f.columns.done, position: 1000 });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.done, position: 2000 });
+    const fija = await makeTask(f, { title: "Fija", columnId: f.columns.done, position: 3000 });
+    await db.task.update({ where: { id: fija.id }, data: { evergreen: true } });
+    const events = async () => (await db.taskEvent.findMany({ where: { projectId: f.project.id }, orderBy: { taskId: "asc" } })).map((e) => [e.taskId, e.code, JSON.parse(e.label)]);
+    expectOk(await deployRelease({ projectId: f.project.id, title: "Semana", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id, b.id, fija.id] }));
+    const label = { k: "Movió la tarea a «{to}» al desplegar la release «{title}»", p: { to: "En producción", title: "Semana" } };
+    assert.deepEqual(await events(), [[a.id, "move", label], [b.id, "move", label]].sort((x, y) => String(x[0]).localeCompare(String(y[0]))));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, prod.id);
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await events(), []);
+    expectOk(await deployRelease({ projectId: f.project.id, title: "Archivo", content: "x", destination: "ARCHIVE", taskIds: [a.id] }));
+    assert.deepEqual(await events(), [[a.id, "archive", { k: "Archivó la tarea al desplegar la release «{title}»", p: { title: "Archivo" } }]]);
   });
 });
 

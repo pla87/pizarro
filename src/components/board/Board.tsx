@@ -40,7 +40,7 @@ import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit"
 import { boardDragA11y } from "./drag-a11y";
 import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel";
 import { NewColumnButton } from "./NewColumnButton";
-import { useCardActions } from "./cardActions";
+import { duplicatedMessage, useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
 import { PENDING_COPY_PREFIX, isPendingCopy, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
@@ -1081,7 +1081,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     if (!ids.length) return;
     const ok = await confirm({
       title: ids.length === 1 ? t("Borrar tarea") : t("Borrar tareas"),
-      message: ids.length === 1 ? t("¿Borrar definitivamente la tarea seleccionada y sus adjuntos?") : t("¿Borrar definitivamente las {n} tareas seleccionadas y sus adjuntos?", { n: ids.length }),
+      message: ids.length === 1 ? t("¿Borrar la tarea seleccionada y sus adjuntos? Puedes deshacerlo justo después.") : t("¿Borrar las {n} tareas seleccionadas y sus adjuntos? Puedes deshacerlo justo después.", { n: ids.length }),
       confirmLabel: t("Borrar"),
       danger: true,
     });
@@ -1306,13 +1306,13 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
       setTasks((prev) => prev.filter((x) => x.id !== tempId));
       return toast(res.error, "error");
     }
-    const { copyNotice, ...copy } = res.data;
+    const { copyNotice, repeatDropped, ...copy } = res.data;
     // La provisional y la de verdad se cambian a la vez (un solo dibujo).
     setTasks((prev) => {
       const rest = prev.filter((x) => x.id !== tempId && x.id !== copy.id);
       return [...rest, copy];
     });
-    toast(t("Tarea duplicada"), "undo");
+    toast(duplicatedMessage({ repeatDropped }, t), "undo");
     if (copyNotice) toast(copyNotice, "error");
   };
 

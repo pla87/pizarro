@@ -1,11 +1,15 @@
+// ZIP de adjuntos de una release: se prepara en flujo (primera pasada para el CRC) y se envía en flujo.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { createReadStream, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { crc32 } from "node:zlib";
-import { buildZip } from "../src/lib/zip";
+import { acquireZipSlot, prepareZipPart, zipPartBody, type ZipEntry } from "../src/lib/release-zip";
+import { streamZip } from "../src/lib/zip-stream";
+
+const dir = mkdtempSync(path.join(tmpdir(), "pz-zip-"));
 
 interface Parsed {
   name: string;
@@ -51,8 +55,27 @@ const files = [
   { name: "C1_Vista_Árbol.webp", data: Buffer.from([0, 1, 2, 3, 255, 254]) },
 ];
 
-test("ZIP: estructura, nombres UTF-8, tamaños, CRC y contenido", () => {
-  const parsed = parseZip(buildZip(files, new Date(2026, 5, 15, 10, 20, 30)));
+/** Entradas que leen de disco en flujo, como las rutas de descarga. */
+function diskEntries(list: { name: string; data: Buffer }[]): ZipEntry[] {
+  return list.map((f, i) => {
+    const file = path.join(dir, `e${i}-${Buffer.from(f.name).toString("hex")}`);
+    writeFileSync(file, f.data);
+    return { id: `a${i}`, name: f.name, size: f.data.length, open: () => createReadStream(file, { highWaterMark: 4 }) };
+  });
+}
+
+/** Prepara el paquete con todas las entradas y lo descarga entero como haría la ruta. */
+async function download(entries: ZipEntry[], now?: Date): Promise<{ zip: Buffer; bytes: number; files: number }> {
+  const part = await prepareZipPart(entries, { items: entries.map((_, i) => i), bytes: 0, oversize: false });
+  const release = acquireZipSlot(`zip-test-${Math.random()}`)!;
+  const zip = Buffer.from(await new Response(zipPartBody(part, release, { now })).arrayBuffer());
+  return { zip, bytes: part.bytes, files: part.entries.length };
+}
+
+test("ZIP: estructura, nombres UTF-8, tamaños, CRC y contenido; Content-Length exacto", async () => {
+  const { zip, bytes } = await download(diskEntries(files), new Date(2026, 5, 15, 10, 20, 30));
+  assert.equal(zip.length, bytes);
+  const parsed = parseZip(zip);
   assert.equal(parsed.length, 2);
   parsed.forEach((p, i) => {
     assert.equal(p.name, files[i]!.name);
@@ -62,17 +85,48 @@ test("ZIP: estructura, nombres UTF-8, tamaños, CRC y contenido", () => {
   });
 });
 
-test("ZIP: fecha DOS y ZIP vacío", () => {
-  const zip = buildZip(files.slice(0, 1), new Date(2026, 5, 15, 10, 20, 30));
+test("ZIP: fecha DOS y ZIP vacío", async () => {
+  const { zip } = await download(diskEntries(files.slice(0, 1)), new Date(2026, 5, 15, 10, 20, 30));
   assert.equal(zip.readUInt16LE(10), (10 << 11) | (20 << 5) | 15);
   assert.equal(zip.readUInt16LE(12), ((2026 - 1980) << 9) | (6 << 5) | 15);
-  assert.equal(parseZip(buildZip([])).length, 0);
+  const parts: Buffer[] = [];
+  for await (const c of streamZip([])) parts.push(c);
+  assert.equal(parseZip(Buffer.concat(parts)).length, 0);
 });
 
-test("ZIP: lo abre python zipfile (si hay python3)", (t) => {
-  const dir = mkdtempSync(path.join(tmpdir(), "zip-"));
+test("ZIP: un fichero que ya no está en disco se omite; si cambió de tamaño vale el que tiene", async () => {
+  const entries = diskEntries(files);
+  const missing: ZipEntry = { id: "zz", name: "no.webp", size: 5, open: () => createReadStream(path.join(dir, "no-existe")) };
+  const grown = { ...entries[1]!, size: 1 };
+  const { zip, files: count } = await download([entries[0]!, missing, grown]);
+  assert.equal(count, 2);
+  assert.deepEqual(parseZip(zip).map((p) => [p.name, p.size]), [[files[0]!.name, files[0]!.data.length], [files[1]!.name, files[1]!.data.length]]);
+});
+
+test("ZIP: si un fichero cambia entre la medida y el envío, el flujo se corta con error y suelta el hueco", async () => {
+  const file = path.join(dir, "cambia.bin");
+  writeFileSync(file, "antes");
+  const entries: ZipEntry[] = [{ id: "c1", name: "cambia.bin", size: 5, open: () => createReadStream(file) }];
+  const part = await prepareZipPart(entries, { items: [0], bytes: 0, oversize: false });
+  writeFileSync(file, "despu");
+  const user = `zip-test-change`;
+  const release = acquireZipSlot(user)!;
+  await assert.rejects(new Response(zipPartBody(part, release)).arrayBuffer());
+  const again = acquireZipSlot(user);
+  assert.ok(again, "hueco libre tras el error");
+  again();
+});
+
+test("ZIP: si se aborta la petición mientras se mide, deja de leer y el paquete queda vacío", async () => {
+  const ac = new AbortController();
+  ac.abort();
+  const part = await prepareZipPart(diskEntries(files), { items: [0, 1], bytes: 0, oversize: false }, ac.signal);
+  assert.deepEqual(part, { entries: [], bytes: 0 });
+});
+
+test("ZIP: lo abre python zipfile (si hay python3)", async (t) => {
   const file = path.join(dir, "t.zip");
-  writeFileSync(file, buildZip(files));
+  writeFileSync(file, (await download(diskEntries(files))).zip);
   let out: string;
   try {
     out = execFileSync(

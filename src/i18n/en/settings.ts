@@ -41,7 +41,7 @@ export const settings: Record<string, string> = {
   "{n} resultados": "{n} results",
   "1 resultado": "1 result",
   "Ninguna release coincide con «{query}».": "No release matches “{query}”.",
-  "¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. Las tareas no cambian.": "Delete the release “{title}” from the history? Its attachments are deleted too. Tasks are not changed.",
+  "¿Borrar la release «{title}» del histórico? Se borran también sus adjuntos. No se puede deshacer. Las tareas no cambian: conservan su código R{number} y la siguiente release no reutilizará ese número.": "Delete the release “{title}” from the history? Its attachments are deleted too. This cannot be undone. Tasks are not changed: they keep their R{number} code and the next release will not reuse that number.",
   "Release borrada": "Release deleted",
   "¿Borrar los {n} adjuntos de esta release? El texto se conserva.": "Delete the {n} attachments of this release? The text is kept.",
   "Adjuntos borrados": "Attachments deleted",

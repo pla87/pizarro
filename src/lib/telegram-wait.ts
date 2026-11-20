@@ -3,14 +3,14 @@
 // pestaña, el código de este enlace se borra y ya no puede conectar nada: hay que dejar de esperar y avisar (antes se
 // seguía esperando los 10 minutos del enlace).
 
-export interface TelegramWaitLink {
+interface TelegramWaitLink {
   /** Bot al que lleva el enlace. */
   bot: string;
   /** Caducidad del código del enlace (ISO): identifica el código pendiente. */
   expiresAt: string;
 }
 
-export interface TelegramWaitView {
+interface TelegramWaitView {
   available: boolean;
   botUsername: string;
   connected: boolean;

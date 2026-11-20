@@ -21,6 +21,8 @@ interface ModalProps {
   bodyClassName?: string;
   /** Contenido que reemplaza la cabecera estándar. */
   header?: React.ReactNode;
+  /** Botones de la cabecera estándar, justo a la izquierda de la X (p. ej. «Copiar tarea» e «Importar tarea»). */
+  headerActions?: React.ReactNode;
   /** Nombre accesible del diálogo cuando no hay `title` que lo dé (p. ej. con `header` propio). */
   ariaLabel?: string;
   /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
@@ -127,7 +129,7 @@ function inertBackground(keep: HTMLElement, keepModals: boolean): () => void {
   };
 }
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, headerActions, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
   const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
@@ -270,9 +272,19 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         {header ?? (
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
             <h2 id={titleId} className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-            <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
-              <X size={18} />
-            </button>
+            {headerActions ? (
+              // Como en la cabecera del detalle de una tarea: los botones y la X juntos, con la misma separación.
+              <div className="flex shrink-0 items-center gap-2">
+                {headerActions}
+                <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="btn-icon" onClick={onClose} aria-label={t("Cerrar")}>
+                <X size={18} />
+              </button>
+            )}
           </div>
         )}
         <div className={cn("min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 [--sticky-top:-1rem]", bodyClassName)}>{children}</div>

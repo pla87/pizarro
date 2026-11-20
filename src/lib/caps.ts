@@ -33,11 +33,6 @@ export async function assertTaskCapacity(client: Client, projectId: string, addi
   throw new AppError(t("Este proyecto tiene {active} de 1000 tareas activas: no caben {adding} más. Archiva o borra alguna.", { active, adding }));
 }
 
-/** ¿Cabe una tarea activa más? (para la repetición automática, que no debe fallar al mover la tarjeta). */
-export async function hasTaskCapacity(client: Client, projectId: string): Promise<boolean> {
-  return (await client.task.count({ where: { projectId, archivedAt: null } })) < MAX_ACTIVE_TASKS_PER_PROJECT;
-}
-
 export async function assertLabelCapacity(client: Client, projectId: string): Promise<void> {
   await lockProject(client, projectId);
   if ((await client.label.count({ where: { projectId } })) >= MAX_LABELS_PER_PROJECT) {

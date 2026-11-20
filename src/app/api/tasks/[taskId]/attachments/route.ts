@@ -21,6 +21,7 @@ import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLeng
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
 import { cleanFileName } from "@/lib/file-name";
+import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
@@ -128,7 +129,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     }
     const attachment = created.attachment;
     logEvent({
-      category: "api", action: "attachments.upload", message: `${image ? "Imagen" : "Archivo"} «${attachment.originalName}» subido (${Math.round(storedBytes / 1024)} KB)`,
+      category: "api", action: "attachments.upload", message: `${image ? "Imagen" : "Archivo"} «${attachment.originalName}» ${image ? "subida" : "subido"} (${logSize(storedBytes)})`,
       userId: user.id, userName: user.name, path: `/api/tasks/${taskId}/attachments`, ip, durationMs: performance.now() - start,
       details: {
         taskId, attachmentId: attachment.id, original: fileInfo, storedBytes, mime: mimeType, isImage: !!image,

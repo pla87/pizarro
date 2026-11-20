@@ -257,3 +257,19 @@ describe("duplicar en el panel de fijas", () => {
     assert.equal(await db.task.count({ where: { projectId: f.project.id } }), before);
   });
 });
+
+describe("duplicar una tarea que se repite", () => {
+  test("la copia nace sin repetición y el resultado lo dice (repeatDropped), para avisar a quien duplica", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const weekly = await makeTask(f, { title: "Semanal", recurrence: "WEEKLY" });
+    const copy = expectOk(await duplicateTask(weekly.id));
+    assert.equal(copy.recurrence, "NONE");
+    assert.equal(copy.repeatDropped, true);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: weekly.id } })).recurrence, "WEEKLY", "la original sigue repitiéndose");
+    // Sin repetición en la original, nada que avisar.
+    const plain = await makeTask(f, { title: "Normal" });
+    assert.equal(expectOk(await duplicateTask(plain.id)).repeatDropped, undefined);
+  });
+});

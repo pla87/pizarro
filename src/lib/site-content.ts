@@ -5,11 +5,11 @@
 import type { T } from "../i18n/shared";
 
 /** Icono de cada función de la lista compacta (los dibuja scripts/build-site.mjs). */
-export type SiteIcon =
+type SiteIcon =
   | "calendar" | "inbox" | "docs" | "report" | "flag" | "repeat" | "filter" | "columns" | "lock" | "shield" | "eye" | "export";
 
 /** Integraciones de la portada («Se conecta con…»); build-site les pone icono y enlaces a sus guías. */
-export type SiteConnect = "email" | "messaging" | "google-login" | "google-docs";
+type SiteConnect = "email" | "messaging" | "google-login" | "google-docs";
 
 // `_priceEur`: ya no lo usa ningún texto (el precio está en su sección, con licenseFaq y buyNote); se mantiene la firma.
 export function siteText(t: T, _priceEur: number) {

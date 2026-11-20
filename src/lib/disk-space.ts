@@ -2,6 +2,7 @@ import "server-only";
 import { mkdir, statfs } from "node:fs/promises";
 import { AppError } from "./errors";
 import { logEvent } from "./log";
+import { logSize } from "./format-size";
 
 /** Mensaje único cuando no cabe lo que se va a escribir (comprobación previa o ENOSPC durante la escritura). */
 export const NO_SPACE_MESSAGE = "No hay espacio suficiente en el disco del servidor para esta operación.";
@@ -72,7 +73,7 @@ export function uploadWriteError(err: unknown, what: { action: string; bytes: nu
   if (!isNoSpaceError(err)) return err;
   logEvent({
     level: "error", category: "system", action: what.action,
-    message: `Disco lleno: no se pudo guardar una subida de ${Math.round(what.bytes / 1024)} KB`,
+    message: `Disco lleno: no se pudo guardar una subida de ${logSize(what.bytes)}`,
     details: { bytes: what.bytes, ...what.details, error: err instanceof Error ? err.message : String(err) },
   });
   return new AppError(UPLOAD_NO_SPACE_MESSAGE, 507, "disk_full");

@@ -86,7 +86,7 @@ describe("zipPlanToken", () => {
 });
 
 describe("zipRequestMode y conflicto de versión", () => {
-  const entries = [{ id: "a1", name: "x", size: 10, read: async () => new Uint8Array() }];
+  const entries = [{ id: "a1", name: "x", size: 10, open: async function* () {} }];
   const v = zipPlanToken(entries, 25);
   const part = (q: string) => zipRequestMode(`http://x/api?${q}`)!;
 
@@ -100,7 +100,7 @@ describe("zipRequestMode y conflicto de versión", () => {
     assert.equal(zipVersionConflict(part("part=1"), entries, 25, "m"), null);
     assert.equal(zipVersionConflict(part(`part=1&v=${v}`), entries, 25, "m"), null);
     assert.equal(zipVersionConflict({ kind: "plan" }, entries, 25, "m"), null);
-    const changed = [...entries, { id: "b2", name: "y", size: 5, read: async () => new Uint8Array() }];
+    const changed = [...entries, { id: "b2", name: "y", size: 5, open: async function* () {} }];
     const res = zipVersionConflict(part(`part=1&v=${v}`), changed, 25, "Cambiaron");
     assert.equal(res?.status, 409);
     assert.equal(await res?.text(), "Cambiaron");
@@ -157,7 +157,7 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
 
 describe("sizedZipEntries", () => {
   test("consulta los tamaños en paralelo (como mucho 16 a la vez), conserva el orden y omite los ausentes", async () => {
-    const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, read: async () => new Uint8Array() }));
+    const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, open: async function* () {} }));
     let active = 0;
     let peak = 0;
     const entries = await sizedZipEntries(candidates, async (c) => {

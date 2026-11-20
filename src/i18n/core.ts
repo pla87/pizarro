@@ -9,7 +9,7 @@ import { EN } from "./en";
 import { makeTWith, translateWith, type Locale, type T, type Vars } from "./shared";
 
 export { intlLocale, toLocale } from "./shared";
-export type { Locale, T, Vars } from "./shared";
+export type { Locale, T } from "./shared";
 
 export function translate(locale: Locale, text: string, vars?: Vars): string {
   return translateWith(locale === "en" ? EN : undefined, text, vars);
