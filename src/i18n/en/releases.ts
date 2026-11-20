@@ -26,4 +26,7 @@ export const releases: Record<string, string> = {
   // «Generar Release» con un filtro activo en el tablero
   "El filtro del tablero no se aplica aquí: la lista incluye 1 tarea que el filtro oculta.": "The board filter doesn't apply here: the list includes 1 task the filter hides.",
   "El filtro del tablero no se aplica aquí: la lista incluye {n} tareas que el filtro oculta.": "The board filter doesn't apply here: the list includes {n} tasks the filter hides.",
+
+  // ZIP de adjuntos: un POST sin ?plan=1 (el envío directo de antes de la v1.60) ya no se sirve
+  "Pide primero el plan de descarga (?plan=1); si la página es de antes de actualizar Pizarro, recárgala.": "Request the download plan first (?plan=1); if the page was opened before Pizarro was updated, reload it.",
 };

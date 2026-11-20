@@ -210,6 +210,16 @@ export function importWhenOnline<T>(load: () => Promise<T>): Promise<T> {
   });
 }
 
+/**
+ * ¿Ha pedido el navegador ahorrar datos (`navigator.connection.saveData`: «Ahorro de datos» de Chrome en Android, o la
+ * cabecera `Save-Data`)? Entonces no se precarga nada por adelantado (diálogos en reposo, enlaces al pasar el ratón, el
+ * detalle de la tarea al hacer clic): solo se descarga lo que se abre. Fuera del navegador, o sin la API (Firefox,
+ * Safari), false.
+ */
+export function saveDataOn(nav: unknown = typeof navigator === "undefined" ? undefined : navigator): boolean {
+  return (nav as { connection?: { saveData?: unknown } } | undefined)?.connection?.saveData === true;
+}
+
 /** Una petición acaba de llegar al servidor: si se daba por perdida la conexión, ha vuelto. */
 export function reportReachable(): void {
   if (!offline) return;

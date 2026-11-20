@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
+import { saveDataOn } from "@/lib/connection";
 
 type Props = Omit<ComponentProps<typeof Link>, "href" | "prefetch"> & { href: string };
 
@@ -11,10 +12,13 @@ type Props = Omit<ComponentProps<typeof Link>, "href" | "prefetch"> & { href: st
  * teclado o tocarlo. Con la precarga normal de Next, cada router.refresh() del tablero (al volver a la pestaña, al
  * llegar un cambio en vivo…) volvía a pedir la página de cada enlace visible: ~10 peticiones por pestaña y por cambio.
  * (prefetch={false} también quita la precarga de Next al pasar el ratón: por eso se hace aquí con router.prefetch.)
+ * Con «Ahorro de datos» no se precarga: la página se pide al pulsar.
  */
 export function HoverPrefetchLink({ href, onMouseEnter, onFocus, onTouchStart, ...props }: Props) {
   const router = useRouter();
-  const prefetch = () => router.prefetch(href);
+  const prefetch = () => {
+    if (!saveDataOn()) router.prefetch(href);
+  };
   return (
     <Link
       {...props}

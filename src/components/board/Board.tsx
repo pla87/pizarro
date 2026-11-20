@@ -4,7 +4,7 @@ import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { lazyDialog } from "../lazyDialog";
-import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh, saveDataOn } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -68,8 +68,8 @@ import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, shou
 import { cardCount } from "./count-texts";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
-// se cargan al abrirlos y se precargan cuando el navegador está libre. Si al abrirlos no hay red, esperan a que vuelva
-// (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
+// se cargan al abrirlos y se precargan cuando el navegador está libre (salvo con «Ahorro de datos»). Si al abrirlos no
+// hay red, esperan a que vuelva (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
 // Suspense (lazyDialog): al abrir uno en un tablero recién abierto el tablero no se cambia por el esqueleto de columnas.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
@@ -371,8 +371,10 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dragHandle = useCoarsePointer();
 
   // Precarga de los diálogos cuando el navegador queda libre: abrirlos es instantáneo, también si luego se va la red. Si
-  // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos.
+  // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos. Con «Ahorro de datos» no se precargan:
+  // cada uno llega al abrirlo.
   useEffect(() => {
+    if (saveDataOn()) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {

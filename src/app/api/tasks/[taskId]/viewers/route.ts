@@ -19,20 +19,18 @@ async function load(ctx: { params: Promise<{ taskId: string }> }) {
   return projectId && (await canAccessProject(user, projectId)) ? { user, taskId: parsed.data, projectId } : null;
 }
 
-/** Id del canal en vivo de la pestaña (`?stream=`, lo da el saludo del canal), o null. */
-function streamParam(req: Request): string | null {
-  const s = new URL(req.url).searchParams.get("stream");
-  return s && /^[0-9a-f-]{36}$/.test(s) ? s : null;
-}
-
 /**
- * Id del montaje del diálogo (`?open=`, lo elige el diálogo al abrirse): el GET y el DELETE de un mismo montaje llevan el
- * mismo, así el cierre de uno no quita la tarea que ha vuelto a abrir otro. Sin él (una pestaña con la versión anterior),
- * todos sus montajes cuentan como uno, como antes.
+ * Canal en vivo de la pestaña (`?stream=`, lo da el saludo del canal) e id del montaje del diálogo (`?open=`, lo elige el
+ * diálogo al abrirse): el GET y el DELETE de un mismo montaje llevan los mismos, así el cierre de uno no quita la tarea
+ * que ha vuelto a abrir otro. Sin `stream`, el aviso con caducidad; con `stream`, `open` es obligatorio (lo manda el
+ * diálogo desde la v1.60): sin él, o con alguno mal formado, null (400).
  */
-function openParam(req: Request): string {
-  const s = new URL(req.url).searchParams.get("open");
-  return s && /^[A-Za-z0-9]{1,16}$/.test(s) ? s : "";
+function liveParams(req: Request): { stream: string; open: string } | { stream: null; open: null } | null {
+  const sp = new URL(req.url).searchParams;
+  const stream = sp.get("stream");
+  if (stream === null) return { stream: null, open: null };
+  const open = sp.get("open");
+  return /^[0-9a-f-]{36}$/.test(stream) && open && /^[A-Za-z0-9]{1,16}$/.test(open) ? { stream, open } : null;
 }
 
 /**
@@ -40,17 +38,19 @@ function openParam(req: Request): string {
  * cuenta como actividad en el tablero («Quién está trabajando»).
  *
  * Con `?stream=<id del canal en vivo de la pestaña>&open=<id del montaje del diálogo>` basta un aviso al abrir: la tarea
- * cuenta como abierta hasta que se cierra ese montaje del diálogo (DELETE con los mismos parámetros) o el canal, y los cambios llegan por el canal (evento `presence`). Sin canal (no soportado o
- * caído), el diálogo repite el aviso cada 60 s y cada aviso vale 150 s.
+ * cuenta como abierta hasta que se cierra ese montaje del diálogo (DELETE con los mismos parámetros) o el canal, y los
+ * cambios llegan por el canal (evento `presence`). Sin canal (no soportado o caído), sin parámetros: el diálogo repite el
+ * aviso cada 60 s y cada aviso vale 150 s.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
+  const live = liveParams(req);
+  if (!live) return new Response((await getT())("Datos no válidos"), { status: 400 });
   const found = await load(ctx);
   if (!found) return new Response((await getT())("No encontrado"), { status: 404 });
   // Cada anuncio puede añadir una tarea o un montaje en memoria (con tope en presence.ts): también con tope de ritmo.
   if (!rateLimit(`viewers:${found.user.id}`, 120, 60_000)) return new Response((await getT())("Demasiadas peticiones"), { status: 429, headers: { "Retry-After": "60" } });
   notePresence(found.projectId, found.user.id, found.user.name);
-  const stream = streamParam(req);
-  const held = stream !== null && holdTaskView(stream, found.user.id, found.taskId, found.projectId, openParam(req));
+  const held = live.stream !== null && holdTaskView(live.stream, found.user.id, found.taskId, found.projectId, live.open);
   const others = held
     ? taskViewersExcept(found.taskId, found.projectId, found.user.id)
     : noteTaskViewer(found.taskId, found.projectId, found.user.id, found.user.name);
@@ -61,11 +61,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ taskId: string 
 export async function DELETE(req: Request, ctx: { params: Promise<{ taskId: string }> }) {
   // Modifica estado (la presencia): misma comprobación de origen que el resto de rutas que escriben.
   if (!isSameOrigin(req)) return new Response(null, { status: 403 });
+  const live = liveParams(req);
+  if (!live) return new Response(null, { status: 400 });
   const found = await load(ctx);
   // Tope de ritmo también aquí: cada cierre con un `open` desconocido se apunta unos segundos (cierres adelantados).
   if (found && rateLimit(`viewers-close:${found.user.id}`, 240, 60_000)) {
-    const stream = streamParam(req);
-    if (stream) releaseTaskView(stream, found.user.id, found.taskId, openParam(req));
+    if (live.stream !== null) releaseTaskView(live.stream, found.user.id, found.taskId, live.open);
     // También el aviso con caducidad: con `?stream=` el GET pudo caer en él (canal desconocido, p. ej. ya cerrado).
     // Solo avisa a los canales si la persona estaba anotada.
     leaveTask(found.taskId, found.user.id);

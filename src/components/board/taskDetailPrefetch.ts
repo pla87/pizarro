@@ -1,4 +1,5 @@
 import { getTaskDetail } from "@/actions/tasks";
+import { saveDataOn } from "@/lib/connection";
 
 // El detalle de una tarea se pide al hacer clic en la tarjeta, sin esperar a que el diálogo monte y cargue.
 // El diálogo recoge ese resultado si es de la misma tarea y reciente; se usa una sola vez (no se reutiliza
@@ -8,6 +9,9 @@ type Detail = ReturnType<typeof getTaskDetail>;
 let entry: { id: string; at: number; promise: Detail } | null = null;
 
 export function prefetchTaskDetail(id: string): void {
+  // Con «Ahorro de datos» el código del diálogo no está precargado y en una red lenta puede tardar más de MAX_AGE_MS:
+  // el detalle adelantado caducaría y el diálogo lo pediría otra vez. Lo pide solo el diálogo al montarse.
+  if (saveDataOn()) return;
   if (entry && entry.id === id && Date.now() - entry.at < MAX_AGE_MS) return;
   entry = { id, at: Date.now(), promise: getTaskDetail(id) };
   // Un fallo de red lo trata quien lo recoja; sin nadie, no queda una promesa rechazada sin atender.

@@ -266,16 +266,22 @@ Guardas que conviene conocer:
   `<input type=file>` de importar) lleva `data-pz-layer=""`; si no, el clic lo atraviesa y cierra el diálogo.
 - Presencia (ronda 56): `src/lib/presence.ts`, en memoria y por proceso. El canal en vivo manda `event: ping` cada 25 s
   y `presence` (JSON calculado una vez por proyecto) al cambiar; el detalle anuncia la tarea con
-  `/api/tasks/[id]/viewers?stream=…&open=…`. Sin canal sano (más de 60 s sin mensajes) se vuelve al sondeo de respaldo y
+  `/api/tasks/[id]/viewers?stream=…&open=…` (con `stream`, `open` es obligatorio: sin él, 400; sin canal va sin
+  parámetros y cada aviso vale 150 s). Sin canal sano (más de 60 s sin mensajes) se vuelve al sondeo de respaldo y
   se reabre el canal. Las revocaciones cortan el canal en el mismo proceso; la comprobación de acceso del canal es cada
   5 min. Una ruta de larga duración nueva debe comprobar `req.signal.aborted` antes de registrar nada.
 - Tarjetas del tablero: las 15 primeras de cada columna no llevan `content-visibility` (evita el salto al cargar) y el asa
   táctil se pinta siempre y se muestra con `pointer-coarse:`; la casilla, el asa y el enlace externo son `<span>` (la
   tarjeta es un `role=button` con `aria-pressed`).
 - Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
-  un vale (`src/lib/zip-ticket.ts`, en memoria, por persona y proyecto) y la página consulta su estado. El
-  `Content-Length` lo pone `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera
-  interna `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
+  un vale (`POST …/release-attachments?plan=1`; `src/lib/zip-ticket.ts`, en memoria, por persona y proyecto), cada
+  paquete se baja con `GET ?ticket=&part=&v=` y la página consulta su estado. Un POST sin `?plan=1` responde 400 (el
+  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe). El `Content-Length` lo pone
+  `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera interna
+  `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
+- Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
+  adelantado (diálogos del tablero en reposo, `HoverPrefetchLink`, el detalle adelantado al hacer clic). Una precarga
+  nueva debe mirarlo. Los `Link` de Next con su precarga normal no lo miran (Next solo lo hace en el router de `pages/`).
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
 - «Compartir → Pizarro» (ronda 57): el manifiesto declara `share_target` (POST multipart a `/api/share`, fuera del proxy
