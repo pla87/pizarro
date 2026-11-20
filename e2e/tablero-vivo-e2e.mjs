@@ -1,4 +1,4 @@
-// Ronda 56 (tablero): el canal en vivo manda un evento `ping` con nombre (la recarga de respaldo se espacia con el canal
+// Tablero en vivo, filtros, móvil y capas (ronda 56): el canal en vivo manda un evento `ping` con nombre (la recarga de respaldo se espacia con el canal
 // sano: reglas probadas en tests/focus-refresh.test.ts) y la presencia («quién está aquí» y «quién tiene abierta la tarea»)
 // llega por él, sin sondeos, con dos personas a la vez; el panel de filtros no se mueve al marcar un tipo (el segundo clic
 // sigue dentro); con un filtro o una búsqueda sin resultados las columnas dicen «Ninguna tarjeta coincide», el tablero
@@ -8,7 +8,7 @@
 // la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS); Alt+P abre el selector de proyectos
 // con el foco en el buscador; y la rueda sobre el detalle de una tarea no desplaza la columna de detrás.
 // Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r56-tablero-e2e.mjs
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
 //   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda
 import fs from "node:fs";
 import os from "node:os";

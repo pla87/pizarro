@@ -21,12 +21,13 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **437** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 388 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
-| **Tablero** | | **587** | |
+| **Tablero** | | **651** | |
 | Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/tablero-cabecera-e2e.mjs` | 42 | ~1 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/tablero-fijas-e2e.mjs` | 75 | ~1 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 64 | ~1,5 min |
 | **Detalle de la tarea** | | **44** | |
 | Comentarios a la vez y red lenta (caza de bugs 48c) | `e2e/detalle-comentarios-e2e.mjs` | 44 | ~1 min |
 | **Copias de tareas** | | **120** | |
@@ -70,7 +71,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **2906** | |
+| **Total** | | **2970** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -221,6 +222,29 @@ encima mandan su id al servidor; al responder no quedan tarjetas fantasma. Misma
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs   # PART=scroll,copia,vaiven,foco,provisional
+```
+
+### Canal en vivo, presencia, filtros, móvil y capas (ronda 56)
+
+El canal en vivo del tablero manda un evento `ping` con nombre (antes un comentario que el navegador no ve) en menos de
+30 s, el saludo lleva el id del canal y el estado completo de la presencia llega al conectar; con el canal abierto el
+tablero no pide `/presence` ni repite el aviso de la tarea abierta (las reglas de la recarga de respaldo, 15 min con el
+canal sano y 2 sin él, están en `tests/focus-refresh.test.ts`). Con dos personas: B aparece en la cabecera de A en unos
+segundos, la tarjeta de A muestra que B tiene abierta la tarea, los dos detalles se avisan y al cerrar B el aviso de A
+desaparece al momento; sin acceso al proyecto el canal responde 404. El panel de filtros no se mueve al marcar un tipo
+(1500 y 1100 px) y el segundo clic cae dentro. Con una búsqueda sin resultados las columnas dicen «Ninguna tarjeta
+coincide», el tablero avisa con «Limpiar filtros» (que la quita) y «Generar Release» con un filtro avisa de cuántas tareas
+ocultas incluye. A 390 px: la lupa da el foco al campo al primer toque, la búsqueda salta a la columna con resultados
+(elegida a mano una sin resultados, se queda), sin columna recordada se abre la primera con tarjetas, las pestañas llevan
+degradado por el lado en que quedan más, la columna nueva se muestra al crearla y al volver se abre la última vista.
+Con el detalle de una tarea abierto no hay botones flotantes del tablero ni nada tapa los del diálogo (390 y 900 px; en
+escritorio sigue la copia de «Nueva tarea» encima del fondo) y en *Documentación*, en el móvil, «Nueva tarea» y «Varias
+tareas» van en el pie de la hoja. CLS al cargar el tablero en el móvil táctil por debajo de 0,02 (con el asa a la vista;
+en escritorio no se ve). Alt+P abre el selector de proyectos con el foco en el buscador sin escribir la letra, y la rueda
+sobre el detalle no desplaza la columna de detrás. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda
 ```
 
 ## Detalle de la tarea
