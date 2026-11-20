@@ -285,13 +285,14 @@ If you lose the server, you need the recovery kit and your external destination:
    ```
 
 2. **Put in your keys.** In `/opt/pizarro/deploy/.env`, replace `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` and
-   `BACKUP_KEY` with the ones in the kit and add your external destination's `BACKUP_S3_*` variables.
+   `BACKUP_KEY` with the ones in the kit (if the kit says «no definida», "not set", for any of them, delete its line)
+   and add your external destination's `BACKUP_S3_*` variables.
 3. **Restore and start:**
 
    ```bash
    cd /opt/pizarro/deploy
    docker compose pull app
-   docker compose up -d postgres
+   docker compose up -d --wait postgres
    docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files
    docker compose up -d
    ```
@@ -417,10 +418,17 @@ docker compose logs --tail 80 app
 If the disk is almost full or memory is short, the app doesn't start or keeps restarting: free up space
 (`docker system prune` removes old images) or upgrade the server.
 
-If the log says `No se puede conectar con PostgreSQL` ("can't connect to PostgreSQL"), the app can't reach the
-database: it says so after trying for 10 seconds, along with the server and the reason (no answer, connection refused
-or no such name). Check that the database container is running (`docker compose ps`) or, on Railway, the
-`DATABASE_URL` variable.
+If the log says `PostgreSQL aún no responde` ("PostgreSQL isn't answering yet"), the app is waiting for the database:
+it retries every 3 seconds for 3 minutes and starts as soon as it answers. If after that time it says
+`No se puede conectar con PostgreSQL` ("can't connect to PostgreSQL"), along with the server and the reason (no
+answer, connection refused or no such name), check that the database container is running (`docker compose ps` and
+`docker compose logs --tail 50 postgres`) or, on Railway, that the PostgreSQL service is active and the `DATABASE_URL`
+variable. With the app already running, the same message appears if the database stops answering for 20 seconds.
+
+If the log says `una migración de la base de datos falló a medias (P3009)` ("a database migration failed halfway"),
+an update didn't finish preparing the database and the app won't start until it is resolved. The log itself explains
+what to do, with the command ready to copy; the details are in the
+[technical documentation](../../INSTALL.md#81-una-migración-falló-a-medias-p3009) (in Spanish).
 
 ### Emails don't arrive
 

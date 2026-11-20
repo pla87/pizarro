@@ -77,7 +77,7 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/dist ./dist
 COPY --from=migrator /app/migrator ./migrator
 COPY changelog.json ./
-COPY scripts/start.sh ./scripts/start.sh
+COPY scripts/start.sh scripts/migrate.mjs ./scripts/
 # Sin permiso de escritura para grupo ni otros (los directorios de "node" de arriba siguen siendo suyos).
 RUN chmod -R go-w /app
 

@@ -167,8 +167,8 @@ El script se puede repetir sin riesgo. Hace esto:
 1. Comprueba que están Docker 24+ y el plugin `docker compose`.
 2. Pregunta el dominio (o la dirección, en modo local) y crea `deploy/.env` con `DOMAIN` y `APP_URL`.
 3. Genera `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY` con aleatorios fuertes (`openssl rand`, o `/dev/urandom` si no hay `openssl`). **Nunca pisa un secreto que ya existe** en el `.env`.
-4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con esos tres secretos y qué hacer si se pierde el servidor.
-5. Descarga la imagen publicada (`docker compose pull app`), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen en el servidor en su lugar.
+4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con las cuatro claves que hacen falta para recuperar las copias (`SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`) y los pasos para restaurar en un servidor nuevo (los de la sección 6.3). La contraseña de PostgreSQL no va en el kit: el servidor nuevo crea la suya.
+5. Descarga las imágenes (`docker compose pull`: la de Pizarro, y también las de Caddy y PostgreSQL, que así reciben sus actualizaciones sin cambiar de versión mayor), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen de Pizarro en el servidor en su lugar (y descarga solo las de Caddy y PostgreSQL).
 6. Muestra la dirección del asistente de configuración y el **código de un solo uso** que lee del log de la app.
 
 > **Guarda `recovery-kit.txt` FUERA del servidor** (gestor de contraseñas, otro equipo) y bórralo de aquí si quieres. Sin `BACKUP_KEY` las copias no se pueden leer; si se pierde o cambia `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
@@ -251,7 +251,7 @@ La imagen publicada incluye **amd64 y arm64** (servidores normales y, por ejempl
 - **Instalaciones existentes (paso manual y opcional).** Siguen funcionando igual (la app usa `pizarro`). Para migrarlas: haz una copia (sección 4.3), añade a `deploy/.env` `APP_DB_USER="pizarro_app"` y `APP_DB_PASSWORD="<aleatoria: openssl rand -hex 24>"`, y ejecuta
   ```bash
   cd /opt/pizarro/deploy
-  docker compose up -d postgres      # recrea el contenedor con las variables nuevas
+  docker compose up -d --wait postgres   # recrea el contenedor con las variables nuevas y espera a que responda
   docker compose exec -T postgres sh /docker-entrypoint-initdb.d/10-app-role.sh
   docker compose up -d app
   ```
@@ -395,11 +395,11 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pi
 
 (No hace falta repetir `--domain`: se conserva el de `deploy/.env`.)
 
-**Solo la imagen** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`):
+**Solo las imágenes** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`). `docker compose pull` descarga la de Pizarro y también las de Caddy y PostgreSQL:
 
 ```bash
 cd /opt/pizarro/deploy
-docker compose pull app
+docker compose pull
 docker compose up -d
 docker compose logs -f app
 ```
@@ -468,7 +468,7 @@ Opciones: `--files` (también los ficheros), `--files-only` (solo los ficheros; 
 ```bash
 cd /opt/pizarro/deploy
 docker compose pull app
-docker compose up -d postgres
+docker compose up -d --wait postgres
 # Ver las copias disponibles
 docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --list
 # Restaurar la base de datos y los ficheros
@@ -534,9 +534,35 @@ Notas:
 | La app queda *unhealthy* y `/api/health` dice `low_disk_space` | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
 | `/api/health` dice `uploads_not_writable` | El volumen de subidas no se puede escribir | `docker compose restart app` (el arranque corrige el propietario); revisa el disco. |
 | `/api/health` dice `database` | PostgreSQL parado o contraseña distinta | `docker compose ps`; si cambiaste `POSTGRES_PASSWORD` después de la primera instalación, vuelve a la original (la base ya se creó con ella). |
+| El log dice `[start] PostgreSQL aún no responde` | Al arrancar, la app espera a la base de datos (reintenta cada 3 s durante 3 min y arranca en cuanto responde) | Si se resuelve solo, nada. Si a los 3 min sale `[start] ERROR: No se puede conectar con PostgreSQL`, el contenedor se reinicia y lo vuelve a intentar: comprueba `docker compose ps`, `docker compose logs --tail 50 postgres`, el disco (`df -h`) y la memoria (`free -m`); en Railway, que el servicio de PostgreSQL está activo y que `DATABASE_URL` es `${{Postgres.DATABASE_URL}}`. |
+| El log dice `ERROR: una migración de la base de datos falló a medias (P3009)` | Una actualización empezó a migrar la base y no terminó (disco lleno, corte, error de la migración); Prisma no aplica ninguna más hasta resolverlo y la app no arranca | Ver 8.1. |
 | El log dice `No se puede conectar con PostgreSQL` | La app no llega a la base de datos (lo dice tras 20 s intentándolo, con el servidor y el motivo) | Comprueba que PostgreSQL está en marcha (`docker compose ps`) y `DATABASE_URL`. Si la base está lejos o tarda en responder, sube el tope con `DATABASE_CONNECT_TIMEOUT_MS` (ms; por defecto 20000). |
 | La app se reinicia sola a menudo | Falta de memoria o un error | `docker compose logs app` y *Administración → Logs*; sube `APP_MEM_LIMIT`/`APP_HEAP_MB` si hay RAM. |
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
 | En red local por HTTP, con muchas ventanas de Pizarro abiertas, las páginas tardan en cargar o no guardan | Límite de 6 conexiones por servidor de HTTP/1.1 (ver 3.3) | Cierra o minimiza ventanas que no uses, o sirve Pizarro por HTTPS (HTTP/2). |
 | No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Integraciones → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |
+
+### 8.1 Una migración falló a medias (P3009)
+
+Si una migración falla mientras se aplica (disco lleno, un corte, un error de la propia migración), Prisma la deja apuntada como fallida en la tabla `_prisma_migrations` y en cada arranque siguiente se niega a seguir con `Error: P3009`. El arranque lo reconoce y escribe debajo `[start] ERROR: una migración de la base de datos falló a medias (P3009): <nombre>` con los pasos y el comando ya completo. Qué hacer:
+
+1. **Corrige la causa.** El error de la migración sale en el log del arranque en el que falló (`docker compose logs app`; en Railway, los *Deploy Logs* de ese despliegue). Si fue el disco, libera espacio antes de seguir.
+2. **Mira qué hace la migración** (`prisma/migrations/<nombre>/migration.sql` en el repositorio, en la etiqueta de la versión que instalabas). Si no llegó a cambiar nada, o deshaces a mano lo que dejó hecho, márcala como revertida: en el siguiente arranque se aplica de nuevo, entera.
+   - **Docker Compose** (en `/opt/pizarro/deploy`):
+     ```bash
+     docker compose run --rm --no-deps -w /app/migrator app ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
+     docker compose up -d
+     ```
+   - **Railway**, con la CLI de Railway (`railway link` al proyecto) y un despliegue de la app en marcha (tras un despliegue fallido, Railway mantiene activo el anterior):
+     ```bash
+     railway ssh --service <servicio de la app>
+     cd /app/migrator && ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
+     ```
+     Después, *Redeploy* del último despliegue. Si no hay ningún despliegue en marcha, hazlo desde tu ordenador con Docker y la dirección pública de la base (servicio de PostgreSQL → *Variables* → `DATABASE_PUBLIC_URL`), con la imagen de la versión que instalabas:
+     ```bash
+     docker run --rm -e DATABASE_URL='<DATABASE_PUBLIC_URL>' -w /app/migrator ghcr.io/pla87/pizarro:<versión> ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
+     ```
+3. **Si no sabes qué dejó hecho**, no la marques: restaura la copia que hiciste antes de actualizar (sección 6) y vuelve a actualizar.
+
+Si la terminaste a mano (aplicaste tú el resto de `migration.sql`), usa `--applied <nombre>` en lugar de `--rolled-back <nombre>`: Prisma la da por aplicada y sigue con las siguientes.

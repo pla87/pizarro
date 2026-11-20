@@ -291,7 +291,7 @@ Esta es la prueba que de verdad importa. Lo único que sobrevivirá es lo que ha
 
    ```bash
    docker compose pull app
-   docker compose up -d postgres
+   docker compose up -d --wait postgres
    docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --list
    time docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files
    docker compose up -d

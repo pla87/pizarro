@@ -283,13 +283,14 @@ Si pierdes el servidor, necesitas el kit de recuperación y tu destino externo:
    ```
 
 2. **Pon tus claves.** En `/opt/pizarro/deploy/.env`, sustituye `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y
-   `BACKUP_KEY` por las del kit y añade las variables `BACKUP_S3_*` de tu destino externo.
+   `BACKUP_KEY` por las del kit (si en el kit alguna pone «no definida», borra su línea) y añade las variables
+   `BACKUP_S3_*` de tu destino externo.
 3. **Restaura y arranca:**
 
    ```bash
    cd /opt/pizarro/deploy
    docker compose pull app
-   docker compose up -d postgres
+   docker compose up -d --wait postgres
    docker compose run --rm --no-deps app node dist/restore.mjs s3:latest --files
    docker compose up -d
    ```
@@ -417,9 +418,16 @@ docker compose logs --tail 80 app
 Si el disco está casi lleno o falta memoria, la app no arranca o se reinicia sola: libera espacio
 (`docker system prune` borra imágenes viejas) o amplía el servidor.
 
-Si el log dice `No se puede conectar con PostgreSQL`, la app no llega a la base de datos: lo dice a los 10 segundos de
-intentarlo, junto con el servidor y el motivo (no responde, rechaza la conexión o no existe ese nombre). Comprueba que
-el contenedor de la base de datos está en marcha (`docker compose ps`) o, en Railway, la variable `DATABASE_URL`.
+Si el log dice `PostgreSQL aún no responde`, la app está esperando a la base de datos: lo reintenta cada 3 segundos
+durante 3 minutos y arranca en cuanto responde. Si al acabar ese tiempo dice `No se puede conectar con PostgreSQL`,
+junto con el servidor y el motivo (no responde, rechaza la conexión o no existe ese nombre), comprueba que el
+contenedor de la base de datos está en marcha (`docker compose ps` y `docker compose logs --tail 50 postgres`) o, en
+Railway, que el servicio de PostgreSQL está activo y la variable `DATABASE_URL`. Con la app ya en marcha, el mismo
+aviso sale si la base deja de responder durante 20 segundos.
+
+Si el log dice `una migración de la base de datos falló a medias (P3009)`, una actualización no terminó de preparar la
+base de datos y la app no arranca hasta resolverlo. El propio log explica qué hacer, con el comando ya completo; los
+detalles están en la [documentación técnica](../INSTALL.md#81-una-migración-falló-a-medias-p3009).
 
 ### No llegan los emails
 

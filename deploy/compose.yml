@@ -49,6 +49,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${APP_DB_USER:-pizarro}:${APP_DB_PASSWORD:-${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}}@postgres:5432/pizarro
+      # env_file pasa todo .env a la app; las contraseñas de PostgreSQL ya van en DATABASE_URL y la del superusuario
+      # no debe estar a la vista dentro del contenedor de la app (ni en /proc/<pid>/environ): aquí se dejan vacías.
+      POSTGRES_PASSWORD: ""
+      APP_DB_PASSWORD: ""
       APP_URL: ${APP_URL:?Define APP_URL en .env}
       UPLOAD_DIR: /app/uploads
       PORT: "3000"
