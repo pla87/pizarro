@@ -8,6 +8,7 @@ import { addDays, dayInZone } from "@/lib/log-range";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { EmailSafe } from "@/components/ui/EmailSafe";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -219,7 +220,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                       {r.userName && <span className="text-xs text-slate-600 dark:text-slate-300">· {r.userName}</span>}
                       {r.durationMs != null && <span className="ml-auto font-mono text-xs text-slate-500">{r.durationMs} ms</span>}
                     </div>
-                    {r.message && <p className="mt-1 break-words text-slate-800 dark:text-slate-100">{r.message}</p>}
+                    {/* Mensajes y detalles pueden llevar emails: a salvo de un proxy que los reescriba (EmailSafe). */}
+                    {r.message && <p className="mt-1 break-words text-slate-800 dark:text-slate-100"><EmailSafe text={r.message} /></p>}
                     {r.path && <p className="mt-0.5 break-all font-mono text-xs text-slate-500">{r.path}</p>}
                   </summary>
                   <div className="space-y-1 bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900/60">
@@ -228,7 +230,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                     </p>
                     {hasDetails ? (
                       <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 font-mono dark:bg-slate-950">
-                        {JSON.stringify(r.details, null, 2)}
+                        <EmailSafe text={JSON.stringify(r.details, null, 2)} />
                       </pre>
                     ) : (
                       <p className="text-slate-500">{t("Sin detalles.")}</p>

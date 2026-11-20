@@ -415,6 +415,24 @@
       "src/app/app-icon/**",
       "public/icons/**"
     ],
+    "interfaz-auditoria-e2e": [
+      "src/components/ui/EmailSafe.tsx",
+      "src/components/ui/ScrollTabs.tsx",
+      "src/components/ui/Modal.tsx",
+      "src/lib/tab-param.ts",
+      "src/lib/theme-color.ts",
+      "src/lib/report-recipient.ts",
+      "src/actions/report-schedule.ts",
+      "src/components/calendar/CalendarView.tsx",
+      "src/app/(app)/calendar/page.tsx",
+      "src/app/(app)/my-tasks/page.tsx",
+      "src/app/(app)/admin/users/UsersAdmin.tsx",
+      "src/app/(app)/admin/AdminTabs.tsx",
+      "src/app/(app)/settings/**",
+      "src/app/(app)/p/[projectId]/settings/**",
+      "src/components/board/ViewToggle.tsx",
+      "src/components/AppShell.tsx"
+    ],
     "interfaz-textos-e2e": [
       "src/i18n/**",
       "src/components/ui/InfoTip.tsx",

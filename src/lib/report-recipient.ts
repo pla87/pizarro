@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { maskEmail } from "./mask-email";
 
 /**
  * ¿Puede salir el informe de este proyecto hacia esta dirección? Sí si es de un usuario activo que ve el
@@ -17,4 +18,29 @@ export async function reportRecipientAllowed(projectId: string, recipient: strin
     return user.memberships.length > 0 || (!project.isPrivate && user.role === "ADMIN");
   }
   return setterRole === "ADMIN" && !project.isPrivate;
+}
+
+/** Personas a las que puede ir el informe (por nombre, sin email): miembros activos y, en un proyecto de equipo, administradores activos. */
+export async function reportRecipientPeople(projectId: string): Promise<{ id: string; name: string; email: string }[]> {
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
+  if (!project) return [];
+  return db.user.findMany({
+    where: { active: true, OR: [{ memberships: { some: { projectId } } }, ...(project.isPrivate ? [] : [{ role: "ADMIN" as const }])] },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, email: true },
+  });
+}
+
+/**
+ * Destinatario guardado tal como lo ve quien abre los ajustes: una persona del proyecto (solo su id: la lista la muestra
+ * por nombre) o una dirección que no es de ninguna de ellas. Esa dirección la ve entera un administrador (las pone él y ve
+ * los emails de todos en Administración); a los demás les llega enmascarada («a***@example.com»).
+ */
+export type ReportRecipientView = { kind: "user"; userId: string } | { kind: "external"; shown: string };
+
+export function reportRecipientView(recipient: string, people: { id: string; email: string }[], viewerIsAdmin: boolean): ReportRecipientView {
+  const lower = recipient.toLowerCase();
+  const person = people.find((p) => p.email.toLowerCase() === lower);
+  if (person) return { kind: "user", userId: person.id };
+  return { kind: "external", shown: viewerIsAdmin ? recipient : maskEmail(recipient) };
 }

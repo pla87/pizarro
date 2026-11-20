@@ -106,7 +106,6 @@ export const common: Record<string, string> = {
   "Rosa": "Pink",
   "Otro color": "Other color",
   "Error": "Error",
-  "{n} tarea(s)": "{n} task(s)",
   "Orden actualizado": "Order updated",
   "Editar {name}": "Edit {name}",
   "Borrar {name}": "Delete {name}",
@@ -122,7 +121,6 @@ export const common: Record<string, string> = {
   "Texto inicial de la descripción": "Initial description text",
   "Al elegir este tipo en una tarea se rellenan solos el título y el comienzo de la descripción.": "When this type is chosen on a task, the title and the start of the description are filled in automatically.",
   "Borrar «{name}»": "Delete “{name}”",
-  "Sus {n} tarea(s) pasarán al tipo:": "Its {n} task(s) will move to the type:",
   "No tiene tareas. Elige igualmente el tipo de destino:": "It has no tasks. Please still choose the target type:",
   "Tipo de destino": "Target type",
   "Tipo borrado": "Type deleted",
@@ -161,4 +159,10 @@ export const common: Record<string, string> = {
   // Contador de avisos con tope (100 o más)
   "Más de 99 avisos sin leer": "More than 99 unread notifications",
   "Más de 99 sin leer": "More than 99 unread",
+  // Singular y plural en lugar de «tarea(s)» (ronda 56)
+  "Su única tarea pasará al tipo:": "Its only task will move to the type:",
+  "Sus {n} tareas pasarán al tipo:": "Its {n} tasks will move to the type:",
+  "1 tarea en todos tus proyectos.": "1 task across all your projects.",
+  "{n} tareas en todos tus proyectos.": "{n} tasks across all your projects.",
+  "Color de la tarea": "Task color",
 };

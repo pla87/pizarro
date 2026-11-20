@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, projectReleaseTemplates } from "@/lib/board";
 import { projectPlanTemplates } from "@/lib/ai-plan-templates";
@@ -15,8 +15,9 @@ import { effectiveShareMode } from "@/lib/google-share";
 import { largestAttachments, projectStorage } from "@/lib/storage-stats";
 import { ProjectSettings } from "./ProjectSettings";
 import { StorageSection } from "./StorageSection";
-import { parseProjectSettingsTab } from "./project-settings-tabs";
+import { resolveProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
+import { reportRecipientPeople, reportRecipientView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
@@ -60,7 +61,13 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   if (!project) notFound();
   // Gestionan el proyecto los administradores y, si es privado, sus miembros (como en las acciones).
   const canManage = isAdmin || project.isPrivate;
-  const tab = parseProjectSettingsTab(tabParam, canManage);
+  const asked = resolveProjectSettingsTab(tabParam, canManage);
+  // Otro nombre de una pestaña («?tab=plantillas», «?tab=board»): se pasa a su id, el de los enlaces de las pestañas.
+  if (asked.kind === "alias") redirect(`/p/${project.id}/settings?tab=${asked.tab}`);
+  const tab = asked.tab;
+  // Una pestaña que existe pero es de gestión (quien no gestiona el proyecto no la tiene): se dice cuál es.
+  const manageView = asked.kind === "unknown" && !canManage ? resolveProjectSettingsTab(tabParam, true) : null;
+  const restricted = manageView && manageView.kind !== "unknown" ? manageView.tab : undefined;
   // Las cabeceras y pies solo se leen cuando se abre la pestaña Releases, que es donde se editan; el almacenamiento,
   // en la pestaña Adjuntos. Los administradores asignan usuarios a los proyectos de equipo; los miembros de un privado
   // añaden a otros usuarios.
@@ -69,7 +76,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   // agrupaba TODAS las tareas del servidor en cada carga (Prisma 7 lo hace con un LEFT JOIN a un GROUP BY sin filtro).
   const kindIds = project.kinds.map((k) => k.id);
   const deliverableIds = project.deliverables.map((d) => d.id);
-  const [releaseTemplates, planTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest, templateChange] = await Promise.all([
+  const [releaseTemplates, planTemplates, generalKinds, generalUsage, kindUsage, deliverableUsage, users, schedule, editorRow, storageInitial, storageLargest, templateChange, reportPeople] = await Promise.all([
     tab === "releases" ? projectReleaseTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     tab === "releases" ? projectPlanTemplates(project.id) : Promise.resolve({ headers: [], footers: [] }),
     listKinds(),
@@ -84,6 +91,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
     showStorage ? projectStorage(project.id) : Promise.resolve(null),
     showStorage ? largestAttachments(project.id, 20) : Promise.resolve(null),
     tab === "tablero" && canManage ? undoableTemplateChange(project.id) : Promise.resolve(null),
+    tab === "informes" ? reportRecipientPeople(project.id) : Promise.resolve([]),
   ]);
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
@@ -114,6 +122,8 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       ) : null}
       isAdmin={isAdmin}
       tab={tab}
+      unknownTab={asked.kind === "unknown" ? asked.asked : undefined}
+      restrictedTab={restricted}
       releaseTemplates={releaseTemplates}
       planTemplates={planTemplates}
       currentUserId={user.id}
@@ -140,7 +150,11 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       reportSchedule={
         <ReportScheduleSection
           projectId={project.id}
-          initial={schedule ?? { enabled: false, recipient: user.email, weekday: 1, hour: 8 }}
+          initial={schedule
+            ? { enabled: schedule.enabled, weekday: schedule.weekday, hour: schedule.hour, recipient: reportRecipientView(schedule.recipient, reportPeople, isAdmin) }
+            : { enabled: false, recipient: null, weekday: 1, hour: 8 }}
+          people={reportPeople.map((p) => ({ id: p.id, name: p.name }))}
+          currentUserId={user.id}
           emailAvailable={emailEnabled()}
           timeZone={appTimeZone()}
           recipients={project.isPrivate ? "members" : isAdmin ? "any" : "team"}

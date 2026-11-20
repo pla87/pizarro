@@ -95,6 +95,40 @@ const BULK_BTN = "h-11 w-11 items-center justify-center rounded-full border bord
 
 const noopSubscribe = () => () => {};
 
+/** Veces que cada elemento de <body> está «inert» por un Modal abierto (varios modales pueden dejar fuera el mismo). */
+const inertCounts = new Map<HTMLElement, number>();
+
+/**
+ * Con un Modal abierto, lo de debajo deja de existir para el teclado y los lectores de pantalla: cada hijo de <body> que
+ * no contiene el modal pasa a `inert` (aria-modal solo no basta: el resto seguía en el árbol de accesibilidad). Se salvan
+ * las regiones vivas (los avisos emergentes y el de sin conexión: `aria-live`), lo marcado con `data-pz-layer` y, en una
+ * pareja de modales (side «left»/«right»), el otro modal. Lo que se abra después desde el propio modal (un menú, el visor
+ * de imágenes, otro modal) se pinta en <body> más tarde y no queda dentro. Devuelve la función que lo deshace.
+ */
+function inertBackground(keep: HTMLElement, keepModals: boolean): () => void {
+  const touched: HTMLElement[] = [];
+  for (const el of Array.from(document.body.children)) {
+    if (!(el instanceof HTMLElement) || el === keep || el.contains(keep)) continue;
+    if (el.tagName === "SCRIPT" || el.tagName === "STYLE" || el.tagName === "TEMPLATE" || el.tagName === "NEXT-ROUTE-ANNOUNCER") continue;
+    if (el.hasAttribute("aria-live") || el.hasAttribute("data-pz-layer") || (keepModals && el.hasAttribute("data-pz-modal"))) continue;
+    const n = inertCounts.get(el) ?? 0;
+    if (n === 0 && el.inert) continue; // ya lo estaba por otro motivo: no se toca
+    if (n === 0) el.inert = true;
+    inertCounts.set(el, n + 1);
+    touched.push(el);
+  }
+  return () => {
+    for (const el of touched) {
+      const n = (inertCounts.get(el) ?? 1) - 1;
+      if (n > 0) inertCounts.set(el, n);
+      else {
+        inertCounts.delete(el);
+        el.inert = false;
+      }
+    }
+  };
+}
+
 export function Modal({ open, onClose, title, children, footer, size = "md", header, headerActions, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
@@ -103,6 +137,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   // justo después aparece. Sin esto, un modal abierto desde el primer render (?task=) daba el error #418.
   const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -137,6 +172,15 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
       setVv(null);
     };
   }, [open]);
+
+  // Fondo «inert» mientras está abierto (ver inertBackground). Va antes que el efecto que devuelve el foco al cerrar: React
+  // deshace los efectos en este orden, y un elemento «inert» no puede recibir el foco. Espera al portal (`hydrated`).
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!open || !hydrated || !root) return;
+    return inertBackground(root, side !== "center");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `side` no cambia mientras está abierto
+  }, [open, hydrated]);
 
   useEffect(() => {
     if (!open) return;
@@ -183,6 +227,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   if (!open || !hydrated) return null;
   return createPortal(
     <div
+      ref={rootRef}
+      data-pz-modal=""
       className={cn(
         "fixed inset-0 z-50 flex justify-center overscroll-contain sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",

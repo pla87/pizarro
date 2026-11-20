@@ -59,18 +59,19 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Cuentas** | | **133** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/cuentas-borrar-restos-e2e.mjs` | 72 | ~45 s |
-| **Interfaz y textos** | | **229** | |
+| **Interfaz y textos** | | **292** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 29 | ~1 min |
+| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 63 | ~3 min |
 | **Accesibilidad** | | **68** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
 | Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla» y `otro.md#apartado` (caza de bugs 54) | `e2e/accesibilidad-releases-e2e.mjs` | 32 | ~30 s |
 | **Red, sin conexión y formularios** | | **147** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **2906** | |
+| **Total** | | **2969** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -656,6 +657,32 @@ a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-textos-e2e.mjs   # PART=admin,profile,release
+```
+
+### Auditoría de escritorio y móvil (ronda 56)
+
+`interfaz-auditoria-e2e.mjs`. **hyd**: recorre las páginas principales (tablero, detalle con `?task=`, releases, documentación, las
+pestañas de Ajustes del proyecto y de Mi perfil, Mis tareas, calendario, avisos, historial y todas las de Administración)
+como administrador, en escritorio y a 393 px, con el navegador en Europe/Madrid y es-ES o en America/New_York y en-US (el
+servidor, en UTC), y con un proxy delante que cambia cada email del HTML por un enlace «[email protected]» (lo que hace la
+«Email Address Obfuscation» de Cloudflare): falla con cualquier error de hidratación de React (#418 y compañía). También
+el acceso y las páginas legales sin sesión. **tabs**: `?tab=plantillas` y `?tab=Board` llevan a su pestaña (la dirección
+pasa al id), una desconocida abre la primera con un aviso y una de gestión, para quien no gestiona, dice por qué; igual
+en Mi perfil. **informe**: un miembro ve las personas por su nombre, ni el email de otra ni el externo entero (sale
+enmascarado) y sin «Otra dirección…»; guarda eligiendo a otra persona y un administrador pone una dirección externa.
+**cal**: «1 vencida de antes de este mes» con su enlace; una vencida del mes lleva el mismo rojo que «Mis tareas»; a
+393 px, el mes actual se abre con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una tarea roja de
+«Más adelante» sin marca de vencida (su color, en un punto) y la vencida con el borde rojo. **movil**: en Usuarios a
+393 px el nombre y el email tienen sitio, las acciones están en «⋯» (y abren su diálogo) y en el escritorio siguen los
+iconos; en las pestañas de Administración, el indicador de que hay más a la derecha (y a la izquierda al final); el pie
+del menú lateral se ve entero. **tema**: con el sistema claro y Pizarro oscuro, theme-color oscuro, y cambia al momento
+al elegir otro tema. **a11y**: «Ver como lista» con aria-pressed y el mismo nombre; «Avisos» dice cuántos hay sin leer;
+con «Nueva tarea» abierta el resto queda inert (fuera del árbol de accesibilidad de Chromium) salvo los avisos
+emergentes, con la confirmación de descartar encima también «Nueva tarea», y al cerrarla vuelve con el foco dentro; axe
+sin botones ni enlaces sin nombre; «Abrir menú» con aria-expanded.
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=hyd,tabs,informe,cal,mis,movil,tema,a11y
 ```
 
 ## Accesibilidad
