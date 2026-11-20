@@ -496,3 +496,35 @@ Una copia que no se ha restaurado nunca no cuenta como copia. Hazlo **en otra in
 ### 8.4 Jira con cabeceras en español
 
 Exporta un CSV de Jira con la interfaz en español que incluya incidencias resueltas y sin resolver. **Qué debe pasar:** «Formato detectado: Jira», las resueltas no se importan y se avisa de cuántas son.
+
+## 9. Novedades de la v1.60.0
+
+### 9.1 Presencia en vivo y recarga
+
+**Necesitas:** dos personas (dos navegadores) en el mismo tablero de tu instalación en Railway.
+
+1. B abre una tarea; en el tablero de A, la tarjeta muestra la burbuja de B al momento. B la cierra: desaparece en un segundo. Repite abriendo y cerrando muy deprisa.
+2. B cierra la pestaña o cierra sesión: deja de salir en «Quién está» enseguida.
+3. Deja el tablero abierto 20 minutos sin tocar nada y mira en *Administración → Logs* que no hay visitas cada 2 minutos.
+
+**Qué debe pasar:** todo al momento, sin burbujas que se queden.
+
+### 9.2 Error de hidratación (Cloudflare)
+
+Abre *Mi perfil* y *Administración → Usuarios* con la consola del navegador abierta y mira *Administración → Logs* (categoría *client*): no debe aparecer «Minified React error #418». Si usas Cloudflare, comprueba en su panel *Scrape Shield → Email Address Obfuscation* y desactívalo.
+
+### 9.3 Descargas ZIP de adjuntos
+
+En *Releases*, abre una release con adjuntos y pulsa **Descargar adjuntos**: la descarga la hace el navegador, con su barra de progreso. Prueba también **Descargar adjuntos** en *Generar release* y en un plan de trabajo con varios paquetes. Cancela una a mitad: sale el aviso «No se pudieron descargar los adjuntos».
+
+### 9.4 Móvil
+
+1. Abre el tablero en el móvil: abre la última columna que viste; la lupa abre el buscador con el teclado; al buscar, salta a la columna con resultados.
+2. Calendario: abre en hoy (o en el aviso de vencidas, con «Ir a hoy»).
+3. *Administración → Usuarios*: las acciones de cada persona en «⋯».
+4. Con la app instalada, Pizarro en *Oscuro* y el móvil en claro: la barra de estado sale oscura.
+
+### 9.5 Informe semanal y cambio de email
+
+1. En *Ajustes del proyecto → Informes*, elige destinatario por nombre. Con una cuenta de miembro, mira que una dirección externa puesta por un administrador sale enmascarada.
+2. Cambia el email de la persona destinataria: el informe le sigue llegando a la nueva dirección.
