@@ -14,12 +14,18 @@ import { toLocale, translate } from "@/i18n/core";
 
 /**
  * Acciones revisadas cuyo resultado basta para actualizar la pestaña que las lanza (ver `cid`). Los comentarios: el
- * detalle abierto aplica su resultado y el recuento de la tarjeta; sin cid, su propio aviso volvía a pedirlos.
+ * detalle abierto aplica su resultado y el recuento de la tarjeta; sin cid, su propio aviso volvía a pedirlos. Las
+ * subtareas: el detalle aplica su resultado y deriva de su lista el contador de la tarjeta (la lista consolidada de la
+ * columna lo suma o lo resta); sin cid, cada casilla marcada pedía el tablero entero. Quitar un enlace de Google: el
+ * detalle quita la fila y resta uno al contador de la tarjeta. Borrar un adjunto no: el detalle no lleva a la tarjeta los
+ * contadores de adjuntos que devuelve (llegan con el refresco).
  */
 const ECHO_SAFE_ACTIONS = new Set([
   "tasks.updateTask", "tasks.moveTask", "tasks.moveTasks", "tasks.archiveTask", "tasks.archiveTasks",
   "tasks.deleteTask", "tasks.deleteTasks", "tasks.duplicateTask", "tasks.makeEvergreen",
   "tasks.addComment", "tasks.editComment", "tasks.deleteComment",
+  "tasks.addSubtask", "tasks.addSubtasks", "tasks.updateSubtask", "tasks.reorderSubtask", "tasks.deleteSubtask",
+  "tasks.deleteTaskLink",
 ]);
 
 /**
