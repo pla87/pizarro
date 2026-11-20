@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 /** PDF «Resumen para el cliente» de una columna «Entrega al cliente». */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string; columnId: string }> }) {
   const start = performance.now();
-  const auth = await authorizeColumnRoute(ctx.params);
+  const auth = await authorizeColumnRoute(ctx.params, "delivery");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const report = await generateDeliveryPdf(projectId, columnId, { locale }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });

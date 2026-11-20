@@ -66,7 +66,7 @@ interface EraseResult {
 export async function eraseUser(userId: string, opts: { self: boolean; deleteProjects?: readonly string[]; actor?: { id: string; name: string } }): Promise<EraseResult> {
   const wanted = new Set(opts.deleteProjects ?? []);
   const google = await db.googleAccount.findUnique({ where: { userId }, select: { refreshTokenEnc: true } });
-  const { solo, userName } = await db.$transaction(async (tx) => {
+  const { solo, userName, reportsOff } = await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
     const block = await deletionBlock(userId, tx);
     if (block) throw new AppError(opts.self ? DELETION_BLOCK_MESSAGES[block] : "Debe quedar al menos un administrador activo.");
@@ -74,16 +74,26 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     // sí, sus entradas de deshacer y sus exportaciones, que caerían en cascada sin liberar sus ficheros.
     await discardUndo({ userId });
     await discardUserTransfers(userId);
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } });
+    // Informes semanales que iban a su dirección: se desactivan. Sin la cuenta, esa dirección ya no es de nadie y
+    // contaría como «externa» (reportRecipientAllowed la aceptaría si los programó un administrador).
+    const reportsOff = await tx.reportSchedule.findMany({ where: { enabled: true, recipient: { equals: user.email, mode: "insensitive" } }, select: { projectId: true } });
+    if (reportsOff.length) await tx.reportSchedule.updateMany({ where: { projectId: { in: reportsOff.map((r) => r.projectId) } }, data: { enabled: false } });
     const solo = await tx.project.findMany({ where: soloPrivateWhere(userId), orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true } });
     const toTeam = solo.filter((p) => !wanted.has(p.id)).map((p) => p.id);
     if (toTeam.length) await tx.project.updateMany({ where: { id: { in: toTeam } }, data: { isPrivate: false, privateOwnerId: null } });
     await tx.taskEvent.updateMany({ where: { userId }, data: { userName: "" } });
     await tx.user.delete({ where: { id: userId } });
-    return { solo, userName: user.name };
+    return { solo, userName: user.name, reportsOff };
     // Con muchos ficheros que liberar, el descarte del deshacer puede tardar más que los 5 s por defecto.
   }, { timeout: 120_000 });
   revokeUser(userId);
+  for (const r of reportsOff) {
+    logEvent({
+      level: "warn", category: "notify", action: "report.scheduleDisabled", message: `Informe semanal desactivado: se ha borrado la cuenta de su destinatario, «${userName}»`,
+      userId: opts.actor?.id ?? null, userName: opts.actor?.name ?? null, projectId: r.projectId, details: { deletedUserId: userId },
+    });
+  }
   // Ya sin la cuenta: que Google retire también el permiso de Drive que había dado.
   if (google) await revokeGoogleToken(google.refreshTokenEnc);
   const result: EraseResult = { toTeam: solo.filter((p) => !wanted.has(p.id)), deleted: [] };

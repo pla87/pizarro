@@ -75,6 +75,18 @@ describe("tarea abierta: cerrar el diálogo", () => {
   });
 });
 
+describe("tarea abierta: tope de ritmo", () => {
+  test("el aviso admite 120 por minuto y persona; después, 429", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const task = await makeTask(f);
+    const ctx = { params: Promise.resolve({ taskId: task.id }) };
+    await loginAs(user);
+    for (let i = 0; i < 120; i++) assert.equal((await viewersGet(new Request(`http://localhost/api/tasks/${task.id}/viewers?stream=${randomUUID()}&open=m${i}`), ctx)).status, 200);
+    assert.equal((await viewersGet(new Request(`http://localhost/api/tasks/${task.id}/viewers`), ctx)).status, 429);
+  });
+});
+
 describe("cerrar sesión", () => {
   test("quien cierra sesión con el tablero abierto deja de salir en «Quién está» al momento", async () => {
     const user = await makeUser();

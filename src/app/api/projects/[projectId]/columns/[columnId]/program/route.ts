@@ -31,7 +31,7 @@ function problemMessage(problem: GeneratedDocumentProblem, t: T, ctx: { projectI
 async function handle(req: Request, params: Params, method: "GET" | "POST") {
   const start = performance.now();
   if (method === "POST" && !isSameOrigin(req)) return new Response((await getT())("Origen no permitido."), { status: 403 });
-  const auth = await authorizeColumnRoute(params);
+  const auth = await authorizeColumnRoute(params, "program");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const url = new URL(req.url);

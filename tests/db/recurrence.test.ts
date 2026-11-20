@@ -1,6 +1,9 @@
 // Tareas recurrentes: la siguiente aparición (campos opcionales, fecha de inicio desplazada) y deshacer el borrado de
 // una aparición sin perder de qué tarea salió ni su columna de rutinas.
 import assert from "node:assert/strict";
+import { mkdtemp, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { createTask, deleteTask, moveTask } from "../../src/actions/tasks";
@@ -10,9 +13,31 @@ import { spawnRecurrences } from "../../src/lib/recurrence";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "../../src/lib/constants";
 import { PROGRAM_MAX_SESSIONS } from "../../src/lib/program-limit";
 import { lockColumns } from "../../src/lib/task-positions";
+import { flushLogs } from "../../src/lib/log";
+import { attachmentPath } from "../../src/lib/uploads";
+
+process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-recurrence-"));
 
 const nextOf = (taskId: string) => db.task.findFirstOrThrow({ where: { recurrenceFromId: taskId } });
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+/** Consultas SQL que hace `fn` (las del registro de actividad aparte). */
+async function counted<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
+  const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+  const orig = proto.query;
+  let queries = 0;
+  proto.query = function (this: unknown, ...args: unknown[]) {
+    const q = args[0];
+    const text = typeof q === "string" ? q : ((q as { text?: string } | undefined)?.text ?? "");
+    if (!/"AppLog"/.test(text)) queries++;
+    return orig.apply(this, args);
+  };
+  try {
+    return { value: await fn(), queries };
+  } finally {
+    proto.query = orig;
+  }
+}
 
 describe("siguiente aparición de una tarea recurrente", () => {
   test("copia coste, horas estimadas, prioridad y cliente; reinicia pagado y horas reales; desplaza la fecha de inicio", async () => {
@@ -90,24 +115,6 @@ describe("«Repetir» al crear la tarea", () => {
 });
 
 describe("muchas apariciones a la vez", () => {
-  /** Consultas SQL que hace `fn` (las del registro de actividad aparte). */
-  async function counted<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
-    const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
-    const orig = proto.query;
-    let queries = 0;
-    proto.query = function (this: unknown, ...args: unknown[]) {
-      const q = args[0];
-      const text = typeof q === "string" ? q : ((q as { text?: string } | undefined)?.text ?? "");
-      if (!/"AppLog"/.test(text)) queries++;
-      return orig.apply(this, args);
-    };
-    try {
-      return { value: await fn(), queries };
-    } finally {
-      proto.query = orig;
-    }
-  }
-
   // Antes, varias consultas y una transacción por tarea: con 500, unas 6.000 consultas y varios segundos.
   // (Con 500 de origen, terminadas pero activas, y 1 más, solo caben 499 por el tope de 1000 tareas activas: 450.)
   test("450 tareas: lecturas una vez por lote, mismas columnas, posiciones, responsables, etiquetas y subtareas", async () => {
@@ -191,5 +198,82 @@ describe("muchas apariciones a la vez", () => {
     const spawned = await spawning!;
     assert.equal(spawned.length, 0);
     assert.equal(await db.task.count({ where: { columnId: f.columns.todo, archivedAt: null } }), PROGRAM_MAX_SESSIONS);
+  });
+});
+
+describe("adjuntos citados en la descripción", () => {
+  /** Adjunto de imagen con sus ficheros (WebP y miniatura) en UPLOAD_DIR. */
+  async function image(taskId: string, name: string, size = 4) {
+    const att = await db.taskAttachment.create({ data: { taskId, originalName: name, size, isImage: true, mimeType: "image/webp" } });
+    await writeFile(attachmentPath(att.id, "full"), "full");
+    await writeFile(attachmentPath(att.id, "thumb"), "mini");
+    return att;
+  }
+  const exists = (file: string) => stat(file).then(() => true, () => false);
+
+  test("la siguiente copia solo los adjuntos que cita y su descripción apunta a las copias; sobrevive a borrar la anterior", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const other = await makeTask(f, { title: "Otra" });
+    const foreign = await image(other.id, "ajena.png");
+    const a = await makeTask(f, { title: "Semanal", recurrence: "WEEKLY", columnId: f.columns.doing });
+    const cited = await image(a.id, "captura.png");
+    await image(a.id, "sin-citar.png");
+    const description = `Mira ![captura](/api/attachments/${cited.id}) y [ajena](/api/attachments/${foreign.id}?thumb=1) y otra vez ![](/api/attachments/${cited.id}?thumb=1)`;
+    await db.task.update({ where: { id: a.id }, data: { description } });
+    expectOk(await moveTask(a.id, f.columns.done, null, null));
+    const next = await db.task.findFirstOrThrow({ where: { recurrenceFromId: a.id }, include: { attachments: true } });
+    assert.equal(next.attachments.length, 1, "solo el citado");
+    const copy = next.attachments[0]!;
+    assert.equal(copy.originalName, "captura.png");
+    assert.notEqual(copy.id, cited.id);
+    assert.equal(next.description, `Mira ![captura](/api/attachments/${copy.id}) y [ajena](/api/attachments/${foreign.id}?thumb=1) y otra vez ![](/api/attachments/${copy.id}?thumb=1)`);
+    expectOk(await deleteTask(a.id));
+    assert.ok(await exists(attachmentPath(copy.id, "full")));
+    assert.ok(await exists(attachmentPath(copy.id, "thumb")));
+  });
+
+  test("si no cabe (tope de adjuntos de la tarea), deja la referencia a la anterior y lo anota", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await db.project.update({ where: { id: f.project.id }, data: { taskAttachMaxMb: 1 } });
+    await loginAs(user);
+    const a = await makeTask(f, { title: "Diaria grande", recurrence: "DAILY", columnId: f.columns.doing });
+    const big = await image(a.id, "grande.png", 2 * 1024 * 1024);
+    const description = `![grande](/api/attachments/${big.id})`;
+    await db.task.update({ where: { id: a.id }, data: { description } });
+    expectOk(await moveTask(a.id, f.columns.done, null, null));
+    const next = await db.task.findFirstOrThrow({ where: { recurrenceFromId: a.id }, include: { attachments: true } });
+    assert.equal(next.attachments.length, 0);
+    assert.equal(next.description, description);
+    await flushLogs();
+    const log = await db.appLog.findFirstOrThrow({ where: { action: "recurrence.attachmentsSkipped", projectId: f.project.id } });
+    assert.match(JSON.stringify(log.details), /task_total/);
+  });
+
+  test("300 a la vez: los adjuntos se copian en lote (pocas consultas más que sin ellos)", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const N = 300;
+    await db.task.createMany({
+      data: Array.from({ length: N }, (_, i) => ({ projectId: f.project.id, columnId: f.columns.done, kindId: f.kindId, title: `A${i}`, position: (i + 1) * 1000, recurrence: "DAILY" as const })),
+    });
+    const sources = await db.task.findMany({ where: { projectId: f.project.id }, orderBy: { position: "asc" }, select: { id: true } });
+    const atts = await db.taskAttachment.createManyAndReturn({ data: sources.map((t) => ({ taskId: t.id, originalName: "a.png", size: 4, isImage: true, mimeType: "image/webp" })), select: { id: true, taskId: true } });
+    for (const att of atts) {
+      await writeFile(attachmentPath(att.id, "full"), "full");
+      await writeFile(attachmentPath(att.id, "thumb"), "mini");
+    }
+    const ids = atts.map((x) => x.id);
+    const tasks = atts.map((x) => x.taskId);
+    await db.$executeRaw`UPDATE "Task" AS t SET "description" = '![](/api/attachments/' || d.a || ')' FROM unnest(${tasks}::text[], ${ids}::text[]) AS d(id, a) WHERE t."id" = d.id`;
+    const { value: spawned, queries } = await counted(() => spawnRecurrences(sources.map((t) => t.id), user.id));
+    assert.equal(spawned.length, N);
+    // Unas 55 (medido): los adjuntos suman un número fijo de consultas para todo el lote, no uno por tarea.
+    assert.ok(queries < 80, `demasiadas consultas: ${queries}`);
+    const next = await db.task.findMany({ where: { recurrenceFromId: { in: sources.map((t) => t.id) } }, select: { description: true, attachments: { select: { id: true } } } });
+    assert.ok(next.every((t) => t.attachments.length === 1 && t.description === `![](/api/attachments/${t.attachments[0]!.id})`));
   });
 });

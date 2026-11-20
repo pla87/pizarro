@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 /** Calendario .ics con las tareas con fecha límite de una columna «Agenda». */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string; columnId: string }> }) {
   const start = performance.now();
-  const auth = await authorizeColumnRoute(ctx.params);
+  const auth = await authorizeColumnRoute(ctx.params, "ics");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const result = await buildColumnIcs(projectId, columnId, { t, locale });

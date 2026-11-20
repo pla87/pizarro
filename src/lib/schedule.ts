@@ -28,13 +28,27 @@ function sentToday(lastSentAt: Date | null, now: Date, timeZone: string): boolea
   return !!lastSentAt && localParts(lastSentAt, timeZone).date === localParts(now, timeZone).date;
 }
 
+/** Lunes (YYYY-MM-DD) de la semana local de un instante. */
+function weekStart(at: Date, timeZone: string): string {
+  const { date, weekday } = localParts(at, timeZone);
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! - (weekday - 1))).toISOString().slice(0, 10);
+}
+
+function sentThisWeek(lastSentAt: Date | null, now: Date, timeZone: string): boolean {
+  return !!lastSentAt && weekStart(lastSentAt, timeZone) === weekStart(now, timeZone);
+}
+
 /** Resumen diario: ya es la hora elegida (o pasó) y hoy todavía no se ha enviado. */
 export function digestDue(now: Date, timeZone: string, s: { hour: number; lastSentAt: Date | null }): boolean {
   return localParts(now, timeZone).hour >= s.hour && !sentToday(s.lastSentAt, now, timeZone);
 }
 
-/** Informe semanal: hoy es el día elegido, ya es la hora (o pasó) y hoy todavía no se ha enviado. */
+/**
+ * Informe semanal: hoy es el día elegido, ya es la hora (o pasó) y esta semana (de lunes a domingo, hora local) todavía
+ * no se ha enviado. Si se cambia el día a otro posterior de la misma semana después del envío, no se repite.
+ */
 export function reportDue(now: Date, timeZone: string, s: { weekday: number; hour: number; lastSentAt: Date | null }): boolean {
   const local = localParts(now, timeZone);
-  return local.weekday === s.weekday && local.hour >= s.hour && !sentToday(s.lastSentAt, now, timeZone);
+  return local.weekday === s.weekday && local.hour >= s.hour && !sentThisWeek(s.lastSentAt, now, timeZone);
 }

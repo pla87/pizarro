@@ -1,7 +1,8 @@
 // Resumen diario por email, contra PostgreSQL real: lo que entra en cada apartado.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { updateCollabPrefs } from "../../src/actions/collab-prefs";
 import { gatherDigest } from "../../src/lib/periodic-mail";
 
 describe("resumen diario", () => {
@@ -34,5 +35,22 @@ describe("resumen diario", () => {
     const now = new Date();
     const d = await gatherDigest({ id: user.id, role: "MEMBER" }, now, now.toISOString().slice(0, 10));
     assert.deepEqual(d.done.filter((x) => [f.project.id, foreign.project.id].includes(x.projectId)).map((x) => x.title).sort(), ["Terminada", "Terminada y archivada"]);
+  });
+});
+
+describe("preferencias del resumen diario", () => {
+  const prefs = { notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true };
+  test("cambiar la hora tras recibirlo no reinicia el «ya enviado hoy»; activarlo, sí", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const sent = new Date();
+    await db.user.update({ where: { id: user.id }, data: { dailyDigest: true, digestHour: 7, lastDigestAt: sent } });
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 20 }));
+    const after = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { digestHour: true, lastDigestAt: true } });
+    assert.equal(after.digestHour, 20);
+    assert.equal(after.lastDigestAt?.getTime(), sent.getTime(), "no llega otro resumen con lo mismo el mismo día");
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: false, digestHour: 20 }));
+    expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 20 }));
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).lastDigestAt, null);
   });
 });
