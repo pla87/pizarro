@@ -517,6 +517,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           {pickProject && <ProjectPicker value={projectId} onChange={(id) => void selectProject(id)} loading={loading} />}
         </span>
       }
+      // Copiar lo escrito como JSON o importar una tarea (portapapeles o fichero): junto a la X, como en el detalle de una
+      // tarea; en el móvil, juntos en «⋯».
+      headerActions={<TaskJsonButtons onCopy={() => void copyForm()} onImport={importForm} shortcuts={{ paste: true }} compactOnMobile />}
       size="md"
       placement="top"
       footer={
@@ -536,11 +539,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         }
       }}>
         <div>
-          <div className="flex items-center justify-between gap-2">
-            <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
-            {/* Copiar lo escrito como JSON o importar una tarea (portapapeles o fichero): discretos, junto al título. */}
-            <TaskJsonButtons onCopy={() => void copyForm()} onImport={importForm} shortcuts={{ paste: true }} className="-my-1.5 -mr-1.5 flex shrink-0 items-center" />
-          </div>
+          <label className="label" htmlFor={`${uid}-title`}>{t("Título")}</label>
           <div className="relative">
             <input ref={titleRef} id={`${uid}-title`} className={cn("peer input min-w-0 w-full pr-10", overTitleLimit(title) && TITLE_INVALID_CLASSES)} value={title} onChange={(e) => setTitle(e.target.value)} onPaste={(e) => pasteAsOneLine(e, setTitle)} maxLength={TITLE_INPUT_LIMIT} aria-invalid={overTitleLimit(title) || undefined} aria-describedby={overTitleLimit(title) ? `${uid}-title-hint` : undefined} required data-autofocus />
             <DictationButton onText={(s) => insertIntoField(titleRef.current, s, setTitle)} within={() => titleRef.current?.parentElement?.parentElement ?? null} placement="inside" whileEditing className="top-1/2 -translate-y-1/2" />
@@ -602,7 +601,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
                 }
               }}
             />
-            <button type="button" className="btn-secondary py-1.5" disabled={!subtaskDraft.trim() || subtasks.length >= MAX_NEW_SUBTASKS} onClick={addSubtaskDraft} aria-label={t("Añadir subtarea")}>
+            <button type="button" className="btn-secondary touch-target py-1.5" disabled={!subtaskDraft.trim() || subtasks.length >= MAX_NEW_SUBTASKS} onClick={addSubtaskDraft} aria-label={t("Añadir subtarea")}>
               <Plus size={15} />
             </button>
           </div>

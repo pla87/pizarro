@@ -98,7 +98,7 @@ export async function run() {
   await U.openTask(p, "T2");
   await U.dialog(p).getByRole("button", { name: "Borrar", exact: true }).first().click();
   const confirm = p.locator("[role=dialog]").last();
-  await confirm.getByText("¿Borrar definitivamente esta tarea y sus adjuntos?").waitFor();
+  await confirm.getByText("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después.").waitFor();
   // Cancelar no borra
   await confirm.getByRole("button", { name: /Cancelar/ }).click();
   await L.sleep(400);

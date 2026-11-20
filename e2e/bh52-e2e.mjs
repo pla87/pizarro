@@ -150,7 +150,7 @@ if (only.includes("borrador")) {
     else {
       // El de la tarea (con la descripción abierta también hay un «Borrar» del texto).
       await U.dialog(p).getByRole("button", { name: "Borrar", exact: true }).last().click();
-      await p.locator("[role=dialog]").filter({ hasText: "¿Borrar definitivamente esta tarea" }).getByRole("button", { name: "Borrar", exact: true }).click();
+      await p.locator("[role=dialog]").filter({ hasText: "¿Borrar esta tarea" }).getByRole("button", { name: "Borrar", exact: true }).click();
     }
     await U.dialog(p).waitFor({ state: "detached", timeout: 3000 });
     await L.checkEventually(`${action} sin red: la tarjeta vuelve`, async () => (await L.cardLoc(p, title).count()) === 1, { timeout: 8000 });

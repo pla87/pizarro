@@ -401,14 +401,43 @@ body {
 }
 
 /*
- * Pantallas táctiles: los botones de icono pequeños amplían su zona de toque a ~40 px con un
- * pseudo-elemento invisible, sin cambiar su tamaño visible ni la maquetación en escritorio.
+ * Flecha de los desplegables (<select> de una sola línea), dibujada por la app y no por el navegador: la nativa de Chromium
+ * quedaba a 4 px del borde derecho y no se puede mover. Esta es igual (8×5 px, del color del texto) pero a 6 px del borde,
+ * y el relleno derecho deja sitio para que un texto largo no la pise. Fuera de @layer: gana a `px-3` de `.input` y a los
+ * `pr-*` sueltos. En alto contraste (forced-colors) las imágenes de fondo no se pintan: vuelve la flecha del sistema.
+ */
+select:not([multiple], [size]) {
+  appearance: none;
+  padding-right: 1.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M.75.75 4 4 7.25.75' fill='none' stroke='%230f172a' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 8px 5px;
+  &:disabled {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M.75.75 4 4 7.25.75' fill='none' stroke='%2394a3b8' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+  @variant dark {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M.75.75 4 4 7.25.75' fill='none' stroke='%23f1f5f9' stroke-width='1.5'/%3E%3C/svg%3E");
+    &:disabled {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5'%3E%3Cpath d='M.75.75 4 4 7.25.75' fill='none' stroke='%2364748b' stroke-width='1.5'/%3E%3C/svg%3E");
+    }
+  }
+  @media (forced-colors: active) {
+    appearance: auto;
+    padding-right: revert-layer;
+  }
+}
+
+/*
+ * Pantallas táctiles: los botones de icono pequeños (y lo marcado con `touch-target`: chips de tipo, muestras de color,
+ * «+», «⋯», micrófono) amplían su zona de toque a ~40 px con un pseudo-elemento invisible, sin cambiar su tamaño visible
+ * ni la maquetación en escritorio.
  */
 @media (pointer: coarse) {
-  .btn-icon:not(.absolute, .fixed) {
+  :is(.btn-icon, .touch-target):not(.absolute, .fixed) {
     position: relative;
   }
-  .btn-icon::after {
+  :is(.btn-icon, .touch-target)::after {
     content: "";
     position: absolute;
     top: 50%;

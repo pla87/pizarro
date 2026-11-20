@@ -684,7 +684,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const dropping = useFileDrop(upload);
 
   const remove = async () => {
-    if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar definitivamente esta tarea y sus adjuntos?"), confirmLabel: t("Borrar"), danger: true }))) return;
+    if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después."), confirmLabel: t("Borrar"), danger: true }))) return;
     // Optimista: el diálogo se cierra y la tarjeta desaparece al momento; si el servidor falla (o no hay red) vuelve a su sitio.
     const before = board.getTask(task.id);
     board.removeTask(task.id);
@@ -1003,9 +1003,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
   const actionButtons = (
     <>
-      <button className="btn-secondary px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-      <button className="btn-secondary px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-      <button className="btn-ghost px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+      <button className="btn-secondary touch-target px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+      <button className="btn-secondary touch-target px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+      <button className="btn-ghost touch-target px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
       <button className="btn-secondary ml-auto px-2 py-1.5" onClick={cancelEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Cancelar")}</button>
       <button className="btn-primary px-3 py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
     </>
@@ -1490,7 +1490,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
           tabIndex={k.id === tabStop ? 0 : -1}
           onClick={() => onChange(k.id)}
           onFocus={() => setFocused(k.id)}
-          className={cn("badge cursor-pointer px-2 py-1 text-xs", value === k.id ? "kind-badge" : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
+          className={cn("badge touch-target cursor-pointer px-2 py-1 text-xs", value === k.id ? "kind-badge" : "bg-transparent text-slate-500 ring-slate-300 dark:ring-slate-700")}
           style={value === k.id ? kindBadgeStyle(k.color) : undefined}
           aria-checked={value === k.id}
         >
@@ -1886,10 +1886,11 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
 
   return (
     <section>
-      {/* Barra de progreso hasta el borde derecho: se llena según la proporción de subtareas hechas (no su orden). */}
+      {/* Barra de progreso hasta el borde derecho: se llena según la proporción de subtareas hechas (no su orden). Sin
+          subtareas no sale (una barra vacía no dice nada). */}
       <div className="mb-2 flex items-center gap-3">
         <h3 className="text-sm font-semibold">{t("Subtareas")}</h3>
-        <div
+        {list.length > 0 && <div
           className="h-2 flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800"
           role="progressbar"
           aria-label={t("Progreso de las subtareas")}
@@ -1899,9 +1900,9 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
         >
           <div
             className="h-full rounded-full bg-progress shadow-[0_0_6px] shadow-progress/60 transition-[width] duration-300"
-            style={{ width: list.length ? `${(done / list.length) * 100}%` : "0%" }}
+            style={{ width: `${(done / list.length) * 100}%` }}
           />
-        </div>
+        </div>}
       </div>
       <DndContext sensors={sensors} collisionDetection={closestCenter} accessibility={dragAccessibility} onDragEnd={onDragEnd}>
         <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
@@ -1914,7 +1915,7 @@ function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onU
       </DndContext>
       <form onSubmit={add} className="mt-1 flex gap-2">
         <input className="input py-1.5" placeholder={t("Añadir subtarea…")} value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onPaste={pasteMany} maxLength={MAX_TITLE} disabled={!detail} />
-        <button className="btn-secondary py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
+        <button className="btn-secondary touch-target py-1.5" disabled={!newTitle.trim()} aria-label={t("Añadir subtarea")}><Plus size={15} /></button>
       </form>
     </section>
   );
@@ -2041,21 +2042,23 @@ function GoogleLinks({ detail, setDetail, onCreate, taskId, canCreate }: {
   const links = detail?.links ?? [];
   return (
     <section>
-      {/* Con tres botones, en el móvil pasan a la línea siguiente (antes el título se partía en tres líneas). */}
+      {/* Con tres botones: en el móvil (por debajo de `sm`) el título va solo en su línea y los tres botones debajo, en una
+          fila repartida de borde a borde (los iconos alineados con el título y con el borde derecho; antes «Nuevo Doc» se
+          quedaba a la derecha del título y los otros dos debajo). Si no caben, se encogen con «…». */}
       <div className="mb-2 flex flex-wrap items-center gap-1">
-        <h3 className="mr-auto min-w-0 text-sm font-semibold">{t("Documentos de Google")}</h3>
+        <h3 className="mr-auto min-w-0 text-sm font-semibold max-sm:w-full">{t("Documentos de Google")}</h3>
         {canCreate && (
-          <>
-            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
-              <FileText size={15} className="text-sky-600" /> {t("Nuevo Doc")}
+          <div className="flex items-center gap-1 max-sm:-mx-2 max-sm:w-[calc(100%+1rem)] max-sm:justify-between sm:shrink-0" data-google-create>
+            <button className="btn-ghost touch-target min-w-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_DOC")} disabled={!detail}>
+              <FileText size={15} className="shrink-0 text-sky-600" /> <span className="truncate">{t("Nuevo Doc")}</span>
             </button>
-            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
-              <FileSpreadsheet size={15} className="text-emerald-600" /> {t("Nuevo Sheet")}
+            <button className="btn-ghost touch-target min-w-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SHEET")} disabled={!detail}>
+              <FileSpreadsheet size={15} className="shrink-0 text-emerald-600" /> <span className="truncate">{t("Nuevo Sheet")}</span>
             </button>
-            <button className="btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SLIDES")} disabled={!detail}>
-              <GoogleFileIcon kind="GOOGLE_SLIDES" size={15} /> {t("Nuevo Slides")}
+            <button className="btn-ghost touch-target min-w-0 whitespace-nowrap px-2 py-1 text-xs" onClick={() => onCreate("GOOGLE_SLIDES")} disabled={!detail}>
+              <GoogleFileIcon kind="GOOGLE_SLIDES" size={15} className="shrink-0" /> <span className="truncate">{t("Nuevo Slides")}</span>
             </button>
-          </>
+          </div>
         )}
       </div>
       {links.length === 0 ? (

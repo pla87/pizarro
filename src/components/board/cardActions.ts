@@ -14,6 +14,14 @@ import type { MoveTurns } from "./moveTurns";
 
 type Toast = ReturnType<typeof useToast>;
 
+/**
+ * Aviso al duplicar (detalle, Alt+Mayús+D y Ctrl al soltar en el tablero): «Tarea duplicada» o, si la original se repetía,
+ * que la copia se ha creado sin repetición (`repeatDropped`, de duplicateTask: la repetición no se copia).
+ */
+export function duplicatedMessage(res: { repeatDropped?: true }, t: T): string {
+  return res.repeatDropped ? t("Copia creada sin repetición: la repetición no se copia") : t("Tarea duplicada");
+}
+
 interface Deps {
   currentUserId: string;
   getTask: (id: string) => BoardTask | undefined;
@@ -184,9 +192,9 @@ export function useCardActions(deps: Deps) {
         const { upsertTask, track, toast, t } = ref.current;
         const res = await track(duplicateTask(id));
         if (!res.ok) return toast(res.error, "error");
-        const { copyNotice, ...copy } = res.data;
+        const { copyNotice, repeatDropped, ...copy } = res.data;
         upsertTask(copy);
-        toast(t("Tarea duplicada"), "undo");
+        toast(duplicatedMessage({ repeatDropped }, t), "undo");
         // Adjuntos que no cupieron (cuota, tope por tarea) o cuyo archivo faltaba: la copia existe, sin ellos.
         if (copyNotice) toast(copyNotice, "error");
       },

@@ -37,14 +37,14 @@ propia. No forman parte de `npm test`: se lanzan a mano antes de publicar una ve
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/r49-account-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/r51-cuenta-e2e.mjs` | 71 | ~45 s |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/r49-infra-e2e.mjs` | 26 | ~1 min |
-| Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 87 | ~2 min |
+| Copias con adjuntos y release con barra de formato | `e2e/r49-copy-e2e.mjs` | 93 | ~2 min |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/r50-formatos-e2e.mjs` | 107 | ~1 min |
 | Tareas que se repiten (calendario, .ics y «Nueva tarea») | `e2e/r49-repeat-e2e.mjs` | 44 | ~1 min |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/r49-ui-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/r51-ui-e2e.mjs` | 62 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/r52-ui-e2e.mjs` | 109 | ~1,5 min |
-| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 97 | ~1,5 min |
-| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/r54-import-e2e.mjs` | 149 | ~3 min |
+| Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/r53-json-e2e.mjs` | 98 | ~1,5 min |
+| Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/r54-import-e2e.mjs` | 155 | ~3 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/r49-textos-e2e.mjs` | 29 | ~1 min |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/r50-plantilla-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/r51-plantilla-e2e.mjs` | 26 | ~40 s |
@@ -512,7 +512,8 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node r51-cuenta-e2e.mjs
 Duplicar una tarea con una imagen y un archivo (botón del detalle, Ctrl al soltar en otra columna, Alt+Mayús+D y en el
 móvil a 390 px): la copia tiene sus propios adjuntos (ids nuevos, mismo contenido y miniatura), el documento de Google
 enlazado y las subtareas sin marcar; borrar el adjunto de la original no toca el de la copia; deshacer y rehacer la
-copia; con la cuota del proyecto justa se copian los que caben y se avisa del resto. Release con la preferencia «Con
+copia; con la cuota del proyecto justa se copian los que caben y se avisa del resto. Duplicar una tarea que se repite
+(Ctrl al soltar, Alt+Mayús+D y el botón del detalle): la copia nace sin repetición y el aviso lo dice. Release con la preferencia «Con
 barra de formato»: editor con barra sin Editar / Vista previa; sin tocar nada, Copiar todo, .md y .txt dan lo mismo que
 con Markdown; al editar solo cambia lo editado; cambiar el pie o quitar la cabecera con el texto ya editado; negrita de
 la barra; desplegar guarda lo editado; release de 300 tareas (tiempo de carga, por tecla frente a un campo de texto y
@@ -573,7 +574,8 @@ una lista o dos seguidas no hacen nada. Dentro de un campo el JSON se pega como 
 pegar la tarea pregunta antes. Los botones «Copiar tarea» e «Importar tarea» (desde el portapapeles, tolerante con lo
 que escribe una IA, con aviso si hay varias tareas o ninguna; desde un fichero .txt; con el teclado; sin permiso para
 leer el portapapeles, cuadro para pegarlo a mano; en el móvil, juntos en un botón «⋯» «Más opciones de la tarea» que cabe en la
-cabecera y deja sitio al título, también con el teclado) y los textos en inglés. Misma
+cabecera y deja sitio al título, también con el teclado), la barra de progreso de las subtareas solo con alguna y los
+textos en inglés. Misma
 base y servidor:
 
 ```sh
@@ -591,7 +593,8 @@ de tareas exacto abre el diálogo con el texto (con texto alrededor, no). Un fic
 € y emojis) se importa por la ruta `/api/projects/[id]/import-tasks` (las acciones admiten 1 MB); sin red, con la sesión
 caducada o con un 413 de un proxy por delante, el aviso de siempre. Con tarjetas marcadas el botón pasa a
 «Exportar (N)»: «Descargar .json» (nombre `tareas-<proyecto>-<fecha>.json`, sin emails) y «Copiar»; lo descargado se
-vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» copia lo escrito, «Importar
+vuelve a importar con la dependencia hacia la copia nueva. «Nueva tarea»: «Copiar tarea» e «Importar tarea» van en la
+cabecera junto a la X, como en el detalle (en el móvil, juntos en «⋯»); «Copiar tarea» copia lo escrito, «Importar
 tarea» rellena el formulario (pregunta antes de sustituir y avisa de lo que no admite), desde un fichero y con Ctrl+V
 estricto fuera de un campo. Ctrl+V de una tarea copiada (de otra instalación, con Markdown largo, tipo «Respuesta» y
 columna del proyecto) la importa entera con el foco en el título vacío, en cada selector, en un tipo, en un botón, en la
@@ -599,7 +602,8 @@ fecha, en una zona vacía o en una caja con el formulario sin tocar; con algo es
 texto; varias tareas avisan; desde el «+» de una columna manda la del JSON si existe (si no, la de la columna). Etiquetas
 (solo las del proyecto), color y enlace al crear, al importar (aviso de las etiquetas que no existen) y al copiar; con el
 selector de proyecto se quedan las etiquetas que existen en el otro. En el móvil (390 px): «Crear varias tareas» con JSON pegado ofrece importarlas, el diálogo
-cabe, la barra de selección tiene «Exportar». En inglés y en modo oscuro. De otros Kanban (`PART=otros`): un tablero de
+cabe, la barra de selección tiene «Exportar»; en «Nueva tarea», zona de toque de 40 px en los chips de tipo, el «+» de
+subtareas y las muestras de color, y la flecha propia de los desplegables a 6 px del borde. En inglés y en modo oscuro. De otros Kanban (`PART=otros`): un tablero de
 Trello por «Desde un fichero» («Formato detectado: Trello (tablero)», avisos de la archivada y del comentario, lista →
 columna por nombre o la primera, checklist → subtareas, etiqueta nueva, responsable por nombre), un CSV de Jira guardado
 en Windows-1252 (eñes bien leídas, dos columnas «Labels» juntas, referencia en la descripción) y una tarjeta de Trello
