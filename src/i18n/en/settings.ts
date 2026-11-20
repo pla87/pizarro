@@ -5,7 +5,6 @@ export const settings: Record<string, string> = {
   "Plantillas": "Templates",
   "Secciones del perfil": "Profile sections",
   "Mis tareas": "My tasks",
-  "{n} tarea(s) en todos tus proyectos.": "{n} task(s) across all your projects.",
   "Se muestran las primeras {shown} de {total}, por fecha límite. Abre cada proyecto para ver el resto.": "Showing the first {shown} of {total}, by due date. Open each project to see the rest.",
   "No tienes tareas asignadas.": "You have no assigned tasks.",
   "Enlace externo": "External link",
