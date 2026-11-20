@@ -125,18 +125,29 @@ const ZIP_SEND_MAX_MS = 15 * 60 * 1000;
  */
 const ZIP_SEND_IDLE_MS = 60 * 1000;
 
+/** Cómo acabó el envío de un ZIP: entero, con un error (fichero cambiado, cliente que no lee, tope de tiempo) o cortado. */
+export type ZipSendOutcome = "ok" | "error" | "aborted";
+
 /**
  * Cuerpo de respuesta que entrega el ZIP según lo pide el cliente (un buffer, a trozos de 1 MB, o un flujo de trozos)
  * y suelta el hueco de acquireZipSlot al dar el último trozo, si falla, si se cancela la descarga o se aborta la
  * petición (o, como muy tarde, a los 15 min, o tras 60 s sin que el cliente lea nada, cortando la respuesta): mientras
- * se envía, el ZIP debe seguir contando como uno en curso.
+ * se envía, el ZIP debe seguir contando como uno en curso. `release` recibe cómo acabó: "ok" solo si se envió entero.
  */
-export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, release: () => void, opts: { signal?: AbortSignal; chunk?: number; idleMs?: number } = {}): ReadableStream<Uint8Array> {
+export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, release: (outcome: ZipSendOutcome) => void, opts: { signal?: AbortSignal; chunk?: number; idleMs?: number } = {}): ReadableStream<Uint8Array> {
   const chunk = opts.chunk ?? ZIP_SEND_CHUNK;
   const idleMs = opts.idleMs ?? ZIP_SEND_IDLE_MS;
   let pos = 0;
   const iterator = zip instanceof Uint8Array ? null : zip[Symbol.asyncIterator]();
-  const timer = setTimeout(() => done(), ZIP_SEND_MAX_MS);
+  const timer = setTimeout(() => {
+    if (finished) return;
+    stop("error");
+    try {
+      ctrl?.error(new Error("ZIP: tiempo máximo de envío"));
+    } catch {
+      // Ya cerrado.
+    }
+  }, ZIP_SEND_MAX_MS);
   timer.unref?.();
   let finished = false;
   let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
@@ -151,7 +162,7 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
     if (finished) return;
     idle = setTimeout(() => {
       if (finished) return;
-      stop();
+      stop("error");
       try {
         ctrl?.error(new Error("ZIP: el cliente no lee la descarga"));
       } catch {
@@ -160,21 +171,22 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
     }, idleMs);
     idle.unref?.();
   };
-  const done = () => {
+  const done = (outcome: ZipSendOutcome) => {
     if (finished) return;
     finished = true;
     clearTimeout(timer);
     disarm();
-    opts.signal?.removeEventListener("abort", stop);
-    release();
+    opts.signal?.removeEventListener("abort", onAbort);
+    release(outcome);
   };
-  // Descarga cancelada o petición abortada: además se cierra el fichero que se estuviera leyendo.
-  const stop = () => {
-    done();
+  // Descarga cancelada, petición abortada o corte por tiempo: además se cierra el fichero que se estuviera leyendo.
+  const stop = (outcome: ZipSendOutcome) => {
+    done(outcome);
     void iterator?.return?.()?.catch(() => {});
   };
-  if (opts.signal?.aborted) stop();
-  else opts.signal?.addEventListener("abort", stop, { once: true });
+  const onAbort = () => stop("aborted");
+  if (opts.signal?.aborted) onAbort();
+  else opts.signal?.addEventListener("abort", onAbort, { once: true });
   return new ReadableStream<Uint8Array>(
     {
       start(controller) {
@@ -190,7 +202,7 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
         }
       },
       cancel() {
-        stop();
+        stop("aborted");
       },
     },
     // Sin cola: cada trozo se lee solo cuando el cliente pide el siguiente.
@@ -203,13 +215,13 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
       try {
         next = await iterator.next();
       } catch (err) {
-        done();
+        done("error");
         controller.error(err);
         return;
       }
       try {
         if (next.done) {
-          done();
+          done("ok");
           controller.close();
         } else controller.enqueue(next.value);
       } catch {
@@ -222,15 +234,24 @@ export function zipBodyStream(zip: Uint8Array | AsyncIterable<Uint8Array>, relea
     if (end > pos) controller.enqueue(buf.subarray(pos, end));
     pos = end;
     if (pos >= buf.length) {
-      done();
+      done("ok");
       controller.close();
     }
   }
 }
 
 /** Cuerpo de respuesta de un paquete preparado con prepareZipPart: se escribe en flujo, fichero a fichero. */
-export function zipPartBody(part: ZipPart, release: () => void, opts: { signal?: AbortSignal; now?: Date } = {}): ReadableStream<Uint8Array> {
+export function zipPartBody(part: ZipPart, release: (outcome: ZipSendOutcome) => void, opts: { signal?: AbortSignal; now?: Date } = {}): ReadableStream<Uint8Array> {
   return zipBodyStream(streamZip(part.entries, opts.now), release, opts);
+}
+
+/**
+ * Respuesta a HEAD de las rutas que sirven ZIP. Sin un HEAD propio, Next lo deriva de GET y lo ejecuta entero: reservaba
+ * el hueco (uno por persona), marcaba el paquete en el vale y leía los ficheros, y el GET de verdad recibía «Ya se está
+ * preparando otro ZIP». Se responde sin hacer nada.
+ */
+export function zipHeadResponse(allow: string): Response {
+  return new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "private, no-store" } });
 }
 
 /** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes pedidos por número otro. */

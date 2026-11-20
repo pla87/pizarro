@@ -1,6 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
-import { closePresenceStream, openPresenceStream, presenceSnapshot, subscribePresence } from "@/lib/presence";
+import { closePresenceStream, openPresenceStream, presenceJson, subscribePresence } from "@/lib/presence";
 import { liveCursor, MAX_STREAMS_PER_USER, openStreamCount, registerStream, subscribeProject } from "@/lib/realtime";
 import { currentSessionId, getCurrentUser, type CurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -48,6 +48,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   if (openStreamCount(user.id) >= MAX_STREAMS_PER_USER) return new Response(t("Demasiadas conexiones abiertas."), { status: 429 });
   const sessionId = await currentSessionId();
   if (!sessionId) return new Response(t("No autorizado"), { status: 401 });
+  // La pestaña se cerró (o el canal se cortó) mientras se comprobaba todo lo anterior: la señal ya no avisará y Next no
+  // cancelaría el flujo, así que no se registra nada (si no, quedaba una persona fantasma y un hueco de canal ocupado).
+  if (req.signal.aborted) return new Response(null, { status: 204 });
 
   const encoder = new TextEncoder();
   let cleanup = () => {};
@@ -71,8 +74,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
       // saludo: el diálogo de una tarea lo usa para anunciarla una sola vez (api/tasks/[id]/viewers?stream=…).
       const streamId = openPresenceStream(project.id, user.id, user.name);
       let lastPresence = "";
-      const sendPresence = () => {
-        const json = JSON.stringify(presenceSnapshot(project.id));
+      // El estado llega ya en JSON, calculado una vez por proyecto (presence.ts); aquí solo se descarta si no ha cambiado.
+      const sendPresence = (json: string) => {
         if (json === lastPresence) return;
         lastPresence = json;
         send(`event: presence\ndata: ${json}\n\n`);
@@ -82,15 +85,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
       // se perdió alguno y solo entonces pide el tablero (ver Board.tsx).
       send(`event: hello\ndata: ${JSON.stringify({ ...liveCursor(project.id), stream: streamId })}\n\n`);
       // Estado completo de la presencia al conectar; después, solo cuando cambia.
-      sendPresence();
+      sendPresence(presenceJson(project.id));
       const unsubscribePresence = subscribePresence(project.id, sendPresence);
       // Evento periódico con nombre (no un comentario: el navegador no los ve): mantiene viva la conexión a través de
       // proxies y le dice a la pestaña que el canal está sano (con él, el respaldo del tablero se espacia: Board.tsx).
-      // De paso se comprueba si alguien ha dejado de contar como activo (5 minutos sin actividad).
-      const ping = setInterval(() => {
-        send(`event: ping\ndata: ${Date.now()}\n\n`);
-        sendPresence();
-      }, PING_MS);
+      // Quién deja de contar como activo (5 minutos sin actividad) lo comprueba presence.ts una vez por proyecto.
+      const ping = setInterval(() => send(`event: ping\ndata: ${Date.now()}\n\n`), PING_MS);
       let checking = false;
       const recheck = setInterval(() => {
         if (checking) return;
@@ -117,7 +117,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
           // Ya cerrado.
         }
       };
-      req.signal.addEventListener("abort", () => cleanup());
+      req.signal.addEventListener("abort", () => cleanup(), { once: true });
+      // Cortada justo ahora (entre la comprobación de arriba y el registro): el aviso ya no llegará.
+      if (req.signal.aborted) cleanup();
     },
     cancel() {
       cleanup();

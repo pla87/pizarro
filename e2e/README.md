@@ -22,7 +22,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 389 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
 | **Tablero** | | **665** | |
-| Tablero | `e2e/board-e2e.mjs` | 360 | ~4 min |
+| Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a) | `e2e/tablero-cabecera-e2e.mjs` | 42 | ~1 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |

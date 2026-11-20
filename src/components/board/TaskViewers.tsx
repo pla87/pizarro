@@ -37,7 +37,9 @@ export function TaskViewers({ taskId }: { taskId: string }) {
         // Sin conexión: se mantiene lo último conocido.
       }
     };
-    void ping();
+    // El cierre (DELETE) sale después de que el primer aviso haya terminado: abriendo y cerrando muy deprisa, el DELETE
+    // podía llegar antes y la tarea quedaba abierta mientras durase el canal.
+    const first = ping();
     // Con canal basta el primer aviso (se reanuncia si el canal se reabre: cambia `stream`).
     if (!stream) {
       timer = setInterval(ping, POLL_MS);
@@ -47,7 +49,7 @@ export function TaskViewers({ taskId }: { taskId: string }) {
       cancelled = true;
       if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", ping);
-      void fetch(url, { method: "DELETE", keepalive: true }).catch(() => {});
+      void first.finally(() => fetch(url, { method: "DELETE", keepalive: true }).catch(() => {}));
     };
   }, [taskId, stream]);
 

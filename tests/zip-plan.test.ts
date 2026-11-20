@@ -180,6 +180,59 @@ describe("zipBodyStream: el hueco del ZIP se suelta al terminar de enviarlo", ()
   });
 });
 
+describe("zipBodyStream: cómo acabó el envío (el vale solo da por terminado el paquete enviado entero)", () => {
+  const zip = Buffer.alloc(2.5 * 1024 * 1024, 7);
+  const outcomeOf = (user: string) => {
+    const slot = acquireZipSlot(user)!;
+    const seen: string[] = [];
+    return { release: (o: string) => { seen.push(o); slot(); }, seen };
+  };
+
+  test("entero: ok (una sola vez)", async () => {
+    const r = outcomeOf("zo-1");
+    await new Response(zipBodyStream(zip, r.release)).arrayBuffer();
+    assert.deepEqual(r.seen, ["ok"]);
+    async function* parts() {
+      yield new Uint8Array(3);
+      yield new Uint8Array(4);
+    }
+    const r2 = outcomeOf("zo-1b");
+    await new Response(zipBodyStream(parts(), r2.release)).arrayBuffer();
+    assert.deepEqual(r2.seen, ["ok"]);
+  });
+
+  test("cancelada o abortada a medias: aborted", async () => {
+    const r = outcomeOf("zo-2");
+    const reader = zipBodyStream(zip, r.release).getReader();
+    await reader.read();
+    await reader.cancel();
+    assert.deepEqual(r.seen, ["aborted"]);
+    const ac = new AbortController();
+    const r2 = outcomeOf("zo-3");
+    const body = zipBodyStream(zip, r2.release, { signal: ac.signal });
+    ac.abort();
+    assert.deepEqual(r2.seen, ["aborted"]);
+    await body.cancel();
+    assert.deepEqual(r2.seen, ["aborted"], "una sola vez");
+  });
+
+  test("un fichero que falla a medias (ha cambiado) o un cliente que no lee: error", async () => {
+    async function* broken() {
+      yield new Uint8Array(5);
+      throw new Error("El fichero ha cambiado");
+    }
+    const r = outcomeOf("zo-4");
+    await assert.rejects(new Response(zipBodyStream(broken(), r.release)).arrayBuffer());
+    assert.deepEqual(r.seen, ["error"]);
+    const r2 = outcomeOf("zo-5");
+    const reader = zipBodyStream(zip, r2.release, { idleMs: 50 }).getReader();
+    await reader.read();
+    await new Promise((res) => setTimeout(res, 150));
+    assert.deepEqual(r2.seen, ["error"]);
+    await reader.read().catch(() => {});
+  });
+});
+
 describe("sizedZipEntries", () => {
   test("consulta los tamaños en paralelo (como mucho 16 a la vez), conserva el orden y omite los ausentes", async () => {
     const candidates = Array.from({ length: 50 }, (_, i) => ({ id: `a${i}`, name: `f${i}.txt`, open: async function* () {} }));

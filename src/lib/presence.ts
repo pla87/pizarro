@@ -28,36 +28,88 @@ interface LiveStream {
   tasks: Set<string>;
 }
 const liveStreams = (globalThis as unknown as { __pzPresenceStreams?: Map<string, LiveStream> }).__pzPresenceStreams ??= new Map();
+// Los canales de cada proyecto (ids de `liveStreams`): el estado de un proyecto no recorre los canales de los demás.
+const streamsByProject = (globalThis as unknown as { __pzPresenceByProject?: Map<string, Set<string>> }).__pzPresenceByProject ??= new Map();
 
-type PresenceListener = () => void;
-const presenceListeners = (globalThis as unknown as { __pzPresenceListeners?: Map<string, Set<PresenceListener>> }).__pzPresenceListeners ??= new Map();
+function addLiveStream(id: string, s: LiveStream): void {
+  liveStreams.set(id, s);
+  let set = streamsByProject.get(s.projectId);
+  if (!set) streamsByProject.set(s.projectId, (set = new Set()));
+  set.add(id);
+}
+
+function deleteLiveStream(id: string): LiveStream | undefined {
+  const s = liveStreams.get(id);
+  if (!s) return undefined;
+  liveStreams.delete(id);
+  const set = streamsByProject.get(s.projectId);
+  set?.delete(id);
+  if (set?.size === 0) streamsByProject.delete(s.projectId);
+  return s;
+}
+
+function* projectStreams(projectId: string): Generator<LiveStream> {
+  for (const id of streamsByProject.get(projectId) ?? []) {
+    const s = liveStreams.get(id);
+    if (s) yield s;
+  }
+}
+
+/** Recibe el estado de la presencia del proyecto (el JSON del evento `presence`), calculado una vez para todos sus canales. */
+type PresenceListener = (json: string) => void;
+interface ProjectListeners {
+  listeners: Set<PresenceListener>;
+  /** Comprobación periódica (una por proyecto, no por canal): quien deja de contar como activo sin que pase nada. */
+  check: ReturnType<typeof setInterval>;
+}
+const presenceListeners = (globalThis as unknown as { __pzPresenceListeners2?: Map<string, ProjectListeners> }).__pzPresenceListeners2 ??= new Map();
 const pendingNotify = new Map<string, ReturnType<typeof setTimeout>>();
+/** Cada cuánto se vuelve a calcular el estado de un proyecto con canales abiertos aunque no haya avisos. */
+const PRESENCE_CHECK_MS = 25_000;
+
+function broadcast(projectId: string): void {
+  const entry = presenceListeners.get(projectId);
+  if (!entry) return;
+  const json = presenceJson(projectId);
+  for (const l of entry.listeners) {
+    try {
+      l(json);
+    } catch {
+      // Un canal roto no afecta al resto.
+    }
+  }
+}
 
 /** Avisa (agrupado: 200 ms) a los canales del proyecto de que la presencia ha cambiado. */
 function notifyPresence(projectId: string): void {
   if (!presenceListeners.has(projectId) || pendingNotify.has(projectId)) return;
   const timer = setTimeout(() => {
     pendingNotify.delete(projectId);
-    for (const l of presenceListeners.get(projectId) ?? []) {
-      try {
-        l();
-      } catch {
-        // Un canal roto no afecta al resto.
-      }
-    }
+    broadcast(projectId);
   }, 200);
   timer.unref?.();
   pendingNotify.set(projectId, timer);
 }
 
-/** El canal recibe una llamada cada vez que cambia la presencia del proyecto (luego pide `presenceSnapshot`). */
+/**
+ * El canal recibe el estado de la presencia del proyecto cada vez que cambia y en la comprobación periódica (cada 25 s,
+ * por si alguien ha dejado de contar como activo); el canal descarta el que ya envió.
+ */
 export function subscribePresence(projectId: string, listener: PresenceListener): () => void {
-  let set = presenceListeners.get(projectId);
-  if (!set) presenceListeners.set(projectId, (set = new Set()));
-  set.add(listener);
+  let entry = presenceListeners.get(projectId);
+  if (!entry) {
+    const check = setInterval(() => broadcast(projectId), PRESENCE_CHECK_MS);
+    check.unref?.();
+    presenceListeners.set(projectId, (entry = { listeners: new Set(), check }));
+  }
+  const e = entry;
+  e.listeners.add(listener);
   return () => {
-    set.delete(listener);
-    if (set.size === 0) presenceListeners.delete(projectId);
+    e.listeners.delete(listener);
+    if (e.listeners.size === 0 && presenceListeners.get(projectId) === e) {
+      clearInterval(e.check);
+      presenceListeners.delete(projectId);
+    }
   };
 }
 
@@ -65,7 +117,7 @@ export function subscribePresence(projectId: string, listener: PresenceListener)
 export function openPresenceStream(projectId: string, userId: string, name: string, now = Date.now()): string {
   const id = randomUUID();
   const fresh = !isPresent(projectId, userId, now);
-  liveStreams.set(id, { projectId, userId, name, openedAt: now, tasks: new Set() });
+  addLiveStream(id, { projectId, userId, name, openedAt: now, tasks: new Set() });
   if (fresh) notifyPresence(projectId);
   return id;
 }
@@ -75,20 +127,37 @@ export function openPresenceStream(projectId: string, userId: string, name: stri
  * quitan las tareas que tenía abiertas. Se puede llamar más de una vez.
  */
 export function closePresenceStream(id: string, now = Date.now()): void {
-  const s = liveStreams.get(id);
+  const s = deleteLiveStream(id);
   if (!s) return;
-  liveStreams.delete(id);
   notePresence(s.projectId, s.userId, s.name, now);
   notifyPresence(s.projectId);
 }
 
 /**
- * La pestaña de ese canal tiene abierta la tarea (del mismo proyecto que el canal). false si el canal no existe o no es
- * de ese usuario y proyecto: entonces se usa el aviso con caducidad (`noteTaskViewer`).
+ * Cierres de tarea que llegaron antes que su anuncio (abrir y cerrar muy deprisa: el DELETE puede adelantar al GET).
+ * Clave `canal:tarea`; el anuncio que llega poco después no la retiene (si no, quedaría abierta mientras dure el canal).
  */
-export function holdTaskView(streamId: string, userId: string, taskId: string, projectId: string): boolean {
+const earlyReleases = (globalThis as unknown as { __pzEarlyReleases?: Map<string, number> }).__pzEarlyReleases ??= new Map();
+const EARLY_RELEASE_MS = 10_000;
+
+function sweepEarlyReleases(now: number): void {
+  for (const [k, at] of earlyReleases) if (now - at > EARLY_RELEASE_MS) earlyReleases.delete(k);
+}
+
+/**
+ * La pestaña de ese canal tiene abierta la tarea (del mismo proyecto que el canal). false si el canal no existe o no es
+ * de ese usuario y proyecto: entonces se usa el aviso con caducidad (`noteTaskViewer`). Si ese canal ya cerró la tarea
+ * hace un momento (el cierre llegó antes que este anuncio), gana el cierre: devuelve true sin retenerla.
+ */
+export function holdTaskView(streamId: string, userId: string, taskId: string, projectId: string, now = Date.now()): boolean {
   const s = liveStreams.get(streamId);
   if (!s || s.userId !== userId || s.projectId !== projectId) return false;
+  const key = `${streamId}:${taskId}`;
+  const released = earlyReleases.get(key);
+  if (released !== undefined) {
+    earlyReleases.delete(key);
+    if (now - released <= EARLY_RELEASE_MS) return true;
+  }
   if (!s.tasks.has(taskId)) {
     s.tasks.add(taskId);
     notifyPresence(projectId);
@@ -96,10 +165,15 @@ export function holdTaskView(streamId: string, userId: string, taskId: string, p
   return true;
 }
 
-/** La pestaña de ese canal ha cerrado la tarea. */
-export function releaseTaskView(streamId: string, userId: string, taskId: string): void {
+/** La pestaña de ese canal ha cerrado la tarea. Si aún no la había anunciado, se apunta para que el anuncio no la retenga. */
+export function releaseTaskView(streamId: string, userId: string, taskId: string, now = Date.now()): void {
   const s = liveStreams.get(streamId);
-  if (!s || s.userId !== userId || !s.tasks.delete(taskId)) return;
+  if (!s || s.userId !== userId) return;
+  if (!s.tasks.delete(taskId)) {
+    if (earlyReleases.size > 1000) sweepEarlyReleases(now);
+    earlyReleases.set(`${streamId}:${taskId}`, now);
+    return;
+  }
   notifyPresence(s.projectId);
 }
 
@@ -115,9 +189,10 @@ export function presenceSnapshot(projectId: string, now = Date.now()): { users: 
     if (!m) byTask.set(taskId, (m = new Map()));
     m.set(id, name);
   };
-  for (const s of liveStreams.values()) if (s.projectId === projectId) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
-  for (const [taskId, v] of viewers) {
-    if (v.projectId !== projectId) continue;
+  for (const s of projectStreams(projectId)) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
+  for (const taskId of viewersByProject.get(projectId) ?? []) {
+    const v = viewers.get(taskId);
+    if (!v) continue;
     for (const [id, e] of v.users) if (now - e.at <= VIEWER_WINDOW_MS) add(taskId, id, e.name);
   }
   const out: Record<string, Person[]> = {};
@@ -127,22 +202,45 @@ export function presenceSnapshot(projectId: string, now = Date.now()): { users: 
   return { users, viewers: out };
 }
 
+/** El estado del proyecto ya en JSON (lo que envía el evento `presence`). */
+export function presenceJson(projectId: string, now = Date.now()): string {
+  return JSON.stringify(presenceSnapshot(projectId, now));
+}
+
 // --- Actividad en el tablero -----------------------------------------------------------------------------------------
 
 function isPresent(projectId: string, userId: string, now: number): boolean {
   const e = state.get(projectId)?.get(userId);
   if (e && now - e.at <= PRESENCE_WINDOW_MS) return true;
-  for (const s of liveStreams.values()) if (s.projectId === projectId && s.userId === userId) return true;
+  for (const s of projectStreams(projectId)) if (s.userId === userId) return true;
   return false;
+}
+
+/** Barrido de la actividad caducada de todos los proyectos: los que nadie mira no pasan por `activeUsers`. */
+const STATE_SWEEP_MS = 60_000;
+let lastStateSweep = 0;
+function sweepState(now: number): void {
+  lastStateSweep = now;
+  for (const [pid, users] of state) {
+    for (const [id, e] of users) if (now - e.at > PRESENCE_WINDOW_MS) users.delete(id);
+    if (users.size === 0) state.delete(pid);
+  }
+}
+
+/** ¿Queda actividad anotada en memoria para el proyecto? (pruebas del barrido) */
+export function hasPresenceEntry(projectId: string): boolean {
+  return state.has(projectId);
 }
 
 /** Anota actividad de un usuario en un proyecto. */
 export function notePresence(projectId: string, userId: string, name: string, at = Date.now()): void {
+  // Como mucho una vez por minuto: barato aunque haya muchos proyectos.
+  if (at - lastStateSweep > STATE_SWEEP_MS) sweepState(at);
   const fresh = !isPresent(projectId, userId, at);
   let users = state.get(projectId);
   if (!users) state.set(projectId, (users = new Map()));
   users.set(userId, { name, at });
-  // Solo se avisa si aparece alguien: el orden se pone al día en la siguiente comprobación periódica del canal.
+  // Solo se avisa si aparece alguien: el orden se pone al día en la siguiente comprobación periódica del proyecto.
   if (fresh) notifyPresence(projectId);
 }
 
@@ -160,8 +258,7 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
     }
     if (users.size === 0) state.delete(projectId);
   }
-  for (const s of liveStreams.values()) {
-    if (s.projectId !== projectId) continue;
+  for (const s of projectStreams(projectId)) {
     const prev = merged.get(s.userId);
     // Con el canal abierto cuenta desde que se abrió o desde su última acción: un orden estable entre comprobaciones.
     if (!prev || prev.at < s.openedAt) merged.set(s.userId, { name: s.name, at: s.openedAt });
@@ -174,11 +271,30 @@ export function activeUsers(projectId: string, now = Date.now()): { id: string; 
 const VIEWER_WINDOW_MS = 45_000;
 type TaskViewers = { projectId: string; users: Map<string, Entry> };
 const viewers = (globalThis as unknown as { __pzViewers?: Map<string, TaskViewers> }).__pzViewers ??= new Map();
+// Las tareas de `viewers` de cada proyecto (el estado de un proyecto no recorre las de los demás).
+const viewersByProject = (globalThis as unknown as { __pzViewersByProject?: Map<string, Set<string>> }).__pzViewersByProject ??= new Map();
+
+function setViewers(taskId: string, v: TaskViewers): void {
+  deleteViewers(taskId);
+  viewers.set(taskId, v);
+  let set = viewersByProject.get(v.projectId);
+  if (!set) viewersByProject.set(v.projectId, (set = new Set()));
+  set.add(taskId);
+}
+
+function deleteViewers(taskId: string): void {
+  const v = viewers.get(taskId);
+  if (!v) return;
+  viewers.delete(taskId);
+  const set = viewersByProject.get(v.projectId);
+  set?.delete(taskId);
+  if (set?.size === 0) viewersByProject.delete(v.projectId);
+}
 
 /** Quién más tiene abierta la tarea ahora (por cualquier camino), sin el propio usuario. */
 export function taskViewersExcept(taskId: string, projectId: string, userId: string, now = Date.now()): Person[] {
   const out = new Map<string, string>();
-  for (const s of liveStreams.values()) if (s.projectId === projectId && s.userId !== userId && s.tasks.has(taskId)) out.set(s.userId, s.name);
+  for (const s of projectStreams(projectId)) if (s.userId !== userId && s.tasks.has(taskId)) out.set(s.userId, s.name);
   const v = viewers.get(taskId);
   if (v) for (const [id, e] of v.users) if (id !== userId && now - e.at <= VIEWER_WINDOW_MS) out.set(id, e.name);
   return [...out].map(([id, name]) => ({ id, name }));
@@ -188,7 +304,7 @@ export function taskViewersExcept(taskId: string, projectId: string, userId: str
 export function noteTaskViewer(taskId: string, projectId: string, userId: string, name: string, now = Date.now()): Person[] {
   if (viewers.size > 200) sweepViewers(now);
   let v = viewers.get(taskId);
-  if (!v || v.projectId !== projectId) viewers.set(taskId, (v = { projectId, users: new Map() }));
+  if (!v || v.projectId !== projectId) setViewers(taskId, (v = { projectId, users: new Map() }));
   const prev = v.users.get(userId);
   v.users.set(userId, { name, at: now });
   if (!prev || now - prev.at > VIEWER_WINDOW_MS) notifyPresence(projectId);
@@ -210,17 +326,17 @@ export function openTaskViewers(exceptUserId: string, now = Date.now()): Map<str
       if (now - e.at > VIEWER_WINDOW_MS) v.users.delete(id);
       else add(taskId, id, e.name);
     }
-    if (v.users.size === 0) viewers.delete(taskId);
+    if (v.users.size === 0) deleteViewers(taskId);
   }
   for (const s of liveStreams.values()) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
   return new Map([...out].map(([taskId, m]) => [taskId, [...m].map(([id, name]) => ({ id, name }))]));
 }
 
-/** El usuario ha cerrado la tarea (aviso sin canal). */
+/** El usuario ha cerrado la tarea (aviso sin canal). Solo avisa a los canales si estaba anotado. */
 export function leaveTask(taskId: string, userId: string): void {
   const v = viewers.get(taskId);
   if (!v?.users.delete(userId)) return;
-  if (v.users.size === 0) viewers.delete(taskId);
+  if (v.users.size === 0) deleteViewers(taskId);
   notifyPresence(v.projectId);
 }
 
@@ -228,7 +344,7 @@ export function leaveTask(taskId: string, userId: string): void {
 function sweepViewers(now: number): void {
   for (const [taskId, v] of viewers) {
     for (const [id, e] of v.users) if (now - e.at > VIEWER_WINDOW_MS) v.users.delete(id);
-    if (v.users.size === 0) viewers.delete(taskId);
+    if (v.users.size === 0) deleteViewers(taskId);
   }
 }
 
@@ -240,15 +356,15 @@ export function dropUserPresence(userId: string, projectId?: string): void {
     if (users.size === 0) state.delete(pid);
   }
   // Sus canales ya se han cortado (revoke.ts); por si quedara alguno, deja de contar.
-  for (const [id, s] of liveStreams) {
+  for (const [id, s] of [...liveStreams]) {
     if (s.userId !== userId || (projectId && s.projectId !== projectId)) continue;
-    liveStreams.delete(id);
+    deleteLiveStream(id);
     notifyPresence(s.projectId);
   }
   if (!projectId) {
     for (const [taskId, v] of viewers) {
       if (v.users.delete(userId)) notifyPresence(v.projectId);
-      if (v.users.size === 0) viewers.delete(taskId);
+      if (v.users.size === 0) deleteViewers(taskId);
     }
   }
 }
@@ -256,7 +372,7 @@ export function dropUserPresence(userId: string, projectId?: string): void {
 /** Vacía la presencia de un proyecto (cambia su visibilidad o se borra); reaparece quien siga actuando. */
 export function dropProjectPresence(projectId: string): void {
   state.delete(projectId);
-  for (const [id, s] of liveStreams) if (s.projectId === projectId) liveStreams.delete(id);
-  for (const [taskId, v] of viewers) if (v.projectId === projectId) viewers.delete(taskId);
+  for (const id of [...(streamsByProject.get(projectId) ?? [])]) deleteLiveStream(id);
+  for (const taskId of [...(viewersByProject.get(projectId) ?? [])]) deleteViewers(taskId);
   notifyPresence(projectId);
 }
