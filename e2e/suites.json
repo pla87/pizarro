@@ -320,6 +320,7 @@
     ],
     "documentacion-formatos-e2e": [
       "src/components/docs/**",
+      "src/components/ui/LazyMarkdown.tsx",
       "src/components/board/ReleaseDialog.tsx",
       "src/components/board/ReleaseRichEditor.tsx",
       "src/components/ui/googleFiles.tsx",
@@ -336,6 +337,7 @@
     ],
     "documentacion-enlaces-e2e": [
       "src/components/docs/**",
+      "src/components/ui/LazyMarkdown.tsx",
       "src/lib/documents.ts",
       "src/lib/document-kind.ts",
       "src/lib/html-doc-links.ts",

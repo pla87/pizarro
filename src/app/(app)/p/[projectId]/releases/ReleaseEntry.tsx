@@ -8,7 +8,7 @@ import { copyText, downloadText } from "@/components/ui/clipboard";
 import { startDownload } from "@/components/board/attachments-zip";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Markdown } from "@/components/ui/Markdown";
+import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { useToast } from "@/components/ui/Toast";
 import { blankEmptyParagraphs } from "@/lib/markdown-entities";
@@ -199,7 +199,7 @@ export function ReleaseEntry({ release }: Props) {
               <p className="mt-1 break-words text-xs text-slate-500">{attachments.join(", ")}</p>
             </div>
           )}
-          <Markdown>{release.content}</Markdown>
+          <LazyMarkdown>{release.content}</LazyMarkdown>
         </div>
       )}
     </article>
