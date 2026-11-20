@@ -19,8 +19,6 @@ interface ZipTicket {
   userId: string;
   projectId: string;
   items: ZipTicketItem[];
-  /** La lista en texto: si la misma persona vuelve a pedir la misma, se reutiliza el vale. */
-  key: string;
   at: number;
   started: Set<number>;
   done: Set<number>;
@@ -30,11 +28,19 @@ interface ZipTicket {
 const TICKET_TTL_MS = 30 * 60 * 1000;
 const MAX_TICKETS = 500;
 /**
- * Vales a la vez por persona (descarga uno a la vez; unos pocos cubren varias pestañas). Al pasarse se va el más antiguo
- * de esa persona: con solo el tope global, una persona pidiendo planes sin parar expulsaba los vales en curso de otras.
+ * Vales a la vez por persona (descarga uno a la vez; unos pocos cubren varias pestañas). Al pasarse se va uno de esa
+ * persona: con solo el tope global, una persona pidiendo planes sin parar expulsaba los vales en curso de otras.
  */
 const MAX_TICKETS_PER_USER = 5;
+/** Un vale sin un paquete en curso y sin uso en este tiempo es el primero que se va al pasar del tope por persona. */
+const IDLE_MS = 60 * 1000;
 const tickets = ((globalThis as unknown as { __pzZipTickets?: Map<string, ZipTicket> }).__pzZipTickets ??= new Map());
+
+function idle(tk: ZipTicket, now: number) {
+  if (now - tk.at <= IDLE_MS) return false;
+  for (const part of tk.started) if (!tk.done.has(part) && !tk.errors.has(part)) return false;
+  return true;
+}
 
 function prune(userId: string, now: number) {
   const mine: string[] = [];
@@ -42,31 +48,27 @@ function prune(userId: string, now: number) {
     if (now - tk.at > TICKET_TTL_MS) tickets.delete(id);
     else if (tk.userId === userId) mine.push(id);
   }
-  // El Map guarda el orden de alta (un vale usado se vuelve a poner al final): los primeros son los más antiguos.
-  while (mine.length >= MAX_TICKETS_PER_USER) tickets.delete(mine.shift()!);
+  // El Map guarda el orden de alta (un vale usado se vuelve a poner al final): los primeros son los más antiguos. Se va
+  // primero el más antiguo sin actividad (ningún paquete empezado y sin terminar ni fallar, y sin uso en IDLE_MS): el
+  // más antiguo puede ser la descarga en curso de otra pestaña. Si todos tienen actividad, el más antiguo.
+  while (mine.length >= MAX_TICKETS_PER_USER) {
+    let i = mine.findIndex((id) => idle(tickets.get(id)!, now));
+    if (i < 0) i = 0;
+    tickets.delete(mine.splice(i, 1)[0]!);
+  }
   // Con demasiados en total, se van los más antiguos.
   while (tickets.size >= MAX_TICKETS) tickets.delete(tickets.keys().next().value!);
 }
 
 /**
- * Vale para estos elementos (ya validados y con acceso comprobado). Si la misma persona ya tiene uno vigente para la
- * misma lista en el mismo proyecto, se reutiliza (y se olvida su estado: es una descarga nueva).
+ * Vale nuevo para estos elementos (ya validados y con acceso comprobado). Siempre uno nuevo, aunque la misma persona
+ * pida la misma lista: otra pestaña puede seguir descargando con el anterior, y vaciar su estado le daría errores falsos
+ * o le haría leer los de esta descarga.
  */
 export function issueZipTicket(userId: string, projectId: string, items: ZipTicketItem[], now = Date.now()): string {
-  const key = JSON.stringify(items.map((i) => [i.taskId, i.code ?? null, i.folder ?? null]));
-  for (const [id, tk] of tickets) {
-    if (tk.userId !== userId || tk.projectId !== projectId || tk.key !== key || now - tk.at > TICKET_TTL_MS) continue;
-    tk.at = now;
-    tk.started.clear();
-    tk.done.clear();
-    tk.errors.clear();
-    tickets.delete(id);
-    tickets.set(id, tk);
-    return id;
-  }
   prune(userId, now);
   const id = randomBytes(18).toString("base64url");
-  tickets.set(id, { userId, projectId, items, key, at: now, started: new Set(), done: new Set(), errors: new Map() });
+  tickets.set(id, { userId, projectId, items, at: now, started: new Set(), done: new Set(), errors: new Map() });
   return id;
 }
 
