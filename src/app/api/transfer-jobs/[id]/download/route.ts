@@ -10,6 +10,7 @@ import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { exportFileOf, getJobFor } from "@/lib/transfer-jobs";
 import { getT } from "@/i18n/server";
+import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,10 +52,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       // Solo se anota la descarga al empezar (no cada reanudación a mitad).
       if (!partial || range.start === 0) logEvent({ category: "api", action: "projects.exportDownload", message: `Descarga de la exportación «${f.name}»`, userId: user.id, userName: user.name, projectId: job.projectId ?? undefined, path: `/api/transfer-jobs/${job.id}/download`, ip: clientIp(req.headers), details: { jobId: job.id, bytes: size } });
       const stream = createReadStream(f.file, partial ? { start: range.start, end: range.end } : undefined);
-      if (partial) {
-        headers["Content-Length"] = String(range.end - range.start + 1);
-        headers["Content-Range"] = `bytes ${range.start}-${range.end}/${size}`;
-      } else headers["Content-Length"] = String(size);
+      // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone (en la 206, la
+      // longitud del rango).
+      const length = String(partial ? range.end - range.start + 1 : size);
+      headers["Content-Length"] = headers[DECLARED_LENGTH_HEADER] = length;
+      if (partial) headers["Content-Range"] = `bytes ${range.start}-${range.end}/${size}`;
       return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, { status: partial ? 206 : 200, headers });
     } catch (err) {
       if (err instanceof AppError) return Response.json({ error: t(err.message) }, { status: err.status });
