@@ -15,6 +15,7 @@ import { createResetLink } from "../../src/lib/reset-link";
 import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
 import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
+import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached } from "../../src/lib/rate-limit";
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
 import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
 import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
@@ -404,6 +405,17 @@ describe("accesos a medio completar (segundo paso pendiente) al cambiar la contr
     logout();
     expectOk(await resetPassword(token, "clave-restablecida-segura-1"));
     await cannotFinish(target.id, c);
+  });
+
+  test("restablecer la contraseña levanta el bloqueo de la cuenta por intentos fallidos", async () => {
+    const target = await makeUser();
+    const key = loginRateKeys("203.0.113.7", target.email).account;
+    for (let i = 0; i < LOGIN_ACCOUNT_LIMIT_TRUSTED; i++) rateLimit(key, LOGIN_ACCOUNT_LIMIT_TRUSTED, 15 * 60_000);
+    assert.ok(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT));
+    const token = await issueAuthToken(target.id, "PASSWORD_RESET");
+    logout();
+    expectOk(await resetPassword(token, "clave-restablecida-segura-2"));
+    assert.equal(rateLimitReached(key, LOGIN_ACCOUNT_LIMIT), false);
   });
 
   test("cambiarla desde la app (applyNewPassword), desactivar la cuenta o desvincular Google, igual", async () => {
