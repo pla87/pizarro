@@ -78,6 +78,29 @@ await page.waitForURL(new RegExp(`/p/${proj.id}`), { timeout: 15000, waitUntil: 
 await L.checkEventually("SHARE: de vuelta en el tablero, con la tarea", async () => [(await U.uiOrder(page, L.COL.backlog)).includes(TITLE), await U.uiOrder(page, L.COL.backlog)]);
 await L.eqEventually("SHARE: lo compartido ya no está en el servidor", async () => (await page.request.get(`${L.BASE}/api/share/${shareId}/0`)).status(), 404);
 
+// Eligiendo otro proyecto en el selector, al crear se va al tablero de ese proyecto (antes volvía al inicial).
+const OTHER = "r57_share_otro";
+const [me] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
+await L.q(`DELETE FROM "Project" WHERE id=$1`, [OTHER]);
+await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Zeta compartir',true,$2,999996,NOW())`, [OTHER, me.id]);
+await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [OTHER, me.id]);
+await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ($1,$2,'Pendiente',1000)`, [`${OTHER}_col`, OTHER]);
+try {
+  const res2 = await page.request.post(`${L.BASE}/api/share`, { headers: { "sec-fetch-site": "none" }, multipart: { title: "Compartida en otro r57" }, maxRedirects: 0 });
+  await page.goto(`${L.BASE}${res2.headers().location}`);
+  await dlg.waitFor({ timeout: 15000 });
+  await dlg.getByLabel("Proyecto", { exact: true }).selectOption(OTHER);
+  await L.eqEventually("OTRO: con las columnas del proyecto elegido", async () => (await dlg.innerText()).includes("Pendiente"), true);
+  await dlg.getByRole("button", { name: "Crear tarea" }).click();
+  await L.eqEventually("OTRO: la tarea se crea en el proyecto elegido", async () => (await L.q(`SELECT "projectId" FROM "Task" WHERE title='Compartida en otro r57'`))[0]?.projectId ?? null, OTHER, { timeout: 20000 });
+  await page.waitForURL(new RegExp(`/p/${OTHER}`), { timeout: 15000, waitUntil: "commit" }).catch(() => {});
+  L.check("OTRO: al cerrar va al tablero de ese proyecto", page.url().includes(`/p/${OTHER}`), page.url());
+  await page.locator('[aria-label="Pendiente"]').first().waitFor({ timeout: 20000 });
+} finally {
+  await page.goto(`${L.BASE}/p/${proj.id}`).catch(() => {});
+  await L.q(`DELETE FROM "Project" WHERE id=$1`, [OTHER]);
+}
+
 L.assertNoErrors("compartir", [s]);
 
 L.scenario("otra web: un formulario cross-site no guarda nada");

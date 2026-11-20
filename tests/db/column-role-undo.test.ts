@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { setColumnRole } from "../../src/actions/columns";
 import { redoLast, undoLast } from "../../src/actions/undo";
+import { flushLogs } from "../../src/lib/log";
 
 const roles = async (f: Awaited<ReturnType<typeof makeProject>>) =>
   Object.fromEntries((await db.column.findMany({ where: { projectId: f.project.id } })).map((c) => [c.id, c.role]));
@@ -52,3 +53,26 @@ for (const role of ["NEXT_RELEASE", "IN_PRODUCTION"] as const) {
     });
   });
 }
+
+// Antes, elegir en el submenú el rol que la columna ya tenía anotaba «Cambió el rol de la columna» y creaba un deshacer
+// que no deshacía nada.
+describe("rol que la columna ya tiene", () => {
+  test("no anota nada en el registro ni crea deshacer", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "WAITING"));
+    await flushLogs();
+    const count = async () => ({
+      undo: await db.undoEntry.count({ where: { projectId: f.project.id } }),
+      logs: await db.appLog.count({ where: { projectId: f.project.id, action: "columns.setColumnRole", message: { contains: "Cambió el rol" } } }),
+    });
+    const before = await count();
+    assert.deepEqual([before.undo, before.logs], [1, 1]);
+    const res = expectOk(await setColumnRole(f.columns.todo, "WAITING"));
+    assert.equal(res.costEnabled, false);
+    await flushLogs();
+    assert.deepEqual(await count(), before);
+    assert.equal((await roles(f))[f.columns.todo], "WAITING");
+  });
+});

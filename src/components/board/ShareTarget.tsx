@@ -114,14 +114,18 @@ export function ShareTarget({ projectId, currentUserId, editorMode, share, text,
     };
   }, [share, text]);
 
-  const close = () => {
+  // Proyecto al que ir al cerrar: el de la tarea creada (o el último elegido en el selector), no siempre el inicial.
+  const [target, setTarget] = useState<string | null>(null);
+  const close = (chosen: string) => {
+    setTarget(chosen);
     setOpen(false);
     if (share) dropShare(share.id);
   };
   // Al tablero una vez cerrado el diálogo y retirada su entrada del historial (si no, ese «atrás» anulaba la navegación).
   useEffect(() => {
-    if (!open) afterModalHistory(() => router.replace(projectId ? `/p/${projectId}` : "/"));
-  }, [open, projectId, router]);
+    const to = target ?? projectId;
+    if (!open) afterModalHistory(() => router.replace(to ? `/p/${to}` : "/"));
+  }, [open, projectId, target, router]);
 
   const panel = (body: React.ReactNode) => (
     <div className="mx-auto flex max-w-md flex-col items-center gap-3 p-6 text-center text-sm text-slate-600 dark:text-slate-300" data-share-page>

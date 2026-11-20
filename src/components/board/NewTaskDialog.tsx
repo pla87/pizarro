@@ -59,7 +59,8 @@ interface Props {
   initialDescription?: string;
   /** Documento abierto en el visor desde el que se crea la tarea: ofrece un botón para adjuntarlo. */
   attachDocument?: { id: string; name: string; kind?: DocumentKindName };
-  onClose: () => void;
+  /** Al cerrar, recibe el proyecto en el que se creó la tarea (o, al cancelar, el último elegido en el selector). */
+  onClose: (projectId: string) => void;
   /** Escritorio: posición en pantalla cuando hay dos modales a la vez. */
   side?: "left" | "right" | "center";
   /** Escritorio: muestra el «+» para abrir un segundo modal de nueva tarea al lado. */
@@ -119,9 +120,21 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const titleRef = useRef<HTMLInputElement>(null);
   // Archivos de entrada (pegar / soltar sobre «Nueva tarea»): mismos límites que al añadirlos dentro del diálogo.
   const [initialPlan] = useState(() => planUploads(initialFiles ?? [], { fileMaxBytes: board.project.fileMaxMb * 1024 * 1024, remainingBytes: board.project.attachMaxMb * 1024 * 1024 }));
-  const [title, setTitle] = useState(() => d?.title ?? (initialPlan.accepted.length ? captureTitle(t, locale) : ""));
   // Tipo: el del borrador; si no, el último con el que esta persona creó una tarea en el proyecto (lastKind.ts); si no, el primero.
-  const [kindId, setKindId] = useState(() => (!foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : initialKindId(board.currentUserId, board.project.id, board.kinds)));
+  // Sin borrador, el tipo inicial trae su automatización (título y descripción de plantilla y subtareas), como al elegirlo
+  // en el selector: antes solo se aplicaba al cambiar de tipo y el preseleccionado se quedaba sin ella.
+  const [init] = useState(() => {
+    const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : initialKindId(board.currentUserId, board.project.id, board.kinds);
+    const title = d?.title ?? (initialPlan.accepted.length ? captureTitle(t, locale) : "");
+    const description = d?.description ?? initialDescription ?? "";
+    const subtasks = d?.subtasks ?? [];
+    const kind = d ? undefined : board.kinds.find((k) => k.id === kindId);
+    if (!kind) return { kindId, title, description, subtasks, templated: false };
+    const preset = applyKindTemplate(kind, { title, description });
+    return { kindId, title: preset?.title ?? title, description: preset?.description ?? description, subtasks: kind.subtaskTemplate.length ? mergeSubtasks(subtasks, kind.subtaskTemplate) : subtasks, templated: !!preset || kind.subtaskTemplate.length > 0 };
+  });
+  const [title, setTitle] = useState(init.title);
+  const [kindId, setKindId] = useState(init.kindId);
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
@@ -136,9 +149,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (!dayPicked.current && (recurrence === "WEEKLY" || recurrence === "MONTHLY") && v.slice(0, 4) >= "1900") setRecurrenceDay(defaultRecurrenceDay(recurrence, v, board.today));
   };
   const [deliverableId, setDeliverableId] = useState(foreignInit ? "" : (d?.deliverableId ?? ""));
-  const [description, setDescription] = useState(d?.description ?? initialDescription ?? "");
+  const [description, setDescription] = useState(init.description);
   const [files, setFiles] = useState<File[]>(() => sortByFileName(initialPlan.accepted, (f) => f.name, locale));
-  const [subtaskItems, setSubtaskItems] = useState<SubtaskItem[]>(() => (d?.subtasks ?? []).map(subtaskItem));
+  const [subtaskItems, setSubtaskItems] = useState<SubtaskItem[]>(() => init.subtasks.map(subtaskItem));
   const subtasks = useMemo(() => subtaskItems.map((s) => s.text), [subtaskItems]);
   const [subtaskDraft, setSubtaskDraft] = useState(d?.subtaskDraft ?? "");
   const [evergreen, setEvergreen] = useState(foreignInit ? false : (d?.evergreen ?? !!initialEvergreen));
@@ -152,13 +165,30 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [color, setColor] = useState<string | null>(() => (typeof d?.color === "string" && (PALETTE as readonly string[]).includes(d.color) ? d.color : null));
   const [linkUrl, setLinkUrl] = useState(() => (typeof d?.linkUrl === "string" ? d.linkUrl : ""));
 
+  /** Elige el tipo `id` (de `kinds`) y aplica su automatización a lo escrito, sin pisarlo más que el título de plantilla. */
+  const applyKind = (id: string, kinds: ProjectFormData["kinds"]) => {
+    setKindId(id);
+    // Tipo especial «Respuesta»: título y primera línea de la descripción predefinidos.
+    // Con actualizaciones funcionales: tras pedir las opciones de otro proyecto, lo escrito mientras tanto no se pierde.
+    const kind = kinds.find((k) => k.id === id);
+    if (kind && applyKindTemplate(kind, { title: "", description: "" })) {
+      setTitle((cur) => applyKindTemplate(kind, { title: cur, description: "" })?.title ?? cur);
+      setDescription((cur) => applyKindTemplate(kind, { title: "", description: cur })?.description ?? cur);
+    }
+    // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
+    // mergeSubtasks conserva las que hay al principio y añade detrás: solo las nuevas llevan clave nueva.
+    if (kind?.subtaskTemplate.length) setSubtaskItems((l) => [...l, ...mergeSubtasks(l.map((x) => x.text), kind.subtaskTemplate).slice(l.length).map(subtaskItem)]);
+  };
   /** Ajusta las opciones al proyecto de `f`: conserva lo que siga existiendo en él y, si no, usa su primera columna / tipo. */
-  const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string; labelNames?: string[] }) => {
+  const applyForm = (f: ProjectFormData, keep: { kindId: string; columnId: string; assigneeId: string; deliverableId: string; labelNames?: string[]; restoring?: boolean }) => {
     // Etiquetas: al cambiar de proyecto se quedan las que también existen en el nuevo (por nombre); las demás se quitan.
     const names = keep.labelNames;
     if (names) setLabelIds(f.labels.filter((l) => names.some((n) => foldName(n) === foldName(l.name))).map((l) => l.id).slice(0, MAX_TASK_LABELS));
     else setLabelIds((ids) => ids.filter((id) => f.labels.some((l) => l.id === id)));
-    setKindId(f.kinds.some((k) => k.id === keep.kindId) ? keep.kindId : initialKindId(board.currentUserId, f.project.id, f.kinds));
+    // Si el tipo no existe en el proyecto nuevo, el que lo sustituye trae su automatización (salvo al recuperar un borrador).
+    if (f.kinds.some((k) => k.id === keep.kindId)) setKindId(keep.kindId);
+    else if (keep.restoring) setKindId(initialKindId(board.currentUserId, f.project.id, f.kinds));
+    else applyKind(initialKindId(board.currentUserId, f.project.id, f.kinds), f.kinds);
     setColumnId(f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? ""));
     setAssigneeId(f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : "");
     setDeliverableId(f.deliverables.some((x) => x.id === keep.deliverableId) ? keep.deliverableId : "");
@@ -195,25 +225,27 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       if (!res.ok) {
         wantedProject.current = board.project.id;
         setProjectId(board.project.id);
-        return applyForm(boardForm, d);
+        return applyForm(boardForm, { ...d, restoring: true });
       }
       formCache.current.set(initialProject, res.data);
       setOther(res.data);
-      applyForm(res.data, d);
+      applyForm(res.data, { ...d, restoring: true });
     }, () => {
       if (wantedProject.current !== initialProject) return;
       wantedProject.current = board.project.id;
       setProjectId(board.project.id);
-      applyForm(boardForm, d);
+      applyForm(boardForm, { ...d, restoring: true });
     });
     // Solo al abrir con un borrador de otro proyecto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  /** ¿Sigue el formulario tal como lo dejó la automatización del tipo inicial? (eso no cuenta como escrito ni se guarda de borrador). */
+  const templateOnly = () => init.templated && kindId === init.kindId && projectId === initialProject && title === init.title && description === init.description && subtasks.join("\n") === init.subtasks.join("\n") && !subtaskDraft.trim() && !labelIds.length && !color && !linkUrl.trim();
   // Borrador cada 5 s; cancelar o crear lo borra (los archivos no se guardan en el borrador).
   const discardDraft = useDraftAutosave(draftKey("new", board.currentUserId, board.project.id), () =>
     !autosave
       ? undefined
-      : !title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim() && !labelIds.length && !color && !linkUrl.trim()
+      : templateOnly() || (!title.trim() && !description.trim() && !subtasks.length && !subtaskDraft.trim() && !labelIds.length && !color && !linkUrl.trim())
         ? null
         : ({ title, kindId, description, columnId, assigneeId, dueDate, deliverableId, evergreen, subtasks, subtaskDraft, projectId, fields: loading ? fieldsForm : fieldsForDraft(fieldsForm, form.project.taskFields), recurrence, recurrenceDay, recurrenceDayPicked: dayPicked.current, labelIds, color, linkUrl } satisfies NewTaskDraft),
   );
@@ -228,7 +260,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const onClose = () => {
     if (!alive.current) return;
     if (autosave) discardDraft();
-    close();
+    close(projectId);
   };
   // Aviso de los archivos de entrada omitidos (una sola vez al abrir).
   const warnedInitial = useRef(false);
@@ -239,7 +271,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /** ¿Hay algo escrito o elegido? (cerrar pide confirmación e importar pregunta antes de sustituirlo). */
-  const isDirty = () => !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim() || labelIds.length || color || linkUrl.trim());
+  const isDirty = () => !templateOnly() && !!(title.trim() || (description.trim() && description !== initialDescription) || subtasks.length || subtaskDraft.trim() || labelIds.length || color || linkUrl.trim());
   // Escape, clic fuera, X o «Cancelar» con contenido escrito piden confirmación; crear no.
   const confirming = useRef(false);
   const busyRef = useRef(false);
@@ -553,17 +585,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           <div className="label">{t("Tipo")}</div>
           <TypeSelector kinds={form.kinds} value={kindId} onChange={(id) => {
             if (loading) return;
-            setKindId(id);
-            // Tipo especial «Respuesta»: título y primera línea de la descripción predefinidos.
-            const kind = form.kinds.find((k) => k.id === id);
-            const preset = kind ? applyKindTemplate(kind, { title, description }) : null;
-            if (preset) {
-              setTitle(preset.title);
-              setDescription(preset.description);
-            }
-            // Subtareas predefinidas del tipo: se añaden a las que haya, sin repetir.
-            // mergeSubtasks conserva las que hay al principio y añade detrás: solo las nuevas llevan clave nueva.
-            if (kind?.subtaskTemplate.length) setSubtaskItems((l) => [...l, ...mergeSubtasks(l.map((x) => x.text), kind.subtaskTemplate).slice(l.length).map(subtaskItem)]);
+            applyKind(id, form.kinds);
           }} />
         </div>
         <div>

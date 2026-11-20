@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { updateCollabPrefs } from "../../src/actions/collab-prefs";
 import { gatherDigest } from "../../src/lib/periodic-mail";
+import { digestDue } from "../../src/lib/schedule";
 
 describe("resumen diario", () => {
   test("«Tareas nuevas» no incluye las que creó la propia persona", async () => {
@@ -40,7 +41,7 @@ describe("resumen diario", () => {
 
 describe("preferencias del resumen diario", () => {
   const prefs = { notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true };
-  test("cambiar la hora tras recibirlo no reinicia el «ya enviado hoy»; activarlo, sí", async () => {
+  test("ni cambiar la hora tras recibirlo ni desactivarlo y volver a activarlo reinician el «ya enviado hoy»", async () => {
     const user = await makeUser();
     await loginAs(user);
     const sent = new Date();
@@ -51,6 +52,20 @@ describe("preferencias del resumen diario", () => {
     assert.equal(after.lastDigestAt?.getTime(), sent.getTime(), "no llega otro resumen con lo mismo el mismo día");
     expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: false, digestHour: 20 }));
     expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 20 }));
-    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).lastDigestAt, null);
+    // Desactivarlo y volver a activarlo el mismo día no lo reinicia (antes llegaba otro resumen igual).
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: user.id } })).lastDigestAt?.getTime(), sent.getTime());
+  });
+
+  test("activarlo por primera vez, o con un envío de otro día, lo deja pendiente", async () => {
+    const now = new Date();
+    for (const last of [null, new Date(now.getTime() - 3 * 86_400_000)]) {
+      const user = await makeUser();
+      await loginAs(user);
+      await db.user.update({ where: { id: user.id }, data: { dailyDigest: false, lastDigestAt: last } });
+      expectOk(await updateCollabPrefs({ ...prefs, dailyDigest: true, digestHour: 0 }));
+      const row = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { dailyDigest: true, digestHour: true, lastDigestAt: true } });
+      assert.equal(row.dailyDigest, true);
+      assert.equal(digestDue(now, "UTC", { hour: row.digestHour, lastSentAt: row.lastDigestAt }), true, String(last));
+    }
   });
 });

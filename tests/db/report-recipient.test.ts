@@ -166,7 +166,7 @@ describe("el destinatario borra su cuenta", () => {
 });
 
 describe("cambiar el día o la hora del informe", () => {
-  test("tras el envío de esta semana no reinicia el «ya enviado»; activarlo, sí", async () => {
+  test("tras el envío de esta semana, ni cambiar el día o la hora ni desactivarlo y activarlo reinician el «ya enviado»", async () => {
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
     await loginAs(member);
@@ -179,6 +179,7 @@ describe("cambiar el día o la hora del informe", () => {
     expectOk(await saveReportSchedule(f.project.id, { enabled: false, weekday: 5, hour: 18, recipient: { keep: true } }));
     assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt?.getTime(), sent.getTime());
     expectOk(await saveReportSchedule(f.project.id, { enabled: true, weekday: 5, hour: 18, recipient: { keep: true } }));
-    assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt, null);
+    // Volver a activarlo la misma semana no lo reinicia (antes se ponía a null y el informe salía otra vez).
+    assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt?.getTime(), sent.getTime());
   });
 });
