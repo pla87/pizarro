@@ -15,6 +15,7 @@ import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
 import { actionThrowResult } from "@/lib/stale-action";
+import { EmailSafe } from "@/components/ui/EmailSafe";
 
 type Role = "ADMIN" | "MEMBER";
 type UserLocale = "ES" | "EN";
@@ -108,7 +109,7 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
               <div className="truncate text-sm font-medium">
                 {u.name} {u.id === meId && <span className="text-xs text-slate-500">{t("(tú)")}</span>}
               </div>
-              <div className="truncate text-xs text-slate-500">{u.email}</div>
+              <div className="truncate text-xs text-slate-500"><EmailSafe text={u.email} /></div>
             </div>
             <span className={cn("badge", u.role === "ADMIN" ? "bg-brand-50 text-brand-700 ring-brand-500/20" : "bg-slate-100 text-slate-600 ring-slate-500/20")}>
               {u.role === "ADMIN" ? t("Admin") : t("Miembro")}
