@@ -16,7 +16,7 @@ type ColumnDownloadKind = "week" | "checklist" | "delivery" | "program" | "ics";
  * Peticiones por minuto de cada descarga: los PDF ocupan la cola de generación (5/min); el .ics de la Agenda es texto
  * barato y se descarga a menudo (30/min). El informe del proyecto lleva su propio contador (`project-report:`).
  */
-export const COLUMN_DOWNLOAD_LIMITS: Record<ColumnDownloadKind, number> = { week: 5, checklist: 5, delivery: 5, program: 5, ics: 30 };
+const COLUMN_DOWNLOAD_LIMITS: Record<ColumnDownloadKind, number> = { week: 5, checklist: 5, delivery: 5, program: 5, ics: 30 };
 
 export const columnRateKey = (kind: ColumnDownloadKind, userId: string) => `column-${kind}:${userId}`;
 
