@@ -658,6 +658,10 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
           const old = new Set(extractMentionIds(before?.description ?? ""));
           added = extractMentionIds(data.description).filter((id) => !old.has(id));
         }
+      } else if (labelIds) {
+        // Las etiquetas se borran y se vuelven a crear con la fila bloqueada (la consulta de arriba ya la bloquea): dos
+        // cambios a la vez creaban las mismas filas y el segundo fallaba con «Los datos han cambiado mientras tanto».
+        await lockTaskRow(tx, taskId);
       }
       await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
       if (labelIds) {
@@ -690,6 +694,11 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       await queueDueChange({ taskId, recipientId: assigneeNow, actorId: user.id, from: oldDue, to: dueDate });
     }
   }
+}
+
+/** Una escritura no ha encontrado la tarea activa: se ha archivado o borrado después de comprobarlo. */
+async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string): Promise<Error> {
+  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Recupérala para modificarla.") : notFound();
 }
 
 /**
@@ -736,7 +745,10 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       const undoPosition = placed.rebalanced && fromColumnId === columnId
         ? (await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position
         : task.position;
-      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 }, select: { id: true } });
+      // Solo si sigue activa: otra persona puede haberla archivado después de la comprobación de arriba (quedaría
+      // archivada en la columna nueva y con la de antes como origen).
+      const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
+      if (!count) throw await inactiveTaskError(tx, taskId);
       return { position: placed.position, undoPosition };
     });
     addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}) } });
@@ -856,10 +868,13 @@ export async function archiveTask(taskId: string) {
     const user = await requireUser();
     const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
     assertNotArchivedRow(task);
-    const { columnId } = task;
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 }, select: { id: true } });
+    // La columna de origen, la que tiene al archivarla (como archiveTasks): si otra persona la mueve a la vez, la leída
+    // antes ya no vale. Y solo si sigue activa (archivada a la vez desde otra pestaña).
+    const now = new Date();
+    const archived = await db.$executeRaw`UPDATE "Task" SET "archivedAt" = ${now}, "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${now} WHERE "id" = ${taskId} AND "archivedAt" IS NULL`;
+    if (!archived) throw await inactiveTaskError(db, taskId);
     return { spawned: await spawnRecurrences([taskId], user.id) };
   });
 }
@@ -1483,6 +1498,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await lockBlocking(tx, projectId);
         if (await blockProblem(id, fields.blockedById, projectId, tx)) delete fields.blockedById;
       }
+      // Etiquetas: borrar y volver a crear con la fila bloqueada, como updateTask.
+      if (labelsChanged) await lockTaskRow(tx, id);
       if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields, select: { id: true } });
       if (labelsChanged) {
         await tx.taskLabel.deleteMany({ where: { taskId: id } });
@@ -1536,12 +1553,13 @@ export async function restoreTask(taskId: string) {
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.$transaction(async (tx) => {
-      // Se vuelve a comprobar dentro de la transacción: otra pestaña pudo recuperarla entre medias.
-      const fresh = await tx.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
-      if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
+      // Se vuelve a comprobar dentro de la transacción y con la fila bloqueada (después de los candados del proyecto y
+      // la columna, como al mover): otra pestaña pudo recuperarla entre medias, y sin el bloqueo las dos salían bien.
+      const [fresh] = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`;
+      if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
       await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.

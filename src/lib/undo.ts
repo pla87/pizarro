@@ -864,6 +864,8 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
               await lockBlocking(tx, projectId);
               if (await blockProblem(op.id, data.blockedById, projectId, tx)) data.blockedById = null;
             }
+            // Etiquetas: borrar y volver a crear con la fila bloqueada (dos cambios a la vez creaban las mismas filas).
+            if (labelRows) await lockTaskRows(tx, [op.id]);
             await tx.task.update({ where: { id: op.id }, data: taskUpdateData(data), select: { id: true } });
             if (labelRows) {
               await tx.taskLabel.deleteMany({ where: { taskId: op.id } });
