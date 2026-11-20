@@ -39,6 +39,14 @@ export function channelHealthy({ open, sinceMessageMs }: { open: boolean; sinceM
   return open && sinceMessageMs < LIVE_HEALTHY_MS;
 }
 
+/**
+ * ¿Canal abierto pero mudo? Abierto y sin ningún mensaje (ni el `ping` periódico) en el tiempo en que cuenta como sano: lo
+ * deja así un proxy que no deja pasar nada, sin que el navegador dé error. Entonces se da por caído y se reabre.
+ */
+export function channelStalled({ open, sinceMessageMs }: { open: boolean; sinceMessageMs: number }): boolean {
+  return open && !channelHealthy({ open, sinceMessageMs });
+}
+
 /** ¿Toca la recarga de respaldo? */
 export function backupRefreshDue({ sinceSyncMs, healthy }: { sinceSyncMs: number; healthy: boolean }): boolean {
   return sinceSyncMs >= (healthy ? BACKUP_REFRESH_LIVE_MS : BACKUP_REFRESH_MS);

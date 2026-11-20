@@ -4,11 +4,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, test } from "node:test";
-import { loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { inRequest, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { GET as eventsRoute } from "../../src/app/api/projects/[projectId]/events/route";
 import { DELETE as viewersDelete, GET as viewersGet } from "../../src/app/api/tasks/[taskId]/viewers/route";
 import { openStreamCount } from "../../src/lib/realtime";
-import { presenceSnapshot, taskViewersExcept } from "../../src/lib/presence";
+import { activeUsers, presenceSnapshot, taskViewersExcept } from "../../src/lib/presence";
+import { destroySession } from "../../src/lib/session";
 
 const events = (projectId: string, signal: AbortSignal) =>
   eventsRoute(new Request(`http://localhost/api/projects/${projectId}/events`, { signal }), { params: Promise.resolve({ projectId }) });
@@ -71,5 +72,20 @@ describe("tarea abierta: cerrar el diálogo", () => {
     const del = await viewersDelete(new Request(url, { method: "DELETE", headers: { origin: "http://localhost", host: "localhost" } }), ctx);
     assert.equal(del.status, 204);
     assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 45 s");
+  });
+});
+
+describe("cerrar sesión", () => {
+  test("quien cierra sesión con el tablero abierto deja de salir en «Quién está» al momento", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const ac = new AbortController();
+    const res = await events(f.project.id, ac.signal);
+    assert.deepEqual(activeUsers(f.project.id).map((u) => u.id), [user.id]);
+    await inRequest(() => destroySession());
+    assert.equal(openStreamCount(user.id), 0, "su canal se corta");
+    assert.deepEqual(activeUsers(f.project.id), [], "y no sigue 5 minutos entre los activos");
+    await res.body?.cancel().catch(() => {});
   });
 });

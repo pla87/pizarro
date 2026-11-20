@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FOCUS_REFRESH_GAP_MS, FOCUS_REFRESH_LIVE_MS, FOCUS_REFRESH_MIN_MS, shouldRefreshOnFocus } from "../src/lib/focus-refresh";
+import { channelStalled, FOCUS_REFRESH_GAP_MS, FOCUS_REFRESH_LIVE_MS, FOCUS_REFRESH_MIN_MS, LIVE_HEALTHY_MS, shouldRefreshOnFocus } from "../src/lib/focus-refresh";
 
 test("sin canal en vivo: como mucho una vez por minuto", () => {
   assert.equal(shouldRefreshOnFocus({ sinceSyncMs: 5_000, channelOpen: false, channelGap: false }), false);
@@ -30,4 +30,10 @@ test("recarga de respaldo: cada 15 minutos con el canal sano, cada 2 sin él", a
   assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS, healthy: true }), true);
   assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS - 1, healthy: false }), false);
   assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS, healthy: false }), true);
+});
+
+test("canal abierto pero mudo (sin ping en el tiempo de «sano»): se da por caído para reabrirlo", () => {
+  assert.equal(channelStalled({ open: true, sinceMessageMs: 1000 }), false);
+  assert.equal(channelStalled({ open: true, sinceMessageMs: LIVE_HEALTHY_MS }), true);
+  assert.equal(channelStalled({ open: false, sinceMessageMs: LIVE_HEALTHY_MS * 10 }), false, "cerrado ya lo trata el error del canal");
 });

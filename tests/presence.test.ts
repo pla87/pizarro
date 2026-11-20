@@ -9,9 +9,11 @@ import {
   dropUserPresence,
   hasPresenceEntry,
   holdTaskView,
+  leavePresence,
   notePresence,
   noteTaskViewer,
   openPresenceStream,
+  openTaskViewers,
   presenceJson,
   presenceSnapshot,
   releaseTaskView,
@@ -109,4 +111,27 @@ test("la actividad caducada de proyectos que nadie consulta se barre al anotar o
   notePresence("pp-8", "uh", "Hugo", now + 6 * 60_000);
   assert.equal(hasPresenceEntry("pp-7"), false, "pp-7 caducó y nadie lo ha consultado: se barre igualmente");
   assert.equal(hasPresenceEntry("pp-8"), true);
+});
+
+test("al cerrar sesión deja de contar al momento, salvo donde tenga otro canal abierto", () => {
+  const other = openPresenceStream("pp-10", "ui", "Iris");
+  notePresence("pp-9", "ui", "Iris");
+  noteTaskViewer("t9b", "pp-9", "ui", "Iris");
+  const s = openPresenceStream("pp-9", "ui", "Iris");
+  closePresenceStream(s); // revokeSessionStreams: el canal se cierra (y la anotaría 5 minutos)
+  leavePresence("ui");
+  assert.deepEqual(activeUsers("pp-9"), [], "sin persona fantasma tras cerrar sesión");
+  assert.deepEqual(presenceSnapshot("pp-9").viewers, {}, "ni tarea abierta");
+  assert.deepEqual(activeUsers("pp-10").map((u) => u.id), ["ui"], "otro dispositivo con el tablero abierto: sigue");
+  closePresenceStream(other);
+});
+
+test("tareas abiertas del sondeo de respaldo: solo las del proyecto pedido", () => {
+  noteTaskViewer("t11a", "pp-11", "uj", "Juan");
+  noteTaskViewer("t11b", "pp-12", "uj", "Juan");
+  const s = openPresenceStream("pp-11", "uk", "Kira");
+  holdTaskView(s, "uk", "t11c", "pp-11");
+  assert.deepEqual([...openTaskViewers("pp-11", "nadie").keys()].sort(), ["t11a", "t11c"]);
+  assert.deepEqual([...openTaskViewers("pp-11", "uk").keys()], ["t11a"], "sin la propia persona");
+  closePresenceStream(s);
 });

@@ -31,11 +31,17 @@ const liveStreams = (globalThis as unknown as { __pzPresenceStreams?: Map<string
 // Los canales de cada proyecto (ids de `liveStreams`): el estado de un proyecto no recorre los canales de los demás.
 const streamsByProject = (globalThis as unknown as { __pzPresenceByProject?: Map<string, Set<string>> }).__pzPresenceByProject ??= new Map();
 
+// Canales abiertos por (proyecto, persona): `isPresent` se consulta en cada acción registrada y no recorre ninguno.
+const liveCount = (globalThis as unknown as { __pzPresenceLiveCount?: Map<string, number> }).__pzPresenceLiveCount ??= new Map();
+const liveKey = (projectId: string, userId: string) => `${projectId}\u0000${userId}`;
+
 function addLiveStream(id: string, s: LiveStream): void {
   liveStreams.set(id, s);
   let set = streamsByProject.get(s.projectId);
   if (!set) streamsByProject.set(s.projectId, (set = new Set()));
   set.add(id);
+  const key = liveKey(s.projectId, s.userId);
+  liveCount.set(key, (liveCount.get(key) ?? 0) + 1);
 }
 
 function deleteLiveStream(id: string): LiveStream | undefined {
@@ -45,6 +51,10 @@ function deleteLiveStream(id: string): LiveStream | undefined {
   const set = streamsByProject.get(s.projectId);
   set?.delete(id);
   if (set?.size === 0) streamsByProject.delete(s.projectId);
+  const key = liveKey(s.projectId, s.userId);
+  const n = (liveCount.get(key) ?? 1) - 1;
+  if (n > 0) liveCount.set(key, n);
+  else liveCount.delete(key);
   return s;
 }
 
@@ -212,8 +222,7 @@ export function presenceJson(projectId: string, now = Date.now()): string {
 function isPresent(projectId: string, userId: string, now: number): boolean {
   const e = state.get(projectId)?.get(userId);
   if (e && now - e.at <= PRESENCE_WINDOW_MS) return true;
-  for (const s of projectStreams(projectId)) if (s.userId === userId) return true;
-  return false;
+  return liveCount.has(liveKey(projectId, userId));
 }
 
 /** Barrido de la actividad caducada de todos los proyectos: los que nadie mira no pasan por `activeUsers`. */
@@ -312,8 +321,11 @@ export function noteTaskViewer(taskId: string, projectId: string, userId: string
   return taskViewersExcept(taskId, projectId, userId, now);
 }
 
-/** Quién tiene abierta cada tarea ahora mismo (sin `exceptUserId`), para los círculos de las tarjetas del tablero. */
-export function openTaskViewers(exceptUserId: string, now = Date.now()): Map<string, Person[]> {
+/**
+ * Quién tiene abierta cada tarea del proyecto ahora mismo (sin `exceptUserId`), para los círculos de las tarjetas del
+ * tablero (sondeo de respaldo). Solo recorre lo de ese proyecto.
+ */
+export function openTaskViewers(projectId: string, exceptUserId: string, now = Date.now()): Map<string, Person[]> {
   const out = new Map<string, Map<string, string>>();
   const add = (taskId: string, id: string, name: string) => {
     if (id === exceptUserId) return;
@@ -321,14 +333,16 @@ export function openTaskViewers(exceptUserId: string, now = Date.now()): Map<str
     if (!m) out.set(taskId, (m = new Map()));
     m.set(id, name);
   };
-  for (const [taskId, v] of viewers) {
+  for (const taskId of [...(viewersByProject.get(projectId) ?? [])]) {
+    const v = viewers.get(taskId);
+    if (!v) continue;
     for (const [id, e] of v.users) {
       if (now - e.at > VIEWER_WINDOW_MS) v.users.delete(id);
       else add(taskId, id, e.name);
     }
     if (v.users.size === 0) deleteViewers(taskId);
   }
-  for (const s of liveStreams.values()) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
+  for (const s of projectStreams(projectId)) for (const taskId of s.tasks) add(taskId, s.userId, s.name);
   return new Map([...out].map(([taskId, m]) => [taskId, [...m].map(([id, name]) => ({ id, name }))]));
 }
 
@@ -366,6 +380,24 @@ export function dropUserPresence(userId: string, projectId?: string): void {
       if (v.users.delete(userId)) notifyPresence(v.projectId);
       if (v.users.size === 0) deleteViewers(taskId);
     }
+  }
+}
+
+/**
+ * La persona ha cerrado sesión: deja de contar entre los activos (no 5 minutos más) y de tener tareas abiertas por el
+ * aviso con caducidad, salvo en los proyectos donde le quede un canal abierto (otro dispositivo con el tablero a la vista).
+ */
+export function leavePresence(userId: string): void {
+  for (const [pid, users] of state) {
+    if (!users.has(userId) || liveCount.has(liveKey(pid, userId))) continue;
+    users.delete(userId);
+    if (users.size === 0) state.delete(pid);
+    notifyPresence(pid);
+  }
+  for (const [taskId, v] of viewers) {
+    if (liveCount.has(liveKey(v.projectId, userId)) || !v.users.delete(userId)) continue;
+    if (v.users.size === 0) deleteViewers(taskId);
+    notifyPresence(v.projectId);
   }
 }
 
