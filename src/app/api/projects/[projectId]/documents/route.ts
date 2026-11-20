@@ -23,6 +23,9 @@ import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
+/** Lo que se lee del principio del fichero para confirmar su tipo: algo más que la muestra de looksLikeText (64 KB). */
+const KIND_SAMPLE_BYTES = 64 * 1024 + 16;
+
 /** Máximo de documentos o cuota superados: el mismo error en la comprobación previa y en la definitiva. */
 async function limitError(problem: DocumentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
   const t = await getT();
@@ -77,23 +80,27 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     if (file.size > maxBytes) throw await tooBig();
     if (file.size === 0) throw new AppError("El archivo está vacío.");
 
-    const buffer = Buffer.from(await file.arrayBuffer());
     const name = sanitizeDocumentName(file.name);
     // El tipo sale de la extensión y se confirma con el contenido (cabecera de PDF, UTF-8 válido, sharp para imágenes).
-    let kind: DocumentKindName = confirmDocumentKind(detectDocumentKind(name, file.type), buffer);
-    let stored: Buffer = buffer;
+    // Para eso basta el principio del fichero (confirmDocumentKind mira como mucho los primeros 64 KB); solo sharp
+    // necesita el contenido entero en un Buffer. El resto se escribe en flujo desde el File, sin otra copia en memoria.
+    const declared = detectDocumentKind(name, file.type);
+    let kind: DocumentKindName = declared === "IMAGE" ? declared : confirmDocumentKind(declared, new Uint8Array(await file.slice(0, KIND_SAMPLE_BYTES).arrayBuffer()));
+    let stored: Buffer | Blob = file;
     if (kind === "IMAGE") {
-      const image = await processImage(buffer).catch((err) => {
+      // Sin miniatura: la Documentación solo guarda la imagen completa.
+      const image = await processImage(Buffer.from(await file.arrayBuffer()), { thumb: false }).catch((err) => {
         if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
         return null;
       });
       if (image) stored = image.full;
       else kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
     }
+    const storedBytes = Buffer.isBuffer(stored) ? stored.length : stored.size;
     const mimeType = documentMime(kind, sanitizeMime(file.type));
     // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
     // con el mismo mensaje antes de escribir nada en el disco.
-    const early = await documentLimitProblem(projectId, stored.length);
+    const early = await documentLimitProblem(projectId, storedBytes);
     if (early) throw await limitError(early, projectId, user.role === "ADMIN");
     // Primero el fichero y después la fila (ver newFileId): un corte entre medias deja como mucho un fichero sin fila, que
     // borra la limpieza de huérfanos; nunca un documento roto que además cuenta en la cuota.
@@ -102,9 +109,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       await saveDocumentFile(id, stored);
     } catch (err) {
       await removeDocumentFiles([id]);
-      throw uploadWriteError(err, { action: "documents.noSpace", bytes: stored.length, details: { projectId } });
+      throw uploadWriteError(err, { action: "documents.noSpace", bytes: storedBytes, details: { projectId } });
     }
-    const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: stored.length, kind, createdById: user.id }).catch(async (err) => {
+    const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: storedBytes, kind, createdById: user.id }).catch(async (err) => {
       await removeDocumentFiles([id]);
       throw err;
     });
@@ -114,9 +121,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     }
     const document = created.document;
     logEvent({
-      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(stored.length)})`,
+      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(storedBytes)})`,
       userId: user.id, userName: user.name, path: `/api/projects/${projectId}/documents`, ip, durationMs: performance.now() - start,
-      details: { projectId, documentId: document.id, original: fileInfo, storedBytes: stored.length, kind, mime: mimeType, sizeMb: roundMb(stored.length) },
+      details: { projectId, documentId: document.id, original: fileInfo, storedBytes, kind, mime: mimeType, sizeMb: roundMb(storedBytes) },
     });
     publishChange({ projectId, userId: user.id, action: "documents.upload" });
     return NextResponse.json(document, { status: 201 });

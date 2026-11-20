@@ -69,9 +69,10 @@ async function handlePost(req: Request): Promise<Response> {
     }
     const text = sharedText({ title: form.get(SHARE_FIELDS.title), text: form.get(SHARE_FIELDS.text), url: form.get(SHARE_FIELDS.url) });
     const all = form.getAll(SHARE_FIELDS.files).filter((f): f is File => f instanceof File && f.size > 0);
-    const files = await Promise.all(all.slice(0, SHARE_MAX_FILES).map(async (f) => ({ name: cleanFileName(f.name, "archivo"), type: sanitizeMime(f.type), data: Buffer.from(await f.arrayBuffer()) })));
+    // Los File del multipart tal cual: stageShare los escribe en flujo (sin una segunda copia en memoria).
+    const files = all.slice(0, SHARE_MAX_FILES).map((f) => ({ name: cleanFileName(f.name, "archivo"), type: sanitizeMime(f.type), data: f }));
     if (!files.length && !text.title && !text.text && !text.url) return failed("empty");
-    const bytes = files.reduce((n, f) => n + f.data.length, 0);
+    const bytes = files.reduce((n, f) => n + f.data.size, 0);
     let shareId: string;
     try {
       shareId = await stageShare(user.id, text, files);

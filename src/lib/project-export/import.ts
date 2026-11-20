@@ -9,6 +9,7 @@ import { MAX_TITLE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants"
 import { isoToDate } from "../dates";
 import { db } from "../db";
 import { confirmDocumentKind, documentMime, sanitizeDocumentName } from "../document-kind";
+import { cleanFileName } from "../file-name";
 import { AppError, forbidden } from "../errors";
 import { googleWorkspaceDomain } from "../google-config";
 import { appTimeZone } from "../format";
@@ -87,10 +88,13 @@ const dateOrNull = (iso: string | null) => (iso ? new Date(iso) : null);
 const GOOGLE_URL_RE = /^https:\/\/(docs|drive)\.google\.com\//;
 const MAX_FILE_NAME = 200;
 
-/** Nombre de fichero sin separadores de ruta ni NUL; con nombre de reserva si queda vacío, «.» o «..». */
+/**
+ * Nombre de un adjunto o de un fichero de release importado: el mismo saneado que al subirlo (cleanFileName: sin
+ * separadores ni caracteres que no admite un nombre, sin controles, tampoco los de dirección del texto como U+202E) y
+ * con MAX_FILE_NAME caracteres como mucho; nombre de reserva si queda vacío, «.» o «..».
+ */
 export function safeFileName(raw: string, fallback = "archivo"): string {
-  const name = raw.replace(/[\\/\0]/g, "_").trim().slice(0, MAX_FILE_NAME);
-  return name && name !== "." && name !== ".." ? name : fallback;
+  return cleanFileName(raw, fallback, MAX_FILE_NAME);
 }
 
 /** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
@@ -274,7 +278,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         let buf = await loadFile(a.file);
         if (a.isImage) {
           try {
-            buf = (await processImportedImage(buf)).full;
+            // Sin miniatura: la copia de histórico solo guarda la imagen completa.
+            buf = (await processImportedImage(buf, { thumb: false })).full;
           } catch (err) {
             if (err instanceof AppError && err.status === 503) throw err;
             warnings.push(t("«{name}» no es una imagen válida y no se ha importado.", { name: a.fileName }));
@@ -310,7 +315,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       let stored: Buffer = buf;
       if (kind === "IMAGE") {
         try {
-          stored = (await processImportedImage(buf)).full;
+          // Sin miniatura: la Documentación solo guarda la imagen completa.
+          stored = (await processImportedImage(buf, { thumb: false })).full;
         } catch (err) {
           if (err instanceof AppError && err.status === 503) throw err;
           kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga

@@ -91,12 +91,12 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     if (file.size > maxBytes) throw await tooBig();
     if (file.size === 0) throw new AppError("El archivo está vacío.");
 
-    const buffer = Buffer.from(await file.arrayBuffer());
     // Imágenes (salvo SVG, que puede llevar scripts): WebP + miniatura. Si sharp no puede
-    // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera.
+    // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera. Solo sharp necesita el contenido en un
+    // Buffer; el resto se escribe en flujo desde el File, sin una segunda copia en memoria.
     let image: Awaited<ReturnType<typeof processImage>> | null = null;
     if (/^image\//i.test(file.type) && !/svg/i.test(file.type)) {
-      image = await processImage(buffer).catch((err) => {
+      image = await processImage(Buffer.from(await file.arrayBuffer())).catch((err) => {
         if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
         return null;
       });
@@ -104,7 +104,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     // Como lo escribió la persona (paréntesis, comas, &…); si es muy largo se recorta el nombre, no la extensión.
     const originalName = cleanFileName(file.name, "captura");
     const mimeType = image ? "image/webp" : sanitizeMime(file.type);
-    const storedBytes = image ? image.full.length : buffer.length;
+    const storedBytes = image ? image.full.length : file.size;
     // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
     // con el mismo mensaje antes de escribir nada en el disco.
     const early = await attachmentLimitProblem(taskId, storedBytes);
@@ -114,7 +114,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const id = newFileId();
     try {
       if (image) await saveAttachmentFiles(id, image);
-      else await saveRawAttachmentFile(id, buffer);
+      else await saveRawAttachmentFile(id, file);
     } catch (err) {
       await removeAttachmentFiles([id]);
       throw uploadWriteError(err, { action: "attachments.noSpace", bytes: storedBytes, details: { taskId, projectId } });
