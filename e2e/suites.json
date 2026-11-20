@@ -476,6 +476,7 @@
     "accesibilidad-releases-e2e": [
       "src/components/calendar/**",
       "src/components/docs/**",
+      "src/components/ui/LazyMarkdown.tsx",
       "src/components/board/ReleaseDialog.tsx",
       "src/actions/template-apply.ts",
       "src/lib/template-apply*.ts",

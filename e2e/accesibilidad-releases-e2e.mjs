@@ -47,6 +47,8 @@ if (only.includes("release")) {
   await entry.locator("p").first().click({ force: true }); // el ::after del botón la cubre (lo que se comprueba)
   L.eq("REL: pulsar en la línea de la fecha abre la release", await toggle.getAttribute("aria-expanded"), "true");
   const item = entry.locator(".prose-md li").filter({ hasText: "Login bh54" });
+  // El Markdown llega aparte (LazyMarkdown) la primera vez que se abre una release.
+  await item.waitFor({ timeout: 8000 });
   const paragraphs = await item.locator(":scope > p").allInnerTexts();
   L.eq("REL: título, adjuntos y descripción, cada uno en su párrafo dentro del punto", paragraphs, ["R2F1 · Login bh54", "Adjuntos: R2F1_captura.webp", "Permite entrar con Google."]);
   const [titleBox, descBox] = await Promise.all([item.locator(":scope > p").nth(0).boundingBox(), item.locator(":scope > p").nth(2).boundingBox()]);
