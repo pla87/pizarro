@@ -9,6 +9,7 @@ import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
+import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
@@ -21,6 +22,7 @@ import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
+import { isEditConflict } from "@/lib/edit-conflict-core";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
@@ -110,7 +112,8 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
   const toast = useToast();
   const confirm = useConfirm();
   const [pending, start] = useActionTransition();
-  const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null);
+  // `version`: la de la plantilla que se abrió (para no pisar el cambio de otro administrador); `conflict`: ya pasó.
+  const [editing, setEditing] = useState<{ id: string | null; draft: Draft; version?: string; conflict?: boolean } | null>(null);
   const [deleting, setDeleting] = useState<TemplateDto | null>(null);
   const [picking, setPicking] = useState(false);
   const [sourceId, setSourceId] = useState("");
@@ -142,7 +145,8 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
         labels: withoutKeys(d.labels),
         releaseTemplates: withoutKeys(d.releaseTemplates),
       };
-      const res = await saveTemplate(body, editing.id);
+      const res = await saveTemplate(body, editing.id, editing.version);
+      if (isEditConflict(res)) return setEditing((e) => (e ? { ...e, conflict: true } : e));
       if (!res.ok) return toast(res.error, "error");
       toast(editing.id ? t("Plantilla actualizada") : t("Plantilla creada"));
       setEditing(null);
@@ -226,7 +230,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                     <RotateCcw size={14} /> <span className="hidden sm:inline">{t("Restablecer")}</span>
                   </button>
                 )}
-                <button className="btn-icon" onClick={() => setEditing({ id: tpl.id, draft: toDraft(tpl) })} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={15} /></button>
+                <button className="btn-icon" onClick={() => setEditing({ id: tpl.id, draft: toDraft(tpl), version: tpl.version })} aria-label={t("Editar {name}", { name: tpl.name })}><Pencil size={15} /></button>
                 <button className="btn-icon hover:text-red-600" onClick={() => setDeleting(tpl)} aria-label={t("Borrar {name}", { name: tpl.name })}><Trash2 size={15} /></button>
               </div>
             </li>
@@ -275,6 +279,8 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
             </>
           }
         >
+          {/* Lo editado sigue en el formulario; «Recargar» lo cierra y trae la lista con lo que guardó la otra persona. */}
+          {editing.conflict && <div className="mb-4"><EditConflictNotice onReload={() => { setEditing(null); router.refresh(); }} /></div>}
           <form id="template-form" className="space-y-6" onSubmit={(e) => { e.preventDefault(); save(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>

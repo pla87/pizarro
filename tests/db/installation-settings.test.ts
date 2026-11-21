@@ -23,8 +23,9 @@ describe("ajustes de la instalación", () => {
     await loginAs(admin);
     // Se leen antes: la caché de 30 s tiene ya los valores de antes.
     assert.equal((await getInstanceSettings()).locale, "es");
-    const res = expectOk(await saveInstallationSettings({ orgName: "  Acme Lda  ", locale: "en", timeZone: "Europe/Lisbon" }));
+    const { version, ...res } = expectOk(await saveInstallationSettings({ orgName: "  Acme Lda  ", locale: "en", timeZone: "Europe/Lisbon" }));
     assert.deepEqual(res, { orgName: "Acme Lda", locale: "en", timeZone: "Europe/Lisbon" });
+    assert.equal(typeof version, "string");
     assert.deepEqual(await getInstanceSettings(), { orgName: "Acme Lda", locale: "en", timeZone: "Europe/Lisbon" });
     const prevTz = process.env.APP_TIMEZONE;
     delete process.env.APP_TIMEZONE;

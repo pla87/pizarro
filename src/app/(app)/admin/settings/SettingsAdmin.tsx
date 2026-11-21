@@ -3,9 +3,11 @@
 import { Download, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveMaxCommentsPerTask } from "@/actions/settings";
+import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
+import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
 import { StorageSettingsSection } from "./StorageSettingsSection";
 import type { StorageAdminView } from "@/lib/storage-stats";
@@ -20,19 +22,28 @@ const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: la instalación y los parámetros generales de la aplicación (las integraciones van en su pestaña). */
-export function SettingsAdmin({ maxComments, storage, installation, appIcon }: { maxComments: number; storage: StorageAdminView; installation: InstallationView; appIcon: AppIconAccent }) {
+export function SettingsAdmin({ maxComments, storage, installation, appIcon, versions }: {
+  maxComments: number; storage: StorageAdminView; installation: InstallationView; appIcon: AppIconAccent;
+  /** Versión de lo guardado en cada formulario al abrir la página (edit-conflict.ts). */
+  versions: { installation: string; comments: string; storage: string };
+}) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(maxComments);
   const [text, setText] = useState(String(maxComments));
+  const [version, setVersion] = useState(versions.comments);
+  const [conflict, setConflict] = useState(false);
   const n = Number(text);
   const valid = text.trim() !== "" && Number.isInteger(n) && n >= MIN && n <= MAX;
 
   const save = () =>
     start(async () => {
-      const res = await saveMaxCommentsPerTask(n).catch((e) => actionThrowResult(e, t));
+      const res = await saveMaxCommentsPerTask(n, version).catch((e) => actionThrowResult(e, t));
+      if (isEditConflict(res)) return setConflict(true);
       if (!res.ok) return toast(res.error, "error");
+      setConflict(false);
+      setVersion(res.data.version);
       setSaved(res.data.value);
       setText(String(res.data.value));
       toast(t("Ajuste guardado."), "success");
@@ -63,7 +74,7 @@ export function SettingsAdmin({ maxComments, storage, installation, appIcon }: {
   return (
     <div className="space-y-4">
       <MovedSectionRedirect />
-      <InstallationSettingsSection view={installation} />
+      <InstallationSettingsSection view={installation} version={versions.installation} />
       <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} />
       <section className="card space-y-3 p-5">
         <div>
@@ -93,8 +104,9 @@ export function SettingsAdmin({ maxComments, storage, installation, appIcon }: {
           </button>
           {!valid && <span className="text-xs text-red-600">{t("Debe ser un número entero entre {min} y {max}.", { min: MIN, max: MAX })}</span>}
         </div>
+        {conflict && <EditConflictNotice draft={text} />}
       </section>
-      <StorageSettingsSection view={storage} />
+      <StorageSettingsSection view={storage} version={versions.storage} />
       <section className="card space-y-3 p-5">
         <div>
           <h2 className="flex items-center gap-1 text-sm font-semibold">

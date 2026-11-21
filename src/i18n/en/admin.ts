@@ -364,4 +364,9 @@ export const admin: Record<string, string> = {
   "Ruta": "Path",
   "Detalles": "Details",
   "No se ha descargado el CSV: {reason}": "The CSV was not downloaded: {reason}",
+  // Aviso de conflicto al guardar plantillas, textos legales y ajustes (otra persona lo cambió mientras tanto)
+  "Otra persona ha cambiado esto mientras lo editabas.": "Someone else changed this while you were editing it.",
+  "No se ha guardado, para no pisar su cambio. Lo que has escrito sigue aquí: cópialo si lo quieres conservar y recarga para ver lo guardado.": "It was not saved, so as not to overwrite their change. What you wrote is still here: copy it if you want to keep it, and reload to see what was saved.",
+  "No se ha guardado, para no pisar su cambio. Lo que has cambiado sigue aquí a la vista: al recargar verás lo que guardó la otra persona y podrás repetir tus cambios.": "It was not saved, so as not to overwrite their change. Your changes are still shown here: after reloading you will see what the other person saved and can make your changes again.",
+  "Copiar lo que has escrito": "Copy what you wrote",
 };

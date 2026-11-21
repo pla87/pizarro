@@ -3,10 +3,12 @@
 import { Building2, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveInstallationSettings } from "@/actions/settings";
+import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/shared";
+import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
 
 export interface InstallationView {
@@ -19,7 +21,7 @@ export interface InstallationView {
 }
 
 /** «Instalación»: lo que se eligió en el asistente de primer arranque (nombre, idioma por defecto y zona horaria). */
-export function InstallationSettingsSection({ view }: { view: InstallationView }) {
+export function InstallationSettingsSection({ view, version: initialVersion }: { view: InstallationView; version: string }) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -27,14 +29,19 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
   const [orgName, setOrgName] = useState(view.orgName);
   const [locale, setLocale] = useState<Locale>(view.locale);
   const [timeZone, setTimeZone] = useState(view.timeZone);
+  const [version, setVersion] = useState(initialVersion);
+  const [conflict, setConflict] = useState(false);
   const validName = orgName.trim() !== "" && orgName.trim().length <= 80;
   const dirty = orgName.trim() !== saved.orgName || locale !== saved.locale || (!view.zoneLocked && timeZone !== saved.timeZone);
   const zones = view.zones.includes(timeZone) ? view.zones : [timeZone, ...view.zones];
 
   const save = () =>
     start(async () => {
-      const res = await saveInstallationSettings({ orgName, locale, timeZone }).catch((e) => actionThrowResult(e, t));
+      const res = await saveInstallationSettings({ orgName, locale, timeZone, since: version }).catch((e) => actionThrowResult(e, t));
+      if (isEditConflict(res)) return setConflict(true);
       if (!res.ok) return toast(res.error, "error");
+      setConflict(false);
+      setVersion(res.data.version);
       const zoneChanged = !view.zoneLocked && res.data.timeZone !== saved.timeZone;
       setSaved({ orgName: res.data.orgName, locale: res.data.locale, timeZone: view.zoneLocked ? saved.timeZone : res.data.timeZone });
       setOrgName(res.data.orgName);
@@ -79,6 +86,7 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
           </label>
         )}
       </div>
+      {conflict && <EditConflictNotice draft={[orgName, locale, view.zoneLocked ? "" : timeZone].filter(Boolean).join("\n")} />}
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName}>
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
