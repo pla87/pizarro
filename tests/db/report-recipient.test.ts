@@ -134,10 +134,10 @@ describe("el destinatario cambia de email", () => {
     expectOk(await saveReportSchedule(f.project.id, { ...week, recipient: { userId: member.id } }));
     await loginAs(admin);
     const newEmail = `editada-${Date.now().toString(36)}@example.com`;
-    expectOk(await updateUser(member.id, { name: member.name, email: newEmail, role: "MEMBER", active: true }));
+    expectOk(await updateUser(member.id, { name: member.name, email: newEmail, role: "MEMBER", active: true, expected: { name: member.name, email: member.email, role: "MEMBER", active: true } }));
     assert.equal(await stored(f.project.id), newEmail);
     // Sin cambio de email, nada cambia.
-    expectOk(await updateUser(member.id, { name: "Otro nombre", email: newEmail, role: "MEMBER", active: true }));
+    expectOk(await updateUser(member.id, { name: "Otro nombre", email: newEmail, role: "MEMBER", active: true, expected: { name: member.name, email: newEmail, role: "MEMBER", active: true } }));
     assert.equal(await stored(f.project.id), newEmail);
   });
 });

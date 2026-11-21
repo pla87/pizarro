@@ -5,6 +5,7 @@ import { emailEnabled } from "@/lib/mail";
 import { getInstanceSettings } from "@/lib/instance";
 import { requireAdminPage } from "@/lib/session";
 import { soloPrivateProjectIdsByUser } from "@/lib/user-delete";
+import { invitePendingFrom } from "@/lib/user-entered";
 import { getT } from "@/i18n/server";
 import { UsersAdmin } from "./UsersAdmin";
 
@@ -31,7 +32,7 @@ export default async function UsersPage() {
     googleLinked: googleSub !== null,
     privateProjects: sole.get(u.id) ?? [],
     // Invitación pendiente: debe elegir contraseña y nunca ha entrado (cada acceso deja una sesión y un dispositivo conocido).
-    invitePending: u.mustChangePassword && googleSub === null && _count.sessions === 0 && _count.knownDevices === 0,
+    invitePending: invitePendingFrom({ mustChangePassword: u.mustChangePassword, googleSub, _count }),
   }));
   const { locale } = await getInstanceSettings();
   return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} emailAvailable={emailEnabled()} noRecovery={!emailEnabled() && !googleEnabled()} defaultLocale={locale === "en" ? "EN" : "ES"} />;

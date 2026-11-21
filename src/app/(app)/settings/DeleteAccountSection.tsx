@@ -10,11 +10,11 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { ACCOUNT_DELETE_PURPOSE, type GoogleReauthResult } from "@/lib/google-reauth";
-import { confirmWordMatches, DELETE_ACCOUNT_WORD, DELETION_BLOCK_MESSAGES, type DeleteFactor, type DeletionBlock } from "@/lib/user-delete-core";
+import { confirmWordMatches, DELETE_ACCOUNT_WORD, deletionBlockMessage, type DeleteFactor, type DeletionBlockInfo } from "@/lib/user-delete-core";
 
 interface Props {
-  /** Por qué no se puede borrar (única cuenta o último administrador); null si se puede. */
-  block: DeletionBlock | null;
+  /** Por qué no se puede borrar (única cuenta, último administrador o los demás aún no han entrado); null si se puede. */
+  block: DeletionBlockInfo | null;
   /** Proyectos privados en los que es el único miembro: pasan a ser de equipo, o se borran con la cuenta si lo pide. */
   privateProjects: { id: string; name: string }[];
   twoFactor: "TOTP" | "EMAIL" | null;
@@ -33,6 +33,8 @@ interface Props {
 export function DeleteAccountSection({ block, ...props }: Props) {
   const t = useT();
   const [open, setOpen] = useState(!block && props.reauth !== null);
+  const blockMessage = block ? deletionBlockMessage(block) : null;
+  const blockText = blockMessage ? t(blockMessage.text, blockMessage.vars) : null;
   // La vuelta de Google ya ha abierto el diálogo: se quita «?delete=…» de la dirección para que recargar no lo reabra
   // con un resultado viejo (p. ej. «google_failed»).
   useEffect(() => {
@@ -47,8 +49,8 @@ export function DeleteAccountSection({ block, ...props }: Props) {
       <h2 className="flex items-center gap-2 font-semibold"><UserX size={18} /> {t("Borrar mi cuenta")}</h2>
       {block ? (
         <>
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300" data-testid="delete-account-block">{t(DELETION_BLOCK_MESSAGES[block])}</p>
-          {block === "only-user" && (
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300" data-testid="delete-account-block">{blockText}</p>
+          {block.reason === "only-user" && (
             <p className="mt-1 flex items-start gap-1.5 text-xs text-slate-500">
               <Info size={14} className="mt-0.5 shrink-0" />
               {t("Si quieres dejar Pizarro, borra la instalación.")}

@@ -226,7 +226,7 @@ describe("usuario desactivado y sin sesión", () => {
     assert.equal(await db.session.count({ where: { userId: u.id } }), 1);
     const userCookie = saveSession();
     await loginAs(admin);
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false, expected: { name: u.name, email: u.email, role: "MEMBER", active: true } }));
     assert.equal(await db.session.count({ where: { userId: u.id } }), 0);
     restoreSession(userCookie);
     expectFail(await getTaskDetail(task.id), SESSION_EXPIRED);
@@ -362,7 +362,7 @@ describe("asignación de usuarios a proyectos", () => {
     await db.task.updateMany({ where: { id: { in: [kept.id, dropped.id, privTask.id] } }, data: { assigneeId: demoted.id } });
     await db.task.update({ where: { id: otherTask.id }, data: { assigneeId: boss.id } });
     await asUser(boss, async () => {
-      expectOk(await updateUser(demoted.id, { name: demoted.name, email: demoted.email, role: "MEMBER", active: true }));
+      expectOk(await updateUser(demoted.id, { name: demoted.name, email: demoted.email, role: "MEMBER", active: true, expected: { name: demoted.name, email: demoted.email, role: "ADMIN", active: true } }));
     });
     const assignee = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id }, select: { assigneeId: true } })).assigneeId;
     // Sigue en el que había elegido (ahora como miembro) y en su privado; del otro de equipo sale y su tarjeta queda libre.

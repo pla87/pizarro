@@ -35,7 +35,7 @@ describe("MAX_USERS", () => {
   test("reactivar a alguien con el tope lleno se rechaza", async () => {
     await loginAs(admin);
     const off = await makeUser({ active: false });
-    const res = await updateUser(off.id, { name: off.name, email: off.email, role: "MEMBER", active: true });
+    const res = await updateUser(off.id, { name: off.name, email: off.email, role: "MEMBER", active: true, expected: { name: off.name, email: off.email, role: "MEMBER", active: false } });
     assert.equal(res.ok, false);
     assert.equal((await db.user.findUniqueOrThrow({ where: { id: off.id } })).active, false);
   });

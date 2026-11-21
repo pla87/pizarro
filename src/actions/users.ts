@@ -20,6 +20,7 @@ import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { eraseUser } from "@/lib/user-delete";
+import { HAS_ENTERED, invitePendingFrom } from "@/lib/user-entered";
 import { disconnectGoogleAccount } from "@/lib/google";
 import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
@@ -133,16 +134,13 @@ export async function inviteToProject(projectId: string, email: string) {
   });
 }
 
-/**
- * ¿Invitación pendiente? Debe elegir contraseña y nunca ha entrado: sin sesiones, sin dispositivos conocidos (cada acceso
- * deja uno, que se conserva 400 días) y sin Google enlazado. Quien ya entró alguna vez usa «Forzar cambio de contraseña».
- */
+/** ¿Invitación pendiente? Debe elegir contraseña y nunca ha entrado (invitePendingFrom, user-entered.ts). */
 async function invitePending(userId: string): Promise<boolean> {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
   });
-  return !!user && user.mustChangePassword && !user.googleSub && user._count.sessions === 0 && user._count.knownDevices === 0;
+  return !!user && invitePendingFrom(user);
 }
 
 /** «Reenviar invitación»: enlace nuevo (72 h) por email; el anterior deja de valer. Solo para quien aún no ha entrado. */
@@ -171,66 +169,64 @@ export async function resendInvite(userId: string) {
   });
 }
 
-const updateSchema = z.object({
+const userFields = {
   name: v.name,
   email: v.email,
   role: z.enum(["ADMIN", "MEMBER"]),
   active: z.boolean(),
+};
+
+const updateSchema = z.object({
+  ...userFields,
+  /**
+   * Los valores que vio quien edita (los de la lista al abrir «Editar»). Solo se aplican los campos que ha cambiado; si
+   * alguno de esos ha cambiado mientras tanto (otro administrador ha desactivado a la persona, le ha cambiado el email…),
+   * se rechaza. Sin ellos (un navegador con la versión anterior) no se sabe qué ha cambiado: también se rechaza.
+   */
+  expected: z.object({ name: z.string().max(200), email: z.string().max(200), role: userFields.role, active: z.boolean() }).optional(),
 });
+
+const STALE_USER = "Los datos han cambiado mientras tanto: recarga la página.";
 
 export async function updateUser(userId: string, input: z.input<typeof updateSchema>) {
   return runAction({ name: "users.updateUser", args: [userId, input] }, async () => {
     const admin = await requireAdmin();
-    const data = updateSchema.parse(input);
-    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, role: true, active: true } });
-    if (!user) throw notFound();
-    if (user.id === admin.id && (data.role !== "ADMIN" || !data.active)) {
+    const { expected, ...wanted } = updateSchema.parse(input);
+    const id = v.id.parse(userId);
+    if (!expected) throw new AppError(STALE_USER, 409);
+    if (id === admin.id && (wanted.role !== "ADMIN" || !wanted.active)) {
       throw new AppError("No puedes quitarte el rol de administrador ni desactivarte a ti mismo.");
     }
-    const reactivating = data.active && !user.active;
-    if (reactivating) await assertUserSlot(db);
-    if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
-      throw new AppError("Ya existe un usuario con ese email.");
-    }
-    // Al cambiar de rol, la asignación a proyectos de equipo se traduce, así no se pierde ni se gana acceso por el cambio:
-    // un admin nuevo sigue asignado (ProjectMember) y además los tiene elegidos (AdminProjectPick); quien deja de serlo
-    // pasa a estar asignado a los que tenía elegidos.
-    const roleSwitch: ((tx: Prisma.TransactionClient) => Promise<unknown>)[] = [];
+    const keys = ["name", "email", "role", "active"] as const;
+    const changed = new Set(keys.filter((k) => wanted[k] !== expected[k]));
     const unassigned = { count: 0, projectIds: [] as string[] };
-    if (data.role !== user.role) {
-      if (data.role === "ADMIN") {
-        const rows = await db.projectMember.findMany({ where: { userId: user.id, project: { isPrivate: false } }, select: { projectId: true } });
-        roleSwitch.push(
-          (tx) => tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-        );
-      } else {
-        const rows = await db.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
-        roleSwitch.push(
-          (tx) => tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          (tx) => tx.adminProjectPick.deleteMany({ where: { userId: user.id } }),
-          // Como al quitar a alguien de un proyecto (removeProjectMember): las tarjetas que tenga asignadas en proyectos
-          // que deja de ver (de equipo que no había elegido; y, por si acaso, privados de los que no es miembro) quedan sin asignar.
-          async (tx) => {
-            const where = { assigneeId: user.id, project: { members: { none: { userId: user.id } } } };
-            const affected = await tx.task.findMany({ where, distinct: ["projectId"], select: { projectId: true } });
-            if (affected.length === 0) return;
-            unassigned.count = (await tx.task.updateMany({ where, data: { assigneeId: null } })).count;
-            unassigned.projectIds = affected.map((a) => a.projectId);
-          },
-        );
-      }
-    }
-    const emailChanged = data.email !== user.email;
-    const losesAdmin = user.role === "ADMIN" && user.active && (data.role !== "ADMIN" || !data.active);
-    await db.$transaction(async (tx) => {
-      // Reactivar ocupa una plaza: se vuelve a contar con el candado de altas (ver assertUserSlot).
-      if (reactivating) await assertUserSlot(tx);
-      // Quitar un administrador activo, con el mismo candado que «Borrar mi cuenta» (eraseUser): si quien lo hace
-      // acaba de borrarse a la vez, no se queda la instalación sin ninguno.
-      if (losesAdmin) {
+    const { user, data } = await db.$transaction(async (tx) => {
+      // Candados en orden fijo: plazas de usuarios (reactivar), administradores (quitar uno) y la fila de la persona.
+      // Así dos administradores que la editan a la vez van en fila y el segundo compara con lo que dejó el primero;
+      // «Borrar mi cuenta» (eraseUser) toma también pz:admins antes de borrar la fila.
+      if (changed.has("active") && wanted.active) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:max-users'))::text`;
+      if ((changed.has("role") && wanted.role !== "ADMIN") || (changed.has("active") && !wanted.active)) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
-        if ((await tx.user.count({ where: { id: { not: user.id }, role: "ADMIN", active: true } })) === 0) throw new AppError("Debe quedar al menos un administrador activo.");
       }
+      // NO KEY UPDATE: no bloquea crear sesiones ni dispositivos de la persona (sus claves foráneas solo piden KEY SHARE).
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR NO KEY UPDATE`;
+      const user = await tx.user.findUnique({ where: { id }, select: { id: true, name: true, email: true, locale: true, role: true, active: true } });
+      if (!user) throw notFound();
+      // Un campo cambiado aquí que otro ha cambiado entretanto (salvo al mismo valor): se rechaza, no se pisa.
+      if ([...changed].some((k) => user[k] !== expected[k] && user[k] !== wanted[k])) throw new AppError(STALE_USER, 409);
+      // Los que no se han tocado se quedan como están ahora (no como estaban al abrir el formulario).
+      const data = { name: changed.has("name") ? wanted.name : user.name, email: changed.has("email") ? wanted.email : user.email, role: changed.has("role") ? wanted.role : user.role, active: changed.has("active") ? wanted.active : user.active };
+      // Reactivar ocupa una plaza (ver assertUserSlot; el candado ya está tomado).
+      if (data.active && !user.active) await assertUserSlot(tx);
+      if (data.email !== user.email && (await tx.user.count({ where: { email: data.email, id: { not: user.id } } }))) {
+        throw new AppError("Ya existe un usuario con ese email.");
+      }
+      // Quitar un administrador activo, con el mismo candado que «Borrar mi cuenta» (eraseUser): si quien lo hace acaba de
+      // borrarse a la vez, no se queda la instalación sin ninguno. Como allí, solo cuenta quien ya ha entrado alguna vez.
+      if (user.role === "ADMIN" && user.active && (data.role !== "ADMIN" || !data.active)) {
+        if ((await tx.user.count({ where: { id: { not: user.id }, role: "ADMIN", active: true, ...HAS_ENTERED } })) === 0) throw new AppError("Debe quedar al menos un administrador activo.");
+      }
+      const emailChanged = data.email !== user.email;
       // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
       await tx.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data });
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
@@ -238,13 +234,33 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       if (emailChanged || !data.active) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
       // Los informes semanales que iban a su dirección anterior pasan a la nueva.
       if (emailChanged) await retargetReportSchedules(tx, user.email, data.email);
-      for (const op of roleSwitch) await op(tx);
+      // Al cambiar de rol, la asignación a proyectos de equipo se traduce, así no se pierde ni se gana acceso por el
+      // cambio: un admin nuevo sigue asignado (ProjectMember) y además los tiene elegidos (AdminProjectPick); quien deja de
+      // serlo pasa a estar asignado a los que tenía elegidos. Se lee aquí, con la fila bloqueada: lo que haya cambiado
+      // otro administrador mientras tanto también cuenta.
+      if (data.role !== user.role && data.role === "ADMIN") {
+        const rows = await tx.projectMember.findMany({ where: { userId: user.id, project: { isPrivate: false } }, select: { projectId: true } });
+        await tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true });
+      } else if (data.role !== user.role) {
+        const rows = await tx.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
+        await tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true });
+        await tx.adminProjectPick.deleteMany({ where: { userId: user.id } });
+        // Como al quitar a alguien de un proyecto (removeProjectMember): las tarjetas que tenga asignadas en proyectos
+        // que deja de ver (de equipo que no había elegido; y, por si acaso, privados de los que no es miembro) quedan sin asignar.
+        const where = { assigneeId: user.id, project: { members: { none: { userId: user.id } } } };
+        const affected = await tx.task.findMany({ where, distinct: ["projectId"], select: { projectId: true } });
+        if (affected.length) {
+          unassigned.count = (await tx.task.updateMany({ where, data: { assigneeId: null } })).count;
+          unassigned.projectIds = affected.map((a) => a.projectId);
+        }
+      }
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       // Y los accesos a medio completar: al reactivar no deben «revivir», y con otro rol cambia si se exige el segundo paso.
       if (data.active !== user.active || data.role !== user.role) {
         await tx.session.deleteMany({ where: { userId: user.id } });
         await tx.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } });
       }
+      return { user, data };
     });
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {

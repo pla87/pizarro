@@ -22,4 +22,8 @@ export const baja: Record<string, string> = {
   "Tu cuenta de Pizarro se ha borrado": "Your Pizarro account has been deleted",
   "Has borrado tu cuenta de Pizarro y se han cerrado todas tus sesiones.": "You deleted your Pizarro account and all your sessions were closed.",
   "Si no has sido tú, avisa a un administrador.": "If this wasn't you, tell an admin.",
+  // El último administrador que ha entrado, con otros que aún tienen la invitación pendiente
+  "Espera a que {name} entre por primera vez antes de borrar tu cuenta.": "Wait until {name} signs in for the first time before deleting your account.",
+  "Los demás administradores aún no han entrado nunca: espera a que alguno entre por primera vez antes de borrar tu cuenta.":
+    "None of the other admins has signed in yet: wait until one of them signs in for the first time before deleting your account.",
 };
