@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { classifyHtmlLink } from "@/lib/html-doc-links";
+import { classifyHtmlLink, htmlLinkTarget } from "@/lib/html-doc-links";
 import { useT } from "@/i18n/client";
 
 /**
@@ -47,11 +47,9 @@ function htmlPreviewDocument(html: string, links: { projectId: string; docs: rea
         // pestaña, sin que el marco gane ningún permiso (no puede avisar al padre sin scripts). La dirección la construye la
         // app con el id que ha resuelto ella; nada del `href` original llega al enlace salvo el apartado, normalizado.
         el.setAttribute(attr, `/p/${encodeURIComponent(links.projectId)}/docs?doc=${encodeURIComponent(link.id)}${link.hash}`);
-        el.setAttribute("target", "_blank");
       } else if (link.type === "missing") {
         // Enlace a un fichero que no está en la Documentación: sin dirección, no navega a ninguna parte.
         el.removeAttribute(attr);
-        el.removeAttribute("target");
         el.setAttribute("title", links.missingTitle);
         el.setAttribute("aria-disabled", "true");
         el.setAttribute("data-pz-disabled", "");
@@ -61,8 +59,11 @@ function htmlPreviewDocument(html: string, links: { projectId: string; docs: rea
         // «about:srcdoc#tema» solo se desplaza dentro del documento. También el propio documento por su nombre
         // («guia.html#tema» dentro de guia.html) o sin ruta («», «?x»): antes abría otra pestaña o salía desactivado.
         el.setAttribute(attr, `about:srcdoc${link.hash || "#"}`);
-        el.setAttribute("target", "_self");
       }
+      // El destino lo decide la app (htmlLinkTarget), no el documento: un externo con `target="_top"` o `"_self"` no se abría.
+      const target = htmlLinkTarget(link);
+      if (target) el.setAttribute("target", target);
+      else el.removeAttribute("target");
       el.setAttribute("rel", "noopener noreferrer");
     }
   }
