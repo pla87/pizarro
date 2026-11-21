@@ -2,11 +2,12 @@
 
 import { appTimeZone } from "@/lib/format";
 import { ChevronDown, ClipboardCopy, Download, FileArchive, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { deleteRelease, deleteReleaseAttachments, getReleaseContent } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { startDownload } from "@/components/board/attachments-zip";
 import { cn } from "@/components/ui/cn";
+import { Highlight } from "@/components/ui/Highlight";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { Menu, MenuItem } from "@/components/ui/Menu";
@@ -22,9 +23,11 @@ import { actionThrowMessage, actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   release: { id: string; number: number; title: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
+  /** Lo buscado en la página (?q=): se resalta en el título, la línea de datos, los adjuntos y el texto. */
+  query?: string;
 }
 
-export function ReleaseEntry({ release }: Props) {
+export function ReleaseEntry({ release, query = "" }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const locale = useIntlLocale();
@@ -54,6 +57,9 @@ export function ReleaseEntry({ release }: Props) {
   // Lo que se copia y se descarga: las releases guardadas con el editor con barra en versiones anteriores pueden traer párrafos
   // vacíos como «&nbsp;» (salen como una línea en blanco; el resto, idéntico).
   const text = content === null ? null : blankEmptyParagraphs(content);
+  // El texto pintado (con lo buscado resaltado) no se vuelve a interpretar al cambiar otro estado de la entrada (el
+  // botón de descargar, los paquetes del ZIP): con una release de cientos de tareas y muchas coincidencias se notaría.
+  const body = useMemo(() => (content === null ? null : <LazyMarkdown highlight={query}>{content}</LazyMarkdown>), [content, query]);
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
@@ -157,16 +163,23 @@ export function ReleaseEntry({ release }: Props) {
         <div className="min-w-0 flex-1">
           <h2 className="font-medium">
             <button type="button" className="block w-full truncate text-left after:absolute after:inset-0" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-              {/* El espacio va en el mismo nodo de texto que el título: separa el número en el nombre accesible del botón
-                  («R3 Release…», no «R3Release…»); Chrome no cuenta un nodo de texto que solo tiene un espacio. */}
+              {/* El espacio va delante del título, en el mismo texto: separa el número en el nombre accesible del botón
+                  («R3 Release…», no «R3Release…»). Con lo buscado al principio del título queda solo, seguido de la
+                  <mark>, y Chrome lo cuenta (accesibilidad-releases-e2e.mjs, PART=resaltar, lo comprueba). */}
               <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
-              {` ${release.title}`}
+              <Highlight text={` ${release.title}`} query={query} />
             </button>
           </h2>
           <p className="text-xs text-slate-500">
-            {formatDate(date, "dateTime", locale)}
-            {release.author && ` · ${release.author}`} · {release.taskCount === 1 ? t("1 tarea") : t("{n} tareas", { n: release.taskCount })}
-            {attachments.length > 0 && ` · ${attachments.length === 1 ? t("1 adjunto") : t("{n} adjuntos", { n: attachments.length })}`}
+            <Highlight
+              query={query}
+              text={[
+                formatDate(date, "dateTime", locale),
+                release.author,
+                release.taskCount === 1 ? t("1 tarea") : t("{n} tareas", { n: release.taskCount }),
+                attachments.length > 0 ? (attachments.length === 1 ? t("1 adjunto") : t("{n} adjuntos", { n: attachments.length })) : null,
+              ].filter(Boolean).join(" · ")}
+            />
           </p>
         </div>
         <ChevronDown size={18} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
@@ -214,16 +227,14 @@ export function ReleaseEntry({ release }: Props) {
                   ))}
                 </div>
               </div>
-              <p className="mt-1 break-words text-xs text-slate-500">{attachments.join(", ")}</p>
+              <p className="mt-1 break-words text-xs text-slate-500"><Highlight text={attachments.join(", ")} query={query} /></p>
             </div>
           )}
-          {content !== null ? (
-            <LazyMarkdown>{content}</LazyMarkdown>
-          ) : loadError ? (
+          {body ?? (loadError ? (
             <p className="text-sm text-red-600">{loadError}</p>
           ) : (
             <p className="flex items-center gap-1.5 text-sm text-slate-500" role="status"><Loader2 size={15} className="animate-spin" aria-hidden /> {t("Cargando…")}</p>
-          )}
+          ))}
         </div>
       )}
     </article>

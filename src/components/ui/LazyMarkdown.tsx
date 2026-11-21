@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Suspense, type ComponentProps } from "react";
 import { importWhenOnline } from "@/lib/connection";
+import { Highlight } from "./Highlight";
 import type { Markdown } from "./Markdown";
 
 const Loaded = dynamic(() => importWhenOnline(() => import("./Markdown")).then((m) => m.Markdown));
@@ -16,7 +17,7 @@ const Loaded = dynamic(() => importWhenOnline(() => import("./Markdown")).then((
  */
 export function LazyMarkdown(props: ComponentProps<typeof Markdown>) {
   return (
-    <Suspense fallback={<div className="prose-md whitespace-pre-wrap">{props.children}</div>}>
+    <Suspense fallback={<div className="prose-md whitespace-pre-wrap"><Highlight text={props.children} query={props.highlight ?? ""} /></div>}>
       <Loaded {...props} />
     </Suspense>
   );

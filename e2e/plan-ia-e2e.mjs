@@ -165,13 +165,14 @@ if (only.includes("plan")) {
   const text = await planText(dlg);
   const today = await appToday(page);
   for (const piece of [
-    `# Plan de trabajo – ${NAME}`, "## Instrucciones para la IA", "Claude Code", "## Contexto del proyecto", `- **Proyecto:** [${NAME}](<${L.BASE}/p/${PID}>)`, "- **Columna:** Plan IA",
+    `# Plan de trabajo – ${NAME}`, "## Instrucciones para la IA", "Claude Code", "## Contexto del proyecto", `- **Proyecto:** ${NAME}\n`, "- **Columna:** Plan IA",
     "Tienda en línea con Next.js.", "- **Tareas:** 3", "### 1. Arreglar el login r51", "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Backend",
-    "- **Fecha límite:** 2026-12-31", `- **Tarea en Pizarro:** [abrir](<${L.BASE}/p/${PID}?task=r51_t1>)`, `- **Adjuntos:**\n  - \`adjuntos/01-arreglar-el-login-r51/error.log\` ([error.log en Pizarro](<${L.BASE}/api/attachments/r51_a1>))`,
+    "- **Fecha límite:** 2026-12-31", "- **Adjuntos:**\n  - `adjuntos/01-arreglar-el-login-r51/error.log`\n",
     "#### Pasos", "- [x] Reproducir", "- [ ] Corregir y probar", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1 («Arreglar el login r51»)",
     "### 3. Revisar estilo r51", "- _Tarea fija: entra en todos los planes._", "## Entrega",
   ]) L.check(`PLAN: el texto incluye «${piece.slice(0, 70)}»`, text.includes(piece), text.slice(0, 200));
   L.check("PLAN: la fija que no toca no entra", !text.includes("Actualizar dependencias r51"));
+  L.check("PLAN: sin enlaces a Pizarro (ni a la tarea, ni al proyecto, ni a los adjuntos): la IA no puede abrirlos", !text.includes(L.BASE) && !text.includes("Tarea en Pizarro") && !text.includes("en Pizarro]"), text);
   L.check("PLAN: las tareas en el orden de la columna", text.indexOf("### 1.") < text.indexOf("### 2.") && text.indexOf("### 2.") < text.indexOf("### 3."));
   L.check("PLAN: dice el nombre con el que se guardará", (await dlg.innerText()).includes(`Se guardará como «Plan de trabajo – ${today}_v1.md».`));
   await page.screenshot({ path: `${SHOTS}/r51-plan-paso2.png` });

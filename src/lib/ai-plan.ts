@@ -1,6 +1,8 @@
 // Plan de trabajo para una IA (columna con rol AI_PLAN): el texto en Markdown que se entrega a un agente (p. ej. Claude
 // Code) para que haga las tareas de la columna. Funciones puras: se usan en el navegador (al generar) y en las pruebas.
 // Reutiliza las piezas de las release notes (plantillas de cabecera y pie, cambio de cabecera o pie en el texto editado).
+// Sin enlaces a Pizarro (a la tarea, al proyecto, a los adjuntos ni los de las descripciones): la IA no puede abrirlos
+// (piden la sesión iniciada). Los adjuntos se citan por su ruta en el ZIP que va con el plan, o por su nombre.
 
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
@@ -12,8 +14,6 @@ export interface AiPlanTask {
   title: string;
   /** Nombre del tipo, ya en el idioma de quien genera el plan. */
   kind?: string | null;
-  /** Enlace a la tarea en la app (absoluto). */
-  url?: string | null;
   /** Descripción en Markdown (con menciones @[Nombre](user:ID)). */
   description?: string | null;
   subtasks?: { title: string; done: boolean }[];
@@ -28,10 +28,10 @@ export interface AiPlanTask {
   /** Documentos de Google vinculados. */
   links?: { title: string; url: string }[];
   /**
-   * Adjuntos con su enlace de descarga en la app (absoluto) y, si el plan va con su ZIP, su ruta dentro de él
-   * (`adjuntos/03-titulo/plano.webp`, o `attachments/…` en un plan en inglés; ver planAttachmentPaths).
+   * Adjuntos con su nombre y, si el plan va con su ZIP, su ruta dentro de él (`adjuntos/03-titulo/plano.webp`, o
+   * `attachments/…` en un plan en inglés; ver planAttachmentPaths).
    */
-  attachments?: { id?: string; name: string; url: string; path?: string }[];
+  attachments?: { id?: string; name: string; path?: string }[];
   /** Tarea fija («Siempre en el plan»): entra en todos los planes. */
   evergreen?: boolean;
   /** Tarea que bloquea a esta (si está en el plan, `index` es su número en él, desde 1). */
@@ -41,13 +41,16 @@ export interface AiPlanTask {
 export interface AiPlanInput {
   header: string;
   footer: string;
-  project: { name: string; description?: string | null; url?: string | null };
+  project: { name: string; description?: string | null };
   /** Nombre de la columna de la que sale el plan. */
   column?: string | null;
   /** Fecha del plan (YYYY-MM-DD, zona de la app). */
   date: string;
   tasks: AiPlanTask[];
-  /** Origen de la app (https://pizarro.example.com): convierte en absolutos los enlaces `/api/attachments/…` de las descripciones. */
+  /**
+   * Origen de la app (https://pizarro.example.com): un enlace de las descripciones que empieza por él (o por «/», relativo a
+   * la app) es un enlace a Pizarro y se queda en su texto (ver planDescription).
+   */
   origin?: string | null;
 }
 
@@ -108,7 +111,6 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Haz cambios pequeños y fáciles de revisar, con el estilo y las convenciones que ya tiene el código.",
       "- Añade o actualiza las pruebas de lo que cambies y ejecútalas antes de dar una tarea por terminada.",
       "- No hagas nada irreversible (borrar datos, migraciones destructivas, desplegar o publicar) sin confirmación.",
-      "- Los enlaces a Pizarro (tareas y adjuntos) solo se abren con la sesión iniciada: si necesitas alguno y no puedes abrirlo, pídelo.",
       "- Los adjuntos de las tareas (planos, capturas, documentos) van en el ZIP «adjuntos/…» que acompaña a este plan: descomprímelo junto a este fichero. Cada tarea cita la ruta de los suyos (p. ej. `adjuntos/03-titulo-de-la-tarea/plano.webp`) y las imágenes de las descripciones apuntan a esa misma ruta. Las imágenes van convertidas a WebP.",
     ].join("\n"),
     footerName: "Entrega (de serie)",
@@ -138,7 +140,6 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Make small changes that are easy to review, following the style and conventions the code already has.",
       "- Add or update tests for what you change and run them before you consider a task done.",
       "- Do nothing irreversible (deleting data, destructive migrations, deploying or publishing) without confirmation.",
-      "- Links to Pizarro (tasks and attachments) only open with a signed-in session: if you need one and cannot open it, ask for it.",
       "- The tasks' attachments (drawings, screenshots, documents) come in the \"attachments/…\" ZIP that goes with this plan: unzip it next to this file. Each task cites the path of its own (e.g. `attachments/03-task-title/drawing.webp`) and the images in the descriptions point to that same path. Images are converted to WebP.",
     ].join("\n"),
     footerName: "Delivery (built-in)",
@@ -171,6 +172,8 @@ const linkText = (text: string) => text.replace(/([[\]\\])/g, "\\$1");
 /** Destino de un enlace Markdown entre <>: sin los caracteres que lo cerrarían. */
 const linkTarget = (url: string) => `<${url.replace(/[<>\s]/g, (c) => encodeURIComponent(c))}>`;
 const oneLine = (text: string) => mentionsToPlain(text).replace(/\s+/g, " ").trim();
+/** Nombre de un adjunto en el texto: en `código` (un «_» o un «*» del nombre no da formato), o tal cual si lleva «`». */
+const fileName = (name: string) => (name.includes("`") ? oneLine(name) : `\`${oneLine(name)}\``);
 
 /** Apertura de un bloque de código: hasta 3 espacios y 3 o más ``` o ~~~ (con ```, sin más ` en la información). */
 const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
@@ -188,20 +191,51 @@ const NOT_PARAGRAPH = /^(?:\s*$| {4}|\t| {0,3}(?:[-*+](?:\s|$)|\d{1,9}[.)](?:\s|
  * tareas y el pie) en la vista previa y en cualquier visor de Markdown.
  */
 const HTML_BLOCK_START = /^( {0,3})(<(?:!--|\?|!\[CDATA\[|![A-Za-z]|(?:pre|script|style|textarea)(?=[\s>]|$)))/i;
+/**
+ * Enlace o imagen de Markdown en línea: «!» (imagen), texto (sin corchetes sin escapar), destino (entre <> o sin espacios)
+ * y título opcional. Un texto con corchetes anidados no casa y el enlace se queda como está.
+ */
+const INLINE_LINK = /(!?)\[((?:\\.|[^\\[\]\n])*)\]\((\s*)(<[^<>\n]*>|[^\s()<>]+)((?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^()\n]*\)))?\s*)\)/g;
+/** Un adjunto de la app (`/api/attachments/<id>`, con o sin parámetros): su id. */
+const ATTACHMENT_PATH = /^\/api\/attachments\/([\w-]+)(?:[?#].*)?$/;
+
+/**
+ * Ruta dentro de la app de un enlace a Pizarro: relativo a ella («/p/…», «/api/attachments/…») o con su origen
+ * (sin distinguir mayúsculas); null si lleva a otro sitio.
+ */
+function appPathOf(url: string, origin: string | null | undefined): string | null {
+  if (url.startsWith("/")) return url.startsWith("//") ? null : url;
+  const base = origin?.replace(/\/+$/, "");
+  if (!base || url.slice(0, base.length).toLowerCase() !== base.toLowerCase() || !/^(?:[/?#]|$)/.test(url.slice(base.length))) return null;
+  return url.slice(base.length) || "/";
+}
+
+/**
+ * Enlaces e imágenes de una línea de descripción que llevan a Pizarro (appPathOf): un adjunto que va en el ZIP pasa a su
+ * ruta dentro de él (la imagen se sigue viendo en un visor que abra el ZIP); los demás se quedan en su texto (la imagen,
+ * en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros sitios no cambian.
+ */
+function withoutAppLinks(line: string, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined): string {
+  if (!line.includes("](")) return line;
+  return line.replace(INLINE_LINK, (whole: string, bang: string, text: string, space: string, dest: string, rest: string) => {
+    const appPath = appPathOf(dest.startsWith("<") ? dest.slice(1, -1) : dest, origin);
+    if (appPath === null) return whole;
+    const zipped = paths?.get(ATTACHMENT_PATH.exec(appPath)?.[1] ?? "");
+    if (zipped) return `${bang}[${text}](${space}${dest.startsWith("<") ? `<${zipped}>` : zipped}${rest})`;
+    return text;
+  });
+}
 
 /**
  * Descripción de una tarea tal como entra en el plan: menciones en texto plano, entidades decodificadas (descripciones
- * antiguas con `&gt;`), enlaces a adjuntos absolutos y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan),
+ * antiguas con `&gt;`), sin enlaces a Pizarro (withoutAppLinks) y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan),
  * también los setext («Texto» subrayado con === o ---), que pasan a «####». Dentro de los bloques de código no se toca
  * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Por lo mismo,
  * una línea que abriría un bloque HTML sin fin (`<!-- nota`, `<pre`, `<script`…) empieza con «\<». Sin líneas en blanco
  * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
  */
 export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
-  let text = decodeEntities(mentionsToPlain(description ?? ""));
-  // Una imagen pegada (`/api/attachments/<id>`) que va en el ZIP se cita por su ruta dentro de él; las demás, con enlace absoluto.
-  if (paths?.size) text = text.replace(/(\]\(<?)\/api\/attachments\/([\w-]+)(?:\?[^)\s>]*)?/g, (whole, open: string, id: string) => (paths.has(id) ? `${open}${paths.get(id)}` : whole));
-  if (origin) text = text.replace(/(\]\(<?)(\/api\/attachments\/)/g, `$1${origin.replace(/\/+$/, "")}$2`);
+  const text = decodeEntities(mentionsToPlain(description ?? ""));
   const out: string[] = [];
   /** Apertura del bloque de código en curso («```», «````», «~~~»…). */
   let fence: string | null = null;
@@ -234,15 +268,17 @@ export function planDescription(description: string | null | undefined, origin?:
       paragraph = 0;
       continue;
     }
-    const heading = ATX_HEADING.exec(raw);
+    // Fuera de los bloques de código: sin enlaces a Pizarro (un adjunto del ZIP, por su ruta en él).
+    const line = withoutAppLinks(raw, origin, paths);
+    const heading = ATX_HEADING.exec(line);
     if (heading) {
       out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
       paragraph = 0;
       continue;
     }
-    paragraph = NOT_PARAGRAPH.test(raw) ? 0 : paragraph + 1;
+    paragraph = NOT_PARAGRAPH.test(line) ? 0 : paragraph + 1;
     // Fuera de los bloques de código, «\<» al principio: se ve igual (un «<») y no abre un bloque HTML.
-    out.push(raw.replace(HTML_BLOCK_START, "$1\\$2"));
+    out.push(line.replace(HTML_BLOCK_START, "$1\\$2"));
   }
   while (out.at(-1) === "") out.pop();
   if (fence) out.push(fence);
@@ -261,14 +297,13 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
     const title = `«${oneLine(task.blockedBy.title)}»`;
     fact(t("Depende de"), task.blockedBy.index ? t("la tarea {n} ({title})", { n: task.blockedBy.index, title }) : t("{title} (no está en este plan)", { title }));
   }
-  if (task.url) fact(t("Tarea en Pizarro"), `[${linkText(t("abrir"))}](${linkTarget(task.url)})`);
-  if (task.linkUrl) fact(t("Enlace"), `[${linkText(task.linkUrl)}](${linkTarget(task.linkUrl)})`);
+  // El enlace externo de la tarea, salvo que lleve a Pizarro (a otra tarea, al tablero…).
+  if (task.linkUrl && appPathOf(task.linkUrl, origin) === null) fact(t("Enlace"), `[${linkText(task.linkUrl)}](${linkTarget(task.linkUrl)})`);
   if (task.links?.length) fact(t("Documentos"), task.links.map((l) => `[${linkText(oneLine(l.title))}](${linkTarget(l.url)})`).join(", "));
   if (task.attachments?.length) {
-    if (task.attachments.some((a) => a.path)) {
-      // Con ZIP: la ruta dentro de él y, detrás, el enlace a Pizarro (el original, con su nombre y formato).
-      facts.push(`- **${t("Adjuntos")}:**`, ...task.attachments.map((a) => `  - ${a.path ? `\`${a.path}\` ` : ""}([${linkText(t("{name} en Pizarro", { name: a.name }))}](${linkTarget(a.url)}))`));
-    } else fact(t("Adjuntos"), task.attachments.map((a) => `[${linkText(a.name)}](${linkTarget(a.url)})`).join(", "));
+    // Con ZIP, su ruta dentro de él (una por línea); sin él, solo su nombre (sin enlace a Pizarro: la IA no puede abrirlo).
+    if (task.attachments.some((a) => a.path)) facts.push(`- **${t("Adjuntos")}:**`, ...task.attachments.map((a) => `  - ${a.path ? `\`${a.path}\`` : fileName(a.name)}`));
+    else fact(t("Adjuntos"), task.attachments.map((a) => fileName(a.name)).join(", "));
   }
   if (task.evergreen) facts.push(`- _${t("Tarea fija: entra en todos los planes.")}_`);
   const parts = [`### ${index}. ${oneLine(task.title)}`];
@@ -289,16 +324,16 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   const zipped = input.tasks.flatMap((x) => x.attachments ?? []).filter((a) => a.path);
   // Con adjuntos pero sin ZIP (más de 200 tareas con adjuntos) la cabecera de serie sigue hablando de un ZIP: no se toca (así
   // se puede cambiar de plantilla en el texto ya editado, swapTemplateBlock) y la línea del contexto lo desmiente.
-  const linksOnly = !zipped.length && input.tasks.some((x) => x.attachments?.length);
+  const namesOnly = !zipped.length && input.tasks.some((x) => x.attachments?.length);
   const header = releaseTemplateText(input.header);
   const footer = releaseTemplateText(input.footer);
   const context = [`## ${t("Contexto del proyecto")}`, ""];
   const projectName = oneLine(input.project.name);
-  context.push(`- **${t("Proyecto")}:** ${input.project.url ? `[${linkText(projectName)}](${linkTarget(input.project.url)})` : projectName}`);
+  context.push(`- **${t("Proyecto")}:** ${projectName}`);
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
   context.push(`- **${t("Fecha")}:** ${input.date}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
-  if (linksOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: van solo como enlaces a Pizarro (cada tarea cita los suyos), aunque las instrucciones hablen de un ZIP.")}`);
+  if (namesOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.")}`);
   if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", description);
