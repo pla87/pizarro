@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { NextRequest } from "next/server";
 import { guardFormAction } from "../src/lib/guard-action";
 import { proxy } from "../src/proxy";
-import { CHALLENGE_COOKIE_NAME, DEVICE_COOKIE_NAME, clearAuthCookieHeaders } from "../src/lib/reset-cookies";
+import { CHALLENGE_COOKIE_NAME, clearAuthCookieHeaders } from "../src/lib/reset-cookies";
 import { isStaleActionError } from "../src/lib/stale-action";
 
 const t = (s: string) => s;
@@ -55,14 +55,17 @@ test("salida limpia: borra sesión, cambio de contraseña pendiente, verificaci�
   try {
     process.env.COOKIE_SECURE = "true";
     const secure = clearAuthCookieHeaders();
-    assert.equal(secure.length, 4);
+    assert.equal(secure.length, 5);
     for (const h of secure) assert.match(h, /Max-Age=0.*; HttpOnly; SameSite=Lax; Secure$/);
     assert.ok(secure.some((h) => h.startsWith("__Host-tablon_session=;")));
+    // Con HTTPS, la de dispositivos con __Host- y también la del nombre de antes.
+    for (const n of ["__Host-pz_device", "pz_device"]) assert.ok(secure.some((h) => h.startsWith(`${n}=;`)), n);
     process.env.COOKIE_SECURE = "false";
     const plain = clearAuthCookieHeaders();
     assert.ok(plain.some((h) => h.startsWith("tablon_session=;")));
     for (const h of plain) assert.doesNotMatch(h, /Secure/);
-    for (const n of ["pz_pwchange", CHALLENGE_COOKIE_NAME, DEVICE_COOKIE_NAME]) assert.ok(plain.some((h) => h.startsWith(`${n}=;`)), n);
+    assert.equal(plain.length, 4);
+    for (const n of ["pz_pwchange", CHALLENGE_COOKIE_NAME, "pz_device"]) assert.ok(plain.some((h) => h.startsWith(`${n}=;`)), n);
   } finally {
     if (saved.s === undefined) delete process.env.COOKIE_SECURE;
     else process.env.COOKIE_SECURE = saved.s;

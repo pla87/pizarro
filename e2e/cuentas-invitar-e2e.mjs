@@ -1,9 +1,10 @@
 // Miembros de un proyecto (ronda 59): un administrador asigna a otro administrador en *Ajustes del proyecto → General*
 // (sale con la marca «admin», queda elegido y el enlace al tablero se copia con «Copiar enlace») y en *Administración →
 // Proyectos* («Asignar usuario…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
-// (servidor sin email: el enlace de invitación se pasa a mano), que elige su contraseña con ese enlace y, al iniciar
-// sesión, llega al tablero del proyecto; quien no es administrador (miembro de un privado) no tiene esa opción; a 390 px
-// el bloque cabe sin desbordar. Misma base y servidor que board-e2e.mjs (sin email):
+// (servidor sin email: el enlace de invitación se pasa a mano) en el idioma de quien invita, sale marcada como «Invitación
+// pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»), elige su
+// contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
+// administrador (miembro de un privado) no tiene esa opción; a 390 px el bloque cabe sin desbordar. Misma base y servidor que board-e2e.mjs (sin email):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
@@ -112,13 +113,24 @@ if (only.includes("invite")) {
   const link = await note.getByTestId("member-link").inputValue();
   L.check("INVITE: el enlace es el de la invitación", link.startsWith(`${L.BASE}/reset/`), link);
   L.check("INVITE: sin email, dice que se lo pases tú", (await note.innerText()).includes("Pásale este enlace a Inv59 Nueva Persona"), await note.innerText());
-  const [invited] = await L.q(`SELECT id,name,role,"mustChangePassword" FROM "User" WHERE email=$1`, [INVITED]);
+  const [invited] = await L.q(`SELECT id,name,role,"mustChangePassword",locale FROM "User" WHERE email=$1`, [INVITED]);
   L.check("INVITE: la cuenta existe como invitación", !!invited && invited.role === "MEMBER" && invited.mustChangePassword, JSON.stringify(invited));
   L.check("INVITE: ya está en el proyecto", !!invited && (await isMember(TEAM, invited.id)));
+  const [inviter] = await L.q(`SELECT locale FROM "User" WHERE id=$1`, [admin.id]);
+  L.eq("INVITE: con el idioma de quien invita", invited?.locale, inviter.locale);
   await L.checkEventually("INVITE: sale en la lista de asignados", async () => (await memberRows(page).innerText()).includes("Inv59 Nueva Persona"));
+  const invitedRow = memberRows(page).locator("li").filter({ hasText: "Inv59 Nueva Persona" });
+  L.check("INVITE: marcada como «Invitación pendiente»", (await invitedRow.innerText()).includes("Invitación pendiente"), await invitedRow.innerText());
+  L.eq("INVITE: sin email no hay «Reenviar invitación»", await invitedRow.getByRole("button", { name: /^Reenviar invitación/ }).count(), 0);
   await note.getByRole("button", { name: "Copiar enlace" }).click();
   await L.checkEventually("INVITE: «Copiar enlace» copia el de la invitación", async () => (await page.evaluate(() => navigator.clipboard.readText())) === link);
   await page.screenshot({ path: `${SHOTS}/r59-invitar.png` });
+  // En Administración → Proyectos, también marcada.
+  await L.goto(page, `${L.BASE}/admin/projects`);
+  const card = page.locator("li.card").filter({ has: page.getByRole("link", { name: TEAM_NAME, exact: true }) });
+  const chip = card.locator("li").filter({ has: page.getByRole("button", { name: "Quitar a Inv59 Nueva Persona" }) });
+  await chip.waitFor({ timeout: 20000 });
+  L.check("INVITE: Administración → Proyectos la marca como «Invitación pendiente»", (await chip.innerText()).includes("Invitación pendiente"), await chip.innerText());
   L.assertNoErrors("INVITE", [s]);
   await s.ctx.close();
 
@@ -144,6 +156,16 @@ if (only.includes("invite")) {
   L.check("INVITE: entra directamente en el tablero", new URL(guest.url()).pathname === `/p/${TEAM}`, guest.url());
   L.check("INVITE: sin errores en el navegador de la invitada", errors.length === 0, errors.join(" | "));
   await ctx.close();
+
+  // Ya ha entrado: deja de salir como invitación pendiente.
+  const s2 = await adminSession();
+  await general(s2.page);
+  const rows = memberRows(s2.page);
+  await rows.waitFor({ timeout: 20000 });
+  const after = await rows.locator("li").filter({ hasText: "Inv59 Nueva Persona" }).innerText();
+  L.check("INVITE: tras entrar, sin la marca", !after.includes("Invitación pendiente"), after);
+  L.assertNoErrors("INVITE", [s2]);
+  await s2.ctx.close();
 }
 
 // --- Quien no es administrador no invita -------------------------------------------------------------------------------

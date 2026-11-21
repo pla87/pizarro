@@ -10,6 +10,7 @@ import { getT } from "@/i18n/server";
 import { projectSectionMetadata } from "../project-title";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { emailEnabled } from "@/lib/mail";
+import { invitePendingFrom } from "@/lib/user-entered";
 import { googleEnabled } from "@/lib/google";
 import { googleWorkspaceDomain } from "@/lib/google-config";
 import { effectiveShareMode } from "@/lib/google-share";
@@ -47,7 +48,10 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       taskFields: true,
       _count: { select: { columns: { where: { role: "BUDGET" } } } },
       hiddenKinds: { select: { kindId: true } },
-      members: { select: { userId: true, user: { select: { name: true, active: true, role: true } } }, orderBy: { user: { name: "asc" } } },
+      members: {
+        select: { userId: true, user: { select: { name: true, active: true, role: true, mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } } } },
+        orderBy: { user: { name: "asc" } },
+      },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
       kinds: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -142,13 +146,15 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
           taskFields: normalizeTaskFields(project.taskFields),
           budgetColumns: project._count.columns,
           // El rol solo se dice en los de equipo (marca «admin» de un administrador asignado); en un privado no hace falta.
-          members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active, admin: !project.isPrivate && m.user.role === "ADMIN" })),
+          // «Invitación pendiente»: aún no ha elegido contraseña ni ha entrado (el mismo criterio que Administración → Usuarios).
+          members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active, admin: !project.isPrivate && m.user.role === "ADMIN", invitePending: invitePendingFrom(m.user) })),
         }}
         labels={project.labels}
         kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: kindTasks.get(k.id) ?? 0 }))}
         generalKinds={generalKinds.map((k) => ({ ...k, enabled: !hidden.has(k.id), taskCount: usage.get(k.id) ?? 0 }))}
         deliverables={project.deliverables.map((d) => ({ id: d.id, name: d.name, description: d.description, dueDate: dateToIso(d.dueDate), taskCount: deliverableTasks.get(d.id) ?? 0 }))}
         users={users}
+        emailAvailable={emailEnabled()}
         editorMode={editorMode}
         google={{ enabled: googleEnabled(), domain: googleWorkspaceDomain() ?? null }}
         reportSchedule={
