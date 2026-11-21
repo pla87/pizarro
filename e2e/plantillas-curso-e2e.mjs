@@ -105,9 +105,9 @@ try {
       await nt.waitFor();
       await sleep(300);
       await nt.getByRole("radio", { name: "Preparar material" }).click();
-      L.eq(`PDF: «Preparar material» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Material:");
+      L.eq(`PDF: «Preparar material» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Material: ");
       await nt.getByRole("radio", { name: "Sesión" }).click();
-      L.eq(`PDF: «Sesión» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Sesión:");
+      L.eq(`PDF: «Sesión» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Sesión: ");
       await nt.getByRole("textbox", { name: "Título", exact: true }).fill(title);
       await nt.getByLabel("Fecha límite (opcional)").fill(due);
       await nt.getByLabel("Asignada a (opcional)").selectOption(adm.id);

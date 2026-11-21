@@ -264,11 +264,12 @@ if (only.includes("col")) try {
   await U.dialog(a.page).waitFor();
   await U.dialog(a.page).locator("select").filter({ has: a.page.locator("option", { hasText: "Temporal" }) }).first().selectOption({ label: "Temporal" });
   await titleField(a.page).fill("Creada tras borrar la columna");
-  await L.q(`DELETE FROM "Column" WHERE id='bh48b_col'`);
-  // Un cambio de B avisa a A por el canal en vivo y su tablero se pone al día (ya sin la columna).
-  await U.openTask(b.page, "Columna 1");
-  await titleField(b.page).fill("Columna 1 bis");
-  await b.page.keyboard.press("Tab");
+  // B borra la columna desde su menú: un cambio de estructura, así que el tablero de A se recarga entero por el canal en
+  // vivo (ya sin la columna). Un cambio de una sola tarjeta ya no recarga las columnas (solo trae esa tarjeta).
+  await L.colLoc(b.page, "Temporal").getByRole("button", { name: "Opciones de columna" }).click();
+  await b.page.getByRole("menuitem", { name: "Borrar columna" }).click();
+  await b.page.getByRole("dialog").getByRole("button", { name: "Borrar", exact: true }).click();
+  await L.waitFor(async () => Number((await L.q(`SELECT count(*)::int AS n FROM "Column" WHERE id='bh48b_col'`))[0]?.n ?? 1) === 0, { timeout: 8000 }).catch(() => {});
   await L.waitFor(async () => hasNotice(a.page, "La columna elegida ya no existe"), { timeout: 10000 }).catch(() => {});
   L.check("COL: avisa de que la columna ya no existe", await hasNotice(a.page, "La columna elegida ya no existe. La tarea se creará en «Backlog»."), JSON.stringify(await notices(a.page)));
   await U.dialog(a.page).getByRole("button", { name: /^Crear/ }).last().click();
