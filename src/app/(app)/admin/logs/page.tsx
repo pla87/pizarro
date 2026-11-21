@@ -10,6 +10,7 @@ import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { EmailSafe } from "@/components/ui/EmailSafe";
+import { CsvErrorNotice } from "./CsvErrorNotice";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -118,7 +119,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
           {!filters.reads && <>{" "}{t("Se muestran solo los cambios.")} <InfoTip topic={t("Incluir consultas")}>{t("Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}</InfoTip></>}
         </p>
-        <form method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
+        <form id="logs-csv" method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
           {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas (se manda para volver a esta
               misma vista si la descarga no se puede hacer). */}
           {filters.range !== "24h" && <input type="hidden" name="range" value={filters.range} />}
@@ -145,11 +146,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
         </form>
       </div>
 
-      {csvMessage && (
-        <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-          {t("No se ha descargado el CSV: {reason}", { reason: csvMessage })}
-        </p>
-      )}
+      {csvMessage && <CsvErrorNotice formId="logs-csv">{t("No se ha descargado el CSV: {reason}", { reason: csvMessage })}</CsvErrorNotice>}
 
       <div className="flex flex-wrap gap-2 text-sm">
         {LEVELS.map((l) => (

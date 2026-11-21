@@ -38,3 +38,15 @@ export function parseLogCsvError(v: unknown): LogCsvError | null {
 export function csvDateParam(v: unknown): string | null {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
+
+/**
+ * Dirección de la página sin los parámetros de vuelta de una descarga fallida (`csv`, `desde`, `hasta`), con los filtros
+ * de la lista. El aviso de la página los quita al mostrarse: si no, tras una descarga que sí funciona (la página no
+ * navega, porque el CSV llega como adjunto) o al recargar, seguía diciendo que no se había descargado.
+ */
+export function withoutCsvParams(pathname: string, search: string, hash = ""): string {
+  const params = new URLSearchParams(search);
+  for (const k of ["csv", "desde", "hasta"]) params.delete(k);
+  const qs = params.toString();
+  return `${pathname}${qs ? `?${qs}` : ""}${hash}`;
+}
