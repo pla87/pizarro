@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { flushLogs, logEvent, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { CSV_BOM, csvDateParam, csvRow, csvSeparator, type LogCsvError } from "@/lib/log-csv";
 import { appTimeZone } from "@/lib/board";
 import { parseExportRange } from "@/lib/log-range";
 import { rateLimit } from "@/lib/rate-limit";
@@ -22,11 +23,9 @@ const BUSY_MAX_MS = 10 * 60_000;
 const g = globalThis as unknown as { __pzLogsCsvBusy?: Map<string, number> };
 const busy = (g.__pzLogsCsvBusy ??= new Map());
 
-/** Celda CSV: comillas dobles y neutralización de fórmulas (=, +, -, @) al abrir en Excel. */
-function cell(v: unknown): string {
-  let s = v == null ? "" : typeof v === "string" ? v : JSON.stringify(v);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return `"${s.replace(/"/g, '""')}"`;
+/** El formulario de la página de Logs (una navegación del navegador), no una llamada suelta a la API. */
+function isNavigation(req: Request): boolean {
+  return req.headers.get("sec-fetch-mode") === "navigate" || (req.headers.get("accept") ?? "").includes("text/html");
 }
 
 /** Descarga en CSV de los logs con el filtro actual y un intervalo de fechas (solo administradores; por defecto, el último día). */
@@ -37,25 +36,36 @@ export async function GET(req: Request) {
   if (user.role !== "ADMIN") return new Response(t("Prohibido"), { status: 403 });
 
   const params = new URL(req.url).searchParams;
+  const filters = parseLogFilters(Object.fromEntries(params));
   const tz = appTimeZone();
   const days = logRetentionDays();
+  // Desde el formulario, un fallo vuelve a la página de Logs con su aviso, los mismos filtros y las fechas elegidas
+  // (antes era una página de texto suelta); llamada directa a la API, el texto con su código.
+  const fail = (code: LogCsvError, status: number, msg: string) => {
+    if (!isNavigation(req)) return new Response(msg, { status, headers: { "Cache-Control": "no-store" } });
+    const extra: Record<string, string> = { csv: code };
+    const from = csvDateParam(params.get("desde"));
+    const to = csvDateParam(params.get("hasta"));
+    if (from) extra.desde = from;
+    if (to) extra.hasta = to;
+    return new Response(null, { status: 303, headers: { Location: `/admin/logs${logQuery(filters, extra)}`, "Cache-Control": "no-store" } });
+  };
   const range = parseExportRange(params.get("desde"), params.get("hasta"), { tz, retentionDays: days });
   if (!range.ok) {
     const msg =
       range.error === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
       : range.error === "too_long" ? t("El intervalo no puede superar {days} días (lo que se conservan los logs).", { days })
       : t("Fechas no válidas.");
-    return new Response(msg, { status: 400 });
+    return fail(range.error, 400, msg);
   }
 
   if (Date.now() - (busy.get(user.id) ?? 0) < BUSY_MAX_MS) {
-    return new Response(t("Ya tienes una descarga de logs en curso. Espera a que termine."), { status: 429, headers: { "Cache-Control": "no-store" } });
+    return fail("busy", 429, t("Ya tienes una descarga de logs en curso. Espera a que termine."));
   }
   if (!rateLimit(`logs-csv:${user.id}`, CSV_LIMIT, 10 * 60_000)) {
-    return new Response(t("Demasiadas descargas de logs. Espera unos minutos."), { status: 429, headers: { "Cache-Control": "no-store" } });
+    return fail("rate", 429, t("Demasiadas descargas de logs. Espera unos minutos."));
   }
 
-  const filters = parseLogFilters(Object.fromEntries(params));
   // Quién descargó qué intervalo. Los filtros, sin datos personales: ni la persona ni el texto buscado (solo si lo había).
   logEvent({
     category: "api",
@@ -82,10 +92,17 @@ export async function GET(req: Request) {
     throw err;
   }
   const where = logWhere({ ...filters, period: { gte: range.gte, lt: range.lt } }, mine);
-  const truncatedLine = t("Recortado a {n} filas: acorta el intervalo.", { n: MAX_ROWS.toLocaleString(intlLocale(await getLocale())) });
+  const locale = await getLocale();
+  const sep = csvSeparator(locale);
+  const truncatedLine = t("Recortado a {n} filas: acorta el intervalo.", { n: MAX_ROWS.toLocaleString(intlLocale(locale)) });
+  const maskedLine = t("Actividad en un proyecto privado");
 
   const fmt = new Intl.DateTimeFormat("sv-SE", { timeZone: tz, dateStyle: "short", timeStyle: "medium" });
-  const header = ["fecha", "nivel", "categoria", "accion", "usuario", "usuario_id", "proyecto_id", "mensaje", "duracion_ms", "ruta", "ip", "detalles"];
+  // Cabecera en el idioma de quien descarga (antes, nombres de columna fijos en español sin tildes).
+  const header = [
+    t("Fecha"), t("Nivel"), t("Categoría"), t("Acción"), t("Usuario"), t("Id. de usuario"), t("Id. de proyecto"),
+    t("Mensaje"), t("Duración (ms)"), t("Ruta"), t("IP"), t("Detalles"),
+  ];
   const enc = new TextEncoder();
   let last: { createdAt: Date; id: string } | null = null;
   let sent = 0;
@@ -100,27 +117,23 @@ export async function GET(req: Request) {
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: Math.min(PAGE, MAX_ROWS - sent),
         });
-        const lines: string[] = first ? [header.map(cell).join(",")] : [];
+        const lines: string[] = first ? [csvRow(header, sep)] : [];
         for (const r of rows) {
           // Proyecto privado de otra persona: solo hora y usuario.
           if (isMaskedLog(r, mine)) {
-            lines.push([fmt.format(r.createdAt), "", "", "", r.userName, r.userId, "", "Actividad en un proyecto privado", "", "", "", ""].map(cell).join(","));
+            lines.push(csvRow([fmt.format(r.createdAt), "", "", "", r.userName, r.userId, "", maskedLine, "", "", "", ""], sep));
             continue;
           }
-          lines.push(
-            [fmt.format(r.createdAt), r.level, r.category, r.action, r.userName, r.userId, r.projectId, r.message, r.durationMs, r.path, r.ip, r.details]
-              .map(cell)
-              .join(","),
-          );
+          lines.push(csvRow([fmt.format(r.createdAt), r.level, r.category, r.action, r.userName, r.userId, r.projectId, r.message, r.durationMs, r.path, r.ip, r.details], sep));
         }
         sent += rows.length;
         last = rows.at(-1) ?? last;
         const done = rows.length < PAGE || sent >= MAX_ROWS;
         // En el tope, si quedaban filas, lo dice la última línea (antes se cortaba sin avisar).
         if (sent >= MAX_ROWS && last && (await db.appLog.findFirst({ where: { AND: [where, logsAfter(last)] }, select: { id: true } }))) {
-          lines.push(cell(truncatedLine));
+          lines.push(csvRow([truncatedLine], sep));
         }
-        if (lines.length) controller.enqueue(enc.encode((first ? "\uFEFF" : "\r\n") + lines.join("\r\n")));
+        if (lines.length) controller.enqueue(enc.encode((first ? CSV_BOM : "\r\n") + lines.join("\r\n")));
         first = false;
         if (done) {
           release();

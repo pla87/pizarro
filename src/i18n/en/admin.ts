@@ -355,4 +355,13 @@ export const admin: Record<string, string> = {
   // Integraciones → Email: aviso de APP_URL (ronda 59)
   "Falta la variable APP_URL del servidor (la dirección pública de Pizarro): los enlaces de los emails llevarán a http://localhost:3000 y no funcionarán. Defínela (por ejemplo https://pizarro.tuempresa.com) y redespliega.": "The server's APP_URL variable is missing (Pizarro's public address): links in emails will point to http://localhost:3000 and won't work. Set it (for example https://pizarro.yourcompany.com) and redeploy.",
   "Entras por {current} pero APP_URL es {app}, y los enlaces de los emails salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.": "You are visiting {current} but APP_URL is {app}, and links in emails come from APP_URL. That is normal if you still use the old address; to use {current}, change APP_URL (Railway → Variables) and redeploy.",
+  // Logs → Descargar CSV: cabecera en el idioma de quien descarga y aviso al volver a la página
+  "Acción": "Action",
+  "Id. de usuario": "User ID",
+  "Id. de proyecto": "Project ID",
+  "Mensaje": "Message",
+  "Duración (ms)": "Duration (ms)",
+  "Ruta": "Path",
+  "Detalles": "Details",
+  "No se ha descargado el CSV: {reason}": "The CSV was not downloaded: {reason}",
 };

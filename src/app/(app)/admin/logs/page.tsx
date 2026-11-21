@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { addDays, dayInZone } from "@/lib/log-range";
+import { csvDateParam, parseLogCsvError } from "@/lib/log-csv";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
@@ -95,6 +96,17 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const days = logRetentionDays();
   const today = dayInZone(new Date(), tz);
   const filtered = filters.range !== "24h" || !!filters.level || !!filters.category || !!filters.userId || !!filters.q || filters.reads;
+  // Vuelta de una descarga que no se pudo hacer (tope, otra en curso, fechas): el aviso y las fechas que se eligieron.
+  const csvError = parseLogCsvError(sp.csv);
+  const csvMessage =
+    csvError === "busy" ? t("Ya tienes una descarga de logs en curso. Espera a que termine.")
+    : csvError === "rate" ? t("Demasiadas descargas de logs. Espera unos minutos.")
+    : csvError === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
+    : csvError === "too_long" ? t("El intervalo no puede superar {days} días (lo que se conservan los logs).", { days })
+    : csvError === "invalid" ? t("Fechas no válidas.")
+    : null;
+  const csvFrom = (csvError && csvDateParam(sp.desde)) || addDays(today, -1);
+  const csvTo = (csvError && csvDateParam(sp.hasta)) || today;
 
   return (
     <div className="space-y-4">
@@ -104,7 +116,9 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {!filters.reads && <>{" "}{t("Se muestran solo los cambios.")} <InfoTip topic={t("Incluir consultas")}>{t("Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}</InfoTip></>}
         </p>
         <form method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
-          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas. */}
+          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas (se manda para volver a esta
+              misma vista si la descarga no se puede hacer). */}
+          {filters.range !== "24h" && <input type="hidden" name="range" value={filters.range} />}
           {filters.level && <input type="hidden" name="level" value={filters.level} />}
           {filters.category && <input type="hidden" name="category" value={filters.category} />}
           {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
@@ -112,11 +126,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {filters.reads && <input type="hidden" name="consultas" value="1" />}
           <label className="flex flex-col gap-1 text-xs text-slate-500">
             {t("Desde")}
-            <input type="date" name="desde" defaultValue={addDays(today, -1)} min={addDays(today, -days)} max={today} required className={field} />
+            <input type="date" name="desde" defaultValue={csvFrom} min={addDays(today, -days)} max={today} required className={field} />
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-500">
             {t("Hasta")}
-            <input type="date" name="hasta" defaultValue={today} min={addDays(today, -days)} max={today} required className={field} />
+            <input type="date" name="hasta" defaultValue={csvTo} min={addDays(today, -days)} max={today} required className={field} />
           </label>
           <button
             type="submit"
@@ -127,6 +141,12 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           </button>
         </form>
       </div>
+
+      {csvMessage && (
+        <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {t("No se ha descargado el CSV: {reason}", { reason: csvMessage })}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2 text-sm">
         {LEVELS.map((l) => (
