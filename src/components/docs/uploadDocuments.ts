@@ -22,7 +22,7 @@ class DocumentUploadError extends Error {
 export async function uploadDocument(projectId: string, file: File, t: T, fileMaxMb?: number): Promise<{ ok: true } | { ok: false; error: string }> {
   // Las fotos grandes se reducen antes, como los adjuntos: el servidor guarda la imagen a 1280 px de ancho como mucho y
   // no admite más de 30 megapíxeles (una de 48 MP quedaba como descarga, sin vista previa). El tope se mira con lo que se envía.
-  const blob = await shrinkImage(file);
+  const blob = await shrinkImage(file, { checkPixels: true });
   if (fileMaxMb && blob.size > fileMaxMb * 1024 * 1024) {
     return { ok: false, error: t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }) };
   }
