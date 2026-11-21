@@ -6,6 +6,7 @@ import { getInstanceSettings } from "@/lib/instance";
 import { APP_SHORT_NAME_KEY, getAppIcon, getAppShortName } from "@/lib/app-icon";
 import { appStateVersion } from "@/lib/edit-conflict";
 import { appTimeZone, DEFAULT_TIME_ZONE, envTimeZone } from "@/lib/format";
+import { currentTimeZoneName, timeZoneOptions } from "@/lib/time-zones";
 import { settingsVersions } from "@/lib/settings-versions";
 import { SettingsAdmin } from "./SettingsAdmin";
 
@@ -23,8 +24,8 @@ export default async function SettingsPage() {
   ]);
   // Con APP_TIMEZONE (válida) manda la variable: solo se muestra la zona fija, sin la lista de ~400 zonas.
   const zoneLocked = envTimeZone() !== null;
-  const zones = zoneLocked ? [] : typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE];
-  if (!zoneLocked && !zones.includes("UTC")) zones.push("UTC");
-  const installation = { orgName: instance.orgName, locale: instance.locale, timeZone: zoneLocked ? appTimeZone() : instance.timeZone || appTimeZone(), zoneLocked, zones };
+  // Las habituales primero y todas con su nombre actual (Intl aún da Asia/Calcutta, Europe/Kiev…): ver time-zones.ts.
+  const zones = zoneLocked ? [] : timeZoneOptions(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE]);
+  const installation = { orgName: instance.orgName, locale: instance.locale, timeZone: currentTimeZoneName(zoneLocked ? appTimeZone() : instance.timeZone || appTimeZone()), zoneLocked, zones };
   return <SettingsAdmin maxComments={maxComments} storage={storage} installation={installation} appIcon={appIcon} appShortName={{ value: shortName, version: shortNameVersion }} versions={versions} />;
 }

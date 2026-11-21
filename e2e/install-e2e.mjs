@@ -114,7 +114,7 @@ await w.page.fill("#setup-code", code ?? SETUP_TOKEN);
 await w.page.getByRole("button", { name: "Continuar" }).click();
 await w.page.locator("#setup-org").waitFor({ timeout: 15000 });
 await w.page.fill("#setup-org", "Acme");
-await w.page.selectOption("#setup-tz", "Europe/Lisbon");
+await w.page.fill("#setup-tz", "Europe/Lisbon");
 await w.page.selectOption("#setup-lang", "en");
 await L.waitFor(() => w.page.getByText(/^Step \d of 5$/).isVisible(), { timeout: 15000 });
 const kept = await w.page.locator("#setup-org").isVisible();
@@ -133,7 +133,7 @@ if (kept) {
   await w.page.getByRole("button", { name: "Continue" }).click();
   await w.page.locator("#setup-org").waitFor({ timeout: 15000 });
   await w.page.fill("#setup-org", "Acme");
-  await w.page.selectOption("#setup-tz", "Europe/Lisbon");
+  await w.page.fill("#setup-tz", "Europe/Lisbon");
 }
 await w.page.getByRole("button", { name: "Continue" }).click();
 await w.page.fill("#setup-name", "Fundadora");
@@ -194,7 +194,7 @@ L.eq("INST: y el idioma", await w.page.inputValue("#instance-locale"), "en");
 L.eq("INST: y la zona horaria", await w.page.inputValue("#instance-tz"), "Europe/Lisbon");
 await w.page.fill("#instance-org", "Acme Iberia");
 await w.page.selectOption("#instance-locale", "es");
-await w.page.selectOption("#instance-tz", "Atlantic/Canary");
+await w.page.fill("#instance-tz", "Atlantic/Canary");
 await inst.getByRole("button", { name: "Save" }).click();
 await L.eqEventually("INST: guardado en la base", async () => Object.fromEntries((await L.q(`SELECT key, value FROM "AppState" WHERE key LIKE 'instance.%' ORDER BY key`)).map((r) => [r.key, r.value])),
   { "instance.locale": "es", "instance.orgName": "Acme Iberia", "instance.timeZone": "Atlantic/Canary" });

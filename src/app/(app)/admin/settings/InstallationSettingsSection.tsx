@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { saveInstallationSettings } from "@/actions/settings";
 import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
+import { TimeZoneField } from "@/components/ui/TimeZoneField";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/shared";
@@ -32,8 +33,9 @@ export function InstallationSettingsSection({ view, version: initialVersion }: {
   const [version, setVersion] = useState(initialVersion);
   const [conflict, setConflict] = useState(false);
   const validName = orgName.trim() !== "" && orgName.trim().length <= 80;
+  // "" mientras lo escrito en la zona no es ninguna de la lista.
+  const validZone = view.zoneLocked || timeZone !== "";
   const dirty = orgName.trim() !== saved.orgName || locale !== saved.locale || (!view.zoneLocked && timeZone !== saved.timeZone);
-  const zones = view.zones.includes(timeZone) ? view.zones : [timeZone, ...view.zones];
 
   const save = () =>
     start(async () => {
@@ -78,17 +80,15 @@ export function InstallationSettingsSection({ view, version: initialVersion }: {
             <span className="block text-xs text-slate-500">{t("Fijada por la variable APP_TIMEZONE del servidor.")}</span>
           </div>
         ) : (
-          <label className="block text-sm">
-            <span className="font-medium">{t("Zona horaria")}</span>
-            <select id="instance-tz" className="input mt-1 w-full" value={timeZone} onChange={(e) => setTimeZone(e.target.value)}>
-              {zones.map((z) => <option key={z} value={z}>{z}</option>)}
-            </select>
-          </label>
+          <div className="block text-sm">
+            <label htmlFor="instance-tz" className="font-medium">{t("Zona horaria")}</label>
+            <TimeZoneField id="instance-tz" className="input mt-1 w-full" value={timeZone} options={view.zones} onChange={setTimeZone} />
+          </div>
         )}
       </div>
       {conflict && <EditConflictNotice draft={[orgName, locale, view.zoneLocked ? "" : timeZone].filter(Boolean).join("\n")} />}
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName}>
+        <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName || !validZone}>
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
         </button>
         {!validName && dirty && <span className="text-xs text-red-600">{t("Escribe el nombre de la organización (hasta 80 caracteres).")}</span>}

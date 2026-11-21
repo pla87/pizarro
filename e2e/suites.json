@@ -520,6 +520,8 @@
       "src/lib/mail*.ts",
       "src/lib/auth-mail.ts",
       "src/lib/instance*.ts",
+      "src/lib/time-zones.ts",
+      "src/components/ui/TimeZoneField.tsx",
       "src/lib/builtin-templates*.ts",
       "src/lib/changelog*.ts",
       "src/app/(app)/admin/settings/**",

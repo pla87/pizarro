@@ -6,6 +6,7 @@ import { completeSetupAction, sendSetupTestEmail, verifySetupCodeAction } from "
 import { BrandMark } from "@/components/ui/BrandMark";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { TimeZoneField } from "@/components/ui/TimeZoneField";
 import { I18nProvider, preloadEnglish, useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/core";
 import { installSectionUrl } from "@/lib/product";
@@ -147,15 +148,14 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
               </div>
               <div>
                 <label className="label" htmlFor="setup-tz">{t("Zona horaria")}</label>
-                <select id="setup-tz" className="input" value={timeZone} disabled={zoneLocked} onChange={(e) => setTimeZone(e.target.value)}>
-                  {(zones.includes(timeZone) ? zones : [timeZone, ...zones]).map((z) => <option key={z} value={z}>{z}</option>)}
-                </select>
+                {/* Con búsqueda: ~420 zonas, las habituales primero (TimeZoneField). */}
+                <TimeZoneField id="setup-tz" value={timeZone} options={zones} disabled={zoneLocked} onChange={setTimeZone} />
                 {zoneLocked && <p className="mt-1 text-xs text-slate-500">{t("Fijada por la variable APP_TIMEZONE del servidor.")}</p>}
               </div>
               {errorBox}
               <div className="flex gap-2">
                 <button type="button" className="btn-secondary" onClick={() => go(1)}>{t("Atrás")}</button>
-                <button type="submit" className="btn-primary flex-1" disabled={!orgName.trim()}>{t("Continuar")}</button>
+                <button type="submit" className="btn-primary flex-1" disabled={!orgName.trim() || !timeZone}>{t("Continuar")}</button>
               </div>
             </form>
           )}
