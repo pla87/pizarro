@@ -1,3 +1,4 @@
+import { maxUsersConfig } from "./limits";
 import { parseBackupKey } from "./backup-core";
 import { trustProxy } from "./client-ip";
 import { validTimeZone } from "./format";
@@ -45,6 +46,8 @@ export function envPresence(env: Env = process.env): Record<string, EnvPresence>
     // Mal escrita, la app la ignora (lib/format.ts): sin esta marca no se vería por qué no manda la variable.
     else if (name === "APP_TIMEZONE" && !validTimeZone(v.trim())) out[name] = "invalid";
     // Solo vale «1»/«true» (o «0»/«false»): otro valor no permite enviar sin cifrar y se señala.
+    // Un MAX_USERS que no es un número no cuenta: se usa el máximo por defecto (lib/limits.ts).
+    else if (name === "MAX_USERS" && maxUsersConfig(env).source === "invalid") out[name] = "invalid";
     else if (name === "SMTP_ALLOW_PLAINTEXT" && !["1", "true", "0", "false"].includes(v.trim().toLowerCase())) out[name] = "invalid";
     else out[name] = "set";
   }

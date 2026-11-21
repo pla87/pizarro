@@ -369,4 +369,9 @@ export const admin: Record<string, string> = {
   "No se ha guardado, para no pisar su cambio. Lo que has escrito sigue aquí: cópialo si lo quieres conservar y recarga para ver lo guardado.": "It was not saved, so as not to overwrite their change. What you wrote is still here: copy it if you want to keep it, and reload to see what was saved.",
   "No se ha guardado, para no pisar su cambio. Lo que has cambiado sigue aquí a la vista: al recargar verás lo que guardó la otra persona y podrás repetir tus cambios.": "It was not saved, so as not to overwrite their change. Your changes are still shown here: after reloading you will see what the other person saved and can make your changes again.",
   "Copiar lo que has escrito": "Copy what you wrote",
+  // Usuarios: de dónde sale el máximo de usuarios activos (MAX_USERS)
+  "El máximo de {max} lo fija la variable MAX_USERS del servidor.": "The maximum of {max} is set by the server's MAX_USERS variable.",
+  "La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.": "The server's MAX_USERS variable is not a valid whole number: the default maximum, {max}, is used.",
+  "El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.": "The maximum of {max} is the default: the server's MAX_USERS variable is not set.",
+  "Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.": "To change it, set MAX_USERS to the number you want (Railway → Variables; with Docker, in the .env file) and restart Pizarro. Deactivated people don't count.",
 };
