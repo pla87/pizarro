@@ -55,7 +55,7 @@ interface ExampleDeliverable {
   dueInDays: number;
 }
 
-export interface ProjectExampleContent {
+interface ProjectExampleContent {
   /** Nombre sugerido para el proyecto. */
   name: string;
   /** Una o dos frases para el selector; también es la descripción del proyecto creado. */

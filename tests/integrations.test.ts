@@ -40,7 +40,8 @@ test("aviso de comentario: el Markdown sale como texto (email y Telegram) y un Â
   assert.ok(!mail.text.includes("**"));
   assert.ok(mail.html.includes("Urgente: revisa el documento (https://example.com/doc) * 5 &lt;b&gt; @Ana"), mail.html);
   const tg = telegramNoticeText(m, makeT("es"));
-  assert.ok(tg.includes("<i>Urgente: revisa el documento (https://example.com/doc) * 5 &lt;b&gt; @Ana</i>"), tg);
+  // Como cita de quien lo ha escrito (bloque de cita de Telegram).
+  assert.ok(tg.includes("<blockquote>Urgente: revisa el documento (https://example.com/doc) * 5 &lt;b&gt; @Ana</blockquote>"), tg);
 });
 
 test("email de aviso: asunto con el tÃ­tulo recortado y pie en texto y HTML", () => {

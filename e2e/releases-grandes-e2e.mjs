@@ -52,7 +52,7 @@ if (only.includes("release")) {
   const s = await L.session();
   const { page } = s;
   await openBoard(page, "Salto");
-  await L.colLoc(page, "Salto").getByRole("button", { name: "Generar Release" }).click();
+  await L.colLoc(page, "Salto").getByRole("button", { name: "Generar release" }).click();
   const dlg = releaseDialog(page);
   const gen = dlg.getByRole("button", { name: /^\s*Generar con \d+ tarea/ });
   await gen.waitFor({ timeout: 10000 });
@@ -95,7 +95,7 @@ if (only.includes("adjuntos")) {
   const s = await L.session();
   const { page } = s;
   await openBoard(page, "Salto");
-  await L.colLoc(page, "Salto").getByRole("button", { name: "Generar Release" }).click();
+  await L.colLoc(page, "Salto").getByRole("button", { name: "Generar release" }).click();
   const dlg = releaseDialog(page);
   const gen = dlg.getByRole("button", { name: /^\s*Generar con \d+ tarea/ });
   await gen.waitFor({ timeout: 10000 });

@@ -5,10 +5,12 @@ import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { addDays, dayInZone } from "@/lib/log-range";
+import { csvDateParam, parseLogCsvError } from "@/lib/log-csv";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { EmailSafe } from "@/components/ui/EmailSafe";
+import { CsvErrorNotice } from "./CsvErrorNotice";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -50,13 +52,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 const field =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-function formatTime(d: Date, tz: string, locale: string): string {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
-      .formatToParts(d)
-      .map((x) => [x.type, x.value]),
-  );
-  return `${p.day}/${p.month} ${p.hour}:${p.minute}:${p.second}`;
+/**
+ * Hora de un evento: día y mes en el orden del idioma («21/11»; en en-US, «11/21») y la hora en 24 horas con segundos
+ * («14:05:09») en los dos idiomas: es un registro técnico, como su CSV y los registros del servidor, y así la columna
+ * queda alineada y dos eventos del mismo minuto se distinguen sin AM/PM.
+ */
+function logTimeFormat(tz: string, locale: string): (d: Date) => string {
+  const day = new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit" });
+  const time = new Intl.DateTimeFormat(locale, { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  return (d) => `${day.format(d)} ${time.format(d)}`;
 }
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -68,6 +72,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
+  const formatTime = logTimeFormat(tz, locale);
   const categoryLabel = (c: string) => (CATEGORY_LABELS[c] ? t(CATEGORY_LABELS[c]!) : c);
 
   // Escribe los eventos pendientes para que los más recientes aparezcan.
@@ -95,6 +100,17 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const days = logRetentionDays();
   const today = dayInZone(new Date(), tz);
   const filtered = filters.range !== "24h" || !!filters.level || !!filters.category || !!filters.userId || !!filters.q || filters.reads;
+  // Vuelta de una descarga que no se pudo hacer (tope, otra en curso, fechas): el aviso y las fechas que se eligieron.
+  const csvError = parseLogCsvError(sp.csv);
+  const csvMessage =
+    csvError === "busy" ? t("Ya tienes una descarga de logs en curso. Espera a que termine.")
+    : csvError === "rate" ? t("Demasiadas descargas de logs. Espera unos minutos.")
+    : csvError === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
+    : csvError === "too_long" ? t("El intervalo no puede superar {days} días (lo que se conservan los logs).", { days })
+    : csvError === "invalid" ? t("Fechas no válidas.")
+    : null;
+  const csvFrom = (csvError && csvDateParam(sp.desde)) || addDays(today, -1);
+  const csvTo = (csvError && csvDateParam(sp.hasta)) || today;
 
   return (
     <div className="space-y-4">
@@ -103,8 +119,10 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
           {!filters.reads && <>{" "}{t("Se muestran solo los cambios.")} <InfoTip topic={t("Incluir consultas")}>{t("Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}</InfoTip></>}
         </p>
-        <form method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
-          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas. */}
+        <form id="logs-csv" method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
+          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas (se manda para volver a esta
+              misma vista si la descarga no se puede hacer). */}
+          {filters.range !== "24h" && <input type="hidden" name="range" value={filters.range} />}
           {filters.level && <input type="hidden" name="level" value={filters.level} />}
           {filters.category && <input type="hidden" name="category" value={filters.category} />}
           {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
@@ -112,11 +130,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {filters.reads && <input type="hidden" name="consultas" value="1" />}
           <label className="flex flex-col gap-1 text-xs text-slate-500">
             {t("Desde")}
-            <input type="date" name="desde" defaultValue={addDays(today, -1)} min={addDays(today, -days)} max={today} required className={field} />
+            <input type="date" name="desde" defaultValue={csvFrom} min={addDays(today, -days)} max={today} required className={field} />
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-500">
             {t("Hasta")}
-            <input type="date" name="hasta" defaultValue={today} min={addDays(today, -days)} max={today} required className={field} />
+            <input type="date" name="hasta" defaultValue={csvTo} min={addDays(today, -days)} max={today} required className={field} />
           </label>
           <button
             type="submit"
@@ -127,6 +145,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           </button>
         </form>
       </div>
+
+      {csvMessage && <CsvErrorNotice formId="logs-csv">{t("No se ha descargado el CSV: {reason}", { reason: csvMessage })}</CsvErrorNotice>}
 
       <div className="flex flex-wrap gap-2 text-sm">
         {LEVELS.map((l) => (
@@ -218,7 +238,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             if (isMaskedLog(r, mine)) {
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm text-slate-500">
-                  <span className="font-mono text-xs">{formatTime(r.createdAt, tz, locale)}</span>
+                  <span className="font-mono text-xs">{formatTime(r.createdAt)}</span>
                   {r.userName && <span className="text-xs">· {r.userName}</span>}
                   <span className="italic">{t("Actividad en un proyecto privado")}</span>
                 </li>
@@ -231,7 +251,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 <details className="group">
                   <summary className="cursor-pointer list-none px-3 focus-visible:outline-offset-[-3px] py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz, locale)}</span>
+                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt)}</span>
                       <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{t(level.label)}</span>
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800" title={r.category}>{categoryLabel(r.category)}</span>
                       <span className="font-mono text-xs font-semibold">{r.action}</span>

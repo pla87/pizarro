@@ -71,8 +71,10 @@ try {
     const help = await nd.locator("#project-start-help").innerText();
     L.check("TPL: la línea de ayuda describe la plantilla", /Preparar un curso o máster/.test(help), help);
     await nd.locator("#project-name").fill(PROJECT);
+    const from = new URL(page.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await page.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    // Con una plantilla, al crear se abre el tablero del proyecto nuevo (no los ajustes).
+    await page.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+$/.test(u.pathname), { timeout: 15000 });
     [{ id: projectId }] = await L.q(`SELECT id FROM "Project" WHERE name=$1`, [PROJECT]);
     const cols = await L.q(`SELECT name, role, "isDone", id FROM "Column" WHERE "projectId"=$1 ORDER BY position`, [projectId]);
     L.eq("TPL: columnas de la plantilla, con «Plan de trabajo para IA» (AI_PLAN) y «Programa» (PROGRAM), sin «Hecho»", cols.map((c) => [c.name, c.role, c.isDone]), [
@@ -103,9 +105,9 @@ try {
       await nt.waitFor();
       await sleep(300);
       await nt.getByRole("radio", { name: "Preparar material" }).click();
-      L.eq(`PDF: «Preparar material» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Material:");
+      L.eq(`PDF: «Preparar material» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Material: ");
       await nt.getByRole("radio", { name: "Sesión" }).click();
-      L.eq(`PDF: «Sesión» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Sesión:");
+      L.eq(`PDF: «Sesión» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Sesión: ");
       await nt.getByRole("textbox", { name: "Título", exact: true }).fill(title);
       await nt.getByLabel("Fecha límite (opcional)").fill(due);
       await nt.getByLabel("Asignada a (opcional)").selectOption(adm.id);
@@ -179,7 +181,7 @@ try {
       await dlg().getByLabel(/^Also save to Documentation as/).uncheck();
       const { text, filename } = await publishAndDownload("program.pdf", true);
       L.check("EN: nombre del archivo en inglés", /^program-master-r50-/.test(filename), filename);
-      for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
+      for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación R50", "Tuesday, January 12, 2027", "January 25, 2027 – January 27, 2027"]) {
         L.check(`EN: el texto incluye «${s}»`, text.includes(s), text.slice(0, 300));
       }
       L.check("EN: sin responsable si no se pide", !text.includes(adm.name) || !text.includes("Assignee:"));

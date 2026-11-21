@@ -1,7 +1,8 @@
 // Ronda 52: plan de trabajo para IA, adjuntos, ritmo por columna, botones de columnas vacías y salida por los enlaces del pie.
 //  - zip: «Descargar adjuntos» en el paso 2 del plan (ZIP «adjuntos/NN-titulo/…» con los adjuntos de las tareas, mismo
 //    formato y topes que el de la release); el texto cita cada adjunto por su ruta dentro del ZIP (también la imagen pegada
-//    en la descripción) y su enlace a Pizarro; solo el .md va a Documentación; la ruta del ZIP de la release sigue igual.
+//    en la descripción), sin enlace a Pizarro (la IA no puede abrirlo); solo el .md va a Documentación; la ruta del ZIP de
+//    la release sigue igual.
 //  - en: con la app en inglés, la carpeta raíz del ZIP y las rutas del texto son «attachments/NN-title/…» (una tarea sin
 //    letras, «NN-task»); el servidor admite las dos raíces, con la misma forma estricta, y no deja mezclarlas.
 //  - ritmo: las tareas fijas «cada dos» cuentan los planes guardados en SU columna (guardar en una no adelanta a las demás),
@@ -105,9 +106,9 @@ if (only.includes("zip")) {
   const f1 = "adjuntos/01-arreglar-el-login-nandu";
   L.check("ZIP: el texto cita la imagen por su ruta en el ZIP", text.includes(`\`${f1}/Plano_final.webp\``), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   L.check("ZIP: …y el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`\`${f1}/notas.txt\``) && text.includes("`adjuntos/03-con-un-registro/registro.txt`"));
-  L.check("ZIP: cada ruta lleva detrás el enlace a Pizarro", text.includes(`([Plano final.png en Pizarro](<${L.BASE}/api/attachments/r52img1>))`));
+  L.check("ZIP: cada ruta va sola, sin enlace a Pizarro detrás", text.includes(`  - \`${f1}/Plano_final.webp\`\n`) && !text.includes(L.BASE), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   L.check("ZIP: la imagen pegada en la descripción apunta a la misma ruta del ZIP", text.includes(`![captura](${f1}/Plano_final.webp)`));
-  L.check("ZIP: una imagen que no es adjunto del plan queda con su enlace absoluto", text.includes(`![ajena](${L.BASE}/api/attachments/zzzzzz)`));
+  L.check("ZIP: una imagen que no es adjunto del plan se queda en su texto alternativo (sin enlace a Pizarro)", text.includes("y esto ajena") && !text.includes("/api/attachments/zzzzzz"));
   L.check("ZIP: el contexto explica el ZIP «adjuntos/…» (3 archivos)", text.includes("- **Adjuntos:** 3 archivo(s) en el ZIP «adjuntos/…» que va con este plan"));
   L.check("ZIP: la cabecera de serie también", text.includes("van en el ZIP «adjuntos/…» que acompaña a este plan"));
   const btn = dlg.getByRole("button", { name: "Descargar adjuntos (3)" });
@@ -184,7 +185,7 @@ if (only.includes("en")) {
     await sleep(300);
     const text = await planText(dlg);
     const f1 = "attachments/01-fix-the-login";
-    L.check("EN: el texto cita la imagen por su ruta «attachments/…»", text.includes(`\`${f1}/Final_plan.webp\` ([Final plan.png in Pizarro](<${L.BASE}/api/attachments/r52img1>))`), text.slice(text.indexOf("### 1.")));
+    L.check("EN: el texto cita la imagen por su ruta «attachments/…» (sin enlace a Pizarro)", text.includes(`  - \`${f1}/Final_plan.webp\`\n`) && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
     L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("`attachments/02-task/notes.txt`"), text.slice(text.indexOf("### 2.")));
     L.check("EN: la imagen de la descripción apunta a la misma ruta", text.includes(`![shot](${f1}/Final_plan.webp)`));
     L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
@@ -257,7 +258,7 @@ if (only.includes("vacias")) {
   const { page } = s;
   await openBoard(page);
   const EMPTY = "No hay tarjetas en esta columna";
-  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Agenda: "Exportar a calendario (.ics)", Entrega: "Resumen para el cliente (PDF)", Presupuesto: "Resumen de presupuesto", Salto: "Generar Release", "Plan A": "Generar plan de trabajo" };
+  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Agenda: "Exportar a calendario (.ics)", Entrega: "Resumen para el cliente (PDF)", Presupuesto: "Resumen de presupuesto", Salto: "Generar release", "Plan A": "Generar plan de trabajo" };
   const state = async (col) => {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     return [await b.isDisabled(), await b.getAttribute("title")];
@@ -325,7 +326,7 @@ if (only.includes("salir")) {
     const isPlan = kind === "plan";
     const open = async () => {
       if (isPlan) return openPlan(page, "Plan A");
-      await L.colLoc(page, "Salto").getByRole("button", { name: "Generar Release" }).click();
+      await L.colLoc(page, "Salto").getByRole("button", { name: "Generar release" }).click();
       const d = page.locator("[role=dialog]").filter({ hasText: "Generar release" }).first();
       await d.getByRole("button", { name: /Generar con 1 tarea/ }).waitFor({ timeout: 10000 });
       await sleep(800);

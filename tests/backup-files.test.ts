@@ -21,7 +21,7 @@ import {
   type ManifestFile,
 } from "../src/lib/backup-files";
 import { restoreFiles } from "../src/lib/backup-restore";
-import { S3Client } from "../src/lib/backup-s3";
+import { isDeleteRefused, S3Client } from "../src/lib/backup-s3";
 import { startFakeS3 } from "./fake-s3";
 
 const key = randomBytes(32);
@@ -403,4 +403,76 @@ test("BACKUP_EXTERNAL_DIR que no existe: no se crea sola y el error lo dice", as
   const local = new DirDestination("local", path.join(await tmp(), "backups"), true);
   await syncBackup(local, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root });
   assert.equal((await listStems(local)).length, 1);
+});
+
+test("bloqueo de retención en el bucket (Bucket Lock de R2): la poda salta lo retenido, lo cuenta y la copia vale", async () => {
+  const s3 = await startFakeS3({ accessKeyId: "AKIDTEST", secretAccessKey: "secreto-de-prueba", pageSize: 5 });
+  try {
+    const root = await tmp();
+    const backups = path.join(root, "backups");
+    await writeFile(path.join(root, "a1.webp"), randomBytes(2000));
+    await writeFile(path.join(root, "a2.webp"), randomBytes(2000));
+    const client = new S3Client({ endpoint: s3.endpoint, bucket: s3.bucket, region: "auto", accessKeyId: "AKIDTEST", secretAccessKey: "secreto-de-prueba", prefix: "pizarro/" });
+    const s3dest = new S3Destination(client);
+    const upload = async (at: string) => {
+      const b = await makeBackup(root, backups, new Date(at));
+      await syncBackup(s3dest, b.manifest, b.bytes, dumpOf(b.manifest, b.dumpFile), { key, uploadRoot: root });
+      return b;
+    };
+    const b1 = await upload("2026-10-01T03:00:00Z");
+    // a1 solo lo nombra la primera copia: al podarla, su objeto es basura.
+    await rm(path.join(root, "a1.webp"));
+    const b2 = await upload("2026-10-02T03:00:00Z");
+    const b3 = await upload("2026-10-03T03:00:00Z");
+    const before = [...s3.objects.keys()].sort();
+
+    // Todo bloqueado: nada se borra, no es un error y se cuentan los objetos retenidos (manifiesto y volcado de b1 y b2).
+    s3.locked = () => true;
+    s3.log.length = 0;
+    const all = await pruneDestination(s3dest, key, { daily: 1, monthly: 0, recent: 0 });
+    assert.deepEqual([all.removedBackups, all.removedObjects, all.gcSkipped, all.retained], [0, 0, null, 4]);
+    assert.deepEqual([...s3.objects.keys()].sort(), before);
+    // Una copia que el bucket no deja borrar sigue reteniendo sus ficheros: el de a1 ni se intenta borrar.
+    assert.ok(!s3.log.some((r) => r.method === "DELETE" && r.key.includes("files/")), "sin borrados de ficheros que siguen nombrados");
+    // Y del volcado de una copia cuyo manifiesto no se pudo borrar, tampoco (no queda una copia a medias).
+    assert.ok(!s3.log.some((r) => r.method === "DELETE" && r.key.endsWith(".pzbak")));
+
+    // Volver a subir la última copia (el botón «Copiar ahora») no sobrescribe nada: con el bloqueo, eso fallaría.
+    s3.log.length = 0;
+    const again = await syncBackup(s3dest, b3.manifest, b3.bytes, dumpOf(b3.manifest, b3.dumpFile), { key, uploadRoot: root });
+    assert.deepEqual([again.uploaded, again.skipped], [0, 1]);
+    assert.ok(!s3.log.some((r) => r.method === "PUT"), "nada se sobrescribe");
+
+    // Solo b1 sigue bloqueada (con el código de error de otro proveedor): b2 se borra, b1 se cuenta y sus ficheros se
+    // conservan.
+    s3.locked = (k) => k.includes(b1.manifest.stem);
+    s3.lockCode = "ObjectLockedByBucketPolicy";
+    const some = await pruneDestination(s3dest, key, { daily: 1, monthly: 0, recent: 0 });
+    assert.deepEqual([some.removedBackups, some.removedObjects, some.retained], [1, 0, 2]);
+    assert.ok(s3.objects.has(`pizarro/${b1.manifest.stem}.pzman`) && !s3.objects.has(`pizarro/${b2.manifest.stem}.pzman`));
+    assert.equal((await listObjectKeys(s3dest)).size, 2, "a1 sigue: lo nombra b1, que el bucket retiene");
+
+    // Vencido el bloqueo, la siguiente poda borra lo que sobra.
+    s3.locked = null;
+    const free = await pruneDestination(s3dest, key, { daily: 1, monthly: 0, recent: 0 });
+    assert.deepEqual([free.removedBackups, free.removedObjects, free.retained], [1, 1, undefined]);
+
+    // Una clave sin permiso para borrar: tras 50 rechazos seguidos sin ningún borrado, el resto no se intenta esta vez.
+    for (let i = 0; i < 80; i++) s3.objects.set(`pizarro/${objectKey(String(i).padStart(64, "0"))}`, Buffer.from("x"));
+    s3.locked = () => true;
+    s3.lockCode = undefined;
+    s3.log.length = 0;
+    const denied = await pruneDestination(s3dest, key, { daily: 1, monthly: 0, recent: 0 });
+    assert.equal(denied.retained, 80);
+    assert.equal(s3.log.filter((r) => r.method === "DELETE").length, 50);
+
+    // Qué cuenta como «retenido»: el bloqueo o la falta de permiso, no un error de firma (fallaría también al subir).
+    const refused = await client.delete(`${b3.manifest.stem}.pzman`).then(() => null, (e: unknown) => e);
+    assert.equal(isDeleteRefused(refused), true);
+    const wrong = new S3Client({ endpoint: s3.endpoint, bucket: s3.bucket, region: "auto", accessKeyId: "AKIDTEST", secretAccessKey: "otra-clave", prefix: "pizarro/" });
+    assert.equal(isDeleteRefused(await wrong.delete("x").then(() => null, (e: unknown) => e)), false);
+    assert.equal(isDeleteRefused(new Error("HTTP 403 AccessDenied")), false);
+  } finally {
+    await s3.close();
+  }
 });

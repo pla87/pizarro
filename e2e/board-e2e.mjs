@@ -1178,8 +1178,11 @@ if (only.includes("r46")) {
     await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-plantilla.png` });
     await sel.selectOption({ label: "Familia y casa" });
     await nd.getByLabel("Crear como proyecto privado inicialmente").check();
+    const from = new URL(p.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    // Con un ejemplo o una plantilla se abre el tablero del proyecto nuevo (en blanco, los ajustes: BH1, más abajo).
+    await p.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
+    L.check("R46M1: con un ejemplo, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     const [made] = await L.q(`SELECT p.id, p."isPrivate", (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks FROM "Project" p WHERE name='Mi casa R46'`);
     L.check("R46M1: crea el proyecto del ejemplo, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
     // Plantilla: la estructura de la plantilla, sin tarjetas.
@@ -1187,8 +1190,10 @@ if (only.includes("r46")) {
     await L.eqEventually("R46M1: las plantillas llegan al desplegable", async () => (await structure(nd))[2]?.group, "Plantillas");
     await nd.locator("#project-start").selectOption({ label: firstTemplate });
     await nd.locator("#project-name").fill("Plantilla R46");
+    const fromTplPage = new URL(p.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    await p.waitForURL((u) => u.pathname !== fromTplPage && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
+    L.check("R46M1: con una plantilla, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     await sleep(500);
     const [fromTpl] = await L.q(`SELECT p.id, (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks, (SELECT json_agg(c.name ORDER BY c.position) FROM "Column" c WHERE c."projectId"=p.id) AS cols FROM "Project" p WHERE name='Plantilla R46'`);
     L.eq("R46M1: con una plantilla, sus columnas y sin tarjetas", [fromTpl?.cols, fromTpl?.tasks], [tplColumns.map((c) => c.name), 0]);
@@ -1413,7 +1418,7 @@ if (only.includes("r47")) {
     ["«+» de una columna", () => p.getByRole("button", { name: `Añadir tarea en ${COL.backlog}` }).click()],
     ["el atajo Alt+N", () => p.keyboard.press("Alt+n")],
     ["el detalle de una tarea", () => L.cardLoc(p, "R47 tarea").click()],
-    ["«Generar Release»", () => p.getByRole("button", { name: "Generar Release" }).first().click()],
+    ["«Generar release»", () => p.getByRole("button", { name: "Generar release" }).first().click()],
     ["«Varias tareas»", () => p.getByRole("button", { name: "Varias tareas" }).click()],
     ["«Archivadas»", () => p.getByRole("button", { name: "Archivadas", exact: true }).click()],
     ["los filtros", () => p.getByRole("button", { name: "Filtros" }).first().click()],
@@ -1541,7 +1546,7 @@ if (only.includes("acc")) {
 
   // Tarjeta: nombre = título; tipo, fecha, responsable… en la descripción; sin los botones de dentro; estado y atajos.
   const card = L.cardLoc(p, "Tarjeta accesible");
-  const snap = async () => p.accessibility.snapshot({ root: await card.elementHandle() });
+  const snap = async () => L.axSnapshot(p, card);
   let a = await snap();
   L.eq("ACC: la tarjeta es un botón cuyo nombre es solo el título", [a?.role, a?.name], ["button", "Tarjeta accesible"]);
   L.check("ACC: sin «Seleccionar» ni «Arrastrar» en su árbol accesible", !/Seleccionar|Arrastrar|Quitar de la selección/.test(JSON.stringify(a)), JSON.stringify(a));
@@ -1568,7 +1573,7 @@ if (only.includes("acc")) {
   const mc = L.cardLoc(m.page, "Otra tarjeta");
   const handle = mc.locator("[aria-label='Arrastrar para reordenar']");
   L.eq("ACC móvil: el asa existe, fuera del Tab y del árbol accesible", [await handle.count(), await handle.evaluate((e) => e.tabIndex < 0 && e.tagName !== "BUTTON"), await handle.getAttribute("aria-hidden")], [1, true, "true"]);
-  L.eq("ACC móvil: nombre de la tarjeta = título", (await m.page.accessibility.snapshot({ root: await mc.elementHandle() }))?.name, "Otra tarjeta");
+  L.eq("ACC móvil: nombre de la tarjeta = título", (await L.axSnapshot(m.page, mc))?.name, "Otra tarjeta");
   await m.ctx.close();
 
   // Suscripción al calendario: sin responsables (uso familiar), «Todas» marcada por defecto y cada opción explicada.

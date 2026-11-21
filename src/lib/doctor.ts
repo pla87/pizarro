@@ -1,12 +1,15 @@
 import { readFile, readdir, statfs } from "node:fs/promises";
+import { resolveAppUrl } from "./app-url";
 import { envGoogleCredentials } from "./google-config-core";
 import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
 import { parseBackupFileName } from "./backup-core";
 import { db } from "./db";
+import { INSTANCE_NOTICE_KEY, instanceLockStatus, otherInstanceNotice, parseStoredNotice } from "./instance-lock-core";
 import { configFlags, configWarnings, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
 import { checkUploads, evaluateHealth, minFreeBytes } from "./health";
+import { maxUsersConfig } from "./limits";
 import { backupsDir, uploadDir } from "./upload-dir";
 
 // Diagnóstico para soporte: estado técnico de la instalación SIN datos personales ni secretos. Lo usan la descarga de
@@ -100,6 +103,8 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     },
     env: envPresence(),
     features: configFlags(),
+    // De dónde sale APP_URL: la variable («env»), el dominio público de Railway («railway», lib/app-url.ts) o ninguno.
+    appUrl: { source: resolveAppUrl().source },
     warnings: configWarnings(),
   };
   // Email configurado en Administración → Integraciones (sin valores: solo si hay servidor y remitente guardados). Las variables SMTP_* mandan.
@@ -139,6 +144,18 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   report.health =await section(async () => {
     const [dbOk, up] = await Promise.all([db.$queryRaw`SELECT 1`.then(() => true, () => false), checkUploads(uploads)]);
     return { ...evaluateHealth({ dbOk, uploads: up, minFreeBytes: minFreeBytes() }), dbOk, uploadsWritable: up.writable };
+  }, ctx);
+
+  // ¿Otra copia de Pizarro con esta misma base de datos? (lib/instance-lock.ts). Desde la línea de órdenes no hay
+  // comprobación en marcha: solo lo que dejó guardado la copia que avisa.
+  report.instance = await section(async () => {
+    const local = opts.source === "app" ? instanceLockStatus() : null;
+    const row = await db.appState.findUnique({ where: { key: INSTANCE_NOTICE_KEY }, select: { value: true } });
+    const stored = parseStoredNotice(row?.value);
+    return {
+      lock: local ? { status: local.status, ...(local.status === "waiting" || local.status === "conflict" ? { since: new Date(local.since).toISOString() } : {}) } : null,
+      otherCopy: otherInstanceNotice(local ?? { status: "starting" }, stored, now.getTime()),
+    };
   }, ctx);
 
   report.disk = await section(async () => {
@@ -211,6 +228,9 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   report.sessions = await section(async () => ({
     active: await db.session.count({ where: { expiresAt: { gt: now } } }),
     activeUsers: await db.user.count({ where: { active: true } }),
+    // El tope de usuarios activos y de dónde sale: «env» (MAX_USERS), «default» (sin la variable) o «invalid» (no vale).
+    maxUsers: maxUsersConfig().max,
+    maxUsersSource: maxUsersConfig().source,
     admins: await db.user.count({ where: { active: true, role: "ADMIN" } }),
   }), ctx);
 

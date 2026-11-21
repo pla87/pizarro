@@ -56,7 +56,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
 /** Explicación de una línea de cada rol (se ve al pasar por encima en el menú de la columna). */
 export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
   NONE: "Columna normal, sin funciones especiales.",
-  NEXT_RELEASE: "Sus tarjetas forman la siguiente release (botón «Generar Release»).",
+  NEXT_RELEASE: "Sus tarjetas forman la siguiente release (botón «Generar release»).",
   IN_PRODUCTION: "Las tarjetas de una release publicada pasan aquí.",
   WAITING: "Avisa a la persona asignada si una tarjeta lleva demasiados días aquí.",
   WEEKLY_PLAN: "PDF de las tareas de la semana, por día o por persona.",

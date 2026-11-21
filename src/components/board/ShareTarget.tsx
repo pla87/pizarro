@@ -13,7 +13,6 @@ import { lazyDialog } from "../lazyDialog";
 import { useToast } from "../ui/Toast";
 import { afterModalHistory } from "../ui/useBackToClose";
 import { BoardContext } from "./context";
-import type { NewTaskDraft } from "./drafts";
 import { stubBoard } from "./stubBoard";
 
 const NewTaskDialog = lazyDialog(() => import("./NewTaskDialog"), (m) => m.NewTaskDialog);
@@ -105,14 +104,10 @@ export function ShareTarget({ projectId, currentUserId, editorMode, share, text,
   }, [projectId]);
 
   const api = useMemo(() => (form ? stubBoard(form, currentUserId, editorMode) : null), [form, currentUserId, editorMode]);
-  const draft = useMemo<NewTaskDraft>(() => {
-    const fromFile = share?.files[0]?.name.replace(/\.[^.]{1,8}$/, "") ?? "";
-    return {
-      title: shareTaskTitle(text) || fromFile,
-      description: shareTaskDescription(text),
-      kindId: "", columnId: "", assigneeId: "", dueDate: "", deliverableId: "", evergreen: false, subtasks: [], subtaskDraft: "",
-    };
-  }, [share, text]);
+  // Título y descripción de lo compartido. Van como textos de partida (no como un borrador recuperado) para que el tipo
+  // preseleccionado aplique su plantilla (descripción y subtareas) sin sustituir el título compartido.
+  const initialTitle = shareTaskTitle(text) || (share?.files[0]?.name.replace(/\.[^.]{1,8}$/, "") ?? "");
+  const initialDescription = shareTaskDescription(text);
 
   // Proyecto al que ir al cerrar: el de la tarea creada (o el último elegido en el selector), no siempre el inicial.
   const [target, setTarget] = useState<string | null>(null);
@@ -150,7 +145,7 @@ export function ShareTarget({ projectId, currentUserId, editorMode, share, text,
       {panel(<p>{t("Elige el proyecto y crea la tarea con lo que has compartido.")}</p>)}
       {open && (
         <BoardContext.Provider value={api}>
-          <NewTaskDialog pickProject initialFiles={files} draft={draft} onClose={close} />
+          <NewTaskDialog pickProject initialFiles={files} initialTitle={initialTitle} initialDescription={initialDescription} onClose={close} />
         </BoardContext.Provider>
       )}
     </>

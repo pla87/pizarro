@@ -1,4 +1,5 @@
-// Topes por proyecto (etiquetas, entregables, tareas activas) y tareas archivadas de solo lectura.
+// Topes por proyecto (etiquetas, entregables, tareas activas), topes que no se saltan con altas en paralelo (subtareas,
+// tipos, comentarios) y tareas archivadas de solo lectura.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, type Fixture } from "./helpers";
@@ -7,6 +8,8 @@ import {
   moveTask, reorderSubtask, restoreTask, updateSubtask,
 } from "../../src/actions/tasks";
 import { createDeliverable, createLabel } from "../../src/actions/projects";
+import { createKind } from "../../src/actions/kinds";
+import { invalidateAppSettings } from "../../src/lib/app-settings";
 import { undoLast } from "../../src/actions/undo";
 import { MAX_ACTIVE_TASKS_PER_PROJECT, MAX_DELIVERABLES_PER_PROJECT, MAX_LABELS_PER_PROJECT } from "../../src/lib/constants";
 
@@ -151,5 +154,68 @@ describe("tareas archivadas de solo lectura", () => {
 
     expectOk(await archiveTask(task.id));
     expectOk(await deleteTask(task.id));
+  });
+});
+
+/** Dos personas con acceso a un proyecto nuevo. */
+async function twoPeople(): Promise<{ a: { id: string }; b: { id: string }; f: Fixture }> {
+  const a = await makeUser();
+  const b = await makeUser();
+  const f = await makeProject({ members: [a, b] });
+  return { a, b, f };
+}
+
+describe("topes que no se pueden saltar en paralelo", () => {
+  test("subtareas: el máximo por tarea y el ritmo por persona", async () => {
+    const { a, f } = await twoPeople();
+    const task = await makeTask(f, { subtasks: Array.from({ length: 98 }, (_, i) => `s${i}`) });
+    await loginAs(a);
+    const results = await Promise.all(Array.from({ length: 4 }, (_, i) => addSubtask(task.id, `nueva ${i}`)));
+    assert.equal(results.filter((r) => r.ok).length, 2);
+    assert.equal(await db.subtask.count({ where: { taskId: task.id } }), 100);
+    // Las que entraron no comparten posición.
+    const positions = (await db.subtask.findMany({ where: { taskId: task.id }, select: { position: true } })).map((s) => s.position);
+    assert.equal(new Set(positions).size, positions.length);
+
+    const fresh = await makeUser();
+    const g = await makeProject({ members: [fresh] });
+    const t2 = await makeTask(g);
+    const t3 = await makeTask(g);
+    await loginAs(fresh);
+    for (let i = 0; i < 60; i++) expectOk(await addSubtask(i < 50 ? t2.id : t3.id, `s${i}`));
+    expectFail(await addSubtask(t3.id, "una más"), /Demasiadas subtareas seguidas/);
+  });
+
+  test("tipos de tarea: el máximo y el nombre único por ámbito", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject();
+    // makeProject ya crea un tipo propio: hasta 29 y tres altas a la vez.
+    await db.taskKind.createMany({ data: Array.from({ length: 28 }, (_, i) => ({ projectId: f.project.id, name: `K${i}`, color: "#3b82f6", position: i + 2 })) });
+    await loginAs(admin);
+    const many = await Promise.all(["Uno", "Dos", "Tres"].map((name) => createKind({ name, color: "#ef4444" }, f.project.id)));
+    assert.equal(many.filter((r) => r.ok).length, 1);
+    assert.equal(await db.taskKind.count({ where: { projectId: f.project.id } }), 30);
+
+    const g = await makeProject();
+    const same = await Promise.all(Array.from({ length: 3 }, () => createKind({ name: "Repetido", color: "#ef4444" }, g.project.id)));
+    assert.equal(same.filter((r) => r.ok).length, 1);
+    assert.equal(await db.taskKind.count({ where: { projectId: g.project.id, name: "Repetido" } }), 1);
+  });
+
+  test("comentarios: el máximo por tarea", async () => {
+    const { a, f } = await twoPeople();
+    const task = await makeTask(f);
+    await db.appState.upsert({ where: { key: "maxCommentsPerTask" }, create: { key: "maxCommentsPerTask", value: "3" }, update: { value: "3" } });
+    invalidateAppSettings();
+    try {
+      await db.taskComment.create({ data: { taskId: task.id, authorId: a.id, body: "antes" } });
+      await loginAs(a);
+      const results = await Promise.all(Array.from({ length: 4 }, (_, i) => addComment(task.id, `nuevo ${i}`)));
+      assert.equal(results.filter((r) => r.ok).length, 2);
+      assert.equal(await db.taskComment.count({ where: { taskId: task.id, deletedAt: null } }), 3);
+    } finally {
+      await db.appState.deleteMany({ where: { key: "maxCommentsPerTask" } });
+      invalidateAppSettings();
+    }
   });
 });

@@ -28,7 +28,7 @@ const UNDO_LIMIT = 10;
 export const UNDO_MAX_AGE_DAYS = 7;
 
 /** Campos de una tarea que se pueden restaurar (fechas en ISO). */
-export interface TaskData {
+interface TaskData {
   title?: string;
   description?: string;
   kindId?: string;
@@ -76,7 +76,7 @@ type LabelRow = { id: string; projectId: string; name: string; color: string };
 type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
-export interface TaskSnapshot {
+interface TaskSnapshot {
   task: TaskData & { id: string; projectId: string; title: string; columnId: string; kindId: string; position: number; createdById: string | null; createdAt: string };
   labelIds: string[];
   subtasks: SubtaskRow[];
@@ -235,7 +235,7 @@ type SubtaskKey = "title" | "done" | "position";
 type Deleted<R> = { row: R; byUndo: boolean };
 
 /** Lo que una persona tocó de una tarea según sus entradas de deshacer y rehacer de un rato (ver touchedTask). */
-export interface TouchedTask {
+interface TouchedTask {
   /** Campos de la tarjeta (claves de TaskData) y si cambió sus etiquetas. */
   fields: Set<string>;
   labels: boolean;

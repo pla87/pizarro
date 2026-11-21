@@ -1,6 +1,6 @@
 // Posiciones sin empates: ninguna acción deja dos tareas de la misma columna con la misma posición
 // (con un empate, su orden dependía de cómo devolviera las filas PostgreSQL y cambiaba tras cualquier
-// refresco). También la migración que renumera los empates que ya existían.
+// refresco). También la migración que renumera los empates que ya existían y resolvePositionTies.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, test } from "node:test";
@@ -9,6 +9,7 @@ import { archiveTask, createTask, createTasks, deleteTask, duplicateTask, makeEv
 import { deleteColumn } from "../../src/actions/columns";
 import { undoLast } from "../../src/actions/undo";
 import { POSITION_STEP as STEP } from "../../src/lib/positions";
+import { resolvePositionTies } from "../../src/lib/task-positions";
 
 async function setup() {
   const user = await makeUser();
@@ -359,5 +360,33 @@ describe("migración 20261028110000_posiciones_sin_empates", () => {
     assert.deepEqual(rows.map((r) => [r.title, r.position]), [["first", 1024], ["moved", 2048], ["arch", 3072], ["ever", 4096], ["last", 5120]]);
     const untouched = await db.task.findMany({ where: { columnId: f.columns.doing }, orderBy: { position: "asc" }, select: { position: true } });
     assert.deepEqual(untouched.map((r) => r.position), [100, 300.5]);
+  });
+});
+
+describe("resolvePositionTies", () => {
+  test("solo mueve las que empatan; renumera la columna si no hay hueco", async () => {
+    const f = await makeProject();
+    const lo = await makeTask(f, { title: "lo", position: 500 });
+    const a = await makeTask(f, { title: "a", position: 1000 });
+    const b = await makeTask(f, { title: "b", position: 1000 });
+    const c = await makeTask(f, { title: "c", position: 2000 });
+    const other = await makeTask(f, { title: "otra", columnId: f.columns.doing, position: 1000 });
+    await resolvePositionTies([a.id, c.id, other.id]);
+    const pos = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id } })).position;
+    assert.ok((await pos(lo.id)) < (await pos(a.id)) && (await pos(a.id)) < (await pos(b.id)), "a pasa justo delante de la que ocupaba su sitio");
+    assert.equal(await pos(b.id), 1000);
+    assert.equal(await pos(c.id), 2000, "sin empate no se toca");
+    assert.equal(await pos(other.id), 1000, "otra columna, sin empate");
+
+    // Sin hueco entre la anterior y el empate: se renumera la columna entera, sin empates.
+    const g = await makeProject();
+    const p1 = await makeTask(g, { position: 1000 });
+    await makeTask(g, { position: 1000.0000001 });
+    const p3 = await makeTask(g, { position: 1000.0000001 });
+    await resolvePositionTies([p3.id]);
+    const ordered = await db.task.findMany({ where: { columnId: g.columns.todo }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, position: true } });
+    assert.equal(new Set(ordered.map((t) => t.position)).size, 3);
+    assert.equal(ordered[0]!.id, p1.id);
+    assert.ok(ordered.every((t) => t.position % 1024 === 0), "renumerada en múltiplos del paso");
   });
 });

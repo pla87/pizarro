@@ -61,7 +61,7 @@ export async function run() {
   L.eq("adjuntos subidos por la UI (imagen y texto)", atts.map((a) => [a.title, a.originalName.replace(/\.(png|webp)$/, ".IMG"), a.isImage]), [["Alpha", "captura.IMG", true], ["Beta", "notas.txt", false]]);
 
   // --- generar (paso 1 y 2) ---
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const dlg = U.dialog(p);
   await dlg.getByText("Paso 1 de 2").waitFor();
   const titleInput = dlg.locator("#rel-title");
@@ -96,7 +96,7 @@ export async function run() {
   L.eq("diálogo: el .md se llama como el ZIP (release-AAAA-MM-DD-R1-Proyecto.md)", mdDl.suggestedFilename(), mdName);
   // «Al marcar como desplegado» se anuncia una sola vez: el grupo lo nombra y el rótulo visible queda oculto al lector.
   const destGroup = dlg.locator("fieldset").filter({ has: p.getByLabel("Archivar tarjetas") });
-  const destTree = await p.accessibility.snapshot({ root: await destGroup.elementHandle(), interestingOnly: false });
+  const destTree = await L.axSnapshot(p, destGroup, { interestingOnly: false });
   const texts = [];
   (function walk(n) { if (n?.role === "text") texts.push(n.name); for (const c of n?.children ?? []) walk(c); })(destTree);
   L.eq("diálogo: «Al marcar como desplegado» se lee una vez (antes, legend y rótulo)", [destTree?.name, texts.filter((x) => /Al marcar como desplegado/.test(x)).length], ["Al marcar como desplegado", 1]);
@@ -134,7 +134,7 @@ export async function run() {
   L.check("Releases: muestra título, número y «4 tareas» y «2 adjuntos»", /Release QA uno/.test(bodyText) && /4 tareas/.test(bodyText) && /2 adjuntos/.test(bodyText) && /\bR1(?!\d)/.test(bodyText), bodyText.slice(0, 300));
   // El nombre accesible de la entrada separa el número del título («R1 Release QA uno…», antes «R1Release QA uno…»).
   const entryBtn = p.locator("article button[aria-expanded]").first();
-  const entryName = (await p.accessibility.snapshot({ root: await entryBtn.elementHandle() }))?.name ?? "";
+  const entryName = (await L.axSnapshot(p, entryBtn))?.name ?? "";
   L.check("Releases: nombre accesible «R1 Release QA uno …» con separador", /^R1 Release QA uno\b/.test(entryName), entryName);
   // v1.22: la descarga es un botón (fetch con el token del plan); se comprueba el botón y la ruta.
   await p.getByText("Release QA uno").first().click();
@@ -214,7 +214,7 @@ export async function run() {
   L.eq("Alt+R: la fija sigue en su columna", await L.dbOrder(COL.next), ["Fija"]);
   // Segunda del día: el título propuesto lleva (2)
   await L.reload(p);
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const d4 = U.dialog(p);
   await d4.getByText("Paso 1 de 2").waitFor();
   await L.sleep(500);
@@ -256,7 +256,7 @@ export async function run() {
   };
   const relCount = async () => (await rels()).length;
   const before = await relCount();
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const d5 = U.dialog(p);
   await d5.getByText("Paso 1 de 2").waitFor();
   await d5.getByRole("button", { name: /Generar con \d+ tarea/ }).click();

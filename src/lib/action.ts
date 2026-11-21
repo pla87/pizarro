@@ -5,6 +5,7 @@ import { AppError, zodIssueMessage } from "./errors";
 import { logEvent } from "./log";
 import { READ_ACTIONS } from "./log-query";
 import { publishChange } from "./realtime";
+import { LIVE_PATCH_MAX } from "@/components/board/livePatch";
 import { saveTaskEvents } from "./task-events";
 import { discardUndo, saveUndo, type UndoOp } from "./undo";
 import { encodeLabel } from "./undo-label";
@@ -35,7 +36,8 @@ const ECHO_SAFE_ACTIONS = new Set([
 const UNPUBLISHED_ACTIONS: ReadonlySet<string> = new Set(["tasks.setTaskFollowing"]);
 
 /** `cid`: id del cambio publicado a las demás pestañas (solo en acciones que cambian datos de un proyecto). */
-type ActionResult<T = undefined> = { ok: true; data: T; cid?: string } | { ok: false; error: string };
+/** `code`: el de un AppError que lo lleve, para que la pantalla distinga un fallo concreto (p. ej. `edit_conflict`). */
+type ActionResult<T = undefined> = { ok: true; data: T; cid?: string } | { ok: false; error: string; code?: string };
 
 /** Nombre y argumentos de la acción, para el registro de actividad. */
 interface ActionMeta {
@@ -65,7 +67,15 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     const user = tracked || willUndo ? await getCurrentUser().catch(() => null) : null;
     // Aviso a las demás pestañas del proyecto (las consultas no cambian nada): ya está confirmada la transacción
     // principal y publishChange no depende del historial ni del deshacer, así que sale antes de guardarlos.
-    const cid = tracked && !ctx.noPublish && !UNPUBLISHED_ACTIONS.has(meta!.name) ? publishChange({ projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name, taskId: ctx.taskId ?? null }) : undefined;
+    // Con las tarjetas que tocó (si no son demasiadas), las demás pestañas piden solo esas; `full` si tocó algo más.
+    const live = ctx.liveTaskIds;
+    const cid = tracked && !ctx.noPublish && !UNPUBLISHED_ACTIONS.has(meta!.name)
+      ? publishChange({
+        projectId: ctx.projectId!, userId: user?.id ?? null, action: meta!.name, taskId: ctx.taskId ?? null,
+        ...(live?.size && live.size <= LIVE_PATCH_MAX ? { taskIds: [...live] } : {}),
+        ...(ctx.refreshOwnTab ? { full: true } : {}),
+      })
+      : undefined;
     // Solo las acciones cuyo resultado ya trae todo lo que cambian devuelven el id; en las demás (o si la acción tocó
     // más de lo que devuelve) la pestaña que la lanzó también se refresca con su propio aviso.
     if (cid && !ctx.refreshOwnTab && ECHO_SAFE_ACTIONS.has(meta!.name)) result.cid = cid;
@@ -85,7 +95,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     if (err && typeof err === "object" && "digest" in err && !(err instanceof AppError)) throw err;
     if (err instanceof AppError) {
       level = "warn";
-      result = { ok: false, error: err.message };
+      result = err.code ? { ok: false, error: err.message, code: err.code } : { ok: false, error: err.message };
     } else if (err instanceof z.ZodError) {
       level = "warn";
       result = { ok: false, error: zodIssueMessage(err.issues[0]?.message) };
@@ -108,7 +118,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   // carga al abrirla) no deja rastro cuando sale bien: es lo más frecuente y solo llenaba el registro.
   if (meta && !(result.ok && UNLOGGED_READS.has(meta.name))) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error, failure);
   // El registro queda en español; al usuario, el error en su idioma.
-  if (!result.ok) result = { ok: false, error: await translateError(result.error) };
+  if (!result.ok) result = { ...result, error: await translateError(result.error) };
   return result;
 }
 

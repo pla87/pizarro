@@ -18,6 +18,16 @@ export function isNetworkError(err: unknown): boolean {
   return /failed to fetch|networkerror|load failed|network ?error|network connection/i.test(err.message);
 }
 
+/**
+ * Mensaje para el `catch` de un `fetch` del navegador. Sin red → `offline`. Un error del propio navegador o de leer la
+ * respuesta («Failed to fetch», «Unexpected token '<'…» de una página de error HTML) → `fallback`. Solo se muestra el
+ * texto de un `Error` normal, el que lanza el propio código con su mensaje ya traducido.
+ */
+export function fetchErrorMessage(err: unknown, offline: string, fallback: string): string {
+  if (isNetworkError(err)) return offline;
+  return err instanceof Error && err.constructor === Error && err.message ? err.message : fallback;
+}
+
 /** ¿Es el aviso de «sin conexión» (en español o ya traducido)? */
 export function isOfflineMessage(message: string, t: (s: string) => string): boolean {
   return message === OFFLINE_MESSAGE || message === t(OFFLINE_MESSAGE);

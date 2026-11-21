@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
-  importWhenOnline, isNetworkError, isOffline, isOfflineMessage, loadWhenOnline, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline,
+  fetchErrorMessage, importWhenOnline, isNetworkError, isOffline, isOfflineMessage, loadWhenOnline, OFFLINE_MESSAGE, probeServer, refreshWhenOnline, reportOffline,
   reportReachable, reportServerHeard, resetConnectionForTests, safeRefresh, saveDataOn, subscribeConnection,
 } from "../src/lib/connection";
 import { actionThrowMessage } from "../src/lib/stale-action";
@@ -265,5 +265,19 @@ describe("saveDataOn: ahorro de datos del navegador (sin precargas por adelantad
       if (prev) Object.defineProperty(globalThis, "navigator", prev);
       else delete (globalThis as Record<string, unknown>).navigator;
     }
+  });
+});
+
+describe("fetchErrorMessage: nunca el texto técnico del navegador", () => {
+  test("sin red, el aviso propio; JSON roto u otro error del navegador, el genérico; un Error del código, su texto", () => {
+    const msg = (err: unknown) => fetchErrorMessage(err, "sin red", "genérico");
+    assert.equal(msg(new TypeError("Failed to fetch")), "sin red");
+    assert.equal(msg(new TypeError("NetworkError when attempting to fetch resource.")), "sin red");
+    assert.equal(msg(new TypeError("Load failed")), "sin red");
+    assert.equal(msg(new SyntaxError("Unexpected token '<', \"<html>\" is not valid JSON")), "genérico");
+    assert.equal(msg(new TypeError("x is not a function")), "genérico");
+    assert.equal(msg(new Error("Demasiadas peticiones, espera un momento.")), "Demasiadas peticiones, espera un momento.");
+    assert.equal(msg(new Error("")), "genérico");
+    assert.equal(msg("texto"), "genérico");
   });
 });

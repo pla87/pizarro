@@ -52,7 +52,7 @@ export const portapapeles: Record<string, string> = {
   "Tarea importada": "Task imported",
   "Tarea importada, salvo: {list}": "Task imported, except: {list}",
   "subtareas (máximo {max} al crear)": "subtasks (maximum {max} when creating)",
-  "subtareas hechas (se crean sin marcar)": "done subtasks (they are created unticked)",
+  "subtareas hechas (se crean sin marcar)": "done subtasks (they are created unchecked)",
   "{list} (no se pueden poner al crear: añádelos en el detalle)": "{list} (can't be set when creating: add them in the task details)",
   "El JSON trae {n} subtareas y se leen como mucho {max} (una tarea admite {per}).": "The JSON has {n} subtasks and at most {max} are read (a task allows {per}).",
   "El JSON de la tarea no es válido: «{field}» es demasiado largo o no se entiende.": "The task JSON is not valid: “{field}” is too long or can't be understood.",

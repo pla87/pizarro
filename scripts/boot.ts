@@ -4,6 +4,7 @@
 // (scripts/start-local.mjs), así las dos formas de arrancar hacen lo mismo.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { applyAppUrlFallback } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
@@ -11,6 +12,8 @@ import { announceSetup } from "@/lib/setup";
 import { seedBuiltinTemplates, upgradeBuiltinTemplates } from "@/lib/template-store";
 
 async function main() {
+  // Sin APP_URL, la dirección pública de Railway (lib/app-url.ts): la usa el enlace de /setup que se imprime abajo.
+  applyAppUrlFallback(process.env, (m) => console.log(`[boot] ${m}`));
   try {
     const { version } = (await import("../package.json")) as { version: string };
     await db.appLog.create({

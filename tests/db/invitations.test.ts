@@ -1,18 +1,23 @@
-// Invitaciones: idioma de la persona invitada (el de la instalación por defecto, o el elegido en «Nuevo usuario») y
-// «Reenviar invitación» para quien aún no ha entrado. Contra PostgreSQL real, con el buzón de pruebas (MAIL_OUTBOX_DIR).
+// Invitaciones: idioma de la persona invitada (el de la instalación por defecto, el elegido en «Nuevo usuario» o, con
+// «Invitar por email» desde un proyecto, el de quien invita), «Reenviar invitación» para quien aún no ha entrado y la
+// marca «Invitación pendiente». Contra PostgreSQL real, con el buzón de pruebas (MAIL_OUTBOX_DIR).
 import assert from "node:assert/strict";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeUser } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeProject, makeUser } from "./helpers";
 import { findUsableToken } from "../../src/lib/auth-token";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
+import { getLocale } from "../../src/i18n/server";
+import { AUTH_LINK_HEADER } from "../../src/lib/auth-link-path";
+import { createSession } from "../../src/lib/session";
+import { invitePendingFrom } from "../../src/lib/user-entered";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
 process.env.MAX_USERS = "100000";
-const { createUser, resendInvite } = await import("../../src/actions/users");
+const { createUser, inviteToProject, resendInvite } = await import("../../src/actions/users");
 
 let outbox = "";
 const prevOutbox = process.env.MAIL_OUTBOX_DIR;
@@ -68,6 +73,63 @@ describe("idioma de la persona invitada", () => {
     expectOk(await createUser({ name: "Elegido", email: to, role: "MEMBER", locale: "EN" }));
     assert.equal((await db.user.findUniqueOrThrow({ where: { email: to } })).locale, "EN");
     assert.equal((await mailsTo(to))[0]?.subject, "You've been invited to Pizarro");
+  });
+});
+
+describe("«Invitar por email» desde un proyecto: idioma de quien invita", () => {
+  const request = (globalThis as unknown as { __pzTestRequest: { headers?: Record<string, string> } }).__pzTestRequest;
+
+  /** Invita con un administrador en `adminLocale` y una instalación en `instance`; devuelve la cuenta, el email y el idioma de /reset. */
+  async function inviteAs(adminLocale: "ES" | "EN", instance: "es" | "en") {
+    await setInstanceLocale(instance);
+    const admin = await makeUser({ role: "ADMIN", name: "Ann Admin" });
+    await db.user.update({ where: { id: admin.id }, data: { locale: adminLocale } });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = email(`proyecto-${adminLocale.toLowerCase()}`);
+    const res = expectOk(await inviteToProject(f.project.id, to));
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    const [mail] = await mailsTo(to);
+    logout();
+    request.headers = { [AUTH_LINK_HEADER]: new URL(res.link).pathname };
+    try {
+      return { user, mail, project: f.project.name, resetLocale: await getLocale() };
+    } finally {
+      delete request.headers;
+    }
+  }
+
+  test("la cuenta, el email y la pantalla de elegir contraseña, en el idioma de quien invita (no en el de la instalación)", async () => {
+    const en = await inviteAs("EN", "es");
+    assert.equal(en.user.locale, "EN");
+    assert.equal(en.mail?.subject, `Ann Admin has invited you to the “${en.project}” project in Pizarro`);
+    assert.equal(en.resetLocale, "en");
+
+    const es = await inviteAs("ES", "en");
+    assert.equal(es.user.locale, "ES");
+    assert.equal(es.mail?.subject, `Ann Admin te ha invitado al proyecto «${es.project}» en Pizarro`);
+    assert.equal(es.resetLocale, "es");
+    await setInstanceLocale("es");
+  });
+
+  test("«Reenviar invitación» la manda en ese mismo idioma y devuelve el enlace nuevo (para «Copiar enlace»)", async () => {
+    const { user } = await inviteAs("EN", "es");
+    const admin = await makeUser({ role: "ADMIN" }); // otro administrador, en español
+    await loginAs(admin);
+    const res = expectOk(await resendInvite(user.id));
+    const mails = await mailsTo(user.email);
+    assert.equal(mails.length, 2);
+    assert.match(mails[1]!.subject, /has invited you to the/);
+    assert.ok(res.link.endsWith(`/reset/${tokenOf(mails[1]!.text)}`), "el enlace devuelto es el del email");
+    assert.ok(await findUsableToken(tokenOf(mails[1]!.text), ["INVITE"]));
+  });
+
+  test("«Invitación pendiente» hasta que entra por primera vez", async () => {
+    const { user } = await inviteAs("ES", "es");
+    const pending = () => db.user.findUniqueOrThrow({ where: { id: user.id }, select: { mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } } }).then(invitePendingFrom);
+    assert.equal(await pending(), true);
+    await createSession(user.id, { mustChangePassword: true });
+    assert.equal(await pending(), false, "ya ha entrado");
   });
 });
 

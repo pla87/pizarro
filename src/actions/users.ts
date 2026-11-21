@@ -26,13 +26,14 @@ import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
+import { isReservedName } from "@/lib/reserved-names";
 import { getT } from "@/i18n/server";
 import { getInstanceSettings } from "@/lib/instance";
 import { revokeUser } from "@/lib/revoke";
 import { publishChange } from "@/lib/realtime";
 
 const createSchema = z.object({
-  name: v.name,
+  name: v.personName,
   email: v.email,
   /** Solo se pide sin email configurado; con email, la persona elige la suya desde la invitación. */
   password: z.string().max(200).optional(),
@@ -104,7 +105,8 @@ async function insertUser(data: { name: string; email: string; role: "ADMIN" | "
  * «Invitar por email» en los miembros de un proyecto (solo administradores, que son quienes crean cuentas): da de alta a
  * una persona sin cuenta como invitación (enlace de un solo uso, 72 h, para elegir su contraseña), la añade al proyecto y,
  * al elegir la contraseña, la lleva a su tablero (el enlace guarda el proyecto). Con email configurado se le envía; con o
- * sin email, se devuelve el enlace para «Copiar enlace». El nombre sale del email; la persona lo cambia en su perfil.
+ * sin email, se devuelve el enlace para «Copiar enlace». El nombre sale del email y el idioma es el de quien invita; la
+ * persona cambia ambos en su perfil.
  */
 export async function inviteToProject(projectId: string, email: string) {
   return runAction({ name: "users.inviteToProject", args: [projectId] }, async () => {
@@ -115,7 +117,9 @@ export async function inviteToProject(projectId: string, email: string) {
     const existing = await db.user.findUnique({ where: { email: address }, select: { active: true } });
     if (existing && !existing.active) throw new AppError("Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.");
     if (existing) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
-    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER" }, null, project.id);
+    // En el idioma de quien invita (no en el de la instalación): el email, la pantalla de elegir la contraseña y, después,
+    // su interfaz. Lo cambia ella en su perfil.
+    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER", locale: admin.locale }, null, project.id);
     const token = await issueAuthToken(created.id, "INVITE", { projectId: project.id });
     const link = `${appUrl()}/reset/${token}`;
     let emailed = false;
@@ -160,7 +164,10 @@ async function inviteProject(userId: string): Promise<{ id: string; name: string
   return members.length === 1 ? members[0]!.project : null;
 }
 
-/** «Reenviar invitación»: enlace nuevo (72 h) por email; el anterior deja de valer. Solo para quien aún no ha entrado. */
+/**
+ * «Reenviar invitación» (Administración → Usuarios y miembros del proyecto): enlace nuevo (72 h) por email; el anterior
+ * deja de valer. Solo para quien aún no ha entrado.
+ */
 export async function resendInvite(userId: string) {
   return runAction({ name: "users.resendInvite", args: [userId] }, async () => {
     const admin = await requireAdmin();
@@ -171,10 +178,11 @@ export async function resendInvite(userId: string) {
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
     const project = await inviteProject(user.id);
+    let link: string;
     try {
       // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
       const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
-      const link = `${appUrl()}/reset/${token}`;
+      link = `${appUrl()}/reset/${token}`;
       if (project) await sendProjectInviteMail(user, link, admin.name, project.name);
       else await sendInviteMail(user, link, admin.name);
     } catch (err) {
@@ -182,6 +190,8 @@ export async function resendInvite(userId: string) {
       throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.");
     }
     describeAction(`Reenvió la invitación a «${user.name}»`);
+    // El enlace nuevo, para «Copiar enlace» en los miembros del proyecto (como al invitar); no se registra.
+    return { link };
   });
 }
 
@@ -215,6 +225,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     }
     const keys = ["name", "email", "role", "active"] as const;
     const changed = new Set(keys.filter((k) => wanted[k] !== expected[k]));
+    // Solo al cambiar el nombre: los que ya existen se pueden seguir guardando tal cual.
+    if (changed.has("name") && isReservedName(wanted.name)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
     const unassigned = { count: 0, projectIds: [] as string[] };
     const { user, data } = await db.$transaction(async (tx) => {
       // Candados en orden fijo: plazas de usuarios (reactivar), administradores (quitar uno) y la fila de la persona.

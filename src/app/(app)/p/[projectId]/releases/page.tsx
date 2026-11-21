@@ -3,6 +3,7 @@ import { Rocket } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { COLUMN_ROLE_LABEL } from "@/lib/constants";
 import { db } from "@/lib/db";
+import { searchReleaseIds } from "@/lib/release-search";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { projectSectionMetadata } from "../project-title";
@@ -20,10 +21,6 @@ const PAGE_STEP = 50;
  * encuentran buscando.
  */
 const LIST_MAX = 200;
-
-const ACCENTS = "áàäâãéèëêíìïîóòöôõúùüûñç";
-const PLAIN = "aaaaaeeeeiiiiooooouuuunc";
-const unaccent = (text: string) => text.replace(/[áàäâãéèëêíìïîóòöôõúùüûñç]/g, (c) => PLAIN[ACCENTS.indexOf(c)]!);
 
 export default async function ReleasesPage({
   params,
@@ -43,18 +40,14 @@ export default async function ReleasesPage({
   // Primero el acceso: la búsqueda no debe tocar proyectos ajenos.
   if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) notFound();
   // Con búsqueda se recorre todo el histórico del proyecto (hasta LIST_MAX coincidencias, las más recientes); sin ella, las últimas `limit`.
-  // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos.
+  // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos (con índice: release-search.ts).
   let where: { id?: { in: string[] } } = {};
   // Más coincidencias que LIST_MAX: se avisa (se pide una de más para saberlo).
   let searchTruncated = false;
   if (q) {
-    const needle = `%${unaccent(q.toLowerCase()).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const rows = await db.$queryRaw<{ id: string }[]>`
-      SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
-        AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})
-      ORDER BY "deployedAt" DESC LIMIT ${LIST_MAX + 1}`;
-    searchTruncated = rows.length > LIST_MAX;
-    where = { id: { in: rows.slice(0, LIST_MAX).map((r) => r.id) } };
+    const ids = await searchReleaseIds(projectId, q, LIST_MAX + 1);
+    searchTruncated = ids.length > LIST_MAX;
+    where = { id: { in: ids.slice(0, LIST_MAX) } };
   }
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },

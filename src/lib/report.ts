@@ -57,7 +57,17 @@ export interface ReportInput {
    * las vencidas, los totales por columna, tipo y persona. Sin ellos se cuentan las de `tasks` (countsFromTasks).
    */
   counts?: ReportCounts;
+  /**
+   * Máximo de tareas por listado (cada columna pendiente, plazos y campos opcionales), con «… y N más» y un enlace al
+   * tablero (`boardUrl`) debajo. Lo usa el informe semanal por email (WEEKLY_REPORT_LIST_LIMIT): en un proyecto enorme,
+   * un PDF de cientos de páginas no lo lee nadie y pesa en el buzón. Sin él (la descarga desde la app), salen todas.
+   */
+  listLimit?: number;
+  boardUrl?: string;
 }
+
+/** Tareas por listado del informe semanal por email (ver ReportInput.listLimit). */
+export const WEEKLY_REPORT_LIST_LIMIT = 15;
 
 /**
  * Tareas activas (no archivadas ni fijas) de una misma columna, responsable y tipo: cuántas son y cuántas vencidas
@@ -93,7 +103,7 @@ export interface ReportFieldRow {
   actualHours: string | null;
 }
 
-export interface ReportFields {
+interface ReportFields {
   enabled: TaskFieldKey[];
   rows: ReportFieldRow[];
   /** Coste de las tareas: pagado, pendiente y total (decimales «12.50»); horas sumadas. */
@@ -134,7 +144,8 @@ export interface Report {
     /** Tareas fijas (fuera de todos los recuentos anteriores). */
     fixed: number;
   };
-  columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[] }[];
+  /** `more`: tareas de la columna que no salen en `tasks` (por `listLimit`; 0 sin él). */
+  columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[]; more: number }[];
   deliverables: { name: string; description: string; dueDate: string | null; daysLeft: number | null; total: number; done: number; pct: number; status: DeliverableStatus }[];
   overdue: ReportTask[];
   upcoming: ReportTask[];
@@ -150,6 +161,11 @@ export interface Report {
    * sí son de todas). 0 si salen todas.
    */
   omittedTasks: number;
+  /** Tope de tareas por listado (ReportInput.listLimit), o null si salen todas. */
+  listLimit: number | null;
+  boardUrl: string | null;
+  /** Lo que el tope deja fuera de los plazos (vencidas y próximas) y de los campos opcionales. */
+  more: { planned: number; fields: number };
 }
 
 /** Máximo de tareas que lee el informe para sus listados (los recuentos se hacen en la BD sobre todas). */
@@ -223,19 +239,29 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
     .filter((t) => t.daysLeft !== null && t.daysLeft >= 0 && t.daysLeft <= UPCOMING_DAYS)
     .sort((a, b) => a.daysLeft! - b.daysLeft!);
 
+  const limit = fullInput.listLimit ?? Infinity;
   const columns = input.columns.map((c) => {
     const tasks = input.tasks.filter((t) => t.columnId === c.id).map(toReportTask);
     const rows = counts.rows.filter((r) => r.columnId === c.id);
+    const count = sum(rows, (r) => r.count);
+    // Pendientes primero por plazo; sin plazo al final. Con tope, las primeras: las más urgentes.
+    const shown = tasks.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity)).slice(0, limit);
     return {
       name: c.name,
       isDone: c.isDone,
-      count: sum(rows, (r) => r.count),
+      count,
       overdue: c.isDone ? 0 : sum(rows, (r) => r.overdue),
       byType: kindNames.map((kind) => ({ label: kind, count: sum(rows.filter((r) => r.kind === kind), (r) => r.count) })).filter((x) => x.count > 0),
-      // Pendientes primero por plazo; sin plazo al final.
-      tasks: tasks.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity)),
+      tasks: shown,
+      // Las que no salen, contadas sobre todas (también las que el informe no lee, más allá de REPORT_MAX_TASKS).
+      more: Number.isFinite(limit) ? Math.max(0, count - shown.length) : 0,
     };
   });
+  // Plazos: las vencidas primero y luego las próximas, hasta el tope entre las dos.
+  const overdueShown = overdue.slice(0, limit);
+  const upcomingShown = upcoming.slice(0, Math.max(0, limit - overdueShown.length));
+  const fields = buildReportFields(fullInput, columnById);
+  const fieldRows = fields ? fields.rows.slice(0, limit) : [];
 
   // Mismo criterio que el calendario: las archivadas cuentan como hechas y las fijas no cuentan (deliverableProgress).
   const deliverables = input.deliverables.map((d) => {
@@ -286,8 +312,8 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
     },
     columns,
     deliverables,
-    overdue,
-    upcoming,
+    overdue: overdueShown,
+    upcoming: upcomingShown,
     people: [...peopleMap.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
     types: kindNames.map((kind) => {
       const rows = counts.rows.filter((r) => r.kind === kind);
@@ -302,8 +328,14 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
       .slice(0, RECENT_DONE_MAX)
       .map(({ t }) => toReportTask(t)),
     releases: input.releases,
-    fields: buildReportFields(fullInput, columnById),
+    fields: fields && { ...fields, rows: fieldRows },
     omittedTasks: fullInput.counts ? Math.max(0, total + counts.fixed - fullInput.tasks.length) : 0,
+    listLimit: Number.isFinite(limit) ? limit : null,
+    boardUrl: fullInput.boardUrl ?? null,
+    more: {
+      planned: overdue.length + upcoming.length - overdueShown.length - upcomingShown.length,
+      fields: fields ? fields.rows.length - fieldRows.length : 0,
+    },
   };
 }
 

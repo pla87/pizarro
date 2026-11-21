@@ -4,6 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
+import { resolveAppUrl } from "./app-url";
+import { escapeHtml } from "./html-escape";
 import { logEvent } from "./log";
 import { getInstanceSettings } from "./instance";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
@@ -41,13 +43,24 @@ export function emailEnabled(): boolean {
 
 /** URL pública de la app; todos los enlaces de los emails salen de aquí, nunca de la petición. */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  // Sin APP_URL, la dirección pública de Railway (lib/app-url.ts, la misma regla que el arranque).
+  return (resolveAppUrl().url ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
-export { escapeHtml } from "./html-escape";
+export { escapeHtml };
 
 /** Pie de los avisos, el resumen y el informe: la dirección del remitente no la lee nadie. */
 export const noReplyNote = (t: (key: string) => string): string => t("No respondas a este email: contesta en Pizarro.");
+
+/**
+ * Enlace del pie para dejar de recibir un tipo de email (avisos, resumen, informe; ver lib/unsubscribe.ts): una línea de
+ * texto plano y el enlace en HTML. Vacío sin enlace.
+ */
+export function unsubscribeFooter(url: string | undefined, t: (key: string) => string): { text: string; html: string } {
+  if (!url) return { text: "", html: "" };
+  const label = t("Dejar de recibir estos emails");
+  return { text: `${label}: ${url}\n`, html: `<br><a href="${escapeHtml(url)}" style="color:#64748b">${escapeHtml(label)}</a>` };
+}
 
 interface Transport {
   t: ReturnType<typeof nodemailer.createTransport>;
@@ -110,7 +123,7 @@ export function closeMailTransport(): void {
 
 onShutdown("mail", closeMailTransport);
 
-export interface MailAttachment {
+interface MailAttachment {
   filename: string;
   content: Buffer;
   contentType?: string;
@@ -122,6 +135,8 @@ export interface MailMessage {
   text: string;
   html?: string;
   attachments?: MailAttachment[];
+  /** Cabeceras propias de este email (List-Unsubscribe…), además de las de todo email de Pizarro. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -151,14 +166,14 @@ async function deliverMail(m: MailMessage): Promise<void> {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const base = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     // Los adjuntos se guardan como ficheros junto al JSON (que solo anota nombre y tamaño).
-    const { attachments, ...rest } = m;
+    const { attachments, headers, ...rest } = m;
     const saved: { filename: string; bytes: number; file: string }[] = [];
     for (const [i, a] of (attachments ?? []).entries()) {
       const file = `${base}-${i}.attachment`;
       await writeFile(join(dir, file), a.content, { mode: 0o600 });
       saved.push({ filename: a.filename, bytes: a.content.length, file });
     }
-    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, headers: AUTO_MAIL_HEADERS, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, headers: { ...AUTO_MAIL_HEADERS, ...headers }, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
     return;
   }
   if (!config.host) throw new Error("El envío de emails no está configurado.");
@@ -166,7 +181,7 @@ async function deliverMail(m: MailMessage): Promise<void> {
   const tr = mailer(config);
   tr.sending++;
   try {
-    await tr.t.sendMail({ from, headers: { ...AUTO_MAIL_HEADERS }, ...m });
+    await tr.t.sendMail({ from, ...m, headers: { ...AUTO_MAIL_HEADERS, ...m.headers } });
   } finally {
     tr.sending--;
     closeIfDone(tr);

@@ -21,6 +21,11 @@ export const LOCK_TRANSFER_CLAIM = 741_031_003;
 export const LOCK_MAIL = 741_031_004;
 /** Crear una copia de seguridad o subirla al destino externo: un solo proceso a la vez (backup.ts). */
 export const LOCK_BACKUP = 741_031_005;
+/**
+ * Toda la vida del proceso del servidor, en una conexión propia: si otra copia de Pizarro ya lo tiene, hay dos usando la
+ * misma base de datos (instance-lock.ts).
+ */
+export const LOCK_INSTANCE = 741_031_006;
 
 /**
  * Nombre del bloqueo de las columnas de un proyecto (para `pg_advisory_xact_lock(hashtext(…))`): crear, borrar y deshacer
@@ -45,4 +50,5 @@ export const ADVISORY_LOCKS: Readonly<Record<string, number>> = {
   LOCK_TRANSFER_CLAIM,
   LOCK_MAIL,
   LOCK_BACKUP,
+  LOCK_INSTANCE,
 };

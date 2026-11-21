@@ -4,8 +4,7 @@ import { beforeEach, describe, test } from "node:test";
 import { db, loginAs, makeUser } from "./helpers";
 import { POST } from "../../src/app/api/client-errors/route";
 import { CHALLENGE_COOKIE } from "../../src/lib/two-factor";
-import { DEVICE_COOKIE } from "../../src/lib/devices";
-import { CHALLENGE_COOKIE_NAME, DEVICE_COOKIE_NAME } from "../../src/lib/reset-cookies";
+import { CHALLENGE_COOKIE_NAME } from "../../src/lib/reset-cookies";
 import { flushLogs } from "../../src/lib/log";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 
@@ -117,7 +116,6 @@ describe("/api/client-errors", () => {
   });
 });
 
-test("la salida limpia borra las cookies con los nombres reales de verificación y dispositivo", () => {
+test("la salida limpia borra la cookie de verificación con su nombre real", () => {
   assert.equal(CHALLENGE_COOKIE_NAME, CHALLENGE_COOKIE);
-  assert.equal(DEVICE_COOKIE_NAME, DEVICE_COOKIE);
 });

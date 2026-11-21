@@ -178,7 +178,7 @@ export const cuentas: Record<string, string> = {
   "Cambiar de método":
     "Change method",
   "Activar":
-    "Enable",
+    "Turn on",
   "Generar códigos de recuperación nuevos":
     "Generate new recovery codes",
   "Verificación en dos pasos desactivada.":
@@ -194,7 +194,7 @@ export const cuentas: Record<string, string> = {
   "La verificación ya está activada. Puedes generar códigos de recuperación nuevos en «Mi perfil».":
     "Verification is already enabled. You can generate new recovery codes in “My profile”.",
   "Los administradores deben activar la verificación en dos pasos antes de entrar.":
-    "Administrators must enable two-step verification before signing in.",
+    "Administrators must turn on two-step verification before signing in.",
   "Volver":
     "Back",
   "Te hemos enviado un código a tu email.":
@@ -274,7 +274,7 @@ export const cuentas: Record<string, string> = {
   "La verificación en dos pasos es obligatoria para administradores. Puedes cambiar de método.":
     "Two-step verification is required for administrators. You can change method.",
   "Activa primero la verificación en dos pasos.":
-    "Enable two-step verification first.",
+    "Turn on two-step verification first.",
   "La configuración ha caducado. Empieza de nuevo.":
     "The setup has expired. Start again.",
   "Demasiados intentos. Empieza de nuevo.":
@@ -337,4 +337,6 @@ export const cuentas: Record<string, string> = {
   "{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.": "{admin} has created your account in {org}'s Pizarro. Use this link to choose your password. It expires in {n} hours and works only once.",
   // Invitar por email a un proyecto: el email es de una cuenta desactivada
   "Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.": "There is a deactivated account with that email: activate it in Administration → Users.",
+  // Nombres reservados (imitan a Pizarro o a su administración)
+  "Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.": "That name is reserved because it could be mistaken for a message from Pizarro. Choose another one.",
 };

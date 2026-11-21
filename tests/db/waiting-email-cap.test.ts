@@ -34,6 +34,8 @@ describe("tope de emails por hora", () => {
     await db.task.updateMany({ where: { waitingNotifiedAt: null }, data: { waitingNotifiedAt: new Date() } });
     const busy = await makeUser();
     const other = await makeUser();
+    // El email de los recordatorios lo decide «fechas límite y recordatorios de “Esperando”» (no viene marcada).
+    await db.user.updateMany({ where: { id: { in: [busy.id, other.id] } }, data: { notifyDueEmail: true } });
     const f = await makeProject({ members: [busy, other] });
     await db.column.update({ where: { id: f.columns.doing }, data: { role: "WAITING" } });
     // 42 tareas de la persona ocupada, más antiguas (se procesan antes) que las 2 de la otra.

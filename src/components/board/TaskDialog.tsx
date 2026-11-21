@@ -30,7 +30,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { applyKindTemplate } from "@/lib/kinds-special";
+import { switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
@@ -120,6 +120,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const subtaskDraftPending = useRef<(() => boolean) | null>(null);
   // ¿La descripción abierta tiene cambios de la persona? (la comunica el editor; ver DescriptionEditor).
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
+  // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
+  const descReplace = useRef<((markdown: string) => void) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -989,11 +991,30 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return res.link;
   };
 
-  /** Cambio de tipo; con «Respuesta» también se guardan título y descripción predefinidos. */
+  /**
+   * Cambio de tipo; si el tipo tiene plantilla también se guardan título y descripción (kinds-special.ts, `switchKind…`):
+   * lo que sigue tal como lo puso el tipo anterior se sustituye por lo del nuevo («Presupuesto: Fontanero» pasa a
+   * «Permiso: Fontanero» y el formulario sin rellenar del anterior se cambia por el del nuevo); lo cambiado se conserva.
+   * Con la descripción abierta y cambios sin guardar, se parte de lo escrito y no de lo guardado: el editor sigue abierto
+   * con el formulario nuevo aplicado a lo escrito, sin guardarlo (antes se volvía a montar con lo guardado y lo escrito se
+   * perdía sin preguntar). Se guardan el tipo y el título; la descripción, al pulsar Guardar.
+   */
   const changeKind = (kindId: string) => {
     const kind = board.kindById.get(kindId);
-    const preset = detail && kind ? applyKindTemplate(kind, { title, description: detail.description }) : null;
-    if (!preset) return save({ kindId }, { kindId });
+    const prev = board.kindById.get(task.kindId);
+    // Sin el espacio que deja el prefijo solo para seguir escribiendo en «Nueva tarea»: aquí se guarda al momento.
+    const nextTitle = detail && kind ? switchKindTitle(prev, kind, title).trimEnd() : title;
+    const typed = descLive.current;
+    if (detail && kind && typed !== null && typed !== detail.description && (descDirtyCheck.current?.() ?? true)) {
+      const nextDesc = switchKindDescription(prev, kind, typed);
+      if (nextDesc !== typed) descReplace.current?.(nextDesc);
+      const nextTitleKept = nextTitle.trim() ? nextTitle : title;
+      if (nextTitleKept === title) return save({ kindId }, { kindId });
+      setTitle(nextTitleKept);
+      return save({ kindId, title: nextTitleKept }, { kindId, title: nextTitleKept });
+    }
+    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId });
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
@@ -1108,6 +1129,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             draft={detail && !draftUsed && descVersion === 0 ? draft?.description : undefined}
             liveRef={descLive}
             dirtyRef={descDirtyCheck}
+            replaceRef={descReplace}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -1526,7 +1548,7 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
-function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef }: {
+function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
   remote?: number;
@@ -1544,6 +1566,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   liveRef?: React.MutableRefObject<string | null>;
   /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
+  /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
+  replaceRef?: React.MutableRefObject<((markdown: string) => void) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -1582,6 +1606,16 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   const touch = () => {
     touched.current = true;
   };
+  useEffect(() => {
+    if (!replaceRef) return;
+    replaceRef.current = (markdown) => {
+      touched.current = true;
+      setValue(markdown);
+    };
+    return () => {
+      replaceRef.current = null;
+    };
+  }, [replaceRef]);
   // Descripción nueva guardada desde fuera: se muestra, también en el editor abierto si no hay cambios propios (que no se
   // pisan: al guardarlos, el servidor avisa del conflicto). Sin remontar, para no cerrar el editor ni perder el foco.
   const appliedRemote = useRef(remote);

@@ -19,7 +19,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 | Proyectos | Selector en la barra lateral. Cada proyecto tiene sus columnas, tareas, etiquetas y releases. Por defecto son visibles para todos; un admin puede **restringir la visibilidad** a usuarios concretos. |
 | Tablero | Columnas configurables por proyecto: crear, renombrar, reordenar, asignar un rol y borrar si están vacías. Arrastrar y soltar entre columnas y dentro de cada una. Selección múltiple y movimiento en lote. |
 | Tarjetas | Tipo (por defecto *Funcionalidad* y *Corrección*; los admins crean más tipos generales y cada proyecto puede tener tipos propios, con su color), color, responsable opcional, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
-| Releases | Botón **Generar Release** en la columna con rol *Siguiente salto*. Eliges una de tus **cabeceras** y uno de tus **pies** (cada usuario puede tener varios). Título, cabecera y una sección por tipo; cada punto lleva un código (F1, C2…), su descripción y sus adjuntos renombrados (`F1_nombre.webp`), descargables juntos en un ZIP. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico *Releases*). |
+| Releases | Botón **Generar release** en la columna con rol *Siguiente salto*. Eliges una de tus **cabeceras** y uno de tus **pies** (cada usuario puede tener varios). Título, cabecera y una sección por tipo; cada punto lleva un código (F1, C2…), su descripción y sus adjuntos renombrados (`F1_nombre.webp`), descargables juntos en un ZIP. Editor con vista previa, **Copiar todo**, descarga `.md` / `.txt` y **Marcar como desplegado** (mueve las tarjetas a *En producción* o las archiva, y guarda el texto final en el histórico *Releases*). |
 | Plazos y entregables | Fecha límite en cada tarjeta (avisos de vencida, hoy o próxima) y **entregables**: hitos con fecha objetivo que agrupan tarjetas. Las columnas pueden contar como «terminadas». |
 | Informe PDF | Botón **Informe PDF** en cada proyecto: resumen y avance, estado por columna, entregables, plazos vencidos y próximos, carga por persona, tipos, últimas releases y detalle de cada columna. |
 | Google Docs / Sheets | Escribe `@docs` o `@sheets` en la descripción o en un comentario, o pulsa *Nuevo Doc* / *Nuevo Sheet*. Se crea el archivo en tu Google Drive, se abre en otra pestaña y queda enlazado a la tarjeta. Cada usuario conecta su cuenta una vez (permiso mínimo `drive.file`). |
@@ -32,7 +32,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 
 Cada proyecto puede tener **como máximo una** columna con cada rol:
 
-- **Siguiente salto (`NEXT_RELEASE`)**: muestra el botón *Generar Release* y es el destino de *Mover seleccionadas a Siguiente salto*.
+- **Siguiente salto (`NEXT_RELEASE`)**: muestra el botón *Generar release* y es el destino de *Mover seleccionadas a Siguiente salto*.
 - **En producción (`IN_PRODUCTION`)**: destino de las tarjetas al *Marcar como desplegado*.
 
 Los roles se cambian desde el menú «⋯» de cada columna. Así puedes renombrar las columnas libremente sin romper el flujo.
@@ -114,10 +114,10 @@ steps:
 | `TOKEN_SECRET` | Recomendada | 48+ caracteres aleatorios | Clave HMAC de los enlaces de email, códigos de recuperación, códigos 2FA por email y dispositivos recordados. Sin ella se usa `SESSION_SECRET`. |
 | `ENCRYPTION_KEY` | Recomendada | 48+ caracteres aleatorios | Clave con la que se cifran (AES-256-GCM) los secretos TOTP y los tokens de Google. Sin ella se usa `SESSION_SECRET`. Con esta y `TOKEN_SECRET` definidas, rotar `SESSION_SECRET` solo cierra las sesiones. Guárdala fuera del servidor. |
 | `TOKEN_SECRET_PREVIOUS` / `ENCRYPTION_KEY_PREVIOUS` | Solo al rotar | la clave anterior | Siguen aceptando lo guardado con la clave anterior. Tras cambiar `ENCRYPTION_KEY`, `node dist/rotate-keys.mjs` (`npm run keys:rotate`) lo re-cifra todo y la anterior se puede quitar. Ver el manual, 4.4. |
-| `APP_URL` | Sí | `https://pizarro.up.railway.app` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. |
+| `APP_URL` | Sí (en Railway, solo con dominio propio) | `https://pizarro.example.com` | URL pública. Con `https://` la cookie se marca `Secure` y usa el prefijo `__Host-`. En Railway, sin ella se usa `https://` + `RAILWAY_PUBLIC_DOMAIN` (la dirección de *Generate Domain*). |
 | `UPLOAD_DIR` | Sí | `/app/uploads` | Carpeta de capturas (la ruta del volumen). Una ruta relativa (`./uploads`) se resuelve contra la carpeta del proyecto, también con `npm start`. |
 | `PORT` | No | Lo inyecta Railway | Puerto HTTP (por defecto 3000). |
-| `SEED_ADMIN_EMAIL` | Solo el primer arranque (Railway) | `admin@tu-dominio.com` | Email del administrador inicial. Si no defines `SEED_ADMIN_*`, con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (servidor propio con Docker Compose, ver `docs/INSTALL.md`). |
+| `SEED_ADMIN_EMAIL` | No (alternativa al asistente) | `admin@example.com` | Email del administrador inicial para instalaciones automatizadas. Si no defines `SEED_ADMIN_*` (lo recomendado, también en Railway), con la base de datos vacía el servidor imprime en su log un código de un solo uso y el asistente web `/setup` crea el administrador (ver `docs/INSTALL.md`). |
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
 | `SETUP_TOKEN` | No | 8+ caracteres | Código fijo que el asistente `/setup` acepta además del código del log (que cambia en cada arranque mientras falte la configuración). |
@@ -168,16 +168,20 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 
 ## Guía de despliegue en Railway
 
+> Paso a paso para quien no ha usado Railway, con un botón que genera las claves en el navegador: <https://getpizarro.com/instalar/#railway>.
+
+Railway no despliega cada cambio por separado: los junta en un aviso arriba a la izquierda, **«Apply N changes»**, con un botón **Deploy**. Haz los pasos 1 a 4 y pulsa **Deploy** una sola vez, al final. Si Railway llega a desplegar antes de tener las variables o el volumen, manda un email «Build failed»: es normal.
+
 ### 1. Crear el proyecto y la base de datos
 
-1. Entra en [railway.com](https://railway.com) → **New Project**.
-2. Elige **Deploy PostgreSQL**. En un proyecto ya creado: botón **+ New** (en algunas versiones de la interfaz, **+ Create**) → **Database → PostgreSQL**. Railway crea el servicio `Postgres` con sus variables (`DATABASE_URL`, `PGHOST`, etc.).
+1. Abre [railway.com/new](https://railway.com/new) y elige **Database → PostgreSQL**. Railway crea el servicio `Postgres` con sus variables (`DATABASE_URL`, `PGHOST`, etc.).
+2. Si quieres, ponle nombre al proyecto en *Settings → General*.
 
 ### 2. Vincular este repositorio
 
-1. En el mismo proyecto: **+ New → GitHub Repo** y selecciona este repositorio. Si es la primera vez, autoriza la app de Railway en GitHub.
+1. En el mismo proyecto: **+ Add → GitHub Repository** y selecciona este repositorio. Si es la primera vez, autoriza la app de Railway en GitHub.
 2. Railway detecta el `Dockerfile` y el `railway.json`. Estos fijan el builder Docker, el comando de arranque `sh scripts/start.sh`, el *healthcheck* en `/api/health` y una única réplica.
-3. En el servicio, **Settings → Source → Branch** (en inglés *Branch connected to production*): elige **`stable`**. Esa rama solo avanza cuando se publica una versión (la mueve el workflow *Release* al commit de esa versión), así que Railway solo redespliega con versiones con nombre (`v1.49.0`, `v1.50.0`…), nunca con cada commit de `main`. `main` es la rama de desarrollo: despliégala solo si quieres probar cambios aún sin publicar (y entonces la app no ofrece *Informar de un error*, porque no es una versión oficial).
+3. En el servicio, **Settings → Source → Branch connected to production**: elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar). Esa rama solo avanza cuando se publica una versión (la mueve el workflow *Release* al commit de esa versión), así que Railway solo redespliega con versiones con nombre (`v1.49.0`, `v1.50.0`…), nunca con cada commit de `main`. `main` es la rama de desarrollo: despliégala solo si quieres probar cambios aún sin publicar (y entonces la app no ofrece *Informar de un error*, porque no es una versión oficial).
 
 #### Cambiar una instalación existente de `main` a `stable`
 
@@ -186,70 +190,51 @@ Las integraciones son **opcionales**: si faltan sus variables, la app funciona i
 3. En el servicio de Pizarro: **Settings → Source → Branch** → `stable`. Railway despliega el commit de la última versión publicada; a partir de ahí, solo cuando se publique otra.
 4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces. Si `stable` existe pero se ha quedado en una versión anterior a la última publicada (el job «Rama stable» de *Release* falló), un mantenedor la pone al día con **Actions → Mover stable → Run workflow** (rama `main`), sin publicar otra versión (ver `docs/HANDOFF.md`, «Cerrar una versión»).
 
-### 3. Variables de entorno
+### 3. Dirección y volumen persistente
 
-> Crea las variables **en el servicio de la app** (`pizarro` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía. Tras crear o cambiar variables, pulsa **Deploy** para aplicar los cambios pendientes.
-
-En el servicio de la app → **Variables** → **Raw Editor**, pega lo siguiente (ajusta los valores):
-
-```env
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-SESSION_SECRET=<resultado de: openssl rand -base64 48>
-APP_URL=https://<tu-subdominio>.up.railway.app
-UPLOAD_DIR=/app/uploads
-SEED_ADMIN_EMAIL=<email del administrador>
-SEED_ADMIN_PASSWORD=<contraseña temporal de 10+ caracteres>
-SEED_ADMIN_NAME=Administrador
-```
-
-- `${{Postgres.DATABASE_URL}}` es una *reference variable*: Railway la sustituye por la URL interna del servicio Postgres (`postgres.railway.internal`), sin salir a internet.
-- `PORT` no hace falta: Railway lo inyecta y la app lo respeta.
-- Para obtener la URL pública: **Settings → Networking → Generate Domain**. Úsala en `APP_URL`.
-
-### 4. Volumen persistente para las capturas
-
-Sin volumen, las imágenes se pierden en cada despliegue.
-
-1. En el lienzo del proyecto: **+ New → Volume** (o clic derecho sobre el servicio → **Attach Volume**).
-2. Selecciona el servicio de la app.
-3. **Mount path**: `/app/uploads`. Debe coincidir con `UPLOAD_DIR`.
-4. Guarda. Railway redespliega el servicio con el volumen montado.
+1. **Settings → Networking → Generate Domain**. Railway reserva una dirección `*.up.railway.app`, que no responde hasta el primer despliegue. Pizarro la usa sola (variable `RAILWAY_PUBLIC_DOMAIN`): no hace falta `APP_URL` salvo con un dominio propio.
+2. Clic derecho sobre el servicio → **Attach volume**, con **Mount path** `/app/uploads` (debe coincidir con `UPLOAD_DIR`). Sin volumen, los adjuntos y las copias locales se pierden en cada despliegue.
 
 > El `Dockerfile` **no** usa la instrucción `VOLUME`: Railway la rechaza al construir la imagen ("The VOLUME keyword is banned"). El punto de montaje se define con el Volume del panel. Para Docker local usa `-v pizarro_uploads:/app/uploads`.
 >
 > Railway monta los volúmenes como `root`. El script de arranque ajusta el propietario de `/app/uploads` y después ejecuta la app como el usuario sin privilegios `node`. No hace falta `RAILWAY_RUN_UID`.
 
-### 5. Migraciones y seed inicial
+### 4. Variables de entorno
 
-**No tienes que ejecutar nada a mano.** En cada arranque, `scripts/start.sh`:
+> Crea las variables **en el servicio de la app** (`pizarro` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía.
 
-1. aplica las migraciones pendientes (`prisma migrate deploy`);
-2. sincroniza `changelog.json` con la tabla `AppVersionLog`;
-3. ejecuta el **seed idempotente**: si no hay usuarios, crea el administrador con `SEED_ADMIN_*`, y si no hay proyectos, crea un *Proyecto de ejemplo*;
-4. arranca el servidor.
+En el servicio de la app → **Variables** → **Raw Editor**, pega lo siguiente con tus claves (la web las genera en el navegador con el botón «Generar mis variables»; o con `openssl`, como se indica):
 
-Cómo comprobarlo: en **Deployments → View logs** deberían aparecer `All migrations have been successfully applied`, `[boot] Administrador inicial creado (…)` y `[start] Arrancando servidor…`.
-
-Después del primer arranque:
-
-1. Entra con el email y la contraseña del seed y **cambia la contraseña** en *Mi perfil*.
-2. **Borra `SEED_ADMIN_PASSWORD`** (y, si quieres, el resto de `SEED_ADMIN_*`) de las variables de Railway. No se vuelven a usar mientras exista algún usuario.
-3. Da de alta al resto del equipo en **Usuarios** (máximo 5 activos).
-
-Si alguna vez necesitas lanzarlos manualmente desde tu máquina con la [CLI de Railway](https://docs.railway.com/guides/cli):
-
-```bash
-railway link                                   # selecciona proyecto y servicio
-railway run npx prisma migrate deploy          # usa las variables del servicio
-railway run npm run db:seed
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+SESSION_SECRET=<resultado de: openssl rand -base64 48>
+TOKEN_SECRET=<otra: openssl rand -base64 48>
+ENCRYPTION_KEY=<otra: openssl rand -base64 48>
+BACKUP_KEY=<resultado de: openssl rand -base64 32>
+UPLOAD_DIR=/app/uploads
 ```
 
-Nota: `railway run` ejecuta el comando en tu máquina con las variables del servicio. Para llegar a la base de datos desde fuera usa la URL pública (`DATABASE_PUBLIC_URL` del servicio Postgres).
+- `${{Postgres.DATABASE_URL}}` es una *reference variable*: Railway la sustituye por la URL interna del servicio Postgres (`postgres.railway.internal`), sin salir a internet.
+- `PORT` no hace falta: Railway lo inyecta y la app lo respeta.
+- `APP_URL` solo con dominio propio (ver «Dominio propio en Railway» en `docs/INSTALL.md`).
+- No definas `SEED_ADMIN_*`: el primer administrador se crea con el asistente `/setup`.
+- Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` también fuera de Railway (gestor de contraseñas).
+
+### 5. Desplegar y primer arranque
+
+1. Pulsa **Deploy** en el aviso «Apply N changes». Antes, revisa lo que lista: si Railway propone por su cuenta cambios de **réplicas**, no los apliques (Pizarro funciona con una sola instancia); la **región** da igual mientras `Postgres` esté en la misma.
+2. **No tienes que ejecutar nada a mano.** En cada arranque, `scripts/start.sh` espera a la base de datos, aplica las migraciones pendientes (`prisma migrate deploy`), sincroniza `changelog.json` con la tabla `AppVersionLog`, ejecuta el seed idempotente (si no hay proyectos, crea un *Proyecto de ejemplo*) y arranca el servidor.
+3. La primera vez tarda 2–3 minutos más, aunque Railway ya marque *Active*. En **Deployments → View logs**, baja al final y espera el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR`; la línea siguiente da la dirección de `/setup` y el código de un solo uso (`introduce el código:`). Las líneas en rojo del principio del log son normales.
+4. Abre `/setup`, escribe el código, crea la organización y el primer administrador y activa la verificación en dos pasos. Después invita al equipo desde *Administración → Usuarios*.
+
+**Alternativa sin asistente:** con `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (y opcionalmente `SEED_ADMIN_NAME`) el seed crea ese administrador al arrancar si no hay usuarios. Entra con esos datos, cambia la contraseña en *Mi perfil* y borra `SEED_ADMIN_PASSWORD` de las variables.
+
+**Consola en el contenedor.** El panel web de Railway no tiene terminal. Para órdenes como `node dist/reset-link.mjs` (enlace de recuperación cuando nadie puede entrar) instala la [CLI de Railway](https://docs.railway.com/guides/cli) (`brew install railway` o `npm install -g @railway/cli`), y ejecuta `railway login`, `railway link` y `railway ssh`. `railway run` no sirve para eso: ejecuta el comando en tu máquina con las variables del servicio (y para llegar a la base de datos desde fuera hace falta la URL pública, `DATABASE_PUBLIC_URL` del servicio Postgres).
 
 ### 6. Copias de seguridad (recomendado)
 
 - **Automáticas (base de datos y ficheros):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak` (NDJSON → gzip → AES-256-GCM, con su manifiesto dentro y en un `.json` al lado) y se copian todos los ficheros de `UPLOAD_DIR` (adjuntos, miniaturas, copias de releases, documentos) a un almacén incremental `backups/files/`: cada fichero se cifra por separado y se guarda una sola vez. Un manifiesto cifrado por copia (`.pzman`) lista el volcado y los ficheros. Se conservan las últimas 14 diarias, 6 mensuales y siempre las 3 más recientes, y se borran los ficheros del almacén que ya no nombra ninguna. Cada mes, una **prueba de restauración** restaura la última copia en una base temporal (si el usuario de la base puede crearla; si no, la descifra y la comprueba) y comprueba que están todos sus ficheros. Todo se ve en *Administración → Copias de seguridad* y en los logs (categoría *system*).
-- **Destino externo:** con `BACKUP_S3_*` (R2, B2, MinIO…) y/o `BACKUP_EXTERNAL_DIR`, tras cada copia se sube lo que falte (reanudable) y se aplica la misma retención; firma AWS SigV4 propia, sin SDK. Si la copia nueva tiene menos de la mitad de personas, proyectos y tareas o de ficheros que la última del destino (con al menos 50 de esas filas o 20 ficheros allí; con copias antiguas, sin cuentas por tabla, el total de filas con al menos 500; p. ej. la primera copia tras perder la base de datos o el volumen), no se sube ni se poda: queda como error. Si la última subida correcta tiene más de 48 h, se avisa como con la copia local. Botón *Copiar ahora a destino externo* (sube aunque la copia sea mucho menor).
+- **Destino externo:** en Railway, pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro y vuelve a desplegar. Con Cloudflare R2, conviene una *Bucket Lock Rule* (retención) de 31 días sobre el prefijo de las copias (`<BACKUP_S3_PREFIX>pizarro-backup-`) y, si el espacio lo permite, otra indefinida o de 180 días sobre `<BACKUP_S3_PREFIX>files/`, para que nadie pueda borrarlas antes (Pizarro salta lo retenido y lo cuenta en *Copias de seguridad*). Con `BACKUP_S3_*` (R2, B2, MinIO…) y/o `BACKUP_EXTERNAL_DIR`, tras cada copia se sube lo que falte (reanudable) y se aplica la misma retención; firma AWS SigV4 propia, sin SDK. Si la copia nueva tiene menos de la mitad de personas, proyectos y tareas o de ficheros que la última del destino (con al menos 50 de esas filas o 20 ficheros allí; con copias antiguas, sin cuentas por tabla, el total de filas con al menos 500; p. ej. la primera copia tras perder la base de datos o el volumen), no se sube ni se poda: queda como error. Si la última subida correcta tiene más de 48 h, se avisa como con la copia local. Botón *Copiar ahora a destino externo* (sube aunque la copia sea mucho menor).
 - **Restaurar** (sin `git`): `node dist/restore.mjs <origen> [--files] [--force]` en el contenedor, o `npm run backup:restore -- <origen> …` en desarrollo. Origen: `latest`, `s3:latest`, `external:latest`, el nombre de una copia o la ruta de un `.pzman`/`.pzbak`. Sobre una base **vacía**: aplica las migraciones hasta la de la copia, carga los datos en una transacción, aplica el resto de migraciones y restaura los ficheros comprobando su sha256. Pasos en `docs/INSTALL.md` (Docker Compose) y en la sección 4.5 del manual (Railway).
 - **Limpieza de huérfanos:** cada hora se borran de `UPLOAD_DIR` los ficheros (adjuntos, miniaturas, copias de releases) que ninguna fila de la base de datos referencia y tienen más de 24 h. No toca `backups/`, enlaces simbólicos ni ficheros con nombres desconocidos, y se cancela sola si más de la mitad de los ficheros parecen huérfanos.
 

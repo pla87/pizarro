@@ -10,10 +10,10 @@ import { db, makeProject, makeTask, makeUser } from "./helpers";
 import { INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
 import { appTimeZone } from "../../src/lib/format";
 import { sendDueReports } from "../../src/lib/periodic-mail";
-import { reportCounts } from "../../src/lib/report-build";
+import { generateProjectReportPdf, reportCounts } from "../../src/lib/report-build";
 import { PDF_OUT_OF_MEMORY_MESSAGE } from "../../src/lib/report-render";
 import { localParts } from "../../src/lib/schedule";
-import { REPORT_MAX_TASKS } from "../../src/lib/report";
+import { REPORT_MAX_TASKS, WEEKLY_REPORT_LIST_LIMIT } from "../../src/lib/report";
 
 let outbox = "";
 const prevOutbox = process.env.MAIL_OUTBOX_DIR;
@@ -77,6 +77,9 @@ describe("email del informe semanal", () => {
       assert.ok(body.includes("reply in Pizarro."), body);
     }
     assert.deepEqual(mail!.attachments?.map((a) => a.filename), ["informe.pdf"]);
+    // Con su baja al pie (apaga este informe; ver tests/db/unsubscribe.test.ts). Sin https no van las cabeceras.
+    assert.match(mail!.text, /\nStop receiving these emails: http:\/\/localhost:3000\/unsubscribe\/r[^\s]+\n/);
+    assert.match(mail!.html, />Stop receiving these emails<\/a>/);
     assert.deepEqual(mail!.headers, { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" });
     await db.appState.deleteMany({ where: { key: INSTANCE_ORG_KEY } });
     invalidateInstance();
@@ -134,6 +137,39 @@ describe("email del informe semanal", () => {
     assert.equal(await sendDueReports(now, { generate: async () => { throw new Error("se cayó"); } }), 0);
     assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt, null);
     assert.deepEqual(await mails(), []);
+  });
+});
+
+describe("informe semanal de un proyecto enorme", () => {
+  // Antes el PDF listaba todas las tareas leídas (hasta 2.000): decenas de páginas adjuntas cada semana. Ahora, como mucho
+  // WEEKLY_REPORT_LIST_LIMIT por listado, con «… y N más» y un enlace al tablero; la descarga desde la app sigue entera.
+  test("el email sale con un PDF corto, mucho más pequeño que el informe completo", async () => {
+    const creator = await makeUser({ role: "ADMIN", name: "Carla" });
+    const f = await makeProject({ members: [creator] });
+    const n = 900;
+    const day = (offset: number) => new Date(Date.now() + offset * 86_400_000);
+    await db.task.createMany({
+      data: Array.from({ length: n }, (_, i) => ({
+        projectId: f.project.id, columnId: i % 3 === 0 ? f.columns.doing : f.columns.todo, kindId: f.kindId, position: i + 1,
+        title: `Tarea ${i} con un título de longitud normal para que ocupe una línea de la tabla`,
+        dueDate: i % 5 === 0 ? day(-10) : i % 5 === 1 ? day(5) : null,
+      })),
+    });
+    await schedule(f, creator, `jefa-${Date.now()}@example.com`);
+    const calls: { listLimit?: number; boardUrl?: string }[] = [];
+    const t0 = performance.now();
+    assert.equal(await sendDueReports(new Date(), { generate: (id, opts) => (calls.push(opts), generateProjectReportPdf(id, opts)) }), 1);
+    const weeklyMs = performance.now() - t0;
+    assert.deepEqual(calls.map((c) => [c.listLimit, c.boardUrl]), [[WEEKLY_REPORT_LIST_LIMIT, `${process.env.APP_URL}/p/${f.project.id}`]]);
+    const [mail] = await mails();
+    const pdfBytes = (mail!.attachments as unknown as { bytes: number }[])[0]!.bytes;
+    // Tamaño del email: el texto, el HTML y el PDF en base64 (4/3 de su tamaño).
+    const emailBytes = Buffer.byteLength(mail!.text) + Buffer.byteLength(mail!.html) + Math.ceil(pdfBytes / 3) * 4;
+    const full = await generateProjectReportPdf(f.project.id, { generatedBy: "Carla", locale: "es" });
+    const fullBytes = full!.pdf.length;
+    console.log(`[informe semanal] ${n} tareas: email ${Math.round(emailBytes / 1024)} KB (PDF ${Math.round(pdfBytes / 1024)} KB, ${Math.round(weeklyMs)} ms); informe completo ${Math.round(fullBytes / 1024)} KB`);
+    assert.ok(emailBytes < 150 * 1024, `el email del informe semanal pesa ${emailBytes} bytes`);
+    assert.ok(pdfBytes * 4 < fullBytes, `semanal ${pdfBytes} bytes, completo ${fullBytes} bytes`);
   });
 });
 

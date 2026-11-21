@@ -1,4 +1,5 @@
 // Invitar a alguien sin cuenta desde los miembros de un proyecto (inviteToProject, actions/users.ts). Parte pura.
+import { isReservedName } from "./reserved-names";
 
 /**
  * Nombre provisional de una persona invitada solo con su email: la parte de antes de la arroba, con puntos, guiones y
@@ -8,7 +9,8 @@ export function nameFromEmail(email: string): string {
   const local = email.split("@")[0] ?? "";
   const words = local.replace(/\+.*$/, "").split(/[._\-\s]+/).filter(Boolean);
   const name = words.map((w) => w.charAt(0).toLocaleUpperCase() + w.slice(1)).join(" ").slice(0, 80).trim();
-  return name || email.slice(0, 80);
+  // «soporte@…» o «pizarro@…» darían un nombre reservado (reserved-names.ts): entonces, el email entero.
+  return name && !isReservedName(name) ? name : email.slice(0, 80);
 }
 
 /** Proyecto guardado en una invitación (AuthToken.data), o null si no es una invitación a un proyecto. */

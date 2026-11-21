@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, TransferStatus } from "@/generated/prisma/client";
 import { makeT, toLocale, type T } from "@/i18n/core";
 import { LOCK_TRANSFER_CLAIM } from "./advisory-locks";
 import { db } from "./db";
@@ -26,7 +26,6 @@ import { logSize } from "./format-size";
 // progreso en la fila para que la interfaz lo consulte. Un reinicio deja las filas RUNNING sin latido: se retoman o se marcan como fallidas.
 
 export type TransferKind = "EXPORT" | "IMPORT";
-export type TransferStatus = "QUEUED" | "RUNNING" | "DONE" | "FAILED" | "EXPIRED";
 
 export interface TransferProgress {
   phase?: "datos" | "archivos" | "comprimir" | "validar" | "base de datos";

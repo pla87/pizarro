@@ -159,6 +159,19 @@ export async function loadBoardTasksByIds(ids: string[]): Promise<BoardTask[]> {
 }
 
 /**
+ * Las tareas ACTIVAS de `projectId` con esos ids (refresco en vivo de tarjetas sueltas): las archivadas, las borradas y
+ * las de otros proyectos no salen, y el tablero entiende que ya no están en él.
+ */
+export async function loadProjectBoardTasks(projectId: string, ids: string[]): Promise<BoardTask[]> {
+  if (!ids.length) return [];
+  const [rows, extras] = await Promise.all([
+    db.task.findMany({ where: { id: { in: ids }, projectId, archivedAt: null }, orderBy: TASK_ORDER, select: boardTaskSelect }),
+    boardExtras(Prisma.sql`t."id" = ANY(${ids}::text[]) AND t."projectId" = ${projectId} AND t."archivedAt" IS NULL`),
+  ]);
+  return rows.map((r) => toBoardTask(r, extras(r.id)));
+}
+
+/**
  * Contadores de adjuntos de una tarea según las filas de TaskAttachment (nunca los ficheros del disco, que se
  * conservan un tiempo para poder deshacer un borrado). El cliente los usa como valor absoluto, no como suma.
  */

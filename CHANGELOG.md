@@ -2,6 +2,46 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.64.0 — 2026-11-21 23:08
+
+Tablero en vivo que trae solo las tarjetas cambiadas, guía de Railway sin terminal ni APP_URL, baja de emails en un clic, búsqueda de releases resaltada, cambiar de tipo sin perder lo escrito, fechas en inglés de EE. UU., copias que aguantan el bloqueo de R2, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Baja en un clic: los emails de avisos, el resumen diario y el informe semanal llevan «Dejar de recibir estos emails» (y el botón «Cancelar suscripción» de Gmail y Outlook con https); la baja apaga solo ese tipo de email.
+- Releases: lo buscado sale resaltado en el título, los datos, los adjuntos y el texto; con miles de releases la búsqueda sigue siendo inmediata.
+- Guía de Railway sin terminal: botón «Generar mis variables» que crea las claves en el navegador, y ya no hace falta APP_URL (Pizarro usa la dirección de Railway).
+- Aviso en Administración si otra copia de Pizarro usa la misma base de datos; «Invitación pendiente» y «Reenviar invitación» en los miembros del proyecto.
+- Administración: aviso si otro administrador cambió una plantilla, un texto legal o un ajuste mientras lo editabas; nombre propio bajo el icono de la app; zona horaria con buscador.
+
+### Mejoras
+
+- Tablero en vivo: cuando otra persona cambia tarjetas, cada pestaña trae solo esas tarjetas en vez de recargar el tablero entero; con muchas tarjetas el servidor pinta primero 50 por columna (1.000 tarjetas: de 3,3 MB a menos de 1 MB).
+- Cambiar de tipo no pierde lo escrito: «Leche y pan» pasa a «Comprar Leche y pan», y la descripción y las subtareas del tipo anterior se sustituyen sin mezclarse (también en el detalle).
+- Crear un proyecto desde una plantilla abre su tablero, con la descripción de la plantilla; el editor de plantillas dice «Tipos generales que se usan», como el proyecto.
+- Cada cuenta conserva su «Recordar este dispositivo» aunque varias personas usen el mismo navegador; la invitación llega en el idioma de quien invita.
+- Recordatorios de «Esperando» por email con la casilla de fechas límite; las citas de los avisos dicen «Ana ha escrito:»; el informe semanal por email muestra 15 tareas por listado en proyectos grandes.
+- En inglés, fechas y horas al estilo de EE. UU. («Nov 21, 2026», «8:05 AM») y el calendario empieza en domingo.
+- CSV de logs listo para Excel en español; portada clara para un administrador sin proyectos elegidos; el máximo de usuarios explica de dónde sale.
+- Plan de trabajo para IA sin enlaces a Pizarro (la IA no puede abrirlos).
+- Menos servidor: contador de avisos con índice (de ~100 ms a ~4 ms), abrir un aviso no recarga el tablero dos veces, guardar ajustes no pinta dos veces y «Nuevo proyecto» recibe menos datos.
+
+### Correcciones
+
+- Una migración cortada por un reinicio se deshace y se reintenta sola si va entera en una transacción.
+- Copias: «Omitida» en lugar de «Correcta» cuando no hay nada que hacer, y funcionan con un bloqueo de retención en el bucket de R2.
+- Cloudflare ya no reescribe los emails de las páginas (no-transform).
+- Railway no da el servicio por listo hasta que Pizarro lo está; las líneas de Prisma ya no salen en rojo.
+- Compartir con Pizarro y cambiar de proyecto en «Nueva tarea» aplican la plantilla del tipo; la descripción a medio escribir no se pierde al cambiar de tipo.
+- Horas de los ficheros de los ZIP en la zona de la instalación, «Semana del…» correcta en el PDF semanal, enlaces externos de la Documentación que se abren, errores de red traducidos y nombres reservados que no se saltan con letras de otros alfabetos.
+
+### Cambios técnicos / DB
+
+- Ruta /api/projects/<id>/board-tasks y avisos del canal en vivo con los ids de las tarjetas; datos del tablero sin campos por defecto.
+- Índice trigram (pg_trgm) para buscar releases, que no impide arrancar si el servidor no permite la extensión.
+- Healthcheck de Railway de hasta 10 minutos; APP_URL desde RAILWAY_PUBLIC_DOMAIN con una sola función.
+- Dependencias al día (Next 16.4.6, TipTap 3.34, nodemailer 10.5, playwright-core 1.65); 27 export sin uso quitados; pruebas por tema.
+
 ## v1.63.0 — 2026-11-21 17:57
 
 Administradores asignables e invitaciones por email desde el proyecto, móvil más cómodo, informes y emails más claros, menos servidor, inglés americano, y revisión de seguridad, eficiencia y caza de bugs

@@ -3,6 +3,7 @@
 import { Children, cloneElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { Document, Font, Link, Page, pdf, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
+import { weekRangeEnds } from "./calendar";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import { programBlocks, type ProgramPdfDocument, type ProgramPdfInput } from "./course-program";
@@ -380,8 +381,20 @@ function fieldsBlocks(r: Report, t: T, locale: string, big: boolean): Block[] {
   return tableBlocks(f.rows, cols, (x) => rowUnits(x.title, titleWidth), big, (table, first) => <>{first ? lead : null}{table}</>, 2 + totals.length);
 }
 
+/** «… y 120 más · Abrir el tablero» debajo de un listado recortado (informe semanal por email, Report.listLimit). */
+function MoreLine({ n, url, t, locale }: { n: number; url: string | null; t: T; locale: string }) {
+  return (
+    <Text style={[s.small, { marginTop: 2, marginBottom: 4 }]}>
+      {t("… y {n} más", { n: n.toLocaleString(locale) })}
+      {url ? <> · <Link src={url} style={{ color: C.brand }}>{t("Abrir el tablero")}</Link></> : null}
+    </Text>
+  );
+}
+
 function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   const x: Ctx = { t, locale };
+  const more = (n: number): Block[] => (n > 0 ? [{ units: 1, node: <MoreLine n={n} url={r.boardUrl} t={t} locale={locale} /> }] : []);
+  const trimmed = r.listLimit !== null && (r.more.planned > 0 || r.more.fields > 0 || r.columns.some((c) => !c.isDone && c.more > 0));
   const generated = formatDay(r.today, undefined, locale);
   const k = r.kpis;
   const num = (n: number) => n.toLocaleString(locale);
@@ -400,7 +413,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
 
   const build = (big: boolean): Block[] => [
     {
-      units: 22 + (r.omittedTasks ? 2 : 0) + (r.project.description ? textUnits(r.project.description, 110) : 0),
+      units: 22 + (r.omittedTasks || trimmed ? 2 : 0) + (r.project.description ? textUnits(r.project.description, 110) : 0),
       node: (
         <>
           <View style={s.header}>
@@ -426,7 +439,12 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
             {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
             {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
             {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
-            {r.omittedTasks ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.", { n: num(k.total + k.fixed - r.omittedTasks), total: num(k.total + k.fixed) })}</Text> : null}
+            {trimmed ? (
+              <Text style={[s.small, { marginTop: 2, color: C.amber }]}>
+                {t("Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.", { n: r.listLimit! })}
+                {r.boardUrl ? <> <Link src={r.boardUrl} style={{ color: C.brand }}>{t("Abrir el tablero")}</Link></> : null}
+              </Text>
+            ) : r.omittedTasks ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.", { n: num(k.total + k.fixed - r.omittedTasks), total: num(k.total + k.fixed) })}</Text> : null}
           </View>
         </>
       ),
@@ -451,10 +469,11 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
           <View style={{ marginBottom: last ? 6 : 0 }}>
             {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {c.count}</Text> : null}
             {table}
+            {last && c.more ? <MoreLine n={c.more} url={r.boardUrl} t={t} locale={locale} /> : null}
           </View>
         </>
       ) : table),
-      ci === 0 ? 5 : 2,
+      (ci === 0 ? 5 : 2) + (c.more ? 1 : 0),
     )),
 
     // Plazos: solo si hay vencidos o próximos
@@ -464,6 +483,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
       { label: t("Responsable"), width: "17%", render: (t) => t.assignee ?? "—" },
       { label: t("Plazo"), width: "29%", render: dueCell(r.today, x) },
     ], (task) => rowUnits(task.title, 36), big),
+    ...more(r.more.planned),
 
     // Entregables
     ...section(t("Entregables"), r.deliverables, [
@@ -488,7 +508,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
     ], (task) => rowUnits(task.title, 58), big),
 
     // Campos opcionales del proyecto
-    ...(r.fields ? fieldsBlocks(r, t, locale, big) : []),
+    ...(r.fields ? [...fieldsBlocks(r, t, locale, big), ...more(r.more.fields)] : []),
 
     // Releases
     ...section(t("Últimas releases"), r.releases, [
@@ -502,10 +522,13 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   return { title: `${t("Informe")} · ${r.project.name}`, build, footer: <Footer left={<>{r.project.name} · {t("Informe del {date}", { date: generated })}</>} /> };
 }
 
-export interface WeekPlanPdfInput {
+interface WeekPlanPdfInput {
   project: string;
   column: string;
   today: string;
+  /** Lunes y domingo (YYYY-MM-DD) de la semana que se planifica, los de las secciones por día. */
+  weekStart: string;
+  weekEnd: string;
   generatedBy: string;
   groupBy: WeekPlanGroupBy;
   sections: WeekPlanSection[];
@@ -531,7 +554,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
             <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
             <Text style={s.title}>{r.column}</Text>
             <Text style={s.meta}>
-              {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
+              {r.project} · {t("Semana del {from} al {to}", weekRangeEnds(r.weekStart, r.weekEnd, locale))} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
             </Text>
           </View>
           {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
@@ -548,7 +571,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
   return { title: `${t("Planificación semanal")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
-export interface ChecklistPdfInput {
+interface ChecklistPdfInput {
   project: string;
   column: string;
   today: string;
@@ -611,7 +634,7 @@ interface DeliveryTask {
   doneSubtasks: string[];
 }
 
-export interface DeliveryPdfInput {
+interface DeliveryPdfInput {
   project: string;
   column: string;
   today: string;

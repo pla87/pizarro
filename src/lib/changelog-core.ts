@@ -8,7 +8,7 @@ export const CHANGE_CATEGORIES = [
   { key: "tecnicos", label: "Cambios técnicos / DB" },
 ] as const;
 
-export type ChangeCategory = (typeof CHANGE_CATEGORIES)[number]["key"];
+type ChangeCategory = (typeof CHANGE_CATEGORIES)[number]["key"];
 
 /** Cambios de una versión por categoría. */
 export type Changes = Record<ChangeCategory, string[]>;

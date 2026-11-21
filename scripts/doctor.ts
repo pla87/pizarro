@@ -3,9 +3,12 @@
 //
 //   docker compose exec app node dist/doctor.mjs > diagnostico.json
 //   (en desarrollo: npm run doctor)
+import { applyAppUrlFallback } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { collectDiagnostics } from "@/lib/doctor";
 
+// Como la app: sin APP_URL, la dirección pública de Railway (así el informe dice lo mismo que el de Administración).
+applyAppUrlFallback(process.env, null);
 collectDiagnostics({ source: "cli" })
   .then((report) => {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

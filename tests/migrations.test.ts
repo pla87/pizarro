@@ -7,32 +7,20 @@ import { test } from "node:test";
 // su checksum y `prisma migrate deploy` falla donde ya se aplicaron); las nuevas van entre BEGIN; y COMMIT;: si una
 // sentencia falla a medias, PostgreSQL deshace todas y la base no queda con media migración aplicada (docs/HANDOFF.md §3).
 const DIR = "prisma/migrations";
-/** Última migración publicada sin BEGIN;/COMMIT; (v1.62.0). La norma vale para todas las posteriores. */
-const LAST_WITHOUT_TRANSACTION = "20261126100000";
+// La norma y su comprobación viven en el arranque (scripts/migrate.mjs): con ellas decide si una migración fallida se puede
+// volver a aplicar sola (P3009). Especificador no literal: el script es .mjs y tsc no tiene sus tipos.
+const SCRIPT = new URL("../scripts/migrate.mjs", import.meta.url);
+const { LAST_WITHOUT_TRANSACTION, transactionProblem } = (await import(SCRIPT.href)) as {
+  /** Última migración publicada sin BEGIN;/COMMIT; (v1.62.0). La norma vale para todas las posteriores. */
+  LAST_WITHOUT_TRANSACTION: string;
+  /** Motivo por el que la migración no va en una transacción explícita, o null si va bien. */
+  transactionProblem: (sql: string) => string | null;
+};
 
 const migrations = readdirSync(DIR, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name)
   .sort();
-
-/** Las sentencias de verdad: sin líneas vacías ni comentarios de línea (`-- …`) al principio y al final. */
-function body(sql: string): string[] {
-  const lines = sql.split(/\r?\n/).map((l) => l.trim());
-  const meaningful = (l: string) => l !== "" && !l.startsWith("--");
-  const first = lines.findIndex(meaningful);
-  const last = lines.findLastIndex(meaningful);
-  return first < 0 ? [] : lines.slice(first, last + 1);
-}
-
-/** Motivo por el que la migración no va en una transacción explícita, o null si va bien. */
-function transactionProblem(sql: string): string | null {
-  const b = body(sql);
-  if (b.length === 0) return "está vacía";
-  if (!/^BEGIN;$/i.test(b[0]!)) return `no empieza por «BEGIN;» (empieza por «${b[0]}»)`;
-  if (!/^COMMIT;$/i.test(b.at(-1)!)) return `no termina en «COMMIT;» (termina en «${b.at(-1)}»)`;
-  if (b.length < 3) return "no tiene nada entre BEGIN; y COMMIT;";
-  return null;
-}
 
 test("migraciones: carpetas <timestamp de 14 cifras>_<nombre>, cada una con su migration.sql, sin timestamps repetidos", () => {
   assert.ok(migrations.length > 0);
@@ -64,4 +52,19 @@ test("migraciones: la comprobación de BEGIN;/COMMIT; acepta comentarios alreded
   assert.match(transactionProblem("BEGIN;\nSELECT 1;\nCOMMIT;\nSELECT 2;\n")!, /no termina en «COMMIT;»/);
   assert.match(transactionProblem("BEGIN;\nCOMMIT;\n")!, /nada entre/);
   assert.match(transactionProblem("-- solo un comentario\n")!, /vacía/);
+});
+
+test("migraciones: nada en medio que cierre la transacción o no pueda ir en ella (el reintento de P3009 repetiría lo confirmado)", () => {
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nCOMMIT;\nCREATE INDEX CONCURRENTLY i ON t (x);\nBEGIN;\nSELECT 2;\nCOMMIT;\n")!, /entre BEGIN; y COMMIT;/);
+  assert.match(transactionProblem("BEGIN;\nCREATE INDEX CONCURRENTLY i ON t (x);\nCOMMIT;\n")!, /CONCURRENTLY/);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nROLLBACK;\nSELECT 2;\nCOMMIT;\n")!, /ROLLBACK/);
+  // Los BEGIN/END de un bloque DO o de una función entre $$ son suyos, no de la transacción.
+  assert.equal(transactionProblem("BEGIN;\nDO $$\nBEGIN\n  PERFORM 1;\nEND\n$$;\nCREATE FUNCTION f() RETURNS int LANGUAGE plpgsql AS $fn$ BEGIN RETURN 1; END; $fn$;\nCOMMIT;\n"), null);
+});
+
+test("migraciones: sentencias enteras, sin falsos positivos por CASE … END ni textos entre comillas", () => {
+  assert.equal(transactionProblem("BEGIN;\nUPDATE \"Task\" SET x = CASE WHEN y THEN 1 ELSE 2 END;\nUPDATE t SET note = 'COMMIT;';\nCOMMIT;\n"), null);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nCOMMIT WORK;\nSELECT 2;\nCOMMIT;\n")!, /COMMIT WORK/);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nEND TRANSACTION;\nBEGIN TRANSACTION;\nSELECT 2;\nCOMMIT;\n")!, /END TRANSACTION/);
+  assert.match(transactionProblem("BEGIN;\n/* nota */\nSAVEPOINT a;\nCOMMIT;\n")!, /SAVEPOINT/);
 });

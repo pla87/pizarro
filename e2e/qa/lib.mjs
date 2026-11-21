@@ -265,3 +265,42 @@ export function assertNoErrors(label, sessions) {
 export const colLoc = (page, name) => page.locator(`[aria-label="${name}"]`).first();
 // Coincidencia exacta del título (hasText con cadena sería subcadena sin mayúsculas: «D» casaría con «Funcionalidad»).
 export const cardLoc = (page, title) => page.locator(`[data-task-card]`).filter({ has: page.locator("p", { hasText: new RegExp(`^\\s*${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`) }) }).first();
+
+/**
+ * Árbol de accesibilidad de un elemento, con la forma que daba `page.accessibility.snapshot({ root })` (quitado en
+ * playwright-core 1.57+): { role, name, description, value, pressed, children }. Sale del árbol de Chromium por CDP
+ * (Accessibility.getFullAXTree). Los textos son role «text»; con `interestingOnly` (por defecto) se saltan los nodos
+ * ignorados y los genéricos sin nombre (se quedan sus hijos).
+ */
+export async function axSnapshot(page, locator, { interestingOnly = true } = {}) {
+  const cdp = await page.context().newCDPSession(page);
+  const mark = `ax${Math.random().toString(36).slice(2)}`;
+  try {
+    await locator.first().evaluate((el, m) => el.setAttribute("data-ax-root", m), mark);
+    const { root } = await cdp.send("DOM.getDocument", { depth: 0 });
+    const { nodeId } = await cdp.send("DOM.querySelector", { nodeId: root.nodeId, selector: `[data-ax-root="${mark}"]` });
+    const { node } = await cdp.send("DOM.describeNode", { nodeId });
+    const { nodes } = await cdp.send("Accessibility.getFullAXTree");
+    const byId = new Map(nodes.map((n) => [n.nodeId, n]));
+    const start = nodes.find((n) => n.backendDOMNodeId === node.backendNodeId);
+    if (!start) return null;
+    const prop = (n, name) => n.properties?.find((p) => p.name === name)?.value?.value;
+    const convert = (n, isRoot) => {
+      const role = n.role?.value === "StaticText" ? "text" : n.role?.value;
+      const kids = (n.childIds ?? []).map((id) => byId.get(id)).filter(Boolean).flatMap((c) => convert(c, false));
+      if (role === "InlineTextBox") return [];
+      if (!isRoot && interestingOnly && (n.ignored || ((role === "generic" || role === "none") && !n.name?.value))) return kids;
+      const out = { role, name: n.name?.value ?? "" };
+      if (n.description?.value) out.description = n.description.value;
+      if (n.value?.value !== undefined && n.value?.value !== "") out.value = n.value.value;
+      const pressed = prop(n, "pressed");
+      if (pressed !== undefined) out.pressed = pressed === "true" || pressed === true;
+      if (kids.length) out.children = kids;
+      return [out];
+    };
+    return convert(start, true)[0] ?? null;
+  } finally {
+    await locator.first().evaluate((el) => el.removeAttribute("data-ax-root")).catch(() => {});
+    await cdp.detach().catch(() => {});
+  }
+}

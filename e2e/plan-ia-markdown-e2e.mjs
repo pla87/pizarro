@@ -112,7 +112,7 @@ if (only.includes("titulo")) {
   // «Generar release»: la columna «Salto» en el selector de columnas de móvil.
   await page.getByRole("button", { name: /^Salto/ }).first().click();
   await sleep(400);
-  await page.getByRole("button", { name: "Generar Release" }).click();
+  await page.getByRole("button", { name: "Generar release" }).click();
   const rel = page.locator("[role=dialog]").filter({ hasText: "Generar release" }).first();
   await rel.getByRole("button", { name: /^\s*Generar con \d+ tarea/ }).click();
   await rel.getByRole("button", { name: "Cambiar tareas" }).waitFor({ timeout: 15000 });

@@ -42,6 +42,12 @@ Cómo usar esta lista:
 | ☐ | 7.1 Exportar tareas e importarlas en otro proyecto (y en otra instalación) | Dos proyectos; mejor dos instalaciones |
 | ☐ | 7.2 Pegar una tarea copiada en «Nueva tarea» y en otra tarea | Un proyecto |
 | ☐ | 7.3 Importar desde Trello, Jira, GitHub, Asana y CSV de otras herramientas | Cuentas o exportaciones reales de esas herramientas |
+| ☐ | 13.1 Railway desde cero sin `APP_URL` | Proyecto de prueba en Railway |
+| ☐ | 13.2 Copias en R2 con bloqueo de retención | Cuenta de Cloudflare |
+| ☐ | 13.3 Emails: citas, baja en un clic, «Esperando» | Email configurado |
+| ☐ | 13.4 Dos cuentas en el mismo navegador e invitación en otro idioma | Dos cuentas |
+| ☐ | 13.5 Cloudflare sin reescribir emails | Dominio con Cloudflare |
+| ☐ | 13.6 Tablero en vivo con dos navegadores | Dos navegadores |
 
 ## 1. Baja de cuenta con Google
 
@@ -618,3 +624,43 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 12.5 Publicar la versión
 
 - En la GitHub Release de la v1.63.0 deben aparecer adjuntos `MANUAL.pdf` y `PRUEBAS.pdf`, y el enlace «Manual en PDF» de getpizarro.com debe descargarlo.
+
+## 13. Novedades de la v1.64.0
+
+### 13.1 Railway desde cero (proyecto de prueba)
+
+1. Sigue la guía de getpizarro.com (*Instalar → Railway*) en un proyecto nuevo: dominio y volumen primero, variables con **Generar mis variables** (sin `APP_URL`) y un solo **Deploy**.
+2. Qué debe pasar: el servicio no sale *Active* hasta que Pizarro está listo; al final del log aparece `PIZARRO ESTÁ SIN CONFIGURAR` con el código y la dirección `https://…up.railway.app/setup` (no `localhost`). *Administración → Ajustes → Instalación* dice que la dirección sale de Railway.
+3. En *Settings → Deploy* del servicio, comprueba que *Healthcheck Path* es `/api/health` (viene de `railway.json`).
+4. Si falla: *Logs*, busca `appUrl` y `migrate`; la línea «Base de datos al día (migraciones: … s; espera a PostgreSQL: … s)» dice en qué se fue el tiempo.
+
+### 13.2 Copias de seguridad en R2 con bloqueo de retención
+
+1. En tu instalación, *Administración → Copias de seguridad*: si sale *Omitida: sin destino externo*, faltan las variables `BACKUP_S3_*` en el servicio (en tu Railway parece que desaparecieron hacia el 18-11: la última copia del bucket es de ese día). Vuelve a ponerlas y despliega.
+2. En Cloudflare, bucket de Pizarro → *Settings → Bucket Lock Rules*: regla con el prefijo de las copias (`pizarro/pizarro-backup-` si usas `BACKUP_S3_PREFIX=pizarro`) a 31 días y, si el espacio lo permite, otra para `pizarro/files/` (indefinida o 180 días).
+3. Pulsa *Copiar ahora a destino externo*: debe salir *Correcta*. A partir del día 15, la página puede decir «N objetos retenidos por el bloqueo del bucket»: es lo esperado, no un error.
+
+### 13.3 Emails
+
+- Un aviso de comentario por email presenta el texto como «Ana ha escrito:» seguido de la cita.
+- Al pie de los avisos, del resumen diario y del informe semanal sale «Dejar de recibir estos emails»: ábrelo (no da de baja), pulsa *Darme de baja* y comprueba que la casilla correspondiente de *Mi perfil → Avisos* queda desmarcada. En Gmail (con `APP_URL` en https) aparece además «Cancelar suscripción» junto al remitente.
+- Con la casilla «Email con los cambios de fecha límite y los recordatorios de «Esperando»» marcada, llegan los recordatorios de una tarea que lleva días en «Esperando».
+- El informe semanal de un proyecto grande muestra como mucho 15 tareas por listado con «… y N más».
+
+### 13.4 Cuentas en el mismo navegador
+
+- Entra con dos cuentas, una tras otra, en el mismo navegador marcando «Recordar este dispositivo»: ninguna recibe el aviso de nuevo inicio de sesión al volver a entrar ni vuelve a pedir el segundo factor.
+- Invita desde un proyecto con la app en inglés: el email llega en inglés y la persona sale como «Invitación pendiente» hasta que elige su contraseña.
+
+### 13.5 Cloudflare
+
+- Con la ofuscación de emails activada en la zona, abre *Mi perfil* o *Administración → Usuarios* y mira el código fuente: no debe aparecer `__cf_email__` ni `email-decode.min.js`.
+
+### 13.6 Varias pestañas y tablero grande
+
+- Con el mismo tablero abierto en dos navegadores, mueve, edita y archiva tarjetas en uno: el otro las cambia en uno o dos segundos sin recargar entero (la búsqueda y la selección se mantienen).
+- En un tablero con cientos de tarjetas por columna, el móvil abre el tablero antes y nada salta al cargar.
+
+### 13.7 Publicar la versión
+
+- En la GitHub Release de la v1.64.0 deben aparecer `MANUAL.pdf` y `PRUEBAS.pdf`, y la rama `stable` debe quedar en el commit de la versión (Railway despliega solo).

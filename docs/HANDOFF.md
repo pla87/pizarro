@@ -351,6 +351,33 @@ Guardas que conviene conocer:
   el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
   él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
   de @react-pdf, pasa `tests/report-pages.test.ts`.
+- Tablero en vivo por tarjeta (ronda 60, `src/components/board/livePatch.ts`): el canal manda `taskIds` (hasta 50) y
+  `full`; para las acciones de `PATCHABLE_ACTIONS` el navegador pide solo esas tarjetas a `GET
+  /api/projects/<id>/board-tasks?ids=…` (mismo permiso que el tablero, 15 s de tiempo máximo) y las aplica
+  (`applyTaskPatch`; si algo no cuadra, recarga entera). **Una acción nueva solo entra en `PATCHABLE_ACTIONS` si anota cada
+  tarjeta que toca (`noteTask`/`noteTasks`) y llama a `needOwnRefresh()` si toca algo más** (columnas, etiquetas,
+  posiciones de otras). Una recarga entera que llega tras un parche conserva las tarjetas parcheadas después de pedirla
+  (`withPatchedTasks`, `patchedSince`); deshacer recarga por la del tablero (`boardRefreshFor`, `undo-context.ts`).
+- Datos del tablero: `packBoardTask`/`unpackBoardTask` (`src/lib/board-task-wire.ts`) omiten y restauran los campos por
+  defecto (`BOARD_TASK_DEFAULTS`); un campo nuevo de `BoardTask` necesita su valor por defecto ahí. El servidor pinta 50
+  tarjetas por columna (`deferredCards.ts`) y el resto llega en tandas de 200 con el hueco reservado; búsqueda, filtros,
+  recuentos y teclado trabajan con las listas de ids, no con lo pintado.
+- `APP_URL` (ronda 60): siempre con `resolveAppUrl()` (`src/lib/app-url.ts`; sin la variable, `https://` +
+  `RAILWAY_PUBLIC_DOMAIN`), también en scripts (`reset-link`, `doctor`, `boot`). No leas `process.env.APP_URL` directamente.
+- Otra copia en la misma base (`src/lib/instance-lock*.ts`): `pg_try_advisory_lock(LOCK_INSTANCE)` en una conexión propia
+  (`application_name` `pizarro-instance:<id>`), aviso tras 2 min; con PgBouncer no se comprueba.
+- Migraciones y P3009 (`scripts/migrate.mjs`): una migración posterior a `20261126100000` que falla se marca como
+  revertida y se reintenta una vez solo si `transactionProblem` la da por buena (entera entre `BEGIN;`/`COMMIT;`, sin otra
+  sentencia de control de transacción ni `CONCURRENTLY` en medio).
+- Baja de emails (`src/lib/unsubscribe*.ts`, rutas `/unsubscribe/<token>` y `/api/unsubscribe/<token>`): token HMAC con
+  `TOKEN_SECRET` (etiqueta propia), el GET nunca da de baja, `List-Unsubscribe` solo con https. `/unsubscribe/` está en
+  `SECRET_PATH_PREFIXES` y en `redactPath` (el token no llega a los logs): una ruta nueva con token en la URL, igual.
+- Aviso de cambio simultáneo (`src/lib/edit-conflict*.ts`, `EditConflictNotice.tsx`): versión por valor de las claves de
+  `AppState` y `updatedAt` en plantillas; `runAction` devuelve el `code` del `AppError`.
+- Releases: la búsqueda usa `search_fold()` (función SQL IMMUTABLE de la migración `20261127103000`, mismas letras que
+  `search-accents.ts`) con índices trigram si `pg_trgm` se pudo crear; `wipeDatabase` la borra y la migración la recrea.
+- e2e: `page.accessibility` ya no existe en playwright-core 1.65: usa `L.axSnapshot(page, locator, { interestingOnly })`
+  (`e2e/qa/lib.mjs`, árbol de Chromium por CDP con la misma forma).
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
@@ -508,45 +535,66 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Estado al cerrar la ronda 59:** v1.63.0 fusionada en `main` (PR #81), **sin publicar** (el propietario la publica con
-*Actions → Release*; desde esta versión el workflow genera y adjunta `MANUAL.pdf` y `PRUEBAS.pdf`). Antes de anunciarla:
-validar el `deploy/Caddyfile` nuevo con Caddy real en un VPS (`PRUEBAS.md` §12.3; en la nube no se pudo instalar Caddy).
-Quien use `SMTP_*` con un relay sin cifrar necesita `SMTP_ALLOW_PLAINTEXT=1` (está en las notas de la versión). Las
-entradas de deshacer guardadas antes de la v1.57 dicen «ya no se puede deshacer» (caducan solas a los 7 días).
+**Estado al cerrar la ronda 60:** v1.64.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida;
+la v1.63.0 la publicó el propietario al empezar la ronda). En la instalación del propietario las copias externas
+parecen haber dejado de subirse hacia el 18-11 (probablemente faltan las variables `BACKUP_S3_*`): lo comprueba el
+prompt 1 de `PRUEBAS-CHROME.md`. Antes de anunciar la v1.63/1.64 a terceros sigue pendiente validar el
+`deploy/Caddyfile` con Caddy real en un VPS (`PRUEBAS.md` §12.3).
 
-**Preguntas abiertas al propietario (tras la v1.63.0)**, con la numeración del informe final de la ronda 59 (entre
+**Preguntas abiertas al propietario (tras la v1.64.0)**, con la numeración del informe final de la ronda 60 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Refresco en vivo que pida solo la tarjeta cambiada y no el tablero entero en cada pestaña (con 10 personas y 1.000
-   tarjetas, cada movimiento cuesta unas 9 recargas completas; `Board.tsx` `router.refresh()` en `drainIncoming`;
-   `loadBoardTask` ya existe). Ronda propia. (SÍ)
-2. Pintar en el servidor solo las primeras 40–60 tarjetas de cada columna (hoy 5 MB de HTML y >1 s de bloqueo en el móvil
-   con 1.000 tarjetas; `ColumnView.tsx`). (SÍ, después del 1)
-3. Datos del tablero sin campos nulos o por defecto (~40 % menos que analizar; `toBoardTask`). (SÍ)
-4. Búsqueda de releases con índice trigram (migración). (Más adelante)
-5. Plan para IA sin los enlaces a Pizarro, con interruptor (~3 % del texto; la IA no puede abrirlos). (SÍ)
-6. Una cookie de dispositivo por cuenta (hoy dos cuentas en el mismo navegador se pisan «Recordar» y avisan de nuevo
-   inicio de sesión; `src/lib/devices.ts`). Cada navegador avisaría una vez. (SÍ)
-7. Invitación desde un proyecto en el idioma de quien invita (hoy, el de la instalación). (SÍ)
-8. «Invitación pendiente» en la lista de asignados del proyecto. (SÍ)
-9. `scripts/migrate.mjs`: deshacer y reintentar solo un `P3009` de una migración transaccional. (SÍ)
-10. Aviso de «otra instancia de Pizarro usa esta base» (bloqueo consultivo de vida del proceso). (SÍ)
-11. Recordatorios de «Esperando» por email con la casilla de fechas límite y renombrarla (`notify.ts` `emailWanted`). (SÍ)
-12. Contra suplantaciones: extracto «{persona} ha escrito:» y nombres reservados («Pizarro», «Administración»). (SÍ)
-13. Baja en un clic (`List-Unsubscribe`). (Más adelante)
-14. Informe semanal más corto en proyectos enormes («y N más» por columna). (SÍ)
-15. Fechas en inglés con formato `en-US` (`intlLocale("en")` devuelve hoy `en-GB`; cambia PDF y pruebas). (SÍ)
-16. CSV de logs con «;» y cabecera traducida para Excel en español. (SÍ)
-17. Aviso si otro administrador cambió mientras tanto una plantilla, un texto legal o los ajustes. (SÍ)
-18. Al pasar el límite del CSV de logs, volver a Logs con aviso en vez de una página de texto. (SÍ)
-19. Portada de un administrador con proyectos de equipo sin elegir: frase exacta y botón «Nuevo proyecto». (SÍ)
-20. Copias de los adjuntos (R2 no tiene versionado): (a) segundo destino con versionado (p. ej. Backblaze B2), (b) también
-    en el servidor (`BACKUP_LOCAL_FILES=1`) o (c) dejarlo; se decide con el informe del prompt 1 de `PRUEBAS-CHROME.md`. (a)
+1. Unificar las plantillas de serie: de 15 plantillas y 5 ejemplos a 5 plantillas, cada una con la casilla «con
+   tarjetas de ejemplo»: *Vibecoding*, *Curso o máster*, *Trabajo y clientes* (Negocio, Ventas, Soporte, Marketing,
+   Producción audiovisual, Selección de personal, Mantenimiento), *Casa y familia* (Tareas familiares, Mudanza, Reformas)
+   y *Eventos y viajes* (Eventos, Viajes); *Estudios o tesis* se retira. Las de serie sin modificar desaparecen de la
+   lista al actualizar; las modificadas quedan como propias; los proyectos creados no cambian. (SÍ)
+2. *Curso o máster*: columna «Publicado» que cuente como terminada (sin ella, los informes no muestran avance). (SÍ)
+3. Que cada plantilla decida qué secciones se ven (Releases, Documentación, «Entregable») en proyectos que no son de
+   software. (Más adelante, tras el 1)
+4. Siete columnas no caben en 1568 px: columnas más estrechas o vista compacta. (NO: el desplazamiento horizontal es lo
+   normal en un Kanban)
+5. Marcar de serie, en las cuentas nuevas, «Email con los cambios de fecha límite y los recordatorios de «Esperando»»
+   (hoy desmarcada: quien no ha tocado sus avisos deja de recibir por email los recordatorios de «Esperando»). (SÍ)
+6. Baja del informe semanal: recordarla, avisar a quien lo configuró y que un miembro no lo reactive sin verlo. (SÍ)
+7. *Mi perfil → Avisos*: una sola tarjeta de email con un solo «Guardar» (hoy son dos y lo marcado en una se pierde al
+   guardar la otra). (SÍ)
+8. «Copiar enlace» de una invitación pendiente sin email configurado (acción nueva solo para administradores). (SÍ)
+9. Contador de avisos exacto al leer uno (que `markNotificationRead` devuelva el recuento real). (SÍ)
+10. Textos: un solo nombre para el responsable (hoy «Asignada a», «Responsable», «Persona»…), quitar los nueve
+    «(opcional)» de *Nueva tarea* y «(evergreen)», quitar la sección vacía «Tarjetas archivadas» de *Ajustes del
+    proyecto*, la línea repetida de la suscripción al calendario y unificar «notices/notifications» en inglés. (SÍ)
+11. Pintado diferido (50 por columna) también en la vista Lista. (SÍ)
+12. Sesión en una sola consulta (JOIN de Session y User). (SÍ)
+13. Índice para las tareas que se repiten en el calendario (~400 kB y algo más de coste al escribir). (NO por ahora)
+14. Importar: decidir día/mes por fichero (no fila a fila), con el idioma como desempate. (SÍ)
+15. Reconocer imágenes que llegan sin tipo (p. ej. `.avif` en algunos Windows) por su extensión. (SÍ)
+16. `MAX_USERS` = 10 por defecto frente a «Un servidor, tantas personas como quieras» de la web: sin tope por defecto (la
+    variable sigue para quien quiera uno). (SÍ)
+17. Copias contra borrados (decisión 20 de la ronda 59): regla de bloqueo de R2 en vez de un segundo proveedor (la app ya
+    la tolera; prompt 1 de `PRUEBAS-CHROME.md`). Un segundo destino con versionado (B2) queda para más adelante. (SÍ)
+18. Retirar: el script `db:generate`, la nota de `JWT_SECRET` del README, `docs/IDEAS.md` (estado de la v1.48: actualizarlo
+    o archivarlo), unir las tres suites de «Aplicar plantilla» y renombrar `board-e2e`/`paste-e2e` por tema, y los
+    `export` que solo usan las pruebas (`applyKindTemplate`, `mergeSubtasks`, `COMMON_TIME_ZONES`). (SÍ)
+19. «tick» → «check» también en las guías inglesas de `docs/guias/en/`. (SÍ)
 
-Menores sin numerar: subir el `socketTimeout` del SMTP reutilizable (hoy la conexión se cierra a los 15 s; NO por ahora);
-filtrar también el log de errores de Caddy (comprobar en el VPS); id del comentario editado en el aviso en vivo; código de
-error propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores; coste de
-almacenamiento de las imágenes que copia cada repetición; React #185 (no se ha vuelto a ver).
+Menores sin numerar (recomendación NO salvo que se note): «Guardar de todos modos» en el aviso de cambio simultáneo;
+`INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro (solo se quitan los enlaces Markdown); «Esta semana»
+y el plan semanal de domingo a sábado en inglés; búsquedas de releases de 1–2 caracteres sin índice; `/login` tras elegir
+contraseña en el idioma de la invitada. De antes: `socketTimeout` del SMTP; log de errores de Caddy; código propio de
+«disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores; coste de las imágenes que copia
+cada repetición.
+
+**Decisiones de la ronda 60 (ya aplicadas):** las 19 primeras preguntas de la ronda 59 (tablero en vivo por tarjeta, datos
+sin campos por defecto, 50 tarjetas por columna desde el servidor, índice trigram de releases ya, plan para IA sin enlaces
+y sin interruptor, cookie de dispositivo por cuenta, invitación en el idioma de quien invita, «Invitación pendiente»,
+reintento de P3009, aviso de otra copia, «Esperando» con la casilla de fechas, citas «ha escrito:» y nombres reservados,
+baja en un clic ya, informe semanal corto, fechas en-US, CSV de logs para Excel, aviso de cambio simultáneo, vuelta a Logs,
+portada del administrador); `APP_URL` desde `RAILWAY_PUBLIC_DOMAIN`; `no-transform` contra la ofuscación de Cloudflare;
+copias que toleran el bloqueo de R2; resaltado de la búsqueda de releases; cambiar de tipo sin perder lo escrito; crear
+un proyecto abre su tablero; Dependabot de noviembre (Next 16.4.6…) incluido en la versión. Pizarro es el producto: la
+instalación del propietario es solo una más, y lo que se revisa en ella (Cloudflare, Railway) se convierte en mejoras del
+producto y de la guía.
 
 **Decisiones de la ronda 59 (ya aplicadas):** administradores asignables a proyectos de equipo, aviso «te han añadido»,
 invitar por email desde el proyecto y «Copiar enlace»; margen de intentos para dispositivos conocidos; «Forzar cambio de

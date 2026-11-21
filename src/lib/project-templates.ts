@@ -96,6 +96,8 @@ export interface TemplateDto extends TemplateData {
   builtinKey?: string | null;
   /** Solo plantillas de serie: su contenido ya no coincide con el canónico (se puede restablecer). */
   builtinModified?: boolean;
+  /** `updatedAt` de la fila (ISO): el editor lo manda al guardar para no pisar el cambio de otro administrador. */
+  version?: string;
 }
 
 /** Orden alfabético con la colación española (sin distinguir mayúsculas ni tildes; números por valor). */

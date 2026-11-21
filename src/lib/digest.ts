@@ -1,9 +1,9 @@
 // Resumen diario por email: agrupación de lo ocurrido y texto del correo. Funciones puras (sin BD).
 import type { T } from "../i18n/core";
-import { escapeHtml, noReplyNote } from "./mail";
+import { escapeHtml, noReplyNote, unsubscribeFooter } from "./mail";
 import { mentionsToPlain } from "./mentions";
 
-export type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
+type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
 
 /** Orden en el que salen las secciones: primero lo que te toca a ti. */
 const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "overdue", "dueToday", "created", "done", "comments"];
@@ -93,7 +93,7 @@ export function digestPeriod(lastSentAt: Date | null, now: Date): DigestPeriod {
 }
 
 /** Correo del resumen: asunto, texto plano y HTML (el contenido de los usuarios va escapado). */
-export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name: string; baseUrl: string; period?: DigestPeriod }, t: T) {
+export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name: string; baseUrl: string; period?: DigestPeriod; unsubscribeUrl?: string }, t: T) {
   const { baseUrl } = opts;
   const link = (i: DigestItem) => `${baseUrl}/p/${i.projectId}?task=${i.taskId}`;
   // Tareas distintas: antes se sumaban las secciones y una tarea asignada y vencida contaba dos veces.
@@ -106,6 +106,7 @@ export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name
       : t("Hola, {name}: esto ha pasado en tus proyectos en las últimas 24 horas.", { name: opts.name });
   const optOut = t("Puedes desactivar este resumen en «Mi perfil» de Pizarro.");
   const noReply = noReplyNote(t);
+  const unsub = unsubscribeFooter(opts.unsubscribeUrl, t);
 
   const text = [
     intro,
@@ -117,7 +118,7 @@ export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name
       ].join("\n"),
     ),
     `${t("Abrir Pizarro")}: ${baseUrl}`,
-    `${optOut}\n${noReply}`,
+    `${optOut}\n${unsub.text}${noReply}`,
   ].join("\n\n") + "\n";
 
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:600px">
@@ -134,6 +135,6 @@ ${s.projects
   )
   .join("\n")}
 <p style="margin-top:24px"><a href="${escapeHtml(baseUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir Pizarro"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }

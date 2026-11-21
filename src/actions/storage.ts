@@ -6,10 +6,12 @@ import { describeAction } from "@/lib/action-context";
 import { runAction } from "@/lib/action";
 import { findManageableProject } from "@/lib/access";
 import { db } from "@/lib/db";
+import { appStateVersion, assertVersion } from "@/lib/edit-conflict";
 import { AppError, forbidden } from "@/lib/errors";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB, type QuotaSetting } from "@/lib/quota";
 import { getQuotaSettings, saveQuotaSettings } from "@/lib/quota-settings";
 import { requireAdmin, requireUser } from "@/lib/session";
+import { QUOTA_KEYS } from "@/lib/settings-versions";
 import {
   CLEANUP_DAYS, cleanupArchivedTaskAttachments, cleanupOldReleaseAttachments, deleteDocumentsForever, deleteReleaseAttachments, deleteTaskAttachments,
   emptyDocumentsTrash, invalidateUndoReferencing, previewCleanup, type CleanupKind,
@@ -33,9 +35,11 @@ const describe = (s: QuotaSetting, t: "project" | "total"): string =>
   s.mode === "custom" ? `${s.mb} MB` : s.mode === "unlimited" ? "sin límite" : t === "project" ? "la predeterminada (10 GB)" : "sin cuota total";
 
 /** Administración → Ajustes → Almacenamiento: cuotas generales guardadas en la aplicación (las variables de entorno, si existen, mandan). */
-export async function saveStorageQuotas(input: { project: QuotaSetting; total: QuotaSetting }) {
+export async function saveStorageQuotas(input: { project: QuotaSetting; total: QuotaSetting }, since?: string) {
   return runAction({ name: "storage.saveQuotas", args: [input] }, async () => {
     await requireAdmin();
+    // Si otro administrador cambió las cuotas desde que se abrió la página, no se pisan (edit-conflict.ts).
+    assertVersion(since, await appStateVersion(QUOTA_KEYS));
     const project = settingInput.parse(input.project) as QuotaSetting;
     // La cuota total no tiene «por defecto» propio: sin valor es sin límite.
     const total = z.union([z.object({ mode: z.literal("custom"), mb }), z.object({ mode: z.literal("default") }), z.object({ mode: z.literal("unlimited") })]).parse(input.total) as QuotaSetting;
@@ -45,6 +49,7 @@ export async function saveStorageQuotas(input: { project: QuotaSetting; total: Q
       from: describe(prev.project, "project"), to: describe(project, "project"), fromTotal: describe(prev.total, "total"), toTotal: describe(total, "total"),
     });
     revalidatePath("/admin/settings");
+    return { version: await appStateVersion(QUOTA_KEYS) };
   });
 }
 

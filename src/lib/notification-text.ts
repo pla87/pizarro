@@ -4,6 +4,9 @@ import { formatDay } from "./dates";
 
 export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM";
 
+/** Avisos cuyo extracto es lo que alguien ha escrito (un comentario, una respuesta o el texto con la mención). */
+export const quotesWriting = (kind: NotificationKind | undefined): boolean => kind === undefined || kind === "MENTION" || kind === "COMMENT" || kind === "REPLY";
+
 /** Avisos de un proyecto, no de una tarea: llevan al proyecto y en `task` va el nombre del proyecto. */
 export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM";
 

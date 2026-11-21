@@ -141,8 +141,8 @@ test("«Último uso» del enlace: horas o días en el idioma de la app; menos de
   assert.equal(ago(2 * H + 5 * 60_000), "hace 2 h");
   assert.equal(ago(47 * H), "hace 47 h");
   assert.equal(ago(3 * 24 * H), "hace 3 d");
-  assert.match(ago(2 * H, "en-GB")!, /^2 hr\.? ago$/);
-  assert.equal(ago(3 * 24 * H, "en-GB"), "3 days ago");
+  assert.match(ago(2 * H, "en-US")!, /^2 hr\.? ago$/);
+  assert.equal(ago(3 * 24 * H, "en-US"), "3 days ago");
   // Acepta la fecha en ISO (como llega de la acción).
   assert.equal(formatAgo(new Date(now.getTime() - 5 * H).toISOString(), now), "hace 5 h");
   const old = new Date(now.getTime() - 40 * 24 * H);

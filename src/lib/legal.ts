@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { appStateRowsVersion } from "./edit-conflict";
 import { GOOGLE_CONTACT_KEY } from "./google-config-core";
 import { LEGAL_KINDS, LEGAL_RESPONSIBLE_KEY, legalTextKey, legalUpdatedKey, type LegalKind, type LegalTexts } from "./legal-core";
 
@@ -12,7 +13,12 @@ export interface LegalSettings {
   email: string;
   texts: Record<LegalKind, LegalTexts>;
   updatedAt: Record<LegalKind, string | null>;
+  /** Versión de lo guardado (texto de cada página; responsable y contacto), para no pisar el cambio de otra persona. */
+  versions: Record<LegalKind | "contact", string>;
 }
+
+const textKeys = (k: LegalKind) => [legalTextKey(k, "es"), legalTextKey(k, "en")];
+const CONTACT_KEYS = [LEGAL_RESPONSIBLE_KEY, GOOGLE_CONTACT_KEY];
 
 const KEYS = [
   LEGAL_RESPONSIBLE_KEY, GOOGLE_CONTACT_KEY,
@@ -29,6 +35,7 @@ export async function getLegalSettings(): Promise<LegalSettings> {
     email: get(GOOGLE_CONTACT_KEY).trim(),
     texts: { privacy: texts("privacy"), terms: texts("terms") },
     updatedAt: { privacy: get(legalUpdatedKey("privacy")) || null, terms: get(legalUpdatedKey("terms")) || null },
+    versions: { privacy: appStateRowsVersion(rows, textKeys("privacy")), terms: appStateRowsVersion(rows, textKeys("terms")), contact: appStateRowsVersion(rows, CONTACT_KEYS) },
   };
 }
 

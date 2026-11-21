@@ -7,7 +7,7 @@ import { test } from "node:test";
 import {
   confirmDocumentKind, decodeDocumentText, detectDocumentKind, documentDownloadName, documentMime, isPreviewable, looksLikePdf, looksLikeText, sanitizeDocumentName,
 } from "../src/lib/document-kind";
-import { classifyHtmlLink } from "../src/lib/html-doc-links";
+import { classifyHtmlLink, htmlLinkTarget } from "../src/lib/html-doc-links";
 import { cleanOrphanFiles, parseUploadName } from "../src/lib/orphan-files";
 import { documentPath } from "../src/lib/uploads";
 import { documentFailuresMessage } from "../src/components/docs/uploadDocuments";
@@ -253,6 +253,16 @@ test("classifyHtmlLink: enlaces entre documentos de la misma Documentación", ()
   assert.deepEqual(classifyHtmlLink("tema1.html%", docs), { type: "missing" });
   // Sin documentos en el proyecto (o solo de otro): nada se resuelve.
   assert.deepEqual(classifyHtmlLink("tema1.html", []), { type: "missing" });
+});
+
+test("htmlLinkTarget: externos y otros documentos, siempre en otra pestaña (aunque el HTML diga _top o _self); internos, en el marco", () => {
+  const docs = [{ id: "d1", name: "tema1.html" }];
+  const target = (href: string) => htmlLinkTarget(classifyHtmlLink(href, docs, "d0"));
+  assert.equal(target("https://example.com/"), "_blank");
+  assert.equal(target("mailto:a@example.com"), "_blank");
+  assert.equal(target("tema1.html"), "_blank");
+  assert.equal(target("#apartado"), "_self");
+  assert.equal(target("no-esta.html"), null);
 });
 
 test("classifyHtmlLink: el propio documento por su nombre y nombres arreglados al subir (caza de bugs 52)", () => {

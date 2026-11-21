@@ -85,10 +85,24 @@ test("ZIP: estructura, nombres UTF-8, tamaños, CRC y contenido; Content-Length 
   });
 });
 
-test("ZIP: fecha DOS y ZIP vacío", async () => {
-  const { zip } = await download(diskEntries(files.slice(0, 1)), new Date(2026, 5, 15, 10, 20, 30));
-  assert.equal(zip.readUInt16LE(10), (10 << 11) | (20 << 5) | 15);
-  assert.equal(zip.readUInt16LE(12), ((2026 - 1980) << 9) | (6 << 5) | 15);
+test("ZIP: fecha DOS en la zona de la app (no en la del proceso) y ZIP vacío", async () => {
+  const prev = process.env.APP_TIMEZONE;
+  process.env.APP_TIMEZONE = "Europe/Madrid";
+  try {
+    // 08:20:30 UTC del 15 de junio = 10:20:30 en Madrid (verano), sea cual sea la zona del proceso.
+    const { zip } = await download(diskEntries(files.slice(0, 1)), new Date(Date.UTC(2026, 5, 15, 8, 20, 30)));
+    assert.equal(zip.readUInt16LE(10), (10 << 11) | (20 << 5) | 15);
+    assert.equal(zip.readUInt16LE(12), ((2026 - 1980) << 9) | (6 << 5) | 15);
+  } finally {
+    if (prev === undefined) delete process.env.APP_TIMEZONE;
+    else process.env.APP_TIMEZONE = prev;
+  }
+  // 23:30 UTC del 15 de enero = 00:30 del 16 en Madrid: también cambia el día.
+  const late: Buffer[] = [];
+  for await (const c of streamZip([{ name: "a.txt", size: 1, crc: crc32(Buffer.from("a")), body: Buffer.from("a") }], new Date(Date.UTC(2026, 0, 15, 23, 30, 0)), "Europe/Madrid")) late.push(c);
+  const head = Buffer.concat(late);
+  assert.equal(head.readUInt16LE(10), (0 << 11) | (30 << 5) | 0);
+  assert.equal(head.readUInt16LE(12), ((2026 - 1980) << 9) | (1 << 5) | 16);
   const parts: Buffer[] = [];
   for await (const c of streamZip([])) parts.push(c);
   assert.equal(parseZip(Buffer.concat(parts)).length, 0);

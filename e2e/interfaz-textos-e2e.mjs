@@ -67,7 +67,7 @@ if (only.includes("admin")) {
     L.check("SETTINGS: la explicación del diagnóstico va en su nota", !(await bodyText(page)).includes("No lleva datos personales, mensajes de los logs"));
     // Ajustes e Integraciones son dos pestañas: el email, Google y Telegram/WhatsApp ya no están en Ajustes.
     L.eq("SETTINGS: sin las secciones de integraciones", await page.locator("section#avisos-email, section#acceso-google, section#mensajeria").count(), 0);
-    L.eq("SETTINGS: con la zona horaria elegible (sin APP_TIMEZONE)", await page.locator("select#instance-tz").count(), 1);
+    L.eq("SETTINGS: con la zona horaria elegible (sin APP_TIMEZONE), con búsqueda", await page.locator("input#instance-tz[list]").count(), 1);
     await page.getByRole("link", { name: "Integraciones", exact: true }).click();
     await page.locator("section#avisos-email").waitFor({ timeout: 20000 });
     L.eq("INTEGRATIONS: pestaña propia en /admin/integrations", new URL(page.url()).pathname, "/admin/integrations");
@@ -136,7 +136,7 @@ if (only.includes("release")) {
   await L.seedTasks(L.COL.next, ["R49 textos uno", "R49 textos dos"]);
   const s = await L.session();
   const { page } = s;
-  await page.getByRole("button", { name: "Generar Release" }).first().click();
+  await page.getByRole("button", { name: "Generar release" }).first().click();
   const dlg = page.getByRole("dialog", { name: /Generar release/ });
   await dlg.waitFor({ timeout: 15000 });
   const all = dlg.getByRole("button", { name: "Todas", exact: true });

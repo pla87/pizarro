@@ -150,8 +150,9 @@ export const proyectos: Record<string, string> = {
   // Exportar: el tamaño estimado cuenta también los datos, no solo los adjuntos.
   "Se exportarán {tasks} tarjetas ({archived} archivadas), {releases} releases y {attachments} adjuntos: un archivo de unos {size} MB.": "{tasks} cards ({archived} archived), {releases} releases and {attachments} attachments will be exported: a file of about {size} MB.",
   // Inicio sin proyectos: cuántos de equipo hay (singular y plural)
-  "Hay 1 proyecto de equipo.": "There is 1 team project.",
-  "Hay {n} proyectos de equipo.": "There are {n} team projects.",
+  "Hay 1 proyecto de equipo que no está en tu lista.": "There is 1 team project that is not on your list.",
+  "Hay {n} proyectos de equipo que no están en tu lista.": "There are {n} team projects that are not on your list.",
+  "Tu lista de proyectos está vacía.": "Your project list is empty.",
   // Importar y exportar un proyecto: respuestas en círculo, ficheros demasiado comprimidos y demasiados adjuntos
   "1 respuesta se respondía a sí misma (directa o indirectamente) y se ha importado como comentario suelto.": "1 reply was a reply to itself (directly or indirectly) and was imported as a standalone comment.",
   "{n} respuestas se respondían a sí mismas (directa o indirectamente) y se han importado como comentarios sueltos.": "{n} replies were replies to themselves (directly or indirectly) and were imported as standalone comments.",

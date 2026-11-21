@@ -7,13 +7,13 @@ import { POSITION_STEP } from "./positions";
 import { MAX_TEMPLATES } from "./project-templates-core";
 import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto } from "./project-templates";
 
-type Row = Parameters<typeof parseStoredTemplate>[0] & { builtinKey: string | null };
+type Row = Parameters<typeof parseStoredTemplate>[0] & { builtinKey: string | null; updatedAt?: Date };
 /** Lo que usan estas funciones: el cliente o una transacción (`tx`). */
 type TemplateDb = Pick<PrismaClient, "projectTemplate" | "builtinTemplateSeeded">;
 
 /** Fila de la base de datos → plantilla de la interfaz, marcando las de serie que ya no coinciden con la canónica. */
 function toTemplateDto(row: Row): TemplateDto {
-  const dto = parseStoredTemplate(row);
+  const dto = { ...parseStoredTemplate(row), ...(row.updatedAt ? { version: row.updatedAt.toISOString() } : {}) };
   if (!row.builtinKey) return { ...dto, builtinKey: null };
   return { ...dto, builtinKey: row.builtinKey, builtinModified: isBuiltinModified(dto, row.builtinKey) };
 }

@@ -70,7 +70,7 @@ Solo usamos cookies técnicas estrictamente necesarias, que no requieren consent
 
 - Sesión (\`tablon_session\`, o \`__Host-tablon_session\` con HTTPS): mantiene tu inicio de sesión; caduca a los 14 días.
 - Verificación en dos pasos (\`pz_2fa\`): recuerda brevemente que estás completando el segundo factor.
-- Dispositivo recordado (\`pz_device\`): evita pedir el segundo factor en un dispositivo de confianza; hasta 400 días.
+- Dispositivo recordado (\`pz_device\`, o \`__Host-pz_device\` con HTTPS): evita pedir el segundo factor en un dispositivo de confianza; guarda una marca aleatoria por cada cuenta que entra desde ese navegador; hasta 400 días.
 - Cambio de contraseña (\`pz_pwchange\`): indica que debes cambiar la contraseña antes de continuar.
 - Inicio de sesión con Google (\`pz_glogin\`): protege el proceso de acceso con Google; dura unos minutos.
 
@@ -147,7 +147,7 @@ We only use strictly necessary technical cookies, which do not require consent. 
 
 - Session (\`tablon_session\`, or \`__Host-tablon_session\` over HTTPS): keeps you signed in; expires after 14 days.
 - Two-factor verification (\`pz_2fa\`): briefly remembers that you are completing the second factor.
-- Remembered device (\`pz_device\`): avoids asking for the second factor on a trusted device; up to 400 days.
+- Remembered device (\`pz_device\`, or \`__Host-pz_device\` over HTTPS): avoids asking for the second factor on a trusted device; holds one random marker per account that signs in from that browser; up to 400 days.
 - Password change (\`pz_pwchange\`): indicates that you must change your password before continuing.
 - Google sign-in (\`pz_glogin\`): protects the Google sign-in flow; lasts a few minutes.
 

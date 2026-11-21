@@ -156,6 +156,66 @@ describe("paginación de los logs y descarga CSV", () => {
   });
 });
 
+describe("CSV de logs para Excel", () => {
+  test("en español: BOM, «;» entre columnas y cabecera en español; en inglés: «,» y cabecera en inglés", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const tag = `csvexcel${Date.now()}`;
+    await db.appLog.create({ data: { level: "warn", category: tag, action: "prueba.csv", message: "uno; dos, «tres»\ncuatro", userId: admin.id, userName: "=Ana" } });
+    const download = async () => {
+      resetRateLimit(`logs-csv:${admin.id}`);
+      const res = await logsCsv(new Request(`http://localhost/api/admin/logs?category=${tag}`));
+      assert.equal(res.status, 200);
+      return new TextDecoder("utf-8", { ignoreBOM: true }).decode(await res.arrayBuffer());
+    };
+    const es = await download();
+    assert.equal(es.charCodeAt(0), 0xfeff);
+    const [head, ...rest] = es.slice(1).split("\r\n");
+    assert.equal(head, ["Fecha", "Nivel", "Categoría", "Acción", "Usuario", "Id. de usuario", "Id. de proyecto", "Mensaje", "Duración (ms)", "Ruta", "IP", "Detalles"].map((h) => `"${h}"`).join(";"));
+    const row = rest.join("\r\n");
+    assert.match(row, /;"warn";/);
+    assert.match(row, /;"'=Ana";/);
+    assert.match(row, /;"uno; dos, «tres»\ncuatro";/);
+
+    await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
+    const en = await download();
+    assert.equal(en.charCodeAt(0), 0xfeff);
+    assert.match(en.slice(1), /^"Date","Level","Category","Action","User","User ID","Project ID","Message","Duration \(ms\)","Path","IP","Details"\r\n/);
+    assert.match(en, /,"warn",/);
+  });
+
+  test("desde el formulario, pasarse del tope vuelve a la página de Logs con el aviso y los mismos filtros", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`logs-csv:${admin.id}`);
+    try {
+      const nav = { headers: { "sec-fetch-mode": "navigate", accept: "text/html" } };
+      const url = "http://localhost/api/admin/logs?level=warn&range=7d&q=algo&desde=2026-01-01&hasta=2026-01-02";
+      for (let i = 0; i < 5; i++) {
+        const res = await logsCsv(new Request(`http://localhost/api/admin/logs?category=vacia${Date.now()}`));
+        assert.equal(res.status, 200);
+        await res.text();
+      }
+      const over = await logsCsv(new Request(url, nav));
+      assert.equal(over.status, 303);
+      const to = new URL(over.headers.get("location")!, "http://localhost");
+      assert.equal(to.pathname, "/admin/logs");
+      assert.deepEqual(Object.fromEntries(to.searchParams), { range: "7d", level: "warn", q: "algo", csv: "rate", desde: "2026-01-01", hasta: "2026-01-02" });
+      // Fechas mal: también vuelve (con su motivo), sin gastar descargas.
+      resetRateLimit(`logs-csv:${admin.id}`);
+      const bad = await logsCsv(new Request("http://localhost/api/admin/logs?desde=2026-01-05&hasta=2026-01-02", nav));
+      assert.equal(bad.status, 303);
+      assert.equal(new URL(bad.headers.get("location")!, "http://localhost").searchParams.get("csv"), "order");
+      // Sin ser una navegación (una llamada a la API), el texto de siempre.
+      const api = await logsCsv(new Request("http://localhost/api/admin/logs?desde=2026-01-05&hasta=2026-01-02"));
+      assert.equal(api.status, 400);
+      assert.match(await api.text(), /no puede ser posterior/);
+    } finally {
+      resetRateLimit(`logs-csv:${admin.id}`);
+    }
+  });
+});
+
 describe("registro de una acción que falla antes de saber su proyecto", () => {
   test("validación en un proyecto privado: solo los nombres de los campos y el motivo, sin los valores", async () => {
     const owner = await makeUser();

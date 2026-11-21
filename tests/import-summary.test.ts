@@ -23,5 +23,5 @@ test("exportación de Pizarro: «1 comentario» (antes «1 comentarios») y en p
 test("Trello y CSV: columnas, tareas, subtareas, etiquetas y comentarios; en inglés con su propia lista", () => {
   const c = { ...zero, columns: 1, tasks: 1, subtasks: 1, labels: 2, comments: 1 };
   assert.equal(importSummaryItems(c, true, makeT("es"), "es-ES"), "1 columna, 1 tarea, 1 subtarea, 2 etiquetas y 1 comentario");
-  assert.equal(importSummaryItems(c, true, makeT("en"), "en-GB"), "1 column, 1 task, 1 subtask, 2 labels and 1 comment");
+  assert.equal(importSummaryItems(c, true, makeT("en"), "en-US"), "1 column, 1 task, 1 subtask, 2 labels, and 1 comment");
 });

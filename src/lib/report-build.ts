@@ -2,7 +2,8 @@ import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
-import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
+import { addDaysIso, dateToIso, isoToDate, todayIso, weekBoundsIso } from "./dates";
+import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
@@ -145,7 +146,11 @@ interface PdfRequestOpts {
   signal?: AbortSignal;
 }
 
-export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
+/**
+ * Informe de estado de un proyecto. `listLimit` y `boardUrl`: tareas por listado y enlace al tablero en el informe
+ * semanal por email (ReportInput.listLimit); sin ellos (la descarga desde la app), todas.
+ */
+export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string; listLimit?: number; boardUrl?: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
@@ -204,7 +209,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
     today,
     timeZone: appTimeZone(),
     // Con la zona («14:05 CET»): el PDF se envía por email y puede leerse en otra.
-    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).format(new Date()),
+    time: formatTimeZone(new Date(), locale),
     columns,
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({
@@ -230,6 +235,8 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),
     counts,
+    listLimit: opts.listLimit,
+    boardUrl: opts.boardUrl,
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);
@@ -341,11 +348,12 @@ export function generateWeekPlanPdf(
     });
     const locale = intlLocale(opts.locale);
     const today = todayIso(appTimeZone());
+    const week = weekBoundsIso(today);
     const sections = buildWeekPlan(
       tasks.map((x) => ({ title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, assigneeName: x.assignee?.name ?? null, dueDate: dateToIso(x.dueDate) })),
       today, opts.groupBy, t, locale,
     );
-    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
+    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, weekStart: week.start, weekEnd: week.end, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }

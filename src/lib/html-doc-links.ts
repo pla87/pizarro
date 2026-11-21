@@ -51,3 +51,12 @@ export function classifyHtmlLink(href: string, docs: readonly { id: string; name
   } catch { /* se deja como está */ }
   return { type: "document", id: found.id, hash: fragment && fragment.length <= 200 ? `#${encodeURIComponent(fragment)}` : "" };
 }
+
+/**
+ * Dónde se abre cada enlace en el visor: los internos, en el propio marco; los demás (otro documento o una dirección externa),
+ * en otra pestaña, digan lo que digan en su `target`. Un externo con `_self` o `_top` no se abría: el marco no puede navegar
+ * a la página de arriba ni cargar otra web (la CSP de la app lo bloquea). Un enlace sin destino (`missing`) no lleva `target`.
+ */
+export function htmlLinkTarget(link: HtmlLink): "_blank" | "_self" | null {
+  return link.type === "internal" ? "_self" : link.type === "missing" ? null : "_blank";
+}

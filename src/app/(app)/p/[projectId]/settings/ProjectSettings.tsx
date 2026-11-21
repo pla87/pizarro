@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,7 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
-import { inviteToProject } from "@/actions/users";
+import { inviteToProject, resendInvite } from "@/actions/users";
 import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -49,6 +49,8 @@ interface Props {
   generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
+  /** Hay envío de emails: los administradores tienen «Reenviar invitación» en los miembros con la invitación pendiente. */
+  emailAvailable: boolean;
   editorMode: EditorModeValue;
   /** Integración con Google: si está activa y el dominio de Workspace configurado (para ofrecer compartir con él). */
   google: { enabled: boolean; domain: string | null };
@@ -95,7 +97,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, emailAvailable, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -143,7 +145,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              run(async () => updateProject(project.id, { name, description }), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => updateProject(project.id, { name, description }), t("Proyecto actualizado"));
             }}
           >
             <div>
@@ -191,7 +193,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 {isPrivateProject ? t("Miembros") : t("Usuarios asignados")}
                 {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.")}</InfoTip>}
               </div>
-              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite />
+              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite canResend={emailAvailable} />
             </div>
           )}
           {visibility !== project.visibility && (
@@ -200,7 +202,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               disabled={pending}
               onClick={async () => {
                 if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso como miembros las personas asignadas ahora ({n}, contándote a ti) y conservan sus tarjetas. Los administradores que no estén asignados (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
-                run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"), () => router.refresh());
+                run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"));
               }}
             >
               {t("Guardar visibilidad")}
@@ -215,7 +217,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             className="space-y-2"
             onSubmit={(e) => {
               e.preventDefault();
-              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"));
             }}
           >
             {GOOGLE_SHARE_MODES.map((m) => {
@@ -281,7 +283,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             type="button"
             className="btn-primary mt-3"
             disabled={pending || (taskFields.length === project.taskFields.length && taskFields.every((f) => project.taskFields.includes(f)))}
-            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"), () => router.refresh())}
+            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"))}
           >
             {t("Guardar")}
           </button>
@@ -327,7 +329,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         description="Se gestionan desde el menú «⋯» de cada columna en el tablero."
         tip={<>
           {t("Ahí se crean, renombran, reordenan, cambian de rol y borran (si están vacías).")}{" "}
-          {t("El rol «Siguiente salto» muestra el botón «Generar Release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
+          {t("El rol «Siguiente salto» muestra el botón «Generar release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
         </>}
       />
 
@@ -369,7 +371,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 toast(t("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto."), "error");
                 return;
               }
-              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"));
             }}
           >
             <div>
@@ -443,20 +445,30 @@ function LimitLabel({ htmlFor, label, children }: { htmlFor: string; label: stri
   );
 }
 
-type MemberRow = { id: string; name: string; active: boolean; /** Administrador asignado a un proyecto de equipo. */ admin?: boolean };
+type MemberRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  /** Administrador asignado a un proyecto de equipo. */
+  admin?: boolean;
+  /** Invitada que aún no ha elegido contraseña ni ha entrado. */
+  invitePending?: boolean;
+};
 
 /**
  * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
  * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
- * da de alta a alguien sin cuenta. Tras añadir o invitar queda a la vista el enlace para pasárselo («Copiar enlace»).
+ * da de alta a alguien sin cuenta y, con `canResend` (hay email), «Reenviar invitación» a quien aún no ha entrado. Tras
+ * añadir, invitar o reenviar queda a la vista el enlace para pasárselo («Copiar enlace»).
  */
-function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false }: {
+function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false, canResend = false }: {
   projectId: string;
   currentUserId: string;
   members: MemberRow[];
   users: { id: string; name: string }[];
   isPrivate: boolean;
   canInvite?: boolean;
+  canResend?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -474,7 +486,6 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (!res.ok) return toast(res.error, "error");
       toast(success);
       after?.();
-      router.refresh();
     });
   const add = () => {
     const name = users.find((u) => u.id === candidate)?.name ?? "";
@@ -484,7 +495,6 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
       setShared({ kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
-      router.refresh();
     });
   };
   const invite = () =>
@@ -495,7 +505,13 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       else toast(res.data.emailed ? t("Invitación enviada") : t("Invitación creada"));
       setInviteEmail("");
       setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
-      router.refresh();
+    });
+  const resend = (m: MemberRow) =>
+    start(async () => {
+      const res = await resendInvite(m.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Invitación enviada"));
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
     });
   const activeCount = members.filter((m) => m.active).length;
   return (
@@ -507,12 +523,27 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           const lastOne = isMe && activeCount <= 1;
           return (
             <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">
-                {m.name}
-                {m.admin && <span className="ml-1 text-xs text-slate-500">{t("admin")}</span>}
-                {isMe && <span className="ml-1 text-xs text-slate-500">{t("(tú)")}</span>}
-                {!m.active && <span className="ml-1 text-xs text-slate-500">{t("(desactivado)")}</span>}
+              {/* Solo el nombre se recorta: las marcas van aparte (antes, dentro del recorte, «Invitación pendiente»
+                  desaparecía en el móvil con un nombre medio largo). Como en Administración → Proyectos. */}
+              <span className="flex min-w-0 flex-1 items-center gap-1">
+                <span className="truncate">{m.name}</span>
+                {m.admin && <span className="shrink-0 text-xs text-slate-500">{t("admin")}</span>}
+                {isMe && <span className="shrink-0 text-xs text-slate-500">{t("(tú)")}</span>}
+                {!m.active && <span className="shrink-0 text-xs text-slate-500">{t("(desactivado)")}</span>}
+                {m.invitePending && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>}
               </span>
+              {canInvite && canResend && m.invitePending && m.active && (
+                <button
+                  type="button"
+                  className="btn-icon shrink-0"
+                  disabled={pending}
+                  aria-label={t("Reenviar invitación a {name}", { name: m.name })}
+                  title={t("Reenviar invitación")}
+                  onClick={() => resend(m)}
+                >
+                  <MailPlus size={16} />
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary"
@@ -811,7 +842,6 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
   const locale = useLocale();
   // Los tipos de serie se guardan en español: se muestran en el idioma de la interfaz (se envía igual su id).
   const shown = <K extends { id: string; name: string }>(k: K) => localizeGeneralKind(k, locale);
-  const router = useRouter();
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [disabling, setDisabling] = useState<(KindOption & { taskCount: number }) | null>(null);
@@ -823,7 +853,6 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
       if (!res.ok) return toast(res.error, "error");
       toast(enabled ? t("Tipo activado en el proyecto") : t("Tipo desactivado en el proyecto"));
       setDisabling(null);
-      router.refresh();
     });
 
   const targets = (kindId: string) => [

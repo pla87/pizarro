@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeUser } from "./helpers";
-import { saveAppIcon, saveInstallationSettings } from "../../src/actions/settings";
-import { APP_ICON_KEY, FAILURE_TTL_MS, getAppIcon } from "../../src/lib/app-icon";
+import { saveAppIcon, saveAppShortName, saveInstallationSettings } from "../../src/actions/settings";
+import { APP_ICON_KEY, APP_SHORT_NAME_KEY, FAILURE_TTL_MS, getAppIcon, getAppShortName } from "../../src/lib/app-icon";
+import { appStateVersion } from "../../src/lib/edit-conflict";
 import { getLocale } from "../../src/i18n/server";
 import { getInstanceSettings, invalidateInstance } from "../../src/lib/instance";
 import { appTimeZone } from "../../src/lib/format";
@@ -23,8 +24,9 @@ describe("ajustes de la instalación", () => {
     await loginAs(admin);
     // Se leen antes: la caché de 30 s tiene ya los valores de antes.
     assert.equal((await getInstanceSettings()).locale, "es");
-    const res = expectOk(await saveInstallationSettings({ orgName: "  Acme Lda  ", locale: "en", timeZone: "Europe/Lisbon" }));
+    const { version, ...res } = expectOk(await saveInstallationSettings({ orgName: "  Acme Lda  ", locale: "en", timeZone: "Europe/Lisbon" }));
     assert.deepEqual(res, { orgName: "Acme Lda", locale: "en", timeZone: "Europe/Lisbon" });
+    assert.equal(typeof version, "string");
     assert.deepEqual(await getInstanceSettings(), { orgName: "Acme Lda", locale: "en", timeZone: "Europe/Lisbon" });
     const prevTz = process.env.APP_TIMEZONE;
     delete process.env.APP_TIMEZONE;
@@ -113,6 +115,31 @@ describe("ajustes de la instalación", () => {
       patched.findUnique = real;
     }
     assert.equal(await getAppIcon(Date.now() + 20 * 60_000), "blue");
+  });
+
+  test("nombre bajo el icono: etiqueta propia de hasta 12 caracteres, vacía vuelve a la automática, sin pisar a otro administrador", async () => {
+    await cleanup();
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    const opened = await appStateVersion([APP_SHORT_NAME_KEY]);
+    const saved = expectOk(await saveAppShortName("  Pruebas   de IT y más ", opened));
+    assert.equal(saved.shortName, "Pruebas de I");
+    assert.equal(await getAppShortName(), "Pruebas de I");
+    // Otro administrador con la página abierta desde antes: aviso, sin cambios.
+    const other = await saveAppShortName("Otra", opened);
+    assert.equal(other.ok, false);
+    assert.equal(!other.ok && other.code, "edit_conflict");
+    assert.equal(await getAppShortName(), "Pruebas de I");
+    // Vacía: se borra y vuelve la automática.
+    expectOk(await saveAppShortName("   ", saved.version));
+    assert.equal(await db.appState.findUnique({ where: { key: APP_SHORT_NAME_KEY } }), null);
+    assert.equal(await getAppShortName(), "");
+    // Un NUL (que PostgreSQL no admite en un texto) o un control de dirección se quitan: se guarda sin error.
+    const clean = expectOk(await saveAppShortName("Ca\u0000sa‮", await appStateVersion([APP_SHORT_NAME_KEY])));
+    assert.equal(clean.shortName, "Casa");
+    assert.equal(await getAppShortName(), "Casa");
+    expectFail(await saveAppShortName(123 as unknown as string), /Datos no válidos/);
+    await loginAs(await makeUser());
+    expectFail(await saveAppShortName("Miembro"), FORBIDDEN);
   });
 
   test("color del icono de la app: solo administradores", async () => {

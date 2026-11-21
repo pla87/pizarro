@@ -6,6 +6,7 @@ import {
   TASKS_TEXT_MAX_CHARS, tasksExportFileName, type TaskJsonSource, actionTextFits,
 } from "../src/lib/task-json";
 import { importPreview } from "../src/lib/task-json-form";
+import { parseDay } from "../src/lib/foreign-import/text";
 import { esT } from "../src/i18n/shared";
 import { assertFast } from "./timing";
 
@@ -140,6 +141,20 @@ test("fechas: AAAA-MM-DD, ISO completa, DD/MM/AAAA; null y vacío la quitan", ()
     ["2026-12-01", "2026-01-05", "2026-12-01", "2026-12-01", "2026-12-01", "2026-12-01", null, null],
   );
   for (const bad of ["2026-13-01", "2026-02-30", "12/2026", "mañana", 20261201, {}]) assert.equal(parseDayLoose(bad), undefined, String(bad));
+});
+
+test("fechas: MM/DD/AAAA (EE. UU.) cuando no puede ser día/mes; lo ambiguo sigue siendo día/mes", () => {
+  assert.equal(parseDayLoose("11/21/2026"), "2026-11-21");
+  assert.equal(parseDayLoose("2/29/2028"), "2028-02-29");
+  assert.equal(parseDayLoose("03/04/2026"), "2026-04-03");
+  assert.equal(parseDayLoose("21/11/2026"), "2026-11-21");
+  for (const bad of ["13/13/2026", "2/30/2026", "02/29/2027"]) assert.equal(parseDayLoose(bad), undefined, bad);
+});
+
+test("fechas: el año con dos cifras se lee igual que en los CSV («21/12/26» → 2026-12-21)", () => {
+  for (const v of ["21/12/26", "1/2/26", "12/21/26", "03.04.26"]) assert.equal(parseDayLoose(v), parseDay(v), v);
+  assert.equal(parseDayLoose("21/12/26"), "2026-12-21");
+  for (const bad of ["1/2/2", "1/2/026", "29/2/27"]) assert.equal(parseDayLoose(bad), undefined, bad);
 });
 
 // El servidor interpreta el texto que le manda cualquier persona con sesión: ningún JSON de hasta 200 000 caracteres

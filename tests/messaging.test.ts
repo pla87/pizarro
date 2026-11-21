@@ -171,7 +171,8 @@ test("mensaje de Telegram: corto, en el idioma de la persona, con el contenido e
   const m = { type: "COMMENT" as const, actorName: "Ana <b>", taskTitle: "Pantalla & menú", projectName: "Web", excerpt: "Mira <esto>", url: "https://pizarro.example.com/p/1?task=2&x=1" };
   const es = core.telegramNoticeText(m, makeT("es"));
   assert.ok(es.startsWith("<b>Ana &lt;b&gt; ha comentado en «Pantalla &amp; menú»</b>"));
-  assert.ok(es.includes("<i>Mira &lt;esto&gt;</i>"));
+  // Lo que ha escrito, como cita suya: «Ana ha escrito:» y el extracto en un bloque de cita (no en la cabecera).
+  assert.ok(es.includes("\n\nAna &lt;b&gt; ha escrito:\n<blockquote>Mira &lt;esto&gt;</blockquote>"), es);
   assert.ok(es.includes('<a href="https://pizarro.example.com/p/1?task=2&amp;x=1">Abrir la tarea</a>'));
   assert.ok(!es.includes("<esto>"));
   const en = core.telegramNoticeText({ ...m, type: "ASSIGNED" }, makeT("en"));
@@ -197,7 +198,7 @@ test("asignación: el título va en la cabecera y no se repite debajo (Telegram 
   assert.doesNotMatch(mentionEmail(batch, makeT("es")).html, /<blockquote/);
   assert.equal(core.whatsappPayload("+34600111222", batch, { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", legacy: false }, makeT("es")).template.components[0]!.parameters[0]!.text, "Ana te ha asignado 3 tareas (entre ellas «Pantalla de inicio»)");
   // Los demás avisos conservan su extracto aunque coincida con el título.
-  assert.match(core.telegramNoticeText({ ...m, type: "MENTION" }, makeT("es")), /<i>Pantalla de inicio<\/i>/);
+  assert.match(core.telegramNoticeText({ ...m, type: "MENTION" }, makeT("es")), /Ana ha escrito:\n<blockquote>Pantalla de inicio<\/blockquote>/);
   const mail = mentionEmail(m, makeT("es"));
   assert.equal(mail.text, "Ana te ha asignado «Pantalla de inicio» (Web)\n\nAbrir la tarea: https://pizarro.example.com/p/1?task=2\n\nPuedes desactivar estos avisos en «Mi perfil» de Pizarro.\nNo respondas a este email: contesta en Pizarro.\n");
   assert.doesNotMatch(mail.html, /<blockquote/);

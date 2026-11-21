@@ -107,7 +107,7 @@ export function createGate(limit: () => number) {
 /** La de todas las subidas del navegador (adjuntos y documentos), con el tope que dice el servidor. */
 export const uploadGate = createGate(() => uploadCap.current());
 
-export type SkipReason = "empty" | "too_big" | "total";
+type SkipReason = "empty" | "too_big" | "total";
 
 export interface SkippedFile {
   name: string;

@@ -88,7 +88,8 @@ export async function createProject(name: string, options?: { templateId?: strin
       const created = await tx.project.create({
         data: {
           name: projectName,
-          ...(example ? { description: example.content.description } : {}),
+          // La descripción del ejemplo o de la plantilla (en su idioma): sin ella, el proyecto nuevo quedaba sin ninguna.
+          ...(example ? { description: example.content.description } : template?.description.trim() ? { description: template.description.trim() } : {}),
           position: (last?.position ?? 0) + POSITION_STEP,
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,

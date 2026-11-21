@@ -3,9 +3,8 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
 import type { BoardTask } from "@/lib/types";
 
-export const LIST_SORT_KEYS = ["title", "column", "assignee", "due", "labels", "priority", "subtasks"] as const;
-export type ListSortKey = (typeof LIST_SORT_KEYS)[number];
-export type ListSortDir = "asc" | "desc";
+export type ListSortKey = "title" | "column" | "assignee" | "due" | "labels" | "priority" | "subtasks";
+type ListSortDir = "asc" | "desc";
 export interface ListSort {
   key: ListSortKey;
   dir: ListSortDir;
@@ -19,7 +18,7 @@ export interface ListSortContext {
   columnPosition: ReadonlyMap<string, number>;
   userName: ReadonlyMap<string, string>;
   labelName: ReadonlyMap<string, string>;
-  /** Locale de Intl («es-ES», «en-GB»…): decide cómo se ordenan los acentos. */
+  /** Locale de Intl («es-ES», «en-US»…): decide cómo se ordenan los acentos. */
   locale: string;
 }
 

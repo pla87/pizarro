@@ -15,7 +15,7 @@ export function todayIso(timeZone?: string, now: Date = new Date()): string {
  * el día al vencer (y conviene no esperar de una vez más de una hora).
  */
 export function msUntilNextDay(timeZone?: string, now: Date = new Date()): number {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(now);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(now);
   const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
   const elapsed = ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000 + (((now.getTime() % 1000) + 1000) % 1000);
   return Math.max(0, 86_400_000 - elapsed);

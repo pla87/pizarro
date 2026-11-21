@@ -3,9 +3,8 @@ import { getBackupAlert } from "@/lib/backup-alert";
 import { lowDiskSpace } from "@/lib/health";
 import { uploadDir } from "@/lib/upload-dir";
 import { listVisibleProjects } from "@/lib/access";
-import { visibleNotificationsWhere } from "@/lib/notification-access";
+import { unreadCount } from "@/lib/notification-access";
 import { outsideListProject } from "@/lib/project-visit";
-import { db } from "@/lib/db";
 import { getPublicContactEmail } from "@/lib/google-config";
 import { licenseNudgeFor } from "@/lib/license-registry";
 import { buyHref } from "@/lib/product";
@@ -21,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [projects, unread, backupAlert, updateAvailable, diskLow, licenseNudge] = await Promise.all([
     listVisibleProjects(user),
     // Con tope: la interfaz muestra «99+» a partir de 100, así que no hace falta contar más allá (AppShell).
-    db.notification.count({ where: { ...visibleNotificationsWhere(user), readAt: null }, take: 100 }),
+    unreadCount(user.id, user.role),
     // Punto de aviso en «Administración» si la copia de seguridad está atrasada o es mucho menor que la última buena
     // (solo se consulta a los admins).
     isAdmin ? getBackupAlert().then((a) => (a?.active ? (a.reason === "shrunk" ? ("shrunk" as const) : true) : false), () => false) : false,

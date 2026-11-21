@@ -5,9 +5,11 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { COMMENT_LIMIT_MAX, COMMENT_LIMIT_MIN, getMaxCommentsPerTask, setMaxCommentsPerTask } from "@/lib/app-settings";
-import { changeAppIcon } from "@/lib/app-icon-save";
+import { changeAppIcon, changeAppShortName } from "@/lib/app-icon-save";
+import { appStateVersion, assertVersion } from "@/lib/edit-conflict";
 import { saveInstanceSettings } from "@/lib/instance";
 import { requireAdmin } from "@/lib/session";
+import { COMMENT_LIMIT_KEYS, INSTANCE_KEYS } from "@/lib/settings-versions";
 
 const commentLimit = z
   .number({ error: "Indica un número." })
@@ -15,28 +17,34 @@ const commentLimit = z
   .min(COMMENT_LIMIT_MIN, "Debe estar entre 1 y 1000.")
   .max(COMMENT_LIMIT_MAX, "Debe estar entre 1 y 1000.");
 
-/** Ajuste de administración: máximo de comentarios por tarea (los comentarios borrados con respuestas no cuentan). */
-export async function saveMaxCommentsPerTask(value: number) {
+/**
+ * Ajuste de administración: máximo de comentarios por tarea (los comentarios borrados con respuestas no cuentan).
+ * `since`: versión de lo guardado cuando se abrió la página; si otro administrador lo cambió después, no se pisa.
+ */
+export async function saveMaxCommentsPerTask(value: number, since?: string) {
   return runAction({ name: "settings.saveMaxCommentsPerTask", args: [value] }, async () => {
     await requireAdmin();
     const next = commentLimit.parse(value);
+    assertVersion(since, await appStateVersion(COMMENT_LIMIT_KEYS));
     const prev = await getMaxCommentsPerTask();
     await setMaxCommentsPerTask(next);
     describeAction("Cambió el máximo de comentarios por tarea de {from} a {to}", { from: prev, to: next });
     revalidatePath("/admin/settings");
-    return { value: next };
+    return { value: next, version: await appStateVersion(COMMENT_LIMIT_KEYS) };
   });
 }
 
-/** Administración → Ajustes → Instalación: nombre de la organización, idioma por defecto y zona horaria. */
-export async function saveInstallationSettings(input: { orgName: string; locale: string; timeZone: string }) {
+/** Administración → Ajustes → Instalación: nombre de la organización, idioma por defecto y zona horaria (`since`, como arriba). */
+export async function saveInstallationSettings(input: { orgName: string; locale: string; timeZone: string; since?: string }) {
   return runAction({ name: "settings.saveInstallationSettings", args: [input] }, async () => {
     await requireAdmin();
-    const { before, after } = await saveInstanceSettings(input);
+    const { since, ...fields } = input;
+    assertVersion(since, await appStateVersion(INSTANCE_KEYS));
+    const { before, after } = await saveInstanceSettings(fields);
     describeAction("Cambió los ajustes de la instalación", { before, after });
     // Nombre en los títulos, idioma de las pantallas sin sesión y zona de las fechas: cambia lo ya pintado.
     revalidatePath("/", "layout");
-    return after;
+    return { ...after, version: await appStateVersion(INSTANCE_KEYS) };
   });
 }
 
@@ -47,4 +55,9 @@ export async function saveInstallationSettings(input: { orgName: string; locale:
 export async function saveAppIcon(accent: string) {
   // La misma función que usa el guardado con sendBeacon al cerrar la pestaña (/api/admin/app-icon).
   return runAction({ name: "settings.saveAppIcon", args: [accent] }, () => changeAppIcon(accent));
+}
+
+/** Administración → Ajustes → «Icono de la app»: etiqueta propia bajo el icono (hasta 12 caracteres; vacía = automática). */
+export async function saveAppShortName(label: string, since?: string) {
+  return runAction({ name: "settings.saveAppShortName", args: [label] }, () => changeAppShortName(label, since));
 }

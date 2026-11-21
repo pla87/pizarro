@@ -10,4 +10,10 @@ export const instalar: Record<string, string> = {
   "Importante": "Important",
   "Atención": "Warning",
   "Cuidado": "Caution",
+
+  // Botón «Generar mis variables» del paso de Railway
+  "Generar mis variables": "Generate my variables",
+  "Generar otras": "Generate new ones",
+  "Listo: claves nuevas, creadas en tu navegador. Pulsa «Copiar» y pégalas en Railway.":
+    "Done: new keys, created in your browser. Click \"Copy\" and paste them into Railway.",
 };

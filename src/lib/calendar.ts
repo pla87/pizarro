@@ -1,6 +1,7 @@
 // Calendario: cálculos puros (sin BD ni React) para la cuadrícula mensual, las bandas de entregables
 // y la agrupación por semanas de la vista móvil.
 import { addDaysIso, daysBetween, isoWeekday } from "./dates";
+import type { Locale } from "../i18n/shared";
 
 /** Mes en formato YYYY-MM. */
 type MonthKey = string;
@@ -32,6 +33,15 @@ interface MonthGrid {
   weeks: CalendarDay[][];
   start: string;
   end: string;
+}
+
+/**
+ * Primer día de la semana en la cuadrícula del calendario según el idioma de la interfaz: domingo en inglés (el
+ * americano, como en-US) y lunes en español. Solo la cuadrícula: «Esta semana» (filtro del tablero) y el plan semanal
+ * siguen de lunes a domingo en los dos idiomas.
+ */
+export function calendarWeekStart(locale: Locale): 1 | 7 {
+  return locale === "en" ? 7 : 1;
 }
 
 /** Cuadrícula del mes: semanas completas de 7 días empezando en `weekStart` (1 = lunes … 7 = domingo). */
@@ -143,6 +153,20 @@ export function groupWeeks(weeks: CalendarDay[][], hasItems: (iso: string) => bo
   return weeks
     .map((w) => ({ start: w[0]!.iso, end: w[w.length - 1]!.iso, days: w.filter((d) => d.inMonth && hasItems(d.iso)).map((d) => d.iso) }))
     .filter((w) => w.days.length > 0);
+}
+
+/**
+ * Extremos del texto «Semana del {from} al {to}» de la vista móvil: el mes se escribe una sola vez si los dos días son
+ * del mismo mes, junto al día donde lo pone el idioma: detrás en español («del 2 al 8 nov»), delante en inglés de EE. UU.
+ * («of Nov 2 to 8»). Si la semana cruza de mes, los dos lo llevan.
+ */
+export function weekRangeEnds(start: string, end: string, locale: string): { from: string; to: string } {
+  const day = (iso: string, withMonth: boolean) =>
+    new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, withMonth ? { day: "numeric", month: "short", timeZone: "UTC" } : { day: "numeric", timeZone: "UTC" });
+  const sameMonth = start.slice(0, 7) === end.slice(0, 7);
+  const types = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone: "UTC" }).formatToParts(new Date(0)).map((p) => p.type);
+  const monthFirst = types.indexOf("month") < types.indexOf("day");
+  return { from: day(start, !sameMonth || monthFirst), to: day(end, !sameMonth || !monthFirst) };
 }
 
 /** Marca de «sin asignar» en `?person=`. */

@@ -119,7 +119,7 @@ export const mensajeria: Record<string, string> = {
   "Los avisos por Telegram no están activados en esta instalación.": "Telegram notices aren't turned on in this installation.",
   "Los avisos por WhatsApp no están activados en esta instalación.": "WhatsApp notices aren't turned on in this installation.",
   "Conecta primero este canal.": "Connect this channel first.",
-  "Marca la casilla para aceptar recibir avisos por WhatsApp.": "Tick the box to agree to receive WhatsApp notices.",
+  "Marca la casilla para aceptar recibir avisos por WhatsApp.": "Check the box to agree to receive WhatsApp notices.",
   "Guarda primero tu número de WhatsApp.": "Save your WhatsApp number first.",
   "El identificador del número de WhatsApp son solo cifras (Phone number ID).": "The WhatsApp phone number ID is digits only (Phone number ID).",
   "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos.": "The template name only allows lowercase letters, digits and underscores.",
@@ -131,7 +131,7 @@ export const mensajeria: Record<string, string> = {
   "Avisos por Telegram desactivados, pero Telegram ha respondido con un error.": "Telegram notices turned off, but Telegram replied with an error.",
 
   // Administración → Integraciones → WhatsApp: la primera vez no se activa sola
-  "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Enable” to start sending notices (paid).",
+  "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Turn on” to start sending notices (paid).",
 
   // Mi perfil → Avisos: la prueba falla porque el bot está bloqueado
   "Telegram no deja enviarte mensajes (has bloqueado el bot o borrado el chat), así que se ha desconectado. Vuelve a conectarlo para recibir avisos.": "Telegram won't let us message you (you blocked the bot or deleted the chat), so it has been disconnected. Connect it again to get notices.",

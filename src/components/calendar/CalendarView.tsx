@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { undoLast } from "@/actions/undo";
 import { moveDeliverable } from "@/actions/projects";
 import { updateTask } from "@/actions/tasks";
-import { PERSON_UNASSIGNED, bandsForWeek, columnAt, dragRange, groupByDay, groupWeeks, isRange, rangeBandsForWeek, shiftMonth, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
+import { PERSON_UNASSIGNED, bandsForWeek, columnAt, dragRange, groupByDay, groupWeeks, isRange, rangeBandsForWeek, shiftMonth, weekRangeEnds, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
 import { kindBadgeStyle } from "@/lib/constants";
 import { addDaysIso, daysBetween, formatDay } from "@/lib/dates";
 import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
@@ -625,10 +625,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   const mobileWeeks = groupWeeks(weeks, (iso) => mobileByDay.has(iso) || delByDay.has(iso) || repeatsByDay.has(iso));
   const mobileEmpty = !empty && mobileWeeks.length === 0;
   const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
-  const weekLabel = (start: string, end: string) => {
-    const f = (iso: string, withMonth: boolean) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale, withMonth ? { day: "numeric", month: "short", timeZone: "UTC" } : { day: "numeric", timeZone: "UTC" });
-    return t("Semana del {from} al {to}", { from: f(start, start.slice(0, 7) !== end.slice(0, 7)), to: f(end, true) });
-  };
+  const weekLabel = (start: string, end: string) => t("Semana del {from} al {to}", weekRangeEnds(start, end, locale));
 
   const navBtn = "inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800";
   const optionCls = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800";

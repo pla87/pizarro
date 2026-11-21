@@ -18,16 +18,16 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 
 | Suite | Script | Comprobaciones | Tiempo |
 |---|---|---|---|
-| **Generales** | | **443** | |
+| **Generales** | | **449** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
-| Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
-| **Tablero** | | **771** | |
-| Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
-| Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 107 | ~1,5 min |
+| Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
+| **Tablero** | | **820** | |
+| Tablero | `e2e/board-e2e.mjs` | 366 | ~4 min |
+| Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 130 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
-| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 87 | ~1,5 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 111 | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
 | **Detalle de la tarea** | | **56** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
@@ -56,23 +56,23 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Documentación y formatos del material** | | **197** | |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/documentacion-formatos-e2e.mjs` | 107 | ~1 min |
 | Enlaces dentro de los HTML de Documentación: entre documentos (ida, vuelta, #apartado, inexistente, otro proyecto), al propio documento y con nombres arreglados, e índice (#apartado, también en SVG, sin `ping`); HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, UTF-8 con un `<meta>` de 8 bits mal puesto y binarios con BOM de UTF-16 (ronda 52, cazas de bugs 50b y 52) | `e2e/documentacion-enlaces-e2e.mjs` | 90 | ~1,5 min |
-| **Cuentas** | | **189** | |
+| **Cuentas** | | **195** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |
-| Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 28 | ~40 s |
-| **Interfaz y textos** | | **302** | |
+| Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 34 | ~40 s |
+| **Interfaz y textos** | | **303** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 35 | ~1 min |
-| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 67 | ~3 min |
-| **Accesibilidad** | | **90** | |
+| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 68 | ~3 min |
+| **Accesibilidad** | | **108** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
-| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 54 | ~30 s |
+| Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 72 | ~30 s |
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3238** | |
+| **Total** | | **3318** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -176,6 +176,10 @@ en la cabecera, los botones de solo icono a 4 px (8 px con texto) sin perder la 
 superior en el móvil y «Nueva tarea» con el último tipo usado preseleccionado (también tras recargar). Misma base y
 servidor:
 
+Ronda 60 (`tipos`): crear un proyecto de «Reformas y obras» abre su tablero con la descripción copiada; el «+» trae la
+plantilla del tipo; cambiar de tipo no acumula descripción ni subtareas y conserva lo escrito («<prefijo> <título>»),
+también en el detalle con la descripción a medio editar; el editor de plantillas dice «Tipos generales que se usan».
+
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs
 ```
@@ -240,7 +244,7 @@ canal sano y 2 sin él, están en `tests/focus-refresh.test.ts`). Con dos person
 segundos, la tarjeta de A muestra que B tiene abierta la tarea, los dos detalles se avisan y al cerrar B el aviso de A
 desaparece al momento; sin acceso al proyecto el canal responde 404. El panel de filtros no se mueve al marcar un tipo
 (1500 y 1100 px) y el segundo clic cae dentro. Con una búsqueda sin resultados las columnas dicen «Ninguna tarjeta
-coincide», el tablero avisa con «Limpiar filtros» (que la quita) y «Generar Release» con un filtro avisa de cuántas tareas
+coincide», el tablero avisa con «Limpiar filtros» (que la quita) y «Generar release» con un filtro avisa de cuántas tareas
 ocultas incluye. A 390 px: la lupa da el foco al campo al primer toque, la búsqueda salta a la columna con resultados
 (elegida a mano una sin resultados, se queda), sin columna recordada se abre la primera con tarjetas, las pestañas llevan
 degradado por el lado en que quedan más, la columna nueva se muestra al crearla y al volver se abre la última vista.
@@ -255,8 +259,12 @@ botones ni enlaces; la cadencia de una fija va fuera de la parte con rol de bot�
 botones sin nombre, el nombre de la cadencia empieza por su texto visible y el recuento de tarjetas se anuncia en un solo
 sitio. Misma base y servidor:
 
+Desde la ronda 60 (`PART=parche`): mover, editar y archivar desde otra sesión piden solo esas tarjetas a `/board-tasks`
+sin recargar el tablero entero (la selección y la búsqueda siguen) y renombrar una columna sí lo recarga; en `cls`, una
+columna de 180 tarjetas llega con 50 o menos en el HTML, después todas, sin CLS, y la búsqueda encuentra la última.
+
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe,parche
 ```
 
 ### Compartir con Pizarro (ronda 57)
@@ -418,7 +426,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node releases-grandes-e
 
 ### Plan de trabajo para IA y botones de las columnas especiales (ronda 51)
 
-Un proyecto propio con una columna de cada rol especial: todas muestran su botón de acción (*Generar Release*, *Generar
+Un proyecto propio con una columna de cada rol especial: todas muestran su botón de acción (*Generar release*, *Generar
 plan de trabajo*, *Publicar programa (PDF)*, *PDF de la semana*, *Ver lista*…) con el mismo aspecto en claro, en oscuro y
 en el móvil. En la columna «Plan de trabajo para IA»: el panel «Siempre en el plan», el diálogo en dos pasos (las fijas
 con su cadencia, cabecera y pie de serie para Claude Code), el texto generado (contexto, tareas en orden con tipo,
@@ -767,8 +775,12 @@ documento con «Descargar» y «Enviar a la papelera»; con teclado (Intro, ↓,
 botón y el menú caben aunque el nombre sea largo; al enviar a la papelera el foco pasa al otro documento). Misma base y
 servidor:
 
+Y (ronda 60, `PART=resaltar`) lo buscado en Releases sale resaltado (303 marcas en una release de 300 tareas en menos de
+3 s, tildes y mayúsculas originales, enlaces y código intactos, adjuntos y línea de datos, contraste en claro y oscuro,
+«Copiar» sin marcas).
+
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs   # PART=release,menu,cal,plantilla,md,borrar
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs   # PART=release,menu,cal,plantilla,md,borrar,resaltar
 ```
 
 ## Red, sin conexión y formularios

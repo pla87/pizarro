@@ -125,6 +125,19 @@ class S3Error extends Error {
   }
 }
 
+/**
+ * ¿Ha rechazado S3 un borrado porque el objeto está protegido? Un bloqueo de retención del bucket (Cloudflare R2: *Bucket
+ * Lock Rules*; Object Lock en otros proveedores) o una clave de acceso sin permiso para borrar: 403 AccessDenied, o un
+ * código o mensaje que hable de bloqueo o retención. Los errores de firma o de credenciales (que también son 403) no
+ * cuentan: fallarían igual en las subidas.
+ */
+export function isDeleteRefused(err: unknown): boolean {
+  if (!(err instanceof S3Error)) return false;
+  if (err.code && /^(SignatureDoesNotMatch|InvalidAccessKeyId|RequestTimeTooSkewed|AuthorizationHeaderMalformed|ExpiredToken|InvalidToken)$/.test(err.code)) return false;
+  if (/lock|retention|worm|immutable/i.test(`${err.code ?? ""} ${err.message}`)) return true;
+  return err.status === 403 && (err.code === null || err.code === "AccessDenied");
+}
+
 const TIMEOUT_MS = 60_000;
 const RETRIES = 3;
 

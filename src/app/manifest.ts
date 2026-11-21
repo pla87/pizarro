@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getAppIcon } from "@/lib/app-icon";
+import { getAppIcon, getAppShortName } from "@/lib/app-icon";
 import { getInstanceSettings } from "@/lib/instance";
 import { webManifest } from "@/lib/web-manifest";
 
@@ -9,6 +9,6 @@ export const dynamic = "force-dynamic";
 
 /** Manifiesto para instalar Pizarro como app en Android, iPhone y escritorio. */
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
-  const [instance, appIcon] = await Promise.all([getInstanceSettings(), getAppIcon()]);
-  return webManifest(instance.locale, { orgName: instance.orgName, appIcon });
+  const [instance, appIcon, shortName] = await Promise.all([getInstanceSettings(), getAppIcon(), getAppShortName()]);
+  return webManifest(instance.locale, { orgName: instance.orgName, appIcon, shortName });
 }

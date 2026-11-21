@@ -1,9 +1,9 @@
-// Rutas públicas cuyo último tramo es una credencial (token del calendario, enlaces de email de /reset/ y /confirm/):
+// Rutas públicas cuyo último tramo es una credencial (token del calendario, enlaces de email de /reset/, /confirm/ y /unsubscribe/, también bajo /api/):
 // nunca deben llegar a los registros (Administración → Logs), ni en el campo «ruta» ni dentro de un mensaje de error.
 // Funciones puras (sin dependencias del servidor) para poder probarlas y reutilizarlas.
 
 /** Prefijos de ruta cuyo resto es un secreto. Para proteger otra ruta con token en la URL, basta añadirla aquí. */
-export const SECRET_PATH_PREFIXES = ["/api/calendar/", "/reset/", "/confirm/"] as const;
+export const SECRET_PATH_PREFIXES = ["/api/calendar/", "/reset/", "/confirm/", "/unsubscribe/"] as const;
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 // Hasta el primer espacio o cierre, sin llevarse la puntuación final de la frase («… /api/calendar/x: fallo»).

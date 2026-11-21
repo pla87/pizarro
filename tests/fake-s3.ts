@@ -13,6 +13,12 @@ export interface FakeS3 {
   log: { method: string; key: string; status: number }[];
   /** Si devuelve true, la petición falla con 500 (para probar reintentos y cortes). */
   failIf: ((method: string, key: string) => boolean) | null;
+  /**
+   * Bloqueo de retención (como las *Bucket Lock Rules* de Cloudflare R2): si devuelve true para una clave existente, no
+   * se puede borrar ni sobrescribir (403 con `lockCode`, AccessDenied si no se indica).
+   */
+  locked: ((key: string) => boolean) | null;
+  lockCode?: string;
   close(): Promise<void>;
 }
 
@@ -48,7 +54,7 @@ export async function startFakeS3(opts: { accessKeyId: string; secretAccessKey: 
   const pageSize = opts.pageSize ?? 3;
   const objects = new Map<string, Buffer>();
   const log: FakeS3["log"] = [];
-  const state: FakeS3 = { endpoint: "", bucket, objects, log, failIf: null, close: async () => {} };
+  const state: FakeS3 = { endpoint: "", bucket, objects, log, failIf: null, locked: null, close: async () => {} };
 
   const server = http.createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -79,6 +85,7 @@ export async function startFakeS3(opts: { accessKeyId: string; secretAccessKey: 
 
     if (parts[0] !== bucket) return error(404, "NoSuchBucket");
     if (state.failIf?.(req.method!, key)) return error(500, "InternalError");
+    if ((req.method === "DELETE" || req.method === "PUT") && key && objects.has(key) && state.locked?.(key)) return error(403, state.lockCode ?? "AccessDenied");
 
     if (!key && req.method === "GET") {
       const q = new URLSearchParams(rawQuery);

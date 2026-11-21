@@ -264,11 +264,12 @@ if (only.includes("col")) try {
   await U.dialog(a.page).waitFor();
   await U.dialog(a.page).locator("select").filter({ has: a.page.locator("option", { hasText: "Temporal" }) }).first().selectOption({ label: "Temporal" });
   await titleField(a.page).fill("Creada tras borrar la columna");
-  await L.q(`DELETE FROM "Column" WHERE id='bh48b_col'`);
-  // Un cambio de B avisa a A por el canal en vivo y su tablero se pone al día (ya sin la columna).
-  await U.openTask(b.page, "Columna 1");
-  await titleField(b.page).fill("Columna 1 bis");
-  await b.page.keyboard.press("Tab");
+  // B borra la columna desde su menú: un cambio de estructura, así que el tablero de A se recarga entero por el canal en
+  // vivo (ya sin la columna). Un cambio de una sola tarjeta ya no recarga las columnas (solo trae esa tarjeta).
+  await L.colLoc(b.page, "Temporal").getByRole("button", { name: "Opciones de columna" }).click();
+  await b.page.getByRole("menuitem", { name: "Borrar columna" }).click();
+  await b.page.getByRole("dialog").getByRole("button", { name: "Borrar", exact: true }).click();
+  await L.waitFor(async () => Number((await L.q(`SELECT count(*)::int AS n FROM "Column" WHERE id='bh48b_col'`))[0]?.n ?? 1) === 0, { timeout: 8000 }).catch(() => {});
   await L.waitFor(async () => hasNotice(a.page, "La columna elegida ya no existe"), { timeout: 10000 }).catch(() => {});
   L.check("COL: avisa de que la columna ya no existe", await hasNotice(a.page, "La columna elegida ya no existe. La tarea se creará en «Backlog»."), JSON.stringify(await notices(a.page)));
   await U.dialog(a.page).getByRole("button", { name: /^Crear/ }).last().click();
@@ -330,7 +331,7 @@ if (only.includes("url")) try {
 const openers = [
   ["Archivadas", (pg) => pg.getByRole("button", { name: "Archivadas" }).first().click()],
   ["Varias tareas", (pg) => pg.getByRole("button", { name: "Varias tareas" }).first().click()],
-  ["Generar Release", (pg) => pg.getByRole("button", { name: "Generar Release" }).first().click()],
+  ["Generar release", (pg) => pg.getByRole("button", { name: "Generar release" }).first().click()],
 ];
 const dialogs = (pg) => pg.locator("[role=dialog]").count().catch(() => 0);
 // Errores de red esperables con la red cortada (los de la consola); un rechazo sin atender (pageerror) sí cuenta.
@@ -552,11 +553,11 @@ if (only.includes("a11y")) try {
   L.eq("A11Y: la fecha límite tiene nombre", await U.dialog(page).getByLabel("Fecha límite", { exact: true }).count(), 1);
   L.check("A11Y: «Columna» no se anuncia con el nombre de la columna", !snap.includes(`combobox "${L.COL.backlog}"`), comboLines);
   // Árbol de accesibilidad de Chromium: ningún desplegable ni campo de texto del detalle sin nombre.
-  const ax = await page.accessibility.snapshot({ root: await U.dialog(page).elementHandle(), interestingOnly: true });
+  const ax = await L.axSnapshot(page, U.dialog(page));
   const flat = [];
   const walk = (n) => { if (!n) return; flat.push(n); (n.children ?? []).forEach(walk); };
   walk(ax);
-  const unnamed = flat.filter((n) => ["combobox", "textbox", "Date"].includes(n.role) && !n.name);
+  const unnamed = flat.filter((n) => ["combobox", "textbox", "Date", "date"].includes(n.role) && !n.name);
   L.eq("A11Y: árbol de accesibilidad: ningún desplegable ni campo sin nombre", unnamed.map((n) => `${n.role}:${n.value ?? ""}`), []);
   L.assertNoErrors("A11Y", [s]);
   await s.ctx.close();

@@ -1,7 +1,9 @@
-// Asignar un rol de columna único: deshacer y rehacer devuelven el rol y las tareas fijas a su sitio.
+// Asignar un rol de columna único: deshacer y rehacer devuelven el rol y las tareas fijas a su sitio (sin pisar el rol
+// que otra persona puso entretanto).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied, type Fixture } from "./helpers";
+import { deleteTask, moveTask } from "../../src/actions/tasks";
 import { setColumnRole } from "../../src/actions/columns";
 import { redoChecked, undoLast } from "../../src/actions/undo";
 import { flushLogs } from "../../src/lib/log";
@@ -74,5 +76,54 @@ describe("rol que la columna ya tiene", () => {
     await flushLogs();
     assert.deepEqual(await count(), before);
     assert.equal((await roles(f))[f.columns.todo], "WAITING");
+  });
+});
+
+/** Dos personas con acceso a un proyecto nuevo. */
+async function twoPeople(): Promise<{ a: { id: string }; b: { id: string }; f: Fixture }> {
+  const a = await makeUser();
+  const b = await makeUser();
+  const f = await makeProject({ members: [a, b] });
+  return { a, b, f };
+}
+
+describe("tareas fijas y roles de columna al deshacer", () => {
+  test("deshacer el cambio de rol no pisa el rol que otra persona puso en otra columna", async () => {
+    const { a, b, f } = await twoPeople();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "NEXT_RELEASE" } });
+    await loginAs(a);
+    expectOk(await setColumnRole(f.columns.doing, "NEXT_RELEASE"));
+    const entry = await db.undoEntry.findFirstOrThrow({ where: { userId: a.id, projectId: f.project.id, kind: "UNDO" }, orderBy: { createdAt: "desc" } });
+    const columnOps = (entry.ops as { t: string; id?: string }[]).filter((op) => op.t === "column.set").map((op) => op.id).sort();
+    assert.deepEqual(columnOps, [f.columns.todo, f.columns.doing].sort(), "solo las dos columnas que cambian");
+    await loginAs(b);
+    expectOk(await setColumnRole(f.columns.done, "WAITING"));
+    await loginAs(a);
+    expectOk(await undoLast(f.project.id));
+    const roles = Object.fromEntries((await db.column.findMany({ where: { projectId: f.project.id } })).map((c) => [c.id, c.role]));
+    assert.deepEqual(roles, { [f.columns.todo]: "NEXT_RELEASE", [f.columns.doing]: "NONE", [f.columns.done]: "WAITING" });
+  });
+
+  test("una tarea fija que vuelve a una columna que ya no es la de la release pasa a normal", async () => {
+    const { a, b, f } = await twoPeople();
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "NEXT_RELEASE" } });
+    const fixed = await makeTask(f, { title: "Fija", columnId: f.columns.todo });
+    await db.task.update({ where: { id: fixed.id }, data: { evergreen: true, evergreenEvery: 2 } });
+    const gone = await makeTask(f, { title: "Fija borrada", columnId: f.columns.todo, position: 3000 });
+    await db.task.update({ where: { id: gone.id }, data: { evergreen: true } });
+    await loginAs(a);
+    expectOk(await moveTask(fixed.id, f.columns.doing, null, null));
+    expectOk(await deleteTask(gone.id));
+    // Entretanto, otra persona le quita el rol a la columna.
+    await loginAs(b);
+    expectOk(await setColumnRole(f.columns.todo, "NONE"));
+    await loginAs(a);
+    expectOk(await undoLast(f.project.id)); // borrado
+    expectOk(await undoLast(f.project.id)); // movimiento
+    for (const id of [fixed.id, gone.id]) {
+      const t = await db.task.findUniqueOrThrow({ where: { id } });
+      assert.equal(t.columnId, f.columns.todo);
+      assert.deepEqual([t.evergreen, t.evergreenEvery], [false, 1]);
+    }
   });
 });

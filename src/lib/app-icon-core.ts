@@ -1,5 +1,6 @@
 // Icono de la app (pestaña, pantalla de inicio del móvil y app instalada) con el color de un tema de color. Parte pura:
 // sin base de datos ni sharp, para poder usarla en el cliente (vista previa en Administración) y en las pruebas.
+import { graphemes } from "./graphemes";
 
 /** Temas de color (los de «Mi perfil → Tema de color», en minúsculas como data-accent). */
 export const APP_ICON_ACCENTS = ["blue", "forest", "sienna", "mustard", "mono", "eva"] as const;
@@ -84,13 +85,56 @@ export const appIconUrl = (accent: AppIconAccent, file: AppIconFile): string => 
  * Nombre de la app bajo el icono (y en la lista de apps): el de la organización de la instalación si lo hay, así dos
  * instalaciones en el mismo móvil no se llaman igual. El nombre largo lleva siempre «Pizarro».
  */
-export function appNames(orgName: string): { name: string; shortName: string } {
+export function appNames(orgName: string, customShortName: string = ""): { name: string; shortName: string } {
   const org = orgName.trim();
-  return org ? { name: `${org} · Pizarro`, shortName: shortAppName(org) } : { name: "Pizarro", shortName: "Pizarro" };
+  // Etiqueta propia (Administración → Ajustes → «Icono de la app»): manda sobre el recorte automático.
+  const custom = cleanAppShortName(customShortName);
+  const names = org ? { name: `${org} · Pizarro`, shortName: shortAppName(org) } : { name: "Pizarro", shortName: "Pizarro" };
+  return custom ? { ...names, shortName: custom } : names;
 }
 
 /** Largo máximo del nombre bajo el icono: el móvil lo corta (o lo escribe en dos líneas) a partir de unos 12 caracteres. */
-const SHORT_NAME_MAX = 12;
+export const SHORT_NAME_MAX = 12;
+
+// Caracteres de control (NUL incluido: PostgreSQL no lo admite en un texto y el guardado fallaba con un error genérico)
+// y de control de la dirección del texto (que en el nombre bajo el icono podrían darle la vuelta).
+const CONTROL_CHARS = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/gu;
+
+/** La etiqueta sin espacios de más (los saltos de línea y tabuladores cuentan como espacio) ni caracteres de control. */
+function normalizeShortName(raw: string): string {
+  return raw.replace(/\s+/g, " ").replace(CONTROL_CHARS, "").replace(/ {2,}/g, " ").trim();
+}
+
+/** Caracteres visibles de la etiqueta tal como se guardaría sin recortar (lo que cuenta el contador de Ajustes). */
+export function appShortNameLength(raw: string): number {
+  let n = 0;
+  for (const g of graphemes(normalizeShortName(raw))) n += g ? 1 : 0;
+  return n;
+}
+
+/**
+ * Etiqueta propia escrita por el administrador: sin espacios de más ni caracteres de control y sin pasar del máximo
+ * (vacía = la automática). Se recorta por caracteres visibles: antes, por puntos de código, una familia «👨‍👩‍👧» se partía
+ * y quedaba un emoji roto en el manifiesto y en apple-mobile-web-app-title.
+ */
+export function cleanAppShortName(raw: string): string {
+  let out = "";
+  let n = 0;
+  for (const g of graphemes(normalizeShortName(raw))) {
+    if (++n > SHORT_NAME_MAX) break;
+    out += g;
+  }
+  return out.trimEnd();
+}
+
+/** Cómo sale el nombre bajo el icono a partir del de la organización (para explicarlo en Ajustes). */
+export function shortNameSource(orgName: string, customShortName: string = ""): "custom" | "none" | "whole" | "firstWord" | "cut" {
+  if (cleanAppShortName(customShortName)) return "custom";
+  const org = orgName.trim().replace(/\s+/g, " ");
+  if (!org) return "none";
+  const short = shortAppName(org);
+  return short === org ? "whole" : short.endsWith("…") ? "cut" : "firstWord";
+}
 
 /** Nombre corto: el entero si cabe; si no, la primera palabra si cabe y tiene 4 o más letras o cifras (no «La» ni un emoji); si no, un recorte con «…» (sin pasar del máximo). */
 export function shortAppName(orgName: string, max: number = SHORT_NAME_MAX): string {
