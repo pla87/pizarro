@@ -12,18 +12,18 @@ import { aiPlanZipName, evergreenDue, swapTemplateBlock } from "../src/lib/relea
 const base = (over: Partial<AiPlanInput> = {}): AiPlanInput => ({
   header: AI_PLAN_DEFAULTS.es.header,
   footer: AI_PLAN_DEFAULTS.es.footer,
-  project: { name: "Web", description: "Tienda en línea.\n\n## Stack\n\nNext.js", url: "https://pz.example.com/p/p1" },
+  project: { name: "Web", description: "Tienda en línea.\n\n## Stack\n\nNext.js. Tablero: [aquí](https://pz.example.com/p/p1)." },
   column: "Plan de trabajo para IA",
   date: "2026-11-23",
   origin: "https://pz.example.com",
   tasks: [
     {
-      id: "t1", title: "Arreglar @[Ana](user:u1) el login", kind: "Corrección", url: "https://pz.example.com/p/p1?task=t1",
+      id: "t1", title: "Arreglar @[Ana](user:u1) el login", kind: "Corrección",
       description: "Falla al entrar.\n\n# Pasos\n\n```\n# no es un título\n```\n\n![captura](/api/attachments/a9) -&gt; ver",
       subtasks: [{ title: "Reproducir", done: true }, { title: "Corregir y probar", done: false }],
       labels: ["Urgente", "Backend"], dueDate: "2026-11-30", startDate: "2026-11-24", priority: "Alta",
       linkUrl: "https://github.com/example/web/issues/1", links: [{ title: "Diseño [v2]", url: "https://docs.google.com/document/d/x" }],
-      attachments: [{ name: "log.txt", url: "https://pz.example.com/api/attachments/a1" }],
+      attachments: [{ name: "log.txt" }, { name: "mi_registro*.txt" }],
     },
     { id: "t2", title: "Añadir pruebas", kind: "Funcionalidad", blockedBy: { title: "Arreglar el login", index: 1 } },
     { id: "t3", title: "Revisar estilo", evergreen: true, blockedBy: { title: "Otra cosa" } },
@@ -44,13 +44,13 @@ describe("texto del plan de trabajo para IA", () => {
     assert.ok(md.endsWith("\n") && !md.endsWith("\n\n"));
   });
 
-  test("contexto del proyecto: nombre con enlace, columna, fecha, número de tareas y descripción (títulos rebajados)", () => {
+  test("contexto del proyecto: nombre (sin enlace a Pizarro), columna, fecha, número de tareas y descripción (títulos rebajados)", () => {
     const md = buildAiPlanMarkdown(base());
-    assert.match(md, /- \*\*Proyecto:\*\* \[Web\]\(<https:\/\/pz\.example\.com\/p\/p1>\)/);
+    assert.match(md, /- \*\*Proyecto:\*\* Web\n/);
     assert.match(md, /- \*\*Columna:\*\* Plan de trabajo para IA/);
     assert.match(md, /- \*\*Fecha:\*\* 2026-11-23/);
     assert.match(md, /- \*\*Tareas:\*\* 3/);
-    assert.match(md, /Tienda en línea\.\n\n##### Stack\n\nNext\.js/);
+    assert.match(md, /Tienda en línea\.\n\n##### Stack\n\nNext\.js\. Tablero: aquí\./);
   });
 
   test("cada tarea lleva tipo, prioridad, etiquetas, fechas, enlaces, documentos, adjuntos, descripción y checklist", () => {
@@ -58,16 +58,18 @@ describe("texto del plan de trabajo para IA", () => {
     const t1 = md.slice(md.indexOf("### 1."), md.indexOf("### 2."));
     for (const line of [
       "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Urgente, Backend", "- **Fecha de inicio:** 2026-11-24", "- **Fecha límite:** 2026-11-30",
-      "- **Tarea en Pizarro:** [abrir](<https://pz.example.com/p/p1?task=t1>)",
       "- **Enlace:** [https://github.com/example/web/issues/1](<https://github.com/example/web/issues/1>)",
       "- **Documentos:** [Diseño \\[v2\\]](<https://docs.google.com/document/d/x>)",
-      "- **Adjuntos:** [log.txt](<https://pz.example.com/api/attachments/a1>)",
+      "- **Adjuntos:** `log.txt`, `mi_registro*.txt`",
       "**Descripción:**", "**Checklist (criterios de aceptación):**", "- [x] Reproducir", "- [ ] Corregir y probar",
     ]) assert.ok(t1.includes(line), line);
     // Títulos de la descripción rebajados (no compiten con los del plan), pero no dentro del código; entidades y enlaces a adjuntos.
     assert.ok(t1.includes("#### Pasos"));
     assert.ok(t1.includes("```\n# no es un título\n```"));
-    assert.ok(t1.includes("![captura](https://pz.example.com/api/attachments/a9) -> ver"));
+    // La imagen de un adjunto que no va en el ZIP se queda en su texto alternativo: la IA no puede abrir Pizarro.
+    assert.ok(t1.includes("captura -> ver"), t1);
+    assert.ok(!md.includes("pz.example.com"), md);
+    assert.ok(!md.includes("Pizarro"), md);
     // Sin datos que no tiene: ni «Fecha límite» ni checklist en la 2.
     const t2 = md.slice(md.indexOf("### 2."), md.indexOf("### 3."));
     assert.ok(!t2.includes("Fecha límite") && !t2.includes("Checklist"));
@@ -244,34 +246,56 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     for (const { folder } of byTask.values()) assert.ok(AI_PLAN_ZIP_FOLDER.test(folder), folder);
   });
 
-  test("el texto cita las rutas del ZIP, sustituye las imágenes de la descripción y explica el ZIP; sin ruta, solo enlaces", () => {
+  test("el texto cita las rutas del ZIP, sustituye las imágenes de la descripción y explica el ZIP; sin ruta, solo los nombres", () => {
     const { byAttachment } = planAttachmentPaths(tasks);
     const withPaths = (path: boolean) => buildAiPlanMarkdown({
       header: AI_PLAN_DEFAULTS.es.header, footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com",
       tasks: [{
         id: "t1", title: "Arreglar", description: "Mira ![captura](/api/attachments/a1) y ![otra](/api/attachments/zz) y ![c](/api/attachments/a1?thumb=1)",
-        attachments: [{ id: "a1", name: "Plano final.png", url: "https://pz.example.com/api/attachments/a1", path: path ? byAttachment.get("a1") : undefined }],
+        attachments: [{ id: "a1", name: "Plano final.png", path: path ? byAttachment.get("a1") : undefined }],
       }],
     });
     const md = withPaths(true);
     assert.ok(md.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…»"));
-    assert.ok(md.includes("  - `adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp` ([Plano final.png en Pizarro](<https://pz.example.com/api/attachments/a1>))"));
+    assert.ok(md.includes("- **Adjuntos:**\n  - `adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`\n"), md);
     assert.ok(md.includes("![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     assert.ok(md.includes("![c](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
-    // Una imagen que no es adjunto de ninguna tarea del plan queda con su enlace absoluto.
-    assert.ok(md.includes("![otra](https://pz.example.com/api/attachments/zz)"));
+    // Una imagen que no es adjunto de ninguna tarea del plan se queda en su texto alternativo (sin enlace a Pizarro).
+    assert.ok(md.includes("Mira ![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp) y otra y "), md);
     assert.ok(md.includes("ZIP «adjuntos/…» que acompaña a este plan"));
     const plain = withPaths(false);
-    assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("![captura](https://pz.example.com/api/attachments/a1)"));
-    assert.ok(plain.includes("- **Adjuntos:** [Plano final.png](<https://pz.example.com/api/attachments/a1>)"));
-    // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que van solo como enlaces, pese a la cabecera de serie.
-    assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: van solo como enlaces a Pizarro"));
+    assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("Mira captura y otra y c"), plain);
+    assert.ok(plain.includes("- **Adjuntos:** `Plano final.png`"));
+    // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que solo van sus nombres, pese a la cabecera de serie.
+    assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos"));
+    for (const text of [md, plain]) assert.ok(!text.includes("pz.example.com") && !text.includes("Pizarro"), text);
     assert.ok(!md.includes("no lleva ZIP"));
   });
 
-  test("planDescription sin mapa deja los enlaces absolutos como siempre", () => {
-    assert.equal(planDescription("![a](/api/attachments/x1)", "https://pz.example.com"), "![a](https://pz.example.com/api/attachments/x1)");
-    assert.equal(planDescription("![a](/api/attachments/x1)", "https://pz.example.com", new Map([["x1", "adjuntos/01-t/a.webp"]])), "![a](adjuntos/01-t/a.webp)");
+  test("planDescription: sin enlaces a Pizarro (relativos o con su origen); los adjuntos del ZIP, por su ruta; los demás enlaces, igual", () => {
+    const origin = "https://pz.example.com";
+    const zip = new Map([["x1", "adjuntos/01-t/a.webp"]]);
+    assert.equal(planDescription("![a](/api/attachments/x1)", origin), "a");
+    assert.equal(planDescription("![a](/api/attachments/x1)", origin, zip), "![a](adjuntos/01-t/a.webp)");
+    assert.equal(planDescription("[plano](</api/attachments/x1?download=1> \"t\")", origin, zip), "[plano](<adjuntos/01-t/a.webp> \"t\")");
+    // A la tarea, al tablero, con el origen en mayúsculas o con «/» al final: el texto, sin el enlace.
+    assert.equal(planDescription("Ver [la tarea](https://pz.example.com/p/p1?task=t2) y [el **tablero**](HTTPS://PZ.example.com/p/p1).", `${origin}/`), "Ver la tarea y el **tablero**.");
+    assert.equal(planDescription("[inicio](https://pz.example.com) y [panel](https://pz.example.com#x)", origin), "inicio y panel");
+    // Otro sitio (también uno que empieza igual), un enlace sin origen conocido o uno «//otro» no cambian.
+    for (const keep of ["[web](https://example.com/p/1)", "[casi](https://pz.example.com.evil.example/p/1)", "[proto](//pz.example.com/p/1)", "![x](https://cdn.example.com/x.png)"]) assert.equal(planDescription(keep, origin), keep);
+    assert.equal(planDescription("[rel](/p/p1)", null), "rel");
+    // Dentro de un bloque de código no se toca nada; en un título, sí.
+    assert.equal(planDescription("```\n[a](/p/1)\n```\n# [Título](/p/1)", origin), "```\n[a](/p/1)\n```\n#### Título");
+  });
+
+  test("el enlace externo de una tarea que lleva a Pizarro no entra; los de otros sitios, sí", () => {
+    const md = (linkUrl: string) => buildAiPlanMarkdown({ header: "", footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com", tasks: [{ id: "t1", title: "A", linkUrl }] });
+    assert.ok(!md("https://pz.example.com/p/p2?task=x").includes("Enlace"));
+    assert.ok(md("https://example.com/issue/1").includes("- **Enlace:** [https://example.com/issue/1](<https://example.com/issue/1>)"));
+  });
+
+  test("la cabecera de serie ya no habla de enlaces a Pizarro (el plan no lleva ninguno)", () => {
+    for (const l of ["es", "en"] as const) assert.ok(!AI_PLAN_DEFAULTS[l].header.includes("Pizarro"), l);
   });
 
   test("nombre del ZIP", () => {
@@ -303,11 +327,12 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
       header: AI_PLAN_DEFAULTS.en.header, footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com",
       tasks: [{
         id: "t1", title: "Fix", description: "See ![shot](/api/attachments/a1)",
-        attachments: [{ id: "a1", name: "Plano final.png", url: "https://pz.example.com/api/attachments/a1", path: byAttachment.get("a1") }],
+        attachments: [{ id: "a1", name: "Plano final.png", path: byAttachment.get("a1") }],
       }],
     }, makeT("en"));
     assert.ok(md.includes("- **Attachments:** 1 file(s) in the “attachments/…” ZIP that goes with this plan"), md);
-    assert.ok(md.includes("  - `attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp` ([Plano final.png in Pizarro](<https://pz.example.com/api/attachments/a1>))"));
+    assert.ok(md.includes("  - `attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp`\n"), md);
+    assert.ok(!md.includes("Pizarro"), md);
     assert.ok(md.includes("![shot](attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     assert.ok(!md.includes("adjuntos/"), md);
   });

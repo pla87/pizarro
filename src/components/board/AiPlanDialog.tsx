@@ -136,6 +136,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
     if (!res) return;
     if (!res.ok) return toast(res.error, "error");
     const details = new Map(res.data.map((d) => [d.id, d]));
+    // Para reconocer los enlaces a Pizarro de las descripciones (el plan no lleva ninguno: la IA no puede abrirlos).
     const origin = window.location.origin;
     const labelName = new Map(board.labels.map((l) => [l.id, l.name]));
     const index = new Map(selectedTasks.map((x, i) => [x.id, i + 1]));
@@ -144,7 +145,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
     // el texto la cita y el servidor recalcula los mismos nombres).
     const paths = planAttachmentPaths(selectedTasks.map((x) => ({ id: x.id, title: x.title, attachments: details.get(x.id)?.attachments ?? [] })), locale === "en" ? "en" : "es");
     const withFiles = selectedTasks.filter((x) => paths.byTask.has(x.id));
-    // Como en la release, el ZIP admite 200 tareas con adjuntos; con más no se ofrece y el texto solo lleva los enlaces a Pizarro.
+    // Como en la release, el ZIP admite 200 tareas con adjuntos; con más no se ofrece y el texto solo cita sus nombres.
     const zipOk = withFiles.length <= RELEASE_MAX_ATTACHMENT_TASKS;
     setZipTooMany(!zipOk);
     setZipItems(zipOk ? withFiles.map((x) => ({ taskId: x.id, folder: paths.byTask.get(x.id)!.folder, count: paths.byTask.get(x.id)!.files.length })) : []);
@@ -154,7 +155,6 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         id: x.id,
         title: x.title,
         kind: board.kindById.get(x.kindId)?.name ?? null,
-        url: `${origin}/p/${board.project.id}?task=${x.id}`,
         description: d?.description ?? "",
         subtasks: d?.subtasks ?? [],
         labels: x.labelIds.map((id) => labelName.get(id)).filter((n): n is string => !!n),
@@ -163,7 +163,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         priority: fields.includes("priority") && x.priority ? t(PRIORITY_LABEL[x.priority]) : null,
         linkUrl: x.linkUrl,
         links: d?.links ?? [],
-        attachments: (d?.attachments ?? []).map((a) => ({ id: a.id, name: a.originalName, url: `${origin}/api/attachments/${a.id}`, path: zipOk ? paths.byAttachment.get(a.id) : undefined })),
+        attachments: (d?.attachments ?? []).map((a) => ({ id: a.id, name: a.originalName, path: zipOk ? paths.byAttachment.get(a.id) : undefined })),
         evergreen: x.evergreen,
         blockedBy: x.blockedBy ? { title: x.blockedBy.title, index: index.get(x.blockedBy.id) ?? null } : null,
       };
@@ -171,7 +171,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
     const md = buildAiPlanMarkdown({
       header: templateText("header", headerId),
       footer: templateText("footer", footerId),
-      project: { name: board.project.name, description: setup?.description ?? "", url: `${origin}/p/${board.project.id}` },
+      project: { name: board.project.name, description: setup?.description ?? "" },
       column: column.name,
       date: today,
       tasks: planTasks,
@@ -343,10 +343,10 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             </select>
             <span className="text-xs text-slate-500">{t("Las fijas se quedan en la columna.")}</span>
           </div>
-          {zipTooMany && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo lleva los enlaces a Pizarro.")}</p>}
+          {zipTooMany && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo cita sus nombres.")}</p>}
           <p className="text-xs text-slate-500">
             {t("Se guardará como «{name}».", { name: docName() })}
-            {attachmentTotal > 0 && <> {t("Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta y su enlace a Pizarro.")}</>}
+            {attachmentTotal > 0 && <> {t("Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta.")}</>}
           </p>
         </div>
       )}

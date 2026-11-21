@@ -359,6 +359,15 @@ body {
 .prose-md th, .prose-md td { @apply border border-slate-200 px-2 py-1 dark:border-slate-700; }
 .prose-md hr { @apply my-4 border-slate-200 dark:border-slate-800; }
 .prose-md input[type="checkbox"] { @apply mr-1.5 align-middle; }
+/*
+ * Lo buscado, resaltado (histórico de releases: título, datos, adjuntos y texto; search-highlight.ts). Fondo ámbar con
+ * texto casi negro en los dos temas (≥ 12:1; las escalas ámbar y piedra no cambian con el tema de color), también
+ * dentro de un enlace o un código. Partido en dos líneas, cada trozo con su fondo.
+ */
+mark.search-hit {
+  @apply rounded-sm bg-amber-200 text-stone-900 dark:bg-amber-300 dark:text-stone-950;
+  box-decoration-break: clone;
+}
 /* Listas de tareas: la de react-markdown (.contains-task-list) y la del editor con barra (TipTap, data-type="taskList"). */
 .prose-md ul.contains-task-list, .prose-md ul[data-type="taskList"] { @apply list-none pl-0; }
 .prose-md ul.contains-task-list ul, .prose-md ul[data-type="taskList"] ul, .prose-md ul.contains-task-list ol, .prose-md ul[data-type="taskList"] ol { @apply pl-5; }

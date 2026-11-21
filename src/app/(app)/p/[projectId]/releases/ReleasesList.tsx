@@ -65,7 +65,7 @@ export function ReleasesList({
         <p className="card p-6 text-center text-sm text-slate-500">{t("Ninguna release coincide con «{query}».", { query })}</p>
       ) : (
         <div className="space-y-3">
-          {releases.map((r) => <ReleaseEntry key={r.id} release={r} />)}
+          {releases.map((r) => <ReleaseEntry key={r.id} release={r} query={query} />)}
         </div>
       )}
       {moreHref && (

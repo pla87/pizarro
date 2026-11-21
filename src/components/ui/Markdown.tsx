@@ -1,10 +1,12 @@
 "use client";
 
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useT } from "@/i18n/client";
 import { rehypeHeadingIds } from "@/lib/heading-ids";
 import { safeMarkdownUrl } from "@/lib/safe-url";
+import { rehypeSearchHighlight } from "@/lib/search-highlight";
 import { markdownComponents, markdownSource } from "./markdown-parts";
 import { rehypeEmailSafe } from "./EmailSafe";
 
@@ -15,12 +17,20 @@ import { rehypeEmailSafe } from "./EmailSafe";
 const PLUGINS = [rehypeEmailSafe];
 const HEADING_IDS = [rehypeEmailSafe, rehypeHeadingIds];
 
-/** `headingIds`: cada título lleva su `id` (heading-ids.ts), para llegar a un «#apartado» (visor de la Documentación). */
-export function Markdown({ children, headingIds = false }: { children: string; headingIds?: boolean }) {
+/**
+ * `headingIds`: cada título lleva su `id` (heading-ids.ts), para llegar a un «#apartado» (visor de la Documentación).
+ * `highlight`: lo buscado, resaltado en los nodos de texto (search-highlight.ts; antes de rehypeEmailSafe, que parte los
+ * emails en varios nodos).
+ */
+export function Markdown({ children, headingIds = false, highlight = "" }: { children: string; headingIds?: boolean; highlight?: string }) {
   const t = useT();
+  const plugins = useMemo(() => {
+    const base = headingIds ? HEADING_IDS : PLUGINS;
+    return highlight ? [() => rehypeSearchHighlight(highlight), ...base] : base;
+  }, [headingIds, highlight]);
   return (
     <div className="prose-md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={headingIds ? HEADING_IDS : PLUGINS} urlTransform={safeMarkdownUrl} components={markdownComponents(t)}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins} urlTransform={safeMarkdownUrl} components={markdownComponents(t)}>
         {markdownSource(children)}
       </ReactMarkdown>
     </div>

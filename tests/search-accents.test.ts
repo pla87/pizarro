@@ -1,8 +1,9 @@
 // Búsquedas sin distinguir mayúsculas ni tildes: la del navegador (normalizeSearch, buscadores del tablero, documentos,
 // changelog, menciones y «Bloqueada por») y la que se compara con translate() en PostgreSQL (foldAccents).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { foldAccents, foldedContains, normalizeSearch, slugify } from "../src/lib/search-accents";
+import { ACCENTED, foldAccents, foldedContains, normalizeSearch, slugify, UNACCENTED } from "../src/lib/search-accents";
 
 test("normalizeSearch: minúsculas y sin marcas diacríticas", () => {
   assert.equal(normalizeSearch("Canción del PINGÜINO"), "cancion del pinguino");
@@ -36,4 +37,13 @@ test("slugify: sin tildes, minúsculas y con guiones; da lo mismo que las copias
     assert.equal(out, zip(s), JSON.stringify(s));
     assert.equal(out, anchor(s), JSON.stringify(s));
   }
+});
+
+test("search_fold (índice de la búsqueda de releases) pliega las mismas letras que ACCENTED → UNACCENTED", () => {
+  const sql = readFileSync("prisma/migrations/20261127103000_indice_busqueda_releases/migration.sql", "utf8");
+  const m = /pg_catalog\.translate\(pg_catalog\.lower\(\$1\), '([^']*)', '([^']*)'\)/.exec(sql);
+  assert.ok(m, "la migración define search_fold con translate(lower($1), …)");
+  assert.equal(m[1], ACCENTED);
+  assert.equal(m[2], UNACCENTED);
+  assert.equal(ACCENTED.length, UNACCENTED.length);
 });

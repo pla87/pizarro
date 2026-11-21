@@ -6,8 +6,9 @@
 // (4) «Aplicar plantilla» ya no pone un paréntesis dentro de otro («Siguiente release (Siguiente salto (genera
 // releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown; (6) borrar va en un menú «⋯»: «Borrar
 // release» y «Borrar adjuntos» del histórico (este, solo con adjuntos) y la papelera de cada documento de la Documentación
-// (con «Descargar»), con teclado y a 390 px. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md,borrar
+// (con «Descargar»), con teclado y a 390 px; (7) lo buscado se resalta en el histórico de releases (título, datos,
+// adjuntos y texto, sin tildes ni mayúsculas, sin romper el Markdown ni los enlaces). Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md,borrar,resaltar
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +16,7 @@ import { createRequire } from "node:module";
 import * as L from "./qa/lib.mjs";
 const { sleep, COL } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "release,menu,cal,plantilla,md,borrar").split(",");
+const only = (process.env.PART || "release,menu,cal,plantilla,md,borrar,resaltar").split(",");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "bh54-"));
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
@@ -338,6 +339,89 @@ if (only.includes("borrar")) {
   L.assertNoErrors("BORRAR docs", [m]);
   await m.ctx.close();
   await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
+}
+
+// --- Lo buscado, resaltado en el histórico de releases ----------------------------------------------------------------
+if (only.includes("resaltar")) {
+  L.scenario("resaltar: lo buscado se resalta en el título, los datos, los adjuntos y el texto (sin tildes ni mayúsculas)");
+  await L.q(`DELETE FROM "Release" WHERE "projectId"=$1`, [p.id]);
+  // Una release como la de 300 tareas, con el término en negrita, en un enlace y en un código, y con tilde y mayúsculas.
+  const lines = Array.from({ length: 300 }, (_, i) => `- **R2F${i + 2}** · Tarea ${i + 2} con un desplegable`);
+  const content = [
+    "### Funcionalidad",
+    "- **R2F1** · El despleGáble del menú",
+    "",
+    "  Ver [el desplegable](https://example.com/desplegable) y `codigo desplegable`. Resumen de las tareas.",
+    ...lines,
+  ].join("\n");
+  await L.q(`INSERT INTO "Release"(id,"projectId",number,title,content,"deployedAt") VALUES ('hl_r2',$1,2,'Menú Desplegable nuevo',$2,NOW()), ('hl_r1',$1,1,'Sin coincidencia hl',$3,NOW() - interval '1 day')`, [p.id, content, "Nada que ver"]);
+  await L.q(`INSERT INTO "ReleaseAttachment"(id,"releaseId","fileName",size,position) VALUES ('hl_a1','hl_r2','R2F1_captura-desplegable.webp',4096,0)`);
+  const s = await L.session();
+  const { page } = s;
+  const hits = (loc) => loc.locator("mark.search-hit").allInnerTexts();
+  await page.goto(`${L.BASE}/p/${p.id}/releases?q=${encodeURIComponent("despleGáble")}`);
+  const entry = page.locator("article").filter({ hasText: "Menú Desplegable nuevo" });
+  await entry.waitFor({ timeout: 15000 });
+  L.eq("RESALTAR: solo la release que coincide", await page.locator("article").count(), 1);
+  const toggle = entry.getByRole("button", { name: "R2 Menú Desplegable nuevo" });
+  L.eq("RESALTAR: el botón conserva su nombre (con el número y el título enteros)", await toggle.count(), 1);
+  L.eq("RESALTAR: en el título, «Desplegable» aunque se busque «despleGáble»", await hits(entry.locator("h2")), ["Desplegable"]);
+  L.eq("RESALTAR: la línea de datos sin coincidencias, sin marcas", await hits(entry.locator(":scope > div > div > p")), []);
+  const t0 = Date.now();
+  await toggle.click();
+  const prose = entry.locator(".prose-md");
+  await L.checkEventually("RESALTAR: al desplegar, el texto que llega se resalta (303 coincidencias)", async () => (await prose.locator("mark.search-hit").count()) === 303, { timeout: 15000 });
+  const ms = Date.now() - t0;
+  L.check("RESALTAR: 300 tareas con 303 coincidencias se pintan enseguida (< 3 s)", ms < 3000, `${ms} ms`);
+  const marks = await hits(prose);
+  L.eq("RESALTAR: cada coincidencia con su texto original (tilde y mayúsculas incluidas)", [marks[0], marks[1], marks[2], new Set(marks.slice(3)).size], ["despleGáble", "desplegable", "desplegable", 1]);
+  const link = prose.locator('a[href="https://example.com/desplegable"]');
+  L.eq("RESALTAR: el enlace sigue siendo un enlace, con su destino, y la marca va dentro", [await link.count(), await link.locator("mark.search-hit").innerText(), await link.innerText()], [1, "desplegable", "el desplegable"]);
+  L.eq("RESALTAR: dentro de un código también", await prose.locator("code mark.search-hit").count(), 1);
+  L.eq("RESALTAR: el Markdown sigue pintado (negritas y puntos, sin asteriscos)", [await prose.locator("li strong").count(), (await prose.innerText()).includes("**")], [301, false]);
+  L.eq("RESALTAR: en los nombres de los adjuntos", await hits(entry.locator("p.break-words")), ["desplegable"]);
+  // Contraste de la marca en claro y en oscuro (texto sobre su fondo).
+  const contrast = () => prose.locator("mark.search-hit").first().evaluate((el) => {
+    // Tailwind da los colores en oklch(): se pasan a RGB pintándolos en un canvas.
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const rgb = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]; };
+    const lum = (c) => { const [r, g, b] = rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const st = getComputedStyle(el);
+    const [a, b] = [lum(st.color), lum(st.backgroundColor)].sort((x, y) => y - x);
+    return Math.round(((a + 0.05) / (b + 0.05)) * 10) / 10;
+  });
+  const light = await contrast();
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await sleep(100);
+  const dark = await contrast();
+  L.check("RESALTAR: contraste de la marca ≥ 7:1 en claro y en oscuro", light >= 7 && dark >= 7, JSON.stringify({ light, dark }));
+  await page.screenshot({ path: `${SHOTS}/resaltar-releases-oscuro.png` });
+  await page.evaluate(() => { delete document.documentElement.dataset.theme; });
+  // «Copiar» copia el texto tal cual, sin marcas.
+  await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+  await entry.getByRole("button", { name: "Copiar", exact: true }).click();
+  await L.eqEventually("RESALTAR: «Copiar» copia el Markdown sin las marcas", () => page.evaluate(() => navigator.clipboard.readText()), content, { timeout: 5000 });
+
+  // Lo buscado al principio del título: el botón se sigue llamando «R2 Menú…» (el espacio queda solo, antes de la marca).
+  await page.goto(`${L.BASE}/p/${p.id}/releases?q=MENU`);
+  await entry.waitFor({ timeout: 15000 });
+  L.eq("RESALTAR: con «MENU», «Menú» resaltado al principio del título", await hits(entry.locator("h2")), ["Menú"]);
+  L.eq("RESALTAR: …y el botón conserva su nombre «R2 Menú Desplegable nuevo»", await entry.getByRole("button", { name: "R2 Menú Desplegable nuevo", exact: true }).count(), 1);
+  // La línea de datos también: «TAREAS» resalta «tareas» (0 tareas en la release) y el texto.
+  await page.goto(`${L.BASE}/p/${p.id}/releases?q=TAREAS`);
+  await entry.waitFor({ timeout: 15000 });
+  L.eq("RESALTAR: en la línea de datos («0 tareas · 1 adjunto»)", await hits(entry.locator(":scope > div > div > p")), ["tareas"]);
+  // Sin búsqueda, ninguna marca.
+  await page.goto(`${L.BASE}/p/${p.id}/releases`);
+  await entry.waitFor({ timeout: 15000 });
+  await entry.getByRole("button", { name: "R2 Menú Desplegable nuevo" }).click();
+  await prose.locator("li").first().waitFor({ timeout: 8000 });
+  L.eq("RESALTAR: sin búsqueda no hay marcas", await page.locator("mark.search-hit").count(), 0);
+  await page.screenshot({ path: `${SHOTS}/resaltar-releases.png` });
+  // El adjunto es solo la fila (sin fichero en disco): el plan del ZIP, que se pide al abrir la release, responde 404.
+  L.assertNoErrors("RESALTAR", [{ errors: s.errors.filter((e) => !/Failed to load resource: .*404/.test(e)) }]);
+  await s.ctx.close();
+  await L.q(`DELETE FROM "Release" WHERE "projectId"=$1`, [p.id]);
 }
 
 await L.closeBrowser(); await L.closeDb();
