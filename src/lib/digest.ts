@@ -85,7 +85,7 @@ function itemText(i: DigestItem, t: T): string {
  * Periodo que cubre el resumen (ver gatherDigest): desde el anterior, si fue hace como mucho 48 h; si fue antes, las
  * últimas 48 h; sin resumen anterior, las últimas 24 h.
  */
-export type DigestPeriod = "sinceLast" | "48h" | "24h";
+type DigestPeriod = "sinceLast" | "48h" | "24h";
 
 export function digestPeriod(lastSentAt: Date | null, now: Date): DigestPeriod {
   if (!lastSentAt) return "24h";
