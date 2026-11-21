@@ -25,9 +25,12 @@ export function makeTWith(dict: Dictionary | undefined): T {
 /** Traductor en español (el texto es la clave): valor por defecto de los módulos de cliente que no deben cargar el diccionario. */
 export const esT: T = makeTWith(undefined);
 
-/** Locale de Intl para fechas y números. */
+/**
+ * Locale de Intl para fechas y números. El inglés de la interfaz es el americano (textos y formatos): «Nov 21, 2026»,
+ * «11/21/2026», «8:05 AM». Los nombres de fichero no dependen de esto: siguen con AAAA-MM-DD.
+ */
 export function intlLocale(locale: Locale): string {
-  return locale === "en" ? "en-GB" : "es-ES";
+  return locale === "en" ? "en-US" : "es-ES";
 }
 
 /** Valor de la base de datos (ES/EN) a Locale. */

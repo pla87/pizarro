@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth } from "../src/lib/calendar";
+import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 import { midnightStep, msUntilNextDay } from "../src/lib/dates";
 import { readFileSync } from "node:fs";
@@ -41,6 +41,25 @@ test("monthGrid con semana en domingo y mes que empieza en domingo", () => {
   assert.equal(s.end, "2026-02-28");
   assert.equal(s.weeks.length, 4);
   assert.ok(s.weeks.flat().every((d) => d.inMonth));
+});
+
+test("calendario: la semana empieza en domingo en inglés (EE. UU.) y en lunes en español", () => {
+  assert.equal(calendarWeekStart("en"), 7);
+  assert.equal(calendarWeekStart("es"), 1);
+  const en = monthGrid("2026-11", calendarWeekStart("en")); // 1 nov 2026 es domingo; 30 nov, lunes
+  assert.equal(en.start, "2026-11-01");
+  assert.equal(en.end, "2026-12-05");
+  assert.ok(en.weeks.every((w) => new Date(`${w[0]!.iso}T00:00:00Z`).getUTCDay() === 0));
+  const es = monthGrid("2026-11", calendarWeekStart("es"));
+  assert.equal(es.start, "2026-10-26");
+  assert.ok(es.weeks.every((w) => new Date(`${w[0]!.iso}T00:00:00Z`).getUTCDay() === 1));
+});
+
+test("calendario móvil: «Semana del … al …» con el mes donde lo pone cada idioma", () => {
+  assert.deepEqual(weekRangeEnds("2026-11-02", "2026-11-08", "es-ES"), { from: "2", to: "8 nov" });
+  assert.deepEqual(weekRangeEnds("2026-11-01", "2026-11-07", "en-US"), { from: "Nov 1", to: "7" });
+  assert.deepEqual(weekRangeEnds("2026-11-29", "2026-12-05", "en-US"), { from: "Nov 29", to: "Dec 5" });
+  assert.deepEqual(weekRangeEnds("2026-11-30", "2026-12-06", "es-ES"), { from: "30 nov", to: "6 dic" });
 });
 
 test("monthGrid: año bisiesto y diciembre", () => {

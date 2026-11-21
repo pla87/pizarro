@@ -69,7 +69,7 @@ export function insertDictation(value: string, start: number, end: number, spoke
   return { value: before + chunk + after, start: caret, end: caret };
 }
 
-/** Idioma de reconocimiento por defecto según el idioma de la interfaz («es-ES» / «en-GB» → es-ES / en-US). */
+/** Idioma de reconocimiento por defecto según el idioma de la interfaz («es-ES» / «en-US» → es-ES / en-US). */
 export function dictationLang(intlLocale: string): string {
   return intlLocale.toLowerCase().startsWith("es") ? "es-ES" : "en-US";
 }

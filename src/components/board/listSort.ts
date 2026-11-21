@@ -19,7 +19,7 @@ export interface ListSortContext {
   columnPosition: ReadonlyMap<string, number>;
   userName: ReadonlyMap<string, string>;
   labelName: ReadonlyMap<string, string>;
-  /** Locale de Intl («es-ES», «en-GB»…): decide cómo se ordenan los acentos. */
+  /** Locale de Intl («es-ES», «en-US»…): decide cómo se ordenan los acentos. */
   locale: string;
 }
 

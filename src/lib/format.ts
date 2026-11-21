@@ -65,22 +65,48 @@ type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeSeconds" 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   date: { dateStyle: "medium" },
   dateShort: { dateStyle: "short" },
-  /** 24/10/2026: día, mes y año completo, numéricos. */
+  /** 24/10/2026 (10/24/2026 en en-US): día, mes y año completo, numéricos, en el orden del idioma. */
   dateNumeric: { day: "2-digit", month: "2-digit", year: "numeric" },
   dateLong: { dateStyle: "long" },
   dateTime: { dateStyle: "medium", timeStyle: "short" },
-  /** Con segundos (13 nov 2026, 14:05:09): para distinguir copias de seguridad hechas en el mismo minuto. */
+  /** Con segundos (13 nov 2026, 14:05:09; Nov 13, 2026, 2:05:09 PM): para distinguir copias hechas en el mismo minuto. */
   dateTimeSeconds: { dateStyle: "medium", timeStyle: "medium" },
   dateTimeShort: { dateStyle: "short", timeStyle: "short" },
   time: { timeStyle: "short" },
-  /** Hora con ceros (08:14), en 24 horas. */
-  timeHm: { hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+  /** Hora y minutos con la costumbre del idioma: «08:14» (24 horas, con ceros) o «8:14 AM» (en-US). Ver hourMinute. */
+  timeHm: {},
 };
+
+// Idiomas que escriben la hora en 12 horas (en-US): se miran una vez.
+const twelveHour = new Map<string, boolean>();
+
+/**
+ * Opciones de Intl para la hora y los minutos: en 24 horas y con ceros («08:14») donde es la costumbre (es-ES), y en
+ * 12 horas sin cero delante («8:14 AM») donde se usa el reloj de 12 horas (en-US).
+ */
+function hourMinute(locale: string): Intl.DateTimeFormatOptions {
+  let h12 = twelveHour.get(locale);
+  if (h12 === undefined) {
+    const cycle = new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hourCycle;
+    h12 = cycle === "h12" || cycle === "h11";
+    if (twelveHour.size >= 16) twelveHour.clear();
+    twelveHour.set(locale, h12);
+  }
+  return h12 ? { hour: "numeric", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit", hourCycle: "h23" };
+}
+
+/**
+ * Espacios «finos» o duros de Intl (U+202F antes de «AM»/«PM», U+00A0) como espacios normales. Según la versión de ICU
+ * (Node, Chrome, Firefox, Safari) salen unos u otros: sin igualarlos, la misma fecha difiere entre el HTML del servidor y
+ * el del navegador (error de hidratación #418) y las búsquedas de texto fallan.
+ */
+const plainSpaces = (text: string): string => text.replace(/[\u00a0\u2009\u202f]/g, " ");
 
 /** Formatea una fecha (Date o ISO) en la zona horaria de la app. */
 export function formatDate(value: Date | string, style: Style = "date", locale = "es-ES"): string {
   const d = typeof value === "string" ? new Date(value) : value;
-  return d.toLocaleString(locale, { ...OPTIONS[style], timeZone: appTimeZone() });
+  const options = style === "timeHm" ? hourMinute(locale) : OPTIONS[style];
+  return plainSpaces(d.toLocaleString(locale, { ...options, timeZone: appTimeZone() }));
 }
 
 /**
@@ -91,8 +117,15 @@ export function formatDate(value: Date | string, style: Style = "date", locale =
 export function formatDateTimeZone(value: Date | string, locale = "es-ES", style: "dateTime" | "dateTimeSeconds" = "dateTime"): string {
   const d = typeof value === "string" ? new Date(value) : value;
   const timeZone = appTimeZone();
+  // En en-US, las zonas que no son de EE. UU. salen como «GMT+1» (en es-ES, «CET»): sin ambigüedad para quien lo lee.
   const zone = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: "short" }).formatToParts(d).find((p) => p.type === "timeZoneName")?.value ?? timeZone;
   return `${formatDate(d, style, locale)} (${zone})`;
+}
+
+/** Hora y minutos con la zona horaria de la app al final («14:05 CET»; en en-US, «2:05 PM GMT+1»): pie de los PDF que se envían por email. */
+export function formatTimeZone(value: Date | string, locale = "es-ES"): string {
+  const d = typeof value === "string" ? new Date(value) : value;
+  return plainSpaces(new Intl.DateTimeFormat(locale, { ...hourMinute(locale), timeZone: appTimeZone(), timeZoneName: "short" }).format(d));
 }
 
 /**

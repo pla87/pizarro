@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { makeT } from "../src/i18n/core";
+import { intlLocale, makeT } from "../src/i18n/core";
 import { buildWeekPlan, type WeekPlanTask } from "../src/lib/week-plan";
 
 // 2026-10-27 es martes: la semana va del 26 al 1 de noviembre.
@@ -28,4 +28,9 @@ test("por persona: por nombre, con «Sin responsable» al final y ordenadas por 
   assert.deepEqual(s.map((x) => x.label), ["Ana", "Berta", "Sin responsable"]);
   assert.deepEqual(s[0]!.tasks.map((x) => x.title), ["Lunes A", "Sin fecha"]);
   assert.deepEqual(s[1]!.tasks.map((x) => x.title), ["Vencida", "Domingo"]);
+});
+
+test("por día, en inglés: fechas de EE. UU. («Monday, Oct 26»), con la semana aún de lunes a domingo", () => {
+  const s = buildWeekPlan(tasks, "2026-10-27", "day", makeT("en"), intlLocale("en"));
+  assert.deepEqual(s.map((x) => x.label), ["Monday, Oct 26", "Sunday, Nov 1", "Other dates", "No date"]);
 });

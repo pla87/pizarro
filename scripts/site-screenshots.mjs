@@ -371,7 +371,7 @@ async function around(page, locator, margin) {
 
 async function capture(browser, lang, ctx) {
   const isEs = lang === "es";
-  const common = { locale: isEs ? "es-ES" : "en-GB", timezoneId: "Europe/Madrid", reducedMotion: "reduce", deviceScaleFactor: 2 };
+  const common = { locale: isEs ? "es-ES" : "en-US", timezoneId: "Europe/Madrid", reducedMotion: "reduce", deviceScaleFactor: 2 };
   for (const scheme of ["light", "dark"]) {
     const sfx = `${lang}-${scheme}`;
     // Escritorio

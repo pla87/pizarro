@@ -142,6 +142,14 @@ test("fechas: AAAA-MM-DD, ISO completa, DD/MM/AAAA; null y vacío la quitan", ()
   for (const bad of ["2026-13-01", "2026-02-30", "12/2026", "mañana", 20261201, {}]) assert.equal(parseDayLoose(bad), undefined, String(bad));
 });
 
+test("fechas: MM/DD/AAAA (EE. UU.) cuando no puede ser día/mes; lo ambiguo sigue siendo día/mes", () => {
+  assert.equal(parseDayLoose("11/21/2026"), "2026-11-21");
+  assert.equal(parseDayLoose("2/29/2028"), "2028-02-29");
+  assert.equal(parseDayLoose("03/04/2026"), "2026-04-03");
+  assert.equal(parseDayLoose("21/11/2026"), "2026-11-21");
+  for (const bad of ["13/13/2026", "2/30/2026", "02/29/2027"]) assert.equal(parseDayLoose(bad), undefined, bad);
+});
+
 // El servidor interpreta el texto que le manda cualquier persona con sesión: ningún JSON de hasta 200 000 caracteres
 // puede tenerlo ocupado varios segundos (expresiones regulares o comparaciones cuadráticas) ni hacerle lanzar.
 test("textos patológicos: se leen en poco tiempo y sin lanzar (responsable, importes, miles de etiquetas, listas anidadas)", () => {

@@ -67,7 +67,7 @@ test("sumas en céntimos sin errores de coma flotante y resumen de presupuesto",
 
 test("importe con el símbolo del euro", () => {
   assert.match(formatEuro("1234.5", "es-ES"), /1234,50\s€|1\.234,50\s€/);
-  assert.match(formatEuro(5, "en-GB"), /€5\.00/);
+  assert.match(formatEuro(5, "en-US"), /€5\.00/);
   assert.equal(formatEuro(null), "");
 });
 

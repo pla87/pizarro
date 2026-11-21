@@ -50,13 +50,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 const field =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-function formatTime(d: Date, tz: string, locale: string): string {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })
-      .formatToParts(d)
-      .map((x) => [x.type, x.value]),
-  );
-  return `${p.day}/${p.month} ${p.hour}:${p.minute}:${p.second}`;
+/**
+ * Hora de un evento: día y mes en el orden del idioma («21/11»; en en-US, «11/21») y la hora en 24 horas con segundos
+ * («14:05:09») en los dos idiomas: es un registro técnico, como su CSV y los registros del servidor, y así la columna
+ * queda alineada y dos eventos del mismo minuto se distinguen sin AM/PM.
+ */
+function logTimeFormat(tz: string, locale: string): (d: Date) => string {
+  const day = new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit" });
+  const time = new Intl.DateTimeFormat(locale, { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  return (d) => `${day.format(d)} ${time.format(d)}`;
 }
 
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -68,6 +70,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
+  const formatTime = logTimeFormat(tz, locale);
   const categoryLabel = (c: string) => (CATEGORY_LABELS[c] ? t(CATEGORY_LABELS[c]!) : c);
 
   // Escribe los eventos pendientes para que los más recientes aparezcan.
@@ -218,7 +221,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             if (isMaskedLog(r, mine)) {
               return (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-2 px-3 py-2 text-sm text-slate-500">
-                  <span className="font-mono text-xs">{formatTime(r.createdAt, tz, locale)}</span>
+                  <span className="font-mono text-xs">{formatTime(r.createdAt)}</span>
                   {r.userName && <span className="text-xs">· {r.userName}</span>}
                   <span className="italic">{t("Actividad en un proyecto privado")}</span>
                 </li>
@@ -231,7 +234,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                 <details className="group">
                   <summary className="cursor-pointer list-none px-3 focus-visible:outline-offset-[-3px] py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/50 [&::-webkit-details-marker]:hidden">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz, locale)}</span>
+                      <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt)}</span>
                       <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{t(level.label)}</span>
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800" title={r.category}>{categoryLabel(r.category)}</span>
                       <span className="font-mono text-xs font-semibold">{r.action}</span>

@@ -78,8 +78,8 @@ describe("sesiones del programa", () => {
     assert.equal(programDateLabel(null, null, "es-ES", es), null);
     assert.equal(programDateLabel("2027-01-30", "2027-01-22", "es-ES", es), "viernes, 22 de enero de 2027");
     assert.equal(programDateLabel("2027-01-22", "2027-01-22", "es-ES", es), "viernes, 22 de enero de 2027");
-    assert.equal(programDateLabel(null, "2027-01-12", "en-GB", en), "Tuesday, 12 January 2027");
-    assert.equal(programDateLabel("2027-01-18", null, "en-GB", en), "From Monday, 18 January 2027");
+    assert.equal(programDateLabel(null, "2027-01-12", "en-US", en), "Tuesday, January 12, 2027");
+    assert.equal(programDateLabel("2027-01-18", null, "en-US", en), "From Monday, January 18, 2027");
   });
 
   test("numeradas en el orden recibido; responsable solo si se pide; fecha de inicio solo si el proyecto la usa", () => {
@@ -188,9 +188,9 @@ describe("PDF del programa", () => {
   });
 
   test("en inglés", async () => {
-    const pdf = await renderInWorker({ kind: "program", locale: "en", input: { project: "Test master", today: "2026-11-13", withAssignee: false, sessions: sessions(en, "en-GB").map((s) => ({ ...s, assignee: null })) } });
+    const pdf = await renderInWorker({ kind: "program", locale: "en", input: { project: "Test master", today: "2026-11-13", withAssignee: false, sessions: sessions(en, "en-US").map((s) => ({ ...s, assignee: null })) } });
     const text = pdfRuns(pdf).join("");
-    for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación", "Tuesday, 12 January 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
+    for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación", "Tuesday, January 12, 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
     assert.ok(!text.includes("Profesora Uno"));
   });
 
