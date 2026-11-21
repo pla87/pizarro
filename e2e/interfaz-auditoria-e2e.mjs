@@ -220,6 +220,8 @@ if (only.includes("cal")) {
   await todayRow.waitFor({ timeout: 15000 });
   await sleep(600);
   const rowTop = () => todayRow.evaluate((el) => el.getBoundingClientRect().top - el.closest("main").getBoundingClientRect().top);
+  // Hacia final de mes puede no quedar página por debajo de hoy: entonces basta con haber bajado todo lo posible.
+  const atEnd = () => todayRow.evaluate((el) => { const main = el.closest("main"); return main.scrollTop + main.clientHeight >= main.scrollHeight - 2; });
   // Con vencidas de antes no baja solo (su aviso, arriba, quedaría fuera de la vista): el aviso se ve y lleva «Ir a hoy».
   const mBox = m.page.getByTestId("cal-overdue");
   const boxTop = await mBox.evaluate((el) => el.getBoundingClientRect().top - el.closest("main").getBoundingClientRect().top);
@@ -229,7 +231,7 @@ if (only.includes("cal")) {
   await sleep(300);
   if (dueDay > 3) {
     const top = await rowTop();
-    L.check("CAL móvil: «Ir a hoy» deja hoy arriba", top >= -2 && top < 120, `top=${top}`);
+    L.check("CAL móvil: «Ir a hoy» deja hoy arriba", top >= -2 && (top < 120 || (await atEnd())), `top=${top}`);
     // Sin vencidas de antes, al abrir el mes sí baja solo hasta hoy.
     await L.q(`UPDATE "Task" SET "dueDate"=$2 WHERE id=$1`, [old, today]);
     await L.goto(m.page, `${L.BASE}/calendar`);
@@ -237,7 +239,7 @@ if (only.includes("cal")) {
     await sleep(600);
     L.eq("CAL móvil: sin vencidas de antes no hay aviso", await m.page.getByTestId("cal-overdue").count(), 0);
     const top2 = await rowTop();
-    L.check("CAL móvil: sin vencidas de antes, al abrir el mes hoy queda arriba", top2 >= -2 && top2 < 120, `top=${top2}`);
+    L.check("CAL móvil: sin vencidas de antes, al abrir el mes hoy queda arriba", top2 >= -2 && (top2 < 120 || (await atEnd())), `top=${top2}`);
   } else L.note("CAL móvil: hoy es de los primeros días del mes, no hay nada que bajar");
   L.assertNoErrors("CAL", [m]);
   await m.ctx.close();
