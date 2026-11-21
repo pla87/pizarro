@@ -38,6 +38,12 @@ describe("presencia de variables", () => {
     for (const v of Object.values(env)) if (v.length > 4) assert.ok(!json.includes(v), v);
   });
 
+  test("SMTP_ALLOW_PLAINTEXT: «set» con 1/true/0/false; otro valor, «invalid» (no permite enviar sin cifrar)", () => {
+    for (const v of ["1", "true", "0", "false", "TRUE"]) assert.equal(envPresence({ SMTP_ALLOW_PLAINTEXT: v }).SMTP_ALLOW_PLAINTEXT, "set", v);
+    for (const v of ["yes", "si", "2"]) assert.equal(envPresence({ SMTP_ALLOW_PLAINTEXT: v }).SMTP_ALLOW_PLAINTEXT, "invalid", v);
+    assert.equal(envPresence({}).SMTP_ALLOW_PLAINTEXT, "unset");
+  });
+
   test("APP_TIMEZONE mal escrita: «invalid» (la app la ignora); bien escrita: «set»", () => {
     assert.equal(envPresence({ APP_TIMEZONE: "Europe/Madird" }).APP_TIMEZONE, "invalid");
     assert.equal(envPresence({ APP_TIMEZONE: "Europe/Madrid" }).APP_TIMEZONE, "set");

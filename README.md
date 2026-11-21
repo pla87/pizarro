@@ -156,6 +156,7 @@ steps:
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
+| `SMTP_ALLOW_PLAINTEXT` | No | `1` | Con las variables `SMTP_*` y un puerto distinto de `465`, STARTTLS es obligatorio salvo con un servidor local (`localhost`, `127.0.0.1`, `::1`). Con `1`, se permite enviar sin cifrar a propósito (un relay de la red privada sin TLS): la contraseña y los enlaces irían en claro. |
 | `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Integraciones*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
@@ -286,7 +287,7 @@ Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por 
    SMTP_FROM=Pizarro <avisos@tu-dominio.com>
    ```
 
-Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS.
+Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS obligatorio (sin cifrar solo con un servidor local o con `SMTP_ALLOW_PLAINTEXT=1`).
 
 #### 7.3 Avisos por Telegram y WhatsApp
 

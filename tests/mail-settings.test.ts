@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  envMailConfig, formatFrom, GMAIL_PRESET, parseMailSettings, resolveMailConfig, sanitizeSmtpError, validateMailSettings, EMPTY_MAIL_SETTINGS,
+  envMailConfig, formatFrom, GMAIL_PRESET, isLocalSmtpHost, parseMailSettings, resolveMailConfig, sanitizeSmtpError, smtpPlaintextAllowed, validateMailSettings, EMPTY_MAIL_SETTINGS,
 } from "../src/lib/mail-settings-core";
 
 const saved = { ...EMPTY_MAIL_SETTINGS, host: "smtp.example.com", port: 587, secure: false, user: "u@example.com", fromName: "Pizarro", fromAddress: "p@example.com", hasPassword: true };
@@ -25,6 +25,33 @@ describe("ajustes de email (parte pura)", () => {
     assert.equal(db.requireTLS, true);
     assert.equal(db.from, '"Pizarro" <p@example.com>');
     assert.equal(resolveMailConfig({}, EMPTY_MAIL_SETTINGS, "").source, "none");
+  });
+
+  test("SMTP_* sin el puerto 465: STARTTLS obligatorio, salvo servidor local o SMTP_ALLOW_PLAINTEXT", () => {
+    const base = { SMTP_HOST: "smtp.srv.example", SMTP_FROM: "a@example.com" };
+    const tls = (env: Record<string, string>) => {
+      const c = envMailConfig({ ...base, ...env })!;
+      return { secure: c.secure, requireTLS: c.requireTLS };
+    };
+    // 465 (o sin puerto): TLS directo.
+    assert.deepEqual(tls({ SMTP_PORT: "465" }), { secure: true, requireTLS: false });
+    assert.deepEqual(tls({}), { secure: true, requireTLS: false });
+    assert.deepEqual(tls({ SMTP_PORT: "465", SMTP_ALLOW_PLAINTEXT: "1" }), { secure: true, requireTLS: false });
+    // 587 o 25 hacia otro servidor: no se baja a texto plano.
+    assert.deepEqual(tls({ SMTP_PORT: "587" }), { secure: false, requireTLS: true });
+    assert.deepEqual(tls({ SMTP_PORT: "25" }), { secure: false, requireTLS: true });
+    // Un valor que no es «1»/«true» no lo permite.
+    for (const v of ["0", "false", "", "yes", "2"]) assert.equal(tls({ SMTP_PORT: "587", SMTP_ALLOW_PLAINTEXT: v }).requireTLS, true, v);
+    for (const v of ["1", "true", " TRUE "]) assert.equal(tls({ SMTP_PORT: "587", SMTP_ALLOW_PLAINTEXT: v }).requireTLS, false, v);
+    // Servidor local: puede ir sin cifrar.
+    for (const host of ["localhost", "LOCALHOST", "127.0.0.1", "::1", "[::1]"]) {
+      assert.equal(envMailConfig({ ...base, SMTP_HOST: host, SMTP_PORT: "25" })!.requireTLS, false, host);
+    }
+    for (const host of ["localhost.example.com", "127.0.0.2.example.com", "mail"]) {
+      assert.equal(envMailConfig({ ...base, SMTP_HOST: host, SMTP_PORT: "25" })!.requireTLS, true, host);
+    }
+    assert.equal(isLocalSmtpHost(" localhost "), true);
+    assert.equal(smtpPlaintextAllowed({}), false);
   });
 
   test("lee los ajustes guardados con valores por defecto sensatos", () => {
