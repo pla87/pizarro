@@ -13,7 +13,7 @@
 
 const RESERVED = [
   // La propia aplicación y su equipo.
-  "Pizarro", "Equipo de Pizarro", "Equipo Pizarro", "Soporte de Pizarro", "Pizarro Soporte", "Avisos de Pizarro",
+  "Pizarro", "Equipo de Pizarro", "Equipo Pizarro", "Soporte de Pizarro", "Soporte Pizarro", "Pizarro Soporte", "Avisos de Pizarro",
   "Pizarro Team", "Pizarro Support", "Pizarro Notifications",
   // El sistema y su administración.
   "Sistema", "System", "Administración", "Administration", "Administrador del sistema", "Administradora del sistema",
@@ -23,9 +23,17 @@ const RESERVED = [
   "No responder", "No-reply", "Noreply",
 ] as const;
 
-/** Forma de comparar: minúsculas, sin tildes ni diacríticos, y solo letras y cifras (sin espacios ni signos). */
+// Letras cirílicas y griegas que se ven igual que una latina («Pizаrro» con «а» cirílica): se pasan a la latina antes de
+// comparar, para que no sirvan para saltarse la lista. Solo minúsculas: se aplica tras toLowerCase().
+const CONFUSABLES: Record<string, string> = {
+  а: "a", в: "b", е: "e", ё: "e", к: "k", м: "m", н: "h", о: "o", р: "p", с: "c", т: "t", у: "y", х: "x", ѕ: "s", і: "i", ї: "i", ј: "j", һ: "h", ԁ: "d", ԛ: "q", ԝ: "w",
+  α: "a", β: "b", ε: "e", η: "n", ι: "i", κ: "k", μ: "u", ν: "v", ο: "o", ρ: "p", τ: "t", υ: "u", χ: "x", ζ: "z",
+};
+
+/** Forma de comparar: minúsculas, sin tildes ni diacríticos, letras parecidas de otros alfabetos en latín, y solo letras y cifras. */
 function reservedNameKey(name: string): string {
-  return name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const lower = name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+  return Array.from(lower, (ch) => CONFUSABLES[ch] ?? ch).join("").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 const KEYS = new Set(RESERVED.map(reservedNameKey));

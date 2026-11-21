@@ -34,7 +34,7 @@ test("maskSecretsFor enmascara además el propio secreto de la ruta aunque el me
   assert.equal(maskSecretsFor("error en /login", "/login"), "error en /login");
   assert.equal(secretOfPath("/reset/abc12345?x=1"), "abc12345");
   assert.equal(secretOfPath("/p/abc"), null);
-  assert.deepEqual([...SECRET_PATH_PREFIXES], ["/api/calendar/", "/reset/", "/confirm/"]);
+  assert.deepEqual([...SECRET_PATH_PREFIXES], ["/api/calendar/", "/reset/", "/confirm/", "/unsubscribe/"]);
 });
 
 test("ifNoneMatchHas ignora el prefijo débil W/ en cualquiera de los dos lados y admite listas y *", () => {
@@ -48,4 +48,12 @@ test("ifNoneMatchHas ignora el prefijo débil W/ en cualquiera de los dos lados 
   assert.equal(ifNoneMatchHas(null, etag), false);
   assert.equal(ifNoneMatchHas("", etag), false);
   assert.equal(ifNoneMatchHas('"abc"', 'W/"abc"'), true);
+});
+
+test("redactPath y maskSecretPaths ocultan el token de los enlaces de baja de emails", async () => {
+  const { redactPath } = await import("../src/lib/redact-path");
+  assert.equal(redactPath("/unsubscribe/m1abc.def?x=1"), "/unsubscribe/…");
+  assert.equal(redactPath("/api/unsubscribe/m1abc.def"), "/api/unsubscribe/…");
+  assert.ok(!maskSecretPaths("fallo en /unsubscribe/m1abc.def: timeout").includes("m1abc"));
+  assert.ok(!maskSecretPaths("POST /api/unsubscribe/m1abc.def").includes("m1abc"));
 });

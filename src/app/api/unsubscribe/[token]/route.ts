@@ -35,9 +35,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
   try {
     const { token } = await ctx.params;
     const tokenKey = `unsub:token:${token.slice(0, 100)}`;
-    if (!rateLimit(`unsub:ip:${rateIp(ip)}`, PER_IP.limit, PER_IP.windowMs) || !rateLimit(tokenKey, PER_TOKEN.limit, PER_TOKEN.windowMs)) {
-      return text("Too many requests", 429, { "Retry-After": String(rateLimitRetryAfterSec(tokenKey)) });
-    }
+    // Retry-After del límite que ha fallado (el de la IP no toca el contador del token).
+    const ipKey = `unsub:ip:${rateIp(ip)}`;
+    const blocked = !rateLimit(ipKey, PER_IP.limit, PER_IP.windowMs) ? ipKey : !rateLimit(tokenKey, PER_TOKEN.limit, PER_TOKEN.windowMs) ? tokenKey : null;
+    if (blocked) return text("Too many requests", 429, { "Retry-After": String(rateLimitRetryAfterSec(blocked)) });
     const type = req.headers.get("content-type") ?? "";
     const form = type.startsWith("multipart/form-data")
       ? await readBodyLimited(req, MAX_BODY, "formData")

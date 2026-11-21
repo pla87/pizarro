@@ -19,3 +19,11 @@ test("nombres reservados: los de persona siguen valiendo, «Administrador» incl
     assert.equal(isReservedName(name), false, name);
   }
 });
+
+test("nombres reservados: letras cirílicas o griegas iguales a las latinas no sirven para saltarse la lista", () => {
+  assert.equal(isReservedName("Pizаrro"), true); // «а» cirílica
+  assert.equal(isReservedName("Sistemа"), true);
+  assert.equal(isReservedName("Ρizarro"), true); // «Ρ» griega
+  assert.equal(isReservedName("Soporte Pizarro"), true);
+  assert.equal(isReservedName("Аna Pizarro"), false);
+});
