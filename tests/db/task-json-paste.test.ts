@@ -1,9 +1,9 @@
 // Copiar y pegar una tarea como JSON (getTaskJson / pasteTaskJson): ida y vuelta, un solo deshacer, permisos y límites.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { assign, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { getTaskJson, pasteTaskJson, restoreTaskSnapshot, type TaskEditSnapshot } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 
 const day = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
 
@@ -150,7 +150,7 @@ describe("pasteTaskJson", () => {
     expectOk(await undoLast(f.project.id, target.id));
     assert.deepEqual(await state(target.id), before, "un solo deshacer lo devuelve todo");
     assert.equal(await undoCount(f.project.id), 0);
-    expectOk(await redoLast(f.project.id, target.id));
+    expectApplied(await redoChecked(f.project.id, target.id));
     assert.deepEqual(await state(target.id), await state(source.id), "rehacer lo vuelve a pegar");
   });
 
@@ -194,7 +194,7 @@ describe("pasteTaskJson", () => {
     assert.deepEqual([back.title, back.columnId, back.labels, back.subtasks.map((x) => x.title)], ["Destino", f.columns.todo, [], ["vieja 1", "vieja 2", "vieja 3"]]);
     assert.deepEqual((await db.label.findMany({ where: { projectId: f.project.id }, orderBy: { name: "asc" } })).map((l) => l.name), ["rojo", "verde"]);
     // Rehacer la vuelve a crear y a poner.
-    expectOk(await redoLast(f.project.id, target.id));
+    expectApplied(await redoChecked(f.project.id, target.id));
     assert.deepEqual((await state(target.id)).labels, ["nueva etiqueta", "rojo"]);
   });
 

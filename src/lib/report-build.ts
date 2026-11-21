@@ -144,11 +144,7 @@ interface PdfRequestOpts {
   signal?: AbortSignal;
 }
 
-export function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
-  return buildProjectReportPdf(projectId, opts);
-}
-
-async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
+export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;

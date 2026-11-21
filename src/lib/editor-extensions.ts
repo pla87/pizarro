@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import { Code } from "@tiptap/extension-code";
+import { CodeBlock } from "@tiptap/extension-code-block";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import StarterKit from "@tiptap/starter-kit";
@@ -14,6 +15,21 @@ const pageIsEnglish = () => typeof document !== "undefined" && document.document
  * documento y pegarlo (o abrirlo) lanzaba «Invalid collection of marks for node text: bold,code» sin pegar nada.
  */
 const InlineCode = Code.extend({ excludes: "code" });
+
+/**
+ * Bloque de código que no gana una línea vacía al final. marked 18 (el de TipTap desde que usa la misma versión que la
+ * app, `overrides` en package.json) deja el salto de línea final en el texto de un bloque sangrado con 4 espacios al final
+ * del documento («    código\n» → «código\n»; marked 17 lo quitaba): abrir y guardar en el editor con barra añadía una
+ * línea vacía dentro del bloque. Por lo demás, como el de TipTap (solo bloques con ``` o ~~~ y sangrados).
+ */
+const TrimmedCodeBlock = CodeBlock.extend({
+  parseMarkdown: (token, helpers) => {
+    const raw = token.raw;
+    if (raw?.startsWith("```") === false && raw.startsWith("~~~") === false && token.codeBlockStyle !== "indented") return [];
+    const text = token.codeBlockStyle === "indented" ? String(token.text ?? "").replace(/\n+$/, "") : token.text;
+    return helpers.createNode("codeBlock", { language: token.lang || null }, text ? [helpers.createTextNode(text)] : []);
+  },
+});
 
 /** Celdas de una tabla GFM («| a | b |»), sin la fila separadora; el texto de cada celda tal cual (con su Markdown). */
 export function tableRows(raw: string): string[][] {
@@ -175,7 +191,8 @@ const CommonMarkOrderedList = OrderedList.extend({
 export function formatExtensions() {
   return [
     // El subrayado ya viene en StarterKit y se serializa como ++texto++.
-    StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false }, code: false, paragraph: false, orderedList: false }),
+    StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false }, code: false, codeBlock: false, paragraph: false, orderedList: false }),
+    TrimmedCodeBlock,
     CommonMarkOrderedList,
     SafeParagraph,
     InlineCode,

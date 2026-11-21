@@ -1,9 +1,9 @@
 // Asignar un rol de columna único: deshacer y rehacer devuelven el rol y las tareas fijas a su sitio.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { setColumnRole } from "../../src/actions/columns";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { flushLogs } from "../../src/lib/log";
 
 const roles = async (f: Awaited<ReturnType<typeof makeProject>>) =>
@@ -42,7 +42,7 @@ for (const role of ["NEXT_RELEASE", "IN_PRODUCTION"] as const) {
       assert.equal(o.columnId, f.columns.doing);
       assert.equal(o.position, 2500);
 
-      const redo = expectOk(await redoLast(f.project.id));
+      const redo = expectApplied(await redoChecked(f.project.id));
       assert.equal(redo.skipped, 0);
       assert.deepEqual(await roles(f), after);
       if (role === "NEXT_RELEASE") assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixed.id } })).evergreen, false);

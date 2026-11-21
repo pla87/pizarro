@@ -5,14 +5,17 @@
 // con un solo paso de deshacer; y arrastrar con Ctrl entre la lista y el panel abierto, con la columna llena, no acaba en
 // «Algo ha fallado» (error #185 de React, «Maximum update depth exceeded»); y coger con Espacio una fija del panel y soltarla
 // o cancelar deja el foco en su fila; con la red lenta, la copia provisional de un arrastre con Ctrl no llega nunca al
-// servidor (ni por atajos, ni por la selección, ni como vecina al soltar otra junto a ella). Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs      # PART=scroll,copia,vaiven,foco,provisional
+// servidor (ni por atajos, ni por la selección, ni como vecina al soltar otra junto a ella); y (caza de bugs 51a) una fija
+// arrastrada del panel «Siempre en el plan» de una columna al de otra pasa allí como fija (antes no hacía nada aunque el
+// lector de pantalla anunciaba el cambio) y se deshace, la de la release también, y en su propio panel no cambia.
+// Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs      # PART=scroll,copia,vaiven,foco,provisional,planes
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "scroll,copia,vaiven,foco,provisional").split(",");
+const only = (process.env.PART || "scroll,copia,vaiven,foco,provisional,planes").split(",");
 
 await L.prepareUsers();
 const PID = "r55_project";
@@ -373,6 +376,66 @@ if (only.includes("provisional")) {
   L.eq("PROVISIONAL: en pantalla, las mismas tarjetas que en la BD", await list(page, "Salto").locator("[data-task-card]").count(), order.length);
   await page.unroute("**/*");
   L.assertNoErrors("PROVISIONAL", [s]);
+  await s.ctx.close();
+}
+
+// --- Fija de un plan al panel de otro (caza de bugs 51a) --------------------------------------------------------------
+if (only.includes("planes")) {
+  L.scenario("planes: arrastrar una fija del panel de «Plan A» al de «Plan B» la lleva allí como fija; deshacer la devuelve");
+  // Otro reparto de columnas: dos planes para IA, la release y una normal.
+  await L.q(`DELETE FROM "Project" WHERE id=$1 OR name=$2`, [PID, NAME]);
+  await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,$2,true,$3,999993,NOW())`, [PID, NAME, adm.id]);
+  await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [PID, adm.id]);
+  const cols = [["r55p_a", "Plan A", "AI_PLAN"], ["r55p_b", "Plan B", "AI_PLAN"], ["r55p_salto", "Salto", "NEXT_RELEASE"], ["r55p_otra", "Otra", "NONE"]];
+  for (const [i, [id, name, role]] of cols.entries()) await L.q(`INSERT INTO "Column"(id,"projectId",name,position,role) VALUES ($1,$2,$3,$4,$5)`, [id, PID, name, (i + 1) * 1000, role]);
+  const tasks = [["r55p_a1", "r55p_a", "A normal", false], ["r55p_af", "r55p_a", "A fija", true], ["r55p_b1", "r55p_b", "B normal", false], ["r55p_bf", "r55p_b", "B fija", true], ["r55p_rf", "r55p_salto", "Release fija", true]];
+  for (const [i, [id, col, title, fixed]] of tasks.entries()) {
+    await L.q(`INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,evergreen,"createdById","updatedAt") VALUES ($1,$2,$3,$4,'kind_funcionalidad',$5,$6,$7,NOW())`, [id, PID, col, title, (i + 1) * 1024, fixed, adm.id]);
+  }
+  const where = async (id) => (await L.q(`SELECT "columnId", evergreen FROM "Task" WHERE id=$1`, [id]))[0];
+  const s = await L.session();
+  const { page } = s;
+  await page.goto(`${L.BASE}/p/${PID}`);
+  await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
+  await L.liveOpen(page);
+  await sleep(400);
+  const panel = (col) => L.colLoc(page, col).locator("button[aria-controls^=evergreen]");
+  for (const col of ["Plan A", "Plan B", "Salto"]) if ((await panel(col).getAttribute("aria-expanded")) !== "true") await panel(col).click();
+  await sleep(400);
+  const fixedCard = (col, title) => L.colLoc(page, col).locator("[id^=evergreen-] [role=button]").filter({ hasText: title }).first();
+  /** Arrastra una fija sobre la lista del panel de otra columna. */
+  async function dragToPanel(title, from, to) {
+    const sb = await fixedCard(from, title).boundingBox();
+    const tb = await L.colLoc(page, to).locator("[id^=evergreen-]").boundingBox();
+    await page.mouse.move(sb.x + 20, sb.y + sb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sb.x + 30, sb.y + sb.height / 2 + 8, { steps: 4 });
+    await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 25 });
+    await sleep(150);
+    await page.mouse.move(tb.x + tb.width / 2 + 1, tb.y + tb.height / 2 + 1, { steps: 2 });
+    await sleep(150);
+    await page.mouse.up();
+  }
+  await dragToPanel("A fija", "Plan A", "Plan B");
+  await L.eqEventually("PLANES: en la base pasa a «Plan B» y sigue fija", async () => JSON.stringify(await where("r55p_af")), JSON.stringify({ columnId: "r55p_b", evergreen: true }));
+  await L.eqEventually("PLANES: el panel de «Plan B» la muestra", async () => fixedCard("Plan B", "A fija").count(), 1);
+  L.eq("PLANES: y el de «Plan A» ya no", await fixedCard("Plan A", "A fija").count(), 0);
+  L.eq("PLANES: el contador de «Plan B» dice 2", (await panel("Plan B").innerText()).replace(/\s+/g, " ").trim(), "Siempre en el plan 2");
+  await page.screenshot({ path: `${SHOTS}/fijas-entre-planes.png` });
+  await sleep(300);
+  await page.keyboard.press("Control+z");
+  await L.eqEventually("PLANES: deshacer la devuelve a «Plan A» como fija", async () => JSON.stringify(await where("r55p_af")), JSON.stringify({ columnId: "r55p_a", evergreen: true }));
+  await L.eqEventually("PLANES: y el tablero también", async () => fixedCard("Plan A", "A fija").count(), 1);
+  // De la release a un plan, igual.
+  await sleep(4500);
+  await dragToPanel("Release fija", "Salto", "Plan A");
+  await L.eqEventually("PLANES: una fija de la release soltada en el panel de un plan pasa a ser fija del plan", async () => JSON.stringify(await where("r55p_rf")), JSON.stringify({ columnId: "r55p_a", evergreen: true }));
+  // Sobre su propio panel no hace nada.
+  await sleep(300);
+  await dragToPanel("B fija", "Plan B", "Plan B");
+  await sleep(800);
+  L.eq("PLANES: soltarla en su propio panel no la cambia", JSON.stringify(await where("r55p_bf")), JSON.stringify({ columnId: "r55p_b", evergreen: true }));
+  L.assertNoErrors("PLANES", [s]);
   await s.ctx.close();
 }
 

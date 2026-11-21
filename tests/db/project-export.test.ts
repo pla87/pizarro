@@ -11,7 +11,8 @@ import { crc32, deflateRawSync } from "node:zlib";
 import sharp from "sharp";
 import { ADMIN_EXPORT, db, loginAs, logout, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
-import { capTitle, freeProjectName, importProjectFile, safeFileName, threadComments, type ImportUser } from "../../src/lib/project-export/import";
+import { freeProjectName, importProjectFile, safeFileName, threadComments, type ImportUser } from "../../src/lib/project-export/import";
+import { clampTitle } from "../../src/lib/title-clamp";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { LIMITS, projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
@@ -1033,12 +1034,12 @@ describe("importar: endurecimiento (ronda 15)", () => {
     assert.ok(s.warnings.some((w) => /2 enlaces/.test(w)));
     // Con uno solo, en singular (antes «1 títulos eran…»).
     assert.ok(s.warnings.includes("1 título era más largo de lo permitido y se ha recortado."), s.warnings.join(" | "));
-    // Una mención cortada a medias no queda en el título.
-    assert.equal(capTitle(`${"x".repeat(205)}@[Nombre](user:abc)`), "x".repeat(205));
-    assert.equal(capTitle("corto"), "corto");
+    // Una mención cortada a medias no queda en el título (el importador recorta con clampTitle, como al guardar).
+    assert.equal(clampTitle(`${"x".repeat(205)}@[Nombre](user:abc)`).value, "x".repeat(205));
+    assert.equal(clampTitle("corto").value, "corto");
     // Sin partir emojis: cuenta caracteres visibles como al guardar.
-    assert.equal(capTitle("👨‍👩‍👧‍👦".repeat(50)), "👨‍👩‍👧‍👦".repeat(50));
-    assert.equal(capTitle(`${"x".repeat(209)}😀😀`), `${"x".repeat(209)}😀`);
+    assert.equal(clampTitle("👨‍👩‍👧‍👦".repeat(50)).value, "👨‍👩‍👧‍👦".repeat(50));
+    assert.equal(clampTitle(`${"x".repeat(209)}😀😀`).value, `${"x".repeat(209)}😀`);
   });
 
   test("títulos de emojis compuestos: se exportan y se importan enteros (antes el tope de 500 tiraba la exportación)", async () => {

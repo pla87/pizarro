@@ -1,10 +1,10 @@
 // Campos opcionales de las tareas: activación por proyecto, validación, permisos, historial y deshacer.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { setTaskFields } from "../../src/actions/projects";
 import { createTask, createTasks, duplicateTask, restoreTaskSnapshot, updateTask } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { projectClients } from "../../src/lib/board";
 
 /** Proyecto con todos los campos activados y una persona administradora que lo gestiona. */
@@ -146,7 +146,7 @@ describe("historial y deshacer", () => {
     expectOk(await undoLast(f.project.id));
     r = await row();
     assert.deepEqual([r.cost?.toFixed(2), r.costPaid, r.priority, r.client, r.startDate?.toISOString().slice(0, 10)], ["10.00", false, "BAJA", null, "2026-12-01"]);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     r = await row();
     assert.deepEqual([r.cost?.toFixed(2), r.priority, r.client], ["25.50", "URGENTE", "Acme"]);
   });

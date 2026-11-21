@@ -2,9 +2,9 @@
 // deshacer, aviso en vivo con la tarea, y el refresco de comentarios del detalle abierto. Contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { addComment, archiveTask, deleteComment, editComment, getRecentComments, getTaskDetail } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { mentionToken } from "../../src/lib/mentions";
 import { subscribeProject } from "../../src/lib/realtime";
 
@@ -104,7 +104,7 @@ describe("editar un comentario", () => {
     let row = await db.taskComment.findUniqueOrThrow({ where: { id: c.id } });
     assert.equal(row.body, "primera versión");
     assert.equal(row.editedAt, null);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     row = await db.taskComment.findUniqueOrThrow({ where: { id: c.id } });
     assert.equal(row.body, "segunda versión");
     assert.ok(row.editedAt);

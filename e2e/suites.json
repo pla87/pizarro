@@ -271,7 +271,6 @@
     ],
     "plan-ia-markdown-e2e": [
       "src/components/board/AiPlanDialog.tsx",
-      "src/components/board/EvergreenPanel.tsx",
       "src/actions/ai-plan.ts",
       "src/lib/ai-plan*.ts",
       "src/lib/markdown-*.ts"
@@ -346,27 +345,6 @@
       "src/app/(app)/p/[projectId]/docs/**",
       "src/app/api/documents/**",
       "src/app/api/projects/[projectId]/documents/**"
-    ],
-    "documentacion-enlaces-bom-e2e": [
-      "src/components/docs/**",
-      "src/components/board/draft-storage.ts",
-      "src/components/board/drafts.ts",
-      "src/lib/documents.ts",
-      "src/lib/document-kind.ts",
-      "src/lib/html-doc-links.ts",
-      "src/app/(app)/p/[projectId]/docs/**",
-      "src/app/api/documents/**"
-    ],
-    "documentacion-indice-e2e": [
-      "src/components/docs/**",
-      "src/lib/html-doc-links.ts",
-      "src/lib/heading-ids.ts",
-      "src/lib/account.ts",
-      "src/lib/user-delete*.ts",
-      "src/lib/google-*.ts",
-      "src/app/(app)/settings/**",
-      "src/app/(app)/p/[projectId]/docs/**",
-      "src/app/api/auth/google/**"
     ],
     "cuentas-borrar-e2e": [
       "src/actions/profile.ts",
@@ -512,7 +490,9 @@
       "src/lib/live-refresh.ts",
       "src/lib/focus-refresh.ts",
       "src/app/api/projects/[projectId]/events/**",
-      "public/sw.js"
+      "public/sw.js",
+      "src/components/board/draft-storage.ts",
+      "src/components/board/drafts.ts"
     ],
     "install-e2e": [
       "src/app/setup/**",

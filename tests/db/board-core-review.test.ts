@@ -6,14 +6,14 @@ import { access, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, type Fixture } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, type Fixture, expectApplied } from "./helpers";
 import {
   addComment, addSubtask, deleteAttachment, deleteComment, deleteSubtask, deleteTask, moveTask, restoreTaskSnapshot, updateSubtask, updateTask,
   type TaskEditSnapshot,
 } from "../../src/actions/tasks";
 import { setColumnRole } from "../../src/actions/columns";
 import { createKind } from "../../src/actions/kinds";
-import { redoLast, undoEntry, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoEntry, undoLast } from "../../src/actions/undo";
 import { discardEntries } from "../../src/lib/undo";
 import { resolvePositionTies } from "../../src/lib/task-positions";
 import { attachmentPath } from "../../src/lib/uploads";
@@ -354,7 +354,7 @@ describe("comentarios importados (sin usuario en Pizarro)", () => {
     expectOk(await deleteComment(imported.id));
     expectOk(await undoLast(f.project.id));
     assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: imported.id } })).authorName, "Persona de otra herramienta");
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     expectOk(await undoLast(f.project.id));
     assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: imported.id } })).authorName, "Persona de otra herramienta");
 
