@@ -266,10 +266,10 @@ async function seedTemplates() {
 /** Abre «Generar release» (Alt+R), genera y devuelve el diálogo en el paso 2. */
 async function generate(page, n, { mobile = false } = {}) {
   if (mobile) {
-    // En el móvil, como una persona: la pestaña de la columna y su botón «Generar Release».
+    // En el móvil, como una persona: la pestaña de la columna y su botón «Generar release».
     await page.locator("button").filter({ hasText: /^Siguiente salto/ }).first().tap();
     await sleep(400);
-    await page.getByRole("button", { name: /Generar Release/ }).filter({ visible: true }).first().tap();
+    await page.getByRole("button", { name: /Generar release/ }).filter({ visible: true }).first().tap();
   } else {
     await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
     await page.keyboard.press("Alt+R");

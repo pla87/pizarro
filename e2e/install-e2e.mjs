@@ -186,7 +186,7 @@ if (await w.page.locator("#enroll-email-code").isVisible().catch(() => false)) {
   const sent = await L.waitFor(() => mails(ADMIN_EMAIL).map((m) => /\b(\d{3} ?\d{3})\b/.exec(m.text)?.[1]).filter(Boolean).at(-1), { timeout: 10000 });
   await w.page.fill("#enroll-email-code", String(sent ?? "").replace(/\s/g, ""));
 }
-await w.page.getByRole("button", { name: "Enable" }).click();
+await w.page.getByRole("button", { name: "Turn on" }).click();
 await w.page.locator('[data-testid="recovery-codes"]').waitFor({ timeout: 15000 });
 await w.page.getByLabel("I have saved the codes").check();
 await w.page.getByRole("button", { name: "Sign in", exact: true }).click();

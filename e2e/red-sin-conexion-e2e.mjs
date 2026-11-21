@@ -331,7 +331,7 @@ if (only.includes("url")) try {
 const openers = [
   ["Archivadas", (pg) => pg.getByRole("button", { name: "Archivadas" }).first().click()],
   ["Varias tareas", (pg) => pg.getByRole("button", { name: "Varias tareas" }).first().click()],
-  ["Generar Release", (pg) => pg.getByRole("button", { name: "Generar Release" }).first().click()],
+  ["Generar release", (pg) => pg.getByRole("button", { name: "Generar release" }).first().click()],
 ];
 const dialogs = (pg) => pg.locator("[role=dialog]").count().catch(() => 0);
 // Errores de red esperables con la red cortada (los de la consola); un rechazo sin atender (pageerror) sí cuenta.

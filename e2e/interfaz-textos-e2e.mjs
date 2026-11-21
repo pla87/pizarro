@@ -136,7 +136,7 @@ if (only.includes("release")) {
   await L.seedTasks(L.COL.next, ["R49 textos uno", "R49 textos dos"]);
   const s = await L.session();
   const { page } = s;
-  await page.getByRole("button", { name: "Generar Release" }).first().click();
+  await page.getByRole("button", { name: "Generar release" }).first().click();
   const dlg = page.getByRole("dialog", { name: /Generar release/ });
   await dlg.waitFor({ timeout: 15000 });
   const all = dlg.getByRole("button", { name: "Todas", exact: true });

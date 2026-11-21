@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { useEscapeClose } from "./useEscapeClose";
 
-export type PopoverAlign = "start" | "end";
+type PopoverAlign = "start" | "end";
 
 const MARGIN = 8;
 /** Elementos que reciben foco al abrir un panel con contenido libre (formularios, chips…). */
@@ -193,7 +193,7 @@ export function PopoverPanel({
   );
 }
 
-export interface TriggerProps {
+interface TriggerProps {
   ref: (el: HTMLElement | null) => void;
   "aria-haspopup": "menu" | "dialog";
   "aria-expanded": boolean;

@@ -3,7 +3,7 @@ import type { T } from "../i18n/core";
 import { escapeHtml, noReplyNote, unsubscribeFooter } from "./mail";
 import { mentionsToPlain } from "./mentions";
 
-export type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
+type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
 
 /** Orden en el que salen las secciones: primero lo que te toca a ti. */
 const DIGEST_ORDER: DigestSectionKey[] = ["assigned", "overdue", "dueToday", "created", "done", "comments"];

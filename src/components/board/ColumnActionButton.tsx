@@ -6,7 +6,7 @@ import { Menu, MenuItem } from "../ui/Menu";
 import { useToast } from "../ui/Toast";
 
 /**
- * Botón de acción de una columna con rol especial («Generar Release», «Generar plan de trabajo», «Publicar programa
+ * Botón de acción de una columna con rol especial («Generar release», «Generar plan de trabajo», «Publicar programa
  * (PDF)», «PDF de la semana»…), bajo la cabecera y a todo el ancho. Todas las columnas especiales lo muestran con el
  * mismo aspecto (el botón principal de la app, en claro y en oscuro); su acción también está en el menú de la columna.
  */

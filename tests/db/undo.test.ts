@@ -700,3 +700,24 @@ describe("entradas guardadas por versiones anteriores", () => {
     assert.deepEqual(data, { title: "x" });
   });
 });
+
+describe("comentarios importados (sin usuario en Pizarro)", () => {
+  test("deshacer y rehacer conservan el nombre del autor", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject();
+    const task = await makeTask(f);
+    const imported = await db.taskComment.create({ data: { taskId: task.id, authorId: null, authorName: "Persona de otra herramienta", body: "importado" } });
+    await loginAs(admin);
+    expectOk(await deleteComment(imported.id));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: imported.id } })).authorName, "Persona de otra herramienta");
+    expectApplied(await redoChecked(f.project.id));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: imported.id } })).authorName, "Persona de otra herramienta");
+
+    // Con la tarea entera: borrar y deshacer.
+    expectOk(await deleteTask(task.id));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.taskComment.findUniqueOrThrow({ where: { id: imported.id } })).authorName, "Persona de otra herramienta");
+  });
+});

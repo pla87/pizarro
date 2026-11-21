@@ -5,7 +5,7 @@ import { AppError } from "./errors";
 import type { QuotaExceeded } from "./quota";
 import { quotaExceededFor } from "./storage-usage";
 
-export interface TaskTotalExceeded {
+interface TaskTotalExceeded {
   /** Suma de los adjuntos que ya tiene la tarea (bytes). */
   usedBytes: number;
   limitMb: number;

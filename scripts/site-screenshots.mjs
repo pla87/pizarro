@@ -414,7 +414,7 @@ async function capture(browser, lang, ctx) {
 
     // Release notes generadas: «Generar release» en la columna de la siguiente release, paso 2
     await open(page, `${BASE}/p/${ctx.shop}`, 800);
-    await page.getByRole("button", { name: isEs ? /Generar Release/ : /Generate release/ }).first().click();
+    await page.getByRole("button", { name: isEs ? /Generar release/ : /Generate release/ }).first().click();
     await settle(page, 800);
     await page.getByRole("button", { name: isEs ? /Generar con \d+/ : /Generate with \d+/ }).click();
     await settle(page, 1200);

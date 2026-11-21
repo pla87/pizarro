@@ -8,7 +8,7 @@ import { attachmentFileNames } from "./release";
 import { attachmentPath, compactImage, copyReleaseAttachmentFile, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
 
 /** Trabajo de copiar los adjuntos de las tareas de una release al histórico; se guarda en `Release.attachmentsPending`. */
-export const pendingJobSchema = z.object({
+const pendingJobSchema = z.object({
   items: z.array(z.object({ taskId: z.string(), code: z.string() })),
   /** Tareas que entraron en la release (solo de esas se copian adjuntos). */
   allowed: z.array(z.string()),

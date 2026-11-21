@@ -4,6 +4,7 @@ import { FileDown, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useT } from "@/i18n/client";
+import { fetchErrorMessage } from "@/lib/connection";
 
 type State = { status: "loading" } | { status: "ready"; url: string; filename: string } | { status: "error"; message: string };
 
@@ -40,7 +41,7 @@ export function ReportButton({ projectId }: { projectId: string }) {
       setState({ status: "ready", url, filename: name ?? `informe-${new Date().toISOString().slice(0, 10)}.pdf` });
     } catch (err) {
       if (run !== runRef.current) return;
-      setState({ status: "error", message: err instanceof Error ? err.message : t("No se pudo generar el informe.") });
+      setState({ status: "error", message: fetchErrorMessage(err, t("Sin conexión: no se ha podido generar el informe."), t("No se pudo generar el informe.")) });
     }
   }, [endpoint, revoke, t]);
 

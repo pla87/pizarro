@@ -329,7 +329,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         description="Se gestionan desde el menú «⋯» de cada columna en el tablero."
         tip={<>
           {t("Ahí se crean, renombran, reordenan, cambian de rol y borran (si están vacías).")}{" "}
-          {t("El rol «Siguiente salto» muestra el botón «Generar Release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
+          {t("El rol «Siguiente salto» muestra el botón «Generar release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
         </>}
       />
 

@@ -463,8 +463,9 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
             {formatBytes(doc.size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "dateNumeric", locale)}
           </span>
           <span className="flex gap-2">
-            <button type="button" className="btn-danger" onClick={() => void remove()} disabled={busy}>
-              <Trash2 size={16} /> {t("Borrar")}
+            {/* Se puede deshacer (va a la papelera): como en el «⋯» de la lista, no «Borrar» en rojo. */}
+            <button type="button" className="btn-secondary" onClick={() => void remove()} disabled={busy}>
+              <Trash2 size={16} /> {t("Enviar a la papelera")}
             </button>
             <a className="btn-primary" href={`${src}?download=1`} download>
               <Download size={16} /> {t("Descargar")}

@@ -28,7 +28,7 @@ export const FORMAT_BAR_CLASS =
   "sticky top-[var(--sticky-top,0px)] z-10 -mx-px -mt-px rounded-t-lg border-b border-slate-200 bg-white p-1 data-[stuck]:rounded-t-none dark:border-slate-800 dark:bg-slate-900";
 
 /** Botón de la barra de formato: `title` en español (con el atajo entre paréntesis). */
-export interface FormatItem {
+interface FormatItem {
   title: string;
   icon: LucideIcon;
   pressed?: boolean;

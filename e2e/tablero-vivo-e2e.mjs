@@ -2,7 +2,7 @@
 // sano: reglas probadas en tests/focus-refresh.test.ts) y la presencia («quién está aquí» y «quién tiene abierta la tarea»)
 // llega por él, sin sondeos, con dos personas a la vez; el panel de filtros no se mueve al marcar un tipo (el segundo clic
 // sigue dentro); con un filtro o una búsqueda sin resultados las columnas dicen «Ninguna tarjeta coincide», el tablero
-// avisa con «Limpiar filtros» y «Generar Release» dice que incluye las tareas ocultas; en el móvil la lupa da el foco al
+// avisa con «Limpiar filtros» y «Generar release» dice que incluye las tareas ocultas; en el móvil la lupa da el foco al
 // campo al primer toque, la búsqueda salta a la columna con resultados, la columna nueva se muestra al crearla, se recuerda
 // la última columna vista y las pestañas avisan de que hay más; los botones flotantes no tapan el diálogo de una tarea ni
 // la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS), y una columna larga llega del servidor con
@@ -145,7 +145,7 @@ if (only.includes("filtros")) {
   }
 }
 
-// --- Estado vacío al filtrar o buscar, y «Generar Release» con un filtro --------------------------------------------------
+// --- Estado vacío al filtrar o buscar, y «Generar release» con un filtro --------------------------------------------------
 if (only.includes("vacio")) {
   L.scenario("vacio: «Ninguna tarjeta coincide», aviso con «Limpiar filtros» y la release con filtro");
   await L.cleanBoard();
@@ -165,7 +165,7 @@ if (only.includes("vacio")) {
   L.check("VACIO: las tarjetas vuelven", await L.cardLoc(page, "Alfa r56").isVisible());
   await boardSearch(page).fill("Salto uno");
   await sleep(300);
-  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar Release" }).click();
+  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar release" }).click();
   const note = U.dialog(page).locator("[data-release-filter-note]");
   await L.checkEventually("RELEASE: con un filtro, el diálogo avisa de que incluye las ocultas", () => note.isVisible());
   L.check("RELEASE: dice cuántas", /2 tareas que el filtro oculta/.test(await note.textContent()), await note.textContent());
@@ -173,7 +173,7 @@ if (only.includes("vacio")) {
   await U.dialog(page).waitFor({ state: "detached" }).catch(() => {});
   await boardSearch(page).fill("");
   await sleep(300);
-  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar Release" }).click();
+  await L.colLoc(page, COL.next).getByRole("button", { name: "Generar release" }).click();
   await U.dialog(page).waitFor();
   await sleep(400);
   L.eq("RELEASE: sin filtro, sin aviso", await note.count(), 0);

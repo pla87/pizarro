@@ -3,6 +3,7 @@
 import { Children, cloneElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
 import { Document, Font, Link, Page, pdf, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
+import { weekRangeEnds } from "./calendar";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
 import { programBlocks, type ProgramPdfDocument, type ProgramPdfInput } from "./course-program";
@@ -521,10 +522,13 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   return { title: `${t("Informe")} · ${r.project.name}`, build, footer: <Footer left={<>{r.project.name} · {t("Informe del {date}", { date: generated })}</>} /> };
 }
 
-export interface WeekPlanPdfInput {
+interface WeekPlanPdfInput {
   project: string;
   column: string;
   today: string;
+  /** Lunes y domingo (YYYY-MM-DD) de la semana que se planifica, los de las secciones por día. */
+  weekStart: string;
+  weekEnd: string;
   generatedBy: string;
   groupBy: WeekPlanGroupBy;
   sections: WeekPlanSection[];
@@ -550,7 +554,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
             <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
             <Text style={s.title}>{r.column}</Text>
             <Text style={s.meta}>
-              {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
+              {r.project} · {t("Semana del {from} al {to}", weekRangeEnds(r.weekStart, r.weekEnd, locale))} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
             </Text>
           </View>
           {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
@@ -567,7 +571,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
   return { title: `${t("Planificación semanal")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
-export interface ChecklistPdfInput {
+interface ChecklistPdfInput {
   project: string;
   column: string;
   today: string;
@@ -630,7 +634,7 @@ interface DeliveryTask {
   doneSubtasks: string[];
 }
 
-export interface DeliveryPdfInput {
+interface DeliveryPdfInput {
   project: string;
   column: string;
   today: string;

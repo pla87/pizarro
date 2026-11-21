@@ -2,6 +2,7 @@
 // ZIP en memoria. Cada entrada declara de antemano su tamaño y su CRC-32 (el exportador de proyectos ya recorre los
 // ficheros una vez para calcular su huella), así que no hacen falta descriptores de datos y cualquier lector lo abre.
 import { crc32 } from "node:zlib";
+import { appTimeZone } from "./format";
 
 export interface StreamZipEntry {
   /** Ruta dentro del ZIP (UTF-8, sin «..» ni barras iniciales). */
@@ -16,11 +17,23 @@ export interface StreamZipEntry {
 const ZIP_LIMIT = 0xffffffff;
 const ZIP_MAX_ENTRIES = 0xffff;
 
-function dosDateTime(date: Date): { time: number; date: number } {
-  const year = Math.min(Math.max(date.getFullYear(), 1980), 2107);
+/** Sello DOS (hora local sin zona) en la zona de la app, no en la del proceso (UTC en el contenedor). */
+function dosDateTime(date: Date, timeZone: string): { time: number; date: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const year = Math.min(Math.max(part("year"), 1980), 2107);
   return {
-    time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
-    date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+    time: (part("hour") << 11) | (part("minute") << 5) | (part("second") >> 1),
+    date: ((year - 1980) << 9) | (part("month") << 5) | part("day"),
   };
 }
 
@@ -38,9 +51,9 @@ export function streamZipSize(entries: Pick<StreamZipEntry, "name" | "size">[]):
 }
 
 /** Genera el ZIP por trozos. Si una entrada no cuadra con lo declarado (tamaño o CRC), lanza: el flujo queda cortado. */
-export async function* streamZip(entries: StreamZipEntry[], now = new Date()): AsyncGenerator<Buffer> {
+export async function* streamZip(entries: StreamZipEntry[], now = new Date(), timeZone = appTimeZone()): AsyncGenerator<Buffer> {
   streamZipSize(entries);
-  const stamp = dosDateTime(now);
+  const stamp = dosDateTime(now, timeZone);
   const central: Buffer[] = [];
   let offset = 0;
   for (const e of entries) {

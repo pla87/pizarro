@@ -216,7 +216,6 @@ export const server: Record<string, string> = {
   "Lleva {n} d en espera": "Waiting for {n} d",
   "semana": "week",
   "columna": "column",
-  "Semana del {date}": "Week of {date}",
   "Por día": "By day",
   "Por persona": "By person",
   "No hay tareas en esta columna.": "There are no tasks in this column.",

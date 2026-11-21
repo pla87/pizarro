@@ -392,7 +392,8 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const edit = readDraft<EditTaskDraft>(draftKey("edit", data.currentUserId, data.project.id));
-      // Los borradores sin cambios (versiones anteriores los guardaban siempre) no reabren nada.
+      // Solo reabre un borrador con título o descripción sin guardar (el detalle no guarda otros) y de una tarea que siga en
+      // el tablero: lo leído de localStorage puede venir incompleto o de otra tarea.
       if (edit && (edit.title !== undefined || edit.description !== undefined) && !initialTaskId && data.tasks.some((t) => t.id === edit.taskId)) {
         setEditDraft(edit);
         setOpenTaskId(edit.taskId);
@@ -2036,7 +2037,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
           onRelease={() => {
             const selected = stores.selection.get();
             const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
+            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar release»).
             setRelease({ taskIds: ids, preselected: ids });
           }}
           onClear={() => setSelected(new Set())}

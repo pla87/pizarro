@@ -125,7 +125,7 @@ if (only.includes("columnas")) {
   await L.liveOpen(page);
   await sleep(800);
   const EMPTY = "No hay tarjetas en esta columna";
-  for (const [col, label] of [["Plan A", "Generar plan de trabajo"], ["Salto", "Generar Release"], ["Semana", "PDF de la semana"]]) {
+  for (const [col, label] of [["Plan A", "Generar plan de trabajo"], ["Salto", "Generar release"], ["Semana", "PDF de la semana"]]) {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     L.check(`COLUMNAS: «${col}»: aria-disabled y sin el atributo disabled`, (await b.getAttribute("aria-disabled")) === "true" && !(await b.evaluate((e) => e.hasAttribute("disabled"))));
     L.check(`COLUMNAS: «${col}»: sigue en el orden de tabulación (se puede enfocar)`, await b.evaluate((e) => { e.focus(); return document.activeElement === e; }));

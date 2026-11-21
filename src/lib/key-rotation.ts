@@ -7,7 +7,7 @@ import { TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY, WHATSAPP_TOKEN_KEY } from "./m
 // lo usa el script de línea de órdenes. Cada valor se actualiza solo si nadie lo ha cambiado mientras tanto.
 
 /** Los campos cifrados de la base de datos: tabla, columna y nombre legible (`idField`: clave de la fila, «id» salvo en AppState; `where`: filtro fijo). */
-export interface EncryptedField {
+interface EncryptedField {
   model: "user" | "loginChallenge" | "googleAccount" | "appState";
   field: string;
   nullable: boolean;
@@ -31,7 +31,7 @@ export const ENCRYPTED_FIELDS: readonly EncryptedField[] = [
 type Row = Record<string, string | null>;
 
 /** Lo mínimo del cliente de Prisma que hace falta (así se prueba sin base de datos). */
-export interface RotationDelegate {
+interface RotationDelegate {
   findMany(args: { where: Record<string, unknown>; select: Record<string, true> }): Promise<Row[]>;
   updateMany(args: { where: Record<string, unknown>; data: Record<string, string> }): Promise<{ count: number }>;
 }

@@ -25,7 +25,6 @@ export const board: Record<string, string> = {
   "Seleccionar todas": "Select all",
   "Añadir tarea en {name}": "Add task in {name}",
   "No hay tarjetas en esta columna": "There are no cards in this column",
-  "Generar Release": "Generate release",
   "Arrastra tarjetas aquí": "Drag cards here",
   "Renombrar columna": "Rename column",
   "Plazo de espera": "Waiting period",
@@ -383,4 +382,7 @@ export const board: Record<string, string> = {
   // Agenda: el .ics se descarga sin salir del tablero (ronda 57)
   "No se pudo exportar el calendario.": "The calendar could not be exported.",
   "Sin conexión: no se ha podido exportar el calendario.": "Offline: the calendar could not be exported.",
+  // Sin red al adjuntar el documento del visor o al descargar los adjuntos en ZIP (en vez del texto del navegador)
+  "Sin conexión: no se ha podido descargar el documento.": "Offline: the document could not be downloaded.",
+  "Sin conexión: no se han podido descargar los adjuntos.": "Offline: the attachments could not be downloaded.",
 };

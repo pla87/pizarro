@@ -474,7 +474,7 @@ function roleAction(
   const hint = t(COLUMN_ROLE_HINT[column.role]);
   switch (column.role) {
     case "NEXT_RELEASE":
-      return <ColumnActionButton icon={Rocket} label={t("Generar Release")} onClick={() => openRelease(column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : `${t("Generar Release")} (${sc("Alt+R")})`} />;
+      return <ColumnActionButton icon={Rocket} label={t("Generar release")} onClick={() => openRelease(column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : `${t("Generar release")} (${sc("Alt+R")})`} />;
     case "AI_PLAN":
       return <ColumnActionButton icon={Bot} label={t("Generar plan de trabajo")} onClick={() => open("plan")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "PROGRAM":
