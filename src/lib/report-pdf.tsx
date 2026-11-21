@@ -228,6 +228,10 @@ function renderDoc(doc: ReactElement): Promise<Buffer> {
     const root = (pdfRoot ??= pdf());
     try {
       root.updateContainer(doc);
+      // Si un componente lanza al pintar, React desmonta la raíz y queda el <Document /> vacío del PDF anterior: sin esta
+      // comprobación salía un PDF en blanco en vez del error. Todos los documentos llevan al menos un <Page>.
+      const pages = (root as unknown as { container?: { document?: { children?: unknown[] } } }).container?.document?.children?.length;
+      if (pages === 0) throw new Error("El PDF no tiene páginas: falló al pintar el documento.");
       const stream = await root.toBuffer();
       return await new Promise<Buffer>((resolve, reject) => {
         const chunks: Buffer[] = [];
@@ -786,7 +790,9 @@ function markdownParts(b: PdfBlock): MarkdownPart[] {
     const lines = b.text.split("\n");
     return lines.map((line, j) => ({
       units: (j === 0 ? 1.5 : 0) + textUnits(line, 110),
-      render: wrapped(<Text style={CODE_LINE_STYLE[j === 0 ? "first" : j === lines.length - 1 ? "last" : "middle"]}>{line || " "}</Text>),
+      // wrap={false}: si el salto de página caía tras el hueco de arriba de la primera línea, esta se partía y pasaba a la
+      // página siguiente encima de la segunda.
+      render: wrapped(<Text wrap={false} style={CODE_LINE_STYLE[j === 0 ? "first" : j === lines.length - 1 ? "last" : "middle"]}>{line || " "}</Text>),
     }));
   }
   return [{ units: markdownUnits([b]), keep: b.t === "h", render: wrapped(<MarkdownBlocks blocks={[b]} />, b.t === "h") }];
