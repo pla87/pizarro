@@ -28,6 +28,23 @@ export function useUndoTask(): string | null {
 /** Aviso a la tarea abierta de que se ha deshecho algo suyo (para que recargue su detalle). */
 export const UNDONE_EVENT = "pz:undone";
 
+// Recarga del tablero que se está viendo (la fija Board al montarse). Deshacer recarga por ella y no con un
+// router.refresh() suelto: el tablero anota cuándo la pidió, y así sabe qué tarjetas sueltas aplicadas antes ya trae.
+let boardRefresh: { projectId: string; refresh: () => void } | null = null;
+
+export function setBoardRefresh(projectId: string, refresh: () => void): () => void {
+  const entry = { projectId, refresh };
+  boardRefresh = entry;
+  return () => {
+    if (boardRefresh === entry) boardRefresh = null;
+  };
+}
+
+/** La recarga del tablero de `projectId` si es el que está abierto. */
+export function boardRefreshFor(projectId: string): (() => void) | null {
+  return boardRefresh?.projectId === projectId ? boardRefresh.refresh : null;
+}
+
 // Hay un diálogo de tarea (nueva o existente) abierto en el tablero: los botones de la cabecera
 // (deshacer, «Nueva tarea») se dibujan encima del fondo difuminado. Lo fija el tablero.
 let boardModalOpen = false;

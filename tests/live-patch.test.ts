@@ -2,7 +2,7 @@
 // y cuáles recargan el tablero entero, qué ids se piden y cómo se aplican al tablero las tarjetas recibidas.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { applyTaskPatch, LIVE_PATCH_MAX, liveTasksUrl, liveUpdatePlan, patchRequestIds } from "../src/components/board/livePatch";
+import { applyTaskPatch, LIVE_PATCH_MAX, liveTasksUrl, liveUpdatePlan, patchRequestIds, withPatchedTasks } from "../src/components/board/livePatch";
 import { PENDING_COPY_PREFIX } from "../src/components/board/groupDrag";
 import type { BoardTask } from "../src/lib/types";
 
@@ -100,5 +100,34 @@ describe("applyTaskPatch: aplicar las tarjetas recibidas", () => {
     const prev = [task("a", { position: 1024 }), task("b", { columnId: "c2", position: 1024 })];
     assert.equal(applyTaskPatch(prev, ["b"], [task("b", { columnId: "c1", position: 1024 })], COLS), null);
     assert.ok(applyTaskPatch(prev, ["b"], [task("b", { columnId: "c1", position: 1536 })], COLS));
+  });
+});
+
+describe("withPatchedTasks: recarga completa que llega después de aplicar tarjetas sueltas", () => {
+  test("sin tarjetas parcheadas, los datos de la recarga tal cual (la misma lista)", () => {
+    const server = [task("a"), task("b", { position: 2048 })];
+    assert.equal(withPatchedTasks(server, new Map(), COLS), server);
+  });
+
+  test("las parcheadas conservan su versión: cambiada, nueva o quitada; las demás, las de la recarga", () => {
+    const moved = task("a", { columnId: "c2", title: "movida" });
+    const created = task("n", { position: 4096 });
+    const server = [task("a"), task("b", { position: 2048, title: "de la recarga" }), task("x", { position: 3072 })];
+    const out = withPatchedTasks(server, new Map<string, BoardTask | null>([["a", moved], ["n", created], ["x", null]]), COLS)!;
+    assert.deepEqual(out.map((t) => t.id), ["a", "b", "n"]);
+    assert.equal(out[0], moved);
+    assert.equal(out[1], server[1]);
+    assert.equal(out[2], created);
+    // La quitada por el parche (archivada, borrada) no vuelve aunque la recarga, pedida antes, aún la traiga.
+    assert.ok(!out.some((t) => t.id === "x"));
+  });
+
+  test("una parcheada en una columna que la recarga ya no trae, o con la posición de otra (columna renumerada): null", () => {
+    assert.equal(withPatchedTasks([task("a")], new Map([["a", task("a", { columnId: "quitada" })]]), COLS), null);
+    const server = [task("a", { position: 1024 }), task("b", { position: 2048 })];
+    assert.equal(withPatchedTasks(server, new Map([["b", task("b", { position: 1024 })]]), COLS), null);
+    assert.ok(withPatchedTasks(server, new Map([["b", task("b", { position: 1536 })]]), COLS));
+    // Las quitadas no cuentan para las columnas.
+    assert.ok(withPatchedTasks(server, new Map([["z", null]]), new Set(["c1"])));
   });
 });
