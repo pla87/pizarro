@@ -32,4 +32,9 @@ export const ics: Record<string, string> = {
   "Último uso: {when}": "Last used: {when}",
   "Último uso: hace menos de una hora": "Last used: less than an hour ago",
   "{date} (se anota como mucho una vez por hora)": "{date} (recorded at most once an hour)",
+  // Suscripción: confirmar antes de dejar sin efecto el enlace (regenerar o desactivar)
+  "Regenerar": "Regenerate",
+  "El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?": "The current link will stop working in every subscribed calendar. Generate a new one?",
+  "Desactivar la suscripción": "Turn off subscription",
+  "El enlace dejará de funcionar en todos los calendarios suscritos. ¿Desactivar la suscripción?": "The link will stop working in every subscribed calendar. Turn off the subscription?",
 };

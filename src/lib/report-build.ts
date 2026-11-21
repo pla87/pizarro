@@ -9,6 +9,7 @@ import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { slugify } from "./search-accents";
 import { buildReport, RECENT_DONE_DAYS } from "./report";
+import { deliverableProgressByIds } from "./deliverable-progress-db";
 import type { PdfJob } from "./report-pdf";
 import { renderInWorker } from "./report-render";
 import { groupChecklist, type ChecklistGroupBy } from "./checklist";
@@ -195,6 +196,8 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
   };
   for (const e of doneEvents) noteDone(e.taskId, e._max.createdAt);
   for (const r of released) noteDone(r.taskId, r.release.deployedAt);
+  // Avance de los entregables con las archivadas (que no se leen arriba) y sin las fijas: el criterio del calendario.
+  const progress = await deliverableProgressByIds(deliverables.map((d) => d.id));
 
   const locale = intlLocale(opts.locale);
   const today = todayIso(appTimeZone());
@@ -224,7 +227,7 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
         priority: task.priority, client: task.client, startDate: dateToIso(task.startDate),
       },
     })),
-    deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
+    deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate), progress: progress.get(d.id) })),
     releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r.taskCount })),
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),

@@ -15,6 +15,8 @@ import { PROGRAM_MAX_SESSIONS } from "../../src/lib/program-limit";
 import { lockColumns } from "../../src/lib/task-positions";
 import { flushLogs } from "../../src/lib/log";
 import { attachmentPath } from "../../src/lib/uploads";
+import { addDaysIso, todayIso } from "../../src/lib/dates";
+import { appTimeZone } from "../../src/lib/format";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-recurrence-"));
 
@@ -70,6 +72,47 @@ describe("siguiente aparición de una tarea recurrente", () => {
     await db.task.update({ where: { id: a.id }, data: { startDate: day("2999-01-07") } });
     expectOk(await moveTask(a.id, f.columns.done, null, null));
     assert.equal((await nextOf(a.id)).startDate, null);
+  });
+});
+
+describe("entregable de la siguiente aparición", () => {
+  /** Tarea recurrente de un entregable con esa fecha (o sin fecha); la termina y devuelve el entregable de la siguiente. */
+  async function nextDeliverable(due: string | null): Promise<{ deliverableId: string; next: string | null }> {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const d = await db.deliverable.create({ data: { projectId: f.project.id, name: "Entrega", position: 1000, dueDate: due ? day(due) : null } });
+    const a = await makeTask(f, { title: "Semanal", recurrence: "WEEKLY", columnId: f.columns.doing, dueDate: day("2999-01-10") });
+    await db.task.update({ where: { id: a.id }, data: { deliverableId: d.id } });
+    expectOk(await moveTask(a.id, f.columns.done, null, null));
+    return { deliverableId: d.id, next: (await nextOf(a.id)).deliverableId };
+  }
+
+  test("lo hereda si no ha vencido (sin fecha, en el futuro o hoy) y no si ya venció", async () => {
+    const today = todayIso(appTimeZone());
+    for (const due of [null, "2999-01-01", today]) {
+      const { deliverableId, next } = await nextDeliverable(due);
+      assert.equal(next, deliverableId, `con fecha ${due}`);
+    }
+    for (const due of [addDaysIso(today, -1), "2000-01-01"]) {
+      assert.equal((await nextDeliverable(due)).next, null, `con fecha ${due}`);
+    }
+  });
+
+  test("«vencido» con el día de la zona de la app", async () => {
+    const prev = process.env.APP_TIMEZONE;
+    // Entre UTC−12 y UTC+14 hay 26 horas: el día de UTC−12 es siempre anterior al de Kiritimati.
+    const due = todayIso("Etc/GMT+12");
+    try {
+      process.env.APP_TIMEZONE = "Etc/GMT+12";
+      const west = await nextDeliverable(due);
+      assert.equal(west.next, west.deliverableId, "en UTC−12 vence hoy: lo hereda");
+      process.env.APP_TIMEZONE = "Pacific/Kiritimati";
+      assert.equal((await nextDeliverable(due)).next, null, "en UTC+14 ya venció ayer");
+    } finally {
+      if (prev === undefined) delete process.env.APP_TIMEZONE;
+      else process.env.APP_TIMEZONE = prev;
+    }
   });
 });
 

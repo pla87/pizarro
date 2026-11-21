@@ -3,35 +3,7 @@ import { esT, type T } from "@/i18n/shared";
 import type { UploadedAttachment } from "@/lib/types";
 import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
 import { QueueStopped, runQueue, summarizeSkipped, uploadCap, uploadGate, withRetry, type SkippedFile } from "@/lib/upload-queue";
-
-/** El ancho que guarda el servidor (processImage en lib/uploads.ts: 1280 px de ancho como mucho, por ancho y no por lado). */
-const CLIENT_MAX_WIDTH = 1280;
-
-/**
- * Reduce en el navegador las fotos grandes antes de subirlas (más rápido en móvil): al mismo ancho que guardará el
- * servidor, que no amplía, así que no se pierde nada y no se sube de más. El servidor hace siempre el procesado definitivo
- * con sharp.
- */
-async function shrink(file: File): Promise<Blob> {
-  if (file.size < 1_500_000 || !/^image\/(png|jpeg|webp)$/.test(file.type) || typeof createImageBitmap !== "function") return file;
-  try {
-    const bitmap = await createImageBitmap(file);
-    if (bitmap.width <= CLIENT_MAX_WIDTH) {
-      bitmap.close();
-      return file;
-    }
-    const scale = CLIENT_MAX_WIDTH / bitmap.width;
-    const canvas = document.createElement("canvas");
-    canvas.width = CLIENT_MAX_WIDTH;
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.92));
-    return blob && blob.size < file.size ? blob : file;
-  } catch {
-    return file;
-  }
-}
+import { shrinkImage } from "@/lib/image-shrink";
 
 /** Archivos (de cualquier tipo) de un FileList o de los items de un arrastre. Para pegar, ver ui/pasteFiles. */
 export function filesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
@@ -73,7 +45,7 @@ async function uploadFile(taskId: string, file: File, onCreate = false, t: T = e
   const isImage = isImageFile(file);
   const fallback = isImage ? `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png` : t("archivo");
   const name = file.name && !(isImage && file.name === "image.png") ? file.name : fallback;
-  const blob = isImage ? await shrink(file) : file;
+  const blob = isImage ? await shrinkImage(file) : file;
   // Cada envío (también los reintentos) pasa por la puerta con el tope por persona que indica el servidor.
   return withRetry(() => uploadGate.run(async () => {
     const body = new FormData();

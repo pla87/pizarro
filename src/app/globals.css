@@ -244,37 +244,44 @@
     outline: 3px solid var(--color-focus);
     outline-offset: 2px;
   }
-  @supports not selector(::-webkit-scrollbar) {
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: var(--color-slate-300) transparent;
-    }
-    @variant dark {
+  /*
+   * Solo con ratón o panel táctil (puntero principal fino). En pantallas táctiles se deja la del sistema: con estilo
+   * propio, Chrome de Android dibuja una barra fija al lado de cada lista que se desplaza (las columnas del tablero);
+   * la suya aparece al desplazar y se oculta sola.
+   */
+  @media not all and (pointer: coarse) {
+    @supports not selector(::-webkit-scrollbar) {
       * {
-        scrollbar-color: var(--color-slate-700) transparent;
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-slate-300) transparent;
+      }
+      @variant dark {
+        * {
+          scrollbar-color: var(--color-slate-700) transparent;
+        }
       }
     }
-  }
-  *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  *::-webkit-scrollbar-thumb {
-    background-color: var(--color-slate-300);
-    border-radius: 9999px;
-  }
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: var(--color-brand-500);
-  }
-  @variant dark {
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
     *::-webkit-scrollbar-thumb {
-      background-color: var(--color-slate-700);
+      background-color: var(--color-slate-300);
+      border-radius: 9999px;
     }
     *::-webkit-scrollbar-thumb:hover {
       background-color: var(--color-brand-500);
+    }
+    @variant dark {
+      *::-webkit-scrollbar-thumb {
+        background-color: var(--color-slate-700);
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background-color: var(--color-brand-500);
+      }
     }
   }
 }

@@ -2,6 +2,7 @@
 import { esT, type T } from "../i18n/shared";
 import { daysBetween, isoInZone } from "./dates";
 import { centsToAmount, sumCents, type TaskFieldKey, type TaskFieldValues } from "./task-fields";
+import { deliverableProgress, type DeliverableProgress } from "./deliverable-progress";
 
 export const UPCOMING_DAYS = 14;
 const RISK_DAYS = 7;
@@ -42,7 +43,11 @@ export interface ReportInput {
      */
     evergreen?: boolean;
   }[];
-  deliverables: { id: string; name: string; description: string; dueDate: string | null }[];
+  /**
+   * `progress`: total y hechas contadas en la BD (deliverableProgressByIds), con las archivadas, que no están en `tasks`.
+   * Sin él, se cuentan las de `tasks` con el mismo criterio (deliverableProgress).
+   */
+  deliverables: { id: string; name: string; description: string; dueDate: string | null; progress?: DeliverableProgress }[];
   releases: { number: number; title: string; deployedAt: string; taskCount: number }[];
   archivedCount: number;
   /** Campos opcionales que el proyecto tiene activados (el informe solo incluye esos). */
@@ -171,19 +176,21 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
     };
   });
 
+  // Mismo criterio que el calendario: las archivadas cuentan como hechas y las fijas no cuentan (deliverableProgress).
   const deliverables = input.deliverables.map((d) => {
-    const tasks = input.tasks.filter((t) => t.deliverableId === d.id);
-    const doneCount = tasks.filter(isDone).length;
+    const { total, done: doneCount } = d.progress ?? deliverableProgress(
+      fullInput.tasks.filter((t) => t.deliverableId === d.id).map((t) => ({ evergreen: !!t.evergreen, archived: false, inDoneColumn: isDone(t) })),
+    );
     const daysLeft = d.dueDate ? daysBetween(today, d.dueDate) : null;
     return {
       name: d.name,
       description: d.description,
       dueDate: d.dueDate,
       daysLeft,
-      total: tasks.length,
+      total,
       done: doneCount,
-      pct: pct(doneCount, tasks.length),
-      status: deliverableStatus(tasks.length, doneCount, daysLeft),
+      pct: pct(doneCount, total),
+      status: deliverableStatus(total, doneCount, daysLeft),
     };
   });
 

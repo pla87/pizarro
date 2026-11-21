@@ -3,7 +3,7 @@
 // 200 tareas con adjuntos lo hacen «Marcar como desplegado» y la descarga de adjuntos; el «+» flotante del móvil con la
 // columna «Programa del curso» a 100 sesiones ya no abre «Nueva tarea» (el servidor la rechazaba al crear): se ve
 // desactivado y dice por qué; y el «+» flotante ya no tapa la barra «Siempre en la release» / «Siempre en el plan» al pie
-// de la columna (ni la lista del panel abierto). Misma base y servidor que board-e2e.mjs:
+// de la columna (ni la lista del panel abierto), que desde la ronda 59 llega hasta abajo como las demás. Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node releases-grandes-e2e.mjs      # PART=release,adjuntos,flotante,panel
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
@@ -196,7 +196,9 @@ if (only.includes("panel")) {
       L.eq(`PANEL ${label}: la barra de «${col}» dice «${text} 2»`, (await toggle.innerText()).replace(/\s+/g, " ").trim(), `${text} 2`);
       L.check(`PANEL ${label}: el «+» flotante no tapa la barra de «${col}»`, !overlap(bar, fab), JSON.stringify({ bar, fab }));
       L.check(`PANEL ${label}: «Crear varias tareas» tampoco`, !overlap(bar, bulk), JSON.stringify({ bar, bulk }));
-      L.check(`PANEL ${label}: la columna «${col}» acaba por encima del «+»`, (await box(column)).y + (await box(column)).height <= fab.y, JSON.stringify({ column: await box(column), fab }));
+      // Ronda 59: la columna llega hasta abajo como las demás (antes acababa por encima del «+» y dejaba un hueco vacío);
+      // la barra, al fondo, deja libre a la derecha el sitio del «+».
+      L.check(`PANEL ${label}: la columna «${col}» llega hasta abajo, con la barra al fondo`, (await box(column)).y + (await box(column)).height > fab.y + fab.height && bar.y + bar.height >= (await box(column)).y + (await box(column)).height - 2, JSON.stringify({ column: await box(column), bar, fab }));
       // Desplegado: las filas y «Añadir» quedan fuera de los dos botones.
       await toggle.tap();
       await column.locator("[id^=evergreen-] [role=button]").first().waitFor();
