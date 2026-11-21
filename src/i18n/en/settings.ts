@@ -181,7 +181,7 @@ export const settings: Record<string, string> = {
   "Tipo activado en el proyecto": "Type enabled in the project",
   "Tipo desactivado en el proyecto": "Type disabled in the project",
   "Tipos generales que usa este proyecto": "General types this project uses",
-  "Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.": "Unticked ones don't appear in this project's selectors or releases.",
+  "Los desmarcados no aparecen en los selectores ni en las releases de este proyecto.": "Unchecked ones don't appear in this project's selectors or releases.",
   "Dejar de usar «{name}»": "Stop using “{name}”",
   "Su tarea en este proyecto pasará al tipo:": "Its task in this project will move to the type:",
   "Sus {n} tareas en este proyecto pasarán al tipo:": "Its {n} tasks in this project will move to the type:",

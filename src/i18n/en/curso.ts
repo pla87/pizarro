@@ -33,7 +33,7 @@ export const curso: Record<string, string> = {
   "Avisa a la persona asignada si una tarjeta lleva demasiados días aquí.": "Reminds the assignee when a card has been here too many days.",
   "PDF de las tareas de la semana, por día o por persona.": "PDF of the week's tasks, by day or by person.",
   "Reúne las subtareas de todas sus tarjetas en una sola lista.": "Gathers the subtasks of all its cards into a single list.",
-  "Avisa al sacar una tarjeta con subtareas sin marcar.": "Warns when a card with unticked subtasks is moved out.",
+  "Avisa al sacar una tarjeta con subtareas sin marcar.": "Warns when a card with unchecked subtasks is moved out.",
   "Exporta sus tareas con fecha a un calendario (.ics).": "Exports its dated tasks to a calendar (.ics).",
   "Tareas que se repiten: elige dónde aparece la siguiente.": "Repeating tasks: choose where the next one appears.",
   "PDF de resumen para el cliente, sin comentarios ni personas.": "Client summary PDF, with no comments or people.",

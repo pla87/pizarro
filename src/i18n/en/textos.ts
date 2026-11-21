@@ -21,7 +21,7 @@ export const textos: Record<string, string> = {
   "Con el número de prueba de Meta, solo llegan a los números verificados.": "With Meta's test number, they only reach verified numbers.",
   "Comprimidas y cifradas (AES-256) en la carpeta backups del volumen y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez: cada copia solo añade los nuevos.": "Compressed and encrypted (AES-256) in the volume's backups folder and, if set up, at an external destination. Files are stored only once: each backup only adds the new ones.",
   "Son las que pide Google y las que enlaza la pantalla de acceso.": "Google asks for them, and the sign-in screen links to them.",
-  "Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.": "Tick “Include reads” to also see page views, opened tasks and downloads.",
+  "Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.": "Check “Include reads” to also see page views, opened tasks and downloads.",
   "La fecha se pone sola. Se guarda en esta instalación y queda en el registro de actividad.": "The date is filled in automatically. It is stored in this installation and recorded in the activity log.",
   "Puedes tener varias cabeceras y varios pies; en cada release eliges cuáles usar.": "You can have several headers and footers; in each release you pick which ones to use.",
   "Como administrador puedes abrir cualquier proyecto de equipo desde Administración → Proyectos.": "As an administrator you can open any team project from Administration → Projects.",

@@ -119,7 +119,7 @@ export const mensajeria: Record<string, string> = {
   "Los avisos por Telegram no están activados en esta instalación.": "Telegram notices aren't turned on in this installation.",
   "Los avisos por WhatsApp no están activados en esta instalación.": "WhatsApp notices aren't turned on in this installation.",
   "Conecta primero este canal.": "Connect this channel first.",
-  "Marca la casilla para aceptar recibir avisos por WhatsApp.": "Tick the box to agree to receive WhatsApp notices.",
+  "Marca la casilla para aceptar recibir avisos por WhatsApp.": "Check the box to agree to receive WhatsApp notices.",
   "Guarda primero tu número de WhatsApp.": "Save your WhatsApp number first.",
   "El identificador del número de WhatsApp son solo cifras (Phone number ID).": "The WhatsApp phone number ID is digits only (Phone number ID).",
   "El nombre de la plantilla solo admite minúsculas, cifras y guiones bajos.": "The template name only allows lowercase letters, digits and underscores.",
