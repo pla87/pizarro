@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { visibleProjectsWhere } from "./access";
 import { db } from "./db";
 import type { CurrentUser } from "./session";
+import { UNREAD_COUNT_CAP } from "./unread-core";
 
 /**
  * Avisos que la persona puede ver: los de tareas de proyectos a los que sigue teniendo acceso y los de proyecto
@@ -13,9 +14,6 @@ export function visibleNotificationsWhere(user: CurrentUser): Prisma.Notificatio
   const projects = visibleProjectsWhere(user);
   return { userId: user.id, OR: [{ task: { project: projects } }, { taskId: null, project: projects }] };
 }
-
-/** Tope del recuento de sin leer: la interfaz dice «99+» o «Más de 99 sin leer» a partir de 100 (AppShell, Avisos). */
-export const UNREAD_COUNT_CAP = 100;
 
 /**
  * Avisos visibles sin leer, como mucho `UNREAD_COUNT_CAP`. Va en cada página (layout) y en cada `router.refresh()`.

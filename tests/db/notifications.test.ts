@@ -9,7 +9,8 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationBody } from "../../src/lib/notification-text";
-import { UNREAD_COUNT_CAP, unreadCount } from "../../src/lib/notification-access";
+import { unreadCount } from "../../src/lib/notification-access";
+import { UNREAD_COUNT_CAP } from "../../src/lib/unread-core";
 import { makeT } from "../../src/i18n/core";
 
 const mention = (u: { id: string; name: string }) => mentionToken(u.name, u.id);

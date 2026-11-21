@@ -1,4 +1,5 @@
-import { UNREAD_COUNT_CAP, unreadCount, visibleNotificationsWhere } from "@/lib/notification-access";
+import { unreadCount, visibleNotificationsWhere } from "@/lib/notification-access";
+import { UNREAD_COUNT_CAP } from "@/lib/unread-core";
 import { db } from "@/lib/db";
 import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
