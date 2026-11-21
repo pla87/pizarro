@@ -91,7 +91,6 @@ export const admin: Record<string, string> = {
   "{n} etiquetas": "{n} labels",
   "1 general oculto": "1 general type hidden",
   "todos los generales ocultos": "all general types hidden",
-  "Ocultar todos los tipos generales": "Hide all general types",
   "{n} generales ocultos": "{n} general types hidden",
   "Elegir otro color": "Pick another color",
   "Plantilla actualizada": "Template updated",
@@ -130,7 +129,6 @@ export const admin: Record<string, string> = {
   "Título automático (opcional)": "Automatic title (optional)",
   "Texto inicial de la descripción (opcional)": "Initial description text (optional)",
   "Añadir tipo": "Add type",
-  "Tipos generales que no se usarán": "General types that won't be used",
   "Si no hay tipos propios, siempre queda al menos uno visible.": "Without project types, at least one always stays visible.",
   "{name} (ya no existe)": "{name} (no longer exists)",
   "Nombre de la etiqueta {n}": "Name of label {n}",
@@ -355,4 +353,8 @@ export const admin: Record<string, string> = {
   // Integraciones → Email: aviso de APP_URL (ronda 59)
   "Falta la variable APP_URL del servidor (la dirección pública de Pizarro): los enlaces de los emails llevarán a http://localhost:3000 y no funcionarán. Defínela (por ejemplo https://pizarro.tuempresa.com) y redespliega.": "The server's APP_URL variable is missing (Pizarro's public address): links in emails will point to http://localhost:3000 and won't work. Set it (for example https://pizarro.yourcompany.com) and redeploy.",
   "Entras por {current} pero APP_URL es {app}, y los enlaces de los emails salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.": "You are visiting {current} but APP_URL is {app}, and links in emails come from APP_URL. That is normal if you still use the old address; to use {current}, change APP_URL (Railway → Variables) and redeploy.",
+  // Plantillas de proyecto: tipos generales en positivo, como en los ajustes del proyecto
+  "Tipos generales que se usan": "General types in use",
+  "Ninguno (ocultar todos los tipos generales)": "None (hide all general types)",
+  "Ocultos que ya no existen:": "Hidden ones that no longer exist:",
 };

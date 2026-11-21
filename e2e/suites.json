@@ -99,7 +99,11 @@
       "src/lib/graphemes.ts",
       "src/lib/title-clamp.ts",
       "src/lib/project-delete.ts",
-      "src/app/(app)/p/[projectId]/settings/**"
+      "src/app/(app)/p/[projectId]/settings/**",
+      "src/lib/kinds-special.ts",
+      "src/lib/project-templates-core.ts",
+      "src/app/(app)/admin/templates/**",
+      "src/components/AppShell.tsx"
     ],
     "tablero-teclado-e2e": [
       "src/components/board/Board.tsx",

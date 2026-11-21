@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
-import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
@@ -18,7 +17,7 @@ import type { EditorModeValue } from "@/lib/types";
 import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
-import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES } from "@/lib/project-templates-core";
+import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -341,31 +340,41 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
             </section>
 
             <section>
-              <h3 className="mb-1 text-sm font-semibold">{t("Tipos generales que no se usarán")}</h3>
+              {/* En positivo, como en los ajustes del proyecto (marcado = se usa); se guarda como «ocultos» y «ocultar
+                  todos» (project-templates-core.ts). Antes decía «que no se usarán» (marcado = oculto) y, con «ocultar
+                  todos», seguían marcados solo algunos: parecía que los demás sí se usaban. */}
+              <h3 className="mb-1 text-sm font-semibold">{t("Tipos generales que se usan")}</h3>
               <p className="mb-2 text-xs text-slate-500">{t("Si no hay tipos propios, siempre queda al menos uno visible.")}</p>
-              <label className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-                <input type="checkbox" checked={draft.hideAllGeneralKinds} onChange={(e) => patch({ hideAllGeneralKinds: e.target.checked })} />
-                {t("Ocultar todos los tipos generales")}
-              </label>
-              <div className={cn("flex flex-wrap gap-x-4 gap-y-1", draft.hideAllGeneralKinds && "opacity-50")}>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
                 {generalKinds.map((name) => (
                   <label key={name} className="flex items-center gap-1.5 text-sm">
                     <input
                       type="checkbox"
-                      checked={draft.hiddenGeneralKinds.includes(name)}
-                      onChange={(e) => patch({ hiddenGeneralKinds: e.target.checked ? [...draft.hiddenGeneralKinds, name] : draft.hiddenGeneralKinds.filter((n) => n !== name) })}
+                      checked={generalKindUsed(draft, name)}
+                      onChange={(e) => patch(setGeneralKindUsed(draft, generalKinds, name, e.target.checked))}
                     />
                     {name}
                   </label>
                 ))}
-                {/* Nombres guardados que ya no existen como tipo general: se pueden desmarcar. */}
-                {draft.hiddenGeneralKinds.filter((n) => !generalKinds.includes(n)).map((name) => (
-                  <label key={name} className="flex items-center gap-1.5 text-sm text-slate-500">
-                    <input type="checkbox" checked onChange={() => patch({ hiddenGeneralKinds: draft.hiddenGeneralKinds.filter((n) => n !== name) })} />
-                    {t("{name} (ya no existe)", { name })}
-                  </label>
-                ))}
+                <label className="flex items-center gap-1.5 text-sm font-medium">
+                  <input type="checkbox" checked={draft.hideAllGeneralKinds} onChange={(e) => patch({ hideAllGeneralKinds: e.target.checked })} />
+                  {t("Ninguno (ocultar todos los tipos generales)")}
+                </label>
               </div>
+              {/* Nombres guardados como ocultos que ya no existen como tipo general: se pueden quitar de la lista. */}
+              {draft.hiddenGeneralKinds.some((n) => !generalKinds.includes(n)) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                  <span>{t("Ocultos que ya no existen:")}</span>
+                  {draft.hiddenGeneralKinds.filter((n) => !generalKinds.includes(n)).map((name) => (
+                    <span key={name} className="inline-flex items-center gap-0.5">
+                      {t("{name} (ya no existe)", { name })}
+                      <button type="button" className="btn-icon h-6 w-6" onClick={() => patch({ hiddenGeneralKinds: draft.hiddenGeneralKinds.filter((n) => n !== name) })} aria-label={t("Quitar «{name}»", { name })}>
+                        <X size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section>

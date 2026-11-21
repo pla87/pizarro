@@ -1179,7 +1179,9 @@ if (only.includes("r46")) {
     await sel.selectOption({ label: "Familia y casa" });
     await nd.getByLabel("Crear como proyecto privado inicialmente").check();
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    // Con un ejemplo o una plantilla se abre el tablero (en blanco, los ajustes: BH1, más abajo).
+    await p.waitForURL(/\/p\/[^/?#]+$/, { timeout: 15000 });
+    L.check("R46M1: con un ejemplo, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     const [made] = await L.q(`SELECT p.id, p."isPrivate", (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks FROM "Project" p WHERE name='Mi casa R46'`);
     L.check("R46M1: crea el proyecto del ejemplo, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
     // Plantilla: la estructura de la plantilla, sin tarjetas.
@@ -1188,7 +1190,8 @@ if (only.includes("r46")) {
     await nd.locator("#project-start").selectOption({ label: firstTemplate });
     await nd.locator("#project-name").fill("Plantilla R46");
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await p.waitForURL(/\/p\/[^/]+\/settings/, { timeout: 15000 });
+    await p.waitForURL(/\/p\/[^/?#]+$/, { timeout: 15000 });
+    L.check("R46M1: con una plantilla, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     await sleep(500);
     const [fromTpl] = await L.q(`SELECT p.id, (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks, (SELECT json_agg(c.name ORDER BY c.position) FROM "Column" c WHERE c."projectId"=p.id) AS cols FROM "Project" p WHERE name='Plantilla R46'`);
     L.eq("R46M1: con una plantilla, sus columnas y sin tarjetas", [fromTpl?.cols, fromTpl?.tasks], [tplColumns.map((c) => c.name), 0]);
