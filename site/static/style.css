@@ -371,6 +371,11 @@ a:hover > .arr, a:hover .arr { transform: translateX(3px); }
 .prose .code pre code { overflow-wrap: anywhere; }
 .code-out { background: color-mix(in srgb, var(--code-bg) 92%, var(--brand)); }
 .code-out pre { color: #cbd5e1; }
+/* Botón «Generar mis variables» (guía de instalación, Railway): encima del bloque de variables que rellena. */
+.gen { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0.8em 0 0.2em; }
+.gen[hidden] { display: none; }
+.gen-status { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.gen-status:empty { display: none; }
 .callout { margin: 0 0 1.2em; padding: 14px 18px; border: 1px solid var(--note-border); border-left-width: 4px; border-radius: 10px; background: var(--note-bg); }
 .callout > :last-child { margin-bottom: 0; }
 .callout-title { margin: 0 0 4px; font-size: 0.8rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--note-title); }

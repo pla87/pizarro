@@ -19,10 +19,13 @@ necesitas, cómo instalarlo, los primeros pasos y cómo mantenerlo al día. Si a
 
 **Para instalarlo en tu propio servidor:**
 
-- **Un servidor Linux** con procesador x86_64 o arm64: un VPS de cualquier proveedor, un miniordenador en la oficina o
-  una Raspberry Pi 5.
-- **1 GB de RAM**, 1 procesador y unos 10 GB de disco, más lo que ocupen tus archivos adjuntos.
-- **Acceso por terminal** (SSH) como `root` o con un usuario que pueda usar `sudo`.
+- **Un servidor Linux** con procesador x86_64 o arm64: un VPS (un servidor que alquilas por meses a un proveedor de
+  alojamiento; cualquiera sirve), un miniordenador en la oficina o una Raspberry Pi 5.
+- **Tamaño recomendado: 2 GB de RAM, 1 o 2 procesadores (vCPU) y 20 GB de disco**, más lo que ocupen tus archivos
+  adjuntos. Pizarro arranca con 1 GB de RAM, pero con 2 GB va holgado. Suele bastar el plan más sencillo que llegue a
+  esas cifras.
+- **Acceso por terminal** (SSH) como `root` o con un usuario que pueda usar `sudo`. Desde Windows sirve PowerShell, que
+  ya trae SSH; en un Mac, la app Terminal.
 - **Docker.** Si no lo tienes, el instalador se ofrece a instalarlo por ti.
 - **Un dominio o subdominio** (por ejemplo `pizarro.example.com`) que apunte a la IP del servidor, con los puertos 80
   y 443 abiertos. Si solo lo vas a usar en casa o en la oficina, también funciona en la red local, sin dominio.
@@ -45,19 +48,36 @@ Los dos caminos acaban igual: en el asistente que crea tu cuenta de administrado
 
 ## Instalar en tu servidor con un comando {#servidor-propio}
 
-1. **Apunta tu dominio al servidor.** En el panel de tu proveedor de dominios, crea un registro DNS de tipo `A` para
-   `pizarro.example.com` con la IP del servidor (y otro `AAAA` si tiene IPv6). Comprueba también que el cortafuegos
-   deja pasar los puertos 80 y 443. Si vas a usar Pizarro solo en la red local, sáltate este paso.
+1. **Apunta tu dominio al servidor.** Entra en el panel de quien te vende el dominio y busca el apartado **DNS** (a
+   veces se llama **Zona DNS** o *Gestionar DNS*). Crea un registro de tipo `A`: como nombre, la parte de delante del
+   dominio (`pizarro` para `pizarro.example.com`, o `@` si usas el dominio entero) y como valor, la IP del servidor. Si
+   el servidor tiene IPv6, crea otro de tipo `AAAA` con esa dirección. El cambio puede tardar de unos minutos a unas
+   horas en llegar a todo Internet. Si vas a usar Pizarro solo en la red local, sáltate este paso.
 
-2. **Entra en el servidor** desde la terminal de tu ordenador:
+2. **Entra en el servidor** desde la terminal de tu ordenador: en Windows, abre **PowerShell** (búscalo en el menú
+   Inicio); en un Mac, la app **Terminal**. Escribe:
 
    ```bash
    ssh root@203.0.113.10
    ```
 
-   Cambia `203.0.113.10` por la IP de tu servidor (o `root` por tu usuario).
+   Cambia `203.0.113.10` por la IP de tu servidor (o `root` por tu usuario). La primera vez te pregunta si confías en
+   el servidor: escribe `yes` y pulsa Intro. Después, la contraseña que te dio el proveedor (mientras la escribes no se
+   ve nada: es normal).
 
-3. **Ejecuta el instalador.** Copia este comando, cambia `pizarro.example.com` por tu dominio y pégalo en la
+3. **Abre los puertos 80 y 443.** Por ellos entra la gente a Pizarro y se pide el certificado HTTPS. Si tu proveedor
+   tiene un cortafuegos en su panel (*Firewall*, *Cortafuegos* o *Security group*), añade allí una regla que permita la
+   entrada TCP por los puertos 80 y 443. Si además el propio servidor usa `ufw` (compruébalo con `ufw status`: dice
+   `Status: active`), ábrelos también en él:
+
+   ```bash
+   ufw allow 80,443/tcp
+   ```
+
+   Si `ufw status` dice `inactive` o que no existe, no hace falta nada más. En la red local, sin dominio, sáltate este
+   paso.
+
+4. **Ejecuta el instalador.** Copia este comando, cambia `pizarro.example.com` por tu dominio y pégalo en la
    terminal:
 
    ```bash
@@ -70,10 +90,10 @@ Los dos caminos acaban igual: en el asistente que crea tu cuenta de administrado
    curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --local
    ```
 
-4. **Responde si te pregunta.** Si el servidor no tiene Docker, el instalador te pregunta si lo instala con el script
+5. **Responde si te pregunta.** Si el servidor no tiene Docker, el instalador te pregunta si lo instala con el script
    oficial de Docker: escribe `s` y pulsa Intro. Si no le has dado el dominio, te pregunta cómo vas a entrar.
 
-5. **Espera unos minutos.** El instalador descarga Pizarro, crea la configuración con claves seguras, arranca todo y
+6. **Espera unos minutos.** El instalador descarga Pizarro, crea la configuración con claves seguras, arranca todo y
    comprueba que funciona. Cuando termina, te muestra la dirección y un código para el siguiente paso.
 
 ### Lo que verás en pantalla {#en-pantalla}
@@ -107,12 +127,17 @@ recuperación.
 
 > [!IMPORTANT]
 > **Guarda el kit de recuperación fuera del servidor.** Es el fichero `/opt/pizarro/deploy/recovery-kit.txt` y
-> contiene las claves de tu instalación. Sin ellas, las copias de seguridad no se pueden abrir. Cópialo a un gestor de
-> contraseñas o a otro equipo; por ejemplo, para verlo y copiar su contenido:
+> contiene las claves de tu instalación. Sin ellas, las copias de seguridad no se pueden abrir. Descárgalo a tu
+> ordenador: abre **otra** ventana de PowerShell o de Terminal, en tu ordenador y no en el servidor, y escribe (con la
+> IP de tu servidor):
 >
 > ```bash
-> cat /opt/pizarro/deploy/recovery-kit.txt
+> scp root@203.0.113.10:/opt/pizarro/deploy/recovery-kit.txt .
 > ```
+>
+> El fichero llega entero a la carpeta en la que está esa ventana (en Windows, normalmente tu carpeta de usuario). Es
+> más seguro que copiarlo de la pantalla, donde es fácil dejarse un trozo. Guárdalo después en un gestor de contraseñas
+> o en otro lugar seguro.
 
 **Qué ha quedado instalado:** el código en `/opt/pizarro` y tres contenedores de Docker que arrancan solos con el
 servidor: Caddy (el que da el HTTPS), Pizarro y su base de datos PostgreSQL. Tus datos viven en volúmenes de Docker,
@@ -134,6 +159,24 @@ aparte del código, y no se tocan al actualizar.
 - `--yes` instala Docker sin preguntar, si falta.
 - `--build` construye Pizarro en el servidor en vez de descargarlo ya hecho (necesita 2 GB de RAM).
 - `--help` muestra todas las opciones.
+
+### Cambiar la configuración (`.env`) {#editar-env}
+
+Algunas cosas, como el destino externo de las copias, la zona horaria o el dominio, se cambian en el fichero
+`/opt/pizarro/deploy/.env` del servidor. Para editarlo, entra en el servidor y ábrelo con el editor `nano` (si no eres
+`root`, pon `sudo` delante):
+
+```bash
+nano /opt/pizarro/deploy/.env
+```
+
+Muévete con las flechas y escribe o cambia lo que haga falta. Para guardar, pulsa **Ctrl+O** y luego Intro; para salir,
+**Ctrl+X** (también en un Mac: Ctrl, no Cmd). Después aplica el cambio:
+
+```bash
+cd /opt/pizarro/deploy
+docker compose up -d
+```
 
 ## Primeros pasos {#primeros-pasos}
 
@@ -161,39 +204,56 @@ inicio de sesión.
 > docker compose restart app
 > docker compose logs app | grep "introduce el código"
 > ```
+>
+> En Railway, reinicia el servicio de Pizarro (en *Deployments*, menú *⋮* del despliegue activo → *Restart*) y busca
+> en el log la línea `PIZARRO ESTÁ SIN CONFIGURAR`: el código nuevo está justo debajo.
 
 ## Instalar en Railway, sin servidor propio {#railway}
 
 [Railway](https://railway.com) pone en marcha Pizarro y su base de datos desde el repositorio de GitHub, con HTTPS.
 Se hace desde su panel web, sin terminal.
 
-1. **Crea el proyecto y la base de datos.** En Railway, pulsa *New Project* y elige *Deploy PostgreSQL*. Railway crea
-   un servicio llamado `Postgres`.
-2. **Añade Pizarro.** En el mismo proyecto, pulsa *+ New → GitHub Repo* y elige `pla87/pizarro` (o tu copia). Railway
-   empieza a desplegar enseguida; fallará hasta que pongas las variables del paso 5: es normal.
-3. **Elige la rama `stable`.** En el servicio de Pizarro, *Settings → Source → Branch*: elige `stable`. Esa rama solo
-   avanza cuando se publica una versión, así que Railway se actualiza solo con versiones terminadas, nunca con cambios
-   a medio hacer.
-4. **Pon una dirección y un volumen.**
-   - *Settings → Networking → Generate Domain* te da una dirección como `https://pizarro-production.up.railway.app`.
-     Cópiala.
-   - Clic derecho en el servicio → *Attach Volume*, con *Mount path* `/app/uploads`. Ahí se guardan los archivos y las
-     copias de seguridad; sin volumen se perderían en cada despliegue.
-5. **Añade las variables.** En el servicio de Pizarro, *Variables → Raw Editor*, pega esto y cambia los valores:
+> [!NOTE]
+> **Cómo despliega Railway.** Mientras preparas el servicio, Railway no despliega cada cambio: los va juntando en un
+> aviso arriba a la izquierda, «Apply N changes», con un botón **Deploy**. En esta guía lo pulsas **una sola vez**, al
+> final (paso 6), cuando ya está todo.
 
-   ```env
+1. **Crea el proyecto y la base de datos.** Abre <https://railway.com/new> y elige **Database → PostgreSQL**. Railway
+   crea un servicio llamado `Postgres`. Si quieres, ponle nombre al proyecto en *Settings → General*.
+2. **Añade Pizarro.** En el mismo proyecto, pulsa **+ Add → GitHub Repository** y elige `pla87/pizarro` (o tu copia).
+   Si es la primera vez, Railway te pide permiso para ver tus repositorios de GitHub. Aparece un segundo recuadro: el
+   servicio de Pizarro.
+3. **Elige la rama `stable`.** Pulsa el recuadro de Pizarro y ve a *Settings → Source → **Branch connected to
+   production***. El desplegable muestra todas las ramas: escribe `stable` para filtrar y elígela. Esa rama solo avanza
+   cuando se publica una versión, así que Railway se actualiza solo con versiones terminadas, nunca con cambios a medio
+   hacer.
+4. **Genera la dirección y monta el volumen.**
+   - En *Settings → Networking*, pulsa **Generate Domain**. Railway reserva una dirección como
+     `pizarro-production.up.railway.app`. No funciona hasta el primer despliegue: es normal.
+   - Haz clic derecho en el recuadro de Pizarro → **Attach volume** y, como *Mount path*, escribe `/app/uploads`. Ahí se
+     guardan los archivos y las copias de seguridad; sin volumen se perderían en cada despliegue.
+5. **Pega las variables.** Pulsa **Generar mis variables**: la página crea en tu navegador cuatro claves aleatorias y
+   las pone en el bloque de abajo. No se envían a ningún sitio, ni a esta web ni a Railway: solo están en tu pantalla
+   hasta que las copias. Pulsa **Copiar**, ve al servicio de Pizarro → *Variables* → *Raw Editor*, pega y pulsa
+   *Update Variables*.
+
+   ```railway-env
    DATABASE_URL=${{Postgres.DATABASE_URL}}
-   SESSION_SECRET=pega-aqui-una-clave
-   TOKEN_SECRET=pega-aqui-otra-clave
-   ENCRYPTION_KEY=pega-aqui-otra-clave
-   BACKUP_KEY=pega-aqui-la-clave-de-las-copias
-   APP_URL=https://pizarro-production.up.railway.app
+   SESSION_SECRET=pulsa-generar-mis-variables
+   TOKEN_SECRET=pulsa-generar-mis-variables
+   ENCRYPTION_KEY=pulsa-generar-mis-variables
+   BACKUP_KEY=pulsa-generar-mis-variables
    UPLOAD_DIR=/app/uploads
    ```
 
-   - `APP_URL` es la dirección del paso 4, con `https://` y sin barra al final.
-   - Cada clave debe ser distinta y aleatoria. Puedes generarlas en la terminal de un Mac o un Linux (en Windows, en
-     Git Bash): ejecuta este comando tres veces, para `SESSION_SECRET`, `TOKEN_SECRET` y `ENCRYPTION_KEY`:
+   - **No hace falta `APP_URL`:** Pizarro usa sola la dirección que reservó Railway en el paso 4. Solo tendrás que
+     añadirla si pones un [dominio propio](#dominio).
+   - `${{Postgres.DATABASE_URL}}` se queda tal cual: Railway lo cambia por la dirección de la base de datos. Si tu
+     servicio de base de datos no se llama `Postgres`, cambia ese nombre.
+   - **Guarda ya las cuatro claves** en un gestor de contraseñas (mira el aviso de abajo).
+   - **Sin el botón:** también puedes generarlas en la terminal de un Mac o un Linux (en Windows, en Git Bash). Cada
+     clave debe ser distinta. Ejecuta este comando tres veces, para `SESSION_SECRET`, `TOKEN_SECRET` y
+     `ENCRYPTION_KEY`:
 
      ```bash
      openssl rand -base64 48
@@ -205,14 +265,40 @@ Se hace desde su panel web, sin terminal.
      openssl rand -base64 32
      ```
 
-6. **Despliega.** Pulsa *Deploy*. El primer arranque prepara la base de datos y tarda un par de minutos.
-7. **Busca el código del asistente.** En *Deployments → View logs*, busca la línea que dice `introduce el código:`.
-   Abre tu dirección terminada en `/setup` y sigue los [primeros pasos](#primeros-pasos) desde el punto 2.
+6. **Despliega una sola vez.** Arriba a la izquierda verás «Apply N changes»: pulsa **Deploy**. Railway construye
+   Pizarro y lo arranca, y eso lleva unos minutos. Si Railway llegó a desplegar antes de que tuvieras las variables o el
+   volumen, quizá te llegue un email «Build failed»: es normal y no tienes que hacer nada. El despliegue que vale es
+   este, ya con todo.
+7. **Espera a que Pizarro prepare la base de datos.** La primera vez tarda 2 o 3 minutos más, aunque Railway ya ponga
+   *Active*. En el servicio de Pizarro, abre *Deployments → View logs*, baja al final del log y espera la línea
+   `PIZARRO ESTÁ SIN CONFIGURAR`. Las líneas en rojo del principio son normales. Verás algo así:
+
+   ```text
+   ================================================================
+   [setup] PIZARRO ESTÁ SIN CONFIGURAR
+   [setup] Abre https://pizarro-production.up.railway.app/setup e introduce el código: K7QM-4TXD
+   [setup] El código caduca en 24 horas y cambia en cada arranque mientras falte la configuración.
+   ================================================================
+   ```
+
+8. **Abre el asistente.** Ve a tu dirección terminada en `/setup` y sigue los [primeros pasos](#primeros-pasos) desde
+   el punto 2, con el código del log.
 
 > [!IMPORTANT]
 > Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` también **fuera de Railway**, en un gestor
 > de contraseñas. Sin `BACKUP_KEY` las copias no se pueden abrir y sin `ENCRYPTION_KEY` todos tendrían que configurar
 > de nuevo su verificación en dos pasos.
+
+> [!WARNING]
+> **Railway puede proponerte cambios que no has pedido.** A veces el aviso de arriba a la izquierda dice, por ejemplo,
+> «Apply 2 changes» con cambios de región o de réplicas que tú no has tocado. Ábrelo para ver qué son antes de pulsar
+> **Deploy**:
+>
+> - **Réplicas:** no apliques un cambio que ponga más de una. Pizarro funciona con una sola instancia (ya viene así en
+>   su configuración); con dos o más fallarían los avisos en vivo y los límites de intentos de acceso. Descarta ese
+>   cambio o vuelve a poner 1.
+> - **Región:** da igual cuál sea, siempre que la base de datos (`Postgres`) esté en la misma. Si están en regiones
+>   distintas, Pizarro va más lento.
 
 > [!NOTE]
 > Crea las variables en el servicio de Pizarro, no como *Shared Variables* del proyecto: esas no llegan solas al
@@ -257,7 +343,7 @@ Esas copias se guardan en el propio servidor, así que no te protegen si lo pier
 1. **Guarda el kit de recuperación fuera del servidor** (o, en Railway, las cuatro claves).
 2. **Añade un destino externo**, donde Pizarro sube cada copia: un almacenamiento compatible con S3 (Cloudflare R2,
    Backblaze B2, MinIO…) o una carpeta montada, como un disco USB o un NAS. Para S3, crea un *bucket* privado y una
-   clave solo para él y añade sus datos al final de `/opt/pizarro/deploy/.env`:
+   clave solo para él y añade sus datos al final de `/opt/pizarro/deploy/.env` ([cómo editarlo](#editar-env)):
 
    ```env
    BACKUP_S3_ENDPOINT="https://<id-de-cuenta>.r2.cloudflarestorage.com"
@@ -268,6 +354,15 @@ Esas copias se guardan en el propio servidor, así que no te protegen si lo pier
 
    Aplica el cambio con `docker compose up -d` (en `/opt/pizarro/deploy`) y pulsa *Copiar ahora a destino externo* en
    *Administración → Copias de seguridad*. Todo lo que se sube va cifrado: el proveedor no puede leerlo.
+
+   **En Railway,** pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro (los mismos nombres y
+   valores, sin las comillas), añade también `BACKUP_S3_PREFIX=pizarro` y vuelve a desplegar.
+
+> [!TIP]
+> **Con Cloudflare R2, protege las copias con una regla de retención.** En el panel de Cloudflare, en tu *bucket* →
+> *Settings* → *Bucket Lock Rules*, añade una regla para el prefijo `pizarro/` (el de `BACKUP_S3_PREFIX`) con una
+> retención de 30 días. Así nadie puede borrar ni sobrescribir una copia antes de que cumpla 30 días, aunque consiga la
+> clave de acceso o un error borre lo que no debe. Pizarro funciona igual con la regla puesta.
 
 La carpeta montada, la región de S3 y los demás detalles están en la
 [documentación técnica](../INSTALL.md#4-copias-de-seguridad).
@@ -340,7 +435,7 @@ Railway).
 Let's Encrypt y lo renueva solo. Para cambiar de dominio más adelante:
 
 1. Apunta el dominio nuevo al servidor (registro `A`, como en la instalación).
-2. En `/opt/pizarro/deploy/.env`, cambia `DOMAIN` y `APP_URL`:
+2. En `/opt/pizarro/deploy/.env` ([cómo editarlo](#editar-env)), cambia `DOMAIN` y `APP_URL`:
 
    ```env
    DOMAIN="pizarro.example.com"
@@ -358,7 +453,9 @@ Let's Encrypt y lo renueva solo. Para cambiar de dominio más adelante:
 
 1. En el servicio de Pizarro, *Settings → Networking → Custom Domain*, escribe tu dominio.
 2. Crea en tu proveedor de DNS el registro `CNAME` (y el `TXT`, si lo pide) que te muestra Railway.
-3. Cuando el dominio aparezca como activo, cambia `APP_URL` a la dirección nueva y vuelve a desplegar.
+3. Cuando el dominio aparezca como activo, añade en *Variables* `APP_URL` con la dirección nueva (por ejemplo,
+   `APP_URL=https://pizarro.example.com`, con `https://` y sin barra al final) y vuelve a desplegar. Es el único caso
+   en que Railway necesita `APP_URL`.
 
 Al cambiar de dirección, todos tienen que volver a iniciar sesión, y quien instaló Pizarro como app en el móvil debe
 instalarla de nuevo. Si usas «Iniciar sesión con Google», añade también las direcciones nuevas en Google Cloud
@@ -436,13 +533,21 @@ Gmail, la contraseña debe ser una contraseña de aplicación, no la de la cuent
 
 ### Las fechas salen con otra hora
 
-Añade tu zona horaria a `/opt/pizarro/deploy/.env`, por ejemplo `APP_TIMEZONE="Europe/Madrid"`, y aplica el cambio
+Añade tu zona horaria a `/opt/pizarro/deploy/.env` ([cómo editarlo](#editar-env)), por ejemplo `APP_TIMEZONE="Europe/Madrid"`, y aplica el cambio
 con `docker compose up -d`.
 
 ### Nadie puede entrar como administrador {#sin-acceso}
 
-Si se olvidó la contraseña o se perdió el móvil de la verificación en dos pasos, genera un enlace de un solo uso desde
-el servidor:
+Si se olvidó la contraseña o se perdió el móvil de la verificación en dos pasos, prueba primero lo que no necesita
+terminal:
+
+- **Con el email configurado,** pulsa *¿Olvidaste tu contraseña?* en la pantalla de inicio de sesión.
+- **Si se perdió el móvil,** entra con uno de los códigos de recuperación que guardaste al activar la verificación en
+  dos pasos.
+- **Si otro administrador puede entrar,** que vaya a *Administración → Usuarios* y, junto a esa persona, elija *Forzar
+  cambio de contraseña* (le da un enlace de un solo uso) o *Restablecer la verificación en dos pasos*.
+
+Si nada de eso sirve, genera un enlace de un solo uso desde el servidor:
 
 ```bash
 cd /opt/pizarro/deploy
@@ -450,8 +555,22 @@ docker compose exec app node dist/reset-link.mjs persona@example.com
 ```
 
 Abre el enlace que imprime y elige una contraseña nueva; sirve una vez y caduca a los 30 minutos. Si además se perdió
-el móvil, añade `--reset-2fa` al final para que vuelva a configurar la verificación en dos pasos. En Railway, la misma
-orden (`node dist/reset-link.mjs …`) se ejecuta en la terminal del servicio (`railway ssh`).
+el móvil, añade `--reset-2fa` al final para que vuelva a configurar la verificación en dos pasos.
+
+**En Railway** hay que ejecutar esa orden dentro del servicio de Pizarro, y el panel web de Railway no tiene una
+terminal: se hace desde tu ordenador con el programa de Railway para la terminal (su *CLI*). Instálalo con una línea:
+`brew install railway` en un Mac, o `npm install -g @railway/cli` en Windows y Linux (necesita
+[Node.js](https://nodejs.org)). Después, en la terminal de tu ordenador:
+
+```bash
+railway login
+railway link
+railway ssh
+```
+
+`railway login` abre el navegador para entrar en tu cuenta; `railway link` te pregunta el proyecto y el servicio (elige
+el de Pizarro); `railway ssh` abre una terminal dentro del servicio. Allí escribe
+`node dist/reset-link.mjs persona@example.com` (con `--reset-2fa` si hace falta) y, al terminar, `exit`.
 
 ### Si necesitas ayuda
 

@@ -191,6 +191,36 @@ describe("guía de instalación de la web (docs/web)", () => {
     assert.equal(update.updateDocsUrl("en"), "https://getpizarro.com/en/install/#update");
     assert.match(readFileSync("docs/INSTALL.md", "utf8").split("\n").slice(0, 4).join("\n"), /https:\/\/getpizarro\.com\/instalar\//);
   });
+
+  // Botón «Generar mis variables» (paso de Railway): lo que genera el navegador (bytes aleatorios en base64, con btoa)
+  // tiene que ser algo que la app acepte, y el bloque que rellena, llevar cada clave y no llevar APP_URL (Railway la
+  // deduce de su dominio; solo hace falta con un dominio propio).
+  test("el generador de variables de Railway crea claves que la app acepta", async () => {
+    const { RAILWAY_KEY_BYTES } = await import("../src/lib/site-content");
+    const { sessionSecret, tokenSecret, encryptionKeys } = await import("../src/lib/keyring");
+    const { parseBackupKey } = await import("../src/lib/backup-core");
+    const { envPresence } = await import("../src/lib/doctor-core");
+    const env: Record<string, string> = {};
+    for (const [k, bytes] of Object.entries(RAILWAY_KEY_BYTES)) {
+      const a = new Uint8Array(bytes);
+      crypto.getRandomValues(a);
+      env[k] = btoa(String.fromCharCode(...a));
+    }
+    assert.equal(sessionSecret(env), env.SESSION_SECRET);
+    assert.equal(tokenSecret(env), env.TOKEN_SECRET);
+    assert.doesNotThrow(() => encryptionKeys(env));
+    assert.equal(parseBackupKey(env.BACKUP_KEY)?.length, 32);
+    const presence = envPresence(env);
+    for (const k of Object.keys(RAILWAY_KEY_BYTES)) assert.equal(presence[k], "set", k);
+    for (const file of Object.keys(anchors)) {
+      const block = /```railway-env\n([\s\S]*?)```/.exec(readFileSync(file, "utf8"))?.[1];
+      assert.ok(block, `${file}: falta el bloque railway-env`);
+      for (const k of Object.keys(RAILWAY_KEY_BYTES)) assert.match(block, new RegExp(`^\\s*${k}=`, "m"), `${file}: ${k}`);
+      assert.doesNotMatch(block, /APP_URL/, file);
+      // El texto que queda si no se pulsa el botón no vale como clave: la app no arranca con él (mejor que una clave débil).
+      assert.throws(() => sessionSecret({ SESSION_SECRET: /SESSION_SECRET=(\S+)/.exec(block)?.[1] }));
+    }
+  });
 });
 
 test("workflow de la web: se lanza al cambiar cualquier módulo que carga build-site.mjs (también los que importan esos)", () => {

@@ -67,25 +67,25 @@ El repositorio ya trae `railway.json` (builder Dockerfile, comando de arranque, 
 
 **A. Con la plantilla publicada** (cuando exista el enlace «Deploy on Railway» de la plantilla de Pizarro): pulsa el botón, acepta las variables propuestas, espera al despliegue y sigue en «Primeros pasos». Los secretos se generan solos.
 
-**B. A mano** (la guía completa está en el README, «Guía de despliegue en Railway»):
+**B. A mano** (paso a paso, con un botón que genera las claves en el navegador: <https://getpizarro.com/instalar/#railway>; más detalle en el README, «Guía de despliegue en Railway»). Railway no despliega cada cambio: los junta en el aviso «Apply N changes» (arriba a la izquierda) con un botón **Deploy**. Prepáralo todo y pulsa **Deploy** una sola vez, al final; si llega a desplegar antes de tener las variables o el volumen, manda un email «Build failed», que no importa.
 
-1. *New Project → Deploy PostgreSQL* (servicio `Postgres`).
-2. *+ New → GitHub Repo*: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` y el `railway.json`. En *Settings → Source → Branch* elige **`stable`**: solo avanza al publicarse una versión, así que Railway no redespliega con cada commit de `main` (detalle y cómo cambiar una instalación que ya usa `main`: README, «Guía de despliegue en Railway», paso 2). Con un fork, `stable` no se actualiza sola: tienes que sincronizarla tú desde el original (y la app no ofrecerá *Informar de un error*, porque no puede saber si el código está modificado).
-3. Variables del servicio de la app:
+1. <https://railway.com/new> → **Database → PostgreSQL** (servicio `Postgres`). El nombre del proyecto se cambia en *Settings → General*.
+2. **+ Add → GitHub Repository**: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` y el `railway.json`. En *Settings → Source → **Branch connected to production*** elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar): solo avanza al publicarse una versión, así que Railway no redespliega con cada commit de `main` (detalle y cómo cambiar una instalación que ya usa `main`: README, «Guía de despliegue en Railway», paso 2). Con un fork, `stable` no se actualiza sola: tienes que sincronizarla tú desde el original (y la app no ofrecerá *Informar de un error*, porque no puede saber si el código está modificado).
+3. *Settings → Networking → **Generate Domain*** y volumen: clic derecho en el servicio → *Attach volume* → *Mount path* `/app/uploads`. Sin volumen, los adjuntos y las copias locales se pierden en cada despliegue. El dominio no responde hasta el primer despliegue.
+4. Variables del servicio de la app (*Variables → Raw Editor*):
 
    | Variable | Valor | Origen |
    |---|---|---|
    | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Referencia al servicio Postgres (nombre exacto de tu servicio) |
-   | `SESSION_SECRET` | 48+ caracteres | **Generar:** `openssl rand -base64 48` |
+   | `SESSION_SECRET` | 48+ caracteres | **Generar:** `openssl rand -base64 48` (o el botón de la web) |
    | `TOKEN_SECRET` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
    | `ENCRYPTION_KEY` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
    | `BACKUP_KEY` | 32 bytes en base64 | **Generar:** `openssl rand -base64 32` (activa las copias diarias cifradas) |
-   | `APP_URL` | `https://<tu-dominio>` | **Debes ponerla:** *Settings → Networking → Generate Domain* o tu dominio propio |
    | `UPLOAD_DIR` | `/app/uploads` | Fija |
+   | `APP_URL` | `https://<tu-dominio>` | **Solo con dominio propio.** Sin ella, Pizarro usa `https://` + `RAILWAY_PUBLIC_DOMAIN` (el dominio de *Generate Domain*, que Railway pone en el entorno) |
 
-   No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso, que aparece en los logs del despliegue (`introduce el código:`). `PORT` lo inyecta Railway.
-4. Volumen: clic derecho en el servicio → *Attach Volume* → *Mount path* `/app/uploads`. Sin él, los adjuntos y las copias locales se pierden en cada despliegue.
-5. *Settings → Networking → Generate Domain* si aún no lo hiciste, ajusta `APP_URL` y pulsa *Deploy*. El healthcheck es `/api/health` (ya en `railway.json`; el primer arranque aplica migraciones, por eso el margen de 120 s).
+   No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso. `PORT` lo inyecta Railway.
+5. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques (Pizarro es de una sola instancia, ver arriba); la región da igual mientras `Postgres` esté en la misma. El healthcheck es `/api/health` (ya en `railway.json`, con margen de 120 s). El primer arranque aplica las migraciones y tarda 2–3 minutos más aunque Railway ya marque *Active*: en *Deployments → View logs*, al final, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`). Las líneas en rojo del principio del log son normales.
 
 Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera de Railway (gestor de contraseñas): sin `BACKUP_KEY` las copias no se pueden leer y sin `ENCRYPTION_KEY` todos pierden la verificación en dos pasos.
 
@@ -125,13 +125,13 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
 
 ## 1. Requisitos
 
-| | Mínimo |
+| | Mínimo (recomendado) |
 |---|---|
-| CPU | 1 vCPU (amd64 o arm64) |
-| Memoria | **1 GB de RAM** basta con la imagen publicada (la opción por defecto). Solo si construyes la imagen en el servidor (`--build`) hacen falta 2 GB (o 1 GB con swap, más lento) |
-| Disco | 10 GB + lo que ocupen los adjuntos |
+| CPU | 1 vCPU, amd64 o arm64 (recomendado: 1–2 vCPU) |
+| Memoria | **1 GB de RAM** basta con la imagen publicada (la opción por defecto); se recomiendan **2 GB** para ir holgado. Si construyes la imagen en el servidor (`--build`) hacen falta 2 GB (o 1 GB con swap, más lento) |
+| Disco | 10 GB + lo que ocupen los adjuntos (recomendado: 20 GB) |
 | Software | Linux con **Docker 24+** y el plugin `docker compose` |
-| Red | Puertos **80** y **443** abiertos hacia Internet y un **dominio** (o subdominio) con un registro DNS `A`/`AAAA` apuntando al servidor |
+| Red | Puertos **80** y **443** abiertos hacia Internet (en el cortafuegos del panel del proveedor y, si está activo, en `ufw`: `ufw allow 80,443/tcp`) y un **dominio** (o subdominio) con un registro DNS `A`/`AAAA` apuntando al servidor (se crea en el panel de quien vende el dominio, apartado «DNS» o «Zona DNS») |
 
 Sin dominio también funciona en una red local, solo por HTTP (ver 3.3).
 
@@ -305,7 +305,7 @@ Para servir Pizarro en `pizarro.example.com` (sustituye `example.com` por tu dom
 1. **Añadir el dominio en Railway.** Servicio de Pizarro → *Settings* → *Networking* → *Custom Domain* → escribe `pizarro.example.com` y confirma.
 2. **Crear los registros DNS.** Railway muestra un registro `CNAME` (nombre `pizarro`, valor algo como `xxxx.up.railway.app`) y, si lo pide, un registro `TXT` de verificación. Créalos en el panel de tu proveedor de DNS tal cual se muestran (si el proveedor añade solo el dominio, escribe únicamente `pizarro` como nombre). Si usas Cloudflare, déjalos sin proxy (nube gris) hasta que el certificado esté emitido.
 3. **Esperar al certificado.** Railway lo emite solo (Let's Encrypt) cuando el DNS propaga; puede tardar de unos minutos a unas horas. El dominio pasa a *Active* en el panel.
-4. **Cambiar `APP_URL`.** En *Variables* del servicio pon `APP_URL=https://pizarro.example.com` (con `https://` y sin barra final) y vuelve a desplegar (*Redeploy*). Las variables se leen al arrancar.
+4. **Poner `APP_URL`.** En *Variables* del servicio añade (o cambia) `APP_URL=https://pizarro.example.com` (con `https://` y sin barra final) y vuelve a desplegar (*Redeploy*). Las variables se leen al arrancar.
 
 Qué cambia:
 
@@ -353,6 +353,10 @@ Los adjuntos, sus miniaturas, las copias de adjuntos de las releases, la documen
 3. `docker compose up -d` y, en *Administración → Copias de seguridad*, pulsa **Copiar ahora a destino externo**. Recarga al cabo de unos minutos: debe salir *Correcta*.
 
 Las claves de acceso nunca aparecen en la página ni en los logs. Todo lo que se sube va cifrado con `BACKUP_KEY`: el proveedor no puede leerlo.
+
+En **Railway**, pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro (sin comillas; `BACKUP_S3_PREFIX=pizarro` para usar el mismo prefijo que el `.env` del servidor, que por defecto en el código es vacío) y vuelve a desplegar.
+
+**Cloudflare R2: protege las copias con una retención.** En el bucket, *Settings → Bucket Lock Rules → Add rule*, con el prefijo de las copias (`pizarro/`, el de `BACKUP_S3_PREFIX`) y una retención de 30 días: nadie, ni con la clave de acceso, puede borrar ni sobrescribir una copia hasta que cumpla 30 días. Pizarro funciona igual con la regla puesta.
 
 ### 4.2 Carpeta montada (disco USB, NAS, SFTP montado)
 
@@ -519,7 +523,7 @@ Notas:
   docker compose exec app node dist/reset-link.mjs persona@example.com --reset-2fa
   ```
 
-  Imprime `APP_URL/reset/<token>`: ábrelo en el navegador y elige la contraseña nueva. Sirve una sola vez y caduca a los 30 minutos; un usuario desactivado se rechaza. En **Railway** el código vive dentro del contenedor del servicio (donde existe `dist/`), así que hay que ejecutar la orden allí: con la CLI, `railway ssh` (o el terminal del servicio en el panel) y dentro `node dist/reset-link.mjs persona@example.com`. `railway run` no es lo adecuado: ejecuta en tu máquina (con las variables de Railway), donde normalmente no existe `dist/` ni se alcanza la base de datos interna.
+  Imprime `APP_URL/reset/<token>`: ábrelo en el navegador y elige la contraseña nueva. Sirve una sola vez y caduca a los 30 minutos; un usuario desactivado se rechaza. En **Railway** el código vive dentro del contenedor del servicio (donde existe `dist/`), así que hay que ejecutar la orden allí, y el panel web de Railway no tiene terminal: con la CLI (`brew install railway` o `npm install -g @railway/cli`), `railway login`, `railway link` y `railway ssh`, y dentro `node dist/reset-link.mjs persona@example.com`. Antes de eso, sin terminal: «¿Olvidaste tu contraseña?» si hay email, un código de recuperación del segundo paso, u otro administrador desde *Administración → Usuarios* (*Forzar cambio de contraseña* da un enlace de un solo uso; *Restablecer la verificación en dos pasos*). `railway run` no es lo adecuado: ejecuta en tu máquina (con las variables de Railway), donde normalmente no existe `dist/` ni se alcanza la base de datos interna.
 - **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). Lo activa `compose.yml` con `EXIT_ON_UNCAUGHT_EXCEPTION=1`; ponlo a `0` para solo registrarlas.
 
 ## 8. Resolución de problemas
