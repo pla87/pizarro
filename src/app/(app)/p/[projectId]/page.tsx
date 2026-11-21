@@ -12,7 +12,8 @@ import { db } from "@/lib/db";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import { effectiveFileMaxMb } from "@/lib/upload-size";
-import type { BoardData } from "@/lib/types";
+import type { BoardPageData } from "@/lib/types";
+import { packBoardTask } from "@/lib/board-task-wire";
 import { getLocale, getT } from "@/i18n/server";
 import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { Board } from "@/components/board/Board";
@@ -58,10 +59,11 @@ export default async function BoardPage({ params, searchParams }: Params) {
     projectReleaseTemplates(projectId),
   ]);
 
-  const data: BoardData = {
+  const data: BoardPageData = {
     project: { id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb), taskFields: normalizeTaskFields(project.taskFields) },
     columns,
-    tasks,
+    // Sin los campos que valen lo de por defecto: el navegador lee bastante menos (el tablero los completa al llegar).
+    tasks: tasks.map(packBoardTask),
     users,
     labels,
     kinds: localizeGeneralKinds(kinds, await getLocale()),

@@ -21,9 +21,9 @@ describe("canal en vivo con acciones propias en vuelo (una subida larga)", () =>
       { cid: "c3", change: mine, announced: false },
     ];
     const own = new Set(["c3", "c9"]);
-    assert.deepEqual(settleIncoming(queue, own), { announce: [otherTab], refresh: true });
+    assert.deepEqual(settleIncoming(queue, own), { announce: [otherTab], refresh: true, changes: [bea, otherTab] });
     assert.deepEqual([...own], ["c9"], "se olvidan los ids ya vistos");
-    assert.deepEqual(settleIncoming([{ cid: "c9", change: mine, announced: false }], own), { announce: [], refresh: false });
+    assert.deepEqual(settleIncoming([{ cid: "c9", change: mine, announced: false }], own), { announce: [], refresh: false, changes: [] });
   });
 });
 

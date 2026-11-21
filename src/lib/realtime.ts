@@ -10,6 +10,13 @@ interface ProjectChange {
   action: string;
   /** Tarea afectada si la acción tocó solo una (el detalle abierto refresca sus comentarios); null si varias o ninguna. */
   taskId?: string | null;
+  /**
+   * Todas las tarjetas que cambió (como mucho LIVE_PATCH_MAX; sin la lista si fueron más): las demás pestañas piden
+   * solo esas en vez del tablero entero (components/board/livePatch.ts).
+   */
+  taskIds?: string[];
+  /** Cambió además algo que esas tarjetas no traen (posiciones de otras, etiquetas): se recarga el tablero entero. */
+  full?: boolean;
   at: number;
   /** Número de orden del cambio en este proceso (crece siempre): ver `liveCursor`. */
   seq: number;

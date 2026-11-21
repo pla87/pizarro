@@ -157,7 +157,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
       (await db.undoEntry.findFirst({ where: { userId: user.id, projectId, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { taskId: true, ops: true } }).then(
         (last) => last?.taskId === taskId && JSON.stringify(last.ops).includes('"task.remove"'),
       ));
-    publishChange({ projectId, userId: user.id, action: "attachments.upload" });
+    publishChange({ projectId, userId: user.id, action: "attachments.upload", taskId, taskIds: [taskId] });
     if (!withCreation) {
       await saveUndo(user.id, projectId, encodeLabel({ k: "Subió «{name}»", p: { name: attachment.originalName } }), [{ t: "attachment.remove", id: attachment.id }], taskId).catch((err) =>
         console.error("[undo] no se pudo guardar", err),
