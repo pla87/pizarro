@@ -25,7 +25,7 @@ const MAX_TASKS = 500;
 const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "overdue", label: "Vencidas" },
-  { value: "week", label: "Próximos 7 días" },
+  { value: "week", label: "Hasta 7 días" },
 ];
 
 export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {

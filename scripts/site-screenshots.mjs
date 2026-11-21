@@ -171,7 +171,7 @@ const DEMO = {
             { by: "carlos", at: [-1, "17:30"], body: "Careful on mobile: on small screens the size chart overflows to the right. I've added it as a subtask." },
           ],
         },
-        { col: 1, kind: "F", title: "Filter by size and colour", who: "carlos", due: 12, subtasks: [["Size filter", true], ["Colour filter", false], ["Keep filters in the URL", false]] },
+        { col: 1, kind: "F", title: "Filter by size and color", who: "carlos", due: 12, subtasks: [["Size filter", true], ["Color filter", false], ["Keep filters in the URL", false]] },
         { col: 1, kind: "Improvement", title: "Faster catalogue loading", who: "ana", due: 3, labels: ["mobile"] },
         { col: 1, kind: "Improvement", title: "Winter collection photos", who: "marcos", due: 8, subtasks: [["Photo shoot", true], ["Retouch and upload", false]] },
         { col: 2, kind: "F", title: "Abandoned cart reminder", who: "marcos", subtasks: [["Email template", true], ["Send after 24 hours", true], ["Direct link to the cart", true]] },

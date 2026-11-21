@@ -24,7 +24,7 @@ export function parseFilter(value: string | string[] | undefined): TaskFilter {
   return v === "overdue" || v === "week" ? v : "all";
 }
 
-/** ¿Entra la tarea en el filtro? «Vencidas» solo las atrasadas; «Esta semana», vencidas, de hoy y de los próximos 7 días. */
+/** ¿Entra la tarea en el filtro? «Vencidas» solo las atrasadas; «Hasta 7 días», vencidas, de hoy y de los próximos 7 días. */
 export function matchesFilter(bucket: TaskBucket, filter: TaskFilter): boolean {
   if (filter === "all") return true;
   if (filter === "overdue") return bucket === "overdue";

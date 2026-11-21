@@ -393,7 +393,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN + "\n\nTurn on the fields you need in the project settings (client, priority, hours, cost).", column: 1, kind: "Job" },
         { title: "Quote for the shop redesign", description: "“Quotes” adds up the cost of its cards. If the client accepts, drag it to “In progress”.", column: 0, kind: "Job", client: "Client A", cost: 1800, estimatedHours: 30 },
-        { title: "Catalogue design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
+        { title: "Catalog design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
         { title: "Waiting for logo approval", description: "In “Waiting for the client”, the card reminds its owner if several days pass without a reply.", column: 2, kind: "Job", client: "Client A", labels: ["Key client"] },
         { title: "Delivery of Client C's website", description: "The “Client delivery” column generates a PDF summary with no comments or people's names, ready to send.", column: 3, kind: "Job", client: "Client C" },
         { title: "Collect the March invoice", description: "When it is paid, the card moves to “Paid”.", column: 4, kind: "Payment", client: "Client B", cost: 950 },
@@ -505,7 +505,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         },
         {
           title: "Exercise: Module 1 case studies",
-          description: "**Objective:** practise the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
+          description: "**Objective:** practice the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
           column: 3, kind: "Prepare exercise", labels: ["Module 1", "For the agent"], dueInDays: 20, subtasks: ["Write the task", "Prepare the solution", "Check the difficulty"],
         },
         {

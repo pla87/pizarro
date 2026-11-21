@@ -324,6 +324,7 @@ export const cuentas: Record<string, string> = {
   "{admin} te ha invitado al proyecto «{project}» en el Pizarro de {org}": "{admin} has invited you to the “{project}” project in {org}’s Pizarro",
   "{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.":
     "{admin} has created a Pizarro account for you and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
+  "{admin} te ha dado de alta en el Pizarro de {org} y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.": "{admin} has created an account for you in {org}’s Pizarro and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
   "{name} te ha añadido al proyecto «{project}»": "{name} has added you to the “{project}” project",
   "{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.": "{name} has added you to the “{project}” project in Pizarro. You can now see its board.",
   "Abrir el tablero": "Open the board",

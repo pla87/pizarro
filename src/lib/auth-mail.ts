@@ -89,7 +89,9 @@ export async function sendProjectInviteMail(user: Recipient, url: string, invite
       : t("{admin} te ha invitado al proyecto «{project}» en Pizarro", { admin: invitedBy, project: projectName }),
     paragraphs: [
       t("Hola, {name}:", { name: user.name }),
-      t("{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) }),
+      org
+        ? t("{admin} te ha dado de alta en el Pizarro de {org} y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, org, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) })
+        : t("{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) }),
     ],
     button: { label: t("Elegir mi contraseña"), url },
   }));

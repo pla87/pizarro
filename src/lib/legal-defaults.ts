@@ -139,7 +139,7 @@ You can exercise your rights of access, rectification, erasure, objection, restr
 
 ## 9. Security
 
-We apply appropriate technical and organisational measures: encrypted connections in transit (HTTPS), hashed passwords, two-factor authentication (2FA) available and mandatory for administrators, per-project access control, sign-in attempt limits and encrypted backups. If a breach affecting you occurs, you will be notified as required by law.
+We apply appropriate technical and organizational measures: encrypted connections in transit (HTTPS), hashed passwords, two-factor authentication (2FA) available and mandatory for administrators, per-project access control, sign-in attempt limits and encrypted backups. If a breach affecting you occurs, you will be notified as required by law.
 
 ## 10. Cookies
 
