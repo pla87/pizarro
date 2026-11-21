@@ -10,7 +10,7 @@ import { cn } from "./ui/cn";
 import { useConfirm } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { isTypingTarget, useShortcut } from "./board/shortcuts";
-import { UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
+import { boardRefreshFor, UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
 import { useFloatingRect } from "./ui/useFloatingRect";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 
@@ -60,7 +60,8 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
       );
       // Con una tarea abierta se recarga su detalle también tras un Alt+Z (puede haber deshecho algo suyo).
       if (taskId) window.dispatchEvent(new CustomEvent(UNDONE_EVENT, { detail: { taskId } }));
-      safeRefresh();
+      // En el tablero, por su recarga (Board.tsx, doRefresh): un router.refresh() suelto no le dice cuándo se pidió.
+      (boardRefreshFor(projectId) ?? safeRefresh)();
     } finally {
       busyRef.current = false;
       setBusy(null);

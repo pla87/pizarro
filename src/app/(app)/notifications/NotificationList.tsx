@@ -10,6 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { assignedBatchCount, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "@/lib/notification-text";
+import { announceUnreadChange } from "@/lib/unread-core";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -39,6 +40,12 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
 };
 
 /**
+ * Avisos leídos desde esta lista en esta pestaña. Como leer uno ya no refresca la página, al volver atrás desde el
+ * tablero Next puede pintar la lista que tenía guardada, de antes de leerlo: con esto sale como leído.
+ */
+const readHere = new Set<string>();
+
+/**
  * `unreadTotal`: sin leer de verdad (contados en el servidor con tope `unreadCap`), no solo los cargados. A partir del
  * tope se dice «Más de 99 sin leer», como la insignia de la cabecera («99+»).
  */
@@ -47,7 +54,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
   const safeRefresh = useSafeRefresh();
   const t = useT();
   const locale = useIntlLocale();
-  const [items, setItems] = useState(initial);
+  const [items, setItems] = useState(() => initial.map((i) => (!i.read && readHere.has(i.id) ? { ...i, read: true } : i)));
   const [pending, start] = useActionTransition();
   const [allRead, setAllRead] = useState(false);
   // Los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
@@ -55,12 +62,20 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
   const unread = allRead ? 0 : outside + items.filter((i) => !i.read).length;
   const many = !allRead && unreadTotal >= unreadCap;
 
-  // router.refresh() actualiza el contador de la barra lateral y la insignia de la app.
+  // Sin router.refresh(): el contador de la cabecera y la insignia de la app los baja `pz:unread` (AppShell). Al abrir
+  // un aviso, el refresco llegaba ya en la página de destino y pedía otra vez el tablero entero.
   const markRead = (item: Item) => {
+    readHere.add(item.id);
     setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: true } : x)));
+    announceUnreadChange({ read: 1 });
     start(async () => {
-      await markNotificationRead(item.id);
-      safeRefresh();
+      const res = await markNotificationRead(item.id);
+      // Si no se ha guardado, el aviso vuelve a estar sin leer y el contador, a lo que diga el servidor.
+      if (!res.ok) {
+        readHere.delete(item.id);
+        setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: false } : x)));
+        safeRefresh();
+      }
     });
   };
 
@@ -85,7 +100,10 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
               start(async () => {
                 setItems((list) => list.map((x) => ({ ...x, read: true })));
                 setAllRead(true);
+                announceUnreadChange({ all: true });
                 await markAllNotificationsRead();
+                // Aquí sí se refresca (es esta misma página, no el tablero): los que no están cargados también pasan a
+                // leídos, y al volver atrás no sale la lista de antes.
                 safeRefresh();
               })
             }

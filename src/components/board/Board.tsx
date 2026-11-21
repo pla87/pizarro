@@ -25,7 +25,7 @@ import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { FilterMenu } from "./FilterMenu";
 import { PrivateIcon, ProjectsContext } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
-import { setBoardModalOpen } from "../undo-context";
+import { setBoardModalOpen, setBoardRefresh } from "../undo-context";
 import { PlusStack } from "../ui/PlusStack";
 import { useFloatingRect } from "../ui/useFloatingRect";
 import { useT } from "@/i18n/client";
@@ -42,7 +42,7 @@ import { EVERGREEN_DROPPABLE_PREFIX, evergreenLeftPanel } from "./EvergreenPanel
 import { NewColumnButton } from "./NewColumnButton";
 import { duplicatedMessage, useCardActions } from "./cardActions";
 import { draggingCard } from "./nearCards";
-import { applyTaskPatch, LIVE_PATCH_MAX, liveTasksUrl, liveUpdatePlan, PATCH_JITTER_MAX_MS, patchRequestIds } from "./livePatch";
+import { applyTaskPatch, LIVE_PATCH_MAX, liveTasksUrl, liveUpdatePlan, PATCH_JITTER_MAX_MS, patchRequestIds, withPatchedTasks } from "./livePatch";
 import { PENDING_COPY_PREFIX, isPendingCopy, placeBlock, realPlacement, sameOrder, selectionGroup, withoutPendingCopies, type BlockPlacement } from "./groupDrag";
 import { focusCard } from "./shortcuts";
 import { createMoveTurns } from "./moveTurns";
@@ -477,12 +477,13 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // Refresco escalonado pendiente por un cambio de otra persona (ver foreignRefreshDelay): cualquier refresco lo cubre.
   const foreignTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tarjetas sueltas que han cambiado otras personas (livePatch.ts): se piden solo esas en vez del tablero entero. Ids a la
-  // espera, su espera al azar, si hay una petición en vuelo y cuándo se aplicó la última (una recarga completa pedida
-  // antes puede llegar después con esas tarjetas en su estado anterior). `run` se fija más abajo (lee lo último del tablero).
+  // espera, su espera al azar, si hay una petición en vuelo y las aplicadas desde la última recarga completa pedida, con
+  // su versión (null: quitada): esa recarga puede llegar después con esas tarjetas en su estado anterior, y al llegar
+  // conservan la del parche (withPatchedTasks). `run` se fija más abajo (lee lo último del tablero).
   const patchIds = useRef(new Set<string>());
   const patchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const patching = useRef(false);
-  const patchedAt = useRef(0);
+  const patchedSince = useRef(new Map<string, BoardTask | null>());
   const livePatch = useRef({ run: () => {} });
   const doRefresh = useCallback(() => {
     if (foreignTimer.current) {
@@ -495,6 +496,8 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       patchTimer.current = null;
     }
     patchIds.current.clear();
+    // Lo aplicado hasta ahora ya viene en esta recarga.
+    patchedSince.current.clear();
     refreshAt.current = performance.now();
     lastSyncAt.current = refreshAt.current;
     // Un refresco pedido con el canal abierto ya recoge todo lo anterior: el corte queda cubierto.
@@ -504,6 +507,8 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
   // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
   const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
+  // Deshacer (en la cabecera, fuera del tablero) recarga por aquí (undo-context.ts).
+  useEffect(() => setBoardRefresh(data.project.id, refresh), [data.project.id, refresh]);
   // «Hoy» (data.today: plazos, «vence hoy», filtros por fecha) cambia a medianoche aunque el tablero siga abierto; sin
   // estado, así que no vuelve a dibujar DndContext hasta que llegan los datos nuevos (useMidnightRefresh).
   useMidnightRefresh(data.today, refresh);
@@ -654,22 +659,24 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // Sincroniza con el servidor cuando llegan datos nuevos (router.refresh).
   useEffect(() => {
     lastSyncAt.current = performance.now();
-    if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current || patchedAt.current > refreshAt.current) {
-      // Datos que pueden ser anteriores a un cambio propio (o a tarjetas sueltas ya aplicadas): se piden otra vez cuando no
-      // quede ninguno en vuelo.
+    // Las tarjetas sueltas aplicadas después de pedir estos datos conservan la versión del parche; si no casan con ellos
+    // (columna quitada o renumerada), null y se piden otra vez.
+    const serverTasks = withPatchedTasks(data.tasks, patchedSince.current, new Set(data.columns.map((c) => c.id)));
+    if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current || !serverTasks) {
+      // Datos que pueden ser anteriores a un cambio propio: se piden otra vez cuando no quede ninguno en vuelo.
       staleRefresh.current = true;
       if (!activeId) flushStale();
       return;
     }
     const openId = openTaskRef.current;
     const before = openId ? stores.tasks.get().find((x) => x.id === openId) : undefined;
-    if (before && !data.tasks.some((x) => x.id === openId)) setGoneTask({ task: before, message: goneMessage(openId!) });
+    if (before && !serverTasks.some((x) => x.id === openId)) setGoneTask({ task: before, message: goneMessage(openId!) });
     setColumns(data.columns);
-    setTasks((prev) => mergeTasks(prev, data.tasks));
+    setTasks((prev) => mergeTasks(prev, serverTasks));
     setLabels(data.labels);
     liveCursor.current = advanceCursor(liveCursor.current, data.live);
     // Quita de la selección múltiple lo que ya no existe (borrado o archivado desde otra pestaña).
-    const present = new Set(data.tasks.map((t) => t.id));
+    const present = new Set(serverTasks.map((t) => t.id));
     const sel = stores.selection.get();
     if (sel.size && [...sel].some((id) => !present.has(id))) stores.selection.set(new Set([...sel].filter((id) => present.has(id))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -710,13 +717,15 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
           const received = (body.tasks as BoardTaskWire[]).map(unpackBoardTask);
           const result = applyTaskPatch(before, ids, received, new Set(columnsNow.current.map((c) => c.id)));
           if (!result) return refresh();
+          // Para la recarga completa que pueda estar en camino (efecto de datos): estas tarjetas, tal como han llegado.
+          const got = new Map(received.map((x) => [x.id, x]));
+          for (const id of ids) patchedSince.current.set(id, got.get(id) ?? null);
           if (result.tasks === before) return;
           // Como con la recarga completa: la tarea abierta que desaparece avisa (antes de quitarla) y sale de la selección.
           const openId = openTaskRef.current;
           const open = openId && result.removed.includes(openId) ? before.find((x) => x.id === openId) : undefined;
           if (open) setGoneTask({ task: open, message: goneMessage(open.id) });
           setTasks(result.tasks);
-          patchedAt.current = performance.now();
           const sel = stores.selection.get();
           if (sel.size && result.removed.some((id) => sel.has(id))) {
             const gone = new Set(result.removed);

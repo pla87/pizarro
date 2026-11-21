@@ -106,16 +106,55 @@ export function applyTaskPatch(
   if (!changed) return { tasks: prev as BoardTask[], removed };
   // Posiciones únicas por columna (task-positions.ts): un empate entre una tarjeta recibida y otra del tablero quiere
   // decir que la de este tablero tiene una posición ya renumerada.
-  const touched = new Set([...got.values()].map((t) => t.columnId));
+  if (positionClash(next, new Set([...got.values()].map((t) => t.columnId)))) return null;
+  return { tasks: next, removed };
+}
+
+/** Dos tarjetas (no provisionales) de una de las columnas `touched` con la misma posición. */
+function positionClash(tasks: readonly BoardTask[], touched: ReadonlySet<string>): boolean {
   const positions = new Map<string, Set<number>>();
-  for (const t of next) {
+  for (const t of tasks) {
     if (!touched.has(t.columnId) || isPendingCopy(t.id)) continue;
     let set = positions.get(t.columnId);
     if (!set) positions.set(t.columnId, (set = new Set()));
-    if (set.has(t.position)) return null;
+    if (set.has(t.position)) return true;
     set.add(t.position);
   }
-  return { tasks: next, removed };
+  return false;
+}
+
+/**
+ * Tarjetas de una recarga completa con las que se aplicaron por parche después de pedirla (`patched`: la versión del
+ * parche, o null si el parche la quitó). La del parche es igual o más nueva: se pidió después que la recarga y por un
+ * aviso de un cambio ya guardado; si después hubo otro, su propio aviso la vuelve a pedir. Así la recarga se aplica (sus
+ * columnas, etiquetas y demás tarjetas) en vez de tirarla entera y pedir otra, que con el equipo activo se repetía en
+ * cadena. Devuelve null si no casan (una tarjeta del parche en una columna que la recarga ya no trae, o con la posición
+ * de otra porque la recarga trae la columna renumerada): entonces hay que pedir otra recarga.
+ */
+export function withPatchedTasks(
+  server: readonly BoardTask[],
+  patched: ReadonlyMap<string, BoardTask | null>,
+  columnIds: ReadonlySet<string>,
+): BoardTask[] | null {
+  if (!patched.size) return server as BoardTask[];
+  const next: BoardTask[] = [];
+  const seen = new Set<string>();
+  for (const t of server) {
+    seen.add(t.id);
+    if (!patched.has(t.id)) next.push(t);
+    else {
+      const p = patched.get(t.id);
+      if (p) next.push(p);
+    }
+  }
+  const touched = new Set<string>();
+  for (const [id, p] of patched) {
+    if (!p) continue;
+    if (!columnIds.has(p.columnId)) return null;
+    touched.add(p.columnId);
+    if (!seen.has(id)) next.push(p);
+  }
+  return positionClash(next, touched) ? null : next;
 }
 
 /** Ruta de las tarjetas sueltas de un proyecto. */

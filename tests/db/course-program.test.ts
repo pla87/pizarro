@@ -19,7 +19,7 @@ import { appTimeZone } from "../../src/lib/format";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { stopPdfWorker } from "../../src/lib/report-render";
 import { documentPath } from "../../src/lib/uploads";
-import { seedBuiltinTemplates } from "../../src/lib/template-store";
+import { listTemplatesSorted, seedBuiltinTemplates } from "../../src/lib/template-store";
 import { GET as programGet, POST as programPost } from "../../src/app/api/projects/[projectId]/columns/[columnId]/program/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-program-"));
@@ -39,7 +39,7 @@ async function courseProject(user: { id: string }) {
   await db.projectTemplate.deleteMany({ where: { builtinKey: "curso-master" } });
   await db.builtinTemplateSeeded.deleteMany({ where: { key: "curso-master" } });
   await seedBuiltinTemplates(db);
-  const tpl = expectOk(await listTemplates()).find((t) => t.builtinKey === "curso-master")!;
+  const tpl = (await listTemplatesSorted(db)).find((t) => t.builtinKey === "curso-master")!;
   const created = expectOk(await createProject(`Máster ${Date.now()}`, { templateId: tpl.id }));
   const program = await db.column.findFirstOrThrow({ where: { projectId: created.id, role: "PROGRAM" } });
   const session = await db.taskKind.findFirstOrThrow({ where: { projectId: created.id, name: "Sesión" } });
@@ -60,7 +60,7 @@ describe("plantilla «Curso o máster»", () => {
     await seedBuiltinTemplates(db);
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    const tpl = expectOk(await listTemplates()).find((t) => t.builtinKey === "curso-master")!;
+    const tpl = (await listTemplatesSorted(db)).find((t) => t.builtinKey === "curso-master")!;
     assert.equal(tpl.name, "Curso o máster");
     assert.equal(tpl.builtinModified, false);
     const p = expectOk(await createProject("Máster de prueba", { templateId: tpl.id }));
@@ -78,7 +78,7 @@ describe("plantilla «Curso o máster»", () => {
 
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
     await loginAs(admin);
-    const en = expectOk(await listTemplates()).find((t) => t.builtinKey === "curso-master")!;
+    const en = expectOk(await listTemplates()).find((t) => t.id === tpl.id)!;
     assert.equal(en.name, "Course or master's");
     const pe = expectOk(await createProject("Test master", { templateId: en.id }));
     const colsEn = await db.column.findMany({ where: { projectId: pe.id }, orderBy: { position: "asc" } });
@@ -93,9 +93,9 @@ describe("plantilla «Curso o máster»", () => {
     await seedBuiltinTemplates(db);
     await loginAs(await makeUser({ role: "ADMIN" }));
     await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { taskFields: [] } });
-    assert.equal(expectOk(await listTemplates()).find((t) => t.builtinKey === "curso-master")!.builtinModified, true);
+    assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "curso-master")!.builtinModified, true);
     // Las que no tienen campos siguen sin modificar (su huella no cambia).
-    assert.equal(expectOk(await listTemplates()).find((t) => t.builtinKey === "negocio")!.builtinModified, false);
+    assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "negocio")!.builtinModified, false);
   });
 });
 

@@ -9,6 +9,8 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationBody } from "../../src/lib/notification-text";
+import { unreadCount } from "../../src/lib/notification-access";
+import { UNREAD_COUNT_CAP } from "../../src/lib/unread-core";
 import { makeT } from "../../src/i18n/core";
 
 const mention = (u: { id: string; name: string }) => mentionToken(u.name, u.id);
@@ -202,5 +204,36 @@ describe("avisos de asignación en lote", () => {
     expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Sola", kindId: f.kindId }] }));
     const one = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED", excerpt: { not: n.excerpt } } });
     assert.equal(notificationBody("ASSIGNED", one.excerpt, en, "en-US"), "Sola");
+  });
+});
+
+describe("recuento de avisos sin leer (cabecera y página de Avisos)", () => {
+  test("cuenta solo los visibles y sin leer, con tope de 100, y no ve los de proyectos a los que ya no tiene acceso", async () => {
+    const owner = await makeUser();
+    const u = await makeUser();
+    const other = await makeUser();
+    const mine = await makeProject({ visibility: "PRIVATE", owner, members: [u] });
+    const lost = await makeProject({ visibility: "PRIVATE", owner, members: [u] });
+    const a = await makeTask(mine);
+    const b = await makeTask(lost);
+    const at = (i: number) => new Date(Date.now() - i * 60_000);
+    await db.notification.createMany({
+      data: [
+        ...Array.from({ length: 3 }, (_, i) => ({ userId: u.id, taskId: a.id, createdAt: at(i) })),
+        // Uno leído y uno de otra persona no cuentan; el de proyecto (sin tarea) y el de `lost`, sí.
+        { userId: u.id, taskId: a.id, readAt: new Date() },
+        { userId: other.id, taskId: a.id },
+        { userId: u.id, projectId: mine.project.id, type: "PROJECT_TO_TEAM" as const },
+        { userId: u.id, taskId: b.id },
+      ],
+    });
+    assert.equal(await unreadCount(u.id, "MEMBER"), 5);
+    // Pierde el acceso a `lost`: su aviso deja de contar.
+    await db.projectMember.deleteMany({ where: { projectId: lost.project.id, userId: u.id } });
+    assert.equal(await unreadCount(u.id, "MEMBER"), 4);
+    // Con más de 100 sin leer se para en 100 (la interfaz dice «99+»).
+    await db.notification.createMany({ data: Array.from({ length: 120 }, (_, i) => ({ userId: u.id, taskId: a.id, createdAt: at(10 + i) })) });
+    assert.equal(UNREAD_COUNT_CAP, 100);
+    assert.equal(await unreadCount(u.id, "MEMBER"), UNREAD_COUNT_CAP);
   });
 });

@@ -15,6 +15,7 @@ import { createProject, listProjectExamples } from "@/actions/projects";
 import { projectOutsideList } from "@/actions/project-visit";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
+import { applyUnreadChange, onUnreadChange } from "@/lib/unread-core";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
@@ -80,7 +81,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects: listed, version, unread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -103,6 +104,14 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
   const current = projects.find((p) => p.id === (projectId ?? lastId)) ?? null;
   // Deshacer y presencia son del proyecto que se está viendo, no del recordado.
   const inProject = Boolean(projectId && current?.id === projectId);
+
+  // Avisos sin leer: los da el layout y los baja la lista de Avisos al leer uno (`pz:unread`), sin volver a pedir la
+  // página (al abrir un aviso, eso pedía otra vez el tablero entero). Cada render del layout en el servidor (refresco,
+  // recarga) trae un `user` nuevo y con él el número del servidor, aunque coincida con el anterior.
+  const [unreadSeen, setUnreadSeen] = useState({ from: user, count: serverUnread });
+  if (unreadSeen.from !== user) setUnreadSeen({ from: user, count: serverUnread });
+  const unread = unreadSeen.from === user ? unreadSeen.count : serverUnread;
+  useEffect(() => onUnreadChange((change) => setUnreadSeen((s) => ({ ...s, count: applyUnreadChange(s.count, change) }))), []);
 
   // Mover/copiar texto arrastrado entre campos (incluido el editor TipTap).
   useEffect(() => installDragMove(), []);

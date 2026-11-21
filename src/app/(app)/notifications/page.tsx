@@ -1,4 +1,5 @@
-import { visibleNotificationsWhere } from "@/lib/notification-access";
+import { unreadCount, visibleNotificationsWhere } from "@/lib/notification-access";
+import { UNREAD_COUNT_CAP } from "@/lib/unread-core";
 import { db } from "@/lib/db";
 import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
@@ -11,8 +12,6 @@ export async function generateMetadata() {
 }
 
 const PAGE_STEP = 100;
-/** Tope del recuento de sin leer: como la cabecera (layout.tsx, AppShell), a partir de 100 se dice «Más de 99 sin leer». */
-const UNREAD_COUNT_CAP = 100;
 
 export default async function NotificationsPage({ searchParams }: { searchParams: Promise<{ limit?: string | string[] }> }) {
   const user = await requireUserPage();
@@ -39,7 +38,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     },
   }),
   // Recuento real de los sin leer, no solo de los cargados (con 150 decía «100 sin leer»).
-  db.notification.count({ where: { ...visibleNotificationsWhere(user), readAt: null }, take: UNREAD_COUNT_CAP })]);
+  // El mismo número que el del layout (memoizado por petición: una sola consulta).
+  unreadCount(user.id, user.role)]);
   const hasMore = rows.length > limit;
   return (
     <NotificationList

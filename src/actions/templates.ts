@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE } from "@/lib/edit-conflict-core";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
-import { templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
+import { templateInputSchema, type TemplateInput } from "@/lib/project-templates";
 import { MAX_TEMPLATES } from "@/lib/project-templates-core";
 import { listTemplatesSorted, lockTemplates, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
@@ -17,12 +17,16 @@ import * as v from "@/lib/validation";
 import { getLocale, getT } from "@/i18n/server";
 import { cutText } from "@/lib/graphemes";
 
-/** Plantillas de proyecto (solo administradores), por orden alfabético. */
+/**
+ * Plantillas de proyecto para el diálogo «Nuevo proyecto» (solo administradores), por orden alfabético: solo lo que
+ * enseña (nombre y descripción). Las de serie sin tocar salen en el idioma de quien las ve; para saberlo hay que leerlas
+ * enteras y compararlas con la canónica, pero columnas, tipos, etiquetas y textos de release no viajan al navegador
+ * (37 KB frente a 3 KB con las 15 de serie). Crear el proyecto lee la plantilla en el servidor.
+ */
 export async function listTemplates() {
-  return runAction({ name: "templates.listTemplates" }, async (): Promise<TemplateDto[]> => {
+  return runAction({ name: "templates.listTemplates" }, async (): Promise<{ id: string; name: string; description: string }[]> => {
     await requireAdmin();
-    // Para el diálogo de «Nuevo proyecto»: las de serie sin tocar salen en el idioma de quien las ve.
-    return listTemplatesSorted(db, await getLocale());
+    return (await listTemplatesSorted(db, await getLocale())).map(({ id, name, description }) => ({ id, name, description }));
   });
 }
 
