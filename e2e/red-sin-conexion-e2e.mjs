@@ -553,11 +553,11 @@ if (only.includes("a11y")) try {
   L.eq("A11Y: la fecha límite tiene nombre", await U.dialog(page).getByLabel("Fecha límite", { exact: true }).count(), 1);
   L.check("A11Y: «Columna» no se anuncia con el nombre de la columna", !snap.includes(`combobox "${L.COL.backlog}"`), comboLines);
   // Árbol de accesibilidad de Chromium: ningún desplegable ni campo de texto del detalle sin nombre.
-  const ax = await page.accessibility.snapshot({ root: await U.dialog(page).elementHandle(), interestingOnly: true });
+  const ax = await L.axSnapshot(page, U.dialog(page));
   const flat = [];
   const walk = (n) => { if (!n) return; flat.push(n); (n.children ?? []).forEach(walk); };
   walk(ax);
-  const unnamed = flat.filter((n) => ["combobox", "textbox", "Date"].includes(n.role) && !n.name);
+  const unnamed = flat.filter((n) => ["combobox", "textbox", "Date", "date"].includes(n.role) && !n.name);
   L.eq("A11Y: árbol de accesibilidad: ningún desplegable ni campo sin nombre", unnamed.map((n) => `${n.role}:${n.value ?? ""}`), []);
   L.assertNoErrors("A11Y", [s]);
   await s.ctx.close();

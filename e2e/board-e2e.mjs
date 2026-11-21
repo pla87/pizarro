@@ -1546,7 +1546,7 @@ if (only.includes("acc")) {
 
   // Tarjeta: nombre = título; tipo, fecha, responsable… en la descripción; sin los botones de dentro; estado y atajos.
   const card = L.cardLoc(p, "Tarjeta accesible");
-  const snap = async () => p.accessibility.snapshot({ root: await card.elementHandle() });
+  const snap = async () => L.axSnapshot(p, card);
   let a = await snap();
   L.eq("ACC: la tarjeta es un botón cuyo nombre es solo el título", [a?.role, a?.name], ["button", "Tarjeta accesible"]);
   L.check("ACC: sin «Seleccionar» ni «Arrastrar» en su árbol accesible", !/Seleccionar|Arrastrar|Quitar de la selección/.test(JSON.stringify(a)), JSON.stringify(a));
@@ -1573,7 +1573,7 @@ if (only.includes("acc")) {
   const mc = L.cardLoc(m.page, "Otra tarjeta");
   const handle = mc.locator("[aria-label='Arrastrar para reordenar']");
   L.eq("ACC móvil: el asa existe, fuera del Tab y del árbol accesible", [await handle.count(), await handle.evaluate((e) => e.tabIndex < 0 && e.tagName !== "BUTTON"), await handle.getAttribute("aria-hidden")], [1, true, "true"]);
-  L.eq("ACC móvil: nombre de la tarjeta = título", (await m.page.accessibility.snapshot({ root: await mc.elementHandle() }))?.name, "Otra tarjeta");
+  L.eq("ACC móvil: nombre de la tarjeta = título", (await L.axSnapshot(m.page, mc))?.name, "Otra tarjeta");
   await m.ctx.close();
 
   // Suscripción al calendario: sin responsables (uso familiar), «Todas» marcada por defecto y cada opción explicada.
