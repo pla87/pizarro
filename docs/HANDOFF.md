@@ -480,35 +480,37 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.62.0)** (explicadas con coste y recomendación en el informe final de la ronda 58):
+**Preguntas abiertas al propietario (tras la v1.63.0)** (explicadas con coste y recomendación en el informe final de la ronda 59):
 
-- Seguridad: cuota extra de acceso para cualquier dispositivo conocido (`KnownDevice`), para que 6 contraseñas falsas cada
-  15 min no bloqueen a quien no tiene 2FA; «Forzar cambio de contraseña» que también borre el calendario suscrito, los
-  canales de Telegram/WhatsApp y Google Drive; proyecto privado con solo miembros desactivados (contar solo activos);
-  `requireTLS` con `SMTP_*` por variables; log de Caddy sin la URI (tokens del .ics, `/reset`, `/confirm`); token de .ics
-  no válido → calendario vacío en vez de 404.
-- Coste: limpiezas con retención cada 23 h; `pool` en nodemailer; refresco en vivo de comentarios solo de la primera
-  página; contenido de cada release al desplegarla; enlaces a Pizarro en el plan para IA apagados por defecto (~27 % menos
-  texto); sin `@img/*musl*` en la imagen (~19 MB); una sola versión de `marked`; caché de miniaturas de 60–300 s;
-  diccionario de inglés de cliente y de servidor; `PDF_WORKER_MAX_MB` (un programa de 100 sesiones de 2 KB no cabe en 256 MB).
-- Uso: margen de disco libre también en las subidas; tope de «Compartir» por envío (hoy el de un archivo); fotos de 48 MP
-  en Documentación; confirmar «Regenerar enlace» del calendario; botón «Nuevo proyecto» también para miembros sin
-  proyectos; «Esta semana» de Mis tareas → «Próximos 7 días»; mismo avance de entregable en calendario e informe; la
-  repetición no hereda un entregable vencido; topes de la app (30 columnas, nombres de 40) al importar; healthcheck de
-  despliegue sin el disco; `get.sh` desde `stable`; imágenes base por digest y Dependabot para Docker; migraciones nuevas
-  entre `BEGIN`/`COMMIT`.
-- Retirar (pedido permiso): `admin/types/page.tsx` y `admin/page.tsx` (ya redirige `next.config.ts`),
-  `passwordChangeRequired`, `redoLast`, `capTitle`, la compatibilidad de huellas `v2:` sin `b:` (desde el 23-11-2026), la
-  tabla «Nombres antiguos» de `e2e/README.md`, juntar suites e2e solapadas, el ZIP del histórico sin `?part`/`?v=`,
-  `generateProjectReportPdf`, `CalendarFeed.rotatedAt` y `lastUsedAt` (o enseñar «último uso»), la rama `Uint8Array` de
-  `zipBodyStream`, `UPLOAD_DIR` en la guía de Railway, `"avif"` en `INPUT_FORMATS`, y `MANUAL.pdf`/`PRUEBAS.pdf` fuera del
-  repositorio (adjuntos de la release). La heurística vieja de `commentNoticesWhere` se puede quitar desde el 19-11-2027.
-- Copias: R2 no tiene versionado de objetos (sí bloqueos por antigüedad). Un bloqueo hace fallar la retención de Pizarro
-  (aviso «Retención: …» en cada copia) y no protege los adjuntos antiguos. Pendiente de lo que vea el propietario con el
-  prompt de Claude in Chrome; alternativas: segundo destino externo con versionado (p. ej. Backblaze B2) o
-  `BACKUP_LOCAL_FILES=1`.
-- Pendiente de antes: unificar «Nueva tarea» con el detalle (decidido: no); coste de almacenamiento de las imágenes que
-  copia cada repetición; React #185 (no se ha vuelto a ver).
+- Rendimiento: refresco en vivo que pida solo la tarea cambiada en vez del tablero entero a cada pestaña (el mayor ahorro de
+  servidor que queda); pintar en el servidor solo las primeras 40–60 tarjetas de cada columna; datos del tablero sin campos
+  nulos; búsqueda de releases con índice trigram.
+- Cuentas: una cookie de dispositivo por cuenta (hoy dos cuentas en el mismo navegador se pisan la de «Recordar»);
+  `__Host-` en la cookie; idioma de la persona invitada desde un proyecto; marca «Invitación pendiente» en los asignados.
+- Instalación: que `migrate.mjs` resuelva solo un `P3009` de una migración transaccional y reintente; aviso de «otra
+  instancia usa esta base»; filtrar también el log de errores de Caddy (comprobar en un VPS).
+- Emails: «Esperando» con la casilla de fechas; extracto «{actor} ha escrito:» y nombres reservados; baja en un clic
+  (`List-Unsubscribe`); aligerar el informe grande.
+- Otros: fechas en inglés con formato `en-US`; CSV de logs con «;» para Excel en español; aviso de cambios de otro
+  administrador en plantillas, textos legales y ajustes; volver a Logs con aviso al pasar el límite de CSV; portada de un
+  administrador con proyectos sin elegir.
+- Pendiente de antes: plan para IA sin enlaces a Pizarro (explicado en el informe de la ronda 59); copia de los adjuntos
+  fuera de R2 (R2 no tiene versionado); coste de almacenamiento de las imágenes que copia cada repetición.
+- Pruebas en real pendientes (`docs/PRUEBAS.md` §11 y §12; prompts de Claude in Chrome en el informe de la ronda 59):
+  Cloudflare y R2, instalación desde getpizarro.com, validar el Caddyfile en un VPS.
+
+**Decisiones de la ronda 59 (ya aplicadas):** administradores asignables a proyectos de equipo, aviso «te han añadido»,
+invitar por email desde el proyecto y «Copiar enlace»; margen de intentos para dispositivos conocidos; «Forzar cambio de
+contraseña» corta calendario, canales y Drive; privado sin miembros activos → de equipo; TLS obligatorio con `SMTP_*`
+(`SMTP_ALLOW_PLAINTEXT`); calendario vacío para enlaces no válidos y «Último uso»; releases que cargan su texto al
+desplegar; comentarios en vivo solo la primera página; limpiezas diarias; SMTP con `pool`; miniaturas 2 min; disco en
+subidas; Compartir con tope por archivo; importar con los topes de la app; `/api/health` 200 con aviso de disco; fotos
+grandes en Documentación; confirmaciones del calendario; «Nuevo proyecto» para miembros; «Próximos 7 días»; avance de
+entregables único; repeticiones sin entregable vencido; Caddy sin URI; imagen sin sharp musl; `get.sh` desde `stable`;
+imágenes por digest; migraciones entre `BEGIN`/`COMMIT`; PDF como adjuntos de la release; retiradas (páginas de admin,
+`redoLast`, `capTitle`, `generateProjectReportPdf` como envoltorio, `passwordChangeRequired`, huellas `v2:` sin `b:`,
+tabla «Nombres antiguos», suites solapadas, ZIP del histórico sin `?part`, una versión de `marked`); inglés americano;
+no subir `PDF_WORKER_MAX_MB`.
 
 **Decisiones de la ronda 58 (ya aplicadas):** borrar en un menú «⋯» en Releases y Documentación; informe semanal con
 margen de 3 días; `MALLOC_ARENA_MAX=2`; workflow «Comprobaciones» en cada PR; sin precargas con Ahorro de datos; retirados
