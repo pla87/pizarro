@@ -19,8 +19,10 @@ export function applyKindTemplate(
   const descTpl = kind.descriptionTemplate.trim();
   if (!titleTpl && !descTpl) return null;
   let description = current.description;
+  // Lo que ya había va tras una línea en blanco: así se distingue de una respuesta escrita en la última línea del
+  // formulario, que va pegada a su etiqueta (ver switchKindDescription).
   if (descTpl && !description.trimStart().startsWith(descTpl)) {
-    description = description.trim() ? `${descTpl}\n${description}` : `${descTpl}\n`;
+    description = description.trim() ? `${descTpl}\n\n${description}` : `${descTpl}\n`;
   }
   return { title: titleTpl || current.title, description };
 }
@@ -61,8 +63,8 @@ function short(text: string, max = 60): string {
 export function describeKindAutomation(kind: KindAutomation, t: T = esT): string | null {
   const title = kind.titleTemplate.trim();
   const desc = kind.descriptionTemplate.trim();
-  if (title && desc) return t("Al elegirlo, el título pasa a ser «{title}» y la descripción empieza por «{desc}».", { title: short(title), desc: short(desc) });
-  if (title) return t("Al elegirlo, el título pasa a ser «{title}».", { title: short(title) });
+  if (title && desc) return t("Al elegirlo, el título empieza por «{title}» y la descripción, por «{desc}».", { title: short(title), desc: short(desc) });
+  if (title) return t("Al elegirlo, el título empieza por «{title}».", { title: short(title) });
   if (desc) return t("Al elegirlo, la descripción empieza por «{desc}».", { desc: short(desc) });
   return null;
 }
@@ -88,17 +90,25 @@ function titleWithoutPrefix(prev: KindAutomation | null | undefined, title: stri
   return rest.trim();
 }
 
-/** Título al pasar del tipo `prev` (el que tenía; null si ninguno) a `next`. */
+/**
+ * Título al pasar del tipo `prev` (el que tenía; null si ninguno) a `next`. Lo escrito no se pierde nunca: el prefijo del
+ * anterior se cambia por el del nuevo y, si el título no lo llevaba, el del nuevo se pone delante («Leche y pan» →
+ * «Comprar Leche y pan»). Si solo queda el prefijo, va con un espacio detrás para seguir escribiendo («Comprar pan» y no
+ * «Comprarpan», que ya no se reconocería como prefijo): el espacio sobrante se quita al guardar.
+ */
 export function switchKindTitle(prev: KindAutomation | null | undefined, next: KindAutomation, title: string): string {
   const prefix = next.titleTemplate.trim();
   // El mismo tipo otra vez (pulsar el ya elegido): no se toca lo que haya.
   if (prev && prev.titleTemplate.trim() === prefix) return title;
+  const join = (text: string) => (text ? `${prefix} ${text}` : `${prefix} `);
   const rest = titleWithoutPrefix(prev, title);
   // Con el prefijo del anterior: se cambia por el del nuevo y se conserva lo escrito detrás. Si el nuevo no tiene, solo se
   // quita el prefijo sin nada detrás («Respuesta a Juan» no pasa a «a Juan»).
-  if (rest !== null) return prefix ? (rest ? `${prefix} ${rest}` : prefix) : rest ? title : "";
-  // Si no, como siempre: el título fijo del tipo nuevo, si lo tiene.
-  return prefix || title;
+  if (rest !== null) return prefix ? join(rest) : rest ? title : "";
+  if (!prefix) return title;
+  // Ya empieza por el prefijo del nuevo (escrito a mano o de antes): se queda como está.
+  if (titleWithoutPrefix(next, title) !== null) return title;
+  return join(title.trim());
 }
 
 /** Descripción al pasar del tipo `prev` a `next`. */
@@ -107,11 +117,15 @@ export function switchKindDescription(prev: KindAutomation | null | undefined, n
   if (prev && tpl === next.descriptionTemplate.trim()) return description;
   let base = description;
   const start = description.trimStart();
-  // El texto del anterior sigue al principio y sin tocar (lo que haya debajo es de la persona): se quita.
+  // El texto del anterior sigue al principio y sin tocar: se quita, y lo que vaya debajo tras una línea en blanco (lo que
+  // ya había, o lo escrito aparte) se conserva. Lo escrito justo en la línea siguiente es la respuesta a la última
+  // etiqueta del formulario: cuenta como formulario rellenado y se conserva entero (sin la etiqueta se leería como la
+  // respuesta a la última del tipo nuevo).
   if (tpl && start.startsWith(tpl)) {
     const rest = start.slice(tpl.length);
+    const below = /^[ \t]*\r?\n[ \t]*\r?\n/.exec(rest);
     if (!rest.trim()) base = "";
-    else if (/^\r?\n/.test(rest)) base = rest.replace(/^\r?\n/, "");
+    else if (below) base = rest.slice(below[0].length);
   }
   return applyKindTemplate(next, { title: "", description: base })?.description ?? base;
 }

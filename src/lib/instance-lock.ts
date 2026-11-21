@@ -123,7 +123,7 @@ const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
 
 function logChange(prev: InstanceLockStatus, next: InstanceLockStatus): void {
   if (next.status === "conflict") {
-    const message = `Hay otra copia de Pizarro usando esta misma base de datos desde hace más de ${minutes(INSTANCE_CONFLICT_GRACE_MS)} minutos. Dos copias a la vez se pisan (Telegram por sondeo, tareas de fondo, copias de seguridad, archivos subidos). Para la que sobra: un servicio o un despliegue antiguo de Railway, otro servidor o un npm start de prueba con esta DATABASE_URL.`;
+    const message = `Hay otra copia de Pizarro usando esta misma base de datos desde hace más de ${minutes(INSTANCE_CONFLICT_GRACE_MS)} minutos. Dos copias a la vez se pisan (Telegram por sondeo, tareas de fondo, copias de seguridad, archivos subidos). Detén la que sobra: un servicio o un despliegue antiguo de Railway, otro servidor o un npm start de prueba con esta DATABASE_URL.`;
     console.warn(`[instance] AVISO: ${message}`);
     logEvent({ level: "warn", category: "system", action: "system.otherInstance", message, details: { holderSince: next.holderSince } });
   } else if (prev.status === "conflict" && next.status === "held") {

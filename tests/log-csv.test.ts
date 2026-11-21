@@ -1,7 +1,7 @@
 // Formato del CSV de logs (Administración → Logs → Descargar CSV): separador según el idioma, escapado y fórmulas.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { csvCell, csvDateParam, csvRow, csvSeparator, parseLogCsvError } from "../src/lib/log-csv";
+import { csvCell, csvDateParam, csvRow, csvSeparator, parseLogCsvError, withoutCsvParams } from "../src/lib/log-csv";
 
 test("separador: «;» en español (Excel en español), «,» en inglés", () => {
   assert.equal(csvSeparator("es"), ";");
@@ -36,4 +36,10 @@ test("vuelta a la página: solo motivos y fechas conocidos", () => {
   assert.equal(csvDateParam("2026-10-24"), "2026-10-24");
   assert.equal(csvDateParam("2026-10-24<script>"), null);
   assert.equal(csvDateParam(undefined), null);
+});
+
+test("el aviso de descarga fallida quita sus parámetros de la dirección y deja los filtros", () => {
+  assert.equal(withoutCsvParams("/admin/logs", "?csv=busy&desde=2026-10-01&hasta=2026-10-02"), "/admin/logs");
+  assert.equal(withoutCsvParams("/admin/logs", "?level=error&csv=rate&q=a%20b", "#x"), "/admin/logs?level=error&q=a+b#x");
+  assert.equal(withoutCsvParams("/admin/logs", ""), "/admin/logs");
 });

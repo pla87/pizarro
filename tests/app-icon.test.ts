@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import sharp from "sharp";
-import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, cleanAppShortName, parseAppIcon, shortAppName, shortNameSource } from "../src/lib/app-icon-core";
+import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, appShortNameLength, cleanAppShortName, parseAppIcon, shortAppName, shortNameSource } from "../src/lib/app-icon-core";
 import { webManifest } from "../src/lib/web-manifest";
 import { rootIconEtag, rootIconResponse } from "../src/lib/app-icon-render";
 import { ifNoneMatchHas } from "../src/lib/etag";
@@ -131,6 +131,16 @@ test("nombre bajo el icono: por qué sale el que sale y etiqueta propia (antes �
   assert.equal(appNames("Prueba de instalación", "   ").shortName, "Prueba");
   assert.equal(cleanAppShortName("Una etiqueta demasiado larga"), "Una etiqueta");
   assert.equal(Array.from(cleanAppShortName("🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠")).length, 12);
+  // Por caracteres visibles: un emoji compuesto (familia, bandera, tono de piel) no se parte ni cuenta como varios.
+  assert.equal(cleanAppShortName("Familia 👨‍👩‍👧 Pérez"), "Familia 👨‍👩‍👧 Pé");
+  assert.equal(cleanAppShortName("👨‍👩‍👧".repeat(14)), "👨‍👩‍👧".repeat(12));
+  assert.equal(appShortNameLength("Familia 👨‍👩‍👧"), 9);
+  assert.equal(appShortNameLength("  Una etiqueta demasiado larga "), 28);
+  // Sin caracteres de control (un NUL hacía fallar el guardado en PostgreSQL) ni de dirección del texto.
+  assert.equal(cleanAppShortName("Pru\u0000ebas\u202E IT\u2066"), "Pruebas IT");
+  assert.equal(cleanAppShortName("Uno\tdos\n\u0007 tres"), "Uno dos tres");
+  assert.equal(cleanAppShortName("\u200F\u0000"), "");
+  assert.equal(appShortNameLength("a\u0000b"), 2);
   assert.equal(webManifest("es", { orgName: "Prueba de instalación", shortName: "Pruebas IT" }).short_name, "Pruebas IT");
   assert.equal(webManifest("es", { orgName: "Prueba de instalación", shortName: "Pruebas IT" }).name, "Prueba de instalación · Pizarro");
 });

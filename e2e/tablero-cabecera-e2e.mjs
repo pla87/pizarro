@@ -253,7 +253,8 @@ if (only.includes("kind")) {
     await L.board(page);
     await page.keyboard.press("Alt+N");
     await U.dialog(page).waitFor();
-    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo");
+    // Con un espacio detrás, para seguir escribiendo (se quita al guardar).
+    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo ");
     // La descripción puede ser un textarea o el editor con formato (según el perfil): se lee lo que haya en el diálogo.
     const dialogText = () => U.dialog(page).evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + el.innerText);
     L.check("KIND: y su descripción de plantilla", (await dialogText()).includes("Pasos para reproducir:"));
@@ -327,7 +328,8 @@ if (only.includes("tipos")) {
     // 1. El «+» de una columna: el tipo marcado trae su plantilla sin pulsarlo.
     await openPlus();
     const first = await state();
-    L.eq("TIPOS: «+» abre con «Presupuesto» marcado y su título de plantilla", [first.kind, first.title], ["Presupuesto", "Presupuesto:"]);
+    // El prefijo va con un espacio detrás para escribir a continuación (se quita al guardar).
+    L.eq("TIPOS: «+» abre con «Presupuesto» marcado y su título de plantilla", [first.kind, first.title], ["Presupuesto", "Presupuesto: "]);
     L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Empresa o profesional"), first.desc);
     L.eq("TIPOS: y sus tres subtareas", first.subtasks, PRESU_SUBS);
     L.check("TIPOS: lo que puso la plantilla no pide confirmar al cerrar", await closesWithoutAsking());
@@ -337,12 +339,12 @@ if (only.includes("tipos")) {
     await dlg.getByRole("radio", { name: "Permisos y licencias" }).click();
     await sleep(200);
     const permiso = await state();
-    L.eq("TIPOS: a «Permisos y licencias»: su título y sus tres subtareas", [permiso.title, permiso.subtasks], ["Permiso:", PERMISO_SUBS]);
+    L.eq("TIPOS: a «Permisos y licencias»: su título y sus tres subtareas", [permiso.title, permiso.subtasks], ["Permiso: ", PERMISO_SUBS]);
     L.check("TIPOS: y su descripción, sin la de «Presupuesto»", permiso.desc.includes("Trámite") && !permiso.desc.includes("Empresa o profesional"), permiso.desc);
     await dlg.getByRole("radio", { name: "Presupuesto", exact: true }).click();
     await sleep(200);
     const back = await state();
-    L.eq("TIPOS: y otra vez a «Presupuesto»: lo suyo, sin acumular", [back.title, back.subtasks], ["Presupuesto:", PRESU_SUBS]);
+    L.eq("TIPOS: y otra vez a «Presupuesto»: lo suyo, sin acumular", [back.title, back.subtasks], ["Presupuesto: ", PRESU_SUBS]);
     L.check("TIPOS: la descripción solo lleva la de «Presupuesto»", back.desc.includes("Empresa o profesional") && !back.desc.includes("Trámite"), back.desc);
     L.check("TIPOS: cambiar de tipo sin escribir nada tampoco pide confirmar al cerrar", await closesWithoutAsking());
 
@@ -374,6 +376,22 @@ if (only.includes("tipos")) {
     await L.eqEventually("TIPOS: detalle: el título pasa a «Presupuesto: fontanería R60»", async () => (await row())?.title, "Presupuesto: fontanería R60");
     const after = await row();
     L.check("TIPOS: detalle: la descripción pasa a la de «Presupuesto», sin la de «Permisos»", /^\*\*Empresa o profesional:\*\*/.test(after?.description ?? "") && !after.description.includes("Trámite"), after?.description);
+    // 4b. Con la descripción abierta y sin guardar: cambiar de tipo parte de lo escrito y no lo pierde (antes el editor se
+    // volvía a montar con lo guardado). El editor sigue abierto y la descripción no se guarda hasta pulsar Guardar.
+    await dlg.getByRole("button", { name: "Editar", exact: true }).first().click();
+    await sleep(400);
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Nota R60 sin guardar");
+    await sleep(400);
+    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Permisos y licencias" }).click();
+    await L.eqEventually("TIPOS: detalle con la descripción abierta: el título pasa a «Permiso: fontanería R60»", async () => (await row())?.title, "Permiso: fontanería R60");
+    const typedDesc = await descText();
+    L.check("TIPOS: detalle: lo escrito sin guardar sigue en el editor, con el formulario de «Permisos»", typedDesc.includes("Nota R60 sin guardar") && typedDesc.includes("Trámite"), typedDesc);
+    L.check("TIPOS: detalle: la descripción sin guardar no se guarda sola", /^\*\*Empresa o profesional:\*\*/.test((await row())?.description ?? ""), (await row())?.description);
+    await dlg.getByRole("button", { name: "Cancelar", exact: true }).first().click();
+    await sleep(300);
     await page.keyboard.press("Escape");
     await dlg.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
 

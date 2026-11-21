@@ -526,12 +526,14 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           const lastOne = isMe && activeCount <= 1;
           return (
             <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">
-                {m.name}
-                {m.admin && <span className="ml-1 text-xs text-slate-500">{t("admin")}</span>}
-                {isMe && <span className="ml-1 text-xs text-slate-500">{t("(tú)")}</span>}
-                {!m.active && <span className="ml-1 text-xs text-slate-500">{t("(desactivado)")}</span>}
-                {m.invitePending && <span className="ml-1 text-xs text-amber-700 dark:text-amber-400" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>}
+              {/* Solo el nombre se recorta: las marcas van aparte (antes, dentro del recorte, «Invitación pendiente»
+                  desaparecía en el móvil con un nombre medio largo). Como en Administración → Proyectos. */}
+              <span className="flex min-w-0 flex-1 items-center gap-1">
+                <span className="truncate">{m.name}</span>
+                {m.admin && <span className="shrink-0 text-xs text-slate-500">{t("admin")}</span>}
+                {isMe && <span className="shrink-0 text-xs text-slate-500">{t("(tú)")}</span>}
+                {!m.active && <span className="shrink-0 text-xs text-slate-500">{t("(desactivado)")}</span>}
+                {m.invitePending && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>}
               </span>
               {canInvite && canResend && m.invitePending && m.active && (
                 <button
