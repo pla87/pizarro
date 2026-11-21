@@ -1,8 +1,13 @@
-// Filtros de Administración → Logs (página y descarga CSV) contra PostgreSQL real: un NUL en la URL no llega a la base.
+// Administración → Logs (página y descarga CSV) contra PostgreSQL real: filtros (un NUL en la URL no llega a la base, los
+// comodines de LIKE se buscan literales), paginación por clave, tope y registro de la descarga, y lo que guarda una acción
+// que falla antes de saber su proyecto.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, loginAs, makeUser } from "./helpers";
-import { logWhere, parseLogFilters } from "../../src/lib/log-query";
+import { db, expectFail, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { logsAfter, logWhere, parseLogFilters } from "../../src/lib/log-query";
+import { flushLogs } from "../../src/lib/log";
+import { resetRateLimit } from "../../src/lib/rate-limit";
+import { updateTask } from "../../src/actions/tasks";
 import { GET as logsCsv } from "../../src/app/api/admin/logs/route";
 
 describe("filtros de logs con NUL", () => {
@@ -29,5 +34,143 @@ describe("filtros de logs con NUL", () => {
     assert.equal(res.status, 200);
     const text = await res.text();
     assert.match(text, new RegExp(action.replace(".", "\\.")));
+  });
+});
+
+describe("búsqueda de texto en los logs", () => {
+  test("«%» y «_» se buscan literales (antes casaban con cualquier cosa)", async () => {
+    const tag = `like${Date.now()}`;
+    await db.appLog.createMany({
+      data: ["al 50% de carga", "500 peticiones", "a_b literal", "axb sin guion"].map((message, i) => ({ level: "warn", category: tag, action: `${tag}.${i}`, message })),
+    });
+    const found = async (q: string) =>
+      (await db.appLog.findMany({ where: logWhere(parseLogFilters({ category: tag, q, consultas: "1" }), []), orderBy: { action: "asc" } })).map((r) => r.message);
+    assert.deepEqual(await found("50%"), ["al 50% de carga"]);
+    assert.deepEqual(await found("a_b"), ["a_b literal"]);
+    assert.deepEqual(await found("%"), ["al 50% de carga"]);
+    assert.deepEqual(await found("\\"), []);
+  });
+});
+
+describe("paginación de los logs y descarga CSV", () => {
+  test("por clave: con fechas repetidas no se salta ni se repite ninguna fila", async () => {
+    const tag = `keyset${Date.now()}`;
+    const t0 = Date.now() - 60_000;
+    // Grupos de filas con la misma fecha (lo normal al escribir el registro por lotes).
+    await db.appLog.createMany({ data: Array.from({ length: 23 }, (_, i) => ({ level: "warn", category: tag, action: `${tag}.${i}`, createdAt: new Date(t0 - Math.floor(i / 5) * 1000) })) });
+    const where = logWhere(parseLogFilters({ category: tag }), []);
+    const order = [{ createdAt: "desc" as const }, { id: "desc" as const }];
+    const all = (await db.appLog.findMany({ where, orderBy: order, select: { id: true } })).map((r) => r.id);
+    const seen: string[] = [];
+    let last: { id: string; createdAt: Date } | null = null;
+    for (;;) {
+      const page: { id: string; createdAt: Date }[] = await db.appLog.findMany({ where: last ? { AND: [where, logsAfter(last)] } : where, orderBy: order, take: 4, select: { id: true, createdAt: true } });
+      seen.push(...page.map((r) => r.id));
+      if (page.length < 4) break;
+      last = page.at(-1)!;
+    }
+    assert.equal(all.length, 23);
+    assert.deepEqual(seen, all);
+  });
+
+  test("CSV de más de 200 000 filas: tiempo lineal (antes cada página recorría las anteriores) y aviso de recorte al final", { timeout: 300_000 }, async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const small = `csvsmall${Date.now()}`;
+    const big = `csvbig${Date.now()}`;
+    const insert = (category: string, n: number) =>
+      db.$executeRawUnsafe(
+        `INSERT INTO "AppLog" (id, "createdAt", level, category, action, message)
+         SELECT '${category}' || lpad(g::text, 7, '0'), now() - interval '1 minute' - (g * interval '200 milliseconds'), 'warn', '${category}', 'prueba.csv', 'mensaje ' || g
+         FROM generate_series(1, ${n}) g`,
+      );
+    await insert(small, 2_000);
+    await insert(big, 200_005);
+    await db.$executeRawUnsafe(`ANALYZE "AppLog"`);
+    try {
+      const download = async (category: string) => {
+        resetRateLimit(`logs-csv:${admin.id}`);
+        const t0 = performance.now();
+        const res = await logsCsv(new Request(`http://localhost/api/admin/logs?category=${category}&q=mensaje`));
+        assert.equal(res.status, 200);
+        const text = await res.text();
+        return { ms: performance.now() - t0, lines: text.split("\r\n") };
+      };
+      let ref = Infinity;
+      for (let i = 0; i < 3; i++) {
+        const d = await download(small);
+        assert.equal(d.lines.length, 2_001);
+        ref = Math.min(ref, d.ms);
+      }
+      // Cien veces más filas. Lineal: entre 45 y 70 veces lo de 2000 (lo fijo pesa más en la pequeña). Con el cursor de
+      // Prisma cada página recorría las anteriores: unas 500 veces (22 s frente a 2,2 s; 81 s en una máquina más lenta).
+      const max = ref * 200;
+      let best = Infinity;
+      let lines: string[] = [];
+      for (let i = 0; i < 3 && best >= max; i++) {
+        const d = await download(big);
+        best = Math.min(best, d.ms);
+        lines = d.lines;
+      }
+      assert.ok(best < max, `200 000 filas: ${Math.round(best)} ms; 2000: ${Math.round(ref)} ms (máximo ${Math.round(max)}, la mejor de tres)`);
+      assert.equal(lines.length, 1 + 200_000 + 1);
+      assert.match(lines.at(-1)!, /^"Recortado a 200.000 filas: acorta el intervalo\."$/);
+      // Sin pasar del tope no hay aviso.
+      assert.match(lines.at(-2)!, /prueba\.csv/);
+    } finally {
+      await db.appLog.deleteMany({ where: { category: { in: [small, big] } } });
+    }
+  });
+
+  test("CSV: una a la vez por administrador, tope de 5 cada 10 minutos y registro sin datos personales", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`logs-csv:${admin.id}`);
+    // Más de una página (1000 filas): la descarga no termina hasta que se lea.
+    const tag = `csvbusy${Date.now()}`;
+    await db.appLog.createMany({ data: Array.from({ length: 1500 }, (_, i) => ({ level: "warn", category: tag, action: "prueba.csv", message: `texto-buscado ${i}`, userId: admin.id })) });
+    const open = await logsCsv(new Request(`http://localhost/api/admin/logs?q=texto-buscado&user=${admin.id}&level=warn&category=${tag}`));
+    assert.equal(open.status, 200);
+    // Con la primera sin terminar, la segunda espera.
+    const busy = await logsCsv(new Request("http://localhost/api/admin/logs"));
+    assert.equal(busy.status, 429);
+    assert.match(await busy.text(), /descarga de logs en curso/);
+    // Cortada (el navegador cancela), queda libre.
+    await open.body!.cancel();
+    for (let i = 0; i < 4; i++) {
+      const res = await logsCsv(new Request("http://localhost/api/admin/logs"));
+      assert.equal(res.status, 200);
+      await res.text();
+    }
+    const over = await logsCsv(new Request("http://localhost/api/admin/logs"));
+    assert.equal(over.status, 429);
+    assert.match(await over.text(), /Demasiadas descargas de logs/);
+    resetRateLimit(`logs-csv:${admin.id}`);
+
+    await flushLogs();
+    const logged = await db.appLog.findMany({ where: { action: "admin.logsCsv", userId: admin.id }, orderBy: { createdAt: "asc" } });
+    assert.equal(logged.length, 5);
+    assert.equal(JSON.stringify(logged[0]).includes("texto-buscado"), false);
+    assert.equal(JSON.stringify(logged[0]!.details).includes(admin.id), false);
+    assert.deepEqual({ ...(logged[0]!.details as Record<string, unknown>), from: "", to: "" }, { from: "", to: "", level: "warn", category: tag, search: true, reads: false });
+  });
+});
+
+describe("registro de una acción que falla antes de saber su proyecto", () => {
+  test("validación en un proyecto privado: solo los nombres de los campos y el motivo, sin los valores", async () => {
+    const owner = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner });
+    const task = await makeTask(f);
+    await loginAs(owner);
+    expectFail(await updateTask(task.id, { description: "SECRETO-PRIVADO en la descripción", color: "no-es-un-color" as "#64748b" }));
+    await flushLogs();
+    const row = await db.appLog.findFirstOrThrow({ where: { action: "tasks.updateTask", userId: owner.id }, orderBy: { createdAt: "desc" } });
+    assert.equal(row.level, "warn");
+    // Sin proyecto anotado, cualquier administrador vería el registro completo: no debe llevar el texto.
+    assert.equal(row.privateProjectId, null);
+    assert.equal(JSON.stringify(row).includes("SECRETO-PRIVADO"), false);
+    const details = row.details as { args: unknown[]; issues: { path: string; message: string }[] };
+    assert.deepEqual(details.args, ["texto", { description: "texto", color: "texto" }, null]);
+    assert.ok(details.issues.some((i) => i.path === "color"), JSON.stringify(details.issues));
   });
 });

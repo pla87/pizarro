@@ -99,15 +99,31 @@ export function logWhere(f: LogFilters, memberProjectIds: readonly string[], wit
   if (!f.reads) and.push({ NOT: { AND: [{ level: "info" }, { OR: [{ category: "page" }, { action: { in: READ_ACTIONS } }] }] } });
   if (f.userId) and.push({ userId: f.userId });
   if (f.q) {
+    // Prisma pasa el texto tal cual a ILIKE: sin escapar, «%» o «_» casaban con cualquier cosa (y «50%» con «500»).
+    const q = likeLiteral(f.q);
     and.push({
       OR: [
-        { action: { contains: f.q, mode: "insensitive" } },
-        { message: { contains: f.q, mode: "insensitive" } },
-        { path: { contains: f.q, mode: "insensitive" } },
+        { action: { contains: q, mode: "insensitive" } },
+        { message: { contains: q, mode: "insensitive" } },
+        { path: { contains: q, mode: "insensitive" } },
       ],
     });
   }
   return { AND: and };
+}
+
+/** Texto para `contains`/`startsWith` de Prisma que se busca literal: escapa los comodines de LIKE (`%`, `_`) y `\`. */
+function likeLiteral(q: string): string {
+  return q.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
+ * Registros posteriores en el orden de la lista (fecha y id descendentes) a `row`: paginación por clave. El cursor de
+ * Prisma (`cursor` + `skip`) generaba un OR que PostgreSQL no puede usar como límite del índice, así que cada página
+ * recorría todas las anteriores (el CSV de 200 000 filas, cuadrático). Con `createdAt <= t` el índice empieza en el cursor.
+ */
+export function logsAfter(row: { createdAt: Date; id: string }): Prisma.AppLogWhereInput {
+  return { AND: [{ createdAt: { lte: row.createdAt } }, { OR: [{ createdAt: { lt: row.createdAt } }, { id: { lt: row.id } }] }] };
 }
 
 /** Parámetros de búsqueda del filtro actual (sin cursor), para enlaces. */
