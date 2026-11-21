@@ -9,10 +9,10 @@ import { SHARE_ACTION, SHARE_FIELDS } from "./share-core";
  * mismo, el icono va en el color elegido para la instalación (Administración → Ajustes → «Icono de la app») y el nombre
  * bajo el icono es el de la organización: dos instalaciones en el mismo móvil se distinguen.
  */
-export function webManifest(locale: Locale, opts: { orgName?: string; appIcon?: AppIconAccent } = {}): MetadataRoute.Manifest {
+export function webManifest(locale: Locale, opts: { orgName?: string; appIcon?: AppIconAccent; shortName?: string } = {}): MetadataRoute.Manifest {
   const t = makeT(locale);
   const icon = opts.appIcon ?? DEFAULT_APP_ICON;
-  const { name, shortName } = appNames(opts.orgName ?? "");
+  const { name, shortName } = appNames(opts.orgName ?? "", opts.shortName);
   const small = { src: appIconUrl(icon, "icon-192.png"), sizes: "192x192", type: "image/png" };
   return {
     // Identidad fija: la app instalada sigue siendo la misma aunque cambien el nombre o el icono (se actualiza, no se duplica).

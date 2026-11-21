@@ -5,7 +5,7 @@ import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { COMMENT_LIMIT_MAX, COMMENT_LIMIT_MIN, getMaxCommentsPerTask, setMaxCommentsPerTask } from "@/lib/app-settings";
-import { changeAppIcon } from "@/lib/app-icon-save";
+import { changeAppIcon, changeAppShortName } from "@/lib/app-icon-save";
 import { appStateVersion, assertVersion } from "@/lib/edit-conflict";
 import { saveInstanceSettings } from "@/lib/instance";
 import { requireAdmin } from "@/lib/session";
@@ -55,4 +55,9 @@ export async function saveInstallationSettings(input: { orgName: string; locale:
 export async function saveAppIcon(accent: string) {
   // La misma función que usa el guardado con sendBeacon al cerrar la pestaña (/api/admin/app-icon).
   return runAction({ name: "settings.saveAppIcon", args: [accent] }, () => changeAppIcon(accent));
+}
+
+/** Administración → Ajustes → «Icono de la app»: etiqueta propia bajo el icono (hasta 12 caracteres; vacía = automática). */
+export async function saveAppShortName(label: string, since?: string) {
+  return runAction({ name: "settings.saveAppShortName", args: [label] }, () => changeAppShortName(label, since));
 }

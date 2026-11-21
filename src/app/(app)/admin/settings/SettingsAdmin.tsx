@@ -22,8 +22,10 @@ const MIN = 1;
 const MAX = 1000;
 
 /** «Ajustes»: la instalación y los parámetros generales de la aplicación (las integraciones van en su pestaña). */
-export function SettingsAdmin({ maxComments, storage, installation, appIcon, versions }: {
+export function SettingsAdmin({ maxComments, storage, installation, appIcon, appShortName, versions }: {
   maxComments: number; storage: StorageAdminView; installation: InstallationView; appIcon: AppIconAccent;
+  /** Etiqueta propia bajo el icono de la app y su versión. */
+  appShortName?: { value: string; version: string };
   /** Versión de lo guardado en cada formulario al abrir la página (edit-conflict.ts). */
   versions: { installation: string; comments: string; storage: string };
 }) {
@@ -75,7 +77,7 @@ export function SettingsAdmin({ maxComments, storage, installation, appIcon, ver
     <div className="space-y-4">
       <MovedSectionRedirect />
       <InstallationSettingsSection view={installation} version={versions.installation} />
-      <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} />
+      <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} shortName={appShortName?.value} shortNameVersion={appShortName?.version} />
       <section className="card space-y-3 p-5">
         <div>
           <div className="flex items-center gap-1">

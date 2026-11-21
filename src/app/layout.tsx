@@ -8,13 +8,13 @@ import { getLocale, getT } from "@/i18n/server";
 import { appTimeZone } from "@/lib/format";
 import { themeColors } from "@/lib/theme-color";
 import { getInstanceSettings } from "@/lib/instance";
-import { getAppIcon } from "@/lib/app-icon";
+import { getAppIcon, getAppShortName } from "@/lib/app-icon";
 import { appIconUrl, appNames } from "@/lib/app-icon-core";
 
 export async function generateMetadata(): Promise<Metadata> {
   // Nombre de la organización elegido en el asistente de primer arranque (si no, solo «Pizarro»).
-  const [{ orgName }, appIcon, t] = await Promise.all([getInstanceSettings(), getAppIcon(), getT()]);
-  const { name, shortName } = appNames(orgName);
+  const [{ orgName }, appIcon, customShort, t] = await Promise.all([getInstanceSettings(), getAppIcon(), getAppShortName(), getT()]);
+  const { name, shortName } = appNames(orgName, customShort);
   return {
     title: { default: name, template: `%s · ${name}` },
     // La misma frase que el manifiesto de la app (web-manifest.ts), en el idioma de la petición (sin sesión, el de la instalación).
