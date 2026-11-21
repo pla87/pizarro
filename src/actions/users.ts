@@ -112,7 +112,9 @@ export async function inviteToProject(projectId: string, email: string) {
     const project = await findManageableProject(admin, projectId);
     if (!rateLimit(`project-invite:${admin.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const address = v.email.parse(email);
-    if (await db.user.count({ where: { email: address } })) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
+    const existing = await db.user.findUnique({ where: { email: address }, select: { active: true } });
+    if (existing && !existing.active) throw new AppError("Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.");
+    if (existing) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
     const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER" }, null, project.id);
     const token = await issueAuthToken(created.id, "INVITE", { projectId: project.id });
     const link = `${appUrl()}/reset/${token}`;
@@ -143,6 +145,21 @@ async function invitePending(userId: string): Promise<boolean> {
   return !!user && invitePendingFrom(user);
 }
 
+/**
+ * Proyecto al que lleva una invitación reenviada: el de la última invitación (si la persona aún está en él) o, si ya no
+ * queda ninguna (caducó y el mantenimiento la borró), su único proyecto. Con varios, o sin ninguno, la invitación genérica.
+ */
+async function inviteProject(userId: string): Promise<{ id: string; name: string } | null> {
+  const pending = await db.authToken.findFirst({ where: { userId, purpose: "INVITE" }, orderBy: { createdAt: "desc" }, select: { data: true } });
+  if (pending) {
+    const projectId = inviteProjectId(pending.data);
+    const member = projectId && (await db.projectMember.findFirst({ where: { projectId, userId }, select: { project: { select: { id: true, name: true } } } }));
+    return member ? member.project : null;
+  }
+  const members = await db.projectMember.findMany({ where: { userId }, select: { project: { select: { id: true, name: true } } }, take: 2 });
+  return members.length === 1 ? members[0]!.project : null;
+}
+
 /** «Reenviar invitación»: enlace nuevo (72 h) por email; el anterior deja de valer. Solo para quien aún no ha entrado. */
 export async function resendInvite(userId: string) {
   return runAction({ name: "users.resendInvite", args: [userId] }, async () => {
@@ -153,14 +170,13 @@ export async function resendInvite(userId: string) {
     if (!user) throw notFound();
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
-    // Una invitación a un proyecto sigue llevando a su tablero (si la persona aún está en él).
-    const pending = await db.authToken.findFirst({ where: { userId: user.id, purpose: "INVITE" }, orderBy: { createdAt: "desc" }, select: { data: true } });
-    const projectId = inviteProjectId(pending?.data);
-    const keep = projectId && (await db.projectMember.count({ where: { projectId, userId: user.id } })) ? { projectId } : undefined;
+    const project = await inviteProject(user.id);
     try {
       // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
-      const token = await issueAuthToken(user.id, "INVITE", keep);
-      await sendInviteMail(user, `${appUrl()}/reset/${token}`, admin.name);
+      const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
+      const link = `${appUrl()}/reset/${token}`;
+      if (project) await sendProjectInviteMail(user, link, admin.name, project.name);
+      else await sendInviteMail(user, link, admin.name);
     } catch (err) {
       logMailError("[users] reenviar invitación", err);
       throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.");

@@ -9,7 +9,7 @@ import { after, before, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { afterDone, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { addProjectMember, removeProjectMember, setProjectVisibility } from "../../src/actions/projects";
-import { findUsableToken } from "../../src/lib/auth-token";
+import { findUsableToken, purgeExpiredTokens } from "../../src/lib/auth-token";
 import { workingProjectsWhere } from "../../src/lib/access";
 import { outsideListProject } from "../../src/lib/project-visit";
 import type { CurrentUser } from "../../src/lib/session";
@@ -166,6 +166,29 @@ describe("aviso por email al añadir a alguien a un proyecto", () => {
     assert.match(log?.message ?? "", /Añadió a «Berta» al proyecto .* \(avisado por email\)/);
   });
 
+  test("añadir, quitar y volver a añadir: un solo email al día por quien añade, persona y proyecto (el alta se hace igual)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const other = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    const f = await makeProject({ members: [] });
+    const g = await makeProject({ members: [] });
+    await loginAs(admin);
+    assert.equal(expectOk(await addProjectMember(f.project.id, target.id)).emailed, true);
+    for (let i = 0; i < 3; i++) {
+      expectOk(await removeProjectMember(f.project.id, target.id));
+      assert.equal(await isMember(f.project.id, target.id), false);
+      assert.equal(expectOk(await addProjectMember(f.project.id, target.id)).emailed, false, `vuelta ${i + 1}: sin email`);
+      assert.equal(await isMember(f.project.id, target.id), true, `vuelta ${i + 1}: añadida igual`);
+    }
+    assert.equal((await mailsTo(target.email)).length, 1);
+    // Otro proyecto, u otra persona que la añade, sí avisan.
+    assert.equal(expectOk(await addProjectMember(g.project.id, target.id)).emailed, true);
+    await loginAs(other);
+    expectOk(await removeProjectMember(f.project.id, target.id));
+    assert.equal(expectOk(await addProjectMember(f.project.id, target.id)).emailed, true);
+    assert.equal((await mailsTo(target.email)).length, 3);
+  });
+
   test("sin email configurado se añade igual y no se envía nada", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();
@@ -250,6 +273,55 @@ describe("Invitar por email desde un proyecto", () => {
     const mails = await mailsTo(to);
     assert.equal(mails.length, 2);
     assert.deepEqual((await findUsableToken(tokenOf(mails[1]!.text), ["INVITE"]))?.data, { projectId: f.project.id });
+  });
+
+  test("«Reenviar invitación» cuando ya caducó y el mantenimiento la borró: su único proyecto, con el email de la invitación al proyecto", async () => {
+    const admin = await makeUser({ role: "ADMIN", name: "Ana Admin" });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = address("caducada");
+    expectOk(await inviteToProject(f.project.id, to));
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    await db.authToken.updateMany({ where: { userId: user.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await purgeExpiredTokens();
+    assert.equal(await db.authToken.count({ where: { userId: user.id } }), 0, "la invitación caducada ya no está");
+    expectOk(await resendInvite(user.id));
+    const mails = await mailsTo(to);
+    assert.equal(mails.length, 2);
+    assert.equal(mails[1]!.subject, `Ana Admin te ha invitado al proyecto «${f.project.name}» en Pizarro`);
+    assert.deepEqual((await findUsableToken(tokenOf(mails[1]!.text), ["INVITE"]))?.data, { projectId: f.project.id });
+  });
+
+  test("«Reenviar invitación» sin invitación pendiente y en varios proyectos (o en ninguno): la invitación genérica", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    const g = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = address("varios");
+    expectOk(await inviteToProject(f.project.id, to));
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    await db.projectMember.create({ data: { projectId: g.project.id, userId: user.id } });
+    await db.authToken.deleteMany({ where: { userId: user.id } });
+    expectOk(await resendInvite(user.id));
+    let mails = await mailsTo(to);
+    assert.equal(mails[1]!.subject, "Te han invitado a Pizarro");
+    assert.equal((await findUsableToken(tokenOf(mails[1]!.text), ["INVITE"]))?.data ?? null, null);
+    // Sin ningún proyecto, igual.
+    await db.projectMember.deleteMany({ where: { userId: user.id } });
+    await db.authToken.deleteMany({ where: { userId: user.id } });
+    expectOk(await resendInvite(user.id));
+    mails = await mailsTo(to);
+    assert.equal(mails[2]!.subject, "Te han invitado a Pizarro");
+  });
+
+  test("invitar el email de una cuenta desactivada: dice que hay que activarla (no que se añada con «Añadir miembro…»)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const off = await makeUser();
+    await db.user.update({ where: { id: off.id }, data: { active: false } });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    expectFail(await inviteToProject(f.project.id, off.email.toUpperCase()), /^Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios\.$/);
+    assert.equal(await isMember(f.project.id, off.id), false);
   });
 
   test("solo administradores que gestionan el proyecto; un email que ya tiene cuenta se rechaza", async () => {

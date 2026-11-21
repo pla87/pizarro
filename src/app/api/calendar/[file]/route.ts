@@ -103,7 +103,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
   // Aviso de uso: como mucho una escritura por hora y enlace (y, en este proceso, ni siquiera la consulta entre medias).
   // Por hash del token: al regenerar el enlace (lastUsedAt vuelve a null) el nuevo se anota en su primera consulta.
   if (usedLogDue(feed.tokenHash)) {
-    void db.calendarFeed.updateMany({ where: { id: feed.feedId, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: new Date(Date.now() - USED_EVERY_MS) } }] }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
+    void db.calendarFeed.updateMany({ where: { id: feed.feedId, tokenHash: feed.tokenHash, OR: [{ lastUsedAt: null }, { lastUsedAt: { lt: new Date(Date.now() - USED_EVERY_MS) } }] }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
   }
   // Muestreado: la primera consulta de cada enlace desde cada IP y luego como mucho una cada 6 h (los clientes de
   // calendario consultan cada pocos minutos). `skipped`: consultas correctas no anotadas desde la anterior.

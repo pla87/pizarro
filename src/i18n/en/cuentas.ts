@@ -330,4 +330,6 @@ export const cuentas: Record<string, string> = {
   "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
   // Editar un usuario: otro administrador lo ha cambiado mientras tanto
   "Los datos han cambiado mientras tanto: recarga la página.": "The data has changed in the meantime: reload the page.",
+  // Invitar por email a un proyecto: el email es de una cuenta desactivada
+  "Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.": "There is a deactivated account with that email: activate it in Administration → Users.",
 };
