@@ -133,6 +133,10 @@ describe("ajustes de la instalación", () => {
     expectOk(await saveAppShortName("   ", saved.version));
     assert.equal(await db.appState.findUnique({ where: { key: APP_SHORT_NAME_KEY } }), null);
     assert.equal(await getAppShortName(), "");
+    // Un NUL (que PostgreSQL no admite en un texto) o un control de dirección se quitan: se guarda sin error.
+    const clean = expectOk(await saveAppShortName("Ca\u0000sa‮", await appStateVersion([APP_SHORT_NAME_KEY])));
+    assert.equal(clean.shortName, "Casa");
+    assert.equal(await getAppShortName(), "Casa");
     expectFail(await saveAppShortName(123 as unknown as string), /Datos no válidos/);
     await loginAs(await makeUser());
     expectFail(await saveAppShortName("Miembro"), FORBIDDEN);

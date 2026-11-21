@@ -1,5 +1,6 @@
 // Icono de la app (pestaña, pantalla de inicio del móvil y app instalada) con el color de un tema de color. Parte pura:
 // sin base de datos ni sharp, para poder usarla en el cliente (vista previa en Administración) y en las pruebas.
+import { graphemes } from "./graphemes";
 
 /** Temas de color (los de «Mi perfil → Tema de color», en minúsculas como data-accent). */
 export const APP_ICON_ACCENTS = ["blue", "forest", "sienna", "mustard", "mono", "eva"] as const;
@@ -95,9 +96,35 @@ export function appNames(orgName: string, customShortName: string = ""): { name:
 /** Largo máximo del nombre bajo el icono: el móvil lo corta (o lo escribe en dos líneas) a partir de unos 12 caracteres. */
 export const SHORT_NAME_MAX = 12;
 
-/** Etiqueta propia escrita por el administrador: sin espacios de más y sin pasar del máximo (vacía = la automática). */
+// Caracteres de control (NUL incluido: PostgreSQL no lo admite en un texto y el guardado fallaba con un error genérico)
+// y de control de la dirección del texto (que en el nombre bajo el icono podrían darle la vuelta).
+const CONTROL_CHARS = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/gu;
+
+/** La etiqueta sin espacios de más (los saltos de línea y tabuladores cuentan como espacio) ni caracteres de control. */
+function normalizeShortName(raw: string): string {
+  return raw.replace(/\s+/g, " ").replace(CONTROL_CHARS, "").replace(/ {2,}/g, " ").trim();
+}
+
+/** Caracteres visibles de la etiqueta tal como se guardaría sin recortar (lo que cuenta el contador de Ajustes). */
+export function appShortNameLength(raw: string): number {
+  let n = 0;
+  for (const g of graphemes(normalizeShortName(raw))) n += g ? 1 : 0;
+  return n;
+}
+
+/**
+ * Etiqueta propia escrita por el administrador: sin espacios de más ni caracteres de control y sin pasar del máximo
+ * (vacía = la automática). Se recorta por caracteres visibles: antes, por puntos de código, una familia «👨‍👩‍👧» se partía
+ * y quedaba un emoji roto en el manifiesto y en apple-mobile-web-app-title.
+ */
 export function cleanAppShortName(raw: string): string {
-  return Array.from(raw.trim().replace(/\s+/g, " ")).slice(0, SHORT_NAME_MAX).join("").trimEnd();
+  let out = "";
+  let n = 0;
+  for (const g of graphemes(normalizeShortName(raw))) {
+    if (++n > SHORT_NAME_MAX) break;
+    out += g;
+  }
+  return out.trimEnd();
 }
 
 /** Cómo sale el nombre bajo el icono a partir del de la organización (para explicarlo en Ajustes). */

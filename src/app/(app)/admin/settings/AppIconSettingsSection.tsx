@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { useActionTransition } from "@/components/useActionTransition";
 import { useT } from "@/i18n/client";
-import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, cleanAppShortName, SHORT_NAME_MAX, shortNameSource, type AppIconAccent } from "@/lib/app-icon-core";
+import { APP_ICON_ACCENTS, APP_ICON_LABEL, appIconUrl, appNames, appShortNameLength, cleanAppShortName, SHORT_NAME_MAX, shortNameSource, type AppIconAccent } from "@/lib/app-icon-core";
 import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -224,10 +224,10 @@ export function AppIconSettingsSection({ initial, orgName, shortName: initialSho
           <button type="button" className="btn-primary py-1.5" onClick={saveShort} disabled={shortPending || !shortDirty}>
             {shortPending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
           </button>
-          <span className="text-xs text-slate-400">{Array.from(shortText.trim()).length} / {SHORT_NAME_MAX}</span>
+          <span className="text-xs text-slate-400">{appShortNameLength(shortText)} / {SHORT_NAME_MAX}</span>
         </div>
         <p className="text-xs text-slate-500">{t("Hasta {max} caracteres, para que el móvil no lo corte. Vacío, se usa el nombre de la organización (recortado si no cabe).", { max: SHORT_NAME_MAX })}</p>
-        {Array.from(shortText.trim()).length > SHORT_NAME_MAX && <p className="text-xs text-amber-700 dark:text-amber-300">{t("Se guardará «{name}».", { name: cleanAppShortName(shortText) })}</p>}
+        {appShortNameLength(shortText) > SHORT_NAME_MAX && <p className="text-xs text-amber-700 dark:text-amber-300">{t("Se guardará «{name}».", { name: cleanAppShortName(shortText) })}</p>}
         {shortConflict && <EditConflictNotice draft={shortText} />}
       </div>
       <p className="text-xs text-slate-500">
