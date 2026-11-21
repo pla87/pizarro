@@ -70,6 +70,7 @@
       "src/components/board/NewTaskDialog.tsx",
       "src/components/board/TaskDialog.tsx",
       "src/components/board/upload.ts",
+      "src/lib/image-shrink.ts",
       "src/components/board/useCardFileDrop.ts",
       "src/components/board/useFileZone.ts",
       "src/lib/paste-table.ts",
@@ -231,6 +232,7 @@
       "src/lib/calendar*.ts",
       "src/lib/ics.ts",
       "src/lib/recurrence*.ts",
+      "src/lib/deliverable-progress*.ts",
       "src/lib/dates.ts",
       "src/actions/calendar-feed.ts",
       "src/app/(app)/calendar/**",
@@ -320,6 +322,7 @@
     ],
     "documentacion-formatos-e2e": [
       "src/components/docs/**",
+      "src/lib/image-shrink.ts",
       "src/components/ui/LazyMarkdown.tsx",
       "src/components/board/ReleaseDialog.tsx",
       "src/components/board/ReleaseRichEditor.tsx",
