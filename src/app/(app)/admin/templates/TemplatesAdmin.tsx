@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, Check, Copy, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
 import { ColorPicker } from "@/components/ui/ColorPicker";
@@ -111,8 +111,16 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
   const toast = useToast();
   const confirm = useConfirm();
   const [pending, start] = useActionTransition();
-  // `version`: la de la plantilla que se abrió (para no pisar el cambio de otro administrador); `conflict`: ya pasó.
-  const [editing, setEditing] = useState<{ id: string | null; draft: Draft; version?: string; conflict?: boolean } | null>(null);
+  // `version`: la de la plantilla que se abrió (para no pisar el cambio de otro administrador); `conflict`: cuántas veces
+  // se ha intentado guardar y otra persona la había cambiado (cada intento vuelve a llevar el aviso a la vista).
+  const [editing, setEditing] = useState<{ id: string | null; draft: Draft; version?: string; conflict?: number } | null>(null);
+  // El aviso va arriba del cuerpo del modal, que tiene scroll propio, y «Guardar» está en el pie fijo: quien guarda tras
+  // bajar hasta el final no lo veía. Se desplaza a la vista al aparecer.
+  const conflictRef = useRef<HTMLDivElement>(null);
+  const conflictCount = editing?.conflict ?? 0;
+  useEffect(() => {
+    if (conflictCount) conflictRef.current?.scrollIntoView({ block: "nearest" });
+  }, [conflictCount]);
   const [deleting, setDeleting] = useState<TemplateDto | null>(null);
   const [picking, setPicking] = useState(false);
   const [sourceId, setSourceId] = useState("");
@@ -145,7 +153,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
         releaseTemplates: withoutKeys(d.releaseTemplates),
       };
       const res = await saveTemplate(body, editing.id, editing.version);
-      if (isEditConflict(res)) return setEditing((e) => (e ? { ...e, conflict: true } : e));
+      if (isEditConflict(res)) return setEditing((e) => (e ? { ...e, conflict: (e.conflict ?? 0) + 1 } : e));
       if (!res.ok) return toast(res.error, "error");
       toast(editing.id ? t("Plantilla actualizada") : t("Plantilla creada"));
       setEditing(null);
@@ -279,7 +287,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
           }
         >
           {/* Lo editado sigue en el formulario; «Recargar» lo cierra y trae la lista con lo que guardó la otra persona. */}
-          {editing.conflict && <div className="mb-4"><EditConflictNotice onReload={() => { setEditing(null); router.refresh(); }} /></div>}
+          {!!editing.conflict && <div ref={conflictRef} className="mb-4 scroll-mt-2"><EditConflictNotice onReload={() => { setEditing(null); router.refresh(); }} /></div>}
           <form id="template-form" className="space-y-6" onSubmit={(e) => { e.preventDefault(); save(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
