@@ -5,12 +5,14 @@ import { useState, useTransition } from "react";
 import { saveLegalIdentity, saveLegalPage } from "@/actions/legal";
 import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { DescriptionField } from "@/components/ui/DescriptionField";
+import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useT } from "@/i18n/client";
 import type { LegalSettings } from "@/lib/legal";
 import { defaultLegalMarkdown, fillLegalPlaceholders, LEGAL_MAX, LEGAL_RESPONSIBLE_MAX, pickLegalText, type LegalKind } from "@/lib/legal-core";
+import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
 import type { EditorModeValue } from "@/lib/types";
 
@@ -25,13 +27,19 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
   const [savedId, setSavedId] = useState({ responsible: settings.responsible, email: settings.email });
   const [responsible, setResponsible] = useState(settings.responsible);
   const [email, setEmail] = useState(settings.email);
+  // Versión de lo guardado al abrir (o al guardar aquí): si otra persona lo cambia entretanto, no se pisa.
+  const [idVersion, setIdVersion] = useState(settings.versions.contact);
+  const [idConflict, setIdConflict] = useState(false);
   const idDirty = responsible.trim() !== savedId.responsible || email.trim() !== savedId.email;
 
   const saveId = () =>
     start(async () => {
-      const res = await saveLegalIdentity({ responsible, email }).catch((e) => actionThrowResult(e, t));
+      const res = await saveLegalIdentity({ responsible, email, since: idVersion }).catch((e) => actionThrowResult(e, t));
+      if (isEditConflict(res)) return setIdConflict(true);
       if (!res.ok) return toast(res.error, "error");
-      setSavedId(res.data);
+      setIdConflict(false);
+      setIdVersion(res.data.version);
+      setSavedId({ responsible: res.data.responsible, email: res.data.email });
       setResponsible(res.data.responsible);
       setEmail(res.data.email);
       toast(t("Guardado."), "success");
@@ -62,6 +70,7 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
           </label>
         </div>
         <p className="text-xs text-slate-500">{t("Sin valor, ambos se muestran como «el administrador de esta instalación».")}</p>
+        {idConflict && <EditConflictNotice draft={[responsible, email].filter(Boolean).join("\n")} />}
         <button className="btn-primary w-fit py-1.5" onClick={saveId} disabled={pending || !idDirty}>
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}
         </button>
@@ -79,6 +88,8 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(settings.texts[kind]);
   const [updatedAt, setUpdatedAt] = useState(settings.updatedAt[kind]);
+  const [version, setVersion] = useState(settings.versions[kind]);
+  const [conflict, setConflict] = useState(false);
   const [text, setText] = useState(settings.texts[kind]);
   const [lang, setLang] = useState<Lang>("es");
   const [preview, setPreview] = useState(false);
@@ -90,11 +101,14 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
 
   const save = () =>
     start(async () => {
-      const res = await saveLegalPage({ kind, es: text.es, en: text.en }).catch((e) => actionThrowResult(e, t));
+      const res = await saveLegalPage({ kind, es: text.es, en: text.en, since: version }).catch((e) => actionThrowResult(e, t));
+      if (isEditConflict(res)) return setConflict(true);
       if (!res.ok) return toast(res.error, "error");
+      setConflict(false);
       setSaved(res.data.texts);
       setText(res.data.texts);
       setUpdatedAt(res.data.updatedAt);
+      setVersion(res.data.version);
       toast(t("Guardado."), "success");
     });
 
@@ -142,6 +156,8 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
           />
         </div>
       )}
+      {/* Lo que se copia: los dos idiomas, cada uno con su título, para no perder lo escrito en la pestaña que no se ve. */}
+      {conflict && <EditConflictNotice draft={tabs.filter(([l]) => text[l].trim()).map(([l, label]) => `## ${label}\n\n${text[l]}`).join("\n\n")} />}
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty}>
           {pending && <Loader2 size={15} className="animate-spin" />} {t("Guardar")}

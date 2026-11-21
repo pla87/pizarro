@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import sharp from "sharp";
-import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, parseAppIcon, shortAppName } from "../src/lib/app-icon-core";
+import { APP_ICON_ACCENTS, APP_ICON_FILES, APP_ICON_REV, appIconColor, appIconSvg, appIconUrl, appNames, cleanAppShortName, parseAppIcon, shortAppName, shortNameSource } from "../src/lib/app-icon-core";
 import { webManifest } from "../src/lib/web-manifest";
 import { rootIconEtag, rootIconResponse } from "../src/lib/app-icon-render";
 import { ifNoneMatchHas } from "../src/lib/etag";
@@ -117,6 +117,22 @@ test("nombre corto bajo el icono: cabe en 12 caracteres (entero, primera palabra
   assert.equal(shortAppName("  Mi   Casa  "), "Mi Casa");
   assert.deepEqual(appNames("Fundación Ejemplo de Ayuda"), { name: "Fundación Ejemplo de Ayuda · Pizarro", shortName: "Fundación" });
   assert.equal(webManifest("es", { orgName: "Acme Corporation Internacional" }).short_name, "Acme");
+});
+
+test("nombre bajo el icono: por qué sale el que sale y etiqueta propia (antes «Prueba» sin decir que se había recortado)", () => {
+  assert.equal(shortNameSource("Prueba de instalación"), "firstWord");
+  assert.equal(appNames("Prueba de instalación").shortName, "Prueba");
+  assert.equal(shortNameSource("Construcciones Hermanos García"), "cut");
+  assert.equal(shortNameSource("Acme"), "whole");
+  assert.equal(shortNameSource(""), "none");
+  // La etiqueta propia manda (y sin pasar de 12 caracteres); vacía o solo espacios, la automática.
+  assert.deepEqual(appNames("Prueba de instalación", " Pruebas  IT "), { name: "Prueba de instalación · Pizarro", shortName: "Pruebas IT" });
+  assert.equal(shortNameSource("Prueba de instalación", "Pruebas IT"), "custom");
+  assert.equal(appNames("Prueba de instalación", "   ").shortName, "Prueba");
+  assert.equal(cleanAppShortName("Una etiqueta demasiado larga"), "Una etiqueta");
+  assert.equal(Array.from(cleanAppShortName("🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠🏠")).length, 12);
+  assert.equal(webManifest("es", { orgName: "Prueba de instalación", shortName: "Pruebas IT" }).short_name, "Pruebas IT");
+  assert.equal(webManifest("es", { orgName: "Prueba de instalación", shortName: "Pruebas IT" }).name, "Prueba de instalación · Pizarro");
 });
 
 test("iconos de la raíz: del color elegido, con caché corta (no inmutables) y .ico válido", async () => {

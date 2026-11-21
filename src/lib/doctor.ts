@@ -9,6 +9,7 @@ import { db } from "./db";
 import { INSTANCE_NOTICE_KEY, instanceLockStatus, otherInstanceNotice, parseStoredNotice } from "./instance-lock-core";
 import { configFlags, configWarnings, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
 import { checkUploads, evaluateHealth, minFreeBytes } from "./health";
+import { maxUsersConfig } from "./limits";
 import { backupsDir, uploadDir } from "./upload-dir";
 
 // Diagnóstico para soporte: estado técnico de la instalación SIN datos personales ni secretos. Lo usan la descarga de
@@ -227,6 +228,9 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   report.sessions = await section(async () => ({
     active: await db.session.count({ where: { expiresAt: { gt: now } } }),
     activeUsers: await db.user.count({ where: { active: true } }),
+    // El tope de usuarios activos y de dónde sale: «env» (MAX_USERS), «default» (sin la variable) o «invalid» (no vale).
+    maxUsers: maxUsersConfig().max,
+    maxUsersSource: maxUsersConfig().source,
     admins: await db.user.count({ where: { active: true, role: "ADMIN" } }),
   }), ctx);
 

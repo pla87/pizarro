@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { MAX_USERS } from "@/lib/limits";
+import { DEFAULT_MAX_USERS, MAX_USERS, MAX_USERS_SOURCE } from "@/lib/limits";
 import { googleEnabled } from "@/lib/google";
 import { emailEnabled } from "@/lib/mail";
 import { getInstanceSettings } from "@/lib/instance";
@@ -35,5 +35,5 @@ export default async function UsersPage() {
     invitePending: invitePendingFrom({ mustChangePassword: u.mustChangePassword, googleSub, _count }),
   }));
   const { locale } = await getInstanceSettings();
-  return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} emailAvailable={emailEnabled()} noRecovery={!emailEnabled() && !googleEnabled()} defaultLocale={locale === "en" ? "EN" : "ES"} />;
+  return <UsersAdmin users={rows} meId={me.id} maxUsers={MAX_USERS} maxUsersSource={MAX_USERS_SOURCE} defaultMaxUsers={DEFAULT_MAX_USERS} emailAvailable={emailEnabled()} noRecovery={!emailEnabled() && !googleEnabled()} defaultLocale={locale === "en" ? "EN" : "ES"} />;
 }

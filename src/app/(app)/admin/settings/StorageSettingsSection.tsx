@@ -5,16 +5,18 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { saveStorageQuotas } from "@/actions/storage";
 import { cn } from "@/components/ui/cn";
+import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatQuotaMb, formatSize } from "@/lib/format-size";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB, quotaMbValid } from "@/lib/quota";
+import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
 import type { StorageAdminView } from "@/lib/storage-stats";
 
 /** Administración → Ajustes → «Almacenamiento»: dónde están los ficheros, cuánto ocupan y las cuotas generales. */
-export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
+export function StorageSettingsSection({ view, version: initialVersion }: { view: StorageAdminView; version: string }) {
   const t = useT();
   const locale = useIntlLocale();
   const toast = useToast();
@@ -27,6 +29,8 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
   const [totalText, setTotalText] = useState(view.settings.total.mode === "custom" ? String(view.settings.total.mb) : "");
   // Lo guardado: sin cambios, «Guardar» no haría nada y queda desactivado.
   const [saved, setSaved] = useState({ projectUnlimited, projectText: projectText.trim(), totalText: totalText.trim() });
+  const [version, setVersion] = useState(initialVersion);
+  const [conflict, setConflict] = useState(false);
   const dirty = projectUnlimited !== saved.projectUnlimited || (!projectUnlimited && projectText.trim() !== saved.projectText) || totalText.trim() !== saved.totalText;
 
   const projectNum = Number(projectText);
@@ -39,8 +43,11 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
     start(async () => {
       const project = projectUnlimited ? { mode: "unlimited" as const } : projectText.trim() === "" ? { mode: "default" as const } : { mode: "custom" as const, mb: projectNum };
       const total = totalText.trim() === "" ? { mode: "default" as const } : { mode: "custom" as const, mb: totalNum };
-      const res = await saveStorageQuotas({ project, total }).catch((e) => actionThrowResult(e, t));
+      const res = await saveStorageQuotas({ project, total }, version).catch((e) => actionThrowResult(e, t));
+      if (isEditConflict(res)) return setConflict(true);
       if (!res.ok) return toast(res.error, "error");
+      setConflict(false);
+      setVersion(res.data.version);
       setSaved({ projectUnlimited, projectText: projectText.trim(), totalText: totalText.trim() });
       toast(t("Ajuste guardado."), "success");
     });
@@ -156,6 +163,7 @@ export function StorageSettingsSection({ view }: { view: StorageAdminView }) {
             </>
           )}
         </div>
+        {conflict && <EditConflictNotice draft={[projectUnlimited ? t("Sin límite") : projectText.trim(), totalText.trim()].join("\n")} />}
         {(view.env.project === null || view.env.total === null) && (
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !projectValid || !totalValid}>

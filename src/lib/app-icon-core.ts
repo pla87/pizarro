@@ -84,13 +84,30 @@ export const appIconUrl = (accent: AppIconAccent, file: AppIconFile): string => 
  * Nombre de la app bajo el icono (y en la lista de apps): el de la organización de la instalación si lo hay, así dos
  * instalaciones en el mismo móvil no se llaman igual. El nombre largo lleva siempre «Pizarro».
  */
-export function appNames(orgName: string): { name: string; shortName: string } {
+export function appNames(orgName: string, customShortName: string = ""): { name: string; shortName: string } {
   const org = orgName.trim();
-  return org ? { name: `${org} · Pizarro`, shortName: shortAppName(org) } : { name: "Pizarro", shortName: "Pizarro" };
+  // Etiqueta propia (Administración → Ajustes → «Icono de la app»): manda sobre el recorte automático.
+  const custom = cleanAppShortName(customShortName);
+  const names = org ? { name: `${org} · Pizarro`, shortName: shortAppName(org) } : { name: "Pizarro", shortName: "Pizarro" };
+  return custom ? { ...names, shortName: custom } : names;
 }
 
 /** Largo máximo del nombre bajo el icono: el móvil lo corta (o lo escribe en dos líneas) a partir de unos 12 caracteres. */
-const SHORT_NAME_MAX = 12;
+export const SHORT_NAME_MAX = 12;
+
+/** Etiqueta propia escrita por el administrador: sin espacios de más y sin pasar del máximo (vacía = la automática). */
+export function cleanAppShortName(raw: string): string {
+  return Array.from(raw.trim().replace(/\s+/g, " ")).slice(0, SHORT_NAME_MAX).join("").trimEnd();
+}
+
+/** Cómo sale el nombre bajo el icono a partir del de la organización (para explicarlo en Ajustes). */
+export function shortNameSource(orgName: string, customShortName: string = ""): "custom" | "none" | "whole" | "firstWord" | "cut" {
+  if (cleanAppShortName(customShortName)) return "custom";
+  const org = orgName.trim().replace(/\s+/g, " ");
+  if (!org) return "none";
+  const short = shortAppName(org);
+  return short === org ? "whole" : short.endsWith("…") ? "cut" : "firstWord";
+}
 
 /** Nombre corto: el entero si cabe; si no, la primera palabra si cabe y tiene 4 o más letras o cifras (no «La» ni un emoji); si no, un recorte con «…» (sin pasar del máximo). */
 export function shortAppName(orgName: string, max: number = SHORT_NAME_MAX): string {

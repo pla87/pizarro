@@ -57,7 +57,6 @@ export const settings: Record<string, string> = {
   "Algo ha fallado": "Something went wrong",
   "Inténtalo de nuevo. El error ha quedado registrado en los logs. Si se repite, avisa a quien administra Pizarro.": "Try again. The error has been recorded in the logs. If it keeps happening, tell whoever runs Pizarro.",
   "Todavía no tienes acceso a ningún proyecto.": "You don't have access to any project yet.",
-  "Crea uno desde el selector de proyectos del menú.": "Create one from the project selector in the menu.",
   "Aún no hay proyectos.": "No projects yet.",
   "No encontrado": "Not found",
   "La página no existe o no tienes acceso.": "The page doesn't exist or you don't have access.",

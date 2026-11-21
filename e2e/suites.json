@@ -528,6 +528,8 @@
       "src/lib/app-url.ts",
       "src/lib/html-no-transform.ts",
       "src/app/(app)/admin/InstanceNotice.tsx",
+      "src/lib/time-zones.ts",
+      "src/components/ui/TimeZoneField.tsx",
       "src/lib/builtin-templates*.ts",
       "src/lib/changelog*.ts",
       "src/app/(app)/admin/settings/**",

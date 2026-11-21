@@ -16,6 +16,7 @@ import { copyText } from "@/components/ui/clipboard";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
 import { actionThrowResult } from "@/lib/stale-action";
+import type { MaxUsersSource } from "@/lib/limits";
 import { EmailSafe } from "@/components/ui/EmailSafe";
 
 type Role = "ADMIN" | "MEMBER";
@@ -37,7 +38,12 @@ interface UserRow {
   invitePending: boolean;
 }
 
-export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, defaultLocale = "ES" }: { users: UserRow[]; meId: string; maxUsers: number; emailAvailable: boolean; noRecovery?: boolean; defaultLocale?: UserLocale }) {
+export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", defaultMaxUsers = 10, emailAvailable, noRecovery, defaultLocale = "ES" }: {
+  users: UserRow[]; meId: string; maxUsers: number;
+  /** De dónde sale el máximo (la variable MAX_USERS del servidor, su valor por defecto o el defecto porque no vale). */
+  maxUsersSource?: MaxUsersSource; defaultMaxUsers?: number;
+  emailAvailable: boolean; noRecovery?: boolean; defaultLocale?: UserLocale;
+}) {
   const t = useT();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
@@ -90,7 +96,18 @@ export function UsersAdmin({ users, meId, maxUsers, emailAvailable, noRecovery, 
           <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
           <p className="flex items-center gap-1 text-sm text-slate-500">
             {t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })}
-            <InfoTip topic={t("Usuarios")}>{t("No hay registro público: solo un administrador da de alta usuarios.")}</InfoTip>
+            {/* De dónde sale el máximo y cómo ampliarlo (antes solo decía que no hay registro público). */}
+            <InfoTip topic={t("Usuarios")}>
+              <span className="block">
+                {maxUsersSource === "env"
+                  ? t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })
+                  : maxUsersSource === "invalid"
+                    ? t("La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.", { max: maxUsers })
+                    : t("El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.", { max: defaultMaxUsers })}{" "}
+                {t("Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}
+              </span>
+              <span className="mt-1 block">{t("No hay registro público: solo un administrador da de alta usuarios.")}</span>
+            </InfoTip>
           </p>
         </div>
         <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers} title={activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
