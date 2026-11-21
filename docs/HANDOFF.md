@@ -308,6 +308,14 @@ Guardas que conviene conocer:
 - Agentes en paralelo: cada uno con su base (`pz_<nombre>`), su puerto y su carpeta de logs (`OUT=` en
   `scripts/e2e-all.sh`; por defecto todas escriben en `/tmp/pizarro-e2e`). `npm run test:db` necesita
   `APP_URL="http://localhost:3000"` en el `.env` (dos pruebas comprueban esa URL) y sus bases se llaman `pizarro_test_*`.
+- Entorno de la nube: `NODE_OPTIONS` trae `--max-old-space-size=8192`, que anula el tope de memoria del worker de PDF
+  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. Lanza `npm test` (y las pruebas de PDF) con
+  `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
+  sesión principal.
+- PDF largos (ronda 58, `src/lib/pdf-chunks.ts`): más de ~20 páginas se maquetan en tramos de varios `<Page>` cortados donde
+  el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
+  él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
+  de @react-pdf, pasa `tests/report-pages.test.ts`.
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
@@ -453,30 +461,40 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.61.0):**
+**Preguntas abiertas al propietario (tras la v1.62.0)** (explicadas con coste y recomendación en el informe final de la ronda 58):
 
-- «Nueva tarea» y el detalle no se parecen (en «Nueva tarea» la descripción es un editor siempre abierto y los campos van
-  en rejilla; en el detalle, clic para editar y barra lateral; el color es desplegable en uno y paleta en otro): ¿unificar
-  el aspecto? El propietario pidió que se lo expliquen mejor (se le explicó en el informe de la ronda 57).
-- Botones de borrar a un menú «⋯»: en *Releases*, «Borrar release» y «Borrar adjuntos» están en la misma fila que
-  Copiar/.md/.txt; en *Documentación*, la papelera de cada fichero siempre visible. Propuesta: moverlos a un «⋯» para
-  evitar pulsarlos sin querer. El propietario pidió que se lo expliquen mejor (explicado en el informe de la ronda 57).
-- Segunda copia de los adjuntos: con `BACKUP_LOCAL_FILES=0` los ficheros solo están en el destino externo (R2). El
-  propietario preguntó «¿para qué?»: protege si el bucket o la cuenta fallan o se comprometen (versionado o bloqueo de
-  objetos en el bucket, o copia local de ficheros). Pendiente de que decida.
-- Opcionales técnicos: `MALLOC_ARENA_MAX=2` en el `Dockerfile` (la memoria con imágenes baja un ~43 %); un workflow
-  que pase lint, tsc y pruebas unitarias en cada PR (también las de Dependabot); no precargar diálogos con
-  `navigator.connection.saveData`; que el nombre accesible de las tarjetas incluya tipo y fecha (axe
-  `label-content-name-mismatch`); copiar la imagen de la descripción de las repeticiones después de responder (`after()`).
-- Informe semanal: hoy no se repite en la misma semana (lunes a domingo): si se envía el lunes y se cambia al viernes, ese
-  viernes no llega. ¿Mejor «no repetir si se envió hace menos de unos 3 días»?
-- Coste de almacenamiento: cada aparición de una tarea repetida copia las imágenes que cita su descripción (cuentan para la
-  cuota).
-- Retirar más adelante (propuestas): el envío directo del ZIP por POST sin vale (`release-attachments` sin `?plan=1`, solo
-  lo usa una prueba) y la compatibilidad de `/viewers` sin `?open=` (pestañas anteriores a la v1.60).
-- Detrás de Cloudflare (la instalación del propietario lo está, por el DNS con proxy): conviene desactivar *Scrape
-  Shield → Email Address Obfuscation*; Pizarro ya protege sus emails con `EmailSafe`.
-- React #185 visto una vez en la ronda 55: no se ha vuelto a ver.
+- Seguridad: cuota extra de acceso para cualquier dispositivo conocido (`KnownDevice`), para que 6 contraseñas falsas cada
+  15 min no bloqueen a quien no tiene 2FA; «Forzar cambio de contraseña» que también borre el calendario suscrito, los
+  canales de Telegram/WhatsApp y Google Drive; proyecto privado con solo miembros desactivados (contar solo activos);
+  `requireTLS` con `SMTP_*` por variables; log de Caddy sin la URI (tokens del .ics, `/reset`, `/confirm`); token de .ics
+  no válido → calendario vacío en vez de 404.
+- Coste: limpiezas con retención cada 23 h; `pool` en nodemailer; refresco en vivo de comentarios solo de la primera
+  página; contenido de cada release al desplegarla; enlaces a Pizarro en el plan para IA apagados por defecto (~27 % menos
+  texto); sin `@img/*musl*` en la imagen (~19 MB); una sola versión de `marked`; caché de miniaturas de 60–300 s;
+  diccionario de inglés de cliente y de servidor; `PDF_WORKER_MAX_MB` (un programa de 100 sesiones de 2 KB no cabe en 256 MB).
+- Uso: margen de disco libre también en las subidas; tope de «Compartir» por envío (hoy el de un archivo); fotos de 48 MP
+  en Documentación; confirmar «Regenerar enlace» del calendario; botón «Nuevo proyecto» también para miembros sin
+  proyectos; «Esta semana» de Mis tareas → «Próximos 7 días»; mismo avance de entregable en calendario e informe; la
+  repetición no hereda un entregable vencido; topes de la app (30 columnas, nombres de 40) al importar; healthcheck de
+  despliegue sin el disco; `get.sh` desde `stable`; imágenes base por digest y Dependabot para Docker; migraciones nuevas
+  entre `BEGIN`/`COMMIT`.
+- Retirar (pedido permiso): `admin/types/page.tsx` y `admin/page.tsx` (ya redirige `next.config.ts`),
+  `passwordChangeRequired`, `redoLast`, `capTitle`, la compatibilidad de huellas `v2:` sin `b:` (desde el 23-11-2026), la
+  tabla «Nombres antiguos» de `e2e/README.md`, juntar suites e2e solapadas, el ZIP del histórico sin `?part`/`?v=`,
+  `generateProjectReportPdf`, `CalendarFeed.rotatedAt` y `lastUsedAt` (o enseñar «último uso»), la rama `Uint8Array` de
+  `zipBodyStream`, `UPLOAD_DIR` en la guía de Railway, `"avif"` en `INPUT_FORMATS`, y `MANUAL.pdf`/`PRUEBAS.pdf` fuera del
+  repositorio (adjuntos de la release). La heurística vieja de `commentNoticesWhere` se puede quitar desde el 19-11-2027.
+- Copias: R2 no tiene versionado de objetos (sí bloqueos por antigüedad). Un bloqueo hace fallar la retención de Pizarro
+  (aviso «Retención: …» en cada copia) y no protege los adjuntos antiguos. Pendiente de lo que vea el propietario con el
+  prompt de Claude in Chrome; alternativas: segundo destino externo con versionado (p. ej. Backblaze B2) o
+  `BACKUP_LOCAL_FILES=1`.
+- Pendiente de antes: unificar «Nueva tarea» con el detalle (decidido: no); coste de almacenamiento de las imágenes que
+  copia cada repetición; React #185 (no se ha vuelto a ver).
+
+**Decisiones de la ronda 58 (ya aplicadas):** borrar en un menú «⋯» en Releases y Documentación; informe semanal con
+margen de 3 días; `MALLOC_ARENA_MAX=2`; workflow «Comprobaciones» en cada PR; sin precargas con Ahorro de datos; retirados
+el ZIP por POST sin vale y `/viewers` sin `?open=`; no unificar «Nueva tarea» con el detalle; en inglés, «organisation»
+(británico, como «licence»).
 
 **Decisiones de la ronda 57 (ya aplicadas):** un solo selector de proyecto en escritorio (el de la barra lateral) y sin
 «Informe PDF» en la cabecera; roles de columna en un submenú; recordar el último tipo usado; tareas fijas fuera del

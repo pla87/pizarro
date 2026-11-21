@@ -26,7 +26,8 @@
           "La app y el asistente enlazan a la guía de instalación de la web (en tu idioma), no a un fichero del repositorio.",
           "Calendario y Mis tareas cambian «Hoy» a medianoche aunque sigan abiertos; quitar a alguien de un proyecto se nota en su calendario suscrito en un minuto.",
           "Al actualizar en un servidor propio se actualizan también Caddy y PostgreSQL; la contraseña de administrador de la base ya no llega al contenedor de la app.",
-          "En inglés: «Sign in» y «Sign out» en toda la app, y plurales escritos enteros."
+          "En inglés: «Sign in» y «Sign out» en toda la app, y plurales escritos enteros.",
+          "La búsqueda de releases avisa si hay más de 200 coincidencias."
         ],
         "correcciones": [
           "Tras iniciar sesión, un enlace preparado («/.//otra-web») podía llevar a otra web.",
@@ -74,7 +75,8 @@
             "The app and the setup wizard link to the installation guide on the website (in your language), not to a file in the repository.",
             "Calendar and My tasks change «Today» at midnight even if left open; removing someone from a project shows in their subscribed calendar within a minute.",
             "Updating on your own server now also updates Caddy and PostgreSQL; the database admin password no longer reaches the app container.",
-            "In English: «Sign in» and «Sign out» throughout the app, and plurals written out in full."
+            "In English: «Sign in» and «Sign out» throughout the app, and plurals written out in full.",
+            "The release search warns when there are more than 200 matches."
           ],
           "correcciones": [
             "After signing in, a crafted link («/.//other-site») could take you to another website.",

@@ -29,6 +29,7 @@ PDF grandes en segundos, borrar en un menú «⋯», arranque que espera a la ba
 - Calendario y Mis tareas cambian «Hoy» a medianoche aunque sigan abiertos; quitar a alguien de un proyecto se nota en su calendario suscrito en un minuto.
 - Al actualizar en un servidor propio se actualizan también Caddy y PostgreSQL; la contraseña de administrador de la base ya no llega al contenedor de la app.
 - En inglés: «Sign in» y «Sign out» en toda la app, y plurales escritos enteros.
+- La búsqueda de releases avisa si hay más de 200 coincidencias.
 
 ### Correcciones
 
