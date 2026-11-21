@@ -6,6 +6,7 @@ import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggeste
 import { actionThrowResult } from "@/lib/stale-action";
 import { useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -33,9 +34,16 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useActionTransition();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  // Con una confirmación abierta el panel no se cierra: pulsar en el diálogo cuenta como pulsar fuera, y el enlace nuevo
+  // de «Regenerar» solo se ve aquí.
+  const confirming = useRef(false);
 
   const onOpenChange = useCallback(
     (open: boolean) => {
+      if (!open && confirming.current) return;
+      setOpen(open);
       if (!open || scope !== null || asked.current) return;
       asked.current = true;
       void suggestedCalendarFeedScope()
@@ -45,6 +53,21 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
     },
     [scope, t],
   );
+
+  /** Pregunta antes de dejar sin efecto el enlace de una suscripción activa (regenerar o desactivar). */
+  const confirmActive = async (title: string, message: string, confirmLabel: string) => {
+    confirming.current = true;
+    try {
+      return await confirm({ title, message, confirmLabel, danger: true });
+    } finally {
+      confirming.current = false;
+    }
+  };
+
+  const regenerate = async () => {
+    if (active && !(await confirmActive(t("Regenerar enlace"), t("El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?"), t("Regenerar")))) return;
+    generate();
+  };
 
   const generate = (next: Scope = scope ?? "ALL") =>
     start(async () => {
@@ -68,7 +91,8 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
     });
   };
 
-  const disable = () =>
+  const disable = async () => {
+    if (!(await confirmActive(t("Desactivar la suscripción"), t("El enlace dejará de funcionar en todos los calendarios suscritos. ¿Desactivar la suscripción?"), t("Desactivar")))) return;
     start(async () => {
       const res = await disableCalendarFeed();
       if (!res.ok) return toast(res.error, "error");
@@ -76,6 +100,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       setLinks(null);
       toast(t("Suscripción desactivada"));
     });
+  };
 
   const copy = async () => {
     if (!links) return;
@@ -93,6 +118,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       kind="dialog"
       label={t("Suscribirse al calendario")}
       align="end"
+      open={open}
       onOpenChange={onOpenChange}
       panelClassName="w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
       trigger={({ props }) => (
@@ -160,12 +186,12 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <button type="button" onClick={() => generate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
+          <button type="button" onClick={() => void regenerate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
             {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : active ? <RefreshCw size={14} aria-hidden /> : <CalendarPlus size={14} aria-hidden />}
             {active ? t("Regenerar enlace") : t("Generar enlace de suscripción")}
           </button>
           {active && (
-            <button type="button" onClick={disable} disabled={pending} className={cn(btn, "text-red-700 dark:text-red-300")}>
+            <button type="button" onClick={() => void disable()} disabled={pending} className={cn(btn, "text-red-700 dark:text-red-300")}>
               <Trash2 size={14} aria-hidden />
               {t("Desactivar")}
             </button>

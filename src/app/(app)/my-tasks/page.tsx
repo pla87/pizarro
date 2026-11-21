@@ -67,7 +67,8 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   const heading: Record<TaskBucket, string> = {
     overdue: t("Vencidas"),
     today: t("Hoy"),
-    week: t("Esta semana"),
+    // Los 7 días siguientes a hoy, no la semana del calendario (el filtro del tablero «Esta semana» sí lo es).
+    week: t("Próximos 7 días"),
     later: t("Más adelante"),
     none: t("Sin fecha"),
   };

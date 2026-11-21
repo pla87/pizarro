@@ -201,7 +201,6 @@ export const settings: Record<string, string> = {
   "Añadir miembro": "Add member",
   "Añadir miembro…": "Add member…",
   "Miembro añadido": "Member added",
-  "Crea un proyecto privado desde el selector del menú o pide a un administrador que te dé acceso.": "Create a private project from the menu selector or ask an administrator to give you access.",
   "1 subtarea predefinida": "1 predefined subtask",
   "{n} subtareas predefinidas": "{n} predefined subtasks",
   "Una por línea": "One per line",

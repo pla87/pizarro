@@ -83,4 +83,6 @@ export const colaboracion: Record<string, string> = {
   "Filtrar mis tareas": "Filter my tasks",
   "No hay tareas en este filtro.": "No tasks in this filter.",
   "Cambió la cadencia en la release a «{to}»": "Changed the release cadence to “{to}”",
+  // Mis tareas: grupo de los 7 días siguientes a hoy
+  "Próximos 7 días": "Next 7 days",
 };
