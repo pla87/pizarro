@@ -106,7 +106,7 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
    UPLOAD_DIR=/app/uploads
    ```
 
-   `secret(longitud)` y `secret(longitud, "alfabeto")` son las funciones de plantilla de Railway; `BACKUP_KEY` en hexadecimal (64 caracteres = 32 bytes) también vale para la app. `${{RAILWAY_PUBLIC_DOMAIN}}` es la variable que Railway rellena cuando el servicio tiene un dominio generado: activa *Generate Domain* en la plantilla. **Esta sintaxis está escrita de memoria: verifícala en la documentación de plantillas de Railway y haz un despliegue de prueba antes de publicar** (si `APP_URL` quedara mal, es lo único que habría que corregir a mano).
+   `secret(longitud)` y `secret(longitud, "alfabeto")` son las funciones de plantilla de Railway; `BACKUP_KEY` en hexadecimal (64 caracteres = 32 bytes) también vale para la app. La plantilla no necesita `APP_URL`: activa *Generate Domain* y Pizarro usa la dirección que Railway pone en `RAILWAY_PUBLIC_DOMAIN`. **Esta sintaxis está escrita de memoria: verifícala en la documentación de plantillas de Railway y haz un despliegue de prueba antes de publicar.**
 4. En el servicio de Pizarro configura el volumen (`/app/uploads`) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
 5. En el servicio de Pizarro, la fuente debe ser el repositorio oficial con la rama **`stable`** (*Settings → Source → Branch* en el proyecto de origen antes de generar la plantilla). Comprueba en el despliegue de prueba (punto 7) que el servicio creado sigue `stable` y no `main`; si la plantilla no conserva la rama, indícalo en su descripción («tras desplegar: Settings → Source → Branch → stable»).
 6. Pulsa *Create template* y copia el enlace. Pon el botón «Deploy on Railway» en el README apuntando a ese enlace.
@@ -355,7 +355,7 @@ Las claves de acceso nunca aparecen en la página ni en los logs. Todo lo que se
 
 En **Railway**, pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro (sin comillas; `BACKUP_S3_PREFIX=pizarro` para usar el mismo prefijo que el `.env` del servidor, que por defecto en el código es vacío) y vuelve a desplegar.
 
-**Cloudflare R2: protege las copias con una retención.** En el bucket, *Settings → Bucket Lock Rules → Add rule*, con el prefijo de las copias (`pizarro/`, el de `BACKUP_S3_PREFIX`) y una retención de 30 días: nadie, ni con la clave de acceso, puede borrar ni sobrescribir una copia hasta que cumpla 30 días. Pizarro funciona igual con la regla puesta.
+**Cloudflare R2: protege las copias con una retención.** En el bucket, *Settings → Bucket Lock Rules → Add rule*, con el prefijo de las copias (`<BACKUP_S3_PREFIX>pizarro-backup-`, p. ej. `pizarro/pizarro-backup-`) y una retención de 31 días (protege las 14 diarias y al menos una mensual) y, si el espacio lo permite, otra para `<BACKUP_S3_PREFIX>files/` indefinida o de 180 días (los ficheros se suben una sola vez y los comparten todas las copias: un bloqueo por días solo protege los recientes). Nadie, ni con la clave de acceso, puede borrar ni sobrescribir lo bloqueado antes de tiempo. Pizarro funciona igual con las reglas puestas: la poda salta lo retenido, lo cuenta en *Administración → Copias de seguridad* («N objetos retenidos por el bloqueo del bucket») y lo borra cuando vence.
 
 ### 4.2 Carpeta montada (disco USB, NAS, SFTP montado)
 

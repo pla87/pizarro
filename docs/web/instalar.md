@@ -360,9 +360,12 @@ Esas copias se guardan en el propio servidor, así que no te protegen si lo pier
 
 > [!TIP]
 > **Con Cloudflare R2, protege las copias con una regla de retención.** En el panel de Cloudflare, en tu *bucket* →
-> *Settings* → *Bucket Lock Rules*, añade una regla para el prefijo `pizarro/` (el de `BACKUP_S3_PREFIX`) con una
-> retención de 30 días. Así nadie puede borrar ni sobrescribir una copia antes de que cumpla 30 días, aunque consiga la
-> clave de acceso o un error borre lo que no debe. Pizarro funciona igual con la regla puesta.
+> *Settings* → *Bucket Lock Rules*, añade una regla para el prefijo de las copias, `pizarro/pizarro-backup-` (con el
+> `BACKUP_S3_PREFIX` de arriba), con una retención de 31 días y, si el espacio te lo permite, otra para
+> `pizarro/files/` (los adjuntos que comparten todas las copias) indefinida o de 180 días. Así nadie puede borrar ni
+> sobrescribir una copia antes de tiempo, aunque consiga la clave de acceso o un error borre lo que no debe. Pizarro
+> funciona igual con las reglas puestas: lo que aún no se puede borrar lo cuenta en *Copias de seguridad* y lo borra
+> cuando vence.
 
 La carpeta montada, la región de S3 y los demás detalles están en la
 [documentación técnica](../INSTALL.md#4-copias-de-seguridad).

@@ -363,9 +363,11 @@ Those backups are kept on the server itself, so they don't protect you if you lo
 
 > [!TIP]
 > **With Cloudflare R2, protect the backups with a retention rule.** In the Cloudflare dashboard, in your *bucket* →
-> *Settings* → *Bucket Lock Rules*, add a rule for the `pizarro/` prefix (the one in `BACKUP_S3_PREFIX`) with a
-> 30-day retention. That way nobody can delete or overwrite a backup before it is 30 days old, even if they get hold of
-> the access key or a mistake deletes what it shouldn't. Pizarro works the same with the rule in place.
+> *Settings* → *Bucket Lock Rules*, add a rule for the backups prefix, `pizarro/pizarro-backup-` (with the
+> `BACKUP_S3_PREFIX` above), with a 31-day retention and, if you can spare the space, another one for `pizarro/files/`
+> (the attachments every backup shares), indefinite or 180 days. That way nobody can delete or overwrite a backup too
+> early, even if they get hold of the access key or a mistake deletes what it shouldn't. Pizarro works the same with
+> the rules in place: what it can't delete yet is counted under *Backups* and deleted once it expires.
 
 The mounted folder, the S3 region and the other details are in the
 [technical documentation](../../INSTALL.md#4-copias-de-seguridad) (in Spanish).
