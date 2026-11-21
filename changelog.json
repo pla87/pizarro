@@ -1,6 +1,83 @@
 {
   "versions": [
     {
+      "version": "1.64.0",
+      "date": "2026-11-21",
+      "releasedAt": "2026-11-21T23:08:42+01:00",
+      "summary": "Tablero en vivo que trae solo las tarjetas cambiadas, guía de Railway sin terminal ni APP_URL, baja de emails en un clic, búsqueda de releases resaltada, cambiar de tipo sin perder lo escrito, fechas en inglés de EE. UU., copias que aguantan el bloqueo de R2, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Baja en un clic: los emails de avisos, el resumen diario y el informe semanal llevan «Dejar de recibir estos emails» (y el botón «Cancelar suscripción» de Gmail y Outlook con https); la baja apaga solo ese tipo de email.",
+          "Releases: lo buscado sale resaltado en el título, los datos, los adjuntos y el texto; con miles de releases la búsqueda sigue siendo inmediata.",
+          "Guía de Railway sin terminal: botón «Generar mis variables» que crea las claves en el navegador, y ya no hace falta APP_URL (Pizarro usa la dirección de Railway).",
+          "Aviso en Administración si otra copia de Pizarro usa la misma base de datos; «Invitación pendiente» y «Reenviar invitación» en los miembros del proyecto.",
+          "Administración: aviso si otro administrador cambió una plantilla, un texto legal o un ajuste mientras lo editabas; nombre propio bajo el icono de la app; zona horaria con buscador."
+        ],
+        "mejoras": [
+          "Tablero en vivo: cuando otra persona cambia tarjetas, cada pestaña trae solo esas tarjetas en vez de recargar el tablero entero; con muchas tarjetas el servidor pinta primero 50 por columna (1.000 tarjetas: de 3,3 MB a menos de 1 MB).",
+          "Cambiar de tipo no pierde lo escrito: «Leche y pan» pasa a «Comprar Leche y pan», y la descripción y las subtareas del tipo anterior se sustituyen sin mezclarse (también en el detalle).",
+          "Crear un proyecto desde una plantilla abre su tablero, con la descripción de la plantilla; el editor de plantillas dice «Tipos generales que se usan», como el proyecto.",
+          "Cada cuenta conserva su «Recordar este dispositivo» aunque varias personas usen el mismo navegador; la invitación llega en el idioma de quien invita.",
+          "Recordatorios de «Esperando» por email con la casilla de fechas límite; las citas de los avisos dicen «Ana ha escrito:»; el informe semanal por email muestra 15 tareas por listado en proyectos grandes.",
+          "En inglés, fechas y horas al estilo de EE. UU. («Nov 21, 2026», «8:05 AM») y el calendario empieza en domingo.",
+          "CSV de logs listo para Excel en español; portada clara para un administrador sin proyectos elegidos; el máximo de usuarios explica de dónde sale.",
+          "Plan de trabajo para IA sin enlaces a Pizarro (la IA no puede abrirlos).",
+          "Menos servidor: contador de avisos con índice (de ~100 ms a ~4 ms), abrir un aviso no recarga el tablero dos veces, guardar ajustes no pinta dos veces y «Nuevo proyecto» recibe menos datos."
+        ],
+        "correcciones": [
+          "Una migración cortada por un reinicio se deshace y se reintenta sola si va entera en una transacción.",
+          "Copias: «Omitida» en lugar de «Correcta» cuando no hay nada que hacer, y funcionan con un bloqueo de retención en el bucket de R2.",
+          "Cloudflare ya no reescribe los emails de las páginas (no-transform).",
+          "Railway no da el servicio por listo hasta que Pizarro lo está; las líneas de Prisma ya no salen en rojo.",
+          "Compartir con Pizarro y cambiar de proyecto en «Nueva tarea» aplican la plantilla del tipo; la descripción a medio escribir no se pierde al cambiar de tipo.",
+          "Horas de los ficheros de los ZIP en la zona de la instalación, «Semana del…» correcta en el PDF semanal, enlaces externos de la Documentación que se abren, errores de red traducidos y nombres reservados que no se saltan con letras de otros alfabetos."
+        ],
+        "tecnicos": [
+          "Ruta /api/projects/<id>/board-tasks y avisos del canal en vivo con los ids de las tarjetas; datos del tablero sin campos por defecto.",
+          "Índice trigram (pg_trgm) para buscar releases, que no impide arrancar si el servidor no permite la extensión.",
+          "Healthcheck de Railway de hasta 10 minutos; APP_URL desde RAILWAY_PUBLIC_DOMAIN con una sola función.",
+          "Dependencias al día (Next 16.4.6, TipTap 3.34, nodemailer 10.5, playwright-core 1.65); 27 export sin uso quitados; pruebas por tema."
+        ]
+      },
+      "en": {
+        "summary": "Live board that fetches only the changed cards, Railway guide with no terminal and no APP_URL, one-click email unsubscribe, highlighted release search, switching types without losing what you typed, US-style dates in English, backups that work with R2 bucket locks, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "One-click unsubscribe: notification emails, the daily digest and the weekly report carry “Stop receiving these emails” (and Gmail/Outlook’s “Unsubscribe” button over https); it turns off only that kind of email.",
+            "Releases: the search term is highlighted in the title, details, attachments and text; with thousands of releases search stays instant.",
+            "Railway guide with no terminal: a “Generate my variables” button creates the keys in your browser, and APP_URL is no longer needed (Pizarro uses the Railway address).",
+            "Admin notice when another copy of Pizarro uses the same database; “Invitation pending” and “Resend invitation” in the project members.",
+            "Admin: notice if another admin changed a template, a legal text or a setting while you were editing it; custom name under the app icon; searchable time zone."
+          ],
+          "mejoras": [
+            "Live board: when someone else changes cards, each tab fetches only those cards instead of reloading the whole board; with many cards the server renders the first 50 per column (1,000 cards: from 3.3 MB to under 1 MB).",
+            "Switching types keeps what you typed: “Milk and bread” becomes “Buy Milk and bread”, and the previous type’s description and subtasks are replaced without mixing (also in the task details).",
+            "Creating a project from a template opens its board, with the template’s description; the template editor says “General types in use”, like the project.",
+            "Each account keeps its own “Remember this device” even when several people share a browser; the invitation arrives in the inviter’s language.",
+            "“Waiting” reminders by email follow the due dates checkbox; quoted notices say “Ana wrote:”; the emailed weekly report shows 15 tasks per list in large projects.",
+            "In English, US-style dates and times (“Nov 21, 2026”, “8:05 AM”) and the calendar starts on Sunday.",
+            "Logs CSV ready for Excel in Spanish; clear home page for an admin with no chosen projects; the user limit explains where it comes from.",
+            "AI work plan without links to Pizarro (the AI can’t open them).",
+            "Less server work: indexed unread counter (from ~100 ms to ~4 ms), opening a notice no longer reloads the board twice, saving settings no longer renders twice and “New project” receives less data."
+          ],
+          "correcciones": [
+            "A migration interrupted by a restart is rolled back and retried automatically if it runs entirely in a transaction.",
+            "Backups: “Skipped” instead of “Successful” when there is nothing to do, and they work with a retention lock on the R2 bucket.",
+            "Cloudflare no longer rewrites emails on the pages (no-transform).",
+            "Railway doesn’t mark the service as ready until Pizarro is; Prisma’s lines no longer show in red.",
+            "Share to Pizarro and switching projects in “New task” apply the type’s template; a description being edited is not lost when switching types.",
+            "File times inside ZIPs in the installation’s time zone, correct “Week of…” in the weekly PDF, external links in Documentation that open, translated network errors and reserved names that can’t be bypassed with look-alike letters."
+          ],
+          "tecnicos": [
+            "Route /api/projects/<id>/board-tasks and live-channel events with card ids; board data without default fields.",
+            "Trigram index (pg_trgm) for release search, which doesn’t block startup if the server doesn’t allow the extension.",
+            "Railway healthcheck of up to 10 minutes; APP_URL from RAILWAY_PUBLIC_DOMAIN in a single function.",
+            "Dependencies up to date (Next 16.4.6, TipTap 3.34, nodemailer 10.5, playwright-core 1.65); 27 unused exports removed; tests by topic."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.63.0",
       "date": "2026-11-21",
       "releasedAt": "2026-11-21T17:57:04+01:00",
