@@ -64,11 +64,6 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
     }
   };
 
-  const regenerate = async () => {
-    if (active && !(await confirmActive(t("Regenerar enlace"), t("El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?"), t("Regenerar")))) return;
-    generate();
-  };
-
   const generate = (next: Scope = scope ?? "ALL") =>
     start(async () => {
       const res = await createCalendarFeed(next);
@@ -77,6 +72,11 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       setActive(true);
       setCopied(false);
     });
+
+  const regenerate = async () => {
+    if (active && !(await confirmActive(t("Regenerar enlace"), t("El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?"), t("Regenerar")))) return;
+    generate();
+  };
 
   const changeScope = (next: Scope) => {
     const prev = scope;
