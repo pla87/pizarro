@@ -382,7 +382,9 @@ if (only.includes("resaltar")) {
   L.eq("RESALTAR: en los nombres de los adjuntos", await hits(entry.locator("p.break-words")), ["desplegable"]);
   // Contraste de la marca en claro y en oscuro (texto sobre su fondo).
   const contrast = () => prose.locator("mark.search-hit").first().evaluate((el) => {
-    const rgb = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+    // Tailwind da los colores en oklch(): se pasan a RGB pintándolos en un canvas.
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const rgb = (c) => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data.slice(0, 3)]; };
     const lum = (c) => { const [r, g, b] = rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const st = getComputedStyle(el);
     const [a, b] = [lum(st.color), lum(st.backgroundColor)].sort((x, y) => y - x);
