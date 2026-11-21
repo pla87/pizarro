@@ -174,7 +174,7 @@ describe("avisos de asignación en lote", () => {
     expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: ["a", "b", "c"].map((title) => ({ title, kindId: f.kindId })) }));
     const n = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED" } });
     const en = makeT("en");
-    assert.equal(notificationBody("ASSIGNED", n.excerpt, en, "en-GB"), "3 tasks");
+    assert.equal(notificationBody("ASSIGNED", n.excerpt, en, "en-US"), "3 tasks");
     assert.equal(notificationBody("ASSIGNED", n.excerpt, makeT("es"), "es-ES"), "3 tareas");
     const mail = mentionEmail({ type: "ASSIGNED", actorName: "X", taskTitle: "a", projectName: "P", excerpt: n.excerpt, url: "https://example.com" }, en);
     assert.match(mail.text, /3 tasks/);
@@ -201,6 +201,6 @@ describe("avisos de asignación en lote", () => {
     // Una sola tarea: el extracto sigue siendo su título.
     expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Sola", kindId: f.kindId }] }));
     const one = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED", excerpt: { not: n.excerpt } } });
-    assert.equal(notificationBody("ASSIGNED", one.excerpt, en, "en-GB"), "Sola");
+    assert.equal(notificationBody("ASSIGNED", one.excerpt, en, "en-US"), "Sola");
   });
 });

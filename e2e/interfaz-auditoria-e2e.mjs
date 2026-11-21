@@ -70,10 +70,13 @@ if (only.includes("hyd")) {
     { label: "escritorio Madrid es-ES", opts: {} },
     { label: "móvil Madrid es-ES", opts: { mobile: true } },
     { label: "escritorio Nueva York en-US", opts: { timezoneId: "America/New_York", locale: "en-US" } },
+    // Con la interfaz en inglés las fechas salen como en EE. UU. y con AM/PM: el servidor y el navegador deben coincidir.
+    { label: "escritorio Nueva York en-US, interfaz en inglés", opts: { timezoneId: "America/New_York", locale: "en-US" }, ui: "EN" },
     { label: "escritorio tras proxy de emails", opts: { proxyEmails: true } },
     { label: "móvil tras proxy de emails", opts: { mobile: true, proxyEmails: true } },
   ];
-  for (const { label, opts } of runs) {
+  for (const { label, opts, ui } of runs) {
+    await L.q(`UPDATE "User" SET locale=$2 WHERE id=$1`, [admin.id, ui ?? "ES"]);
     await asMember();
     const s = await sessionTz(opts);
     await asAdmin();
@@ -94,6 +97,7 @@ if (only.includes("hyd")) {
     }
     await s.ctx.close();
   }
+  await L.q(`UPDATE "User" SET locale='ES' WHERE id=$1`, [admin.id]);
   // Sin sesión: acceso y páginas legales.
   for (const proxyEmails of [false, true]) {
     const b = await L.getBrowser();

@@ -43,7 +43,7 @@ test("títulos con acentos y mayúsculas: localeCompare es y en", () => {
   const ts = [task({ id: "z", title: "Zorro" }), task({ id: "a2", title: "árbol" }), task({ id: "e", title: "Éxito" }), task({ id: "b", title: "Barco" }), task({ id: "a1", title: "Avión" })];
   // «árbol» va antes que «Avión» (ar < av) y «Éxito» entre «Barco» y «Zorro», no al final como con el orden por código.
   assert.equal(ids(sortTasks(ts, by("title"), ctx("es-ES"))), "a2,a1,b,e,z");
-  assert.equal(ids(sortTasks(ts, by("title"), ctx("en-GB"))), "a2,a1,b,e,z");
+  assert.equal(ids(sortTasks(ts, by("title"), ctx("en-US"))), "a2,a1,b,e,z");
   assert.equal(ids(sortTasks(ts, by("title", "desc"), ctx())), "z,e,b,a1,a2");
 });
 

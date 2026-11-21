@@ -198,7 +198,7 @@ test("avisos: texto del cambio de fecha", () => {
   assert.equal(dueChangeExcerpt("2026-10-01", null), "2026-10-01>");
   assert.deepEqual(parseDueChange("2026-10-01>2026-10-05"), { from: "2026-10-01", to: "2026-10-05" });
   assert.deepEqual(parseDueChange(">2026-10-05"), { from: null, to: "2026-10-05" });
-  assert.match(dueChangeText(">2026-10-05", makeT("en"), "en-GB"), /^No date → 5 Oct/);
+  assert.match(dueChangeText(">2026-10-05", makeT("en"), "en-US"), /^No date → Oct 5/);
 });
 
 test("avisos: email por tipo y preferencias", () => {

@@ -3,7 +3,7 @@ import type { QuotaExceeded } from "./quota";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
-/** Megas con un decimal como mucho y el separador del idioma: «12,5» (es-ES), «12.5» (en-GB). */
+/** Megas con un decimal como mucho y el separador del idioma: «12,5» (es-ES), «12.5» (en-US). */
 export function mbNumber(mb: number, locale: string): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(mb);
 }

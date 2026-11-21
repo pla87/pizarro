@@ -3,6 +3,7 @@ import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
+import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
@@ -208,7 +209,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
     today,
     timeZone: appTimeZone(),
     // Con la zona («14:05 CET»): el PDF se envía por email y puede leerse en otra.
-    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).format(new Date()),
+    time: formatTimeZone(new Date(), locale),
     columns,
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({

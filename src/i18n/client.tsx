@@ -57,7 +57,7 @@ export function useLocale(): Locale {
   return useContext(I18nContext).locale;
 }
 
-/** Locale de Intl (es-ES / en-GB) para formatear fechas. */
+/** Locale de Intl (es-ES / en-US) para formatear fechas. */
 export function useIntlLocale(): string {
   return intlLocale(useContext(I18nContext).locale);
 }

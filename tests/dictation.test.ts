@@ -52,6 +52,7 @@ test("signos al principio del trozo se pegan a la palabra anterior; tras apertur
 test("idioma por defecto según la interfaz", () => {
   assert.equal(dictationLang("es-ES"), "es-ES");
   assert.equal(dictationLang("en-GB"), "en-US");
+  assert.equal(dictationLang("en-US"), "en-US");
 });
 
 test("comillas rectas, guion y barra solo abren al principio o tras un espacio", () => {

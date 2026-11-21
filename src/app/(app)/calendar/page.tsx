@@ -1,6 +1,6 @@
 import { listVisibleProjects, projectUsersWhere, visibleProjectsWhere, workingProjectsWhere } from "@/lib/access";
 import { appTimeZone } from "@/lib/board";
-import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
+import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, calendarWeekStart, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { deliverableProgressByIds } from "@/lib/deliverable-progress-db";
@@ -39,7 +39,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const today = todayIso(appTimeZone());
   const month = parseMonth(one(sp.month), today);
-  const grid = monthGrid(month, 1);
+  const locale = await getLocale();
+  const grid = monthGrid(month, calendarWeekStart(locale));
 
   // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
   // sin ninguno válido equivale a «todos». Las dos consultas no dependen una de otra: en paralelo.
@@ -154,7 +155,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     }),
     overduePromise,
   ]);
-  const locale = await getLocale();
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
   const repeats: CalendarRepeat[] = [];
   let repeatsCut = repeatRows.length >= MAX_REPEAT_SOURCES;

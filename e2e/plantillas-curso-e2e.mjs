@@ -181,7 +181,7 @@ try {
       await dlg().getByLabel(/^Also save to Documentation as/).uncheck();
       const { text, filename } = await publishAndDownload("program.pdf", true);
       L.check("EN: nombre del archivo en inglés", /^program-master-r50-/.test(filename), filename);
-      for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
+      for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación R50", "Tuesday, January 12, 2027", "January 25, 2027 – January 27, 2027"]) {
         L.check(`EN: el texto incluye «${s}»`, text.includes(s), text.slice(0, 300));
       }
       L.check("EN: sin responsable si no se pide", !text.includes(adm.name) || !text.includes("Assignee:"));
