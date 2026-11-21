@@ -267,8 +267,10 @@ export const projectDataSchema = z.object({
 
 export type ProjectExportData = z.infer<typeof projectDataSchema>;
 
-const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "trashedDocuments", "events", "files"] as const;
-export type ExportCounts = Record<(typeof COUNT_KEYS)[number], number>;
+type CountKey =
+  | "columns" | "kinds" | "labels" | "deliverables" | "tasks" | "archivedTasks" | "subtasks" | "comments" | "taskAttachments" | "releases"
+  | "releaseAttachments" | "documents" | "trashedDocuments" | "events" | "files";
+export type ExportCounts = Record<CountKey, number>;
 
 export const manifestSchema = z.object({
   format: z.literal(EXPORT_FORMAT),

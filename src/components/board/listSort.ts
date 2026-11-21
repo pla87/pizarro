@@ -3,8 +3,7 @@ import { mentionsToPlain } from "@/lib/mentions";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
 import type { BoardTask } from "@/lib/types";
 
-const LIST_SORT_KEYS = ["title", "column", "assignee", "due", "labels", "priority", "subtasks"] as const;
-export type ListSortKey = (typeof LIST_SORT_KEYS)[number];
+export type ListSortKey = "title" | "column" | "assignee" | "due" | "labels" | "priority" | "subtasks";
 type ListSortDir = "asc" | "desc";
 export interface ListSort {
   key: ListSortKey;
