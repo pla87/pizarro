@@ -8,6 +8,8 @@ import { currentTimeZoneName, matchTimeZone } from "@/lib/time-zones";
  * Zona horaria con búsqueda (`<input list>` + `<datalist>`): sustituye al `<select>` de ~420 zonas sin buscador. Las
  * habituales van arriba con el país al lado (se puede buscar por él: «Colombia», «Canarias»); todas con su nombre actual.
  * `onChange` recibe la zona elegida o "" mientras lo escrito no es ninguna de la lista (el formulario no deja guardar).
+ * El aviso «Elige una zona de la lista» sale al salir del campo, también vacío (así se sabe por qué no se puede guardar),
+ * y se quita al volver a escribir: antes salía, y se anunciaba, desde la primera letra.
  */
 export function TimeZoneField({ id, value, options, onChange, disabled, className }: {
   id: string;
@@ -24,7 +26,9 @@ export function TimeZoneField({ id, value, options, onChange, disabled, classNam
   const [text, setText] = useState(currentTimeZoneName(value));
   // Una zona guardada que no está en la lista (p. ej. Etc/GMT+3) sigue siendo elegible.
   const zones = value && !options.includes(value) ? [value, ...options] : options;
-  const invalid = text.trim() !== "" && matchTimeZone(text, zones) === null;
+  // Se ha salido del campo sin volver a escribir: solo entonces se marca lo que no es una zona de la lista.
+  const [left, setLeft] = useState(false);
+  const invalid = left && matchTimeZone(text, zones) === null;
   const labels: Record<string, string> = {
     "Europe/Madrid": t("España (península y Baleares)"),
     "Atlantic/Canary": t("Canarias"),
@@ -57,10 +61,12 @@ export function TimeZoneField({ id, value, options, onChange, disabled, classNam
         aria-describedby={invalid ? `${id}-error` : undefined}
         onChange={(e) => {
           setText(e.target.value);
+          setLeft(false);
           onChange(matchTimeZone(e.target.value, zones) ?? "");
         }}
         // Al salir, lo escrito sin mayúsculas o con espacios («america/new york») se muestra con el nombre de la lista.
         onBlur={() => {
+          setLeft(true);
           const zone = matchTimeZone(text, zones);
           if (zone && zone !== text) setText(zone);
         }}
