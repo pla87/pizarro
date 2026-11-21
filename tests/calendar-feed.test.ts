@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { FEED_LOG_EVERY_MS, feedHttpsUrl, feedLogDue, feedWebcalUrl, FEED_TOKEN_LENGTH, googleSubscribeUrl, hashFeedToken, isFeedTokenShape, newFeedToken, safeEqualHex, sequenceOf, snippet, tokenFromFilename } from "../src/lib/calendar-feed-core";
 import { buildIcs, escapeIcsText, foldIcsLine } from "../src/lib/ics";
+import { formatAgo, formatDate } from "../src/lib/format";
 
 process.env.SESSION_SECRET ??= "x".repeat(40);
 
@@ -128,4 +129,22 @@ test("registro muestreado: la primera consulta de cada clave y después una cada
   for (let i = 0; i < 6000; i++) feedLogDue(state, `k${i}`, t0);
   assert.ok(state.size <= 5000);
   assert.ok(!state.has("a"));
+});
+
+test("«Último uso» del enlace: horas o días en el idioma de la app; menos de una hora, null; desde 30 días, la fecha", () => {
+  const now = new Date("2026-11-21T12:00:00Z");
+  const H = 3_600_000;
+  const ago = (ms: number, locale?: string) => formatAgo(new Date(now.getTime() - ms), now, locale);
+  assert.equal(ago(0), null);
+  assert.equal(ago(59 * 60_000), null);
+  assert.equal(ago(-H), null, "en el futuro (reloj desajustado): como «menos de una hora»");
+  assert.equal(ago(2 * H + 5 * 60_000), "hace 2 h");
+  assert.equal(ago(47 * H), "hace 47 h");
+  assert.equal(ago(3 * 24 * H), "hace 3 d");
+  assert.match(ago(2 * H, "en-GB")!, /^2 hr\.? ago$/);
+  assert.equal(ago(3 * 24 * H, "en-GB"), "3 days ago");
+  // Acepta la fecha en ISO (como llega de la acción).
+  assert.equal(formatAgo(new Date(now.getTime() - 5 * H).toISOString(), now), "hace 5 h");
+  const old = new Date(now.getTime() - 40 * 24 * H);
+  assert.equal(formatAgo(old, now), formatDate(old, "date"));
 });

@@ -27,4 +27,9 @@ export const ics: Record<string, string> = {
   "Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.": "Yours, and the deliverables where you have one. Tasks without an assignee are left out.",
   "Tareas y entregables, con o sin responsable.": "Tasks and deliverables, with or without an assignee.",
   "Solo tareas con fecha límite y sin terminar.": "Only tasks with a due date that aren't done.",
+  // «Suscribirse»: último uso del enlace
+  "Aún no se ha usado": "Not used yet",
+  "Último uso: {when}": "Last used: {when}",
+  "Último uso: hace menos de una hora": "Last used: less than an hour ago",
+  "{date} (se anota como mucho una vez por hora)": "{date} (recorded at most once an hour)",
 };

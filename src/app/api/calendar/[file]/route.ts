@@ -1,5 +1,5 @@
-import { cachedFeedIcs, feedMaxAgeSec, resolveFeedToken } from "@/lib/calendar-feed";
-import { FEED_LOG_EVERY_MS, feedLogDue, feedRateKey, tokenFromFilename } from "@/lib/calendar-feed-core";
+import { cachedFeedIcs, EMPTY_FEED_ETAG, EMPTY_FEED_ICS, FEED_CACHE_MS, feedMaxAgeSec, resolveFeedToken } from "@/lib/calendar-feed";
+import { FEED_LOG_EVERY_MS, feedLogDue, feedRateKey, isFeedTokenShape, tokenFromFilename } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
@@ -9,8 +9,25 @@ import { maskSecretsFor } from "@/lib/secret-path";
 
 export const runtime = "nodejs";
 
-/** Mismo cuerpo y cabeceras para todo lo que no vale (token ajeno, regenerado, desactivado, usuario inactivo…): no revela si existe. */
+/** Dirección que no puede ser un enlace (sin .ics o con otra forma): 404. */
 const notFound = () => new Response("Not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+
+const FEED_HEADERS = {
+  "Content-Type": "text/calendar; charset=utf-8",
+  "Content-Disposition": 'inline; filename="pizarro.ics"',
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+} as const;
+
+/**
+ * Enlace con forma válida que no vale (desconocido, regenerado, desactivado, de un usuario inactivo o borrado): el mismo
+ * calendario vacío para todos (EMPTY_FEED_ICS), para que el cliente borre los eventos que guardaba sin saber si existió.
+ */
+function emptyFeed(req: Request): Response {
+  const headers = { ...FEED_HEADERS, "Cache-Control": `private, max-age=${FEED_CACHE_MS / 1000}`, ETag: EMPTY_FEED_ETAG };
+  if (ifNoneMatchHas(req.headers.get("if-none-match"), EMPTY_FEED_ETAG)) return new Response(null, { status: 304, headers: { ETag: EMPTY_FEED_ETAG, "Cache-Control": headers["Cache-Control"] } });
+  return new Response(EMPTY_FEED_ICS, { headers });
+}
 
 const PER_IP = { limit: 300, windowMs: 10 * 60_000 };
 const PER_TOKEN = { limit: 30, windowMs: 10 * 60_000 };
@@ -67,7 +84,8 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     }
     return new Response("Too many requests", { status: 429, headers: { "Retry-After": String(rateLimitRetryAfterSec(tokenKey)), "Cache-Control": "no-store" } });
   }
-  const feed = token ? await resolveFeedToken(token) : null;
+  const shaped = !!token && isFeedTokenShape(token);
+  const feed = shaped ? await resolveFeedToken(token) : null;
   if (!feed) {
     // Enlace regenerado o desactivado (el calendario lo sigue pidiendo), usuario inactivo o un token inventado: por IP.
     const skipped = feedLogDue(feedLog, `404|${ipKey}`, Date.now());
@@ -77,7 +95,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
         path: "/api/calendar/…", ip, durationMs: performance.now() - start, details: { skipped },
       });
     }
-    return notFound();
+    return shaped ? emptyFeed(req) : notFound();
   }
 
   // Guardado un minuto por enlace (cachedFeedIcs): un calendario que consulta a menudo, o varios a la vez, no lo rehacen.
@@ -98,13 +116,10 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     });
   }
   const headers = {
-    "Content-Type": "text/calendar; charset=utf-8",
-    "Content-Disposition": 'inline; filename="pizarro.ics"',
+    ...FEED_HEADERS,
     // Lo que le queda en la memoria del servidor (≤ 60 s; antes 300 s fijos): entre las dos, como mucho un minuto.
     "Cache-Control": `private, max-age=${feedMaxAgeSec(builtAt)}`,
     ETag: etag,
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
   };
   if (ifNoneMatchHas(req.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": headers["Cache-Control"] } });
   return new Response(ics, { headers });

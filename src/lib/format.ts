@@ -82,3 +82,18 @@ export function formatDate(value: Date | string, style: Style = "date", locale =
   const d = typeof value === "string" ? new Date(value) : value;
   return d.toLocaleString(locale, { ...OPTIONS[style], timeZone: appTimeZone() });
 }
+
+/**
+ * Cuánto hace de `value` («hace 2 h», «hace 3 días»; en inglés, «2 hr. ago»), en el idioma de Intl dado. null si es de
+ * hace menos de una hora (o posterior a `now`): el texto de ese caso lo elige quien lo muestra. Desde 30 días, la fecha
+ * (en la zona de la app).
+ */
+export function formatAgo(value: Date | string, now: Date, locale = "es-ES"): string | null {
+  const d = typeof value === "string" ? new Date(value) : value;
+  const hours = Math.floor((now.getTime() - d.getTime()) / 3_600_000);
+  if (!(hours >= 1)) return null;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "short" });
+  if (hours < 48) return rtf.format(-hours, "hour");
+  const days = Math.floor(hours / 24);
+  return days < 30 ? rtf.format(-days, "day") : formatDate(d, "date", locale);
+}

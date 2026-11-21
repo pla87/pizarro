@@ -2,9 +2,10 @@
 
 import { CalendarPlus, Check, Copy, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "@/actions/calendar-feed";
+import { calendarFeedUsage, createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "@/actions/calendar-feed";
+import { formatAgo, formatDate } from "@/lib/format";
 import { actionThrowResult } from "@/lib/stale-action";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
@@ -20,6 +21,22 @@ interface Links {
 const btn = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800";
 
 /**
+ * «Último uso: hace 2 h» / «Aún no se ha usado» (CalendarFeed.lastUsedAt, anotado como mucho una vez por hora), en el
+ * idioma de la app; la fecha exacta, en la zona de la app, va en el título. Sirve para ver si alguien usa un enlace filtrado.
+ */
+function LastUsed({ at }: { at: string | null }) {
+  const t = useT();
+  const locale = useIntlLocale();
+  if (!at) return <p className="text-xs text-slate-500" data-testid="feed-last-used">{t("Aún no se ha usado")}</p>;
+  const ago = formatAgo(at, new Date(), locale);
+  return (
+    <p className="text-xs text-slate-500" data-testid="feed-last-used" title={t("{date} (se anota como mucho una vez por hora)", { date: formatDate(at, "dateTimeShort", locale) })}>
+      {ago ? t("Último uso: {when}", { when: ago }) : t("Último uso: hace menos de una hora")}
+    </p>
+  );
+}
+
+/**
  * Suscripción al calendario (.ics vivo) desde Google/Apple/Outlook. El enlace solo se ve al generarlo (en la BD queda su
  * HMAC): para volver a verlo hay que regenerarlo, lo que invalida el anterior.
  */
@@ -32,10 +49,25 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   const asked = useRef(false);
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
+  // Último uso del enlace: se pide cada vez que se abre el menú con una suscripción activa (undefined: aún no se sabe).
+  const [lastUsed, setLastUsed] = useState<string | null | undefined>(undefined);
   const [pending, start] = useActionTransition();
 
   const onOpenChange = useCallback(
     (open: boolean) => {
+      if (open && active) {
+        void calendarFeedUsage()
+          .catch((e) => actionThrowResult(e, t))
+          .then((res) => {
+            if (!res.ok) return;
+            setLastUsed(res.data.lastUsedAt);
+            // Desactivada entretanto (otra pestaña, o un administrador al forzar el cambio de contraseña).
+            if (!res.data.active) {
+              setActive(false);
+              setLinks(null);
+            }
+          });
+      }
       if (!open || scope !== null || asked.current) return;
       asked.current = true;
       void suggestedCalendarFeedScope()
@@ -43,7 +75,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         // Si no se puede saber (sin conexión…), «Todas»: con «Solo las mías» el calendario podría salir vacío.
         .then((res) => setScope((cur) => cur ?? (res.ok ? res.data : "ALL")));
     },
-    [scope, t],
+    [active, scope, t],
   );
 
   const generate = (next: Scope = scope ?? "ALL") =>
@@ -53,6 +85,8 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       setLinks(res.data);
       setActive(true);
       setCopied(false);
+      // Enlace nuevo: aún nadie lo ha usado.
+      setLastUsed(null);
     });
 
   const changeScope = (next: Scope) => {
@@ -74,6 +108,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       if (!res.ok) return toast(res.error, "error");
       setActive(false);
       setLinks(null);
+      setLastUsed(undefined);
       toast(t("Suscripción desactivada"));
     });
 
@@ -158,6 +193,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         ) : active ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Ya tienes una suscripción activa. El enlace no se vuelve a mostrar; si lo necesitas, regenéralo.")}</p>
         ) : null}
+        {active && lastUsed !== undefined && <LastUsed at={lastUsed} />}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
           <button type="button" onClick={() => generate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
