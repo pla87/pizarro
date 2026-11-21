@@ -313,4 +313,16 @@ test("nombres de adjuntos: los reservados de Windows (CON, NUL, LPT1…) llevan 
   // Solo el nombre exacto: «console», «com10» o «nul_1» no están reservados; con código delante, tampoco.
   assert.deepEqual(plainAttachmentFileNames(["console.txt", "com10.txt", "nul_1.txt"].map((originalName) => ({ originalName, isImage: false }))), ["console.txt", "com10.txt", "nul_1.txt"]);
   assert.deepEqual(attachmentFileNames("F1", [{ originalName: "CON.txt", isImage: false }]), ["F1_CON.txt"]);
+  // También COM y LPT con los superíndices ¹ ² ³, que Windows trata como dígitos.
+  assert.deepEqual(
+    plainAttachmentFileNames(["COM¹.txt", "lpt²", "Com³.pdf", "LPT³.log"].map((originalName) => ({ originalName, isImage: false }))),
+    ["_COM¹.txt", "_lpt²", "_Com³.pdf", "_LPT³.log"],
+  );
+});
+
+test("nombres de adjuntos: sin puntos ni espacios al final (Windows los quita: «informe.» chocaba con «informe»)", async () => {
+  const { plainAttachmentFileNames } = await import("../src/lib/release");
+  const names = plainAttachmentFileNames(["informe.", "informe", "notas..", "notas", "..."].map((originalName) => ({ originalName, isImage: false })));
+  assert.deepEqual(names, ["informe", "informe-2", "notas", "notas-2", "adjunto"]);
+  for (const n of names) assert.ok(!/[. ]$/.test(n), n);
 });

@@ -8,8 +8,10 @@
 // - Los documentos de hasta PDF_SINGLE_PAGE_UNITS (casi todos) siguen en un solo <Page>, exactamente como antes.
 // - En los más largos, cada tramo se corta donde el documento entero saltaría de página: report-pdf.tsx maqueta una
 //   ventana de bloques (unas 5 páginas), mira en qué página cae cada uno y corta con pickCut. Si ninguna página de la
-//   ventana empieza con un bloque nuevo (p. ej. sesiones del programa que siempre se parten entre dos páginas), corta
-//   antes del último bloque que empieza en una página: ese salto adelanta un poco el del documento entero.
+//   ventana empieza con un bloque nuevo, la ventana crece con los bloques siguientes; si tampoco, se corta antes de un
+//   bloque partido (ese salto adelanta un poco el del documento entero). Para que casi nunca haga falta, los bloques
+//   son pequeños: filas de tabla, subtareas, tarjetas y, en el programa, cada párrafo, elemento de lista o línea de
+//   código.
 //
 // Funciones puras: report-pdf.tsx las usa en el worker de PDF y las pruebas, sin cargar @react-pdf.
 
@@ -17,12 +19,17 @@
 const LINES_PER_PAGE = 60;
 /** Hasta este tamaño estimado (unas 20 páginas) el documento va entero en un solo <Page>. */
 export const PDF_SINGLE_PAGE_UNITS = 20 * LINES_PER_PAGE;
-/** Tamaño de cada tramo cuando no se puede medir dónde salta de página (unas 5 páginas). */
-const PDF_CHUNK_UNITS = 5 * LINES_PER_PAGE;
+/**
+ * Unas 5 páginas: la ventana que se maqueta para buscar dónde cortar cada tramo (y lo que crece si no hay dónde), y el
+ * tamaño de cada tramo cuando no se puede medir dónde salta de página.
+ */
+export const PDF_CHUNK_UNITS = 5 * LINES_PER_PAGE;
 
 export interface PdfBlockSize {
   /** Tamaño estimado del bloque (ver LINES_PER_PAGE). */
   units: number;
+  /** Pide ir con el bloque siguiente (un título, la cabecera de una sesión): un corte no los separa. */
+  keep?: boolean;
 }
 
 /** Líneas que ocupa un texto con `charsPerLine` caracteres por línea (al menos una por párrafo). */
@@ -62,11 +69,13 @@ function splitRuns<T>(items: readonly T[], units: (item: T) => number, max: numb
  * basta (hay que maquetar una mayor).
  *
  * Solo se mira hasta la penúltima página (la última puede estar incompleta o depender de lo que hay después de la
- * ventana). Lo mejor es la última página que empieza con un bloque entero: el tramo acaba justo donde el documento
- * entero salta de página. Si no hay ninguna (todas empiezan con el resto de un bloque partido), antes del bloque partido
- * de la última de esas páginas: ese bloque pasa entero a la página siguiente y deja en blanco lo poco que ocupaba al pie.
+ * ventana). Lo bueno es la última página que empieza con un bloque entero: el tramo acaba justo donde el documento
+ * entero salta de página. Si no hay ninguna, null (que la ventana crezca), salvo con `unclean`: entonces se corta antes
+ * del bloque partido de la última de esas páginas, que pasa entero a la siguiente. Ese corte deja en blanco al pie lo que
+ * el bloque ocupaba en ella (con bloques pequeños, unas líneas; con uno de varias páginas, casi toda) y se lleva consigo
+ * los bloques de antes que piden ir con él (`keep`: un título no se queda solo al pie).
  */
-export function pickCut(pages: readonly (readonly number[])[]): number | null {
+export function pickCut(pages: readonly (readonly number[])[], opts: { unclean?: boolean; keep?: (block: number) => boolean } = {}): number | null {
   /** Bloque al que pertenece el primer elemento de la página p, y si empieza en ella. */
   const opening = (p: number): { block: number; starts: boolean } | null => {
     const first = pages[p]![0];
@@ -82,9 +91,13 @@ export function pickCut(pages: readonly (readonly number[])[]): number | null {
     const o = opening(p);
     if (o?.starts && o.block > 0) return o.block;
   }
+  if (!opts.unclean) return null;
   for (let p = pages.length - 2; p >= 1; p--) {
     const o = opening(p);
-    if (o && o.block > 0) return o.block;
+    if (!o || o.block <= 0) continue;
+    let cut = o.block;
+    while (cut > 1 && opts.keep?.(cut - 1)) cut--;
+    return cut;
   }
   return null;
 }

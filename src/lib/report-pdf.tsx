@@ -1,7 +1,7 @@
 // Documentos PDF (@react-pdf/renderer). Este módulo solo se carga en el worker de PDF (report-pdf-worker.ts): el
 // proceso web importa de aquí únicamente tipos, así @react-pdf/renderer no entra en el servidor de Next.
 import { Children, cloneElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
-import { Document, Font, Link, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Font, Link, Page, pdf, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
@@ -11,7 +11,7 @@ import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
 import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
 import { pdfSafeData, pdfWordParts } from "./pdf-text";
-import { chunkBlocks, PDF_SINGLE_PAGE_UNITS, pickCut, textUnits, totalUnits, type PdfBlockSize } from "./pdf-chunks";
+import { chunkBlocks, PDF_CHUNK_UNITS, PDF_SINGLE_PAGE_UNITS, pickCut, textUnits, totalUnits, type PdfBlockSize } from "./pdf-chunks";
 
 // Sin partición de palabras por sílabas (en español quedaba «re-sumen»), salvo las palabras muy largas (URLs, textos
 // sin espacios), que se pueden cortar en trozos para no salirse de la celda ni de la página.
@@ -215,6 +215,34 @@ function tagFirst(node: ReactNode, tag: number): ReactNode {
 
 const tagged = (b: Block, i: number) => <Fragment key={i}>{tagFirst(b.node, i)}</Fragment>;
 
+/**
+ * Pinta un documento con una sola raíz de @react-pdf para todo el worker. renderToBuffer crea una raíz nueva en cada
+ * llamada y no la suelta nunca, con todo su árbol (medido: ~1,5 MB por cada ventana de unas páginas): con las ventanas
+ * que se maquetan para cortar los tramos, un informe de 2.000 tareas pasaba del tope de memoria del worker (256 MB). De
+ * uno en uno (la raíz es compartida); al terminar se le deja un documento vacío, para soltar el árbol.
+ */
+let pdfRoot: ReturnType<typeof pdf> | null = null;
+let pdfRendering: Promise<unknown> = Promise.resolve();
+function renderDoc(doc: ReactElement): Promise<Buffer> {
+  const run = pdfRendering.then(async () => {
+    const root = (pdfRoot ??= pdf());
+    try {
+      root.updateContainer(doc);
+      const stream = await root.toBuffer();
+      return await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
+    } finally {
+      root.updateContainer(<Document />);
+    }
+  });
+  pdfRendering = run.catch(() => {});
+  return run;
+}
+
 type LayoutData = { children?: { children?: { props?: Record<string, unknown> }[] }[] };
 
 /**
@@ -227,7 +255,7 @@ async function layoutPages(blocks: Block[]): Promise<number[][] | null> {
     // Lo que no lleva número (el resto de un bloque de varios elementos) cuenta como -1.
     pages = layout?.children?.map((p) => (p.children ?? []).filter((c) => !c.props?.fixed).map((c) => (typeof c.props?.["data-pz"] === "number" ? (c.props["data-pz"] as number) : -1))) ?? null;
   };
-  await renderToBuffer(
+  await renderDoc(
     <Document onRender={onRender as () => void}>
       <Page size="A4" style={s.page}>{blocks.map(tagged)}</Page>
     </Document>,
@@ -235,35 +263,43 @@ async function layoutPages(blocks: Block[]): Promise<number[][] | null> {
   return pages;
 }
 
-/** Ventana con la que se busca dónde cortar cada tramo (unas 5 páginas). */
-const MEASURE_UNITS = 300;
-
 /**
- * Tramos de un documento largo cortados donde el documento entero salta de página: se maqueta una ventana de bloques,
- * se corta donde una página empieza con un bloque nuevo (pickCut) y se sigue desde ahí. Cada tramo sale igual que
- * esas páginas del documento entero. Si @react-pdf no da la maquetación, tramos por tamaño estimado.
+ * Tramos de un documento largo cortados donde el documento entero salta de página: se maqueta una ventana de bloques
+ * (PDF_CHUNK_UNITS, unas 5 páginas), se corta donde una página empieza con un bloque nuevo (pickCut) y se sigue desde
+ * ahí. Cada tramo sale igual que esas páginas del documento entero. Si no hay dónde cortar, la ventana crece con los
+ * bloques que vienen detrás (otros PDF_CHUNK_UNITS): doblarla volvía a maquetar lo mismo cuando la ventana era un solo
+ * bloque enorme. Solo si tampoco así hay una página que empiece limpia se corta antes de un bloque partido. Si
+ * @react-pdf no da la maquetación, tramos por tamaño estimado.
  */
 async function naturalChunks(blocks: Block[]): Promise<Block[][]> {
   const chunks: Block[][] = [];
+  /** Bloques desde `from` hasta sumar al menos `units` (como mínimo uno). */
+  const extend = (from: number, units: number) => {
+    let end = from;
+    for (let u = 0; end < blocks.length && (end === from || u < units); end++) u += blocks[end]!.units;
+    return end;
+  };
   let start = 0;
-  let window = MEASURE_UNITS;
+  let end = extend(0, PDF_CHUNK_UNITS);
+  let grown = 0;
   while (start < blocks.length) {
-    let end = start;
-    for (let u = 0; end < blocks.length && u < window; end++) u += blocks[end]!.units;
-    if (end === blocks.length) {
+    if (end >= blocks.length) {
       chunks.push(blocks.slice(start));
       break;
     }
-    const pages = await layoutPages(blocks.slice(start, end));
+    const window = blocks.slice(start, end);
+    const pages = await layoutPages(window);
     if (!pages) return [...chunks, ...chunkBlocks(blocks.slice(start))];
-    const cut = pickCut(pages);
+    const cut = pickCut(pages, { unclean: grown > 0, keep: (i) => !!window[i]?.keep });
     if (!cut) {
-      window *= 2;
+      end = extend(end, PDF_CHUNK_UNITS);
+      grown++;
       continue;
     }
     chunks.push(blocks.slice(start, start + cut));
     start += cut;
-    window = MEASURE_UNITS;
+    end = extend(start, PDF_CHUNK_UNITS);
+    grown = 0;
   }
   return chunks;
 }
@@ -276,7 +312,7 @@ async function pagedPdf(doc: PagedDoc, singlePageUnits: number): Promise<Buffer>
   const small = doc.build(false);
   const big = totalUnits(small) > singlePageUnits;
   const chunks = big ? await naturalChunks(doc.build(true)) : [small];
-  return renderToBuffer(
+  return renderDoc(
     <Document title={doc.title} author="Pizarro" creator="Pizarro" producer="Pizarro">
       {chunks.map((chunk, i) => (
         <Page key={i} size="A4" style={s.page}>
@@ -654,6 +690,32 @@ function Runs({ runs }: { runs: PdfRun[] }) {
 
 const HEADING_SIZE = [11.5, 10.5, 10, 9.5, 9, 9];
 
+const CODE_STYLE = { marginTop: 3, padding: 5, fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderWidth: 1, borderColor: C.line, borderRadius: 3 };
+/** Una línea de un bloque de código partido por líneas: la caja se reparte entre la primera, las de en medio y la última. */
+const CODE_LINE = { fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderColor: C.line, paddingLeft: 5, paddingRight: 5, borderLeftWidth: 1, borderRightWidth: 1 };
+const CODE_LINE_STYLE = {
+  first: { ...CODE_LINE, marginTop: 3, paddingTop: 5, borderTopWidth: 1, borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  middle: CODE_LINE,
+  last: { ...CODE_LINE, paddingBottom: 5, borderBottomWidth: 1, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+};
+
+type ListBlock = Extract<PdfBlock, { t: "list" }>;
+/** Estilo de la fila de un trozo: márgenes y, en el último de una sesión, el borde de abajo (ver sessionParts). */
+type PartStyle = { marginTop?: number; paddingLeft?: number; paddingBottom?: number; borderBottomWidth?: number; borderBottomColor?: string };
+
+/** Elemento `j` de una lista: su viñeta (o número, o casilla) y su contenido, con `style` en la fila. */
+function listItem(b: ListBlock, j: number, style: PartStyle, extra?: { minPresenceAhead?: number }) {
+  const item = b.items[j]!;
+  return (
+    <View key={j} style={{ flexDirection: "row", ...style }} minPresenceAhead={extra?.minPresenceAhead}>
+      <Text style={{ width: b.ordered || item.checked !== null ? 18 : 10, color: item.checked ? C.green : C.muted, fontFamily: item.checked !== null ? "Helvetica-Bold" : "Helvetica" }}>
+        {item.checked !== null ? (item.checked ? "[x]" : "[ ]") : b.ordered ? `${b.start + j}.` : "•"}
+      </Text>
+      <View style={{ flex: 1 }}><MarkdownBlocks blocks={item.blocks} tight /></View>
+    </View>
+  );
+}
+
 /** Bloques de Markdown. `tight`: dentro de un elemento de lista, el primero sin margen superior (va junto a su viñeta). */
 function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?: boolean }) {
   return (
@@ -663,19 +725,12 @@ function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?:
         switch (b.t) {
           case "p": return <Text key={i} style={{ marginTop: top }}><Runs runs={b.runs} /></Text>;
           case "h": return <Text key={i} style={{ marginTop: 6, fontSize: HEADING_SIZE[b.level - 1], fontFamily: "Helvetica-Bold", color: "#312e81" }} minPresenceAhead={20}><Runs runs={b.runs} /></Text>;
-          case "code": return <Text key={i} style={{ marginTop: 3, padding: 5, fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderWidth: 1, borderColor: C.line, borderRadius: 3 }}>{b.text}</Text>;
+          case "code": return <Text key={i} style={CODE_STYLE}>{b.text}</Text>;
           case "hr": return <View key={i} style={{ marginVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }} />;
           case "quote": return <View key={i} style={{ marginTop: 3, paddingLeft: 7, borderLeftWidth: 2, borderLeftColor: C.line, color: C.muted }}><MarkdownBlocks blocks={b.blocks} /></View>;
           case "list": return (
             <View key={i} style={{ marginTop: top }}>
-              {b.items.map((item, j) => (
-                <View key={j} style={{ flexDirection: "row", marginTop: j === 0 ? 0 : 2 }}>
-                  <Text style={{ width: b.ordered || item.checked !== null ? 18 : 10, color: item.checked ? C.green : C.muted, fontFamily: item.checked !== null ? "Helvetica-Bold" : "Helvetica" }}>
-                    {item.checked !== null ? (item.checked ? "[x]" : "[ ]") : b.ordered ? `${b.start + j}.` : "•"}
-                  </Text>
-                  <View style={{ flex: 1 }}><MarkdownBlocks blocks={item.blocks} tight /></View>
-                </View>
-              ))}
+              {b.items.map((item, j) => listItem(b, j, { marginTop: j === 0 ? 0 : 2 }))}
             </View>
           );
           case "table": return (
@@ -694,6 +749,47 @@ function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?:
       })}
     </>
   );
+}
+
+/**
+ * Un trozo de la descripción de una sesión (ver sessionParts): su tamaño, si pide ir con lo siguiente y cómo se pinta
+ * con el estilo del trozo (`style`: el hueco del número a la izquierda y, en el último, el borde de abajo).
+ */
+interface MarkdownPart {
+  units: number;
+  keep?: boolean;
+  render: (style: PartStyle) => React.ReactNode;
+}
+
+/** Envuelve un bloque en una vista con el estilo del trozo (lo que no puede llevarlo en sí mismo). */
+function wrapped(node: React.ReactNode, keep?: boolean): MarkdownPart["render"] {
+  return function wrap(style) {
+    return <View style={style} minPresenceAhead={keep ? 20 : undefined}>{node}</View>;
+  };
+}
+
+/**
+ * Un bloque de Markdown en trozos que, uno debajo de otro, se ven igual que el bloque entero: una lista, elemento a
+ * elemento (cada fila lleva el margen que tenía en la lista y el estilo del trozo, sin vistas de más: con miles de
+ * elementos, cada vista cuenta en la memoria del worker); un bloque de código, línea a línea (la caja repartida entre
+ * ellas). Así ninguna lista ni ningún código largo es un trozo de varias páginas, que habría que maquetar entero una y
+ * otra vez para encontrar dónde cortar (ver naturalChunks). Lo demás, en un trozo.
+ */
+function markdownParts(b: PdfBlock): MarkdownPart[] {
+  if (b.t === "list" && b.items.length > 1) {
+    return b.items.map((item, j) => ({
+      units: 0.2 + markdownUnits(item.blocks),
+      render: (style) => listItem(b, j, { marginTop: j === 0 ? 3 : 2, ...style }),
+    }));
+  }
+  if (b.t === "code" && b.text.includes("\n")) {
+    const lines = b.text.split("\n");
+    return lines.map((line, j) => ({
+      units: (j === 0 ? 1.5 : 0) + textUnits(line, 110),
+      render: wrapped(<Text style={CODE_LINE_STYLE[j === 0 ? "first" : j === lines.length - 1 ? "last" : "middle"]}>{line || " "}</Text>),
+    }));
+  }
+  return [{ units: markdownUnits([b]), keep: b.t === "h", render: wrapped(<MarkdownBlocks blocks={[b]} />, b.t === "h") }];
 }
 
 // --- Programa del curso (columna PROGRAM) -------------------------------------------------------------------------------
@@ -733,47 +829,34 @@ function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
       {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
     </View>
   );
-  const session = (x: ProgramSessionPdf) => (
-    <View style={{ ...SESSION_ROW, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line }}>
-      {circle(x)}
-      <View style={{ flex: 1 }}>
-        {head(x)}
-        <MarkdownBlocks blocks={x.blocks} />
-      </View>
-    </View>
-  );
   /**
-   * Documento largo: la sesión en trozos que, uno debajo de otro, se ven igual que la sesión entera (el número y la
-   * cabecera en el primero; luego un bloque de Markdown por trozo, con un hueco del ancho del número; el borde de abajo en
-   * el último). Así las páginas suelen empezar con un trozo entero (ver pickCut). Lo que pedía seguir con algo detrás
-   * (la cabecera, los títulos) lo pide el propio trozo.
+   * La sesión en trozos que, uno debajo de otro, se ven igual que la sesión entera: el número y la cabecera en el
+   * primero (sin partir: antes el número podía quedarse solo al pie y el título pasar a la página siguiente); luego la
+   * descripción en trozos (markdownParts), con un hueco del ancho del número; el borde de abajo en el último. Así las
+   * páginas suelen empezar con un trozo entero (ver pickCut), y lo que pedía seguir con algo detrás (la cabecera, los
+   * títulos) lo pide el propio trozo.
    */
   const sessionParts = (x: ProgramSessionPdf): Block[] => {
-    const only = x.blocks.length === 0;
+    const md = x.blocks.flatMap(markdownParts);
+    const only = md.length === 0;
     const parts: Block[] = [{
       units: 4 + textUnits(x.title, 70),
+      keep: !only,
       node: (
-        <View style={{ ...SESSION_ROW, paddingTop: 8, ...(only ? SESSION_END : {}) }} minPresenceAhead={only ? undefined : 30}>
+        <View style={{ ...SESSION_ROW, paddingTop: 8, ...(only ? SESSION_END : {}) }} wrap={false} minPresenceAhead={only ? undefined : 30}>
           {circle(x)}
           <View style={{ flex: 1 }}>{head(x)}</View>
         </View>
       ),
     }];
-    x.blocks.forEach((b, i) => {
-      const last = i === x.blocks.length - 1;
-      parts.push({
-        units: markdownUnits([b]),
-        node: (
-          <View style={{ ...SESSION_ROW, ...(last ? SESSION_END : {}) }} minPresenceAhead={b.t === "h" ? 20 : undefined}>
-            <View style={{ width: 26 }} />
-            <View style={{ flex: 1 }}><MarkdownBlocks blocks={[b]} /></View>
-          </View>
-        ),
-      });
+    md.forEach((part, i) => {
+      const last = i === md.length - 1;
+      // El hueco del número (26) y su separación (10) como margen izquierdo del trozo.
+      parts.push({ units: part.units, keep: part.keep, node: part.render({ paddingLeft: 36, ...(last ? SESSION_END : {}) }) });
     });
     return parts;
   };
-  const build = (big: boolean): Block[] => [
+  const build = (): Block[] => [
     {
       units: 8,
       node: (
@@ -787,7 +870,7 @@ function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
         </>
       ),
     },
-    ...r.sessions.flatMap((x) => (big ? sessionParts(x) : [{ units: 4 + textUnits(x.title, 70) + markdownUnits(x.blocks), node: session(x) }])),
+    ...r.sessions.flatMap(sessionParts),
   ];
   return { title: `${t("Programa")} · ${r.project}`, build, footer: <Footer left={r.project} /> };
 }

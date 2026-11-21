@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 import { pdfPageRuns } from "./pdf-runs";
+import { assertFastAsync } from "./timing";
 import { chunkBlocks, pickCut, textUnits, totalUnits } from "../src/lib/pdf-chunks";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
@@ -58,10 +59,14 @@ describe("pdf-chunks", () => {
     assert.equal(pickCut([[0, 1, 2], [3, 4], [4, 5], [6]]), 3);
   });
 
-  test("pickCut: si todas empiezan con el resto de un bloque partido, corta antes de ese bloque (pasa entero a la página siguiente)", () => {
-    assert.equal(pickCut([[0, 1], [1, 2], [2, 3], [3, 4]]), 2);
+  test("pickCut: si todas empiezan con el resto de un bloque partido, null (que crezca la ventana); con `unclean`, antes de ese bloque", () => {
+    assert.equal(pickCut([[0, 1], [1, 2], [2, 3], [3, 4]]), null);
+    assert.equal(pickCut([[0, 1], [1, 2], [2, 3], [3, 4]], { unclean: true }), 2);
     // -1: otro elemento del bloque anterior (un título y su tabla); al principio de página, es su continuación.
-    assert.equal(pickCut([[0, -1], [-1, 1, -1], [-1, 2], [3]]), 1);
+    assert.equal(pickCut([[0, -1], [-1, 1, -1], [-1, 2], [3]], { unclean: true }), 1);
+    // Lo que pide ir con lo siguiente (un título) se va con el bloque partido; nunca se corta antes del primero.
+    assert.equal(pickCut([[0, 1, 2, 3, 4], [4, 5], [5, 6], [7]], { unclean: true, keep: (b) => b === 3 || b === 4 }), 3);
+    assert.equal(pickCut([[0, 1], [1, 2], [2, 3], [3, 4]], { unclean: true, keep: () => true }), 1);
   });
 
   test("pickCut: con menos de tres páginas, o un solo bloque, no corta (hace falta una ventana mayor)", () => {
@@ -106,11 +111,8 @@ describe("PDF largos en tramos", () => {
     const description = (i: number) => [`## Objetivos ${i}`, `${lorem}. **Negrita** y *cursiva*.`, "- uno\n- dos\n- tres", (lorem + ". ").repeat(1 + (i % 4))].join("\n\n");
     const sessions = Array.from({ length: 50 }, (_, i) => ({ n: i + 1, title: `Sesión de ${words(i, 6)}`, date: null, assignee: null, description: description(i) }));
     const job: PdfJob = { kind: "program", locale: "es", input: { project: "Curso", today: "2026-11-20", withAssignee: false, sessions } };
+    await assertSamePages(job, 10);
     const pages = await pagesText({ ...job, singlePageUnits: 0 });
-    // Las sesiones van en trozos (para poder cortar entre ellos): las páginas son casi las mismas que en un solo <Page>.
-    const single = await pagesText({ ...job, singlePageUnits: Infinity });
-    assert.ok(pages.length >= 10 && Math.abs(pages.length - single.length) <= 1, `${pages.length} páginas (en un solo <Page>, ${single.length})`);
-    assertFooters(pages);
     const all = pages.join("\n");
     let from = 0;
     for (let n = 1; n <= sessions.length; n++) {
@@ -118,6 +120,43 @@ describe("PDF largos en tramos", () => {
       assert.ok(at >= from, `falta la sesión ${n} (o no va en orden)`);
       from = at;
     }
+  });
+
+  test("programa: el número y el título de una sesión nunca se separan (antes el número se quedaba solo al pie)", async () => {
+    const description = (i: number) => [`## Objetivos ${i}`, `${lorem}. **Negrita** y *cursiva*.`, "- uno\n- dos\n- tres", (lorem + ". ").repeat(1 + (i % 4))].join("\n\n");
+    const sessions = Array.from({ length: 150 }, (_, i) => ({ n: i + 1, title: `Sesión de ${words(i, 6)}`, date: null, assignee: null, description: description(i) }));
+    const job: PdfJob = { kind: "program", locale: "es", input: { project: "Curso", today: "2026-11-20", withAssignee: false, sessions } };
+    for (const singlePageUnits of [undefined, Infinity]) {
+      const pages = pdfPageRuns(await renderInWorker({ ...job, singlePageUnits }));
+      let seen = 0;
+      for (const runs of pages) {
+        runs.forEach((run, k) => {
+          const m = /^Sesión (\d+)$/.exec(run);
+          if (!m) return;
+          seen++;
+          assert.equal(runs[k - 1], m[1], `«${run}» sin su número delante en la misma página`);
+        });
+      }
+      assert.equal(seen, sessions.length);
+    }
+  });
+
+  test("programa: una lista o un código enormes en una sesión no disparan el tiempo (se parten por elementos y por líneas)", async () => {
+    // Antes, la ventana que se maqueta para cortar se doblaba una y otra vez sobre la misma lista (5.000 elementos: 372 s
+    // y error 504); con esta, de 2.500, más de 100 s. Ahora, unos 12 s.
+    const sessions = [
+      { n: 1, title: "Lista", date: null, assignee: null, description: "- a\n".repeat(2499) + "- z" },
+      { n: 2, title: "Código", date: null, assignee: null, description: "```\n" + Array.from({ length: 800 }, (_, k) => `linea ${k}`).join("\n") + "\n```" },
+      ...Array.from({ length: 40 }, (_, i) => ({ n: i + 3, title: `Sesión ${words(i, 6)}`, date: null, assignee: null, description: (lorem + ". ").repeat(2) })),
+    ];
+    const pdf = await assertFastAsync(60_000, () => renderInWorker({ kind: "program", locale: "es", input: { project: "Curso", today: "2026-11-20", withAssignee: false, sessions } }), "programa con una lista de 2.500 elementos");
+    const runs = pdfPageRuns(pdf);
+    const pages = runs.map((r) => r.join(""));
+    assertFooters(pages);
+    const all = pages.join("\n");
+    assert.ok(all.includes("linea 0") && all.includes("linea 799") && all.includes("Sesión 42: "));
+    // Ninguna página casi vacía (el corte antes de un bloque enorme dejaba la cabecera de la sesión sola en una página).
+    runs.slice(0, -1).forEach((r, i) => assert.ok(r.length > 30, `página ${i + 1} casi vacía: ${JSON.stringify(r)}`));
   });
 
   test("resumen para el cliente: una tarjeta con 100 subtareas se parte entre páginas (antes se aplastaba sobre la primera)", async () => {
