@@ -162,7 +162,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Improvement" },
         { title: "Idea: dark mode for the app", description: "Ideas start here. Once you decide to build them, drag them to “To do”.", column: 0, kind: "Improvement" },
-        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organise the release notes.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgent"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
+        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organize the release notes.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgent"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
         { title: "Add sign-in with email", description: "Subtasks are ticked from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", priority: "MEDIA", dueInDays: 5, subtasks: ["Design the screen", "Connect to the server", "Try it on a phone"] },
         { title: "Speed up loading the order list", description: "“Review” waits for someone else's approval before the card goes into the release.", column: 3, kind: "Improvement" },
         { title: "Help text on the settings page", description: "Whatever is in “Next release” appears in the notes when you click “Generate release”, with the project's headers and footers. Once published, these cards move to “Done”.", column: 4, kind: "Improvement" },
@@ -465,14 +465,14 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
     },
     en: {
       name: "Course preparation",
-      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Programme” (published as a PDF), materials, exercises and exams, and student follow-up.",
+      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Program” (published as a PDF), materials, exercises and exams, and student follow-up.",
       template: { ...BUILTIN_TEMPLATES_EN["curso-master"]!, description: "" },
       tasks: [
         {
           title: "Welcome: how this board works",
           description:
             WELCOME_EN +
-            "\n\nIn **Programme** each card is a session of the course, with its date. “Publish programme (PDF)” generates the programme with the sessions in that order and saves a copy in Documentation.\n\n" +
+            "\n\nIn **Program** each card is a session of the course, with its date. “Publish program (PDF)” generates the program with the sessions in that order and saves a copy in Documentation.\n\n" +
             "When you choose a type (Prepare material, Prepare exercise, Prepare exam…) the description is filled in with a brief for an AI agent: objective, content, delivery format, duration, criteria and notes for the agent.\n\n" +
             "Move the briefs you want to give the agent to **AI work plan** and click “Generate work plan”: you get a Markdown text with the instructions and every task, ready to paste into Claude Code or save in Documentation. Those under “Always in the plan” go into every plan.",
           column: 0,
@@ -480,7 +480,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         },
         {
           title: "Session: Course introduction",
-          description: "**Objectives:** get to know the course, the calendar and how it is assessed.\n\n**Topics:**\n\n- Teachers and students introduce themselves\n- Programme and calendar\n- Assessment criteria\n\n**Activities:** round of introductions.\n\n**Readings and materials:** course guide.",
+          description: "**Objectives:** get to know the course, the calendar and how it is assessed.\n\n**Topics:**\n\n- Teachers and students introduce themselves\n- Program and calendar\n- Assessment criteria\n\n**Activities:** round of introductions.\n\n**Readings and materials:** course guide.",
           column: 4, kind: "Session", labels: ["Module 1"], dueInDays: 14,
         },
         {

@@ -59,9 +59,9 @@ describe("cola de renders PDF: petición cancelada (req.signal)", () => {
     await new Promise((r) => setTimeout(r, 5)); // el primero ya ocupa el turno
     const ctrl = new AbortController();
     let ran = false;
-    const cancelled = queuedRender(async () => { ran = true; return "no"; }, 5000, ctrl.signal);
+    const canceled = queuedRender(async () => { ran = true; return "no"; }, 5000, ctrl.signal);
     ctrl.abort();
-    await assert.rejects(cancelled, isAborted); // sin esperar a que termine el primero
+    await assert.rejects(canceled, isAborted); // sin esperar a que termine el primero
     // Su sitio entre los PDF_MAX_WAITING queda libre: caben otros tantos.
     const waiting = Array.from({ length: PDF_MAX_WAITING }, (_, i) => queuedRender(async () => i, 5000));
     release();

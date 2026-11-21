@@ -30,7 +30,7 @@ describe("licencia", () => {
     assert.match(LICENSE_EN, /## 3\. Free personal and educational use/);
     assert.match(LICENSE_EN, /\*\*Educational institution\*\*/);
     assert.match(LICENSE_EN, /\*\*Educational use\*\*/);
-    assert.match(LICENSE_EN, /neither personal nor educational needs a licence/);
+    assert.match(LICENSE_EN, /neither personal nor educational needs a license/);
   });
   test("el precio se publica sin IVA y el pago es con pasarela y factura automática", () => {
     assert.match(LICENSE_ES, /más los impuestos aplicables \(IVA\)/);

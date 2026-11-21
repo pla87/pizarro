@@ -2,11 +2,11 @@
 // Clave: texto exacto en español.
 export const curso: Record<string, string> = {
   // Rol «Programa» y su PDF
-  "Programa del curso (PDF)": "Course programme (PDF)",
-  "Programa": "Programme",
-  "programa": "programme",
-  "Programa del curso": "Course programme",
-  "Publicar programa (PDF)": "Publish programme (PDF)",
+  "Programa del curso (PDF)": "Course program (PDF)",
+  "Programa": "Program",
+  "programa": "program",
+  "Programa del curso": "Course program",
+  "Publicar programa (PDF)": "Publish program (PDF)",
   "1 sesión": "1 session",
   "{n} sesiones": "{n} sessions",
   "Sesión {n}": "Session {n}",
@@ -17,9 +17,9 @@ export const curso: Record<string, string> = {
   "No se pudo guardar en la Documentación.": "Could not save it to Documentation.",
   // Diálogo «Publicar programa»
   "Publicar": "Publish",
-  "No se pudo generar el programa.": "Could not generate the programme.",
-  "Sin conexión: no se ha podido generar el programa.": "Offline: the programme could not be generated.",
-  "El programa está listo.": "The programme is ready.",
+  "No se pudo generar el programa.": "Could not generate the program.",
+  "Sin conexión: no se ha podido generar el programa.": "Offline: the program could not be generated.",
+  "El programa está listo.": "The program is ready.",
   "Guardado en Documentación como «{name}».": "Saved to Documentation as “{name}”.",
   "No se ha guardado en Documentación: {reason}": "Not saved to Documentation: {reason}",
   "Un PDF con la sesión de «{name}»: número, fecha, título y descripción.": "A PDF with the session in “{name}”: number, date, title and description.",
@@ -38,5 +38,5 @@ export const curso: Record<string, string> = {
   "Tareas que se repiten: elige dónde aparece la siguiente.": "Repeating tasks: choose where the next one appears.",
   "PDF de resumen para el cliente, sin comentarios ni personas.": "Client summary PDF, with no comments or people.",
   "Suma el coste de sus tarjetas y activa el campo Coste.": "Adds up the cost of its cards and turns on the Cost field.",
-  "Cada tarjeta es una sesión del curso: publica el programa en PDF.": "Each card is a session of the course: publish the programme as a PDF.",
+  "Cada tarjeta es una sesión del curso: publica el programa en PDF.": "Each card is a session of the course: publish the program as a PDF.",
 };

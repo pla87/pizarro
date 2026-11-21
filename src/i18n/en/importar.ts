@@ -11,7 +11,7 @@ export const importar: Record<string, string> = {
   "Cosas que no se pudieron importar": "Things that could not be imported",
 
   // Errores del archivo
-  "Formato de archivo no reconocido. Sube un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV.": "File format not recognised. Upload a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV.",
+  "Formato de archivo no reconocido. Sube un .pizarro.zip de Pizarro, un JSON exportado de Trello o un CSV.": "File format not recognized. Upload a Pizarro .pizarro.zip, a JSON exported from Trello or a CSV.",
   "El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).": "The file exceeds the maximum size for JSON and CSV ({mb} MB).",
   "El archivo no es un JSON válido.": "The file is not valid JSON.",
   "El JSON no parece una exportación de un tablero de Trello (faltan «lists» y «cards»).": "The JSON does not look like a Trello board export (“lists” and “cards” are missing).",
@@ -24,7 +24,7 @@ export const importar: Record<string, string> = {
   "Hay más de 1000 tareas activas (máximo 1000 por proyecto). Quita o archiva tareas en el origen y vuelve a exportar.":
     "There are more than 1000 active tasks (maximum 1000 per project). Remove or archive tasks at the source and export again.",
   "El CSV no tiene una columna de título reconocible (título, title, name, summary…). Revisa la cabecera de la primera fila.":
-    "The CSV has no recognisable title column (título, title, name, summary…). Check the header in the first row.",
+    "The CSV has no recognizable title column (título, title, name, summary…). Check the header in the first row.",
 
   // Textos que se escriben en las tareas
   "Sin nombre": "Unnamed",
@@ -41,7 +41,7 @@ export const importar: Record<string, string> = {
   "{n} textos eran más largos de lo permitido y se han recortado.": "{n} texts were longer than allowed and have been shortened.",
   "{n} archivos adjuntos subidos a Trello no se han importado (solo se importan los enlaces).": "{n} files uploaded to Trello were not imported (only links are imported).",
   "{n} fechas límite no se pudieron interpretar y se han ignorado.": "{n} due dates could not be understood and were ignored.",
-  "{n} prioridades no se reconocieron y se han ignorado.": "{n} priorities were not recognised and were ignored.",
+  "{n} prioridades no se reconocieron y se han ignorado.": "{n} priorities were not recognized and were ignored.",
   "{n} filas no tenían título y se han ignorado.": "{n} rows had no title and were ignored.",
   "{n} tarjetas no tenían título y se han ignorado.": "{n} cards had no title and were ignored.",
   "{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.": "{n} task labels were over the limit ({max} per task) and were not imported.",
@@ -63,7 +63,7 @@ export const importar: Record<string, string> = {
   "1 elemento de checklist sobraba (máximo {max} subtareas por tarea) y no se ha importado.": "1 checklist item was over the limit ({max} subtasks per task) and was not imported.",
   "1 comentario antiguo no se ha importado: de cada tarjeta con más de {max} se guardan los {max} más recientes.": "1 older comment was not imported: for each card with more than {max}, the {max} most recent are kept.",
   "1 fila no tenía título y se ha ignorado.": "1 row had no title and was ignored.",
-  "1 prioridad no se reconoció y se ha ignorado.": "1 priority was not recognised and was ignored.",
+  "1 prioridad no se reconoció y se ha ignorado.": "1 priority was not recognized and was ignored.",
   "1 subtarea sobraba (máximo {max} por tarea) y no se ha importado.": "1 subtask was over the limit ({max} per task) and was not imported.",
   "1 etiqueta sobraba (máximo {max} por proyecto) y no se ha importado.": "1 label was over the limit ({max} per project) and was not imported.",
   "1 tarea archivada sobraba (máximo {max}) y no se ha importado.": "1 archived task was over the limit ({max}) and was not imported.",

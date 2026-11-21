@@ -2,7 +2,7 @@
 export const textos: Record<string, string> = {
   "No hay registro público: solo un administrador da de alta usuarios.": "There is no public sign-up: only an administrator can add users.",
   "Ya hay {max} usuarios activos, el máximo": "There are already {max} active users, the maximum",
-  "También se anulan los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.": "Any pending links are cancelled too. You don't type any password.",
+  "También se anulan los enlaces que tuviera pendientes. Tú no escribes ninguna contraseña.": "Any pending links are canceled too. You don't type any password.",
   "Tendrá que configurar uno nuevo al entrar.": "They will have to set up a new one when they sign in.",
   "Podrá volver a activarla en «Mi perfil».": "They can turn it on again in “My profile”.",
   "También deja de ser miembro de los proyectos privados que comparte con otras personas.": "They also stop being a member of the private projects they share with other people.",

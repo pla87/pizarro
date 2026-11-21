@@ -142,7 +142,7 @@ and updates don't touch it.
 1. **Open the wizard** in your browser: the address the installer gave you, ending in `/setup` (for example,
    `https://pizarro.example.com/setup`).
 2. **Type the one-time code.** It checks that you are the person installing the server.
-3. **Your organisation:** enter its name and choose the installation's language and time zone.
+3. **Your organization:** enter its name and choose the installation's language and time zone.
 4. **First administrator:** your name, your email and a password of at least 10 characters.
 5. **Email:** the wizard tells you whether sending email is ready and lets you send a test. If it isn't yet, carry on:
    you set it up later from the app itself ([how](#email)).

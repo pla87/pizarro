@@ -53,9 +53,9 @@ async function openBoard(page) {
 const programCol = (page) => L.colLoc(page, "Programa");
 const badge = (page) => programCol(page).locator("[data-session-badge]");
 const plus = (page) => programCol(page).getByRole("button", { name: /^Añadir tarea en Programa|^Add task in Programa/ });
-const dlg = (page) => page.locator("[role=dialog]").filter({ hasText: /Publicar programa|Publish programme/ }).first();
+const dlg = (page) => page.locator("[role=dialog]").filter({ hasText: /Publicar programa|Publish program/ }).first();
 async function openPublish(page) {
-  await programCol(page).getByRole("button", { name: /Publicar programa \(PDF\)|Publish programme \(PDF\)/ }).click();
+  await programCol(page).getByRole("button", { name: /Publicar programa \(PDF\)|Publish program \(PDF\)/ }).click();
   await dlg(page).waitFor();
   await sleep(300);
 }
@@ -203,9 +203,9 @@ try {
       L.eq("EN: y el contador", await badge(page).getAttribute("title"), "Sessions: 100 of at most 100");
       await openPublish(page);
       const today = await appToday(page);
-      L.check("EN: la casilla de guardar", await dlg(page).getByLabel(`Also save to Documentation as a new version (“Programme – ${today}_vN.pdf”)`).isChecked());
+      L.check("EN: la casilla de guardar", await dlg(page).getByLabel(`Also save to Documentation as a new version (“Program – ${today}_vN.pdf”)`).isChecked());
       await publish(page, true);
-      L.eq("EN: la versión guardada", (await dlg(page).getByRole("status").innerText()).replace(/\s+/g, " "), `Saved to Documentation as “Programme – ${today}_v1.pdf” (programme version 1). Open Documentation`);
+      L.eq("EN: la versión guardada", (await dlg(page).getByRole("status").innerText()).replace(/\s+/g, " "), `Saved to Documentation as “Program – ${today}_v1.pdf” (program version 1). Open Documentation`);
       L.check("EN: el diálogo cabe en 390 px", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
       await page.screenshot({ path: `${SHOTS}/r51-programa-en.png` });
       L.assertNoErrors("EN", [s]);

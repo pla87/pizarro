@@ -27,7 +27,7 @@ describe("textos legales: lógica pura", () => {
     assert.match(defaultLegalMarkdown("terms", "es"), /Ley aplicable/);
     assert.match(defaultLegalMarkdown("terms", "en"), /Governing law/);
     assert.match(defaultLegalMarkdown("terms", "es"), /Licencia del software[\s\S]*\/licencia[\s\S]*licencia comercial/);
-    assert.match(defaultLegalMarkdown("terms", "en"), /Software licence[\s\S]*\/licencia[\s\S]*commercial licence/);
+    assert.match(defaultLegalMarkdown("terms", "en"), /Software license[\s\S]*\/licencia[\s\S]*commercial license/);
     for (const kind of ["privacy", "terms"] as const)
       for (const l of ["es", "en"] as const) {
         const unknown = [...defaultLegalMarkdown(kind, l).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => k !== "responsable" && k !== "email");

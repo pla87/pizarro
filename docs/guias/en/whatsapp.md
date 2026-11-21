@@ -42,7 +42,7 @@ You need:
 ## Step 1. Create a Meta Business account
 
 1. Go to [business.facebook.com](https://business.facebook.com) with your Facebook account.
-2. Create a **business portfolio** (your organisation's name and a contact email). If you already have one, use it.
+2. Create a **business portfolio** (your organization's name and a contact email). If you already have one, use it.
 
 ## Step 2. Create the app in Meta for Developers
 
@@ -115,7 +115,7 @@ Pizarro fills in the variables in each person's language; the rest of the text i
 ## Step 6. Create the verification code template
 
 Each person confirms their number with a 6-digit code. Meta requires one-time codes to go in an **Authentication**
-template (if they go in a utility one, Meta may recategorise or pause it). You don't write this template: Meta sets the
+template (if they go in a utility one, Meta may recategorize or pause it). You don't write this template: Meta sets the
 text.
 
 1. In [WhatsApp Manager](https://business.facebook.com/wa/manage/message-templates/) → **Message templates → Create

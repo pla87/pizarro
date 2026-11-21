@@ -36,7 +36,7 @@ export const cuentas: Record<string, string> = {
     "We'll email you a link to confirm the change; once confirmed, all devices will be signed out.",
   "Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).": "We've sent you an email: confirm the change with the link (expires in 30 minutes).",
   "Sesiones abiertas": "Open sessions",
-  "Dispositivos en los que has iniciado sesión. Cierra los que no reconozcas.": "Devices where you are signed in. Close any you don't recognise.",
+  "Dispositivos en los que has iniciado sesión. Cierra los que no reconozcas.": "Devices where you are signed in. Close any you don't recognize.",
   "Se han cerrado las demás sesiones": "The other sessions were closed",
   "Cerrar las demás": "Close the others",
   "Esta sesión": "This session",
@@ -260,7 +260,7 @@ export const cuentas: Record<string, string> = {
   "El inicio de sesión con Google ha caducado o no es válido. Vuelve a intentarlo.":
     "Google sign-in has expired or is not valid. Try again.",
   "Has cancelado el inicio de sesión con Google.":
-    "You cancelled the Google sign-in.",
+    "You canceled the Google sign-in.",
   "El inicio de sesión con Google no está configurado en el servidor.":
     "Google sign-in is not configured on the server.",
   "No se pudo iniciar sesión con Google. Inténtalo de nuevo.":

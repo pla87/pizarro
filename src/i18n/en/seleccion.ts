@@ -8,7 +8,7 @@ export const seleccion: Record<string, string> = {
   "Las {n} tarjetas ya no están sobre ninguna columna.": "The {n} cards are no longer over any column.",
   "Has soltado {n} tarjetas en {place}.": "Dropped {n} cards in {place}.",
   "Has soltado {n} tarjetas fuera de las columnas: no se mueven.": "Dropped {n} cards outside the columns: they stay where they were.",
-  "Arrastre cancelado: las {n} tarjetas vuelven a su sitio.": "Drag cancelled: the {n} cards go back to where they were.",
+  "Arrastre cancelado: las {n} tarjetas vuelven a su sitio.": "Drag canceled: the {n} cards go back to where they were.",
   "Con varias tarjetas seleccionadas, Alt+flechas sobre una de ellas las mueve todas juntas, y al arrastrar una de ellas se arrastran todas.":
     "With several cards selected, Alt+arrows on one of them moves them all together, and dragging one of them drags them all.",
 

@@ -66,66 +66,66 @@ Para obtener una licencia comercial, escribe al Autor al email indicado en la p√
 
 export const LICENSE_EN = `# Pizarro License (English translation)
 
-**In short:** Pizarro is source-available software, not open source. You can read the code, but you need a licence to use it. If you are an individual running it on your own server for personal, household or family purposes, with no commercial or professional aim, it is free. It is also free for education: educational institutions, public or private (schools, universities, vocational training centres, academies), their teachers and their students can use it at no cost to teach, learn, do research and run the institution itself. If you use it in a company, as a professional or freelancer, or in any other organisation (including associations, NGOs and public bodies), you need a commercial licence: it is a one-time payment per server, includes all future updates and does not include support. This summary is for guidance only and does not replace the licence text, which is the one that applies.
+**In short:** Pizarro is source-available software, not open source. You can read the code, but you need a license to use it. If you are an individual running it on your own server for personal, household or family purposes, with no commercial or professional aim, it is free. It is also free for education: educational institutions, public or private (schools, universities, vocational training centers, academies), their teachers and their students can use it at no cost to teach, learn, do research and run the institution itself. If you use it in a company, as a professional or freelancer, or in any other organization (including associations, NGOs and public bodies), you need a commercial license: it is a one-time payment per server, includes all future updates and does not include support. This summary is for guidance only and does not replace the license text, which is the one that applies.
 
-*This is a translation of the Spanish licence above. In case of any discrepancy between the two versions, the Spanish version prevails.*
+*This is a translation of the Spanish license above. In case of any discrepancy between the two versions, the Spanish version prevails.*
 
 ## 1. Ownership
 
-Pizarro (the "Software"), its source code, its documentation and its graphic elements are works protected by intellectual property law. The author of Pizarro (the "Author") retains all rights not expressly granted in this licence. The fact that the code is publicly visible, for example in a repository, does not grant any right to use, copy, modify or distribute it beyond those this licence recognises.
+Pizarro (the "Software"), its source code, its documentation and its graphic elements are works protected by intellectual property law. The author of Pizarro (the "Author") retains all rights not expressly granted in this license. The fact that the code is publicly visible, for example in a repository, does not grant any right to use, copy, modify or distribute it beyond those this license recognizes.
 
 ## 2. Definitions
 
 - **Installation**: a production instance of the Software, with its database, deployed on a server (physical or virtual) or in a hosting environment. Copies intended only for testing, development, backup or disaster recovery of a licensed installation do not count as additional installations as long as they are not used in production.
 - **Personal use**: use by an individual for personal, household or family purposes, with no commercial or professional aim, on servers that individual controls.
-- **Educational institution**: an entity, public or private, whether or not for profit, whose main activity is teaching, formal or non-formal: for example, schools, secondary schools, universities, vocational training centres, language schools, music conservatories, adult education centres, academies and training centres.
-- **Educational use**: use by an educational institution, its teachers and its students for teaching, learning or academic research, and to organise and manage the institution's own activity (for example, coordinating teachers, planning courses and materials or handling the institution's internal tasks). The institution may install the Software on its own servers or on hosting it contracts, and so may the entity or public body the institution depends on, for its institutions and for these same purposes. Commercial activity unrelated to teaching is not educational use, even when carried out by an educational institution or its teachers (for example, providing services to third parties for a fee), nor is use by companies or other organisations whose main activity is not teaching, even if they train their own staff.
-- **Business or professional use**: any use for commercial or professional purposes, or within an organisation, whether or not for profit, including freelancers and independent professionals, except educational use. Associations, NGOs, foundations and public bodies are treated as organisations for this purpose and need a commercial licence: any use that is neither personal nor educational needs a licence.
+- **Educational institution**: an entity, public or private, whether or not for profit, whose main activity is teaching, formal or non-formal: for example, schools, secondary schools, universities, vocational training centers, language schools, music conservatories, adult education centers, academies and training centers.
+- **Educational use**: use by an educational institution, its teachers and its students for teaching, learning or academic research, and to organize and manage the institution's own activity (for example, coordinating teachers, planning courses and materials or handling the institution's internal tasks). The institution may install the Software on its own servers or on hosting it contracts, and so may the entity or public body the institution depends on, for its institutions and for these same purposes. Commercial activity unrelated to teaching is not educational use, even when carried out by an educational institution or its teachers (for example, providing services to third parties for a fee), nor is use by companies or other organizations whose main activity is not teaching, even if they train their own staff.
+- **Business or professional use**: any use for commercial or professional purposes, or within an organization, whether or not for profit, including freelancers and independent professionals, except educational use. Associations, NGOs, foundations and public bodies are treated as organizations for this purpose and need a commercial license: any use that is neither personal nor educational needs a license.
 
 ## 3. Free personal and educational use
 
 Individuals may install and use the Software free of charge for personal use, on their own servers, and may modify it for that same use. Educational institutions, their teachers and their students may install and use the Software free of charge for educational use, and may modify it for that same use. In both cases, subject to the prohibitions in section 5.
 
-## 4. Commercial licence
+## 4. Commercial license
 
-Business or professional use requires a commercial licence. The commercial licence:
+Business or professional use requires a commercial license. The commercial license:
 
 - is paid once for each installation (server), with no recurring fees;
 - entitles you to use the Software indefinitely on that installation, with as many users as the application itself allows;
 - entitles you to receive and use all future updates of the Software at no additional cost;
 - does not include support, maintenance, installation, configuration or any guarantee of availability, unless the Author agrees to them separately in writing;
-- is not transferable to another person or organisation without the Author's written authorisation, and covers only the person or organisation that obtains it.
+- is not transferable to another person or organization without the Author's written authorization, and covers only the person or organization that obtains it.
 
 To obtain one, see section 10.
 
 ## 5. Prohibitions
 
-Without the Author's written authorisation, it is not permitted to:
+Without the Author's written authorization, it is not permitted to:
 
 - sell, resell, rent or sublicense the Software;
 - redistribute copies of the Software, modified or unmodified, by any means;
 - offer the Software as a service to third parties (for example, as SaaS or hosting for customers);
-- remove or alter authorship and licence notices;
+- remove or alter authorship and license notices;
 - circumvent, disable or tamper with the technical limits or mechanisms of the application.
 
-Modifying the Software for your own use within the limits of this licence is permitted.
+Modifying the Software for your own use within the limits of this license is permitted.
 
-## 6. Use without a licence
+## 6. Use without a license
 
-Using the Software for business or professional purposes without the corresponding commercial licence is not authorised. Such use constitutes an infringement of the Author's intellectual property rights and entitles the Author to bring the civil and, where applicable, criminal legal actions available to them, including a claim for damages and for the price of the unpaid licences, together with any costs and expenses that may be due. The Author prefers to resolve these situations by the purchase of a licence, and anyone using the Software without one may get in touch to do so.
+Using the Software for business or professional purposes without the corresponding commercial license is not authorized. Such use constitutes an infringement of the Author's intellectual property rights and entitles the Author to bring the civil and, where applicable, criminal legal actions available to them, including a claim for damages and for the price of the unpaid licenses, together with any costs and expenses that may be due. The Author prefers to resolve these situations by the purchase of a license, and anyone using the Software without one may get in touch to do so.
 
 ## 7. No warranty and limitation of liability
 
-The Software is provided "as is", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, absence of errors or availability. Whoever installs it is responsible for their server, their backups and the data it stores. To the extent permitted by law, the Author is not liable for indirect damages, loss of profit or loss of data arising from the use of, or inability to use, the Software, except in cases of wilful misconduct or gross negligence. Nothing in this licence limits the rights that the law grants to consumers and users and that cannot be waived.
+The Software is provided "as is", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, absence of errors or availability. Whoever installs it is responsible for their server, their backups and the data it stores. To the extent permitted by law, the Author is not liable for indirect damages, loss of profit or loss of data arising from the use of, or inability to use, the Software, except in cases of wilful misconduct or gross negligence. Nothing in this license limits the rights that the law grants to consumers and users and that cannot be waived.
 
 ## 8. Term and termination
 
-This licence lasts as long as its conditions are met. If they are breached, the rights granted end automatically for the party in breach, without prejudice to any other actions available to the Author. The commercial licence does not expire with the passage of time.
+This license lasts as long as its conditions are met. If they are breached, the rights granted end automatically for the party in breach, without prejudice to any other actions available to the Author. The commercial license does not expire with the passage of time.
 
 ## 9. Governing law and jurisdiction
 
-This licence is governed by Spanish law. For any dispute, the parties submit to the courts with jurisdiction under the law, respecting the forum that applies to consumers and users.
+This license is governed by Spanish law. For any dispute, the parties submit to the courts with jurisdiction under the law, respecting the forum that applies to consumers and users.
 
-## 10. How to obtain a licence
+## 10. How to obtain a license
 
-To obtain a commercial licence, write to the Author at the email shown on Pizarro's presentation page or in the project repository. The price is the one published on the presentation page at the time of purchase, plus applicable taxes (VAT). Payment is by card through a payment gateway, and the invoice is issued automatically with the details of the purchasing company or person (an ID or tax number is optional for individuals).`;
+To obtain a commercial license, write to the Author at the email shown on Pizarro's presentation page or in the project repository. The price is the one published on the presentation page at the time of purchase, plus applicable taxes (VAT). Payment is by card through a payment gateway, and the invoice is issued automatically with the details of the purchasing company or person (an ID or tax number is optional for individuals).`;
