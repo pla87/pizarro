@@ -167,4 +167,6 @@ export const common: Record<string, string> = {
   "Color de la tarea": "Task color",
   // Botón «⋯» de acciones secundarias (título)
   "Más acciones": "More actions",
+  // Informe PDF sin red (en vez del texto del navegador)
+  "Sin conexión: no se ha podido generar el informe.": "Offline: the report could not be generated.",
 };

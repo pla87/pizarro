@@ -1,3 +1,4 @@
+import { fetchErrorMessage } from "@/lib/connection";
 import type { T } from "@/i18n/shared";
 
 type Toast = (message: string, kind?: "success" | "error", action?: { label: string; onClick: () => void }) => void;
@@ -87,7 +88,8 @@ export async function downloadAttachmentsZip(opts: {
     if (total > 1) toast(t("Adjuntos descargados en {n} paquetes de hasta {mb} MB", { n: total, mb: plan.maxMb }));
     if (plan.parts.some((p) => p.oversize)) toast(t("Algún archivo supera por sí solo los {mb} MB y va en su propio paquete.", { mb: plan.maxMb }), "error");
   } catch (e) {
-    const message = e instanceof Error && e.message ? e.message : t("No se pudieron descargar los adjuntos");
+    // Sin red, o una página de error HTML en vez de JSON (proxy): el texto propio, nunca el técnico del navegador.
+    const message = fetchErrorMessage(e, t("Sin conexión: no se han podido descargar los adjuntos."), t("No se pudieron descargar los adjuntos"));
     // Adjuntos cambiados durante la descarga: se ofrece volver a empezar (nuevo plan y todos los paquetes).
     toast(message, "error", changed ? { label: t("Reintentar"), onClick: () => void downloadAttachmentsZip(opts) } : undefined);
   } finally {

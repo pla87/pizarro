@@ -383,4 +383,7 @@ export const board: Record<string, string> = {
   // Agenda: el .ics se descarga sin salir del tablero (ronda 57)
   "No se pudo exportar el calendario.": "The calendar could not be exported.",
   "Sin conexión: no se ha podido exportar el calendario.": "Offline: the calendar could not be exported.",
+  // Sin red al adjuntar el documento del visor o al descargar los adjuntos en ZIP (en vez del texto del navegador)
+  "Sin conexión: no se ha podido descargar el documento.": "Offline: the document could not be downloaded.",
+  "Sin conexión: no se han podido descargar los adjuntos.": "Offline: the attachments could not be downloaded.",
 };

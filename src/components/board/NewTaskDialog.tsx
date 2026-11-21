@@ -46,7 +46,7 @@ import { subtaskLines } from "@/lib/subtask-lines";
 import { documentDownloadName, type DocumentKindName } from "@/lib/document-kind";
 import { draftKey, useDraftAutosave, type NewTaskDraft } from "./drafts";
 import { actionThrowResult } from "@/lib/stale-action";
-import { loadWhenOnline } from "@/lib/connection";
+import { fetchErrorMessage, loadWhenOnline } from "@/lib/connection";
 import { subtasksDidNotFit } from "./count-texts";
 import { RecurrencePicker } from "./RecurrencePicker";
 import { defaultRecurrenceDay, RECURRENCES, type RecurrenceRule } from "@/lib/recurrence-date";
@@ -380,7 +380,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       setDocFile(file);
       setFiles((prev) => byName([...prev, file]));
     } catch (e) {
-      toast(e instanceof Error && e.message ? e.message : t("No se pudo descargar el documento."), "error");
+      toast(fetchErrorMessage(e, t("Sin conexión: no se ha podido descargar el documento."), t("No se pudo descargar el documento.")), "error");
     } finally {
       setDocLoading(false);
     }
