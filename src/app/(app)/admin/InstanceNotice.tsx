@@ -16,7 +16,7 @@ export async function InstanceNotice({ since }: { since: string }) {
       <div className="min-w-0 flex-1">
         <p className="font-medium">{t("Hay otra copia de Pizarro usando esta misma base de datos (desde {date}).", { date: formatDate(since, "dateTime", locale) })}</p>
         <p className="text-xs opacity-80">
-          {t("Dos copias a la vez se pisan: el bot de Telegram por sondeo pierde mensajes, las tareas de fondo y las copias de seguridad se reparten entre las dos y cada una tiene sus propios archivos subidos. Para la que sobra: otro servicio o un despliegue antiguo en Railway, otro servidor o una prueba con esta misma DATABASE_URL.")}
+          {t("Dos copias a la vez se pisan: el bot de Telegram por sondeo pierde mensajes, las tareas de fondo y las copias de seguridad se reparten entre las dos y cada una tiene sus propios archivos subidos. Detén la que sobra: otro servicio o un despliegue antiguo en Railway, otro servidor o una prueba con esta misma DATABASE_URL.")}
         </p>
       </div>
     </div>
