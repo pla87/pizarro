@@ -25,5 +25,7 @@ test("nombres reservados: letras cirílicas o griegas iguales a las latinas no s
   assert.equal(isReservedName("Sistemа"), true);
   assert.equal(isReservedName("Ρizarro"), true); // «Ρ» griega
   assert.equal(isReservedName("Soporte Pizarro"), true);
+  assert.equal(isReservedName("Pızarro"), true); // ı sin punto
+  assert.equal(isReservedName("Pizɑrro"), true); // alfa latina
   assert.equal(isReservedName("Аna Pizarro"), false);
 });

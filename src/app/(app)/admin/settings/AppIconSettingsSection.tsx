@@ -213,7 +213,7 @@ export function AppIconSettingsSection({ initial, orgName, shortName: initialSho
             id="app-short-name"
             className="input w-44"
             value={shortText}
-            maxLength={SHORT_NAME_MAX * 2}
+            maxLength={SHORT_NAME_MAX * 8} // en unidades UTF-16: un emoji compuesto ocupa varias; el recorte a 12 visibles lo hace cleanAppShortName
             placeholder={auto}
             autoComplete="off"
             onChange={(e) => setShortText(e.target.value)}

@@ -61,3 +61,10 @@ test("migraciones: nada en medio que cierre la transacción o no pueda ir en ell
   // Los BEGIN/END de un bloque DO o de una función entre $$ son suyos, no de la transacción.
   assert.equal(transactionProblem("BEGIN;\nDO $$\nBEGIN\n  PERFORM 1;\nEND\n$$;\nCREATE FUNCTION f() RETURNS int LANGUAGE plpgsql AS $fn$ BEGIN RETURN 1; END; $fn$;\nCOMMIT;\n"), null);
 });
+
+test("migraciones: sentencias enteras, sin falsos positivos por CASE … END ni textos entre comillas", () => {
+  assert.equal(transactionProblem("BEGIN;\nUPDATE \"Task\" SET x = CASE WHEN y THEN 1 ELSE 2 END;\nUPDATE t SET note = 'COMMIT;';\nCOMMIT;\n"), null);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nCOMMIT WORK;\nSELECT 2;\nCOMMIT;\n")!, /COMMIT WORK/);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nEND TRANSACTION;\nBEGIN TRANSACTION;\nSELECT 2;\nCOMMIT;\n")!, /END TRANSACTION/);
+  assert.match(transactionProblem("BEGIN;\n/* nota */\nSAVEPOINT a;\nCOMMIT;\n")!, /SAVEPOINT/);
+});

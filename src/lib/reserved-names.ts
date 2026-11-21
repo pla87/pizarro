@@ -28,6 +28,8 @@ const RESERVED = [
 const CONFUSABLES: Record<string, string> = {
   а: "a", в: "b", е: "e", ё: "e", к: "k", м: "m", н: "h", о: "o", р: "p", с: "c", т: "t", у: "y", х: "x", ѕ: "s", і: "i", ї: "i", ј: "j", һ: "h", ԁ: "d", ԛ: "q", ԝ: "w",
   α: "a", β: "b", ε: "e", η: "n", ι: "i", κ: "k", μ: "u", ν: "v", ο: "o", ρ: "p", τ: "t", υ: "u", χ: "x", ζ: "z",
+  // Latinas que se confunden: i sin punto, alfa latina, l pequeña de otras formas.
+  ı: "i", ɑ: "a", ɩ: "i", ł: "l", ɡ: "g",
 };
 
 /** Forma de comparar: minúsculas, sin tildes ni diacríticos, letras parecidas de otros alfabetos en latín, y solo letras y cifras. */

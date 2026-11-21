@@ -93,9 +93,18 @@ export function transactionProblem(sql) {
   if (b.length < 3) return "no tiene nada entre BEGIN; y COMMIT;";
   // Nada en medio que cierre o abra otra transacción ni que no pueda ir dentro de una (CONCURRENTLY): si no, un reintento
   // repetiría lo ya confirmado. Lo que va entre $$ (cuerpos de funciones y bloques DO, con su BEGIN/END propios) no cuenta.
-  const outside = b.slice(1, -1).join("\n").replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, "''").replace(/--[^\n]*/g, "");
-  const bad = /\b(?:BEGIN|COMMIT|ROLLBACK|END|START\s+TRANSACTION)\s*;|\bCONCURRENTLY\b/i.exec(outside);
-  if (bad) return `tiene «${bad[0].trim()}» entre BEGIN; y COMMIT;`;
+  // Sin cuerpos entre $$, textos entre comillas ni comentarios; después se mira cada sentencia entera (así «CASE … END;»
+  // de un UPDATE no cuenta, y «COMMIT WORK;» o «END TRANSACTION;» sí).
+  const outside = b.slice(1, -1).join("\n")
+    .replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, "''")
+    .replace(/'(?:[^']|'')*'/g, "''")
+    .replace(/"(?:[^"]|"")*"/g, '""')
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--[^\n]*/g, "");
+  const statements = outside.split(";").map((x) => x.trim().replace(/\s+/g, " "));
+  const txControl = /^(?:(?:BEGIN|START TRANSACTION|COMMIT|END|ROLLBACK|ABORT)(?:\s+(?:WORK|TRANSACTION)\b.*)?|(?:SAVEPOINT|RELEASE|ROLLBACK TO|PREPARE TRANSACTION|COMMIT PREPARED)\b.*)$/i;
+  const bad = statements.find((x) => txControl.test(x)) ?? statements.find((x) => /\bCONCURRENTLY\b/i.test(x))?.match(/\bCONCURRENTLY\b/i)?.[0];
+  if (bad) return `tiene «${bad}» entre BEGIN; y COMMIT;`;
   return null;
 }
 
