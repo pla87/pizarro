@@ -19,6 +19,9 @@ import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLi
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
 import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
 import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
+import { changePassword } from "../../src/actions/profile";
+import { encryptSecret } from "../../src/lib/crypto";
+import { hashFeedToken, newFeedToken } from "../../src/lib/calendar-feed-core";
 
 describe("miembros de proyectos privados", () => {
   test("un miembro añade y quita miembros; quien no lo es recibe «no encontrado»", async () => {
@@ -448,5 +451,134 @@ describe("accesos a medio completar (segundo paso pendiente) al cambiar la contr
     expectOk(await forcePasswordChange(target.id, { copyLink: true }));
     assert.equal(await halfDone(other.id), 2);
     logout();
+  });
+});
+
+describe("forzar el cambio de contraseña desconecta lo que funciona sin sesión", () => {
+  const realFetch = globalThis.fetch;
+
+  /** Calendario suscrito, Telegram (con un enlace de conexión a medio usar), WhatsApp y Google Drive. */
+  async function connectEverything(userId: string) {
+    await db.calendarFeed.create({ data: { userId, tokenHash: hashFeedToken(newFeedToken()) } });
+    await db.userChannel.create({ data: { userId, channel: "TELEGRAM", address: `77${userId.slice(-6)}` } });
+    await db.userChannel.create({ data: { userId, channel: "WHATSAPP", address: "+34600111222", consentAt: new Date(), verifiedAt: new Date() } });
+    await db.telegramLinkCode.create({ data: { hash: `link-${userId}`, userId, expiresAt: new Date(Date.now() + 600_000) } });
+    await db.googleAccount.create({ data: { userId, email: "drive@example.com", refreshTokenEnc: encryptSecret("refresh-de-prueba"), scope: "drive.file" } });
+  }
+  const connected = async (userId: string) => ({
+    feeds: await db.calendarFeed.count({ where: { userId } }),
+    channels: await db.userChannel.count({ where: { userId } }),
+    linkCodes: await db.telegramLinkCode.count({ where: { userId } }),
+    google: await db.googleAccount.count({ where: { userId } }),
+  });
+  const ALL = { feeds: 1, channels: 2, linkCodes: 1, google: 1 };
+
+  test("lo hace un administrador: borra el calendario suscrito, Telegram, WhatsApp y la conexión con Drive (retirando el permiso en Google)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    const bystander = await makeUser();
+    await connectEverything(target.id);
+    await connectEverything(bystander.id);
+    const revoked: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).startsWith("https://oauth2.googleapis.com/revoke")) {
+        revoked.push(new URLSearchParams(String(init?.body)).get("token") ?? "");
+        return new Response("{}", { status: 200 });
+      }
+      throw new Error(`fetch inesperado: ${String(input)}`);
+    }) as typeof fetch;
+    try {
+      await loginAs(admin);
+      expectOk(await forcePasswordChange(target.id, { copyLink: true }));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(await connected(target.id), { feeds: 0, channels: 0, linkCodes: 0, google: 0 });
+    assert.deepEqual(revoked, ["refresh-de-prueba"]);
+    // Lo de otras personas no se toca.
+    assert.deepEqual(await connected(bystander.id), ALL);
+  });
+
+  test("cambiar uno mismo la contraseña (Mi perfil o al elegir una nueva) o restablecerla con el enlace no desconecta nada", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      throw new Error(`fetch inesperado: ${String(input)}`);
+    }) as typeof fetch;
+    try {
+      const self = await makeUser();
+      await db.user.update({ where: { id: self.id }, data: { passwordHash: await hashPassword("clave-original-123") } });
+      await connectEverything(self.id);
+      await loginAs(self);
+      expectOk(await changePassword("clave-original-123", "clave-nueva-desde-perfil-1"));
+      assert.deepEqual(await connected(self.id), ALL);
+
+      const pending = await makeUser({ mustChangePassword: true });
+      await connectEverything(pending.id);
+      await loginAs(pending);
+      expectOk(await setNewPassword("clave-elegida-al-entrar-1"));
+      assert.deepEqual(await connected(pending.id), ALL);
+
+      const reset = await makeUser();
+      await connectEverything(reset.id);
+      const token = await issueAuthToken(reset.id, "PASSWORD_RESET");
+      logout();
+      expectOk(await resetPassword(token, "clave-restablecida-segura-3"));
+      assert.deepEqual(await connected(reset.id), ALL);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
+describe("límite de intentos de acceso por cuenta y dispositivos conocidos", () => {
+  const PASSWORD = "clave-de-acceso-1234";
+  const TOO_MANY = "Demasiados intentos. Espera unos minutos.";
+  const WRONG = "Credenciales incorrectas.";
+
+  async function attempt(email: string, password: string): Promise<{ error?: string; redirect?: string }> {
+    const form = new FormData();
+    form.set("email", email);
+    form.set("password", password);
+    try {
+      return await login({}, form);
+    } catch (err) {
+      const digest = (err as { digest?: string }).digest ?? "";
+      if (digest.startsWith("NEXT_REDIRECT")) return { redirect: digest.split(";")[2] };
+      throw err;
+    }
+  }
+
+  /** Cuenta sin verificación en dos pasos que ya ha entrado una vez desde «su» navegador (sin «Recordar»): sus cookies. */
+  async function accountWithDevice() {
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(PASSWORD) } });
+    logout();
+    assert.deepEqual(await attempt(user.email, PASSWORD), { redirect: "/" });
+    const device = await db.knownDevice.findFirstOrThrow({ where: { userId: user.id } });
+    assert.equal(device.trustedUntil, null, "sin «Recordar»: dispositivo conocido, no de confianza");
+    return { user, browser: saveSession() };
+  }
+
+  test("un tercero que gasta los intentos de la cuenta desde otro navegador no impide entrar desde un dispositivo conocido", async () => {
+    const { user, browser } = await accountWithDevice();
+    logout();
+    for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
+    // Desde un navegador sin la cookie, bloqueada (aun con la contraseña correcta).
+    assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
+    // Desde el suyo, entra.
+    restoreSession(browser);
+    assert.deepEqual(await attempt(user.email, PASSWORD), { redirect: "/" });
+  });
+
+  test("desde el dispositivo conocido el tope es LOGIN_ACCOUNT_LIMIT_TRUSTED; el de otra cuenta no da intentos extra", async () => {
+    const { user, browser } = await accountWithDevice();
+    const other = await accountWithDevice();
+    // El navegador de otra cuenta es desconocido para esta: se queda en LOGIN_ACCOUNT_LIMIT.
+    restoreSession(other.browser);
+    for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG);
+    assert.equal((await attempt(user.email, "otra-clave-x-9999")).error, TOO_MANY);
+    // El suyo llega hasta LOGIN_ACCOUNT_LIMIT_TRUSTED y después también queda bloqueado.
+    restoreSession(browser);
+    for (let i = LOGIN_ACCOUNT_LIMIT; i < LOGIN_ACCOUNT_LIMIT_TRUSTED; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
+    assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
   });
 });

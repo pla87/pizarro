@@ -313,4 +313,6 @@ export const cuentas: Record<string, string> = {
   "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.": "The invitation could not be sent. Check email sending in Administration → Integrations.",
   // Quitar el rol de administrador
   "Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.": "Cards assigned to them in team projects they do not work on will be unassigned.",
+  // Forzar cambio de contraseña: también desconecta lo que funciona sin sesión
+  "También se desconectan su calendario suscrito, Telegram, WhatsApp y Google Drive.": "Their calendar subscription, Telegram, WhatsApp and Google Drive are also disconnected.",
 };

@@ -18,6 +18,7 @@ import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { eraseUser } from "@/lib/user-delete";
+import { disconnectGoogleAccount } from "@/lib/google";
 import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
@@ -215,6 +216,9 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
  * la persona queda obligada a elegir una nueva, se cierran sus sesiones, se anulan sus enlaces pendientes y recibe un
  * enlace de restablecimiento (30 min) por email o el admin lo copia. Con Google (si lo tiene enlazado) sigue
  * pudiendo entrar, pero aterriza en «Elige una contraseña nueva» hasta elegirla.
+ * Como la cuenta puede estar en manos de otro, también se corta lo que sigue funcionando sin sesión: el calendario
+ * suscrito (su enlace deja de valer), Telegram y WhatsApp (los avisos dejan de llegar a ese chat o teléfono) y Google
+ * Drive (como «Desconectar» en Mi perfil). Cambiar o restablecer uno mismo la contraseña no toca nada de esto.
  */
 export async function forcePasswordChange(userId: string, opts?: { copyLink?: boolean }) {
   return runAction({ name: "users.forcePasswordChange", args: [userId, !!opts?.copyLink] }, async () => {
@@ -235,8 +239,15 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
       db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
       // También los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo).
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
+      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.
+      db.calendarFeed.deleteMany({ where: { userId: user.id } }),
+      db.userChannel.deleteMany({ where: { userId: user.id } }),
+      db.telegramLinkCode.deleteMany({ where: { userId: user.id } }),
     ]);
+    // revokeUser también vacía la caché de los calendarios suscritos: el enlace deja de dar sus tareas al momento.
     revokeUser(user.id);
+    // Google Drive, como «Desconectar» en Mi perfil (retira el permiso en Google y borra la conexión).
+    await disconnectGoogleAccount(user.id);
     // El token nunca se registra: describeAction solo dice qué se hizo.
     if (showLink) {
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
@@ -289,8 +300,15 @@ export async function unlinkGoogle(userId: string) {
       db.session.deleteMany({ where: { userId: user.id } }),
       // Un acceso con Google a medio completar (falta el segundo paso) tampoco debe poder terminarse.
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
+      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.
+      db.calendarFeed.deleteMany({ where: { userId: user.id } }),
+      db.userChannel.deleteMany({ where: { userId: user.id } }),
+      db.telegramLinkCode.deleteMany({ where: { userId: user.id } }),
     ]);
+    // revokeUser también vacía la caché de los calendarios suscritos: el enlace deja de dar sus tareas al momento.
     revokeUser(user.id);
+    // Google Drive, como «Desconectar» en Mi perfil (retira el permiso en Google y borra la conexión).
+    await disconnectGoogleAccount(user.id);
     describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);
     if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
     revalidatePath("/admin/users");

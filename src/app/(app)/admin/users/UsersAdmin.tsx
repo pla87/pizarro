@@ -311,6 +311,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
             : t("Sin email configurado: tendrás un enlace de un solo uso (válido 30 minutos) para pasárselo tú.")}
         </p>
         {user.googleLinked && <p className="text-slate-500">{t("Podrá seguir entrando con Google, pero antes tendrá que elegir contraseña.")}</p>}
+        <p className="text-slate-500">{t("También se desconectan su calendario suscrito, Telegram, WhatsApp y Google Drive.")}</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           {emailAvailable && <button type="button" className="btn-secondary" disabled={pending} onClick={() => run(true)}>{t("Copiar enlace en lugar de enviarlo")}</button>}

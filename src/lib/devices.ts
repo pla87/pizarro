@@ -6,7 +6,8 @@ import { deviceIdHashes, hashDeviceId } from "./auth-token-core";
 import { cookieSecure } from "./session-config";
 
 // Dispositivos conocidos: una cookie larga y aleatoria (pz_device) identifica el navegador; en la BD solo
-// se guarda su hash. Sirve únicamente para avisar de inicios de sesión desde un dispositivo nuevo.
+// se guarda su hash. Sirve para avisar de inicios de sesión desde un dispositivo nuevo, para dar margen extra de intentos
+// de acceso desde un dispositivo ya conocido de la cuenta y, con «Recordar este dispositivo», para no pedir el segundo paso.
 
 export const DEVICE_COOKIE = "pz_device";
 export const TRUST_DEVICE_DAYS = 14;
@@ -46,10 +47,26 @@ export async function registerDevice(userId: string, opts: { trustDays?: number 
   return { alert: others > 0 };
 }
 
+/** La cookie de dispositivo de este navegador, si tiene una forma válida. */
+async function deviceCookie(): Promise<string | null> {
+  const deviceId = (await cookies()).get(DEVICE_COOKIE)?.value;
+  return deviceId && deviceId.length >= 20 && deviceId.length <= 100 ? deviceId : null;
+}
+
+/**
+ * ¿Este navegador es un dispositivo conocido de la cuenta (ya se ha entrado en ella desde aquí, con o sin «Recordar»)?
+ * Da el margen extra de intentos de acceso (LOGIN_ACCOUNT_LIMIT_TRUSTED): un tercero sin la cookie no puede gastarlo.
+ */
+export async function isKnownDevice(userId: string): Promise<boolean> {
+  const deviceId = await deviceCookie();
+  if (!deviceId) return false;
+  return (await db.knownDevice.count({ where: { userId, deviceHash: { in: deviceIdHashes(deviceId) } } })) > 0;
+}
+
 /** «Recordar este dispositivo»: ¿este navegador está marcado como de confianza para esta cuenta (no se pide el segundo paso)? */
 export async function isTrustedDevice(userId: string): Promise<boolean> {
-  const deviceId = (await cookies()).get(DEVICE_COOKIE)?.value;
-  if (!deviceId || deviceId.length < 20 || deviceId.length > 100) return false;
+  const deviceId = await deviceCookie();
+  if (!deviceId) return false;
   return (await db.knownDevice.count({ where: { userId, deviceHash: { in: deviceIdHashes(deviceId) }, trustedUntil: { gt: new Date() } } })) > 0;
 }
 
