@@ -58,6 +58,8 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   // Con una confirmación abierta el panel no se cierra: pulsar en el diálogo cuenta como pulsar fuera, y el enlace nuevo
   // de «Regenerar» solo se ve aquí.
   const confirming = useRef(false);
+  // Mientras se confirma, el panel se oculta: en un móvil bajo tapaba la confirmación (va por encima de los diálogos).
+  const [confirmShown, setConfirmShown] = useState(false);
 
   const onOpenChange = useCallback(
     (open: boolean) => {
@@ -89,10 +91,12 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   /** Pregunta antes de dejar sin efecto el enlace de una suscripción activa (regenerar o desactivar). */
   const confirmActive = async (title: string, message: string, confirmLabel: string) => {
     confirming.current = true;
+    setConfirmShown(true);
     try {
       return await confirm({ title, message, confirmLabel, danger: true });
     } finally {
       confirming.current = false;
+      setConfirmShown(false);
     }
   };
 
@@ -155,7 +159,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       align="end"
       open={open}
       onOpenChange={onOpenChange}
-      panelClassName="w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      panelClassName={cn("w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900", confirmShown && "invisible")}
       trigger={({ props }) => (
         <button type="button" {...props} className={cn("inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", className)}>
           <CalendarPlus size={15} aria-hidden />

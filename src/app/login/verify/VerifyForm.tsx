@@ -60,7 +60,7 @@ export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; em
       </div>
       {/* Sin el móvil, la app o el email no hay forma de pasar de aquí: a quién pedírselo y, si no hay nadie, la guía. */}
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        {t("¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único, sigue la guía")}{" "}
+        {t("¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único administrador, sigue la guía")}{" "}
         <a href={installSectionUrl("lockedOut", locale)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">
           {t("«Nadie puede entrar como administrador»")}
         </a>

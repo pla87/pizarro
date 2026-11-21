@@ -483,7 +483,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (!res.ok) return toast(res.error, "error");
       toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
-      setShared({ kind: "board", name, link: res.data.link, emailed: res.data.emailed });
+      setShared({ kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
       router.refresh();
     });
   };
@@ -494,7 +494,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (res.data.mailFailed) toast(t("Invitación creada, pero no se pudo enviar el email: pásale el enlace."), "error");
       else toast(res.data.emailed ? t("Invitación enviada") : t("Invitación creada"));
       setInviteEmail("");
-      setShared({ kind: "invite", name: res.data.name, link: res.data.link, emailed: res.data.emailed });
+      setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
       router.refresh();
     });
   const activeCount = members.filter((m) => m.active).length;
@@ -574,6 +574,20 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
 }
 
 type SharedLink = { kind: "board" | "invite"; name: string; link: string; emailed: boolean };
+
+/**
+ * Sin APP_URL el servidor compone los enlaces con http://localhost:3000, que no sirve a nadie más: en ese caso se usa la
+ * dirección por la que se ha entrado. Con APP_URL (aunque se entre por otra, p. ej. una IP interna) se respeta la pública.
+ */
+function shareableLink(link: string): string {
+  try {
+    const u = new URL(link);
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(u.hostname) || u.origin === window.location.origin) return link;
+    return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return link;
+  }
+}
 
 /** El enlace del último alta, para pasarlo por otro canal (WhatsApp…): el del tablero o el de la invitación. */
 function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () => void }) {

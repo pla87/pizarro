@@ -316,8 +316,8 @@ export const cuentas: Record<string, string> = {
   // Forzar cambio de contraseña: también desconecta lo que funciona sin sesión
   "También se desconectan su calendario suscrito, Telegram, WhatsApp y Google Drive.": "Their calendar subscription, Telegram, WhatsApp and Google Drive are also disconnected.",
   // Verificación en dos pasos al entrar: qué hacer si no tienes los códigos
-  "¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único, sigue la guía":
-    "Can't get your codes? Ask an administrator to reset your two-step verification; if you are the only one, follow the guide",
+  "¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único administrador, sigue la guía":
+    "Can't get your codes? Ask an administrator to reset your two-step verification; if you are the only administrator, follow the guide",
   "«Nadie puede entrar como administrador»": "“No administrator can sign in”",
   // Miembros de un proyecto: aviso al añadir a alguien e invitación a un proyecto (emails y errores)
   "{admin} te ha invitado al proyecto «{project}» en Pizarro": "{admin} has invited you to the “{project}” project in Pizarro",
