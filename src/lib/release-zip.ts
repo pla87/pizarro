@@ -4,6 +4,7 @@ import { streamZip, streamZipSize, type StreamZipEntry } from "./zip-stream";
 import { zipPlanToken } from "./zip-token";
 import { planPackages, zipEntryOverhead, type ZipPackage } from "./zip-plan";
 import { runQueue } from "./upload-queue";
+import type { T } from "@/i18n/core";
 
 /** Un fichero que puede ir en un ZIP de release: su tamaño ya está comprobado en disco. */
 export interface ZipEntry {
@@ -254,28 +255,38 @@ export function zipHeadResponse(allow: string): Response {
   return new Response(null, { status: 405, headers: { Allow: allow, "Cache-Control": "private, no-store" } });
 }
 
-/** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes pedidos por número otro. */
+/** Tope por petición: el plan tiene el suyo (se consulta al abrir cada release del histórico), los paquetes otro. */
 export function zipRateKey(mode: ZipRequestMode, userId: string): { key: string; limit: number } {
-  if (mode.kind === "plan") return { key: `release-zip-plan:${userId}`, limit: 60 };
-  return mode.explicit ? { key: `release-zip-part:${userId}`, limit: 120 } : { key: `release-zip:${userId}`, limit: 10 };
+  return mode.kind === "plan" ? { key: `release-zip-plan:${userId}`, limit: 60 } : { key: `release-zip-part:${userId}`, limit: 120 };
 }
 
-type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; explicit: boolean; version: string | null };
+type ZipRequestMode = { kind: "plan" } | { kind: "part"; part: number; version: string };
 
-/** Respuesta 409 cuando el token `?v=` ya no coincide con el reparto actual; null si coincide o no se envió (enlaces antiguos). */
+/** Respuesta 409 cuando el token `?v=` ya no coincide con el reparto actual; null si coincide. */
 export function zipVersionConflict(mode: ZipRequestMode, entries: ZipEntry[], maxMb: number, message: string): Response | null {
-  if (mode.kind !== "part" || mode.version === null || mode.version === zipPlanToken(entries, maxMb)) return null;
+  if (mode.kind !== "part" || mode.version === zipPlanToken(entries, maxMb)) return null;
   return new Response(message, { status: 409, headers: { "Cache-Control": "private, no-store" } });
 }
 
-/** `?plan=1` pide el reparto; `?part=N` (1-based) un paquete (con `?v=` el token del plan); sin nada, el primero. */
-export function zipRequestMode(url: string): ZipRequestMode | null {
+/** 400 cuando a un paquete le falta `?part=` o `?v=` (enlaces de antes de la v1.60, que pedían el primero sin token). */
+export function zipPartRequired(t: T): Response {
+  return new Response(t("Falta el paquete del ZIP o su versión (?part=N&v=…): descárgalo desde la página; si es de antes de actualizar Pizarro, recárgala."), {
+    status: 400,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+/**
+ * `?plan=1` pide el reparto; `?part=N&v=…` (N desde 1, `v` el token del plan) un paquete. Sin `part` o sin `v`,
+ * "incomplete" (la ruta responde 400 con zipPartRequired); con un valor no válido, null.
+ */
+export function zipRequestMode(url: string): ZipRequestMode | { kind: "incomplete" } | null {
   const sp = new URL(url).searchParams;
   if (sp.get("plan") === "1") return { kind: "plan" };
   const raw = sp.get("part");
   const version = sp.get("v");
-  if (version !== null && !/^[0-9a-f]{16}$/.test(version)) return null;
-  if (raw === null) return { kind: "part", part: 1, explicit: false, version };
+  if (raw === null || version === null) return { kind: "incomplete" };
+  if (!/^[0-9a-f]{16}$/.test(version)) return null;
   const part = Number(raw);
-  return Number.isInteger(part) && part >= 1 && part <= 1000 ? { kind: "part", part, explicit: true, version } : null;
+  return Number.isInteger(part) && part >= 1 && part <= 1000 ? { kind: "part", part, version } : null;
 }

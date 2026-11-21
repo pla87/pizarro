@@ -61,7 +61,7 @@ for s in ${SUITES:-$ALL}; do
   fi
   [ -f "e2e/$s.mjs" ] || { echo "$s: no existe e2e/$s.mjs"; BAD="$BAD $s"; continue; }
   # Las que simulan Google (y, sin email, la baja con Google): servidor con Google de prueba.
-  case $s in documentacion-formatos-e2e|documentacion-indice-e2e|cuentas-borrar-restos-e2e|documentacion-enlaces-e2e) EXTRA="GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50";; *) EXTRA="";; esac
+  case $s in documentacion-formatos-e2e|cuentas-borrar-restos-e2e|documentacion-enlaces-e2e) EXTRA="GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50";; *) EXTRA="";; esac
   env $EXTRA DATABASE_URL=$DBURL PORT=$E2E_PORT APP_URL=$URL node --env-file-if-exists=.env --env-file=scripts/server.env scripts/start-local.mjs > "$OUT/srv-$s.log" 2>&1 &
   SP=$!
   until curl -sf -o /dev/null $URL/api/health; do sleep 1; done

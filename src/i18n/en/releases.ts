@@ -34,4 +34,6 @@ export const releases: Record<string, string> = {
   "Hay releases más antiguas: búscalas por su título o su contenido.": "There are older releases: search for them by title or content.",
   // Búsqueda con más coincidencias de las que caben en la página
   "se muestran las más recientes; afina la búsqueda para ver otras.": "showing the most recent; refine the search to see others.",
+  // ZIP de adjuntos: un paquete sin ?part= o sin ?v= (enlaces de antes de la v1.60) ya no se sirve
+  "Falta el paquete del ZIP o su versión (?part=N&v=…): descárgalo desde la página; si es de antes de actualizar Pizarro, recárgala.": "The ZIP package or its version is missing (?part=N&v=…): download it from the page; if the page was opened before Pizarro was updated, reload it.",
 };

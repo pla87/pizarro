@@ -1,9 +1,9 @@
 // Recordatorios de espera en lotes (sin inanición) y limpieza de la configuración al cambiar el rol de una columna.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { setColumnRole, setColumnRoutineTarget } from "../../src/actions/columns";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { deliverWaitingReminders } from "../../src/lib/waiting";
 
 const DAY = 86_400_000;
@@ -66,7 +66,7 @@ describe("cambiar el rol de una columna limpia su configuración", () => {
     expectOk(await undoLast(f.project.id));
     assert.equal(await days(), 6);
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).role, "WAITING");
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal(await days(), null);
   });
 

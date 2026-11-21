@@ -292,7 +292,8 @@ Guardas que conviene conocer:
 - Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
   un vale (`POST …/release-attachments?plan=1`; `src/lib/zip-ticket.ts`, en memoria, por persona y proyecto), cada
   paquete se baja con `GET ?ticket=&part=&v=` y la página consulta su estado. Un POST sin `?plan=1` responde 400 (el
-  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe). El `Content-Length` lo pone
+  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe), y un paquete sin `?part=` o sin `?v=`
+  también (`zipPartRequired`; desde la ronda 59 no hay «primer paquete sin número» ni enlaces sin token). El `Content-Length` lo pone
   `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera interna
   `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
 - Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
@@ -469,14 +470,13 @@ Cómo se revisa cada PR:
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
-- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:`. El anterior (sin
-  prefijo) se quitó con su compatibilidad; una entrada que aún lo traiga (copia de seguridad antigua restaurada) se
-  descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
+- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:b:` (`FP_CURRENT`:
+  la descripción por su hash y también el bloqueo de cada tarea, `blockedById`). Los anteriores (sin prefijo, y `v2:`
+  sin «b:», que no cubría el bloqueo) se quitaron con su compatibilidad (la de `v2:` en la ronda 59); una entrada que aún
+  traiga uno (copia de seguridad antigua restaurada) se descarta al intentar aplicarla con «ya no se puede deshacer»,
+  también si se confirma, y no se pone al día al aplicar otra (`isObsoleteFingerprint`, «no empieza por `v2:b:`»;
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
-  el formato, prefijo nuevo y el mismo trato para el anterior.
-  Ampliación compatible: las huellas `v2:b:` cubren también el bloqueo de cada tarea (`blockedById`). Siguen siendo v2;
-  una `v2:` sin «b:» guardada antes se compara calculándola como entonces (parámetro `like` de `fingerprintsOf`) y pasa
-  al formato nuevo cuando se reescribe. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
+  el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 

@@ -74,7 +74,7 @@ function conflictDialog(c: UndoConflicts, redo: boolean, t: T): { title: string;
 }
 
 /**
- * Como undoLast/redoLast, pero antes mira si otra persona cambió después lo que la entrada va a tocar (findUndoConflicts).
+ * Como undoLast, pero antes mira si otra persona cambió después lo que la entrada va a tocar (findUndoConflicts).
  * Si no, la aplica igual que siempre. Si sí, no aplica nada y devuelve el texto de la confirmación con el id de la
  * entrada; con `confirmEntryId` (la persona aceptó) la aplica sin preguntar, solo si sigue siendo la última de su pila
  * (si entretanto cambió, se pide volver a intentarlo para no aplicar otra cosa de la que se confirmó).
@@ -135,11 +135,7 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   let prints: string[];
   try {
     siblings = await db.undoEntry.findMany({ where: { userId: user.id, projectId: pid, fingerprint: { not: null }, id: { not: entry.id } }, select: { id: true, ops: true, fingerprint: true } });
-    prints = await fingerprintsOf(pid, [
-      // Cada una en el formato de la que tiene guardada (las de antes de cubrir el bloqueo, como entonces).
-      ...(entry.fingerprint ? [{ ops, like: entry.fingerprint }] : []),
-      ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[], like: s.fingerprint })),
-    ]);
+    prints = await fingerprintsOf(pid, [...(entry.fingerprint ? [{ ops }] : []), ...siblings.map((s) => ({ ops: s.ops as unknown as UndoOp[] }))]);
   } catch (err) {
     await restore();
     throw err;
@@ -176,7 +172,7 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
   // Después de aplicar: la huella de la entrada contraria y la nueva de las intactas, otra vez con una sola lectura.
   // Se recalculan todas (no solo las que comparten tareas con esta): aplicar también puede mover otras filas
   // (renumerar una columna, quitar la marca de fija, llevar tareas de una columna borrada a otra). Solo se escriben
-  // las que han cambiado (también las guardadas en el formato anterior, que pasan al actual).
+  // las que han cambiado. Una de un formato antiguo (isObsoleteFingerprint) nunca está intacta: no se pone al día.
   const after = await fingerprintsOf(pid, [...(saveCounter ? [{ ops: counter }] : []), ...intact.map((s) => ({ ops: s.ops as unknown as UndoOp[] }))]);
   if (saveCounter) await saveUndo(user.id, pid, entry.label, counter, entry.taskId, undo ? "REDO" : "UNDO", false, after.shift()!, history);
   const changed = intact.flatMap((s, i) => (after[i] !== s.fingerprint ? [Prisma.sql`(${s.id}::text, ${after[i]!}::text)`] : []));
@@ -200,11 +196,6 @@ export async function undoLast(projectId: string, taskId?: string | null) {
   return runAction({ name: "undo.undoLast", args: [projectId, taskId] }, () => applyLast("UNDO", projectId, taskId));
 }
 
-/** Rehace lo último que se deshizo (mismo contexto que undoLast). Una acción nueva vacía esta pila. */
-export async function redoLast(projectId: string, taskId?: string | null) {
-  return runAction({ name: "undo.redoLast", args: [projectId, taskId] }, () => applyLast("REDO", projectId, taskId));
-}
-
 /**
  * Deshacer del botón y de Ctrl+Z: como undoLast, pero si otra persona cambió después lo que se va a deshacer, devuelve
  * `conflict` sin aplicar nada; se vuelve a llamar con `confirmEntryId` cuando la persona acepta. En el registro
@@ -214,7 +205,10 @@ export async function undoChecked(projectId: string, taskId?: string | null, con
   return runAction({ name: "undo.undoLast", args: [projectId, taskId, confirmEntryId] }, () => applyLastChecked("UNDO", projectId, taskId, confirmEntryId));
 }
 
-/** Lo mismo para rehacer (undo.redoLast). */
+/**
+ * Rehacer (botón y Ctrl+Y): rehace lo último que se deshizo, en el mismo contexto que undoLast, con la misma pregunta si
+ * otra persona cambió lo mismo después. Una acción nueva vacía esta pila. En el registro cuenta como undo.redoLast.
+ */
 export async function redoChecked(projectId: string, taskId?: string | null, confirmEntryId?: string | null) {
   return runAction({ name: "undo.redoLast", args: [projectId, taskId, confirmEntryId] }, () => applyLastChecked("REDO", projectId, taskId, confirmEntryId));
 }

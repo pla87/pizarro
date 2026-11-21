@@ -4,11 +4,11 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { createTask, archiveTask, deleteTask, deleteTasks, duplicateTask, moveTask, restoreTaskSnapshot, updateTask } from "../../src/actions/tasks";
 import { setColumnWipLimit } from "../../src/actions/columns";
 import { blockProblem } from "../../src/lib/blocking";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { loadBoardTasks } from "../../src/lib/board";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile, type ImportUser } from "../../src/lib/project-export/import";
@@ -69,7 +69,7 @@ describe("límite de tarjetas por columna", () => {
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).wipLimit, 4);
     expectOk(await undoLast(f.project.id));
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).wipLimit, null);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).wipLimit, 4);
   });
 
@@ -169,7 +169,7 @@ describe("tareas bloqueadas", () => {
     expectOk(await updateTask(a.id, { blockedById: b.id }));
     expectOk(await undoLast(f.project.id));
     assert.equal(await blockerOf(a.id), null);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal(await blockerOf(a.id), b.id);
     // Y quitarlo también se deshace.
     expectOk(await updateTask(a.id, { blockedById: null }));

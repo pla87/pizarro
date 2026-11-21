@@ -2,9 +2,9 @@
 // solo cuentan las filas de TaskAttachment, no los ficheros que se conservan en disco para poder deshacer un borrado.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { deleteAttachment, restoreTaskSnapshot } from "../../src/actions/tasks";
-import { redoLast, undoEntry } from "../../src/actions/undo";
+import { redoChecked, undoEntry } from "../../src/actions/undo";
 import { attachmentTotals } from "../../src/lib/board";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 
@@ -35,7 +35,7 @@ describe("contadores de adjuntos de la tarea", () => {
     // Deshacer el borrado devuelve la fila y vuelve a contar; rehacer la quita otra vez.
     expectOk(await undoEntry(delB.undo.id!));
     assert.deepEqual(await attachmentTotals(task.id), { imageCount: 1, fileCount: 0, attachBytes: 3 * MB });
-    expectOk(await redoLast(f.project.id, task.id));
+    expectApplied(await redoChecked(f.project.id, task.id));
     assert.deepEqual(await attachmentTotals(task.id), { imageCount: 0, fileCount: 0, attachBytes: 0 });
   });
 

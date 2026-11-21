@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { listTemplatesSorted, missingBuiltinKeys } from "@/lib/template-store";
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
-import { KindsAdmin } from "../types/KindsAdmin";
+import { KindsAdmin } from "./KindsAdmin";
 import { TemplatesAdmin } from "./TemplatesAdmin";
 
 export async function generateMetadata() {

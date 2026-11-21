@@ -5,7 +5,7 @@ import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
 import { visibleProjectsWhere } from "../access";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-size";
-import { MAX_TITLE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
+import { RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
 import { isoToDate, todayIso } from "../dates";
 import { db } from "../db";
 import { confirmDocumentKind, documentMime, sanitizeDocumentName } from "../document-kind";
@@ -108,15 +108,6 @@ export function safeFileName(raw: string, fallback = "archivo"): string {
 
 /** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
 const nextUp = (n: number) => n + Math.max(Math.abs(n) * 2 ** -40, 2 ** -30);
-
-/**
- * Recorta un título al máximo de la aplicación como al guardarlo (clampTitle): por caracteres visibles, sin partir un
- * emoji ni dejar a medias una mención @[Nombre](user:id). Antes cortaba a 210 unidades UTF-16: un título de emojis
- * compuestos, que cabe, salía recortado y con medio emoji.
- */
-export function capTitle(title: string, max = MAX_TITLE): string {
-  return clampTitle(title, max).value;
-}
 
 export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));

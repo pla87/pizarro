@@ -3,12 +3,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import pg from "pg";
-import { assign, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { assign, db, expectFail, expectOk, loginAs, logout, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { exportTasksJson } from "../../src/actions/task-json";
 import { importTasks } from "../../src/lib/task-import";
 import { POST as importRoute } from "../../src/app/api/projects/[projectId]/import-tasks/route";
 import { assertFastAsync } from "../timing";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { TASKS_JSON_MAX } from "../../src/lib/task-json";
 
 const undoCount = (projectId: string) => db.undoEntry.count({ where: { projectId, kind: "UNDO" } });
@@ -118,7 +118,7 @@ describe("importTasks", () => {
     expectOk(await undoLast(f.project.id));
     assert.deepEqual(await titles(f.project.id), ["De otra persona"]);
     assert.deepEqual((await db.label.findMany({ where: { projectId: f.project.id }, orderBy: { name: "asc" } })).map((l) => l.name), ["nueva B", "ya estaba"]);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     const back = await db.task.findMany({ where: { projectId: f.project.id, title: { in: ["Uno", "Dos"] } }, include: { labels: { include: { label: true } } }, orderBy: { title: "asc" } });
     assert.deepEqual(back.map((t) => [t.title, t.labels.map((l) => l.label.name).sort()]), [["Dos", ["nueva A", "nueva B"]], ["Uno", ["nueva A", "ya estaba"]]]);
     assert.ok(keep);
@@ -370,7 +370,7 @@ describe("importar más de 1 MB por la ruta, avisos de etiquetas y rehacer con e
     assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 0);
     // Mientras tanto, el proyecto llega al tope.
     await db.label.createMany({ data: Array.from({ length: 50 }, (_, i) => ({ projectId: f.project.id, name: `e${i}`, color: "#ef4444" })) });
-    const redo = expectOk(await redoLast(f.project.id));
+    const redo = expectApplied(await redoChecked(f.project.id));
     assert.equal(redo.skipped, 1, "la etiqueta que no vuelve cuenta como parte que no se pudo aplicar");
     assert.equal(await db.label.count({ where: { projectId: f.project.id } }), 50);
     const task = await db.task.findFirstOrThrow({ where: { projectId: f.project.id, title: "Con etiqueta" }, include: { labels: true } });
@@ -387,7 +387,7 @@ describe("importar más de 1 MB por la ruta, avisos de etiquetas y rehacer con e
     await db.taskLabel.create({ data: { taskId: other.id, labelId: label.id } });
     expectOk(await undoLast(f.project.id));
     assert.equal(await db.label.count({ where: { id: label.id } }), 1);
-    const redo = expectOk(await redoLast(f.project.id));
+    const redo = expectApplied(await redoChecked(f.project.id));
     assert.equal(redo.skipped, 0);
     const uno = await db.task.findFirstOrThrow({ where: { projectId: f.project.id, title: "Uno" }, include: { labels: true } });
     assert.deepEqual(uno.labels.map((l) => l.labelId), [label.id]);

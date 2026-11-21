@@ -1,9 +1,16 @@
-// Ronda 52, HTML en Documentación: (1) los enlaces entre HTML de la misma Documentación (tema1.html -> «./Tema2.HTML#apartado»,
-// con mayúsculas y %20) abren el otro documento en el visor de la app (otra pestaña, el marco sigue sin permisos nuevos) y
-// llevan al apartado; vuelta incluida; un enlace a un fichero que no está queda desactivado con su title; un documento de
-// OTRO proyecto con el mismo nombre no se abre; (2) los ficheros HTML, texto y Markdown en Latin-1, Windows-1252 y UTF-16 se
-// ven con sus tildes y la descarga los entrega tal cual. Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs      # PART=enlaces,codificacion
+// Enlaces y codificaciones de los HTML de Documentación (ronda 52 y cazas de bugs 50b y 52):
+// (enlaces) los enlaces entre HTML de la misma Documentación (tema1.html -> «./Tema2.HTML#apartado», con mayúsculas y
+// %20) abren el otro documento en el visor de la app (otra pestaña, el marco sigue sin permisos nuevos) y llevan al
+// apartado; vuelta incluida; un enlace a un fichero que no está queda desactivado con su title; un documento de OTRO
+// proyecto con el mismo nombre no se abre; (codificacion) los ficheros HTML, texto y Markdown en Latin-1, Windows-1252 y
+// UTF-16 se ven con sus tildes y la descarga los entrega tal cual; (propio) un enlace al PROPIO documento por su nombre
+// («indice.html#abajo» dentro de indice.html) se desplaza en el marco (antes abría una pestaña nueva con el mismo documento
+// en cada clic), un enlace sin ruta («», «?v=2») tampoco sale desactivado, y los nombres se comparan como se guardan al
+// subir (espacios seguidos en uno, tildes descompuestas de macOS); (binario) un binario que empieza por FF FE (el BOM de
+// UTF-16) ya no pasa por texto y un HTML con `<meta charset="unicode">` sin BOM se ve bien; (indice) el índice de un HTML
+// («#tema-2», también en SVG) se desplaza dentro del marco aislado (antes llevaba al marco la página de la app y quedaba un
+// error) y `ping` no sale de lo que se pinta. Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs      # PART=enlaces,codificacion,propio,binario,indice
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,8 +18,8 @@ import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "enlaces,codificacion").split(",");
-const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "r52-"));
+const only = (process.env.PART || "enlaces,codificacion,propio,binario,indice").split(",");
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "documentacion-enlaces-"));
 
 await L.prepareUsers();
 await L.cleanBoard();
@@ -49,6 +56,23 @@ async function openDoc(pg, projectId, name) {
   return viewer;
 }
 const page_ = (title) => `<!doctype html><html><head><title>${title}</title></head><body>`;
+
+/** Sube un documento con el selector de archivos, desde memoria (los nombres con tildes no dependen del disco). */
+async function uploadMem(pg, name, body, mimeType = "text/html") {
+  await pg.goto(`${L.BASE}/p/${p.id}/docs`);
+  await pg.getByRole("heading", { name: /Documentación/ }).first().waitFor({ timeout: 15000 });
+  await sleep(1000); // hidratación: el cambio del selector lo atiende React
+  await pg.locator("input[type=file][aria-label='Subir archivos']").setInputFiles({ name, mimeType, buffer: Buffer.from(body) });
+  return L.waitFor(async () => (await L.q(`SELECT 1 FROM "ProjectDocument" WHERE "projectId"=$1 AND name=$2`, [p.id, name.normalize("NFC").replace(/\s+/g, " ")])).length === 1, { timeout: 15000 });
+}
+const docByName = (name) => docId(p.id, name);
+async function openDocByName(pg, name) {
+  const d = await docByName(name);
+  await pg.goto(`${L.BASE}/p/${p.id}/docs`);
+  await pg.locator(`[data-doc-open="${d.id}"]`).first().click();
+  await U.dialog(pg).getByText(name).first().waitFor();
+  return d;
+}
 
 // --- Enlaces entre HTML de la misma Documentación ----------------------------------------------------------------------------
 if (only.includes("enlaces")) {
@@ -219,6 +243,155 @@ if (only.includes("codificacion")) {
 }
 
 await s.ctx.close();
+
+// --- Enlaces al propio documento y nombres arreglados --------------------------------------------------------------------
+if (only.includes("propio")) {
+  L.scenario("propio: el propio documento, sin ruta, espacios seguidos y tildes de macOS");
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
+  const s = await L.session();
+  const { page } = s;
+  const filler = Array.from({ length: 80 }, (_, i) => `<p>Relleno ${i}</p>`).join("");
+  const nfd = "lección.html".normalize("NFD");
+  L.check("subida: «lección.html»", await uploadMem(page, "lección.html", `<html><body><h1>Lección</h1></body></html>`));
+  L.check("subida: «a  b.html» (se guarda «a b.html»)", await uploadMem(page, "a  b.html", `<html><body><h1>AB</h1></body></html>`));
+  L.check("subida: «indice.html»", await uploadMem(page, "indice.html", `<!doctype html><html><head><title>Índice</title></head><body><h1 id="arriba">Índice</h1>
+<a id="self" href="indice.html#abajo">Abajo (por su nombre)</a>
+<a id="selfmay" href="./INDICE.HTML">Arriba (por su nombre, sin apartado)</a>
+<a id="vacio" href="">Este documento</a>
+<a id="query" href="?v=2#abajo">Abajo (con consulta)</a>
+<a id="nfd" href="${encodeURIComponent(nfd)}">Lección (NFD)</a>
+<a id="dosesp" href="a%20%20b.html">AB</a>
+<a id="falta" href="otro.html">No está</a>
+${filler}<h2 id="abajo">Abajo del todo</h2>${filler}</body></html>`));
+  const dIndice = await docByName("indice.html");
+  const dLeccion = await docByName("lección.html");
+  const dAb = await docByName("a b.html");
+  await openDocByName(page, "indice.html");
+  const frameEl = page.locator("iframe[data-testid=doc-html]");
+  const frame = page.frameLocator("iframe[data-testid=doc-html]");
+  await frame.getByRole("heading", { name: "Índice" }).waitFor({ timeout: 10000 });
+  const attr = (id, a) => frame.locator(`#${id}`).getAttribute(a);
+  L.eq("PROPIO: «indice.html#abajo» dentro de indice.html se queda en el marco", [await attr("self", "href"), await attr("self", "target")], ["about:srcdoc#abajo", "_self"]);
+  L.eq("PROPIO: «./INDICE.HTML» (sin apartado), al principio del mismo documento", [await attr("selfmay", "href"), await attr("selfmay", "target")], ["about:srcdoc#", "_self"]);
+  L.eq("PROPIO: href vacío = este documento (no «no está en la Documentación»)", [await attr("vacio", "href"), await attr("vacio", "title")], ["about:srcdoc#", null]);
+  L.eq("PROPIO: «?v=2#abajo» = este documento", await attr("query", "href"), "about:srcdoc#abajo");
+  L.eq("PROPIO: tildes descompuestas (NFD) encuentran «lección.html»", await attr("nfd", "href"), `/p/${p.id}/docs?doc=${dLeccion.id}`);
+  L.eq("PROPIO: «a%20%20b.html» encuentra «a b.html»", await attr("dosesp", "href"), `/p/${p.id}/docs?doc=${dAb.id}`);
+  L.eq("PROPIO: un fichero que no está sigue desactivado", [await attr("falta", "href"), await attr("falta", "aria-disabled")], [null, "true"]);
+  L.check("PROPIO: ningún enlace apunta al propio documento con ?doc=", !(await frameEl.getAttribute("srcdoc")).includes(`doc=${dIndice.id}`));
+
+  // Clic en el enlace al propio documento: se desplaza al apartado, sin abrir pestañas ni salir de la página.
+  let popped = 0;
+  const onPage = () => { popped++; };
+  page.context().on("page", onPage);
+  const url0 = page.url();
+  const top = () => frame.locator("#abajo").evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  await frame.locator("#self").click();
+  await L.checkEventually("PROPIO: clic en «indice.html#abajo»: el marco baja al apartado", async () => { const y = await top(); return [y > -20 && y < 400, String(y)]; });
+  await frame.locator("#selfmay").scrollIntoViewIfNeeded();
+  await frame.locator("#selfmay").click();
+  await L.checkEventually("PROPIO: clic en «./INDICE.HTML»: vuelve arriba", async () => { const y = await frame.locator("#arriba").evaluate((el) => Math.round(el.getBoundingClientRect().top)); return [y >= 0 && y < 100, String(y)]; });
+  await frame.locator("#query").click();
+  await L.checkEventually("PROPIO: clic en «?v=2#abajo»: baja al apartado", async () => { const y = await top(); return [y > -20 && y < 400, String(y)]; });
+  await sleep(500);
+  L.check("PROPIO: ninguno ha abierto otra pestaña ni cambiado la página", popped === 0 && page.url() === url0 && (await frameEl.count()) === 1, `${popped} pestañas, ${page.url()}`);
+  L.check("PROPIO: el marco sigue mostrando el documento", await frame.getByRole("heading", { name: "Índice" }).isVisible());
+  page.context().off("page", onPage);
+  // El enlace NFD abre «lección.html» en otra pestaña.
+  const [tab] = await Promise.all([page.context().waitForEvent("page", { timeout: 10000 }), frame.locator("#nfd").click()]);
+  await tab.waitForLoadState();
+  await tab.frameLocator("iframe[data-testid=doc-html]").getByRole("heading", { name: "Lección" }).waitFor({ timeout: 15000 });
+  L.eq("PROPIO: la pestaña del enlace NFD es «lección.html»", new URL(tab.url()).search, `?doc=${dLeccion.id}`);
+  await tab.close();
+  // Chromium avisa en la consola de cada desplazamiento dentro del marco sin scripts: es esperado.
+  L.assertNoErrors("propio", [{ errors: s.errors.filter((e) => !/Blocked script execution in 'about:srcdoc/.test(e)) }]);
+  await s.ctx.close();
+}
+
+// --- Binarios con BOM de UTF-16 y meta «unicode» -----------------------------------------------------------------------------
+if (only.includes("binario")) {
+  L.scenario("binario: FF FE delante no lo convierte en texto; <meta charset=unicode> sin BOM");
+  const s = await L.session();
+  const { page } = s;
+  // Ruido determinista (sin controles en los bytes): con el BOM delante, antes se veía como texto (caracteres chinos).
+  const noise = Buffer.from(Array.from({ length: 3000 }, (_, i) => ((Math.imul(i + 1, 2654435761) >>> 13) & 0xff)));
+  L.check("subida: «datos.txt» (FF FE + binario)", await uploadMem(page, "datos.txt", Buffer.concat([Buffer.from([0xff, 0xfe]), noise]), "text/plain"));
+  L.check("subida: «sonido.html» (FE FF + binario)", await uploadMem(page, "sonido.html", Buffer.concat([Buffer.from([0xfe, 0xff]), noise])));
+  L.check("subida: «nota16.txt» (UTF-16 de verdad)", await uploadMem(page, "nota16.txt", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Camión 你好 😀 fin", "utf16le")]), "text/plain"));
+  L.check("subida: «word.html» (meta unicode, sin BOM)", await uploadMem(page, "word.html", Buffer.from('<html><head><meta http-equiv="Content-Type" content="text/html; charset=unicode"></head><body><p id="t">Camión ñandú</p></body></html>')));
+  L.eq("BIN: tipos", Object.fromEntries(await Promise.all(["datos.txt", "sonido.html", "nota16.txt", "word.html"].map(async (n) => [n, (await docByName(n)).kind]))), { "datos.txt": "OTHER", "sonido.html": "OTHER", "nota16.txt": "TEXT", "word.html": "HTML" });
+  await openDocByName(page, "datos.txt");
+  L.check("BIN: «datos.txt» binario: sin vista previa, solo descarga", (await page.locator("[data-testid=doc-text]").count()) === 0 && (await U.dialog(page).getByText(/no tiene vista previa/).isVisible()));
+  await page.keyboard.press("Escape");
+  await openDocByName(page, "nota16.txt");
+  await page.locator("[data-testid=doc-text]").waitFor({ timeout: 10000 });
+  L.eq("BIN: «nota16.txt» UTF-16 de verdad se sigue viendo", await page.locator("[data-testid=doc-text]").innerText(), "Camión 你好 😀 fin");
+  await page.keyboard.press("Escape");
+  await openDocByName(page, "word.html");
+  const frame = page.frameLocator("iframe[data-testid=doc-html]");
+  await frame.locator("#t").waitFor({ timeout: 10000 });
+  L.eq("BIN: «word.html» con meta «unicode» sin BOM se ve bien (antes, caracteres chinos)", await frame.locator("#t").innerText(), "Camión ñandú");
+  L.assertNoErrors("binario", [s]);
+  await s.ctx.close();
+}
+
+// --- HTML de Documentación: enlaces internos dentro del marco ---------------------------------------------------------
+if (only.includes("indice")) {
+  L.scenario("indice: índice de un HTML en el marco aislado");
+  await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1 AND name='temario.html'`, [p.id]);
+  const filler = Array.from({ length: 60 }, (_, i) => `<p>Párrafo de relleno ${i + 1} del tema 1.</p>`).join("\n");
+  const HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Temario</title></head><body>
+<nav><a id="ir" href="#tema-2">Ir al tema 2</a> · <a id="arriba" href="#">Arriba</a> · <a id="fuera" href="https://example.com/fuera" ping="https://example.com/rastreo">Fuera</a></nav>
+<svg width="220" height="30"><a id="svg-ir" href="#tema-2"><text x="4" y="20">Tema 2 (SVG)</text></a></svg>
+<h1>Tema 1</h1>${filler}
+<h2 id="tema-2">Tema 2: Derivadas</h2><p>Contenido del tema 2.</p>${filler}
+</body></html>`;
+  const file = path.join(TMP, "temario.html");
+  fs.writeFileSync(file, HTML);
+  const s = await L.session();
+  const { page } = s;
+  page.on("dialog", (d) => { s.errors.push(`dialog: ${d.message()}`); void d.dismiss(); });
+  await page.goto(`${L.BASE}/p/${p.id}/docs`);
+  await page.getByRole("heading", { name: /Documentación/ }).first().waitFor({ timeout: 15000 });
+  await page.locator("input[type=file][aria-label='Subir archivos']").setInputFiles(file);
+  await L.waitFor(async () => (await L.q(`SELECT 1 FROM "ProjectDocument" WHERE "projectId"=$1 AND name='temario.html'`, [p.id])).length === 1, { timeout: 15000 });
+  const [doc] = await L.q(`SELECT id,kind FROM "ProjectDocument" WHERE "projectId"=$1 AND name='temario.html'`, [p.id]);
+  L.eq("ANCHOR: se sube como HTML", doc.kind, "HTML");
+  await page.reload();
+  await page.locator(`[data-doc-open="${doc.id}"]`).first().click();
+  const viewer = U.dialog(page);
+  const frameEl = viewer.locator("iframe[data-testid=doc-html]");
+  await frameEl.waitFor({ timeout: 10000 });
+  const frame = page.frameLocator("iframe[data-testid=doc-html]");
+  await frame.getByRole("heading", { name: "Tema 1" }).waitFor({ timeout: 10000 });
+  const child = await (await frameEl.elementHandle()).contentFrame();
+  const srcdoc = await frameEl.getAttribute("srcdoc");
+  L.check("ANCHOR: sin `ping` en lo que se pinta (avisaría a otra dirección al pulsar)", !/\sping=/i.test(srcdoc), srcdoc.slice(0, 400));
+  const pageUrl = page.url();
+  const state = () => child.evaluate(() => ({ url: location.href, y: Math.round(scrollY), top: Math.round(document.getElementById("tema-2").getBoundingClientRect().top) }));
+  const atTop = await state();
+  L.eq("ANCHOR: el documento empieza arriba", atTop.y, 0);
+  await frame.locator("#ir").click();
+  await L.waitFor(async () => (await state().catch(() => ({ y: 0 }))).y > 0, { timeout: 5000 });
+  const after = await state().catch((e) => ({ url: `error: ${e.message}`, y: 0, top: -1 }));
+  L.check("ANCHOR: el enlace del índice se queda en el documento (no carga otra página en el marco)", after.url.startsWith("about:srcdoc"), after.url);
+  L.check("ANCHOR: …y desplaza el marco hasta «Tema 2»", after.y > 0 && Math.abs(after.top) < 40, JSON.stringify(after));
+  L.check("ANCHOR: el tema 2 se ve", await frame.getByRole("heading", { name: "Tema 2: Derivadas" }).isVisible());
+  L.eq("ANCHOR: la página de la app no se mueve", page.url(), pageUrl);
+  await page.screenshot({ path: `${SHOTS}/documentacion-indice.png` });
+  await frame.locator("#arriba").click();
+  await L.waitFor(async () => (await state()).y === 0, { timeout: 5000 });
+  L.eq("ANCHOR: «#» vuelve arriba", (await state()).y, 0);
+  await frame.locator("#svg-ir").click();
+  await L.waitFor(async () => (await state()).y > 0, { timeout: 5000 });
+  const svg = await state();
+  L.check("ANCHOR: el enlace interno de un SVG también se desplaza dentro del documento", svg.url.startsWith("about:srcdoc") && svg.y > 0, JSON.stringify(svg));
+  L.check("ANCHOR: el visor sigue abierto", await frameEl.isVisible());
+  L.assertNoErrors("ANCHOR", [s]);
+  await s.ctx.close();
+}
+
+await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
 await L.q(`DELETE FROM "Project" WHERE id=$1`, [P2]);
 fs.rmSync(TMP, { recursive: true, force: true });
 await L.closeBrowser(); await L.closeDb();

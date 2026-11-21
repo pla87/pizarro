@@ -24,6 +24,18 @@ test("cita, código en línea, bloque de código, regla y enlace se conservan", 
   assert.equal(roundTrip("[enlace](https://example.com)"), "[enlace](https://example.com)");
 });
 
+test("un bloque sangrado (4 espacios) al final no gana una línea vacía (marked 18 deja el salto final en su texto)", () => {
+  for (const md of ["    código", "    código\n", "    código\n\n", "texto\n\n    a\n\n    b\n"]) {
+    const block = manager.parse(md).content!.findLast((n) => n.type === "codeBlock");
+    assert.ok(block, JSON.stringify(md));
+    assert.doesNotMatch(block.content![0]!.text!, /\n$/, JSON.stringify(md));
+  }
+  assert.equal(roundTrip("    código\n"), "```\ncódigo\n```");
+  assert.equal(roundTrip("texto\n\n    a\n\n    b\n"), "texto\n\n```\na\n\nb\n```");
+  // Los cercados conservan su texto tal cual (también las líneas vacías del final, que son contenido).
+  assert.equal(roundTrip("```\ncódigo\n\n```"), "```\ncódigo\n\n```");
+});
+
 test("sangría de listas: viñetas y numeradas anidadas se conservan", () => {
   assert.equal(roundTrip("- a\n  - b\n    - c"), "- a\n  - b\n    - c");
   assert.equal(roundTrip("1. a\n   1. b"), "1. a\n   1. b");

@@ -1,10 +1,10 @@
 // Rol de columna BUDGET (Presupuesto): repetible, fuerza el campo Coste y lo bloquea mientras exista.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeUser, expectApplied } from "./helpers";
 import { setColumnRole } from "../../src/actions/columns";
 import { createProject, setTaskFields } from "../../src/actions/projects";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { saveTemplate, templateFromProject } from "../../src/actions/templates";
 
 const fieldsOf = async (projectId: string) => (await db.project.findUniqueOrThrow({ where: { id: projectId } })).taskFields;
@@ -53,7 +53,7 @@ describe("columna Presupuesto", () => {
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "NONE");
     // Mientras tanto se desactiva el coste (ya no hay columna de presupuesto) y se rehace el rol.
     expectOk(await setTaskFields(f.project.id, []));
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "BUDGET");
     assert.ok((await fieldsOf(f.project.id)).includes("cost"));
   });
@@ -68,7 +68,7 @@ describe("columna Presupuesto", () => {
     expectOk(await undoLast(f.project.id));
     assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } })).role, "NONE");
     assert.deepEqual(await fieldsOf(f.project.id), ["priority"]);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.deepEqual(await fieldsOf(f.project.id), ["cost", "priority"]);
     expectOk(await undoLast(f.project.id));
     assert.deepEqual(await fieldsOf(f.project.id), ["priority"]);

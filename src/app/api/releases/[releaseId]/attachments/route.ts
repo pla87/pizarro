@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { appTimeZone } from "@/lib/format";
 import { isoDate, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipHeadResponse, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipHeadResponse, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipSlotBusy, zipVersionConflict, zipPartRequired } from "@/lib/release-zip";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { getCurrentUser } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -25,7 +25,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   const mode = zipRequestMode(req.url);
   if (!mode) return new Response(t("Datos no válidos"), { status: 400 });
-  // El plan (o la petición sin paquete) cuenta como la descarga; cada paquete pedido por número tiene su propio tope.
+  if (mode.kind === "incomplete") return zipPartRequired(t);
+  // El plan cuenta como la descarga; cada paquete tiene su propio tope.
   const rate = zipRateKey(mode, user.id);
   const allowed = rateLimit(rate.key, rate.limit, 60_000);
   if (!allowed) return new Response(t("Demasiadas peticiones"), { status: 429 });

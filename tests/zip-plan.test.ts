@@ -88,16 +88,20 @@ describe("zipPlanToken", () => {
 describe("zipRequestMode y conflicto de versión", () => {
   const entries = [{ id: "a1", name: "x", size: 10, open: async function* () {} }];
   const v = zipPlanToken(entries, 25);
-  const part = (q: string) => zipRequestMode(`http://x/api?${q}`)!;
+  const part = (q: string) => {
+    const mode = zipRequestMode(`http://x/api?${q}`);
+    assert.equal(mode?.kind, "part", q);
+    return mode as Extract<typeof mode, { kind: "part" }>;
+  };
 
-  test("lee ?v= y rechaza uno mal formado", () => {
-    assert.deepEqual(part(`part=2&v=${v}`), { kind: "part", part: 2, explicit: true, version: v });
-    assert.deepEqual(part("part=2"), { kind: "part", part: 2, explicit: true, version: null });
-    assert.equal(zipRequestMode("http://x/api?part=1&v=zz"), null);
+  test("lee ?part= y ?v=; sin alguno de los dos, «incomplete» (ya no hay paquete sin número ni sin token)", () => {
+    assert.deepEqual(part(`part=2&v=${v}`), { kind: "part", part: 2, version: v });
+    assert.deepEqual(zipRequestMode("http://x/api?plan=1"), { kind: "plan" });
+    for (const q of ["", "part=2", `v=${v}`, "plan=0"]) assert.deepEqual(zipRequestMode(`http://x/api?${q}`), { kind: "incomplete" }, q);
+    for (const q of ["part=1&v=zz", `part=0&v=${v}`, `part=x&v=${v}`, `part=1001&v=${v}`]) assert.equal(zipRequestMode(`http://x/api?${q}`), null, q);
   });
 
-  test("sin ?v= no hay conflicto (enlaces antiguos); con token igual tampoco; distinto, 409", async () => {
-    assert.equal(zipVersionConflict(part("part=1"), entries, 25, "m"), null);
+  test("con token igual no hay conflicto; distinto, 409", async () => {
     assert.equal(zipVersionConflict(part(`part=1&v=${v}`), entries, 25, "m"), null);
     assert.equal(zipVersionConflict({ kind: "plan" }, entries, 25, "m"), null);
     const changed = [...entries, { id: "b2", name: "y", size: 5, open: async function* () {} }];
