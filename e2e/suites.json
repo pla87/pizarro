@@ -365,6 +365,7 @@
       "src/lib/auth-mail.ts",
       "src/lib/auth-token*.ts",
       "src/lib/project-invite.ts",
+      "src/lib/user-entered.ts",
       "src/app/(app)/p/[projectId]/settings/**",
       "src/app/(app)/admin/projects/**",
       "src/app/reset/**",

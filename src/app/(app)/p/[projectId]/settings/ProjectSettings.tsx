@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, EyeOff, Loader2, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,7 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
-import { inviteToProject } from "@/actions/users";
+import { inviteToProject, resendInvite } from "@/actions/users";
 import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -49,6 +49,8 @@ interface Props {
   generalKinds: (KindOption & { enabled: boolean; taskCount: number })[];
   deliverables: DeliverableRow[];
   users: { id: string; name: string; role: "ADMIN" | "MEMBER" }[];
+  /** Hay envío de emails: los administradores tienen «Reenviar invitación» en los miembros con la invitación pendiente. */
+  emailAvailable: boolean;
   editorMode: EditorModeValue;
   /** Integración con Google: si está activa y el dominio de Workspace configurado (para ofrecer compartir con él). */
   google: { enabled: boolean; domain: string | null };
@@ -95,7 +97,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, emailAvailable, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -191,7 +193,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 {isPrivateProject ? t("Miembros") : t("Usuarios asignados")}
                 {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.")}</InfoTip>}
               </div>
-              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite />
+              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite canResend={emailAvailable} />
             </div>
           )}
           {visibility !== project.visibility && (
@@ -443,20 +445,30 @@ function LimitLabel({ htmlFor, label, children }: { htmlFor: string; label: stri
   );
 }
 
-type MemberRow = { id: string; name: string; active: boolean; /** Administrador asignado a un proyecto de equipo. */ admin?: boolean };
+type MemberRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  /** Administrador asignado a un proyecto de equipo. */
+  admin?: boolean;
+  /** Invitada que aún no ha elegido contraseña ni ha entrado. */
+  invitePending?: boolean;
+};
 
 /**
  * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
  * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
- * da de alta a alguien sin cuenta. Tras añadir o invitar queda a la vista el enlace para pasárselo («Copiar enlace»).
+ * da de alta a alguien sin cuenta y, con `canResend` (hay email), «Reenviar invitación» a quien aún no ha entrado. Tras
+ * añadir, invitar o reenviar queda a la vista el enlace para pasárselo («Copiar enlace»).
  */
-function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false }: {
+function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false, canResend = false }: {
   projectId: string;
   currentUserId: string;
   members: MemberRow[];
   users: { id: string; name: string }[];
   isPrivate: boolean;
   canInvite?: boolean;
+  canResend?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -497,6 +509,13 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
       router.refresh();
     });
+  const resend = (m: MemberRow) =>
+    start(async () => {
+      const res = await resendInvite(m.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Invitación enviada"));
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
+    });
   const activeCount = members.filter((m) => m.active).length;
   return (
     <div className="space-y-3">
@@ -512,7 +531,20 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                 {m.admin && <span className="ml-1 text-xs text-slate-500">{t("admin")}</span>}
                 {isMe && <span className="ml-1 text-xs text-slate-500">{t("(tú)")}</span>}
                 {!m.active && <span className="ml-1 text-xs text-slate-500">{t("(desactivado)")}</span>}
+                {m.invitePending && <span className="ml-1 text-xs text-amber-700 dark:text-amber-400" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>}
               </span>
+              {canInvite && canResend && m.invitePending && m.active && (
+                <button
+                  type="button"
+                  className="btn-icon shrink-0"
+                  disabled={pending}
+                  aria-label={t("Reenviar invitación a {name}", { name: m.name })}
+                  title={t("Reenviar invitación")}
+                  onClick={() => resend(m)}
+                >
+                  <MailPlus size={16} />
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary"

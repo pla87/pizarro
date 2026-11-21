@@ -14,6 +14,17 @@ export function sessionCookieName(): string {
   return cookieSecure() ? "__Host-tablon_session" : "tablon_session";
 }
 
+/**
+ * Cookie de dispositivos conocidos (devices.ts). Con Secure lleva también el prefijo __Host- (sin Domain, Path=/): ni otro
+ * subdominio ni una conexión sin HTTPS pueden plantarla, pisarla ni borrarla. Sin HTTPS el navegador no admite el prefijo.
+ */
+export function deviceCookieName(): string {
+  return cookieSecure() ? "__Host-pz_device" : LEGACY_DEVICE_COOKIE;
+}
+
+/** Nombre de siempre, y el anterior con HTTPS: allí se sigue leyendo mientras el navegador no tenga la nueva, y se borra al escribirla. */
+export const LEGACY_DEVICE_COOKIE = "pz_device";
+
 export function sessionCookieOptions() {
   return {
     httpOnly: true,

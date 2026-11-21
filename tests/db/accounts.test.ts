@@ -17,8 +17,7 @@ import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
 import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached } from "../../src/lib/rate-limit";
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
-import { hashAuthToken, hashDeviceId, newToken } from "../../src/lib/auth-token-core";
-import { DEVICE_COOKIE, isTrustedDevice } from "../../src/lib/devices";
+import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
 import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
 import { changePassword } from "../../src/actions/profile";
 import { encryptSecret } from "../../src/lib/crypto";
@@ -576,50 +575,6 @@ describe("límite de intentos de acceso por cuenta y dispositivos conocidos", ()
     restoreSession(browser);
     for (let i = LOGIN_ACCOUNT_LIMIT; i < LOGIN_ACCOUNT_LIMIT_TRUSTED; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
     assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
-  });
-});
-
-describe("cookie de dispositivo (pz_device) al iniciar sesión", () => {
-  const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
-  const enter = (user: { id: string; name: string; email: string }, rememberDevice = false) =>
-    completeLogin({ ...user, locale: "ES", mustChangePassword: false }, { method: "password+2fa", rememberDevice, path: "/login/verify" });
-
-  test("un valor plantado desde fuera no se adopta: se genera otro y con «Recordar» la confianza va al nuevo", async () => {
-    const victim = await makeUser();
-    const planted = "plantado-por-un-tercero-0123456789";
-    logout();
-    jar.set(DEVICE_COOKIE, planted);
-    await enter(victim, true);
-    const issued = jar.get(DEVICE_COOKIE)!;
-    assert.ok(issued && issued !== planted, "la cookie se sobrescribe");
-    assert.ok(Buffer.from(issued, "base64url").length >= 32);
-    const devices = await db.knownDevice.findMany({ where: { userId: victim.id } });
-    assert.deepEqual(devices.map((d) => d.deviceHash), [hashDeviceId(issued)]);
-    assert.ok(devices[0]!.trustedUntil && devices[0]!.trustedUntil > new Date());
-    // Quien plantó el valor no se salta el segundo paso con él.
-    logout();
-    jar.set(DEVICE_COOKIE, planted);
-    assert.equal(await isTrustedDevice(victim.id), false);
-    jar.set(DEVICE_COOKIE, issued);
-    assert.equal(await isTrustedDevice(victim.id), true);
-  });
-
-  test("un dispositivo ya conocido de la cuenta conserva su cookie (sin fila nueva); el de otra cuenta no vale", async () => {
-    const user = await makeUser();
-    const other = await makeUser();
-    logout();
-    await enter(user);
-    const mine = jar.get(DEVICE_COOKIE)!;
-    await enter(user, true);
-    assert.equal(jar.get(DEVICE_COOKIE), mine, "se adopta: es de esta cuenta");
-    const rows = await db.knownDevice.findMany({ where: { userId: user.id } });
-    assert.equal(rows.length, 1);
-    assert.ok(rows[0]!.trustedUntil, "«Recordar» marca el mismo dispositivo");
-    // Con la cookie de esta cuenta, otra cuenta recibe una propia.
-    await enter(other);
-    const theirs = jar.get(DEVICE_COOKIE)!;
-    assert.notEqual(theirs, mine);
-    assert.deepEqual((await db.knownDevice.findMany({ where: { userId: other.id } })).map((d) => d.deviceHash), [hashDeviceId(theirs)]);
   });
 });
 

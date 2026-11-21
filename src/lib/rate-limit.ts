@@ -99,7 +99,7 @@ export function loginRateKeys(ip: string, email: string): { ip: string; account:
 /** Fallos permitidos por cuenta en la ventana del login (cualquier conexión). */
 export const LOGIN_ACCOUNT_LIMIT = 6;
 /**
- * Desde un dispositivo conocido de esa cuenta (cookie pz_device con su fila KnownDevice: ya se entró desde él, con o sin
+ * Desde un dispositivo conocido de esa cuenta (su marca en la cookie de dispositivos, con su fila KnownDevice: ya se entró desde él, con o sin
  * «Recordar») se admiten fallos hasta este tope. Un tercero (sin el dispositivo) se
  * queda en LOGIN_ACCOUNT_LIMIT, así que no puede gastar estos intentos: quien entra desde su equipo no queda bloqueado.
  */

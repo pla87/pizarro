@@ -15,6 +15,8 @@ interface AdminUser {
   id: string;
   name: string;
   role: "ADMIN" | "MEMBER";
+  /** Invitada que aún no ha elegido contraseña ni ha entrado. */
+  invitePending: boolean;
 }
 
 interface Row {
@@ -80,6 +82,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
           <li key={u.id} className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-2.5 pr-1 text-sm dark:bg-slate-800">
             <span className="truncate">{u.name}</span>
             {u.role === "ADMIN" && <span className="shrink-0 text-xs text-slate-500">{t("admin")}</span>}
+            {u.invitePending && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400" title={t("Aún no ha entrado ni ha elegido su contraseña")}>{t("Invitación pendiente")}</span>}
             <button
               type="button"
               className="btn-icon h-6 w-6 shrink-0 hover:text-red-600"
