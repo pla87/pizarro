@@ -5,7 +5,7 @@ import { mkdtemp, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter, type Fixture } from "./helpers";
 import { createTask, deleteTask, moveTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
 import pg from "pg";
@@ -318,5 +318,33 @@ describe("adjuntos citados en la descripción", () => {
     assert.ok(queries < 80, `demasiadas consultas: ${queries}`);
     const next = await db.task.findMany({ where: { recurrenceFromId: { in: sources.map((t) => t.id) } }, select: { description: true, attachments: { select: { id: true } } } });
     assert.ok(next.every((t) => t.attachments.length === 1 && t.description === `![](/api/attachments/${t.attachments[0]!.id})`));
+  });
+});
+
+/** Dos personas con acceso a un proyecto nuevo. */
+async function twoPeople(): Promise<{ a: { id: string }; b: { id: string }; f: Fixture }> {
+  const a = await makeUser();
+  const b = await makeUser();
+  const f = await makeProject({ members: [a, b] });
+  return { a, b, f };
+}
+
+describe("deshacer el borrado de una tarea recurrente", () => {
+  test("si entretanto nació otra siguiente aparición, vuelve sin origen en vez de perderse", async () => {
+    const { a, b, f } = await twoPeople();
+    const source = await makeTask(f, { title: "Diaria", recurrence: "DAILY", dueDate: new Date("2026-11-02T00:00:00Z") });
+    await loginAs(a);
+    const first = expectOk(await moveTask(source.id, f.columns.done, null, null)).spawned[0]!.id;
+    expectOk(await deleteTask(first));
+    // Otra persona la saca de «Hecho» y la vuelve a terminar: nace otra siguiente aparición.
+    await loginAs(b);
+    expectOk(await moveTask(source.id, f.columns.todo, null, null));
+    const second = expectOk(await moveTask(source.id, f.columns.done, null, null)).spawned[0]!.id;
+    await loginAs(a);
+    const res = expectOk(await undoLast(f.project.id));
+    assert.equal(res.skipped, 0);
+    const back = await db.task.findUniqueOrThrow({ where: { id: first } });
+    assert.equal(back.recurrenceFromId, null);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: second } })).recurrenceFromId, source.id);
   });
 });
