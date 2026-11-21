@@ -253,7 +253,8 @@ if (only.includes("kind")) {
     await L.board(page);
     await page.keyboard.press("Alt+N");
     await U.dialog(page).waitFor();
-    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo");
+    // Con un espacio detrás, para seguir escribiendo (se quita al guardar).
+    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo ");
     // La descripción puede ser un textarea o el editor con formato (según el perfil): se lee lo que haya en el diálogo.
     const dialogText = () => U.dialog(page).evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + el.innerText);
     L.check("KIND: y su descripción de plantilla", (await dialogText()).includes("Pasos para reproducir:"));
@@ -327,7 +328,8 @@ if (only.includes("tipos")) {
     // 1. El «+» de una columna: el tipo marcado trae su plantilla sin pulsarlo.
     await openPlus();
     const first = await state();
-    L.eq("TIPOS: «+» abre con «Presupuesto» marcado y su título de plantilla", [first.kind, first.title], ["Presupuesto", "Presupuesto:"]);
+    // El prefijo va con un espacio detrás para escribir a continuación (se quita al guardar).
+    L.eq("TIPOS: «+» abre con «Presupuesto» marcado y su título de plantilla", [first.kind, first.title], ["Presupuesto", "Presupuesto: "]);
     L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Empresa o profesional"), first.desc);
     L.eq("TIPOS: y sus tres subtareas", first.subtasks, PRESU_SUBS);
     L.check("TIPOS: lo que puso la plantilla no pide confirmar al cerrar", await closesWithoutAsking());
@@ -337,12 +339,12 @@ if (only.includes("tipos")) {
     await dlg.getByRole("radio", { name: "Permisos y licencias" }).click();
     await sleep(200);
     const permiso = await state();
-    L.eq("TIPOS: a «Permisos y licencias»: su título y sus tres subtareas", [permiso.title, permiso.subtasks], ["Permiso:", PERMISO_SUBS]);
+    L.eq("TIPOS: a «Permisos y licencias»: su título y sus tres subtareas", [permiso.title, permiso.subtasks], ["Permiso: ", PERMISO_SUBS]);
     L.check("TIPOS: y su descripción, sin la de «Presupuesto»", permiso.desc.includes("Trámite") && !permiso.desc.includes("Empresa o profesional"), permiso.desc);
     await dlg.getByRole("radio", { name: "Presupuesto", exact: true }).click();
     await sleep(200);
     const back = await state();
-    L.eq("TIPOS: y otra vez a «Presupuesto»: lo suyo, sin acumular", [back.title, back.subtasks], ["Presupuesto:", PRESU_SUBS]);
+    L.eq("TIPOS: y otra vez a «Presupuesto»: lo suyo, sin acumular", [back.title, back.subtasks], ["Presupuesto: ", PRESU_SUBS]);
     L.check("TIPOS: la descripción solo lleva la de «Presupuesto»", back.desc.includes("Empresa o profesional") && !back.desc.includes("Trámite"), back.desc);
     L.check("TIPOS: cambiar de tipo sin escribir nada tampoco pide confirmar al cerrar", await closesWithoutAsking());
 

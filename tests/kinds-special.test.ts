@@ -15,7 +15,7 @@ test("fija el título y antepone el texto", () => {
   assert.deepEqual(applyKindTemplate(RESP, { title: "Algo", description: "" }), { title: "Respuesta", description: `${RESPUESTA_LINE}\n` });
   assert.deepEqual(applyKindTemplate(RESP, { title: "Algo", description: "Texto previo" }), {
     title: "Respuesta",
-    description: `${RESPUESTA_LINE}\nTexto previo`,
+    description: `${RESPUESTA_LINE}\n\nTexto previo`,
   });
 });
 
@@ -31,7 +31,7 @@ test("solo título o solo descripción", () => {
 
 test("describeKindAutomation resume y trunca", () => {
   assert.equal(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "" }), null);
-  assert.equal(describeKindAutomation({ titleTemplate: "Aviso", descriptionTemplate: "" }), "Al elegirlo, el título pasa a ser «Aviso».");
+  assert.equal(describeKindAutomation({ titleTemplate: "Aviso", descriptionTemplate: "" }), "Al elegirlo, el título empieza por «Aviso».");
   assert.equal(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "Pasos:" }), "Al elegirlo, la descripción empieza por «Pasos:».");
   const line = describeKindAutomation(RESP)!;
   assert.ok(line.includes("«Respuesta»") && line.includes("«Respondo a las preguntas y lo que necesitas de mi:»"));
@@ -67,7 +67,7 @@ const PLAIN = { titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] 
 
 test("sin tipo anterior, igual que aplicar la plantilla (lo que hace «Nueva tarea» al abrir)", () => {
   assert.deepEqual(switchKindText(null, PRESU, { title: "", description: "", subtasks: [] }), {
-    title: "Presupuesto:",
+    title: "Presupuesto: ",
     description: `${PRESU.descriptionTemplate.trim()}\n`,
     subtasks: PRESU.subtaskTemplate,
   });
@@ -86,34 +86,75 @@ test("sin tocar lo que puso el tipo anterior: se sustituye por lo del nuevo, sin
 
 test("el título: se cambia el prefijo y se conserva lo escrito detrás", () => {
   assert.equal(switchKindTitle(PRESU, PERMISO, "Presupuesto: fontanería"), "Permiso: fontanería");
-  assert.equal(switchKindTitle(PRESU, PERMISO, "Presupuesto:"), "Permiso:");
-  // Un título que ya no empieza por el prefijo: como siempre, el título fijo del tipo nuevo.
-  assert.equal(switchKindTitle(PRESU, PERMISO, "Fontanería"), "Permiso:");
+  // Solo el prefijo: el nuevo, con un espacio detrás para seguir escribiendo.
+  assert.equal(switchKindTitle(PRESU, PERMISO, "Presupuesto:"), "Permiso: ");
+  // Un título que no empieza por el prefijo del anterior: lo escrito se conserva y el prefijo del nuevo va delante.
+  assert.equal(switchKindTitle(PRESU, PERMISO, "Fontanería"), "Permiso: Fontanería");
   // A un tipo sin prefijo: solo se quita el prefijo sin nada detrás.
   assert.equal(switchKindTitle(PRESU, PLAIN, "Presupuesto:"), "");
   assert.equal(switchKindTitle(RESP, PLAIN, "Respuesta a Juan"), "Respuesta a Juan");
   // «Comprar» no es prefijo de «Comprarlo todo».
-  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, "Comprarlo todo"), "Gestionar");
+  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, "Comprarlo todo"), "Gestionar Comprarlo todo");
   assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, "Comprar pan"), "Gestionar pan");
   // El mismo tipo otra vez (pulsar el ya elegido) no cambia nada, aunque se haya borrado el prefijo.
   assert.equal(switchKindTitle(PRESU, PRESU, "Presupuesto: fontanería"), "Presupuesto: fontanería");
   assert.equal(switchKindTitle(PRESU, PRESU, "Fontanería"), "Fontanería");
 });
 
+test("el título escrito no se pierde nunca al elegir un tipo con prefijo", () => {
+  // Plantilla «Hogar»: Salud «Cita: », Casa sin prefijo, Compras «Comprar ».
+  const SALUD = { titleTemplate: "Cita: ", descriptionTemplate: "" };
+  const CASA = { titleTemplate: "", descriptionTemplate: "" };
+  const COMPRAS = { titleTemplate: "Comprar ", descriptionTemplate: "" };
+  assert.equal(switchKindTitle(CASA, COMPRAS, "Leche y pan"), "Comprar Leche y pan");
+  assert.equal(switchKindTitle(null, COMPRAS, "  Leche y pan "), "Comprar Leche y pan");
+  assert.equal(switchKindTitle(CASA, SALUD, "dentista"), "Cita: dentista");
+  // Salud → Casa → Compras: «dentista» sigue ahí.
+  assert.equal(switchKindTitle(CASA, COMPRAS, switchKindTitle(SALUD, CASA, "Cita: dentista")), "Comprar Cita: dentista");
+  // Si ya empieza por el prefijo del nuevo, no se duplica.
+  assert.equal(switchKindTitle(CASA, COMPRAS, "Comprar pan"), "Comprar pan");
+  // Vacío: el prefijo con su espacio, para escribir detrás y que se siga reconociendo al cambiar otra vez de tipo.
+  const empty = switchKindTitle(null, COMPRAS, "");
+  assert.equal(empty, "Comprar ");
+  assert.equal(switchKindTitle(COMPRAS, SALUD, `${empty}pan`), "Cita: pan");
+  assert.equal(switchKindTitle(COMPRAS, SALUD, empty), "Cita: ");
+  // Un prefijo guardado sin espacio (los tipos creados a mano se guardan recortados) también lleva el espacio.
+  assert.equal(switchKindTitle(null, { titleTemplate: "Comprar", descriptionTemplate: "" }, ""), "Comprar ");
+  // A un tipo sin prefijo, el título escrito se queda tal cual.
+  assert.equal(switchKindTitle(COMPRAS, CASA, "Leche y pan"), "Leche y pan");
+});
+
 test("la descripción: la plantilla anterior sin tocar se cambia y lo escrito debajo se conserva", () => {
   const tpl = PRESU.descriptionTemplate.trim();
-  assert.equal(switchKindDescription(PRESU, PERMISO, `${tpl}\nNotas mías`), `${PERMISO.descriptionTemplate.trim()}\nNotas mías`);
+  assert.equal(switchKindDescription(PRESU, PERMISO, `${tpl}\n\nNotas mías`), `${PERMISO.descriptionTemplate.trim()}\n\nNotas mías`);
   assert.equal(switchKindDescription(PRESU, PLAIN, `${tpl}\n`), "");
   // Rellenada (el formulario ha cambiado): se conserva y se añade el texto del nuevo al principio, sin duplicarlo.
   const filled = tpl.replace("[nombre]", "Reformas López");
   const out = switchKindDescription(PRESU, PERMISO, filled);
-  assert.equal(out, `${PERMISO.descriptionTemplate.trim()}\n${filled}`);
+  assert.equal(out, `${PERMISO.descriptionTemplate.trim()}\n\n${filled}`);
   assert.equal(switchKindDescription(PRESU, PERMISO, out), out);
   // Escrito en la misma línea que el final de la plantilla: también cuenta como cambiado.
   assert.equal(switchKindDescription(PRESU, PLAIN, `${tpl} todo el baño`), `${tpl} todo el baño`);
   // El mismo tipo otra vez no duplica (tampoco el formulario ya rellenado).
   assert.equal(switchKindDescription(PRESU, PRESU, `${tpl}\n`), `${tpl}\n`);
   assert.equal(switchKindDescription(PRESU, PRESU, filled), filled);
+});
+
+test("la descripción: la respuesta escrita en la última línea del formulario no pierde su etiqueta", () => {
+  const SALUD = { titleTemplate: "Cita: ", descriptionTemplate: "**Quién:**\n\n**Dónde y cuándo:**\n\n**Preguntas para la consulta:**\n" };
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  // Elegir Salud deja el cursor en la línea vacía final; se escribe ahí la respuesta a la última pregunta.
+  const answered = `${switchKindDescription(null, SALUD, "")}Llevar análisis`;
+  const out = switchKindDescription(SALUD, CASA, answered);
+  assert.ok(out.includes("**Preguntas para la consulta:**\nLlevar análisis"), out);
+  // El formulario nuevo va encima, separado por una línea en blanco: la respuesta no queda bajo «Material necesario».
+  assert.equal(out, `${CASA.descriptionTemplate.trim()}\n\n${answered}`);
+  // Lo que ya había al elegir el tipo (compartido, enlazado) va tras una línea en blanco y se sigue cambiando de formulario.
+  const shared = switchKindDescription(null, SALUD, "Texto compartido");
+  assert.equal(shared, `${SALUD.descriptionTemplate.trim()}\n\nTexto compartido`);
+  assert.equal(switchKindDescription(SALUD, CASA, shared), `${CASA.descriptionTemplate.trim()}\n\nTexto compartido`);
+  // Una línea en blanco con espacios también separa.
+  assert.equal(switchKindDescription(SALUD, CASA, `${SALUD.descriptionTemplate.trim()}\n  \nMías`), `${CASA.descriptionTemplate.trim()}\n\nMías`);
 });
 
 test("las subtareas: las del anterior se cambian si siguen todas; si se ha quitado alguna, se conservan", () => {
