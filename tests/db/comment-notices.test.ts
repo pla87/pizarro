@@ -4,9 +4,9 @@
 // vacía o devuelve el extracto de sus avisos.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { addComment, deleteComment, editComment } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { mentionToken } from "../../src/lib/mentions";
 import { subscribeProject } from "../../src/lib/realtime";
 import { applyUndo } from "../../src/lib/undo";
@@ -176,7 +176,7 @@ describe("deshacer comentarios: el extracto de sus avisos", () => {
     expectOk(await undoLast(f.project.id));
     assert.equal(await db.taskComment.count({ where: { taskId: task.id } }), 0);
     assert.deepEqual(await excerpts(task.id), [""], "el aviso no muestra el texto deshecho");
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.deepEqual(await excerpts(task.id), ["@Bea texto secreto"]);
   });
 
@@ -187,7 +187,7 @@ describe("deshacer comentarios: el extracto de sus avisos", () => {
     assert.deepEqual(await excerpts(task.id), [""]);
     expectOk(await undoLast(f.project.id));
     assert.deepEqual(await excerpts(task.id), ["@Bea texto secreto"]);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal(await db.taskComment.count({ where: { id: c.id } }), 0);
     assert.deepEqual(await excerpts(task.id), [""]);
   });
@@ -204,7 +204,7 @@ describe("deshacer comentarios: el extracto de sus avisos", () => {
     assert.equal(await mine(), "");
     expectOk(await undoLast(f.project.id));
     assert.equal(await mine(), "@Bea texto secreto");
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal(await mine(), "");
   });
 
@@ -216,7 +216,7 @@ describe("deshacer comentarios: el extracto de sus avisos", () => {
     assert.deepEqual(await excerpts(task.id), [""]);
     expectOk(await undoLast(f.project.id));
     assert.deepEqual(await excerpts(task.id), ["@Bea texto secreto"]);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.deepEqual(await excerpts(task.id), [""]);
   });
 

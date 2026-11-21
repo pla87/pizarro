@@ -50,7 +50,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
   },
   "tareas-familiares": {
     name: "Family chores",
-    description: "Household organisation: shopping, home, paperwork, appointments and chores that repeat. One label per person to share out the work.",
+    description: "Household organization: shopping, home, paperwork, appointments and chores that repeat. One label per person to share out the work.",
     columns: [
       col("To do"),
       col("This week", false, "WEEKLY_PLAN"),
@@ -94,8 +94,8 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       kind("Proposal", "#6366f1", "Proposal: ", "**What the piece is about and who it is for:**\n\n**Format and length:**\n\n**Desired delivery date:**\n\n**What the quote includes:**\n", ["Briefing meeting", "Prepare proposal and quote", "Send to the client", "Get the approval"]),
       kind("Script", "#a855f7", "Script: ", "**Synopsis:**\n\n**Estimated length:**\n\n**Client notes:**\n", ["First draft", "Review with the client", "Final script"]),
       kind("Shoot", "#ef4444", "Shoot: ", "**Location:**\n\n**Date and hours:**\n\n**Crew and equipment:**\n\n**Shot list:**\n", ["Confirm location and permits", "Prepare equipment and batteries", "Send the shooting plan to the crew", "Back up the memory cards"]),
-      kind("Editing", "#0ea5e9", "Edit: ", "**Version:** v1\n\n**References:**\n\n**Changes requested by the client:**\n", ["Rough cut", "Fine cut", "Colour grading", "Export the review version"]),
-      kind("Sound", "#14b8a6", "Sound: ", "**What is needed:** music, voice-over, effects or mixing.\n\n**Licences:**\n", ["Pick music and check the licence", "Clean up and mix the audio", "Balance the levels"]),
+      kind("Editing", "#0ea5e9", "Edit: ", "**Version:** v1\n\n**References:**\n\n**Changes requested by the client:**\n", ["Rough cut", "Fine cut", "Color grading", "Export the review version"]),
+      kind("Sound", "#14b8a6", "Sound: ", "**What is needed:** music, voice-over, effects or mixing.\n\n**Licenses:**\n", ["Pick music and check the license", "Clean up and mix the audio", "Balance the levels"]),
       kind("Graphics", "#f97316", "Graphics: ", "**What is needed:** titles, captions, logos or animations.\n\n**Format and resolution:**\n"),
       kind("Delivery", "#22c55e", "Delivery: ", "**Requested formats:**\n\n**Destination:**\n", ["Export in the agreed formats", "Watch the full export", "Send to the client", "Archive the project and footage"]),
     ],
@@ -104,7 +104,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     labels: [
       { name: "Urgent", color: "#ef4444" },
       { name: "Missing footage", color: "#eab308" },
-      { name: "Licences pending", color: "#f97316" },
+      { name: "Licenses pending", color: "#f97316" },
       { name: "Approved", color: "#22c55e" },
     ],
     taskFields: ["client", "startDate"],
@@ -172,7 +172,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
   },
   eventos: {
     name: "Event planning",
-    description: "From the first sketch to the day itself: venue, suppliers, guests, programme and logistics, with the budget of what is booked and the checklist for the day.",
+    description: "From the first sketch to the day itself: venue, suppliers, guests, program and logistics, with the budget of what is booked and the checklist for the day.",
     columns: [
       col("Ideas"),
       col("To confirm", false, "WAITING"),
@@ -184,8 +184,8 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     kinds: [
       kind("Venue", "#0ea5e9", "Venue: ", "**Options:**\n\n**Capacity and price:**\n\n**Terms (hours, set-up, cancellation):**\n", ["Request quotes", "Visit the venue", "Book and sign"]),
       kind("Supplier", "#f97316", "Supplier: ", "**Service (catering, music, photography…):**\n\n**Contact:**\n\n**Quote and deposit:**\n", ["Request a quote", "Compare options", "Confirm and pay the deposit"]),
-      kind("Guests", "#ec4899", "", "**List and headcount:**\n\n**Special needs:**\n", ["Finalise the list", "Send invitations", "Confirm attendance"]),
-      kind("Programme", "#a855f7", "Programme: ", "**Time and length:**\n\n**Who takes part:**\n\n**What is needed (microphone, screen, music):**\n", ["Fix the schedule", "Confirm with the speakers", "Send out the programme"]),
+      kind("Guests", "#ec4899", "", "**List and headcount:**\n\n**Special needs:**\n", ["Finalize the list", "Send invitations", "Confirm attendance"]),
+      kind("Program", "#a855f7", "Program: ", "**Time and length:**\n\n**Who takes part:**\n\n**What is needed (microphone, screen, music):**\n", ["Fix the schedule", "Confirm with the speakers", "Send out the program"]),
       kind("Logistics", "#6366f1", "", "**What needs moving or preparing:**\n\n**When and who:**\n", ["Plan for the day", "Transport and set-up", "Pack up and take down"]),
       kind("Communication", "#14b8a6", "", "**What is announced and to whom:**\n\n**Channel (email, social media, poster):**\n\n**Send date:**\n", ["Prepare the text and image", "Send or publish", "Reminder a few days before"]),
     ],
@@ -272,7 +272,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     ],
     kinds: [
       kind("Quote", "#eab308", "Quote: ", "**Company or professional:** [name]\n\n**Scope included:**\n\n**Price and payment terms:**\n\n**Completion time:**\n", ["Request a quote", "Compare with others", "Accept or decline"]),
-      kind("Permits and licences", "#64748b", "Permit: ", "**Procedure:**\n\n**Authority:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather the documentation", "Submit the application", "Keep the decision"]),
+      kind("Permits and licenses", "#64748b", "Permit: ", "**Procedure:**\n\n**Authority:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather the documentation", "Submit the application", "Keep the decision"]),
       kind("Materials", "#8b5a2b", "Material: ", "**What is needed:**\n\n**Measurements or quantity:**\n\n**Supplier and delivery time:**\n", ["Choose the model", "Order and pay", "Receive and check"]),
       kind("Site work", "#f97316", "Work: ", "**Room or area:**\n\n**Work to be done:**\n\n**Trade responsible:**\n\n**Planned dates:**\n", ["Agree a start date", "Monitor progress", "Check the result"]),
       kind("Snagging", "#a855f7", "Snagging: ", "**Room or area:**\n\n**Who fixes them:**\n\n**Defects to fix (one per subtask):**\n"),
@@ -332,13 +332,13 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       col("Submitted", true),
     ],
     kinds: [
-      kind("Reading", "#0ea5e9", "Read: ", "**Source:**\n\n**For which chapter:**\n\n**Main ideas:**\n\n**Useful quotes:**\n", ["Read", "Summarise", "Add to the bibliography"]),
+      kind("Reading", "#0ea5e9", "Read: ", "**Source:**\n\n**For which chapter:**\n\n**Main ideas:**\n\n**Useful quotes:**\n", ["Read", "Summarize", "Add to the bibliography"]),
       kind("Writing", "#6366f1", "Write: ", "**Chapter or section:**\n\n**Outline:**\n\n- \n\n**Expected length:**\n", ["Outline", "First draft", "Check the style", "Check the citations"]),
-      kind("Fieldwork", "#22c55e", "Fieldwork: ", "**Objective:**\n\n**Method:**\n\n**Data to collect:**\n\n**Dates:**\n", ["Prepare the materials", "Collect the data", "Organise and back up"]),
+      kind("Fieldwork", "#22c55e", "Fieldwork: ", "**Objective:**\n\n**Method:**\n\n**Data to collect:**\n\n**Dates:**\n", ["Prepare the materials", "Collect the data", "Organize and back up"]),
       kind("Supervisor meeting", "#a855f7", "Meeting: ", "**Date:**\n\n**What to present:**\n\n**Questions:**\n\n**Agreements:**\n", ["Send the material beforehand", "Prepare the questions", "Note the agreements"]),
       kind("Revisions", "#f97316", "Revise: ", "**Chapter or section:**\n\n**Next submission date:**\n\n**Supervisor comments (one per subtask):**\n"),
       kind("Bibliography", "#8b5a2b", "", "**References to add or check:**\n\n- \n\n**Citation style:**\n"),
-      kind("Submission or defence", "#ef4444", "Submission: ", "**What is submitted and where:**\n\n**Deadline:**\n\n**Formatting requirements:**\n", ["Final proofread", "Check the formatting", "Submit and keep the receipt", "Prepare the presentation"]),
+      kind("Submission or defense", "#ef4444", "Submission: ", "**What is submitted and where:**\n\n**Deadline:**\n\n**Formatting requirements:**\n", ["Final proofread", "Check the formatting", "Submit and keep the receipt", "Prepare the presentation"]),
     ],
     hiddenGeneralKinds: [],
     hideAllGeneralKinds: true,
@@ -361,7 +361,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       col("Done", true),
     ],
     kinds: [
-      kind("Admin and change of address", "#64748b", "Change address: ", "**Organisation or company:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather documents", "Make the change", "Keep the confirmation"]),
+      kind("Admin and change of address", "#64748b", "Change address: ", "**Organization or company:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather documents", "Make the change", "Keep the confirmation"]),
       kind("Packing", "#8b5a2b", "Pack: ", "**Room:**\n\n**What is being packed:**\n\n**Fragile or valuable:**\n", ["Get boxes and materials", "Pack and label", "List the contents of each box"]),
       kind("Transport", "#0ea5e9", "Transport: ", "**Company or helpers:** [name]\n\n**Date and time:**\n\n**Approximate volume:**\n\n**Access at both ends:**\n", ["Request quotes", "Book the date", "Reserve a parking space or permit", "Confirm the day before"]),
       kind("Cleaning and handing back keys", "#14b8a6", "", "**Property:**\n\n**What must be done:**\n\n**Key handover date:**\n", ["Deep clean", "Take photos of the condition", "Read the meters", "Hand over the keys"]),
@@ -394,7 +394,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     kinds: [
       kind("Breakdown", "#ef4444", "Breakdown: ", "**Where:**\n\n**What is happening:**\n\n**Since when and who is affected:**\n\n**Equipment or reference:**\n", ["Check the fault", "Call the technician or supplier", "Repair", "Check it works"]),
       kind("Preventive maintenance", "#14b8a6", "Maintenance: ", "**Equipment or installation:**\n\n**What is checked:**\n\n- \n\n**Frequency:**\n", ["Inspect", "Record readings or issues", "Sign the report"]),
-      kind("Mandatory inspection", "#6366f1", "Inspection: ", "**Installation (lift, fire extinguishers, boiler, electrics…):**\n\n**Authorised company:**\n\n**Due date:**\n", ["Book the authorised company", "Attend the inspection", "Keep the certificate", "Fix the defects found"]),
+      kind("Mandatory inspection", "#6366f1", "Inspection: ", "**Installation (lift, fire extinguishers, boiler, electrics…):**\n\n**Authorized company:**\n\n**Due date:**\n", ["Book the authorized company", "Attend the inspection", "Keep the certificate", "Fix the defects found"]),
       kind("Parts order", "#8b5a2b", "Order: ", "**Material or spare part:**\n\n**Quantity and reference:**\n\n**Supplier and lead time:**\n", ["Request a quote", "Place the order", "Receive and check"]),
       kind("Supplier contract", "#64748b", "Contract: ", "**Supplier and service:**\n\n**Expiry and renewal:**\n\n**Emergency contact:**\n", ["Review the terms", "Renew or change supplier", "File the contract"]),
       kind("Improvement", "#22c55e", "", "**What is improved:**\n\n**Why:**\n\n**Estimated cost:**\n", ["Request quotes", "Approve the spending", "Do it"]),
@@ -443,13 +443,13 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
   },
   "curso-master": {
     name: "Course or master's",
-    description: "Prepare a course or master's programme with help from an AI agent: a work plan for the agent, a session-by-session programme you can publish as a PDF, materials, exercises and exams, and student follow-up.",
+    description: "Prepare a course or master's program with help from an AI agent: a work plan for the agent, a session-by-session program you can publish as a PDF, materials, exercises and exams, and student follow-up.",
     columns: [
       col("Ideas"),
       col("Materials"),
       col("Exercises and exams"),
       col("AI work plan", false, "AI_PLAN"),
-      col("Programme", false, "PROGRAM"),
+      col("Program", false, "PROGRAM"),
       col("Student follow-up"),
     ],
     kinds: [

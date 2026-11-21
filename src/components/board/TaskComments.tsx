@@ -17,7 +17,8 @@ import { useBoard } from "./context";
 import { purgeExpiredCommentDrafts, readCommentDraft, saveCommentDraft, type CommentDraft } from "./drafts";
 import { REMOTE_CHANGE_EVENT, touchesComments, type RemoteChange } from "./remoteChange";
 import { actionThrowResult } from "@/lib/stale-action";
-import { isBefore, mergeComments, refreshCursor, type CommentCursor } from "./comment-list";
+import { mergeComments } from "./comment-list";
+import { applyFirstPage } from "@/lib/comment-refresh";
 import { cutText } from "@/lib/graphemes";
 
 /** Igual que en el servidor (tasks.ts): el texto guardado, con las menciones completas. */
@@ -109,19 +110,22 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
   }, [detail]);
   // Cuenta los cambios propios en curso o recién hechos: un refresco que empezó antes no pisa lo que ya se ve.
   const localChanges = useRef(0);
-  // Comentarios propios enviados que aún no han llegado en una lista del servidor (no sirven de cursor, ver refreshCursor).
+  // Comentarios propios enviados que aún no han llegado en una lista del servidor: no sirven para saber si la primera
+  // página enlaza con lo que ya se ve (otra persona pudo comentar justo antes; ver applyFirstPage).
   const unlisted = useRef(new Set<string>());
-  // Pide un refresco (lo usa también «Enviar», con el cursor de antes de enviar).
-  const requestRefresh = useRef<(delay: number, from?: CommentCursor | null) => void>(() => {});
+  // Pide un refresco (lo usa también «Enviar»).
+  const requestRefresh = useRef<(delay: number) => void>(() => {});
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let alive = true;
-    const refresh = async (cursor?: CommentCursor | null) => {
-      const d = detailRef.current;
-      if (!d) return;
-      const from = cursor !== undefined ? cursor : refreshCursor(d.comments, unlisted.current);
+    // Solo la primera página, la que trae el detalle al abrirse: lo nuevo siempre cae en ella. Lo cargado con «Ver
+    // anteriores» no se relee (con cada aviso se pedían todos los cargados, hasta 1000); un comentario antiguo editado o
+    // borrado por otra persona se ve al volver a abrir la tarea.
+    const refresh = async () => {
+      if (!detailRef.current) return;
+      const unlistedNow = new Set(unlisted.current);
       const stamp = localChanges.current;
-      const res = await getRecentComments(taskId, from).catch(() => null);
+      const res = await getRecentComments(taskId).catch(() => null);
       if (!alive || !res?.ok) return;
       if (stamp !== localChanges.current) {
         // Mientras tanto se cambió algo aquí: se vuelve a pedir con lo de ahora.
@@ -133,20 +137,15 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
       unlisted.current.clear();
       setDetail((cur) => {
         if (!cur) return cur;
-        // Lo anterior al cursor (cargado con «Ver anteriores» mientras tanto) se conserva; desde él manda el servidor.
-        const kept = from ? cur.comments.filter((c) => isBefore(c, from)) : [];
-        return {
-          ...cur,
-          comments: mergeComments(kept, res.data.comments),
-          commentCount: res.data.commentCount,
-          olderComments: kept.length ? cur.olderComments : res.data.olderComments,
-        };
+        // Lo anterior a la página (cargado con «Ver anteriores») se conserva; desde ella manda el servidor.
+        const next = applyFirstPage(cur, res.data, (id) => !unlistedNow.has(id));
+        return { ...cur, ...next, commentCount: res.data.commentCount };
       });
       board.patchTask(taskId, () => ({ commentCount: res.data.commentCount }));
     };
-    requestRefresh.current = (delay, from) => {
+    requestRefresh.current = (delay) => {
       clearTimeout(timer);
-      timer = setTimeout(() => void refresh(from), delay);
+      timer = setTimeout(() => void refresh(), delay);
     };
     const onChange = (e: Event) => {
       if (!touchesComments((e as CustomEvent<RemoteChange>).detail, taskId)) return;
@@ -187,9 +186,8 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     if (!body || sending) return;
     if (body.length > MAX_COMMENT) return toast(t("El comentario es demasiado largo."), "error");
     setSending(true);
-    // Desde dónde estaba al día antes de enviar: al terminar se recarga desde ahí, así llegan también los comentarios
-    // que otras personas enviaron a la vez (anteriores al nuestro) aunque su aviso en vivo se cruce con el envío.
-    const from = detailRef.current ? refreshCursor(detailRef.current.comments, unlisted.current) : null;
+    // Al terminar se relee la primera página: así llegan también los comentarios que otras personas enviaron a la vez
+    // (anteriores al nuestro) aunque su aviso en vivo se cruce con el envío.
     const res = await local(board.track(addComment(taskId, body, replyTo?.id ?? null)).catch((e) => actionThrowResult(e, t)));
     setSending(false);
     // Si falla, el texto (y su borrador) se quedan para reintentar.
@@ -201,7 +199,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
     // En su sitio por fecha (no al final): puede haber comentarios de otras personas posteriores que ya llegaron.
     setDetail((d) => (d ? { ...d, comments: mergeComments(d.comments, [res.data]), commentCount: d.commentCount + 1 } : d));
     board.patchTask(taskId, (t) => ({ commentCount: t.commentCount + 1 }));
-    requestRefresh.current(0, from);
+    requestRefresh.current(0);
   };
 
   const remove = async (c: CommentInfo) => {

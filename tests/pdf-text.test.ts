@@ -93,3 +93,30 @@ describe("PDF generado", () => {
     assert.ok(pieces.length > 0 && pieces.every((l) => l.length <= 30), JSON.stringify(pieces));
   });
 });
+
+describe("informe con más tareas de las que se listan", () => {
+  // Los recuentos llegan de la BD sobre todas las tareas; el PDF dice cuántas salen en los listados.
+  test("el resumen avisa de que se muestran las primeras y el avance es el de todas", async () => {
+    const input: ReportInput = {
+      project: { name: "P", description: "" },
+      generatedBy: "Test",
+      today: "2026-10-18",
+      columns: [{ id: "todo", name: "Backlog", isDone: false }, { id: "done", name: "Hecho", isDone: true }],
+      kinds: ["Funcionalidad"],
+      tasks: [{ id: "a", title: "Una", kind: "Funcionalidad", columnId: "todo", assigneeName: "Ana", dueDate: null, deliverableId: null, subtaskTotal: 0, subtaskDone: 0 }],
+      deliverables: [],
+      releases: [],
+      archivedCount: 0,
+      counts: {
+        rows: [
+          { columnId: "todo", assigneeName: "Ana", kind: "Funcionalidad", count: 3000, overdue: 0, dueSoon: 0, withoutDue: 3000 },
+          { columnId: "done", assigneeName: "Ana", kind: "Funcionalidad", count: 1000, overdue: 0, dueSoon: 0, withoutDue: 1000 },
+        ],
+        fixed: 0,
+      },
+    };
+    const text = pdfRuns(await renderInWorker({ kind: "report", locale: "en", input: buildReport(input) })).join(" ").replace(/\s+/g, " ");
+    assert.match(text, /The lists show the first 1 of 4,000 tasks; progress and counts include all of them\./, text);
+    assert.match(text, /Progress: 25%/);
+  });
+});

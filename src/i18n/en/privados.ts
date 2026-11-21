@@ -32,4 +32,6 @@ export const privados: Record<string, string> = {
   "El disco del servidor está casi lleno: avisa a un administrador.": "The server's disk is almost full: tell an admin.",
   "Confírmalo con un código por email.": "Confirm it with an email code.",
   "Confírmalo volviendo a entrar con Google.": "Confirm it by signing in with Google again.",
+  // Portada sin proyectos: botón «Nuevo proyecto» también para quien no es administrador
+  "Crea un proyecto privado o pide a un administrador que te dé acceso.": "Create a private project or ask an administrator to give you access.",
 };

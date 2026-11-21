@@ -5,6 +5,7 @@ import { Mic } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { dictationChunk, dictationLang, insertDictation } from "@/lib/dictation";
+import { screenWakeLock } from "@/lib/wake-lock";
 import { cn } from "./cn";
 import { useDictationEnabled, useDictationLangPref } from "./dictation-prefs";
 import { useToast } from "./Toast";
@@ -148,6 +149,24 @@ function useDictation(onText: (text: string) => void, within?: () => Scope) {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [listening, stop]);
+
+  // Mientras escucha, la pantalla no se apaga (en el móvil, al bloquearse se cortaba el dictado). Se suelta al parar, al
+  // terminar y al desmontar (la limpieza del efecto); si la pestaña se oculta, el navegador lo suelta y al volver se pide
+  // otra vez. Sin Wake Lock en el navegador, nada.
+  useEffect(() => {
+    if (!listening) return;
+    // `wakeLock` puede no existir aunque los tipos lo den por hecho (Firefox antiguo, http sin TLS).
+    const lock = screenWakeLock(() => (navigator as Partial<Navigator>).wakeLock);
+    lock.hold();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") lock.resume();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      lock.release();
+    };
+  }, [listening]);
 
   // Mientras escucha, el dictado termina al salir del campo: el foco se va a otro elemento, o se pulsa/toca fuera.
   const withinRef = useRef(within);

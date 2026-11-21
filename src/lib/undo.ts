@@ -1276,30 +1276,27 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
  * ha cambiado esas filas entretanto (las acciones propias vacían la pila de rehacer). Task.updatedAt
  * no cambia con subtareas, comentarios o etiquetas, por eso se incluyen sus filas en la huella.
  *
- * Todas llevan el prefijo de su formato (FP_V2). Una huella guardada con otro formato no se puede comparar con el estado
- * actual: la entrada se rechaza sin aplicar nada (isObsoleteFingerprint). `like`: la huella guardada con la que se va a
- * comparar (ver fingerprintsOf).
+ * Todas llevan el prefijo de su formato (FP_CURRENT). Una huella guardada con otro formato no se puede comparar con el
+ * estado actual: la entrada se rechaza sin aplicar nada (isObsoleteFingerprint).
  */
-export async function fingerprintOps(projectId: string, ops: UndoOp[], like?: string | null): Promise<string> {
-  return (await fingerprintsOf(projectId, [{ ops, like }]))[0]!;
+export async function fingerprintOps(projectId: string, ops: UndoOp[]): Promise<string> {
+  return (await fingerprintsOf(projectId, [{ ops }]))[0]!;
 }
 
-/** Prefijo de las huellas: la descripción cuenta por su hash (sha256 en SQL), no por su texto. */
-const FP_V2 = "v2:";
 /**
- * Huellas v2 que también cubren el bloqueo de cada tarea (`blockedById`). Siguen siendo v2 (empiezan por FP_V2): una
- * guardada antes, sin la «b:», se compara con la huella calculada como entonces, sin el bloqueo (`like` en fingerprintsOf).
+ * Prefijo de las huellas actuales: formato 2 (la descripción cuenta por su hash, sha256 en SQL, no por su texto) que
+ * también cubre el bloqueo de cada tarea (`blockedById`, la «b:»).
  */
-const FP_V2_BLOCK = `${FP_V2}b:`;
-const withoutBlock = (fingerprint: string | null | undefined): boolean => !!fingerprint && !fingerprint.startsWith(FP_V2_BLOCK);
+const FP_CURRENT = "v2:b:";
 
 /**
  * ¿Es una huella de un formato que ya no se calcula? Las de antes de la versión 2 no llevaban prefijo (y cubrían la
- * descripción entera); su compatibilidad se quitó cuando ya habían caducado (las entradas duran 7 días). Si aún aparece
- * alguna (una copia de seguridad antigua restaurada, una instalación que salta varias versiones), no hay forma de saber si
- * lo que toca ha cambiado: la entrada se descarta con un «ya no se puede deshacer», nunca se aplica (ni confirmando).
+ * descripción entera) y las v2 sin «b:» no cubrían el bloqueo; su compatibilidad se quitó cuando ya habían caducado (las
+ * entradas duran 7 días). Si aún aparece alguna (una copia de seguridad antigua restaurada, una instalación que salta
+ * varias versiones), no hay forma de saber si lo que toca ha cambiado: la entrada se descarta con un «ya no se puede
+ * deshacer», nunca se aplica (ni confirmando).
  */
-export const isObsoleteFingerprint = (fingerprint: string | null | undefined): boolean => !!fingerprint && !fingerprint.startsWith(FP_V2);
+export const isObsoleteFingerprint = (fingerprint: string | null | undefined): boolean => !!fingerprint && !fingerprint.startsWith(FP_CURRENT);
 /** Ids por consulta al leer el estado (una entrada puede tocar 500 tareas y se leen varias a la vez). */
 const FP_CHUNK = 1000;
 
@@ -1355,10 +1352,8 @@ function chunks<T>(items: T[]): T[][] {
  * lee una vez aunque la cubran varias entradas, por lotes (`id IN (…)`) y una consulta detrás de otra, sin saturar el
  * pool. Cada huella sale igual que si se calculara sola (fingerprintOps). La descripción entra por su sha256,
  * calculado en PostgreSQL: un cambio en ella cambia la huella igual que antes, sin traer 20 KB por tarjeta.
- * `like`: la huella guardada con la que se va a comparar; si es de antes de cubrir el bloqueo (sin FP_V2_BLOCK), esa
- * se calcula como entonces. Sin `like`, siempre la actual.
  */
-export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; like?: string | null }[]): Promise<string[]> {
+export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[] }[]): Promise<string[]> {
   const subjects = items.map((it) => fingerprintSubjects(it.ops));
   // Filas hijas: su tarea entra en la huella; las que ya no existen se anotan como ausentes.
   const byModel = new Map<FpModel, Set<string>>();
@@ -1384,7 +1379,6 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
   const current = new Set<string>();
   for (const s of subjects) for (const id of s.taskIds) current.add(id);
   const tasks = new Map<string, string>();
-  const tasksWithoutBlock = new Map<string, string>();
   for (const part of chunks([...current])) {
     const rows = await db.task.findMany({ where: { id: { in: part }, projectId }, select: FP_TASK_SELECT });
     const hashes = await db.$queryRaw<{ id: string; d: string }[]>`
@@ -1393,8 +1387,6 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
     for (const r of rows) {
       const description = hashById.get(r.id) ?? null;
       tasks.set(r.id, JSON.stringify({ ...r, description }));
-      const { blockedById: _blockedById, ...rest } = r;
-      tasksWithoutBlock.set(r.id, JSON.stringify({ ...rest, description }));
     }
   }
   const columnIds = [...new Set(subjects.flatMap((s) => [...s.columnIds]))];
@@ -1409,13 +1401,11 @@ export async function fingerprintsOf(projectId: string, items: { ops: UndoOp[]; 
 
   return subjects.map((s, i) => {
     const out = lines[i]!;
-    const old = withoutBlock(items[i]!.like);
-    const taskLines = old ? tasksWithoutBlock : tasks;
-    for (const id of s.taskIds) out.push(`task:${id}:${taskLines.get(id) ?? '"absent"'}`);
+    for (const id of s.taskIds) out.push(`task:${id}:${tasks.get(id) ?? '"absent"'}`);
     for (const id of s.columnIds) out.push(`column:${id}:${cols.get(id) ?? '"absent"'}`);
     for (const id of s.releaseIds) out.push(`release:${id}:${rels.has(id) ? "present" : "absent"}`);
     for (const id of s.labelIds) out.push(`label:${id}:${labels.get(id) ?? '"absent"'}`);
     const hash = createHash("sha256").update(out.sort().join("\n")).digest("hex");
-    return `${old ? FP_V2 : FP_V2_BLOCK}${hash}`;
+    return `${FP_CURRENT}${hash}`;
   });
 }

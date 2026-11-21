@@ -1,6 +1,6 @@
 {
   "name": "pizarro",
-  "version": "1.62.0",
+  "version": "1.63.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE.md",
   "type": "module",
@@ -41,6 +41,7 @@
     "@react-pdf/renderer": "4.9.0",
     "@tiptap/core": "3.32.3",
     "@tiptap/extension-code": "3.32.3",
+    "@tiptap/extension-code-block": "3.32.3",
     "@tiptap/extension-paragraph": "3.32.3",
     "@tiptap/extension-list": "3.32.3",
     "@tiptap/extension-mention": "3.32.3",
@@ -84,6 +85,9 @@
   "overrides": {
     "@typescript-eslint/typescript-estree": {
       "minimatch": "11.0.5"
+    },
+    "@tiptap/markdown": {
+      "marked": "$marked"
     }
   }
 }

@@ -21,7 +21,7 @@ import { clientIp } from "@/lib/request";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
-import { isTrustedDevice } from "@/lib/devices";
+import { isKnownDevice } from "@/lib/devices";
 import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
@@ -38,7 +38,8 @@ const loginSchema = z.object({
 /**
  * Reserva un intento de acceso con contraseña para esta cuenta, ANTES de comprobar la contraseña (así no se salta con
  * peticiones en paralelo); un acceso correcto lo devuelve (resetRateLimit). Tras LOGIN_ACCOUNT_LIMIT intentos sin acierto
- * (desde cualquier conexión), solo se sigue desde un dispositivo recordado de la cuenta, hasta LOGIN_ACCOUNT_LIMIT_TRUSTED.
+ * (desde cualquier conexión), solo se sigue desde un dispositivo conocido de la cuenta (uno desde el que ya se ha entrado en
+ * ella, con o sin «Recordar» en el segundo paso), hasta LOGIN_ACCOUNT_LIMIT_TRUSTED.
  * `false`: bloqueado.
  */
 async function reserveAccountAttempt(key: string, email: string): Promise<boolean> {
@@ -47,7 +48,7 @@ async function reserveAccountAttempt(key: string, email: string): Promise<boolea
   // Comprobar y reservar sin ningún await entre medias: dos peticiones a la vez no pueden ver el mismo contador.
   if (!rateLimitReached(key, LOGIN_ACCOUNT_LIMIT)) return rateLimit(key, LOGIN_ACCOUNT_LIMIT_TRUSTED, window);
   const user = await db.user.findUnique({ where: { email }, select: { id: true } });
-  if (!user || !(await isTrustedDevice(user.id))) return false;
+  if (!user || !(await isKnownDevice(user.id))) return false;
   return rateLimit(key, LOGIN_ACCOUNT_LIMIT_TRUSTED, window);
 }
 

@@ -2,10 +2,12 @@
 
 import { CalendarPlus, Check, Copy, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "@/actions/calendar-feed";
+import { calendarFeedUsage, createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "@/actions/calendar-feed";
+import { formatAgo, formatDate } from "@/lib/format";
 import { actionThrowResult } from "@/lib/stale-action";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { cn } from "@/components/ui/cn";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Popover } from "@/components/ui/Popover";
 import { useToast } from "@/components/ui/Toast";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -20,6 +22,22 @@ interface Links {
 const btn = "inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800";
 
 /**
+ * «Último uso: hace 2 h» / «Aún no se ha usado» (CalendarFeed.lastUsedAt, anotado como mucho una vez por hora), en el
+ * idioma de la app; la fecha exacta, en la zona de la app, va en el título. Sirve para ver si alguien usa un enlace filtrado.
+ */
+function LastUsed({ at }: { at: string | null }) {
+  const t = useT();
+  const locale = useIntlLocale();
+  if (!at) return <p className="text-xs text-slate-500" data-testid="feed-last-used">{t("Aún no se ha usado")}</p>;
+  const ago = formatAgo(at, new Date(), locale);
+  return (
+    <p className="text-xs text-slate-500" data-testid="feed-last-used" title={t("{date} (se anota como mucho una vez por hora)", { date: formatDate(at, "dateTimeShort", locale) })}>
+      {ago ? t("Último uso: {when}", { when: ago }) : t("Último uso: hace menos de una hora")}
+    </p>
+  );
+}
+
+/**
  * Suscripción al calendario (.ics vivo) desde Google/Apple/Outlook. El enlace solo se ve al generarlo (en la BD queda su
  * HMAC): para volver a verlo hay que regenerarlo, lo que invalida el anterior.
  */
@@ -32,10 +50,34 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
   const asked = useRef(false);
   const [links, setLinks] = useState<Links | null>(null);
   const [copied, setCopied] = useState(false);
+  // Último uso del enlace: se pide cada vez que se abre el menú con una suscripción activa (undefined: aún no se sabe).
+  const [lastUsed, setLastUsed] = useState<string | null | undefined>(undefined);
   const [pending, start] = useActionTransition();
+  const confirm = useConfirm();
+  const [open, setOpen] = useState(false);
+  // Con una confirmación abierta el panel no se cierra: pulsar en el diálogo cuenta como pulsar fuera, y el enlace nuevo
+  // de «Regenerar» solo se ve aquí.
+  const confirming = useRef(false);
+  // Mientras se confirma, el panel se oculta: en un móvil bajo tapaba la confirmación (va por encima de los diálogos).
+  const [confirmShown, setConfirmShown] = useState(false);
 
   const onOpenChange = useCallback(
     (open: boolean) => {
+      if (!open && confirming.current) return;
+      setOpen(open);
+      if (open && active) {
+        void calendarFeedUsage()
+          .catch((e) => actionThrowResult(e, t))
+          .then((res) => {
+            if (!res.ok) return;
+            setLastUsed(res.data.lastUsedAt);
+            // Desactivada entretanto (otra pestaña, o un administrador al forzar el cambio de contraseña).
+            if (!res.data.active) {
+              setActive(false);
+              setLinks(null);
+            }
+          });
+      }
       if (!open || scope !== null || asked.current) return;
       asked.current = true;
       void suggestedCalendarFeedScope()
@@ -43,8 +85,20 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         // Si no se puede saber (sin conexión…), «Todas»: con «Solo las mías» el calendario podría salir vacío.
         .then((res) => setScope((cur) => cur ?? (res.ok ? res.data : "ALL")));
     },
-    [scope, t],
+    [active, scope, t],
   );
+
+  /** Pregunta antes de dejar sin efecto el enlace de una suscripción activa (regenerar o desactivar). */
+  const confirmActive = async (title: string, message: string, confirmLabel: string) => {
+    confirming.current = true;
+    setConfirmShown(true);
+    try {
+      return await confirm({ title, message, confirmLabel, danger: true });
+    } finally {
+      confirming.current = false;
+      setConfirmShown(false);
+    }
+  };
 
   const generate = (next: Scope = scope ?? "ALL") =>
     start(async () => {
@@ -53,7 +107,14 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       setLinks(res.data);
       setActive(true);
       setCopied(false);
+      // Enlace nuevo: aún nadie lo ha usado.
+      setLastUsed(null);
     });
+
+  const regenerate = async () => {
+    if (active && !(await confirmActive(t("Regenerar enlace"), t("El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?"), t("Regenerar")))) return;
+    generate();
+  };
 
   const changeScope = (next: Scope) => {
     const prev = scope;
@@ -68,14 +129,17 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
     });
   };
 
-  const disable = () =>
+  const disable = async () => {
+    if (!(await confirmActive(t("Desactivar la suscripción"), t("El enlace dejará de funcionar en todos los calendarios suscritos. ¿Desactivar la suscripción?"), t("Desactivar")))) return;
     start(async () => {
       const res = await disableCalendarFeed();
       if (!res.ok) return toast(res.error, "error");
       setActive(false);
       setLinks(null);
+      setLastUsed(undefined);
       toast(t("Suscripción desactivada"));
     });
+  };
 
   const copy = async () => {
     if (!links) return;
@@ -93,8 +157,9 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
       kind="dialog"
       label={t("Suscribirse al calendario")}
       align="end"
+      open={open}
       onOpenChange={onOpenChange}
-      panelClassName="w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      panelClassName={cn("w-[26rem] max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900", confirmShown && "invisible")}
       trigger={({ props }) => (
         <button type="button" {...props} className={cn("inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800", className)}>
           <CalendarPlus size={15} aria-hidden />
@@ -158,14 +223,15 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
         ) : active ? (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Ya tienes una suscripción activa. El enlace no se vuelve a mostrar; si lo necesitas, regenéralo.")}</p>
         ) : null}
+        {active && lastUsed !== undefined && <LastUsed at={lastUsed} />}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <button type="button" onClick={() => generate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
+          <button type="button" onClick={() => void regenerate()} disabled={pending || scope === null} className={cn(btn, !active && "border-brand-600 bg-brand-600 text-on-brand hover:bg-brand-700 dark:border-brand-600 dark:hover:bg-brand-700")}>
             {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : active ? <RefreshCw size={14} aria-hidden /> : <CalendarPlus size={14} aria-hidden />}
             {active ? t("Regenerar enlace") : t("Generar enlace de suscripción")}
           </button>
           {active && (
-            <button type="button" onClick={disable} disabled={pending} className={cn(btn, "text-red-700 dark:text-red-300")}>
+            <button type="button" onClick={() => void disable()} disabled={pending} className={cn(btn, "text-red-700 dark:text-red-300")}>
               <Trash2 size={14} aria-hidden />
               {t("Desactivar")}
             </button>

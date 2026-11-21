@@ -7,6 +7,17 @@ export const SHARE_ACTION = "/api/share";
 export const SHARE_FIELDS = { title: "title", text: "text", url: "url", files: "files" } as const;
 /** Archivos por envío (lo demás se ignora y se avisa). */
 export const SHARE_MAX_FILES = 10;
+/** Tope de un envío entero (todos sus archivos juntos), que se lee en memoria como una subida. */
+const SHARE_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+
+/**
+ * Topes de un envío con sesión: cada archivo, lo que admite un adjunto en el proyecto que más admite de los de la persona
+ * (el de cada proyecto se vuelve a aplicar al subirlos a la tarea); el envío entero, SHARE_MAX_FILES veces eso, como mucho
+ * 100 MB. Antes el envío entero tenía el tope de un solo archivo y cinco fotos de 5 MB no cabían en 20 MB.
+ */
+export function shareLimits(fileMaxBytes: number): { fileMaxBytes: number; totalMaxBytes: number } {
+  return { fileMaxBytes, totalMaxBytes: Math.min(fileMaxBytes * SHARE_MAX_FILES, SHARE_MAX_TOTAL_BYTES) };
+}
 /** Lo compartido y no usado caduca a los 30 minutos (se borra al caducar y al usarlo o descartarlo). */
 export const SHARE_TTL_MS = 30 * 60_000;
 /** Envíos pendientes por persona como mucho: uno nuevo retira los más antiguos. */

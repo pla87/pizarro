@@ -8,6 +8,7 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { useT } from "@/i18n/client";
+import type { UrlMismatch } from "@/lib/google-config-core";
 import { detectMailPreset, GMAIL_PRESET, MAIL_PRESETS, type MailMode, type MailSettings } from "@/lib/mail-settings-core";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -20,7 +21,15 @@ interface EnvView {
 }
 
 /** «Avisos por email»: cómo envía Pizarro los avisos y los emails de las cuentas (o, si el servidor define SMTP_*, solo lectura). */
-export function MailSettingsSection({ initial, env, outbox }: { initial: MailSettings; env: EnvView | null; outbox: boolean }) {
+export function MailSettingsSection({ initial, env, outbox, links, orgName }: {
+  initial: MailSettings;
+  env: EnvView | null;
+  outbox: boolean;
+  /** APP_URL, de la que salen los enlaces de los emails: si falta o no es la dirección por la que se entra. */
+  links: { missing: boolean; mismatch: UrlMismatch | null };
+  /** Nombre de la organización: el remitente por defecto si no se escribe otro. */
+  orgName: string;
+}) {
   const t = useT();
   const toast = useToast();
   const router = useRouter();
@@ -106,6 +115,21 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
 
   const connection = (secure: boolean) => (secure ? t("SSL/TLS (puerto 465)") : t("STARTTLS (puerto 587)"));
 
+  // Mismo aviso que en «Acceso con Google»: los enlaces de los emails (avisos, invitaciones, resumen) salen de APP_URL.
+  const linksWarning = links.missing ? (
+    <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="mail-app-url-missing">
+      {t("Falta la variable APP_URL del servidor (la dirección pública de Pizarro): los enlaces de los emails llevarán a http://localhost:3000 y no funcionarán. Defínela (por ejemplo https://pizarro.tuempresa.com) y redespliega.")}
+    </p>
+  ) : links.mismatch ? (
+    <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200" data-testid="mail-url-mismatch">
+      {links.mismatch.kind === "own" ? (
+        <p>{t("Entras por {current} pero APP_URL es {app}. Si ya usas tu dominio propio, cambia APP_URL en el servidor (Railway → Variables) a {current} y redespliega.", { current: links.mismatch.current, app: links.mismatch.app })}</p>
+      ) : (
+        <p>{t("Entras por {current} pero APP_URL es {app}, y los enlaces de los emails salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.", { current: links.mismatch.current, app: links.mismatch.app })}</p>
+      )}
+    </div>
+  ) : null;
+
   const header = (
     <div>
       <h2 className="flex items-center gap-1.5 text-base font-semibold"><Mail size={16} /> {t("1. Avisos por email")}</h2>
@@ -120,6 +144,7 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
     return (
       <section id="avisos-email" className="card space-y-3 p-5">
         {header}
+        {linksWarning}
         <p className="text-xs text-slate-500">{t("Configurado en el servidor (variables SMTP_*); aquí solo se muestra.")}</p>
         <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[10rem_1fr]">
           <dt className="text-slate-500">{t("Servidor SMTP")}</dt><dd>{env.host}</dd>
@@ -159,13 +184,14 @@ export function MailSettingsSection({ initial, env, outbox }: { initial: MailSet
   const nameField = (
     <label className="block text-sm">
       <span className="font-medium">{t("Nombre del remitente")}</span>
-      <input className="input mt-1 w-full" value={form.fromName} onChange={(e) => set("fromName", e.target.value)} placeholder="Pizarro" maxLength={100} />
+      <input className="input mt-1 w-full" value={form.fromName} onChange={(e) => set("fromName", e.target.value)} placeholder={orgName || "Pizarro"} maxLength={100} />
     </label>
   );
 
   return (
     <section id="avisos-email" className="card space-y-4 p-5">
       {header}
+      {linksWarning}
       {outbox && <p className="text-xs text-amber-600">{t("El buzón de pruebas (MAIL_OUTBOX_DIR) está activo: los emails se guardan en disco en vez de enviarse.")}</p>}
 
       <div {...modeGroup.groupProps} aria-label={t("Cómo se envían los emails")} className="grid gap-3 sm:grid-cols-2">

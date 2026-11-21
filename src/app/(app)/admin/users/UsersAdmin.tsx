@@ -191,7 +191,11 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = user ? await updateUser(user.id, { name, email, role, active }) : await createUser({ name, email, role, locale, password: emailAvailable ? undefined : password });
+      // Con los valores que se veían al abrir el formulario: el servidor solo aplica los cambiados y rechaza si otro
+      // administrador los ha cambiado entretanto (no reactiva a quien acaban de desactivar, p. ej.).
+      const res = user
+        ? await updateUser(user.id, { name, email, role, active, expected: { name: user.name, email: user.email, role: user.role, active: user.active } })
+        : await createUser({ name, email, role, locale, password: emailAvailable ? undefined : password });
       if (!res.ok) return toast(res.error, "error");
       toast(user ? t("Usuario actualizado") : emailAvailable ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
       router.refresh();
@@ -311,6 +315,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
             : t("Sin email configurado: tendrás un enlace de un solo uso (válido 30 minutos) para pasárselo tú.")}
         </p>
         {user.googleLinked && <p className="text-slate-500">{t("Podrá seguir entrando con Google, pero antes tendrá que elegir contraseña.")}</p>}
+        <p className="text-slate-500">{t("También se desconectan su calendario suscrito, Telegram, WhatsApp y Google Drive.")}</p>
         <div className="flex flex-wrap justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
           {emailAvailable && <button type="button" className="btn-secondary" disabled={pending} onClick={() => run(true)}>{t("Copiar enlace en lugar de enviarlo")}</button>}

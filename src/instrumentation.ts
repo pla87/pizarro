@@ -54,18 +54,20 @@ export async function register() {
   } catch (err) {
     console.error("[instrumentation] no se pudo registrar el apagado ordenado", err);
   }
-  try {
-    const { startMaintenance } = await import("@/lib/maintenance");
-    startMaintenance();
-  } catch (err) {
-    console.error("[instrumentation] no se pudo iniciar el mantenimiento", err);
-  }
-  // Zona horaria elegida en el asistente de primer arranque: disponible desde la primera acción, no solo tras renderizar el layout.
+  // Zona horaria elegida en el asistente de primer arranque: disponible desde la primera acción, no solo tras renderizar el layout. Antes del
+  // mantenimiento: la pasada del correo a la hora en punto se calcula con la zona de la app (con la de por defecto, el primer
+  // resumen tras arrancar podía salir media hora tarde en una zona como Asia/Kolkata).
   try {
     const { getInstanceSettings } = await import("@/lib/instance");
     await getInstanceSettings();
   } catch (err) {
     console.error("[instrumentation] no se pudieron cargar los ajustes de la instalación", err);
+  }
+  try {
+    const { startMaintenance } = await import("@/lib/maintenance");
+    startMaintenance();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo iniciar el mantenimiento", err);
   }
   // Configuración del envío de emails guardada en Administración: emailEnabled() es síncrona y lee esta copia en memoria.
   try {

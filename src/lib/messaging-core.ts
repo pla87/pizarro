@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { T } from "../i18n/shared";
-import { isProjectNotice, notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
+import { markdownToPlain } from "./ics";
+import { assignedBatchCount, isProjectNotice, notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 import { ellipsize } from "./graphemes";
 
@@ -194,7 +195,16 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 /** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
 function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
-  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }) }));
+  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }), excerpt: m.excerpt }));
+}
+
+/**
+ * Extracto de un comentario sin las marcas de Markdown (**negrita**, [texto](url) → «texto (url)», escapes…). El extracto
+ * guardado ya trae las entidades pasadas a su carácter (excerpt()): «<» y «&» se vuelven a escribir como entidad para
+ * que markdownToPlain no tome por etiqueta HTML un «<b>» que alguien escribió tal cual (al final las decodifica).
+ */
+function commentExcerptPlain(excerpt: string): string {
+  return markdownToPlain(excerpt.replace(/&/g, "&amp;").replace(/</g, "&lt;"));
 }
 
 /**
@@ -203,8 +213,12 @@ function noticeHeadline(m: NoticeMessage, t: T): string {
  * cambió de título desde el aviso, el extracto (el título de entonces) sí se muestra.
  */
 export function noticeBody(m: NoticeMessage, t: T): string {
-  const body = notificationBody(m.type ?? "MENTION", m.excerpt, t, m.locale ?? "es-ES");
-  if ((m.type ?? "MENTION") === "ASSIGNED") {
+  const type = m.type ?? "MENTION";
+  if (type === "MENTION" || type === "COMMENT" || type === "REPLY") return commentExcerptPlain(m.excerpt);
+  const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
+  if (type === "ASSIGNED") {
+    // Lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).
+    if ((assignedBatchCount(m.excerpt) ?? 0) > 1) return "";
     const [b, title] = [oneLine(body), oneLine(m.taskTitle)];
     if (b === title || (b.endsWith("…") && title.startsWith(b.slice(0, -1)))) return "";
   }

@@ -51,6 +51,10 @@ const modalStack: { close: () => void }[] = [];
 export function hasOpenModal(): boolean {
   return modalStack.length > 0;
 }
+/** Cuántos Modal hay abiertos, uno encima de otro (useEscapeClose: ¿se ha abierto alguno encima de un menú?). */
+export function modalDepth(): number {
+  return modalStack.length;
+}
 let scrollLocks = 0;
 let savedBody: { overflow: string; position: string; top: string; width: string; htmlOverflow: string; scrollY: number } | null = null;
 

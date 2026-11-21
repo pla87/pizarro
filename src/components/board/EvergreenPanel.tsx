@@ -216,8 +216,8 @@ export function EvergreenPanel({ columnId, taskIds, kind = "release" }: { column
         aria-controls={`evergreen-${columnId}`}
         // Plegado, la cabecera es el único destino de archivos del panel.
         {...(open ? {} : { "data-file-zone": true })}
-        // Móvil: la barra queda por encima del «+» flotante (margen de la columna en ColumnView) y a la altura de «Crear varias
-        // tareas», así que deja libres los 4 rem de la derecha para que ese botón no la tape. Tableta: el texto deja sitio (pr-20).
+        // Móvil: la barra va al fondo de la columna, a la altura del «+» flotante, y deja libres los 4 rem de la derecha para
+        // que ese botón no la tape (las filas del panel abierto, con max-lg:pr-16, también). Tableta: el texto deja sitio (pr-20).
         className={cn("flex items-center gap-1.5 rounded-b-xl px-3 py-2 max-md:w-[calc(100%-4rem)] max-md:rounded-br-md md:w-full md:max-lg:pr-20 text-xs font-medium text-slate-600 hover:bg-slate-200/60 dark:text-slate-300 dark:hover:bg-slate-800/60", !open && fileZone.over && "bg-brand-50 ring-2 ring-brand-500 ring-inset dark:bg-brand-500/10")}
       >
         <span>{kind === "plan" ? t("Siempre en el plan") : t("Siempre en la release")}</span>

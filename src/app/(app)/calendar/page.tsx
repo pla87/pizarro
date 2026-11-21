@@ -3,6 +3,7 @@ import { appTimeZone } from "@/lib/board";
 import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { deliverableProgressByIds } from "@/lib/deliverable-progress-db";
 import { mentionsToPlain } from "@/lib/mentions";
 import { requireUserPage } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
@@ -76,21 +77,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     }),
   ]);
 
-  // Total y hechas por entregable (en columna terminada o archivadas por una release): se cuentan en la BD, sin traer las
-  // tareas, filtrando por los ids (un `_count` de relación agruparía todas las tareas del servidor).
-  const deliverableIds = deliverableRows.map((d) => d.id);
-  const [totalGroups, doneGroups] = deliverableIds.length
-    ? await Promise.all([
-        db.task.groupBy({ by: ["deliverableId"], where: { deliverableId: { in: deliverableIds } }, _count: { _all: true } }),
-        db.task.groupBy({
-          by: ["deliverableId"],
-          where: { deliverableId: { in: deliverableIds }, OR: [{ archivedAt: { not: null } }, { column: { isDone: true } }] },
-          _count: { _all: true },
-        }),
-      ])
-    : [[], []];
-  const totalBy = new Map(totalGroups.map((g) => [g.deliverableId, g._count._all]));
-  const doneBy = new Map(doneGroups.map((g) => [g.deliverableId, g._count._all]));
+  // Total y hechas por entregable, con el mismo criterio que el informe PDF (archivadas = hechas; las fijas no cuentan),
+  // contadas en la BD sin traer las tareas.
+  const progressBy = await deliverableProgressByIds(deliverableRows.map((d) => d.id));
   // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
   // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
   const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
@@ -213,8 +202,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     due: dateToIso(d.dueDate)!,
     projectId: d.project.id,
     projectName: d.project.name,
-    total: totalBy.get(d.id) ?? 0,
-    done: doneBy.get(d.id) ?? 0,
+    total: progressBy.get(d.id)?.total ?? 0,
+    done: progressBy.get(d.id)?.done ?? 0,
   }));
 
   return (

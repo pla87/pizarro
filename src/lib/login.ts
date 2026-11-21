@@ -1,6 +1,5 @@
 import "server-only";
 import { headers } from "next/headers";
-import { passwordChangeRequired } from "./auth-policy";
 import { sendNewLoginMail } from "./auth-mail";
 import { registerDevice, TRUST_DEVICE_DAYS } from "./devices";
 import { db } from "./db";
@@ -29,8 +28,10 @@ export async function completeLogin(
   user: LoginUser,
   how: { method: "password" | "google" | "password+2fa" | "google+2fa"; rememberDevice?: boolean; path: string },
 ): Promise<void> {
-  // La marca se respeta con cualquier método (también Google): quien tiene el cambio pendiente aterriza en /change-password y no puede usar la app hasta elegir contraseña.
-  await createSession(user.id, { mustChangePassword: passwordChangeRequired(how.method, user.mustChangePassword) });
+  // La marca se respeta con cualquier método (también Google): quien tiene el cambio pendiente aterriza en /change-password y
+  // no puede usar la app hasta elegir contraseña. La cuenta conserva una clave inicial o impuesta que no debe seguir vigente
+  // (sirve de respaldo y para el acceso de emergencia). Lo prueba tests/db/accounts.test.ts («Con Google… solo ve /change-password»).
+  await createSession(user.id, { mustChangePassword: user.mustChangePassword });
   const ip = clientIp(await headers());
   const device = await registerDevice(user.id, how.rememberDevice ? { trustDays: TRUST_DEVICE_DAYS } : {});
   if (device.alert && emailEnabled()) {

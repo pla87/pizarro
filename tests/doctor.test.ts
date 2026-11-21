@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 
 const {
-  DOCUMENTED_ENV_VARS, configFlags, envPresence, groupLogCounts, migrationStatus, scrubDeep, scrubText, secretEnvValues,
+  DOCUMENTED_ENV_VARS, configFlags, configWarnings, envPresence, groupLogCounts, migrationStatus, scrubDeep, scrubText, secretEnvValues,
 } = await import("../src/lib/doctor-core");
 
 const SECRET = "Zx9-very-secret-session-value-0123456789";
@@ -36,6 +36,12 @@ describe("presencia de variables", () => {
     assert.equal(p.APP_TIMEZONE, "unset");
     const json = JSON.stringify(p);
     for (const v of Object.values(env)) if (v.length > 4) assert.ok(!json.includes(v), v);
+  });
+
+  test("SMTP_ALLOW_PLAINTEXT: «set» con 1/true/0/false; otro valor, «invalid» (no permite enviar sin cifrar)", () => {
+    for (const v of ["1", "true", "0", "false", "TRUE"]) assert.equal(envPresence({ SMTP_ALLOW_PLAINTEXT: v }).SMTP_ALLOW_PLAINTEXT, "set", v);
+    for (const v of ["yes", "si", "2"]) assert.equal(envPresence({ SMTP_ALLOW_PLAINTEXT: v }).SMTP_ALLOW_PLAINTEXT, "invalid", v);
+    assert.equal(envPresence({}).SMTP_ALLOW_PLAINTEXT, "unset");
   });
 
   test("APP_TIMEZONE mal escrita: «invalid» (la app la ignora); bien escrita: «set»", () => {
@@ -169,5 +175,31 @@ describe("migraciones y logs", () => {
       { level: "info", action: "auth.login", _count: { _all: 50 } },
     ]);
     assert.deepEqual(g, [{ level: "error", action: "action.error", count: 7 }, { level: "warn", action: "auth.loginFailed", count: 3 }]);
+  });
+});
+
+describe("avisos de configuración", () => {
+  const codes = (e: Record<string, string | undefined>) => configWarnings(e).map((w) => w.code);
+
+  test("SMTP en otra máquina por un puerto distinto de 465 y sin SMTP_ALLOW_PLAINTEXT: recuerda que ahora se exige STARTTLS", () => {
+    assert.deepEqual(codes({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "587" }), ["smtp_starttls_required"]);
+    assert.deepEqual(codes({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "25", SMTP_ALLOW_PLAINTEXT: "no" }), ["smtp_starttls_required"], "un valor no válido no permite enviar en claro");
+    assert.match(configWarnings({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "587" })[0]!.text, /STARTTLS/);
+  });
+
+  test("sin aviso: sin SMTP_HOST, con el 465 (o sin puerto), un servidor local o SMTP_ALLOW_PLAINTEXT", () => {
+    assert.deepEqual(codes({}), []);
+    assert.deepEqual(codes({ SMTP_HOST: "  ", SMTP_PORT: "587" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "465" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "smtp.example.com" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "localhost", SMTP_PORT: "25" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "127.0.0.1", SMTP_PORT: "587" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "relay.example.com", SMTP_PORT: "25", SMTP_ALLOW_PLAINTEXT: "1" }), []);
+    assert.deepEqual(codes({ SMTP_HOST: "relay.example.com", SMTP_PORT: "25", SMTP_ALLOW_PLAINTEXT: "true" }), []);
+  });
+
+  test("el aviso no lleva el valor de ninguna variable", () => {
+    const text = JSON.stringify(configWarnings({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "2525", SMTP_PASS: "clave-del-correo-123" }));
+    assert.ok(!text.includes("example.com") && !text.includes("2525") && !text.includes("clave-del-correo"));
   });
 });

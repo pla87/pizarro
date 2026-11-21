@@ -36,7 +36,7 @@ export const cuentas: Record<string, string> = {
     "We'll email you a link to confirm the change; once confirmed, all devices will be signed out.",
   "Te hemos enviado un email: confirma el cambio con el enlace (caduca en 30 minutos).": "We've sent you an email: confirm the change with the link (expires in 30 minutes).",
   "Sesiones abiertas": "Open sessions",
-  "Dispositivos en los que has iniciado sesión. Cierra los que no reconozcas.": "Devices where you are signed in. Close any you don't recognise.",
+  "Dispositivos en los que has iniciado sesión. Cierra los que no reconozcas.": "Devices where you are signed in. Close any you don't recognize.",
   "Se han cerrado las demás sesiones": "The other sessions were closed",
   "Cerrar las demás": "Close the others",
   "Esta sesión": "This session",
@@ -260,7 +260,7 @@ export const cuentas: Record<string, string> = {
   "El inicio de sesión con Google ha caducado o no es válido. Vuelve a intentarlo.":
     "Google sign-in has expired or is not valid. Try again.",
   "Has cancelado el inicio de sesión con Google.":
-    "You cancelled the Google sign-in.",
+    "You canceled the Google sign-in.",
   "El inicio de sesión con Google no está configurado en el servidor.":
     "Google sign-in is not configured on the server.",
   "No se pudo iniciar sesión con Google. Inténtalo de nuevo.":
@@ -313,4 +313,28 @@ export const cuentas: Record<string, string> = {
   "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.": "The invitation could not be sent. Check email sending in Administration → Integrations.",
   // Quitar el rol de administrador
   "Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.": "Cards assigned to them in team projects they do not work on will be unassigned.",
+  // Forzar cambio de contraseña: también desconecta lo que funciona sin sesión
+  "También se desconectan su calendario suscrito, Telegram, WhatsApp y Google Drive.": "Their calendar subscription, Telegram, WhatsApp and Google Drive are also disconnected.",
+  // Verificación en dos pasos al entrar: qué hacer si no tienes los códigos
+  "¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único administrador, sigue la guía":
+    "Can't get your codes? Ask an administrator to reset your two-step verification; if you are the only administrator, follow the guide",
+  "«Nadie puede entrar como administrador»": "“No administrator can sign in”",
+  // Miembros de un proyecto: aviso al añadir a alguien e invitación a un proyecto (emails y errores)
+  "{admin} te ha invitado al proyecto «{project}» en Pizarro": "{admin} has invited you to the “{project}” project in Pizarro",
+  "{admin} te ha invitado al proyecto «{project}» en el Pizarro de {org}": "{admin} has invited you to the “{project}” project in {org}’s Pizarro",
+  "{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.":
+    "{admin} has created a Pizarro account for you and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
+  "{admin} te ha dado de alta en el Pizarro de {org} y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.": "{admin} has created an account for you in {org}’s Pizarro and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
+  "{name} te ha añadido al proyecto «{project}»": "{name} has added you to the “{project}” project",
+  "{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.": "{name} has added you to the “{project}” project in Pizarro. You can now see its board.",
+  "Abrir el tablero": "Open the board",
+  "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notices you get by email in “My profile → Notifications”.",
+  "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
+  // Editar un usuario: otro administrador lo ha cambiado mientras tanto
+  "Los datos han cambiado mientras tanto: recarga la página.": "The data has changed in the meantime: reload the page.",
+  // Invitación con el nombre de la organización (ronda 59)
+  "Te han invitado al Pizarro de {org}": "You've been invited to {org}'s Pizarro",
+  "{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.": "{admin} has created your account in {org}'s Pizarro. Use this link to choose your password. It expires in {n} hours and works only once.",
+  // Invitar por email a un proyecto: el email es de una cuenta desactivada
+  "Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.": "There is a deactivated account with that email: activate it in Administration → Users.",
 };

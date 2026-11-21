@@ -2,13 +2,14 @@ import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
-import { dateToIso, todayIso } from "./dates";
+import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { slugify } from "./search-accents";
-import { buildReport, RECENT_DONE_DAYS } from "./report";
+import { buildReport, RECENT_DONE_DAYS, REPORT_MAX_TASKS, type ReportCounts } from "./report";
+import { deliverableProgressByIds } from "./deliverable-progress-db";
 import type { PdfJob } from "./report-pdf";
 import { renderInWorker } from "./report-render";
 import { groupChecklist, type ChecklistGroupBy } from "./checklist";
@@ -36,7 +37,8 @@ interface ProjectReportPdf {
 // núcleo ni más memoria de la cuenta aunque se pidan varios a la vez; solo el render ocupa turno. Un render atascado
 // no bloquea la cola para siempre: a los 90 s se termina el worker (deja de gastar CPU), queda libre el turno y quien
 // lo pidió recibe un error claro.
-let reportQueue: Promise<unknown> = Promise.resolve();
+/** Cola de PDF en globalThis: una sola por proceso aunque webpack empaquete este módulo una vez por capa. */
+const Q = ((globalThis as unknown as { __pzPdfQueue?: { reportQueue: Promise<unknown>; waitingRenders: number } }).__pzPdfQueue ??= { reportQueue: Promise.resolve(), waitingRenders: 0 });
 
 const PDF_RENDER_TIMEOUT_MS = 90_000;
 const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
@@ -51,7 +53,6 @@ export class PdfTimeoutError extends AppError {
 /** Con tantos renders ya esperando turno, los nuevos se rechazan al instante (503) en vez de apilarse sin fin. */
 export const PDF_MAX_WAITING = 5;
 export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
-let waitingRenders = 0;
 
 /**
  * Quien pidió el PDF ya no lo espera (cerró la pestaña, canceló la descarga): su render sale de la cola o, si ya se
@@ -83,8 +84,8 @@ export function queuedRender<T>(
   render: (signal: AbortSignal) => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS, request?: AbortSignal,
 ): Promise<T> {
   if (request?.aborted) return Promise.reject(new PdfAbortedError());
-  if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
-  waitingRenders++;
+  if (Q.waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
+  Q.waitingRenders++;
   let waiting = true;
   let started: ((err: unknown) => void) | null = null; // para el render en curso (si lo hay) con este error
   let rejectWaiting!: (err: unknown) => void;
@@ -93,15 +94,15 @@ export function queuedRender<T>(
     const err = new PdfAbortedError();
     if (waiting) {
       waiting = false;
-      waitingRenders--;
+      Q.waitingRenders--;
       rejectWaiting(err);
     } else started?.(err);
   };
   request?.addEventListener("abort", onRequestAbort, { once: true });
-  const turn = reportQueue.then(() => {
+  const turn = Q.reportQueue.then(() => {
     if (!waiting) return cancelled; // cancelado mientras esperaba: no ocupa turno
     waiting = false;
-    waitingRenders--;
+    Q.waitingRenders--;
     return new Promise<T>((resolve, reject) => {
       const abort = new AbortController();
       const stop = (err: unknown) => {
@@ -118,7 +119,7 @@ export function queuedRender<T>(
     });
   });
   const run = Promise.race([turn, cancelled]).finally(() => request?.removeEventListener("abort", onRequestAbort));
-  reportQueue = turn.catch(() => {});
+  Q.reportQueue = turn.catch(() => {});
   return run;
 }
 
@@ -144,21 +145,18 @@ interface PdfRequestOpts {
   signal?: AbortSignal;
 }
 
-export function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
-  return buildProjectReportPdf(projectId, opts);
-}
-
-async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
+export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
 
-  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released]] = await Promise.all([
+  const today = todayIso(appTimeZone());
+  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],
-      take: 2000,
+      take: REPORT_MAX_TASKS,
       select: {
         id: true,
         title: true,
@@ -187,6 +185,7 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
         select: { taskId: true, release: { select: { deployedAt: true } } },
       }),
     ]),
+    reportCounts(projectId, today, opts.locale),
   ]);
   const doneAt = new Map<string, string>();
   const noteDone = (taskId: string | null, at: Date | null | undefined) => {
@@ -195,15 +194,17 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
   };
   for (const e of doneEvents) noteDone(e.taskId, e._max.createdAt);
   for (const r of released) noteDone(r.taskId, r.release.deployedAt);
+  // Avance de los entregables con las archivadas (que no se leen arriba) y sin las fijas: el criterio del calendario.
+  const progress = await deliverableProgressByIds(deliverables.map((d) => d.id));
 
   const locale = intlLocale(opts.locale);
-  const today = todayIso(appTimeZone());
   const report = buildReport({
     project: { name: project.name, description: project.description },
     generatedBy: opts.generatedBy,
     today,
     timeZone: appTimeZone(),
-    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
+    // Con la zona («14:05 CET»): el PDF se envía por email y puede leerse en otra.
+    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).format(new Date()),
     columns,
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({
@@ -224,15 +225,57 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
         priority: task.priority, client: task.client, startDate: dateToIso(task.startDate),
       },
     })),
-    deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate) })),
+    deliverables: deliverables.map((d) => ({ ...d, dueDate: dateToIso(d.dueDate), progress: progress.get(d.id) })),
     releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r.taskCount })),
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),
+    counts,
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);
   const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
+}
+
+/**
+ * Recuentos del informe sobre TODAS las tareas activas del proyecto (los listados solo leen las primeras
+ * REPORT_MAX_TASKS): por columna, responsable y tipo, cuántas hay, vencidas, con plazo en 7 días y sin plazo, y las fijas.
+ * Antes el avance, las vencidas y la carga por persona salían de esas 2.000 sin avisar.
+ */
+export async function reportCounts(projectId: string, today: string, locale: Locale): Promise<ReportCounts> {
+  const active = { projectId, archivedAt: null, evergreen: false };
+  const group = (where: Prisma.TaskWhereInput) => db.task.groupBy({ by: ["columnId", "assigneeId", "kindId"], where: { ...active, ...where }, _count: { _all: true } });
+  const day = isoToDate(today);
+  const [all, overdue, dueSoon, withoutDue, fixed] = await Promise.all([
+    group({}),
+    group({ dueDate: { lt: day } }),
+    group({ dueDate: { gte: day, lte: isoToDate(addDaysIso(today, 7)) } }),
+    group({ dueDate: null }),
+    db.task.count({ where: { projectId, archivedAt: null, evergreen: true } }),
+  ]);
+  const key = (g: { columnId: string; assigneeId: string | null; kindId: string }) => `${g.columnId}|${g.assigneeId ?? ""}|${g.kindId}`;
+  const countOf = (groups: Awaited<ReturnType<typeof group>>) => new Map(groups.map((g) => [key(g), g._count._all]));
+  const [overdueN, soonN, noDueN] = [countOf(overdue), countOf(dueSoon), countOf(withoutDue)];
+  const userIds = [...new Set(all.flatMap((g) => (g.assigneeId ? [g.assigneeId] : [])))];
+  const kindIds = [...new Set(all.map((g) => g.kindId))];
+  const [users, kinds] = await Promise.all([
+    userIds.length ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : [],
+    kindIds.length ? db.taskKind.findMany({ where: { id: { in: kindIds } }, select: { id: true, name: true } }) : [],
+  ]);
+  const userName = new Map(users.map((u) => [u.id, u.name]));
+  const kindName = new Map(localizeGeneralKinds(kinds, locale).map((k) => [k.id, k.name]));
+  return {
+    rows: all.map((g) => ({
+      columnId: g.columnId,
+      assigneeName: g.assigneeId ? (userName.get(g.assigneeId) ?? null) : null,
+      kind: kindName.get(g.kindId) ?? "—",
+      count: g._count._all,
+      overdue: overdueN.get(key(g)) ?? 0,
+      dueSoon: soonN.get(key(g)) ?? 0,
+      withoutDue: noDueN.get(key(g)) ?? 0,
+    })),
+    fixed,
+  };
 }
 
 const slugOf = (name: string, fallback: string) => slugify(name) || fallback;

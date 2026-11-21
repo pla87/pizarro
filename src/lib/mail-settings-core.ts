@@ -101,10 +101,24 @@ export function parseMailSettings(rows: { key: string; value: string }[]): MailS
   };
 }
 
-/** Remitente «Nombre <dirección>» (el nombre sin comillas, saltos de línea ni ángulos: no se puede inyectar una cabecera). */
+/**
+ * Remitente «Nombre <dirección>» (el nombre sin comillas, saltos de línea, ángulos ni barras invertidas: no se puede
+ * inyectar una cabecera, y un nombre que acaba en «\» no escapa la comilla de cierre y rompe la dirección).
+ */
 export function formatFrom(name: string, address: string): string {
-  const clean = name.replace(/[\r\n"<>]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = name.replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim();
   return clean ? `"${clean}" <${address}>` : address;
+}
+
+/**
+ * Remitente con nombre: si `from` es solo una dirección (sin nombre en Administración, o SMTP_FROM sin él), le pone
+ * `fallbackName` (el nombre de la organización o «Pizarro»). Sin nombre, muchos programas de correo muestran solo la
+ * dirección y el aviso parece de un desconocido. Si ya trae nombre («Nombre <dirección>»), no se toca.
+ */
+export function withSenderName(from: string, fallbackName: string): string {
+  const f = from.trim();
+  if (!f || f.includes("<")) return from;
+  return formatFrom(fallbackName.trim() || "Pizarro", f);
 }
 
 /** Configuración efectiva para enviar. */
@@ -125,11 +139,30 @@ type Env = Record<string, string | undefined>;
 
 export const NO_MAIL_CONFIG: MailConfig = { source: "none", host: "", port: 465, secure: true, requireTLS: false, user: "", pass: "", from: "" };
 
-/** Variables SMTP_* del servidor (SMTP_HOST y SMTP_FROM definidos), o null. Es lo que hacía la app antes de existir los ajustes. */
+/** Servidor SMTP en la propia máquina: la conexión no sale de ella y puede ir sin cifrar. */
+export function isLocalSmtpHost(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+}
+
+/** SMTP_ALLOW_PLAINTEXT: «1» o «true» permite, a propósito, enviar sin cifrar a un servidor que no ofrece STARTTLS. */
+export function smtpPlaintextAllowed(env: Env = process.env): boolean {
+  const v = env.SMTP_ALLOW_PLAINTEXT?.trim().toLowerCase();
+  return v === "1" || v === "true";
+}
+
+/**
+ * Variables SMTP_* del servidor (SMTP_HOST y SMTP_FROM definidos), o null. Con el puerto 465, TLS directo; con otro,
+ * STARTTLS obligatorio (si el servidor no lo ofrece no se envía: la contraseña y los enlaces de acceso no viajan en
+ * claro), salvo con un servidor local o con SMTP_ALLOW_PLAINTEXT. Lo guardado en Administración tampoco baja nunca a
+ * texto plano (resolveMailConfig).
+ */
 export function envMailConfig(env: Env = process.env): MailConfig | null {
   if (!env.SMTP_HOST || !env.SMTP_FROM) return null;
   const port = Number(env.SMTP_PORT ?? 465);
-  return { source: "env", host: env.SMTP_HOST, port, secure: port === 465, requireTLS: false, user: env.SMTP_USER ?? "", pass: env.SMTP_PASS ?? "", from: env.SMTP_FROM };
+  const secure = port === 465;
+  const requireTLS = !secure && !isLocalSmtpHost(env.SMTP_HOST) && !smtpPlaintextAllowed(env);
+  return { source: "env", host: env.SMTP_HOST, port, secure, requireTLS, user: env.SMTP_USER ?? "", pass: env.SMTP_PASS ?? "", from: env.SMTP_FROM };
 }
 
 /** Precedencia: si hay SMTP_* en el servidor mandan; si no, lo guardado (con su contraseña ya descifrada). */
@@ -155,7 +188,7 @@ export interface MailSettingsInput {
 export function validateMailSettings(input: MailSettingsInput): { ok: true; value: MailSettingsInput } | { ok: false; error: string } {
   const host = String(input.host ?? "").trim();
   const user = String(input.user ?? "").trim();
-  const fromName = String(input.fromName ?? "").replace(/[\r\n"<>]/g, " ").replace(/\s+/g, " ").trim();
+  const fromName = String(input.fromName ?? "").replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim();
   const fromAddress = String(input.fromAddress ?? "").trim();
   const port = Number(input.port);
   // Sin servidor se desactiva el envío: se guarda vacío y no se exige nada más.

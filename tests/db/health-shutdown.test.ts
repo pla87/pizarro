@@ -33,6 +33,20 @@ test("/api/health: 200 normalmente y 503 «shutting_down» en cuanto empieza el 
   assert.deepEqual(await down.json(), { status: "error", reason: "shutting_down" });
 });
 
+test("/api/health: con el disco casi lleno, 200 con el aviso (no 503: Railway no desplegaba)", async () => {
+  resetShutdownForTests();
+  invalidateMemo(HEALTH_KEY);
+  process.env.HEALTH_MIN_FREE_MB = String(1024 ** 3);
+  try {
+    const res = await health();
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { status: "ok", warnings: ["low_disk_space"] });
+  } finally {
+    process.env.HEALTH_MIN_FREE_MB = "0";
+    invalidateMemo(HEALTH_KEY);
+  }
+});
+
 test("/api/health: guarda el resultado unos segundos y el apagado no lo usa", async () => {
   resetShutdownForTests();
   invalidateMemo(HEALTH_KEY);

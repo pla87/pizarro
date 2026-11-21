@@ -19,6 +19,10 @@ export async function withAdvisoryLock<T>(key: number, fn: () => Promise<T>, opt
   // vuelve a intentar, en vez de quedarse esperando para siempre. `opts`: solo para pruebas.
   const client = await connectPgClient(opts.url ?? process.env.DATABASE_URL ?? "", { label: "jobs", connectTimeoutMs: opts.connectTimeoutMs });
   try {
+    // Que PostgreSQL detecte en ~1,5 min una conexión cuyo proceso desapareció sin cerrarla (máquina caída, red cortada):
+    // con el keepalive del sistema (unas 2 h) el bloqueo seguía cogido y la instancia nueva se saltaba el mantenimiento,
+    // el correo programado y las copias. Un pooler que no lo admita no impide seguir.
+    await client.query("SET tcp_keepalives_idle = 60; SET tcp_keepalives_interval = 10; SET tcp_keepalives_count = 3").catch(() => {});
     const { rows } = await client.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [key]);
     if (!rows[0]?.ok) return { ran: false };
     try {

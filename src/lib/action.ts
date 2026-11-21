@@ -43,8 +43,8 @@ interface ActionMeta {
   args?: ArrayLike<unknown>;
 }
 
-/** Consultas que no se anotan en el registro cuando salen bien (los errores sí). */
-const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments"]);
+/** Consultas que no se anotan en el registro cuando salen bien (los errores sí): abrir una tarea o desplegar una release del histórico. */
+const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments", "releases.getReleaseContent"]);
 
 /** Ejecuta una acción, la registra en los logs y convierte los errores en un resultado serializable. */
 export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>>;
@@ -56,6 +56,8 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   let result: ActionResult<T>;
   let level: "info" | "warn" | "error" = "info";
   const ctx: ActionContext = {};
+  // Lo que explica un fallo de validación en el registro (campo y motivo), también cuando los argumentos no se guardan.
+  let failure: Record<string, unknown> | undefined;
   try {
     result = { ok: true, data: await actionContext.run(ctx, fn) };
     const tracked = !!meta && !!ctx.projectId && !READ_ACTIONS.includes(meta.name);
@@ -87,6 +89,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
     } else if (err instanceof z.ZodError) {
       level = "warn";
       result = { ok: false, error: zodIssueMessage(err.issues[0]?.message) };
+      failure = { issues: err.issues.slice(0, 10).map((i) => ({ path: i.path.map(String).join("."), code: i.code, message: i.message })) };
     } else if (err && typeof err === "object" && "code" in err && (err.code === "P2003" || err.code === "P2002" || err.code === "P2025")) {
       // Clave foránea o única violada, o fila desaparecida: otra persona cambió los datos a la vez.
       level = "warn";
@@ -103,7 +106,7 @@ export async function runAction<T>(a: ActionMeta | (() => Promise<T>), b?: () =>
   }
   // Con éxito, el texto que haya dejado la acción («Movió «X» de A a B»); si falla, el error. Abrir una tarea (y lo que
   // carga al abrirla) no deja rastro cuando sale bien: es lo más frecuente y solo llenaba el registro.
-  if (meta && !(result.ok && UNLOGGED_READS.has(meta.name))) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error);
+  if (meta && !(result.ok && UNLOGGED_READS.has(meta.name))) await logAction(meta, ctx, start, level, result.ok ? (ctx.message ?? "OK") : result.error, failure);
   // El registro queda en español; al usuario, el error en su idioma.
   if (!result.ok) result = { ok: false, error: await translateError(result.error) };
   return result;
@@ -141,11 +144,17 @@ async function logAction(
 ) {
   try {
     const [user, ctx] = await Promise.all([getCurrentUser().catch(() => null), requestContext()]);
-    const args = meta.args ? Array.from(meta.args) : [];
-    const first = args[0];
+    const rawArgs = meta.args ? Array.from(meta.args) : [];
+    const first = rawArgs[0];
     const projectId =
       actx.projectId ??
       (first && typeof first === "object" && "projectId" in first && typeof first.projectId === "string" ? first.projectId : null);
+    // Una acción que falla antes de saber su proyecto (validación, sin acceso) no puede marcar el registro como de un
+    // proyecto privado, y cualquier administrador lo vería: de los argumentos (títulos, descripciones…) solo se guardan
+    // los nombres de los campos. El motivo va en el mensaje y, en los de validación, en `issues`.
+    const hidden = level !== "info" && !actx.projectId;
+    const args = hidden ? argShape(rawArgs) : rawArgs;
+    const details = hidden ? (argShape(actx.details ?? {}) as Record<string, unknown>) : actx.details;
     logEvent({
       level,
       category: "action",
@@ -157,9 +166,30 @@ async function logAction(
       path: ctx.path,
       ip: ctx.ip,
       durationMs: performance.now() - start,
-      details: { args, ...actx.details, ...extra },
+      details: { args, ...details, ...extra },
     });
   } catch {
     // El registro nunca debe romper la acción.
   }
+}
+
+/**
+ * Forma de unos argumentos sin sus valores: los objetos conservan los nombres de sus campos y cada valor queda en su tipo
+ * («texto», «número»…); las listas, la forma de cada elemento (como mucho 10).
+ */
+function argShape(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return "texto";
+  if (typeof value === "number" || typeof value === "bigint") return "número";
+  if (typeof value === "boolean") return "sí/no";
+  if (value instanceof Date) return "fecha";
+  if (typeof File !== "undefined" && value instanceof File) return "fichero";
+  if (typeof FormData !== "undefined" && value instanceof FormData) return argShape(Object.fromEntries(value.entries()), depth);
+  if (depth >= 4) return "…";
+  if (Array.isArray(value)) {
+    const items = value.slice(0, 10).map((v) => argShape(v, depth + 1));
+    return value.length > 10 ? [...items, `… y ${value.length - 10} más`] : items;
+  }
+  if (typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 40).map(([k, v]) => [k, argShape(v, depth + 1)]));
+  return typeof value;
 }

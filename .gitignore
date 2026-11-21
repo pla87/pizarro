@@ -15,3 +15,7 @@ npm-debug.log*
 dist/
 
 deploy/recovery-kit.txt
+
+# Se generan en local para revisarlos (scripts/build-manual-pdf.mjs); se publican como adjuntos de cada GitHub Release.
+/MANUAL.pdf
+/PRUEBAS.pdf

@@ -37,7 +37,7 @@ async function main() {
 
 /**
  * Ejecuta las tareas de arranque y cierra su conexión. Lanza si fallan (base inaccesible, migraciones sin aplicar).
- * Fuera de producción src/lib/db.ts deja el cliente en globalThis para reutilizarlo; aquí se quita al terminar: si no,
+ * src/lib/db.ts deja el cliente en globalThis (una sola copia por proceso); aquí se quita al terminar: si no,
  * el servidor cargado después en el mismo proceso (`npm start`) heredaría este cliente ya desconectado.
  */
 export async function runBoot(): Promise<void> {

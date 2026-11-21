@@ -1,7 +1,9 @@
 # Al subir una etiqueta vX.Y.Z (npm run release:tag + git push origin vX.Y.Z):
 #   1. construye la imagen Docker, cada arquitectura en su máquina nativa (linux/amd64 en ubuntu-latest y linux/arm64
 #      en ubuntu-24.04-arm, sin QEMU), sube cada una por su digest y las une en ghcr.io/pla87/pizarro:X.Y.Z y :latest;
-#   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json;
+#   2. crea la GitHub Release con las notas de esa versión tomadas de changelog.json y le adjunta MANUAL.pdf y
+#      PRUEBAS.pdf, generados aquí desde docs/MANUAL.md y docs/PRUEBAS.md (no están en el repositorio; la web y el README
+#      enlazan a releases/latest/download/MANUAL.pdf);
 #   3. mueve la rama «stable» a ese commit (solo versiones X.Y.Z sin sufijo, de commits que están en main y nunca
 #      hacia atrás; con el secreto opcional STABLE_PUSH_TOKEN si la versión cambia .github/workflows/; lógica en
 #      scripts/move-stable.sh, compartida con .github/workflows/stable.yml). Railway y quien construya desde el código
@@ -147,10 +149,53 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # MANUAL.pdf y PRUEBAS.pdf de esta versión (scripts/build-manual-pdf.mjs con el Chrome que trae el runner), en paralelo
+  # con las imágenes. «Imagen Docker» los espera: si no se pueden generar, no se etiqueta ni se publica nada.
+  pdf:
+    name: Manual en PDF
+    needs: version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # Solo hacen falta marked y playwright-core (sin descargar navegadores: se usa el Chrome del runner).
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Generar MANUAL.pdf y PRUEBAS.pdf
+        run: |
+          # El script usa el Chrome de CHROME_PATH; las máquinas Ubuntu de GitHub traen Google Chrome (CHROME_BIN).
+          CHROME_PATH="${CHROME_BIN:-$(command -v google-chrome || command -v google-chrome-stable || true)}"
+          if [ -z "$CHROME_PATH" ] || [ ! -x "$CHROME_PATH" ]; then echo "No hay Chrome en el runner (CHROME_BIN vacío)." >&2; exit 1; fi
+          export CHROME_PATH
+          node scripts/build-manual-pdf.mjs
+          node scripts/build-manual-pdf.mjs pruebas
+          for f in MANUAL.pdf PRUEBAS.pdf; do
+            if [ "$(head -c 5 "$f" 2>/dev/null)" != "%PDF-" ]; then echo "$f no se ha generado bien." >&2; exit 1; fi
+            ls -l "$f"
+          done
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: manuales
+          path: |
+            MANUAL.pdf
+            PRUEBAS.pdf
+          if-no-files-found: error
+          retention-days: 1
+
   image:
     name: Imagen Docker
     runs-on: ubuntu-latest
-    needs: [version, build]
+    needs: [version, build, pdf]
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -219,17 +264,27 @@ jobs:
       - name: Notas de la versión (changelog.json)
         run: node scripts/release-notes.mjs "$TAG" > release-notes.md
 
+      # Los PDF del job «Manual en PDF»: se adjuntan al crear la release, así que nunca hay una release sin ellos.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: manuales
+          path: ${{ runner.temp }}/manuales
+
       - name: Crear la release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PDFS: ${{ runner.temp }}/manuales
         run: |
+          for f in MANUAL.pdf PRUEBAS.pdf; do [ -s "$PDFS/$f" ] || { echo "Falta $f." >&2; exit 1; }; done
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             # Crea la etiqueta en este commit junto con la release.
             gh release create "$TAG" --target "$GITHUB_SHA" \
-              --title "Pizarro $TAG" --notes-file release-notes.md
+              --title "Pizarro $TAG" --notes-file release-notes.md \
+              "$PDFS/MANUAL.pdf" "$PDFS/PRUEBAS.pdf"
           else
             gh release create "$TAG" \
-              --title "Pizarro $TAG" --notes-file release-notes.md --verify-tag
+              --title "Pizarro $TAG" --notes-file release-notes.md --verify-tag \
+              "$PDFS/MANUAL.pdf" "$PDFS/PRUEBAS.pdf"
           fi
 
   stable:

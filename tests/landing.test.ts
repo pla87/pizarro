@@ -38,7 +38,7 @@ test("frase de compra: solo promete tarjeta y factura automática si hay enlace 
       assert.ok(!text.includes("Escríbenos") || locale === "es");
     }
     assert.match(withEmail, locale === "es" ? /^Escríbenos/ : /^Write to us/);
-    assert.match(noContact, locale === "es" ? /^Lee la licencia/ : /^Read the licence/);
+    assert.match(noContact, locale === "es" ? /^Lee la licencia/ : /^Read the license/);
     assert.notEqual(withEmail, noContact);
   }
   // Con el BUY_URL real vacío (hasta que el autor lo publique) la frase por defecto no promete pasarela.

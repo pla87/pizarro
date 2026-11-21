@@ -27,4 +27,14 @@ export const ics: Record<string, string> = {
   "Las tuyas y los entregables donde tienes alguna. Las que no tienen responsable no salen.": "Yours, and the deliverables where you have one. Tasks without an assignee are left out.",
   "Tareas y entregables, con o sin responsable.": "Tasks and deliverables, with or without an assignee.",
   "Solo tareas con fecha límite y sin terminar.": "Only tasks with a due date that aren't done.",
+  // «Suscribirse»: último uso del enlace
+  "Aún no se ha usado": "Not used yet",
+  "Último uso: {when}": "Last used: {when}",
+  "Último uso: hace menos de una hora": "Last used: less than an hour ago",
+  "{date} (se anota como mucho una vez por hora)": "{date} (recorded at most once an hour)",
+  // Suscripción: confirmar antes de dejar sin efecto el enlace (regenerar o desactivar)
+  "Regenerar": "Regenerate",
+  "El enlace actual dejará de funcionar en todos los calendarios suscritos. ¿Generar uno nuevo?": "The current link will stop working in every subscribed calendar. Generate a new one?",
+  "Desactivar la suscripción": "Turn off subscription",
+  "El enlace dejará de funcionar en todos los calendarios suscritos. ¿Desactivar la suscripción?": "The link will stop working in every subscribed calendar. Turn off the subscription?",
 };

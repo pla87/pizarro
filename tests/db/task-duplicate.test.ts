@@ -6,9 +6,9 @@ import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { deleteAttachment, deleteTask, duplicateTask, updateTask } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { createAttachmentWithinLimit } from "../../src/lib/attachment-limit";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { invalidateQuotaSettings } from "../../src/lib/quota-settings";
@@ -181,7 +181,7 @@ describe("duplicar una tarea copia sus adjuntos", () => {
     assert.equal(await db.task.count({ where: { id: copy.id } }), 0);
     // Mientras se pueda rehacer, los ficheros se conservan.
     for (const a of copied) for (const file of filesOf(a)) assert.ok(await exists(file));
-    expectOk(await redoLast(task.projectId));
+    expectApplied(await redoChecked(task.projectId));
     assert.deepEqual((await attachmentsOf(copy.id)).map((a) => a.id), copied.map((a) => a.id));
     for (const a of copied) for (const file of filesOf(a)) assert.ok(await exists(file));
 

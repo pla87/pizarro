@@ -11,10 +11,14 @@ export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PR
  * Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. En un aviso de proyecto
  * (PROJECT_TO_TEAM) `task` es el nombre del proyecto entre comillas y `actor`, el de la cuenta borrada.
  */
-export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string }): string {
+export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string }): string {
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
-    case "ASSIGNED": return t("{actor} te ha asignado {task}", vars);
+    case "ASSIGNED": {
+      // Un lote (alta masiva o importación): un solo aviso que enlaza a la primera tarea; la cabecera dice cuántas son.
+      const n = vars.excerpt === undefined ? null : assignedBatchCount(vars.excerpt);
+      return n !== null && n > 1 ? t("{actor} te ha asignado {n} tareas (entre ellas {task})", { ...vars, n }) : t("{actor} te ha asignado {task}", vars);
+    }
     case "DUE_CHANGED": return t("{actor} ha cambiado la fecha límite de {task}", vars);
     case "COMMENT": return t("{actor} ha comentado en {task}", vars);
     case "WAITING": return t("{task} sigue esperando respuesta", vars);
@@ -55,7 +59,8 @@ export function assignedBatchExcerpt(count: number): string {
   return `\t${count}`;
 }
 
-function parseAssignedBatch(excerpt: string): number | null {
+/** Número de tareas de un aviso de asignación en lote, o null si el aviso es de una sola tarea (el extracto es su título). */
+export function assignedBatchCount(excerpt: string): number | null {
   const m = /^\t(\d+)$/.exec(excerpt);
   return m ? Number(m[1]) : null;
 }
@@ -68,7 +73,7 @@ export function notificationBody(kind: NotificationKind, excerpt: string, t: T, 
     case "DUE_CHANGED": return dueChangeText(excerpt, t, locale);
     case "WAITING": return waitingText(excerpt, t);
     case "ASSIGNED": {
-      const n = parseAssignedBatch(excerpt);
+      const n = assignedBatchCount(excerpt);
       return n === null ? excerpt : n === 1 ? t("1 tarea") : t("{n} tareas", { n });
     }
     default: return excerpt;

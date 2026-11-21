@@ -82,3 +82,30 @@ export function formatDate(value: Date | string, style: Style = "date", locale =
   const d = typeof value === "string" ? new Date(value) : value;
   return d.toLocaleString(locale, { ...OPTIONS[style], timeZone: appTimeZone() });
 }
+
+/**
+ * Fecha y hora con la zona horaria al final («14 nov 2026, 14:05 (CET)»), para lo que se lee fuera de Pizarro (emails):
+ * quien lo recibe puede estar en otra zona que la de la app. Intl no admite la zona junto a `dateStyle`, así que se
+ * añade su nombre corto aparte.
+ */
+export function formatDateTimeZone(value: Date | string, locale = "es-ES", style: "dateTime" | "dateTimeSeconds" = "dateTime"): string {
+  const d = typeof value === "string" ? new Date(value) : value;
+  const timeZone = appTimeZone();
+  const zone = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: "short" }).formatToParts(d).find((p) => p.type === "timeZoneName")?.value ?? timeZone;
+  return `${formatDate(d, style, locale)} (${zone})`;
+}
+
+/**
+ * Cuánto hace de `value` («hace 2 h», «hace 3 días»; en inglés, «2 hr. ago»), en el idioma de Intl dado. null si es de
+ * hace menos de una hora (o posterior a `now`): el texto de ese caso lo elige quien lo muestra. Desde 30 días, la fecha
+ * (en la zona de la app).
+ */
+export function formatAgo(value: Date | string, now: Date, locale = "es-ES"): string | null {
+  const d = typeof value === "string" ? new Date(value) : value;
+  const hours = Math.floor((now.getTime() - d.getTime()) / 3_600_000);
+  if (!(hours >= 1)) return null;
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "always", style: "short" });
+  if (hours < 48) return rtf.format(-hours, "hour");
+  const days = Math.floor(hours / 24);
+  return days < 30 ? rtf.format(-days, "day") : formatDate(d, "date", locale);
+}

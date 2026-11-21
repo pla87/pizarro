@@ -2,6 +2,49 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.63.0 — 2026-11-21 17:57
+
+Administradores asignables e invitaciones por email desde el proyecto, móvil más cómodo, informes y emails más claros, menos servidor, inglés americano, y revisión de seguridad, eficiencia y caza de bugs
+
+### Nuevas funcionalidades
+
+- Los administradores se pueden asignar a un proyecto de equipo, como cualquier persona (en Ajustes del proyecto y en Administración → Proyectos).
+- Al añadir a alguien a un proyecto le llega un email «te ha añadido al proyecto» con el enlace al tablero; un administrador puede además invitar por email a alguien sin cuenta, y «Copiar enlace» deja el enlace listo para pasarlo por otro canal.
+- «Suscribirse» al calendario muestra cuándo se usó el enlace por última vez.
+- Aviso en Administración cuando el disco del servidor está casi lleno (y Railway ya puede desplegar en ese caso).
+
+### Mejoras
+
+- En el móvil, todas las columnas llegan hasta abajo, la barra de desplazamiento es la del sistema y la pantalla no se apaga mientras dictas.
+- Las fotos grandes se reducen antes de subirlas también en Documentación.
+- El informe semanal llega en el idioma de quien lo recibe, dice de qué organización es y cuenta todas las tareas aunque haya más de 2.000.
+- Emails más claros: remitente con el nombre de la organización, aviso de no responder, horas con su zona horaria, comentarios sin símbolos de Markdown y un solo aviso al asignar varias tareas.
+- El avance de los entregables es el mismo en el calendario y en el informe PDF.
+- Mis tareas agrupa «Próximos 7 días»; «Nuevo proyecto» también para quien aún no tiene proyectos.
+- Logs: categorías con nombre, búsqueda literal, cualquier página igual de rápida y CSV con tope y aviso.
+- Menos servidor: el histórico de releases carga cada texto al abrirlo, los comentarios en vivo releen solo los últimos, un solo cliente de base de datos y una cola de PDF por proceso, limpiezas diarias, conexión de correo reutilizable y calendario sin precargar tableros.
+- Compartir con Pizarro admite varias fotos a la vez (tope por archivo); las subidas comprueban el disco antes de empezar.
+- Inglés americano en toda la app, la licencia y la web.
+
+### Correcciones
+
+- Alguien podía bloquear el acceso de otra persona con contraseñas falsas aunque entrara desde su propio equipo; una cookie de dispositivo plantada desde fuera ya no sirve.
+- Dos administradores editando a la misma persona se pisaban (podía volver a activarse una cuenta desactivada).
+- «Forzar cambio de contraseña» ahora corta también el calendario suscrito, Telegram, WhatsApp y Google Drive.
+- Un enlace de calendario no válido devuelve un calendario vacío, para que el móvil borre los eventos guardados.
+- El último administrador ya no puede irse dejando solo invitaciones sin usar; un proyecto privado sin miembros activos pasa a verlo la administración.
+- Con el email por variables, la contraseña ya no puede viajar sin cifrar (SMTP_ALLOW_PLAINTEXT para un relay interno).
+- Importar un proyecto respeta los límites de la app (30 columnas, nombres de 40) y las tareas que se repiten no heredan un entregable vencido.
+- Un informe semanal que no cabe en memoria ya no se reintenta cada hora: avisa una vez a quien lo configuró.
+- Reenviar una invitación caducada conserva su proyecto; otras correcciones menores en el calendario, los logs, las plantillas y la verificación en dos pasos.
+
+### Cambios técnicos / DB
+
+- El instalador se descarga de la rama stable; imágenes de Node, Caddy y PostgreSQL fijadas por digest con Dependabot; el log de Caddy no guarda rutas; imagen 19 MB más pequeña.
+- MANUAL.pdf y PRUEBAS.pdf ya no están en el repositorio: se adjuntan a cada GitHub Release.
+- Las migraciones nuevas van entre BEGIN y COMMIT (con prueba); keepalive corto en la conexión del bloqueo de tareas de fondo.
+- Retirados: páginas de admin sin uso, redoLast, capTitle, passwordChangeRequired, huellas de deshacer v2 sin bloqueo, el ZIP del histórico sin paquete y una de las dos versiones de marked; suites e2e reorganizadas por tema.
+
 ## v1.62.0 — 2026-11-21 01:40
 
 PDF grandes en segundos, borrar en un menú «⋯», arranque que espera a la base de datos, tablero y calendario más ligeros, mejor contraste en oscuro, y revisión de seguridad, eficiencia y caza de bugs

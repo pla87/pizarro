@@ -162,7 +162,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Improvement" },
         { title: "Idea: dark mode for the app", description: "Ideas start here. Once you decide to build them, drag them to “To do”.", column: 0, kind: "Improvement" },
-        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organise the release notes.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgent"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
+        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organize the release notes.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgent"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
         { title: "Add sign-in with email", description: "Subtasks are ticked from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", priority: "MEDIA", dueInDays: 5, subtasks: ["Design the screen", "Connect to the server", "Try it on a phone"] },
         { title: "Speed up loading the order list", description: "“Review” waits for someone else's approval before the card goes into the release.", column: 3, kind: "Improvement" },
         { title: "Help text on the settings page", description: "Whatever is in “Next release” appears in the notes when you click “Generate release”, with the project's headers and footers. Once published, these cards move to “Done”.", column: 4, kind: "Improvement" },
@@ -393,7 +393,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN + "\n\nTurn on the fields you need in the project settings (client, priority, hours, cost).", column: 1, kind: "Job" },
         { title: "Quote for the shop redesign", description: "“Quotes” adds up the cost of its cards. If the client accepts, drag it to “In progress”.", column: 0, kind: "Job", client: "Client A", cost: 1800, estimatedHours: 30 },
-        { title: "Catalogue design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
+        { title: "Catalog design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
         { title: "Waiting for logo approval", description: "In “Waiting for the client”, the card reminds its owner if several days pass without a reply.", column: 2, kind: "Job", client: "Client A", labels: ["Key client"] },
         { title: "Delivery of Client C's website", description: "The “Client delivery” column generates a PDF summary with no comments or people's names, ready to send.", column: 3, kind: "Job", client: "Client C" },
         { title: "Collect the March invoice", description: "When it is paid, the card moves to “Paid”.", column: 4, kind: "Payment", client: "Client B", cost: 950 },
@@ -465,14 +465,14 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
     },
     en: {
       name: "Course preparation",
-      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Programme” (published as a PDF), materials, exercises and exams, and student follow-up.",
+      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Program” (published as a PDF), materials, exercises and exams, and student follow-up.",
       template: { ...BUILTIN_TEMPLATES_EN["curso-master"]!, description: "" },
       tasks: [
         {
           title: "Welcome: how this board works",
           description:
             WELCOME_EN +
-            "\n\nIn **Programme** each card is a session of the course, with its date. “Publish programme (PDF)” generates the programme with the sessions in that order and saves a copy in Documentation.\n\n" +
+            "\n\nIn **Program** each card is a session of the course, with its date. “Publish program (PDF)” generates the program with the sessions in that order and saves a copy in Documentation.\n\n" +
             "When you choose a type (Prepare material, Prepare exercise, Prepare exam…) the description is filled in with a brief for an AI agent: objective, content, delivery format, duration, criteria and notes for the agent.\n\n" +
             "Move the briefs you want to give the agent to **AI work plan** and click “Generate work plan”: you get a Markdown text with the instructions and every task, ready to paste into Claude Code or save in Documentation. Those under “Always in the plan” go into every plan.",
           column: 0,
@@ -480,7 +480,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         },
         {
           title: "Session: Course introduction",
-          description: "**Objectives:** get to know the course, the calendar and how it is assessed.\n\n**Topics:**\n\n- Teachers and students introduce themselves\n- Programme and calendar\n- Assessment criteria\n\n**Activities:** round of introductions.\n\n**Readings and materials:** course guide.",
+          description: "**Objectives:** get to know the course, the calendar and how it is assessed.\n\n**Topics:**\n\n- Teachers and students introduce themselves\n- Program and calendar\n- Assessment criteria\n\n**Activities:** round of introductions.\n\n**Readings and materials:** course guide.",
           column: 4, kind: "Session", labels: ["Module 1"], dueInDays: 14,
         },
         {
@@ -505,7 +505,7 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
         },
         {
           title: "Exercise: Module 1 case studies",
-          description: "**Objective:** practise the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
+          description: "**Objective:** practice the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
           column: 3, kind: "Prepare exercise", labels: ["Module 1", "For the agent"], dueInDays: 20, subtasks: ["Write the task", "Prepare the solution", "Check the difficulty"],
         },
         {

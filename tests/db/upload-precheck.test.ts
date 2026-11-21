@@ -26,6 +26,7 @@ const unwritable = path.join(blocker, "subidas");
 
 afterEach(() => {
   process.env.UPLOAD_DIR = ok;
+  delete process.env.DISK_MIN_FREE_MB;
   mock.restoreAll();
   syncBuiltinESMExports();
 });
@@ -93,6 +94,28 @@ describe("subidas: comprobación previa antes de escribir el fichero", () => {
     assert.equal(body.code, "quota_project");
     assert.match(body.error, /^Cuota de almacenamiento del proyecto superada \(.* de 1 MB\)/);
     assert.equal(await db.projectDocument.count({ where: { projectId: f.project.id } }), 0);
+  });
+});
+
+describe("subidas: disco casi lleno antes de recibir el archivo", () => {
+  // Un margen mínimo mayor que cualquier disco: assertDiskRoom lo da por lleno (como importar, transferir o duplicar).
+  const full = () => (process.env.DISK_MIN_FREE_MB = String(1024 * 1024 * 1024));
+
+  test("adjunto y documento: 507 con el mensaje y el código de importar, sin escribir nada", async () => {
+    const { f, task } = await setup();
+    process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-diskroom-"));
+    full();
+    for (const res of [await attach(task.id, 30 * KB), await addDocument(f.project.id, 30 * KB)]) {
+      const body = await res.json();
+      assert.equal(res.status, 507, JSON.stringify(body));
+      assert.deepEqual(body, { error: "No hay espacio suficiente en el disco del servidor para esta operación.", code: "disk_full" });
+    }
+    assert.equal(await db.taskAttachment.count({ where: { taskId: task.id } }), 0);
+    assert.equal(await db.projectDocument.count({ where: { projectId: f.project.id } }), 0);
+    assert.deepEqual(await readdir(process.env.UPLOAD_DIR), [], "no se ha escrito nada");
+    // Con espacio, la misma subida entra.
+    delete process.env.DISK_MIN_FREE_MB;
+    assert.equal((await attach(task.id, 30 * KB)).status, 201);
   });
 });
 

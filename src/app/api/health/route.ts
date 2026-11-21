@@ -6,7 +6,10 @@ import { uploadDir } from "@/lib/upload-dir";
 
 export const dynamic = "force-dynamic";
 
-/** Comprobación de salud (Railway, Docker, Caddy): 200 si todo va bien; 503 con un motivo corto si no. */
+/**
+ * Comprobación de salud (Railway, Docker, Caddy): 200 si todo va bien (con `warnings` si algo pide atención, como el disco
+ * casi lleno: no impide desplegar ni servir); 503 con un motivo corto si no (base de datos, subidas, apagado).
+ */
 export async function GET() {
   // Apagado en marcha (lib/shutdown.ts): el balanceador deja de mandar tráfico a esta instancia mientras termina lo que
   // tiene en curso. Va antes de lo guardado: se responde al instante aunque haya un resultado reciente.
@@ -14,7 +17,7 @@ export async function GET() {
   // Es pública y sin límite: el resultado se guarda unos segundos y las peticiones simultáneas comparten la comprobación.
   const result = await memo(HEALTH_MEMO_KEY, checkHealth, HEALTH_CACHE_MS);
   const headers = { "Cache-Control": "no-store" };
-  if (result.ok) return Response.json({ status: "ok" }, { headers });
+  if (result.ok) return Response.json({ status: "ok", ...(result.warnings ? { warnings: result.warnings } : {}) }, { headers });
   return Response.json({ status: "error", reason: result.reason }, { status: 503, headers });
 }
 

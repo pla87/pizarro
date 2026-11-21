@@ -1,10 +1,10 @@
 // Comentarios: paginación con cursor, máximo configurable y borrado que conserva el hilo, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { addComment, deleteComment, getOlderComments, getTaskDetail } from "../../src/actions/tasks";
 import { saveMaxCommentsPerTask } from "../../src/actions/settings";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { mentionToken } from "../../src/lib/mentions";
 import { COMMENT_LIMIT_DEFAULT, COMMENT_LIMIT_KEY, getMaxCommentsPerTask, invalidateAppSettings, setMaxCommentsPerTask } from "../../src/lib/app-settings";
 
@@ -206,7 +206,7 @@ describe("borrar un comentario con respuestas", () => {
     let row = await db.taskComment.findUniqueOrThrow({ where: { id: parent.id } });
     assert.equal(row.body, "texto original @algo");
     assert.equal(row.deletedAt, null);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     row = await db.taskComment.findUniqueOrThrow({ where: { id: parent.id } });
     assert.equal(row.body, "");
     assert.ok(row.deletedAt);

@@ -70,6 +70,7 @@
       "src/components/board/NewTaskDialog.tsx",
       "src/components/board/TaskDialog.tsx",
       "src/components/board/upload.ts",
+      "src/lib/image-shrink.ts",
       "src/components/board/useCardFileDrop.ts",
       "src/components/board/useFileZone.ts",
       "src/lib/paste-table.ts",
@@ -231,6 +232,7 @@
       "src/lib/calendar*.ts",
       "src/lib/ics.ts",
       "src/lib/recurrence*.ts",
+      "src/lib/deliverable-progress*.ts",
       "src/lib/dates.ts",
       "src/actions/calendar-feed.ts",
       "src/app/(app)/calendar/**",
@@ -271,7 +273,6 @@
     ],
     "plan-ia-markdown-e2e": [
       "src/components/board/AiPlanDialog.tsx",
-      "src/components/board/EvergreenPanel.tsx",
       "src/actions/ai-plan.ts",
       "src/lib/ai-plan*.ts",
       "src/lib/markdown-*.ts"
@@ -320,6 +321,7 @@
     ],
     "documentacion-formatos-e2e": [
       "src/components/docs/**",
+      "src/lib/image-shrink.ts",
       "src/components/ui/LazyMarkdown.tsx",
       "src/components/board/ReleaseDialog.tsx",
       "src/components/board/ReleaseRichEditor.tsx",
@@ -347,27 +349,6 @@
       "src/app/api/documents/**",
       "src/app/api/projects/[projectId]/documents/**"
     ],
-    "documentacion-enlaces-bom-e2e": [
-      "src/components/docs/**",
-      "src/components/board/draft-storage.ts",
-      "src/components/board/drafts.ts",
-      "src/lib/documents.ts",
-      "src/lib/document-kind.ts",
-      "src/lib/html-doc-links.ts",
-      "src/app/(app)/p/[projectId]/docs/**",
-      "src/app/api/documents/**"
-    ],
-    "documentacion-indice-e2e": [
-      "src/components/docs/**",
-      "src/lib/html-doc-links.ts",
-      "src/lib/heading-ids.ts",
-      "src/lib/account.ts",
-      "src/lib/user-delete*.ts",
-      "src/lib/google-*.ts",
-      "src/app/(app)/settings/**",
-      "src/app/(app)/p/[projectId]/docs/**",
-      "src/app/api/auth/google/**"
-    ],
     "cuentas-borrar-e2e": [
       "src/actions/profile.ts",
       "src/actions/users.ts",
@@ -377,6 +358,17 @@
       "src/app/(app)/settings/**",
       "src/app/(app)/admin/users/**",
       "src/app/api/auth/google/**"
+    ],
+    "cuentas-invitar-e2e": [
+      "src/actions/users.ts",
+      "src/actions/projects.ts",
+      "src/lib/auth-mail.ts",
+      "src/lib/auth-token*.ts",
+      "src/lib/project-invite.ts",
+      "src/app/(app)/p/[projectId]/settings/**",
+      "src/app/(app)/admin/projects/**",
+      "src/app/reset/**",
+      "src/app/login/**"
     ],
     "cuentas-borrar-restos-e2e": [
       "src/actions/profile.ts",
@@ -512,7 +504,9 @@
       "src/lib/live-refresh.ts",
       "src/lib/focus-refresh.ts",
       "src/app/api/projects/[projectId]/events/**",
-      "public/sw.js"
+      "public/sw.js",
+      "src/components/board/draft-storage.ts",
+      "src/components/board/drafts.ts"
     ],
     "install-e2e": [
       "src/app/setup/**",

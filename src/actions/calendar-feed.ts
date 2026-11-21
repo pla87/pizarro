@@ -43,6 +43,20 @@ export async function suggestedCalendarFeedScope() {
   });
 }
 
+/**
+ * «Último uso» del enlace (lastUsedAt: la ruta lo anota como mucho una vez por hora), para que la persona vea si alguien
+ * lo está consultando sin que ella lo use. Se pide al abrir «Suscribirse», no en cada visita al Calendario. `active: false`
+ * si ya no hay suscripción (desactivada desde otra pestaña o por un administrador).
+ */
+export async function calendarFeedUsage() {
+  // Sin registro: es una consulta, una por cada vez que se abre el menú.
+  return runAction(async () => {
+    const user = await requireUser();
+    const feed = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { lastUsedAt: true } });
+    return { active: !!feed, lastUsedAt: feed?.lastUsedAt?.toISOString() ?? null };
+  });
+}
+
 /** Cambia qué tareas incluye la suscripción sin cambiar la dirección. */
 export async function setCalendarFeedScope(scope: "MINE" | "ALL") {
   return runAction({ name: "calendarFeed.setScope", args: [scope] }, async () => {

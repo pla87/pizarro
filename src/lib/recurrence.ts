@@ -107,8 +107,8 @@ async function copyDescriptionAttachments(spawned: { src: { id: string; projectI
  * «terminada») o archivar. Es idempotente: `recurrenceFromId` es único, así que de cada tarea solo sale una
  * siguiente, aunque se mueva varias veces, se archive después de terminarla o dos personas lo hagan a la vez.
  *
- * La nueva copia lleva los mismos campos (subtareas sin marcar; sin comentarios ni historial, y de los adjuntos solo
- * copia de los que cita la descripción: copyDescriptionAttachments),
+ * La nueva copia lleva los mismos campos (subtareas sin marcar; sin comentarios ni historial; el entregable solo si no
+ * ha vencido, y de los adjuntos solo copia de los que cita la descripción: copyDescriptionAttachments),
  * la misma repetición y la fecha límite que marca la regla. Va al final de la primera columna no terminada
  * o, si la tarea no estaba en una terminada (p. ej. se archivó desde «En curso»), de su misma columna.
  * Deshacer la acción que la provocó quita también la copia (operación inversa anotada aquí).
@@ -131,6 +131,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       id: true, projectId: true, columnId: true, title: true, description: true, kindId: true, color: true, linkUrl: true,
       assigneeId: true, dueDate: true, startDate: true, cost: true, estimatedHours: true, priority: true, client: true, deliverableId: true, recurrence: true, recurrenceDay: true,
       routineColumnId: true,
+      deliverable: { select: { dueDate: true } },
       column: { select: { isDone: true, role: true } },
       labels: { select: { labelId: true } },
       subtasks: { orderBy: { position: "asc" }, select: { title: true, position: true } },
@@ -283,6 +284,10 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     const oldDue = dateToIso(src.dueDate);
     const oldStart = dateToIso(src.startDate);
     const startDate = oldStart && oldDue && dueIso ? isoToDate(addDaysIso(oldStart, daysBetween(oldDue, dueIso))) : null;
+    // El entregable se hereda mientras no haya vencido (hoy, en la zona de la app, aún vale): la siguiente aparición de una
+    // tarea semanal no debe colgar de un entregable que ya pasó.
+    const deliverableDue = dateToIso(src.deliverable?.dueDate);
+    const deliverableId = deliverableDue && deliverableDue < today ? null : src.deliverableId;
     const item: Item = {
       ...entry,
       data: {
@@ -294,7 +299,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
         color: src.color,
         linkUrl: src.linkUrl,
         assigneeId: assignable(src.projectId, src.assigneeId),
-        deliverableId: src.deliverableId,
+        deliverableId,
         dueDate,
         startDate,
         cost: src.cost,

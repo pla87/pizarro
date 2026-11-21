@@ -9,6 +9,10 @@
 //
 // Usa el Chromium indicado en CHROME_PATH o, si no, el que tenga instalado
 // Playwright (`npx playwright install chromium`).
+//
+// Los PDF no se suben al repositorio (están en .gitignore): en local se generan para revisarlos, y el workflow Release
+// (.github/workflows/release.yml, job «Manual en PDF») los genera con el Chrome del runner y los adjunta a la GitHub
+// Release. La web y los enlaces apuntan a https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf.
 import { readFileSync } from "node:fs";
 import { marked } from "marked";
 import { chromium } from "playwright-core";

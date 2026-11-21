@@ -19,8 +19,11 @@ describe("Google: no re-enlazar tras desvincular", () => {
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();
     await db.user.update({ where: { id: target.id }, data: { googleSub: `sub-${target.id}` } });
+    // Su calendario suscrito no debe verse afectado (solo se desvincula el acceso con Google; «Forzar cambio de contraseña» sí lo corta).
+    await db.calendarFeed.create({ data: { userId: target.id, tokenHash: `h-${target.id}` } });
     await loginAs(admin);
     expectOk(await unlinkGoogle(target.id));
+    assert.equal(await db.calendarFeed.count({ where: { userId: target.id } }), 1);
     const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
     assert.equal(row.googleSub, null);
     assert.equal(row.googleRelinkBlocked, true);

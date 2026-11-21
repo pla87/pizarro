@@ -47,7 +47,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       taskFields: true,
       _count: { select: { columns: { where: { role: "BUDGET" } } } },
       hiddenKinds: { select: { kindId: true } },
-      members: { select: { userId: true, user: { select: { name: true, active: true } } }, orderBy: { user: { name: "asc" } } },
+      members: { select: { userId: true, user: { select: { name: true, active: true, role: true } } }, orderBy: { user: { name: "asc" } } },
       labels: { orderBy: { name: "asc" }, select: { id: true, name: true, color: true } },
       kinds: {
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -141,7 +141,8 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
           fileMaxMb: project.fileMaxMb,
           taskFields: normalizeTaskFields(project.taskFields),
           budgetColumns: project._count.columns,
-          members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active })),
+          // El rol solo se dice en los de equipo (marca «admin» de un administrador asignado); en un privado no hace falta.
+          members: project.members.map((m) => ({ id: m.userId, name: m.user.name, active: m.user.active, admin: !project.isPrivate && m.user.role === "ADMIN" })),
         }}
         labels={project.labels}
         kinds={project.kinds.map((k) => ({ id: k.id, name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate, taskCount: kindTasks.get(k.id) ?? 0 }))}

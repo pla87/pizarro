@@ -47,6 +47,15 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
 }
 
 /**
+ * Calendario sin eventos para un enlace con forma válida que no vale (desconocido, regenerado, desactivado, de un usuario
+ * inactivo o borrado). Con un 404, Google, Apple y Outlook conservan los eventos que ya habían descargado (con el nombre
+ * de los proyectos y las tareas); con un calendario vacío los borran. Siempre el mismo, con un nombre genérico y sin datos
+ * de nadie: no dice si el enlace existió. Sin DTSTAMP (no hay eventos), así que no cambia entre peticiones.
+ */
+export const EMPTY_FEED_ICS = buildIcs({ name: "Pizarro", events: [], prodId: "-//Pizarro//Suscripcion//ES", refreshMinutes: FEED_REFRESH_MINUTES });
+export const EMPTY_FEED_ETAG = `"${createHash("sha256").update(EMPTY_FEED_ICS).digest("base64url").slice(0, 27)}"`;
+
+/**
  * Cuánto se guarda el .ics ya hecho de cada enlace, cuántos enlaces como mucho y cuántos bytes en total (se olvidan los
  * usados hace más tiempo). Un calendario con los topes de tareas, entregables y repeticiones ronda los 2-3 MB: sin el
  * tope de bytes, 200 enlaces grandes retenían cientos de MB.
@@ -81,7 +90,7 @@ type FeedResult = Omit<Awaited<ReturnType<typeof buildFeedIcs>>, "ics"> & { ics:
 
 /**
  * El .ics de un enlace ya validado (resolveFeedToken, que se comprueba en cada petición: un enlace regenerado,
- * desactivado o de un usuario inactivo da 404 aunque su calendario siga aquí guardado), con su ETag. Se guarda
+ * desactivado o de un usuario inactivo da el calendario vacío aunque el suyo siga aquí guardado), con su ETag. Se guarda
  * FEED_CACHE_MS por enlace, alcance, idioma y rol, y las consultas simultáneas del mismo enlace comparten la misma
  * generación. Un cambio de permisos o de tareas se ve, como mucho, al cabo de FEED_CACHE_MS.
  */

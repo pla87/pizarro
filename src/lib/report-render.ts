@@ -50,13 +50,15 @@ interface Slot {
   jobs: Map<number, Pending>;
 }
 
-let current: Slot | null = null;
-let idleTimer: NodeJS.Timeout | null = null;
-let seq = 0;
+/**
+ * Estado del worker en globalThis: webpack empaqueta este módulo una vez por capa (páginas, acciones e instrumentación) y,
+ * con variables del módulo, cada copia arrancaba su propio worker de PDF (con su tope de memoria) y su propia cola.
+ */
+const W = ((globalThis as unknown as { __pzPdfWorker?: { current: Slot | null; idleTimer: NodeJS.Timeout | null; seq: number } }).__pzPdfWorker ??= { current: null, idleTimer: null, seq: 0 });
 
 /** Retira el worker (si sigue siendo el actual) y rechaza sus trabajos pendientes. */
 function drop(slot: Slot, err: unknown) {
-  if (current === slot) current = null;
+  if (W.current === slot) W.current = null;
   for (const p of slot.jobs.values()) p.reject(err);
   slot.jobs.clear();
 }
@@ -90,17 +92,17 @@ function startWorker(): Slot {
 /** Sin trabajos: el worker no retiene el proceso (tests, scripts) y se apaga si sigue así un rato. */
 function idle(slot: Slot) {
   slot.worker.unref();
-  if (idleTimer) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    idleTimer = null;
-    if (current === slot && !slot.jobs.size) stopPdfWorker();
+  if (W.idleTimer) clearTimeout(W.idleTimer);
+  W.idleTimer = setTimeout(() => {
+    W.idleTimer = null;
+    if (W.current === slot && !slot.jobs.size) stopPdfWorker();
   }, PDF_WORKER_IDLE_MS);
-  idleTimer.unref();
+  W.idleTimer.unref();
 }
 
 /** Apaga el worker (si hay); lo pendiente se rechaza. */
 export function stopPdfWorker(reason: unknown = new Error("Generador de PDF detenido")): void {
-  const slot = current;
+  const slot = W.current;
   if (!slot) return;
   drop(slot, reason);
   void slot.worker.terminate();
@@ -112,18 +114,18 @@ export function renderInWorker(job: PdfJob, signal?: AbortSignal): Promise<Uint8
   return new Promise<Uint8Array>((resolve, reject) => {
     let slot: Slot;
     try {
-      slot = current ??= startWorker();
+      slot = W.current ??= startWorker();
     } catch (err) {
       reject(err);
       return;
     }
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = null;
+    if (W.idleTimer) {
+      clearTimeout(W.idleTimer);
+      W.idleTimer = null;
     }
-    const id = ++seq;
+    const id = ++W.seq;
     const onAbort = () => {
-      if (current === slot) stopPdfWorker(signal!.reason);
+      if (W.current === slot) stopPdfWorker(signal!.reason);
       else reject(signal!.reason);
     };
     slot.jobs.set(id, {

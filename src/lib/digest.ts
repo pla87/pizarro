@@ -1,6 +1,6 @@
 // Resumen diario por email: agrupación de lo ocurrido y texto del correo. Funciones puras (sin BD).
 import type { T } from "../i18n/core";
-import { escapeHtml } from "./mail";
+import { escapeHtml, noReplyNote } from "./mail";
 import { mentionsToPlain } from "./mentions";
 
 export type DigestSectionKey = "assigned" | "overdue" | "dueToday" | "created" | "done" | "comments";
@@ -36,13 +36,18 @@ export function emptyDigestInput(): DigestInput {
   return { assigned: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
 }
 
-/** Agrupa por sección y proyecto, sin repetir tareas dentro de una sección, y descarta las secciones vacías. */
-export function buildDigest(input: DigestInput): { sections: DigestSection[]; empty: boolean } {
+/**
+ * Agrupa por sección y proyecto, sin repetir tareas dentro de una sección, y descarta las secciones vacías. `taskCount`:
+ * tareas distintas entre todas las secciones (una tarea asignada, vencida y comentada cuenta una vez).
+ */
+export function buildDigest(input: DigestInput): { sections: DigestSection[]; empty: boolean; taskCount: number } {
   const sections: DigestSection[] = [];
+  const all = new Set<string>();
   for (const key of DIGEST_ORDER) {
     const seen = new Set<string>();
     const unique = input[key].filter((i) => !seen.has(i.taskId) && !!seen.add(i.taskId));
     if (!unique.length) continue;
+    for (const i of unique) all.add(i.taskId);
     const shown = unique.slice(0, DIGEST_MAX_ITEMS);
     const byProject = new Map<string, DigestSection["projects"][number]>();
     for (const item of shown) {
@@ -57,7 +62,7 @@ export function buildDigest(input: DigestInput): { sections: DigestSection[]; em
       hidden: unique.length - shown.length,
     });
   }
-  return { sections, empty: sections.length === 0 };
+  return { sections, empty: sections.length === 0, taskCount: all.size };
 }
 
 function heading(key: DigestSectionKey, t: T): string {
@@ -76,13 +81,31 @@ function itemText(i: DigestItem, t: T): string {
   return i.count && i.count > 1 ? `${title} (${t("{n} comentarios", { n: i.count })})` : title;
 }
 
+/**
+ * Periodo que cubre el resumen (ver gatherDigest): desde el anterior, si fue hace como mucho 48 h; si fue antes, las
+ * últimas 48 h; sin resumen anterior, las últimas 24 h.
+ */
+type DigestPeriod = "sinceLast" | "48h" | "24h";
+
+export function digestPeriod(lastSentAt: Date | null, now: Date): DigestPeriod {
+  if (!lastSentAt) return "24h";
+  return now.getTime() - lastSentAt.getTime() <= 2 * 24 * 60 * 60 * 1000 ? "sinceLast" : "48h";
+}
+
 /** Correo del resumen: asunto, texto plano y HTML (el contenido de los usuarios va escapado). */
-export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name: string; baseUrl: string }, t: T) {
+export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name: string; baseUrl: string; period?: DigestPeriod }, t: T) {
   const { baseUrl } = opts;
   const link = (i: DigestItem) => `${baseUrl}/p/${i.projectId}?task=${i.taskId}`;
-  const total = digest.sections.reduce((n, s) => n + s.total, 0);
-  const subject = t("Tu resumen diario de Pizarro ({n})", { n: total });
-  const intro = t("Hola, {name}: esto ha pasado en tus proyectos en las últimas 24 horas.", { name: opts.name });
+  // Tareas distintas: antes se sumaban las secciones y una tarea asignada y vencida contaba dos veces.
+  const subject = t("Tu resumen diario de Pizarro ({n})", { n: digest.taskCount });
+  const period = opts.period ?? "24h";
+  const intro = period === "sinceLast"
+    ? t("Hola, {name}: esto ha pasado en tus proyectos desde el último resumen.", { name: opts.name })
+    : period === "48h"
+      ? t("Hola, {name}: esto ha pasado en tus proyectos en las últimas 48 horas.", { name: opts.name })
+      : t("Hola, {name}: esto ha pasado en tus proyectos en las últimas 24 horas.", { name: opts.name });
+  const optOut = t("Puedes desactivar este resumen en «Mi perfil» de Pizarro.");
+  const noReply = noReplyNote(t);
 
   const text = [
     intro,
@@ -94,7 +117,7 @@ export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name
       ].join("\n"),
     ),
     `${t("Abrir Pizarro")}: ${baseUrl}`,
-    t("Puedes desactivar este resumen en «Mi perfil» de Pizarro."),
+    `${optOut}\n${noReply}`,
   ].join("\n\n") + "\n";
 
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:600px">
@@ -111,6 +134,6 @@ ${s.projects
   )
   .join("\n")}
 <p style="margin-top:24px"><a href="${escapeHtml(baseUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir Pizarro"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(t("Puedes desactivar este resumen en «Mi perfil» de Pizarro."))}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}</p></div>`;
   return { subject, text, html };
 }

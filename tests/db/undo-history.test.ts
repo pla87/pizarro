@@ -1,9 +1,9 @@
 // Deshacer y rehacer también quitan y recrean las entradas del historial de la tarea.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, expectApplied } from "./helpers";
 import { moveTask } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -25,7 +25,7 @@ describe("historial y deshacer", () => {
 
     expectOk(await undoLast(f.project.id));
     assert.equal(await events(task.id), 0);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     assert.equal(await events(task.id), 1);
     const again = await db.undoEntry.findFirstOrThrow({ where: { projectId: f.project.id, kind: "UNDO" } });
     assert.equal(again.eventIds.length, 1);

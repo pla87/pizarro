@@ -9,8 +9,20 @@
 		header_up X-Real-IP {remote_host}
 	}
 
+	# Registro de accesos sin direcciones: la ruta de una petición puede llevar un token (calendario suscrito
+	# /api/calendar/<token>.ics, /reset/<token>, /confirm/<token>, /login/verify?token=…), y la cabecera Referer
+	# y la Location de una redirección, lo mismo (la app manda Referrer-Policy: same-origin, así que dentro del
+	# propio sitio el Referer va completo). Se siguen registrando el método, el host, el estado, los bytes y el tiempo
+	# de cada petición. Cookie y Authorization ya salen ocultas por defecto en Caddy.
 	log {
 		output stdout
-		format console
+		format filter {
+			wrap console
+			fields {
+				request>uri delete
+				request>headers>Referer delete
+				resp_headers>Location delete
+			}
+		}
 	}
 }

@@ -1,20 +1,32 @@
 // Reglas de «Borrar mi cuenta» sin base de datos (la acción completa: tests/db/account-delete.test.ts).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { confirmWordMatches, DELETE_ACCOUNT_WORD, deleteAlternatives, DELETION_BLOCK_MESSAGES, deletionBlockFor } from "../src/lib/user-delete-core";
+import { confirmWordMatches, DELETE_ACCOUNT_WORD, deleteAlternatives, DELETION_BLOCK_MESSAGES, deletionBlockFor, deletionBlockMessage } from "../src/lib/user-delete-core";
 import { makeT } from "../src/i18n/core";
 import { parseGoogleReauthResult, reauthFreshness, REAUTH_MAX_AGE_SECONDS } from "../src/lib/google-reauth";
 
 test("la única cuenta de la instalación no se puede borrar, sea admin o no", () => {
-  assert.equal(deletionBlockFor({ role: "ADMIN", active: true }, { users: 0, activeAdmins: 0 }), "only-user");
-  assert.equal(deletionBlockFor({ role: "MEMBER", active: true }, { users: 0, activeAdmins: 0 }), "only-user");
+  assert.deepEqual(deletionBlockFor({ role: "ADMIN", active: true }, { users: 0, activeAdmins: 0 }), { reason: "only-user" });
+  assert.deepEqual(deletionBlockFor({ role: "MEMBER", active: true }, { users: 0, activeAdmins: 0 }), { reason: "only-user" });
 });
 
 test("el último administrador activo no se puede borrar; un miembro o un admin desactivado, sí", () => {
-  assert.equal(deletionBlockFor({ role: "ADMIN", active: true }, { users: 3, activeAdmins: 0 }), "last-admin");
+  assert.deepEqual(deletionBlockFor({ role: "ADMIN", active: true }, { users: 3, activeAdmins: 0 }), { reason: "last-admin" });
   assert.equal(deletionBlockFor({ role: "ADMIN", active: true }, { users: 3, activeAdmins: 1 }), null);
   assert.equal(deletionBlockFor({ role: "ADMIN", active: false }, { users: 3, activeAdmins: 0 }), null);
   assert.equal(deletionBlockFor({ role: "MEMBER", active: true }, { users: 3, activeAdmins: 0 }), null);
+});
+
+test("los demás administradores aún no han entrado: con uno se le nombra; con varios, el aviso genérico", () => {
+  const admin = { role: "ADMIN" as const, active: true };
+  assert.deepEqual(deletionBlockFor(admin, { users: 3, activeAdmins: 0, pendingAdmins: ["Ana"] }), { reason: "pending-admin", name: "Ana" });
+  assert.deepEqual(deletionBlockFor(admin, { users: 3, activeAdmins: 0, pendingAdmins: ["Ana", "Bea"] }), { reason: "pending-admins" });
+  // Con uno que ya ha entrado, los pendientes no importan; un miembro nunca está bloqueado por ellos.
+  assert.equal(deletionBlockFor(admin, { users: 3, activeAdmins: 1, pendingAdmins: ["Ana"] }), null);
+  assert.equal(deletionBlockFor({ role: "MEMBER", active: true }, { users: 3, activeAdmins: 0, pendingAdmins: ["Ana"] }), null);
+  const { text, vars } = deletionBlockMessage({ reason: "pending-admin", name: "Ana" });
+  assert.equal(makeT("es")(text, vars), "Espera a que Ana entre por primera vez antes de borrar tu cuenta.");
+  assert.match(makeT("en")(text, vars), /Ana/);
 });
 
 test("los mensajes explican qué hacer y están traducidos", () => {

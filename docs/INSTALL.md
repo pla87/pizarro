@@ -4,7 +4,7 @@
 
 Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio y no cambia nada del despliegue en Railway.
 
-> Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un solapamiento breve durante una actualización no duplica nada, pero no lo escales a varias réplicas.
+> Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un reinicio o una herramienta de consola contra la misma base no duplican nada, pero no lo escales a varias réplicas (el canal en vivo, los límites de intentos y los vales de descarga viven en la memoria de cada proceso). No uses un *pooler* en modo transacción (PgBouncer en modo `transaction`): los bloqueos de las tareas de fondo necesitan una conexión de sesión.
 
 ## Instalación en un paso
 
@@ -22,16 +22,16 @@ Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
 En el servidor, como root (o con `sudo` disponible):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
 ```
 
-Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--version X.Y.Z` (instala esa versión; sin ella, la última publicada), `--ref <rama|tag>` (código de una rama o etiqueta; una rama se construye en el servidor), `--build` (construye la imagen en el servidor en vez de descargarla, ver «Construir la imagen en tu servidor»), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
+Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--version X.Y.Z` (instala esa versión, de la 1.38.0 en adelante; sin ella, la última publicada), `--ref <rama|tag>` (código de una rama o etiqueta; una rama se construye en el servidor), `--build` (construye la imagen en el servidor en vez de descargarla, ver «Construir la imagen en tu servidor»), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
 
 El script:
 
 1. Comprueba Linux (x86_64 o arm64) y que eres root o tienes `sudo`.
 2. Comprueba Docker y el plugin `docker compose`. Si faltan, **te pregunta** si los instala con el script oficial de `get.docker.com` (con `--yes` no pregunta). Si dices que no, se detiene.
-3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Muestra la versión que va a instalar. Si no puede saber cuál es la última (sin red, límite de GitHub o todavía no hay ninguna publicada), **no construye `main` a escondidas**: en una instalación nueva se detiene y sugiere `--build` o `--ref main`, y en una ya existente la deja intacta y sugiere `--version X.Y.Z` o reintentar más tarde.
+3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Muestra la versión que va a instalar. Si no puede saber cuál es la última (sin red, límite de GitHub o todavía no hay ninguna publicada), **no construye `main` a escondidas**: en una instalación nueva se detiene y sugiere `--build` (que usa la rama `stable`, la de la última versión publicada) o `--ref stable`, y en una ya existente la deja intacta y sugiere `--version X.Y.Z` o reintentar más tarde.
 4. Ejecuta `deploy/install.sh`: descarga la **imagen ya construida** (ver «La imagen ya construida»), crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
 
 Repetir el mismo comando **actualiza** Pizarro a la última versión (sección 5): prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
@@ -168,7 +168,7 @@ El script se puede repetir sin riesgo. Hace esto:
 2. Pregunta el dominio (o la dirección, en modo local) y crea `deploy/.env` con `DOMAIN` y `APP_URL`.
 3. Genera `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY` con aleatorios fuertes (`openssl rand`, o `/dev/urandom` si no hay `openssl`). **Nunca pisa un secreto que ya existe** en el `.env`.
 4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con las cuatro claves que hacen falta para recuperar las copias (`SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`) y los pasos para restaurar en un servidor nuevo (los de la sección 6.3). La contraseña de PostgreSQL no va en el kit: el servidor nuevo crea la suya.
-5. Descarga las imágenes (`docker compose pull`: la de Pizarro, y también las de Caddy y PostgreSQL, que así reciben sus actualizaciones sin cambiar de versión mayor), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen de Pizarro en el servidor en su lugar (y descarga solo las de Caddy y PostgreSQL).
+5. Descarga las imágenes (`docker compose pull`: la de Pizarro, y también las de Caddy y PostgreSQL, fijadas por digest en `compose.yml`; sus actualizaciones, sin cambiar de versión mayor, llegan con el `compose.yml` de cada versión de Pizarro), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen de Pizarro en el servidor en su lugar (y descarga solo las de Caddy y PostgreSQL).
 6. Muestra la dirección del asistente de configuración y el **código de un solo uso** que lee del log de la app.
 
 > **Guarda `recovery-kit.txt` FUERA del servidor** (gestor de contraseñas, otro equipo) y bórralo de aquí si quieres. Sin `BACKUP_KEY` las copias no se pueden leer; si se pierde o cambia `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
@@ -266,7 +266,7 @@ Dos cosas distintas, configurables desde Pizarro (como administrador) sin editar
 - *Gmail de un administrador (uso familiar):* activa la verificación en dos pasos en esa cuenta de Google, crea una contraseña de aplicación en `myaccount.google.com/apppasswords` y pégala en Pizarro junto con la dirección de Gmail (usa `smtp.gmail.com`, puerto 465, SSL/TLS).
 - *Servicio de correo de la empresa:* elige el proveedor y Pizarro rellena servidor, puerto y conexión; tú pones usuario y contraseña (cada preajuste explica cuáles). Disponibles: Google Workspace (buzón con contraseña de aplicación en `smtp.gmail.com:465`, o relay en `smtp-relay.gmail.com:587`), Brevo, Mailchimp Transactional (Mandrill), SendGrid (usuario `apikey`), Amazon SES (cambia la región), Mailgun y Outlook/Microsoft 365 (`smtp.office365.com:587`).
 
-El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente por variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`. Si cambias el servidor, el puerto o el usuario, hay que escribir la contraseña de nuevo.
+El botón *Enviar email de prueba* manda un mensaje a tu dirección. Equivalente por variables: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM`. Con las variables, el puerto `465` usa TLS directo y cualquier otro (`587`) exige STARTTLS: si el servidor no lo ofrece, el email no sale (la contraseña y los enlaces de acceso no viajan en claro). Un servidor en la propia máquina (`localhost`, `127.0.0.1`, `::1`) puede ir sin cifrar; para otro sin TLS (un relay de la misma red privada), define `SMTP_ALLOW_PLAINTEXT=1` sabiendo que todo irá en claro. Si cambias el servidor, el puerto o el usuario, hay que escribir la contraseña de nuevo.
 
 **2. Acceso con Google** (entrar con «Iniciar sesión con Google» las personas que ya existen en Pizarro con el mismo email; también conecta Docs, Sheets y Slides). No envía emails. Necesita `APP_URL` en `.env` (la dirección pública, con `https://`). Antes de empezar decide con qué dirección van a entrar tus usuarios (la del servidor o un dominio propio): ver 3.7, «Paso 0». Integraciones muestra arriba la «Dirección pública de Pizarro» (`APP_URL`) y avisa si estás entrando por otra distinta. En *Administración → Integraciones → Acceso con Google* hay una guía desplegable, un paso por pantalla de Google Cloud, con las direcciones y el dominio listos para copiar. Resumen (Google Cloud usa ahora la interfaz «Google Auth Platform»: Overview, Branding, Audience, Clients, Data Access, Verification Center y Settings):
 
@@ -390,12 +390,12 @@ Antes de actualizar, haz una copia (sección 4). Las migraciones de la base de d
 **Servidor propio, la forma más sencilla:** repite el comando de instalación. Averigua la última versión publicada, descarga su código y su imagen, y conserva tu configuración y tus datos:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh
 ```
 
 (No hace falta repetir `--domain`: se conserva el de `deploy/.env`.)
 
-**Solo las imágenes** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`). `docker compose pull` descarga la de Pizarro y también las de Caddy y PostgreSQL:
+**Solo las imágenes** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`). `docker compose pull` descarga la de Pizarro y también las de Caddy y PostgreSQL (estas dos, exactamente las que fija por digest tu `deploy/compose.yml`: para recibir las nuevas, repite el comando de instalación):
 
 ```bash
 cd /opt/pizarro/deploy
@@ -409,14 +409,14 @@ Esto solo funciona si no fijaste una versión (ver abajo): una instalación fija
 **Fijar una versión o volver a una anterior:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --version 1.37.0
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --version 1.49.0
 ```
 
-Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/pizarro:1.37.0` (`PIZARRO_IMAGE` en `deploy/.env`). Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
+Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/pizarro:1.49.0` (`PIZARRO_IMAGE` en `deploy/.env`). Admite de la 1.38.0 en adelante (la primera con imagen publicada); una anterior se rechaza con un aviso. Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
 
 **Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada). Despliega desde la rama **`stable`**: el workflow *Release* la mueve al commit de cada versión publicada, así que Railway se actualiza solo al publicarse una versión, nunca con commits sueltos de `main`. Para quedarte en una versión, desactiva el despliegue automático del servicio (o apúntalo a la etiqueta `vX.Y.Z` si tu Railway lo permite). Cambiar una instalación que hoy sigue `main`: README, «Guía de despliegue en Railway», paso 2.
 
-**Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. Solo reciben `main` quienes lo piden expresamente (`--ref main`, `--build` sin versiones publicadas o Railway apuntado a `main`).
+**Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. El propio `get.sh` se descarga de la rama `stable`. Solo reciben `main` quienes lo piden expresamente (`--ref main` o Railway apuntado a `main`); `--build` sin poder consultar la última versión usa `stable`.
 
 **Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Es una petición a `api.github.com` cada 12 horas desde tu servidor: solo pide un dato público (la última versión) y no se envía nada de tu instalación, pero GitHub ve la dirección IP del servidor. Si no quieres esa conexión saliente, desactívalo (abajo). Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
 
@@ -498,7 +498,7 @@ Notas:
 
 ## 7. Estado y diagnóstico
 
-- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta, la carpeta de subidas se puede escribir y quedan al menos `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres en su disco. Si no, 503 con un motivo: `database`, `uploads_not_writable` o `low_disk_space`. Docker la usa para marcar el contenedor como *unhealthy*.
+- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta y la carpeta de subidas se puede escribir. Si no, 503 con un motivo: `database` o `uploads_not_writable` (y `shutting_down` mientras se apaga). Docker la usa para marcar el contenedor como *unhealthy* y Railway, para dar por bueno un despliegue. Si a su disco le quedan menos de `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres, sigue en 200 con el aviso `"warnings":["low_disk_space"]` (así se puede desplegar una versión nueva) y *Administración* lo avisa.
 - **Tareas de fondo:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra cuándo se ejecutó cada tarea y si falló.
 - **Logs:** *Administración → Logs* (errores de la app, incluidos los no capturados) y `docker compose logs app`.
 - **Diagnóstico para soporte:** si pides ayuda, adjunta el diagnóstico: *Administración → Ajustes → Descargar diagnóstico*, o por consola
@@ -507,7 +507,7 @@ Notas:
   docker compose exec app node dist/doctor.mjs > diagnostico.json
   ```
 
-  Es un JSON legible con la versión, la memoria, qué variables están definidas (nunca su valor), el tamaño de la base de datos y las filas por tabla, las migraciones aplicadas y pendientes, el disco, las tareas de fondo, las copias, la comprobación de salud y los errores de las últimas 24 h agrupados por tipo. No contiene datos personales, mensajes de los logs ni claves.
+  Es un JSON legible con la versión, la memoria, qué variables están definidas (nunca su valor), el tamaño de la base de datos y las filas por tabla, las migraciones aplicadas y pendientes, el disco, las tareas de fondo, las copias, la comprobación de salud, los errores de las últimas 24 h agrupados por tipo y los avisos de configuración (`warnings`; p. ej. `smtp_starttls_required`, que la orden de consola repite en la terminal). No contiene datos personales, mensajes de los logs ni claves.
 - **Informar de un error:** en una versión publicada sin modificar, *Historial de versiones → Informar de un error* abre el formulario de incidencias de GitHub con la versión, el commit, el tipo de instalación, el navegador y el idioma ya rellenos (nada de usuarios, proyectos, emails ni la dirección de la instalación). Hace falta una cuenta de GitHub y la incidencia es pública. Los administradores pueden añadir *Administración → Ajustes → Copiar información técnica* (versión, commit, Node, PostgreSQL, migraciones, funciones activas y los **nombres** de las variables definidas, nunca sus valores). Los fallos de seguridad van en privado: `SECURITY.md`.
 - **Rotar claves:** tras cambiar `ENCRYPTION_KEY` (con la anterior en `ENCRYPTION_KEY_PREVIOUS`), `docker compose exec app node dist/rotate-keys.mjs` vuelve a cifrar todo con la nueva; después quita la anterior. Detalles en `docs/MANUAL.md`, 4.4.
 - **Recuperar el acceso sin email:** si alguien olvida su contraseña, un administrador abre *Administración → Usuarios → Forzar cambio de contraseña*; sin email configurado la app muestra un enlace de un solo uso (30 minutos) para pasárselo por un canal de confianza. Si **ningún administrador puede entrar** (olvidó la contraseña o perdió el móvil de la verificación en dos pasos), genera el enlace desde la consola del servidor:
@@ -531,7 +531,7 @@ Notas:
 | `/setup` da 404 | Ya hay usuarios (la instalación está configurada) o se definió `SEED_ADMIN_*` | Entra en `/login`. Para empezar de cero hay que vaciar la base de datos. |
 | `[start] ERROR: faltan variables de entorno: SESSION_SECRET(>=32)` | Secreto vacío o corto | `./install.sh` (genera los que falten) o `openssl rand -base64 48` y `docker compose up -d`. |
 | El navegador avisa de certificado no válido | El DNS aún no apunta al servidor o los puertos 80/443 están cerrados | Comprueba el registro DNS y el cortafuegos; mira `docker compose logs caddy`. |
-| La app queda *unhealthy* y `/api/health` dice `low_disk_space` | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
+| *Administración* avisa de que el disco está casi lleno (y `/api/health` lleva `low_disk_space` en `warnings`) | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
 | `/api/health` dice `uploads_not_writable` | El volumen de subidas no se puede escribir | `docker compose restart app` (el arranque corrige el propietario); revisa el disco. |
 | `/api/health` dice `database` | PostgreSQL parado o contraseña distinta | `docker compose ps`; si cambiaste `POSTGRES_PASSWORD` después de la primera instalación, vuelve a la original (la base ya se creó con ella). |
 | El log dice `[start] PostgreSQL aún no responde` | Al arrancar, la app espera a la base de datos (reintenta cada 3 s durante 3 min y arranca en cuanto responde) | Si se resuelve solo, nada. Si a los 3 min sale `[start] ERROR: No se puede conectar con PostgreSQL`, el contenedor se reinicia y lo vuelve a intentar: comprueba `docker compose ps`, `docker compose logs --tail 50 postgres`, el disco (`df -h`) y la memoria (`free -m`); en Railway, que el servicio de PostgreSQL está activo y que `DATABASE_URL` es `${{Postgres.DATABASE_URL}}`. |
@@ -541,6 +541,7 @@ Notas:
 | Las fechas salen con otra hora | La zona elegida en el asistente o `APP_TIMEZONE` no es la tuya | Define `APP_TIMEZONE` en `.env` y `docker compose up -d` (manda sobre la del asistente). |
 | El login no mantiene la sesión | `APP_URL` con `https://` pero se entra por `http://` | Entra por la URL de `APP_URL`. |
 | En red local por HTTP, con muchas ventanas de Pizarro abiertas, las páginas tardan en cargar o no guardan | Límite de 6 conexiones por servidor de HTTP/1.1 (ver 3.3) | Cierra o minimiza ventanas que no uses, o sirve Pizarro por HTTPS (HTTP/2). |
+| Tras actualizar dejan de salir los emails y el diagnóstico avisa `smtp_starttls_required` | `SMTP_HOST` apunta a otro servidor con un puerto distinto de `465` y ese servidor no ofrece STARTTLS: ahora se exige (antes se enviaba en claro) | Usa el puerto `465` (TLS directo) o el `587` de un servidor con STARTTLS. Solo para un relay de la misma red privada sin TLS, `SMTP_ALLOW_PLAINTEXT=1` (todo irá en claro). |
 | No llegan emails | Email sin configurar o credenciales erróneas | Revisa *Administración → Integraciones → Avisos por email* (o `SMTP_*`) y *Administración → Logs* (`[notify]`). |
 
 ### 8.1 Una migración falló a medias (P3009)

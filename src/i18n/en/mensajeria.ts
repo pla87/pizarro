@@ -93,7 +93,7 @@ export const mensajeria: Record<string, string> = {
   "Cambiar número": "Change number",
   "Conectado: {phone}.": "Connected: {phone}.",
   "Con la plantilla de WhatsApp que usa esta instalación solo se envían las menciones.": "With the WhatsApp template this installation uses, only mentions are sent.",
-  "WhatsApp le cuesta dinero a tu organización por cada mensaje: actívalo solo si lo vas a usar.": "WhatsApp costs your organisation money for each message: turn it on only if you'll use it.",
+  "WhatsApp le cuesta dinero a tu organización por cada mensaje: actívalo solo si lo vas a usar.": "WhatsApp costs your organization money for each message: turn it on only if you'll use it.",
   "Mensaje de prueba enviado.": "Test message sent.",
   "Telegram desconectado.": "Telegram disconnected.",
   "WhatsApp desconectado.": "WhatsApp disconnected.",

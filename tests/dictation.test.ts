@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { capitalizeFirst, dictationChunk, dictationLang, insertDictation, startsSentence } from "../src/lib/dictation";
+import { screenWakeLock } from "../src/lib/wake-lock";
 
 test("empieza frase: principio, línea nueva, lista y tras un punto", () => {
   assert.equal(startsSentence(""), true);
@@ -66,4 +67,103 @@ test("modo líneas: cada trozo en su línea", () => {
   assert.equal(insertDictation("", 0, 0, "comprar pan", true)?.value, "Comprar pan");
   assert.equal(insertDictation("Comprar pan", 11, 11, "llamar a Ana", true)?.value, "Comprar pan\nLlamar a Ana");
   assert.equal(insertDictation("Uno\nTres", 3, 3, "dos", true)?.value, "Uno\nDos\nTres");
+});
+
+/** `navigator.wakeLock` de mentira: cada petición queda pendiente hasta `grant()` (o `deny()`). */
+function fakeWakeLock() {
+  const sentinels: { released: boolean; release(): Promise<void> }[] = [];
+  const waiting: { resolve: (s: (typeof sentinels)[number]) => void; reject: (e: Error) => void }[] = [];
+  const api = {
+    request(type: "screen") {
+      assert.equal(type, "screen");
+      return new Promise<(typeof sentinels)[number]>((resolve, reject) => waiting.push({ resolve, reject }));
+    },
+  };
+  const tick = () => new Promise((r) => setImmediate(r));
+  return {
+    api,
+    sentinels,
+    get requests() {
+      return waiting.length;
+    },
+    async grant() {
+      const s = { released: false, async release() { s.released = true; } };
+      sentinels.push(s);
+      waiting.shift()!.resolve(s);
+      await tick();
+      return s;
+    },
+    async deny() {
+      waiting.shift()!.reject(new Error("NotAllowedError"));
+      await tick();
+    },
+    /** El navegador lo suelta solo (pestaña oculta). */
+    hide() {
+      for (const s of sentinels) s.released = true;
+    },
+  };
+}
+
+test("pantalla encendida al dictar: se pide al empezar y se suelta al parar", async () => {
+  const fake = fakeWakeLock();
+  const lock = screenWakeLock(() => fake.api);
+  lock.hold();
+  assert.equal(fake.requests, 1);
+  lock.hold(); // ya pidiéndose: no pide otro
+  assert.equal(fake.requests, 1);
+  const s = await fake.grant();
+  assert.equal(s.released, false);
+  lock.resume(); // activo: no pide otro
+  assert.equal(fake.requests, 0);
+  lock.release();
+  assert.equal(s.released, true);
+});
+
+test("pantalla encendida: soltado antes de que llegue, se suelta en cuanto llega", async () => {
+  const fake = fakeWakeLock();
+  const lock = screenWakeLock(() => fake.api);
+  lock.hold();
+  lock.release();
+  const s = await fake.grant();
+  assert.equal(s.released, true);
+  lock.resume(); // ya no se quiere: nada
+  assert.equal(fake.requests, 0);
+});
+
+test("pantalla encendida: al volver a la pestaña se pide de nuevo, solo si sigue dictando", async () => {
+  const fake = fakeWakeLock();
+  const lock = screenWakeLock(() => fake.api);
+  lock.hold();
+  await fake.grant();
+  fake.hide();
+  lock.resume();
+  assert.equal(fake.requests, 1);
+  const again = await fake.grant();
+  assert.equal(again.released, false);
+  lock.release();
+  assert.equal(again.released, true);
+  fake.hide();
+  lock.resume();
+  assert.equal(fake.requests, 0);
+});
+
+test("pantalla encendida: sin Wake Lock o si el navegador lo niega, sigue sin errores", async () => {
+  for (const api of [() => undefined, () => null, () => ({}) as never, () => { throw new Error("x"); }]) {
+    const lock = screenWakeLock(api);
+    lock.hold();
+    lock.resume();
+    lock.release();
+  }
+  const throwing = screenWakeLock(() => ({ request: () => { throw new Error("SecurityError"); } }));
+  throwing.hold();
+  throwing.release();
+  const fake = fakeWakeLock();
+  const lock = screenWakeLock(() => fake.api);
+  lock.hold();
+  await fake.deny();
+  lock.resume(); // se puede volver a intentar al volver a la pestaña
+  assert.equal(fake.requests, 1);
+  await fake.grant();
+  lock.release();
+  assert.equal(fake.sentinels[0]!.released, true);
 });

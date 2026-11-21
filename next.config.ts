@@ -34,7 +34,19 @@ const tracingExcludes = [
   "./deploy/.env*",
   "./deploy/recovery-kit*",
   ...(uploadRel && !uploadRel.startsWith("..") && !path.isAbsolute(uploadRel) && uploadRel !== "uploads" ? [`./${uploadRel}/**`] : []),
+  // sharp para Alpine (musl): npm instala los binarios de glibc y de musl de la misma arquitectura y el trazado los copia
+  // todos, pero la imagen es Debian (glibc), igual que Railway: unos 19 MB que nunca se cargan. Se quedan los de glibc
+  // (@img/sharp-linux-*, @img/sharp-libvips-linux-*), de x64 y de arm64. Solo si se compila sobre glibc: compilando en
+  // Alpine (`npm start` en un servidor con musl) se dejan, porque son los que cargaría.
+  ...(glibcBuild() ? ["./node_modules/@img/sharp-linuxmusl-*/**", "./node_modules/@img/sharp-libvips-linuxmusl-*/**"] : []),
 ];
+
+/** ¿Se compila en Linux con glibc? (el informe de Node solo trae glibcVersionRuntime con glibc). */
+function glibcBuild(): boolean {
+  if (process.platform !== "linux") return false;
+  const header = (process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined)?.header;
+  return Boolean(header?.glibcVersionRuntime);
+}
 
 const nextConfig: NextConfig = {
   // Servidor autocontenido (.next/standalone): imagen Docker mucho más pequeña.

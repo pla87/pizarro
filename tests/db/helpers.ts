@@ -160,6 +160,13 @@ export function expectOk<T>(res: Result<T>): T {
   return res.data;
 }
 
+/** Deshacer o rehacer como el botón (undoChecked/redoChecked): debe aplicarse sin pedir confirmación; devuelve lo aplicado. */
+export function expectApplied<T>(res: Result<{ applied?: T; conflict?: { message: string } }>): T {
+  const data = expectOk(res);
+  assert.ok(data.applied, `pidió confirmación en vez de aplicarse: ${data.conflict?.message}`);
+  return data.applied;
+}
+
 /** La acción debe rechazarse; si se indica `message`, el error debe contenerlo. */
 export function expectFail(res: Result<unknown>, message?: RegExp | string): string {
   assert.equal(res.ok, false, "la acción debería haberse rechazado");

@@ -1,17 +1,16 @@
 // Caza de bugs 51a (plan de trabajo para IA, botones de columna, programa y plantillas): el Markdown del plan con
 // descripciones raras (un bloque de código sin cerrar ya no se traga las tareas siguientes ni el pie; ``` dentro de un
-// bloque de ```` no se toca; títulos setext rebajados; saltos de línea forzados conservados), una tarea fija arrastrada
-// del panel «Siempre en el plan» de una columna al de otra pasa allí (antes no hacía nada aunque el lector de pantalla
-// anunciaba el cambio) y se deshace, el título de «Generar plan de trabajo» y «Generar release» a 390 px con el icono
-// visible y el paso recortado con «…», y con más de 500 tareas «Generar» se desactiva con su motivo (antes salía el
-// error de zod en inglés). Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e2e.mjs      # PART=markdown,fijas,titulo,limite
+// bloque de ```` no se toca; títulos setext rebajados; saltos de línea forzados conservados), el título de «Generar plan
+// de trabajo» y «Generar release» a 390 px con el icono visible y el paso recortado con «…», y con más de 500 tareas
+// «Generar» se desactiva con su motivo (antes salía el error de zod en inglés). El arrastre de una fija entre los paneles
+// de dos planes está en tablero-fijas-e2e.mjs (PART=planes). Misma base y servidor que board-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e2e.mjs      # PART=markdown,titulo,limite
 import { marked } from "marked";
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "markdown,fijas,titulo,limite").split(",");
+const only = (process.env.PART || "markdown,titulo,limite").split(",");
 
 await L.prepareUsers();
 const PID = "bh51a_project";
@@ -54,7 +53,6 @@ async function toStep2(dlg) {
   await sleep(300);
 }
 const planText = (dlg) => dlg.getByRole("textbox", { name: "Texto del plan de trabajo" }).inputValue();
-const where = async (id) => (await L.q(`SELECT "columnId", evergreen FROM "Task" WHERE id=$1`, [id]))[0];
 
 // --- Markdown con descripciones raras -------------------------------------------------------------------------------------
 if (only.includes("markdown")) {
@@ -84,57 +82,6 @@ if (only.includes("markdown")) {
   L.check("MD: ni títulos de nivel 1 o 2 sueltos entre las tareas", !headings.some((h) => /^[12] /.test(h) && !/^(1 Plan de trabajo|2 (Instrucciones para la IA|Contexto del proyecto|Tareas|Entrega))/.test(h)), headings.join(" | "));
   await page.keyboard.press("Escape");
   L.assertNoErrors("MD", [s]);
-  await s.ctx.close();
-}
-
-// --- Fija de un plan al panel de otro -------------------------------------------------------------------------------------
-if (only.includes("fijas")) {
-  L.scenario("fijas: arrastrar una fija del panel de «Plan A» al de «Plan B» la lleva allí como fija; deshacer la devuelve");
-  await seed([
-    ["bh51a_a1", "bh51a_a", "A normal", ""], ["bh51a_af", "bh51a_a", "A fija bh51a", "", true],
-    ["bh51a_b1", "bh51a_b", "B normal", ""], ["bh51a_bf", "bh51a_b", "B fija bh51a", "", true],
-    ["bh51a_rf", "bh51a_salto", "Release fija bh51a", "", true],
-  ]);
-  const s = await L.session();
-  const { page } = s;
-  await openBoard(page);
-  const panel = (col) => L.colLoc(page, col).locator("button[aria-controls^=evergreen]");
-  for (const col of ["Plan A", "Plan B", "Salto"]) if ((await panel(col).getAttribute("aria-expanded")) !== "true") await panel(col).click();
-  await sleep(400);
-  const fixedCard = (col, title) => L.colLoc(page, col).locator("[id^=evergreen-] [role=button]").filter({ hasText: title }).first();
-  /** Arrastra una fija sobre la lista del panel de otra columna. */
-  async function dragToPanel(title, from, to) {
-    const sb = await fixedCard(from, title).boundingBox();
-    const tb = await L.colLoc(page, to).locator("[id^=evergreen-]").boundingBox();
-    await page.mouse.move(sb.x + 20, sb.y + sb.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(sb.x + 30, sb.y + sb.height / 2 + 8, { steps: 4 });
-    await page.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2, { steps: 25 });
-    await sleep(150);
-    await page.mouse.move(tb.x + tb.width / 2 + 1, tb.y + tb.height / 2 + 1, { steps: 2 });
-    await sleep(150);
-    await page.mouse.up();
-  }
-  await dragToPanel("A fija bh51a", "Plan A", "Plan B");
-  await L.eqEventually("FIJAS: en la base pasa a «Plan B» y sigue fija", async () => JSON.stringify(await where("bh51a_af")), JSON.stringify({ columnId: "bh51a_b", evergreen: true }));
-  await L.eqEventually("FIJAS: el panel de «Plan B» la muestra", async () => fixedCard("Plan B", "A fija bh51a").count(), 1);
-  L.eq("FIJAS: y el de «Plan A» ya no", await fixedCard("Plan A", "A fija bh51a").count(), 0);
-  L.eq("FIJAS: el contador de «Plan B» dice 2", (await panel("Plan B").innerText()).replace(/\s+/g, " ").trim(), "Siempre en el plan 2");
-  await page.screenshot({ path: `${SHOTS}/bh51a-fijas.png` });
-  await sleep(300);
-  await page.keyboard.press("Control+z");
-  await L.eqEventually("FIJAS: deshacer la devuelve a «Plan A» como fija", async () => JSON.stringify(await where("bh51a_af")), JSON.stringify({ columnId: "bh51a_a", evergreen: true }));
-  await L.eqEventually("FIJAS: y el tablero también", async () => fixedCard("Plan A", "A fija bh51a").count(), 1);
-  // De la release a un plan, igual.
-  await sleep(4500);
-  await dragToPanel("Release fija bh51a", "Salto", "Plan A");
-  await L.eqEventually("FIJAS: una fija de la release soltada en el panel de un plan pasa a ser fija del plan", async () => JSON.stringify(await where("bh51a_rf")), JSON.stringify({ columnId: "bh51a_a", evergreen: true }));
-  // Sobre su propio panel no hace nada.
-  await sleep(300);
-  await dragToPanel("B fija bh51a", "Plan B", "Plan B");
-  await sleep(800);
-  L.eq("FIJAS: soltarla en su propio panel no la cambia", JSON.stringify(await where("bh51a_bf")), JSON.stringify({ columnId: "bh51a_b", evergreen: true }));
-  L.assertNoErrors("FIJAS", [s]);
   await s.ctx.close();
 }
 

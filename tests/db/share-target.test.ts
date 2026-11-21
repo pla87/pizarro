@@ -9,7 +9,7 @@ import { db, loginAs, logout, makeProject, makeUser } from "./helpers";
 import { POST as shareRoute } from "../../src/app/api/share/route";
 import { GET as shareFileRoute } from "../../src/app/api/share/[shareId]/[index]/route";
 import { DELETE as shareDropRoute } from "../../src/app/api/share/[shareId]/route";
-import { SHARE_MAX_FILES, SHARE_MAX_PENDING, SHARE_TTL_MS } from "../../src/lib/share-core";
+import { SHARE_MAX_FILES, SHARE_MAX_PENDING, SHARE_TTL_MS, shareLimits } from "../../src/lib/share-core";
 import { purgeShares, readShare, sharedDir, stageShare } from "../../src/lib/share-inbox";
 import { MAINTENANCE_JOBS } from "../../src/lib/maintenance";
 
@@ -113,6 +113,42 @@ describe("compartir con Pizarro", () => {
     assert.equal((await readShare(ana.id, shareIdOf(many)!))?.files.length, SHARE_MAX_FILES);
     for (let i = 0; i < SHARE_MAX_PENDING + 2; i++) await shareRoute(await shareRequest({ text: `envío ${i}` }));
     assert.equal((await readdir(path.join(sharedDir(), ana.id))).length, SHARE_MAX_PENDING, "un envío nuevo retira los más antiguos");
+  });
+
+  test("topes: cada archivo, el de un adjunto; el envío entero, diez veces eso (100 MB como mucho)", async () => {
+    const MB = 1024 * 1024;
+    assert.deepEqual(shareLimits(20 * MB), { fileMaxBytes: 20 * MB, totalMaxBytes: 100 * MB });
+    assert.deepEqual(shareLimits(5 * MB), { fileMaxBytes: 5 * MB, totalMaxBytes: 50 * MB });
+    assert.deepEqual(shareLimits(100 * MB), { fileMaxBytes: 100 * MB, totalMaxBytes: 100 * MB });
+    const ana = await makeUser();
+    const f = await makeProject({ members: [ana] });
+    await db.project.update({ where: { id: f.project.id }, data: { fileMaxMb: 1 } });
+    await loginAs(ana);
+    // Cinco fotos que caben una a una pero no juntas en el tope de un archivo: antes, too_big.
+    const photos = Array.from({ length: 5 }, (_, i) => new File([new Uint8Array(800 * 1024)], `foto${i}.jpg`, { type: "image/jpeg" }));
+    const ok = await shareRoute(await shareRequest({ files: photos }));
+    assert.match(location(ok), /^\/share\?id=/);
+    assert.equal((await readShare(ana.id, shareIdOf(ok)!))?.files.length, 5);
+    // Un archivo que pasa del tope de un adjunto no entra aunque el envío quepa.
+    const one = await shareRoute(await shareRequest({ files: [new File([new Uint8Array(1.5 * MB)], "grande.bin")] }));
+    assert.equal(location(one), "/share?error=too_big");
+    // Más que el tope del envío entero (10 × 1 MB): se corta antes de leerlo.
+    const all = await shareRoute(await shareRequest({ files: Array.from({ length: 11 }, (_, i) => new File([new Uint8Array(1000 * 1024)], `f${i}.bin`)) }));
+    assert.equal(location(all), "/share?error=too_big");
+  });
+
+  test("con el disco casi lleno no se recibe nada", async () => {
+    const ana = await makeUser();
+    await makeProject({ members: [ana] });
+    await loginAs(ana);
+    process.env.DISK_MIN_FREE_MB = String(1024 * 1024 * 1024);
+    try {
+      const res = await shareRoute(await shareRequest({ text: "nota", files: [new File(["hola"], "a.txt")] }));
+      assert.equal(location(res), "/share?error=failed");
+      assert.deepEqual(await readdir(path.join(sharedDir(), ana.id)).catch(() => []), []);
+    } finally {
+      delete process.env.DISK_MIN_FREE_MB;
+    }
   });
 
   test("caduca: no se puede leer pasado el plazo y la tarea de mantenimiento lo borra", async () => {

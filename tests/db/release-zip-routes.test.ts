@@ -1,6 +1,7 @@
 // Rutas del ZIP de adjuntos (release-attachments con vale y /api/releases/[id]/attachments) contra PostgreSQL real: el
 // vale solo da por terminado un paquete enviado entero (cortado o cancelado queda como fallido, para que la página lo
-// avise), HEAD no reserva el hueco del ZIP ni lee nada y un POST sin `?plan=1` ya no envía el ZIP en la respuesta.
+// avise), HEAD no reserva el hueco del ZIP ni lee nada, un POST sin `?plan=1` ya no envía el ZIP en la respuesta y un
+// paquete del histórico sin `?part=` o sin `?v=` (enlaces de antes de la v1.60) responde 400.
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,9 +9,9 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { db, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { GET as ticketGet, HEAD as ticketHead, POST as planPost } from "../../src/app/api/projects/[projectId]/release-attachments/route";
-import { HEAD as releaseHead } from "../../src/app/api/releases/[releaseId]/attachments/route";
+import { GET as releaseGet, HEAD as releaseHead } from "../../src/app/api/releases/[releaseId]/attachments/route";
 import { acquireZipSlot } from "../../src/lib/release-zip";
-import { attachmentPath } from "../../src/lib/uploads";
+import { attachmentPath, saveReleaseAttachmentFile } from "../../src/lib/uploads";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-zip-routes-"));
 
@@ -91,5 +92,35 @@ describe("POST sin ?plan=1 (envío directo de antes de la v1.60)", () => {
       assert.match(await res.text(), /\?plan=1/, query);
       assert.ok(slotFree(user.id), query);
     }
+  });
+});
+
+describe("ZIP del histórico de releases: siempre con ?part= y ?v=, como lo pide la página", () => {
+  test("sin ?part= o sin ?v=, 400 con un texto claro y sin reservar el hueco; con los dos, el paquete", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    const release = await db.release.create({ data: { projectId: f.project.id, number: 1, title: "R", content: "x" } });
+    const att = await db.releaseAttachment.create({ data: { releaseId: release.id, fileName: "R1A1_datos.webp", size: 2048, position: 0 } });
+    await saveReleaseAttachmentFile(att.id, Buffer.alloc(2048, 3));
+    await loginAs(user);
+    const base = `http://localhost/api/releases/${release.id}/attachments`;
+    const ctx = { params: Promise.resolve({ releaseId: release.id }) };
+    const plan = await releaseGet(new Request(`${base}?plan=1`), ctx);
+    assert.equal(plan.status, 200);
+    const { v } = (await plan.json()) as { v: string };
+    for (const query of ["", "?part=1", `?v=${v}`]) {
+      const res = await releaseGet(new Request(`${base}${query}`), ctx);
+      assert.equal(res.status, 400, query);
+      assert.doesNotMatch(res.headers.get("content-type") ?? "", /zip/, query);
+      assert.match(await res.text(), /\?part=N&v=/, query);
+      assert.ok(slotFree(user.id), query);
+    }
+    assert.equal((await releaseGet(new Request(`${base}?part=1&v=0123456789abcdef`), ctx)).status, 409, "otro token: los adjuntos cambiaron");
+    const res = await releaseGet(new Request(`${base}?part=1&v=${v}`), ctx);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("content-type"), "application/zip");
+    const zip = new Uint8Array(await res.arrayBuffer());
+    assert.deepEqual([zip[0], zip[1]], [0x50, 0x4b]);
+    assert.ok(slotFree(user.id));
   });
 });

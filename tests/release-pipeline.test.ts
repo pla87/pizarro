@@ -30,7 +30,7 @@ test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64 en máquinas n
   assert.match(wf, /push-by-digest=true/);
   assert.match(wf, /docker buildx imagetools create/);
   assert.doesNotMatch(wf, /setup-qemu-action/);
-  assert.match(wf, /needs: \[version, build\]/);
+  assert.match(wf, /needs: \[version, build, pdf\]/);
   assert.match(wf, /ghcr\.io\/pla87\/pizarro:\$\{VERSION\}/);
   assert.match(wf, /pizarro:latest/);
   assert.match(wf, /cache-from: type=gha/);
@@ -51,6 +51,87 @@ test("workflows: cada acción fijada a un commit exacto con su versión en el co
   assert.match(dep, /package-ecosystem: github-actions/);
   assert.match(dep, /package-ecosystem: npm/);
   assert.match(dep, /version-update:semver-major/);
+});
+
+/** Un job de release.yml: desde «  <nombre>:» hasta el siguiente job. */
+function releaseJob(name: string): string {
+  const wf = readFileSync(".github/workflows/release.yml", "utf8");
+  const from = wf.indexOf(`\n  ${name}:\n`);
+  assert.ok(from > 0, name);
+  const next = wf.slice(from + 1).search(/\n {2}[a-z]+:\n/);
+  return next < 0 ? wf.slice(from) : wf.slice(from, from + 1 + next);
+}
+
+test("workflow de release: genera MANUAL.pdf y PRUEBAS.pdf con el Chrome del runner y los adjunta a la release", () => {
+  const pdf = releaseJob("pdf");
+  assert.match(pdf, /needs: version/);
+  assert.match(pdf, /permissions:\n {6}contents: read\n/);
+  assert.match(pdf, /export CHROME_PATH/);
+  assert.match(pdf, /CHROME_BIN/);
+  assert.match(pdf, /node scripts\/build-manual-pdf\.mjs\n/);
+  assert.match(pdf, /node scripts\/build-manual-pdf\.mjs pruebas\n/);
+  assert.match(pdf, /uses: actions\/upload-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales\n\s+path: \|\n\s+MANUAL\.pdf\n\s+PRUEBAS\.pdf/);
+  // Sin los PDF no se etiqueta la imagen (ni, por tanto, se crea la release).
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf\]/);
+  const release = releaseJob("release");
+  assert.match(release, /uses: actions\/download-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales/);
+  // Los dos `gh release create` (a mano y con etiqueta) llevan los dos PDF.
+  const creates = release.split("gh release create").slice(1);
+  assert.equal(creates.length, 2);
+  for (const c of creates) {
+    const cmd = c.slice(0, c.search(/\n\s+(else|fi)\n/));
+    assert.match(cmd, /"\$PDFS\/MANUAL\.pdf" "\$PDFS\/PRUEBAS\.pdf"/);
+  }
+  // Los PDF ya no están en el repositorio y la web enlaza al adjunto de la última release.
+  const ignore = readFileSync(".gitignore", "utf8");
+  assert.match(ignore, /^\/MANUAL\.pdf$/m);
+  assert.match(ignore, /^\/PRUEBAS\.pdf$/m);
+  const tracked = spawnSync("git", ["ls-files", "MANUAL.pdf", "PRUEBAS.pdf"], { encoding: "utf8" });
+  assert.equal(tracked.status, 0);
+  assert.equal(tracked.stdout.trim(), "");
+  assert.match(readFileSync("scripts/build-site.mjs", "utf8"), /manualPdf: `\$\{product\.REPO_URL\}\/releases\/latest\/download\/MANUAL\.pdf`/);
+  for (const f of ["README.md", "scripts/build-site.mjs", "docs/INSTALL.md", "docs/web/instalar.md", "docs/web/en/install.md"]) {
+    assert.doesNotMatch(readFileSync(f, "utf8"), /blob\/main\/MANUAL\.pdf|\]\(\.?\/?MANUAL\.pdf\)/, f);
+  }
+});
+
+test("imágenes base fijadas por digest (etiqueta@sha256) y vigiladas por Dependabot", () => {
+  const df = readFileSync("Dockerfile", "utf8");
+  const froms = [...df.matchAll(/^FROM\s+(\S+)/gm)].map((m) => m[1]!);
+  // Una sola imagen externa (las demás etapas salen de «base»), escrita en el FROM: Dependabot no sigue los ARG.
+  assert.deepEqual(froms.filter((f) => f.includes(":")), [froms[0]]);
+  assert.match(df, /^FROM node:22-bookworm-slim@sha256:[0-9a-f]{64} AS base$/m);
+  assert.doesNotMatch(df, /^FROM \$\{/m);
+  const compose = readFileSync("deploy/compose.yml", "utf8");
+  assert.match(compose, /^ {4}image: caddy:2-alpine@sha256:[0-9a-f]{64}$/m);
+  assert.match(compose, /^ {4}image: postgres:16-alpine@sha256:[0-9a-f]{64}$/m);
+  // Todas las imágenes de terceros con digest; la de Pizarro sigue su etiqueta (o la de PIZARRO_IMAGE).
+  for (const m of compose.matchAll(/^\s+image:\s*(\S+)/gm)) {
+    if (m[1]!.startsWith("${PIZARRO_IMAGE")) continue;
+    assert.match(m[1]!, /@sha256:[0-9a-f]{64}$/, m[1]);
+  }
+  const dep = readFileSync(".github/dependabot.yml", "utf8");
+  for (const [eco, dir] of [["docker", "/"], ["docker-compose", "/deploy"]] as const) {
+    const at = dep.indexOf(`- package-ecosystem: ${eco}\n`);
+    assert.ok(at > 0, eco);
+    const end = dep.indexOf("\n\n", at);
+    const block = dep.slice(at, end > 0 ? end : undefined);
+    assert.ok(block.includes(`directory: ${dir}\n`), eco);
+    assert.match(block, /interval: weekly/, eco);
+    assert.match(block, /cooldown:\n\s+default-days: 7/, eco);
+    assert.match(block, /version-update:semver-major/, eco);
+  }
+});
+
+test("Caddy: el registro de accesos no guarda la dirección (tokens del calendario, /reset, /confirm) ni Referer/Location", () => {
+  const caddy = readFileSync("deploy/Caddyfile", "utf8");
+  const log = /^\tlog \{\n([\s\S]*?)^\t\}$/m.exec(caddy)?.[1] ?? "";
+  assert.match(log, /output stdout/);
+  assert.match(log, /format filter \{\n\t+wrap console\n\t+fields \{/);
+  for (const field of ["request>uri", "request>headers>Referer", "resp_headers>Location"]) {
+    assert.match(log, new RegExp(`^\\t+${field} delete$`, "m"), field);
+  }
+  assert.doesNotMatch(log, /format console/);
 });
 
 test("workflow de release: build oficial y rama stable movida solo por su job, con scripts/move-stable.sh", () => {

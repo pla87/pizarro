@@ -272,7 +272,7 @@ write_kit() {
     echo
     echo "Si pierdes el servidor (necesitas este kit y tu destino externo de copias):"
     echo "  1. Prepara el servidor nuevo sin arrancar Pizarro (instala Docker si falta):"
-    echo "       curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- $(kit_get_opts)"
+    echo "       curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- $(kit_get_opts)"
     echo "  2. En $DIR/.env, sustituye SESSION_SECRET, TOKEN_SECRET, ENCRYPTION_KEY y BACKUP_KEY por las de arriba"
     echo "     (si alguna pone «no definida», borra su línea) y añade las variables BACKUP_S3_* de tu destino externo"
     echo "     (o BACKUP_EXTERNAL_DIR, si es una carpeta montada)."
@@ -295,8 +295,9 @@ fi
 # --- Arranque -----------------------------------------------------------------
 cd "$DIR"
 say ""
-# Se descargan todas las imágenes, no solo la de Pizarro: así Caddy y PostgreSQL también reciben sus
-# actualizaciones (caddy:2-alpine y postgres:16-alpine, sin cambiar de versión mayor).
+# Se descargan todas las imágenes, no solo la de Pizarro. Caddy y PostgreSQL van fijadas por digest en compose.yml
+# (caddy:2-alpine@sha256:… y postgres:16-alpine@sha256:…): «pull» descarga exactamente esa, y sus actualizaciones
+# llegan con el compose.yml de cada versión de Pizarro (sin cambiar de versión mayor).
 if [ "$BUILD" = 1 ]; then
   say "Descargando las imágenes de Caddy y PostgreSQL..."
   docker compose pull caddy postgres || say "AVISO: no se pudieron descargar las imágenes de Caddy y PostgreSQL; se usan las que ya hay."

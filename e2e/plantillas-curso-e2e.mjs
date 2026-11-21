@@ -29,14 +29,14 @@ const s = await L.session({ viewport: { width: 1600, height: 950 } });
 const { page } = s;
 let projectId = null;
 let programId = null;
-const dlg = () => page.locator("[role=dialog]").filter({ hasText: /Publicar programa|Publish programme/ }).first();
+const dlg = () => page.locator("[role=dialog]").filter({ hasText: /Publicar programa|Publish program/ }).first();
 const programCol = () => L.colLoc(page, "Programa");
 
 /** Abre «Publicar programa (PDF)» desde el botón de la columna (o desde su menú) y espera el diálogo. */
 async function openPublish(viaMenu = false, english = false) {
   if (viaMenu) {
     await programCol().getByRole("button", { name: english ? "Column options" : "Opciones de columna" }).click();
-    await page.getByRole("menuitem", { name: english ? "Publish programme (PDF)" : "Publicar programa (PDF)" }).click();
+    await page.getByRole("menuitem", { name: english ? "Publish program (PDF)" : "Publicar programa (PDF)" }).click();
   } else {
     await programCol().getByRole("button", { name: "Publicar programa (PDF)" }).click();
   }
@@ -177,9 +177,9 @@ try {
       await programCol().waitFor({ timeout: 15000 });
       await openPublish(true, true);
       await dlg().getByLabel(/^Also save to Documentation as/).uncheck();
-      const { text, filename } = await publishAndDownload("programme.pdf", true);
-      L.check("EN: nombre del archivo en inglés", /^programme-master-r50-/.test(filename), filename);
-      for (const s of ["COURSE PROGRAMME", "3 sessions", "Session 1: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
+      const { text, filename } = await publishAndDownload("program.pdf", true);
+      L.check("EN: nombre del archivo en inglés", /^program-master-r50-/.test(filename), filename);
+      for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación R50", "Tuesday, 12 January 2027", "25 January 2027 – 27 January 2027"]) {
         L.check(`EN: el texto incluye «${s}»`, text.includes(s), text.slice(0, 300));
       }
       L.check("EN: sin responsable si no se pide", !text.includes(adm.name) || !text.includes("Assignee:"));

@@ -145,8 +145,9 @@ export async function run() {
   L.check("Releases: botón «Descargar adjuntos» visible", await histZipBtn.isVisible());
   const [histDl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), histZipBtn.click()]);
   L.eq("Releases: el botón descarga el ZIP con el mismo nombre que el diálogo", histDl.suggestedFilename(), zipName);
+  // Como la página (ReleaseEntry.tsx): primero el plan y después cada paquete con su número y el token (`?part=1&v=…`).
   const href = `/api/releases/${rel.id}/attachments`;
-  const z = await p.evaluate(async (h) => { const r = await fetch(h); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type"), cl: r.headers.get("content-length") }; }, href);
+  const z = await p.evaluate(async (h) => { const { v } = await (await fetch(`${h}?plan=1`)).json(); const r = await fetch(`${h}?part=1&v=${v}`); const b = new Uint8Array(await r.arrayBuffer()); return { status: r.status, len: b.length, pk: b[0] === 0x50 && b[1] === 0x4b, ct: r.headers.get("content-type"), cl: r.headers.get("content-length") }; }, href);
   L.eq("ZIP del histórico: 200, application/zip, PK", [z.status, z.ct, z.pk], [200, "application/zip", true]);
   L.check("ZIP del histórico: no vacío", z.len > 100, String(z.len));
   // Next quita el Content-Length de las rutas; se vuelve a poner (src/lib/response-length.ts) para que se vea el progreso.

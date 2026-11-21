@@ -4,9 +4,9 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Instalar:** guía paso a paso en la web, [getpizarro.com/instalar](https://getpizarro.com/instalar/) ([English](https://getpizarro.com/en/install/)): requisitos, instalación en un comando, primeros pasos, Railway, copias, actualizar y problemas frecuentes. Se genera desde `docs/web/instalar.md` y `docs/web/en/install.md`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
 - **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
-- **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
+- **Documentación:** [Manual de operaciones (PDF)](https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf) (adjunto de la última versión publicada) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
 - **Errores:** con el formulario de [incidencias](https://github.com/pla87/pizarro/issues/new/choose) (o *Informar de un error* en *Historial de versiones* dentro de la app). Solo se atienden versiones publicadas sin modificar. Los fallos de seguridad, en privado: [SECURITY.md](SECURITY.md).
 
 ---
@@ -67,7 +67,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `npm run db:seed` | Seed idempotente: crea el admin si no hay usuarios y un proyecto de ejemplo si no hay proyectos. |
 | `npm run changelog:sync` | Sincroniza `changelog.json` con la tabla `AppVersionLog`. |
 | `npm run version:bump -- <patch\|minor\|major>` | Registra una nueva versión de la app (ver abajo). |
-| `npm run docs:pdf` | Regenera `MANUAL.pdf` a partir de `docs/MANUAL.md`. |
+| `npm run docs:pdf` | Genera `MANUAL.pdf` a partir de `docs/MANUAL.md`, para revisarlo en local (no se sube: el workflow Release lo adjunta a cada [release](https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf)). |
 
 ### Tests de integración (base de datos real)
 
@@ -146,7 +146,7 @@ steps:
 | `UPDATE_CHECK` | No | `0` | Con `0` desactiva el aviso de versión nueva en Administración (por defecto Pizarro consulta la última release pública de GitHub como mucho cada 12 h; no envía datos de tu instalación). |
 | `LANDING_AT_ROOT` | No | `1` | Con `1`, quien no tiene sesión ve la presentación del producto en `/` (sin cambiar la dirección) en vez de ir al acceso; sin usuarios, `/` lleva a `/setup`. La presentación siempre está en `/presentacion`. |
 | `DISK_MIN_FREE_MB` | No | `1024` | Espacio libre que debe quedar tras una exportación o importación de proyecto. Por defecto, el menor entre 1 GB y el 20 % del volumen (mínimo 100 MB). |
-| `HEALTH_MIN_FREE_MB` | No | `200` | `/api/health` responde 503 (`low_disk_space`) si al disco de subidas le queda menos espacio libre. `0` desactiva la comprobación. |
+| `HEALTH_MIN_FREE_MB` | No | `200` | Si al disco de subidas le queda menos espacio libre, *Administración* lo avisa y `/api/health` lo lleva en `warnings` (`low_disk_space`; sigue en 200). `0` desactiva la comprobación. |
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
@@ -156,6 +156,7 @@ steps:
 | `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
+| `SMTP_ALLOW_PLAINTEXT` | No | `1` | Con las variables `SMTP_*` y un puerto distinto de `465`, STARTTLS es obligatorio salvo con un servidor local (`localhost`, `127.0.0.1`, `::1`). Con `1`, se permite enviar sin cifrar a propósito (un relay de la red privada sin TLS): la contraseña y los enlaces irían en claro. |
 | `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Integraciones*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
@@ -286,7 +287,7 @@ Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por 
    SMTP_FROM=Pizarro <avisos@tu-dominio.com>
    ```
 
-Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS.
+Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS obligatorio (sin cifrar solo con un servidor local o con `SMTP_ALLOW_PLAINTEXT=1`).
 
 #### 7.3 Avisos por Telegram y WhatsApp
 

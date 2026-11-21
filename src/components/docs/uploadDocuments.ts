@@ -1,5 +1,6 @@
 import type { T } from "@/i18n/core";
 import { uploadCap, uploadGate, withRetry } from "@/lib/upload-queue";
+import { shrinkImage } from "@/lib/image-shrink";
 
 /** Nombre con el que se sube un archivo: las capturas pegadas llegan como «image.png» y se les da uno con fecha. */
 export function documentUploadName(file: File, t: T): string {
@@ -19,14 +20,17 @@ class DocumentUploadError extends Error {
  * servidor está ocupado o se ha llegado al tope de subidas por minuto (429/503, esperando lo que diga Retry-After).
  */
 export async function uploadDocument(projectId: string, file: File, t: T, fileMaxMb?: number): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (fileMaxMb && file.size > fileMaxMb * 1024 * 1024) {
+  // Las fotos grandes se reducen antes, como los adjuntos: el servidor guarda la imagen a 1280 px de ancho como mucho y
+  // no admite más de 30 megapíxeles (una de 48 MP quedaba como descarga, sin vista previa). El tope se mira con lo que se envía.
+  const blob = await shrinkImage(file, { checkPixels: true });
+  if (fileMaxMb && blob.size > fileMaxMb * 1024 * 1024) {
     return { ok: false, error: t("El archivo supera el tamaño máximo del proyecto ({mb} MB por archivo).", { mb: fileMaxMb }) };
   }
   try {
     // Por la misma puerta que los adjuntos: con otra persona activa, una subida a la vez en total desde esta pestaña.
     await withRetry(() => uploadGate.run(async () => {
       const body = new FormData();
-      body.append("file", file, documentUploadName(file, t));
+      body.append("file", blob, documentUploadName(file, t));
       const res = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body });
       uploadCap.note(res.headers);
       if (res.ok) return;

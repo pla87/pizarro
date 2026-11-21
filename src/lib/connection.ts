@@ -96,7 +96,7 @@ async function checkNow(): Promise<boolean> {
 
 /**
  * ¿Responde el servidor? Sin red (navigator.onLine) ni se intenta. Un 503 de la propia aplicación por otro motivo
- * (disco casi lleno, base de datos lenta) cuenta como que responde: la página se puede pedir. Mientras se apaga
+ * (base de datos lenta, carpeta de subidas; una versión anterior también por el disco casi lleno) cuenta como que responde: la página se puede pedir. Mientras se apaga
  * (`shutting_down`) o si responde un proxy con otro error (502/504), no.
  */
 export function probeServer(): Promise<boolean> {

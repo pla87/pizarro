@@ -6,7 +6,7 @@ export type TaskFilter = "all" | "overdue" | "week";
 
 const BUCKET_ORDER: TaskBucket[] = ["overdue", "today", "week", "later", "none"];
 
-/** Días que abarca «esta semana» desde hoy (hoy no incluido: tiene su propio grupo). */
+/** Días que abarca el grupo «Próximos 7 días» desde hoy (hoy no incluido: tiene su propio grupo). */
 const WEEK_DAYS = 7;
 
 /** Grupo de una tarea según su fecha límite (YYYY-MM-DD) respecto a hoy. */
@@ -24,7 +24,7 @@ export function parseFilter(value: string | string[] | undefined): TaskFilter {
   return v === "overdue" || v === "week" ? v : "all";
 }
 
-/** ¿Entra la tarea en el filtro? «Vencidas» solo las atrasadas; «Esta semana», vencidas, de hoy y de los próximos 7 días. */
+/** ¿Entra la tarea en el filtro? «Vencidas» solo las atrasadas; «Hasta 7 días», vencidas, de hoy y de los próximos 7 días. */
 export function matchesFilter(bucket: TaskBucket, filter: TaskFilter): boolean {
   if (filter === "all") return true;
   if (filter === "overdue") return bucket === "overdue";
@@ -32,7 +32,7 @@ export function matchesFilter(bucket: TaskBucket, filter: TaskFilter): boolean {
 }
 
 /**
- * Reparte las tareas en grupos (vencidas, hoy, esta semana, más adelante, sin fecha), cada grupo
+ * Reparte las tareas en grupos (vencidas, hoy, próximos 7 días, más adelante, sin fecha), cada grupo
  * ordenado por fecha y, a igual fecha, por el orden recibido. Los grupos vacíos no salen.
  */
 export function groupByDue<T extends { dueDate: string | null }>(tasks: T[], today: string, filter: TaskFilter = "all"): { bucket: TaskBucket; tasks: T[] }[] {

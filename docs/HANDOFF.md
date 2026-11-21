@@ -33,10 +33,13 @@ Railway. Se está preparando para venderse como producto.
   publicadas; la mueve el workflow Release al publicar). Fusionar en `main` no despliega nada: hay que publicar la
   versión (sección 5). Si un despliegue no llega, en Railway ⌘K → «Deploy Latest Commit». Dominio propio en `APP_URL`.
 - **Versión actual:** la de `package.json` y el primer bloque de `changelog.json`.
-- **Cómo funciona todo:** `docs/MANUAL.md` (y `MANUAL.pdf`, generado). Instalación: `docs/INSTALL.md`. Prueba en un
+- **Cómo funciona todo:** `docs/MANUAL.md`. Su PDF, `MANUAL.pdf`, no está en el repositorio: el workflow Release lo
+  genera y lo adjunta a cada GitHub Release (la web enlaza a
+  `https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf`). Instalación: `docs/INSTALL.md`. Prueba en un
   VPS: `docs/PRUEBA-VPS.md`.
-- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `PRUEBAS.pdf`, en la
-  raíz, generado desde `docs/PRUEBAS.md` con `node scripts/build-manual-pdf.mjs pruebas` (con `CHROME_PATH` si hace falta).
+- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `docs/PRUEBAS.md`;
+  su PDF, `PRUEBAS.pdf`, también va adjunto a cada release (en local: `node scripts/build-manual-pdf.mjs pruebas`, con
+  `CHROME_PATH` si hace falta). Los dos PDF están en `.gitignore`.
 
 ## 2. Cómo trabaja el propietario (protocolo de cada ronda)
 
@@ -82,11 +85,16 @@ expliquen las opciones con su coste y beneficio y una recomendación.
   repetidas entre ficheros (`npm run i18n:unused` las cuenta).
 - Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último. Las ya
   publicadas no se editan nunca (cambia su checksum y `prisma migrate deploy` falla en las instalaciones que la aplicaron).
+  El SQL de cada migración nueva va **entre `BEGIN;` y `COMMIT;`** (solo comentarios antes y después): si una sentencia
+  falla, no queda la base con media migración aplicada. Lo comprueba `tests/migrations.test.ts` para las posteriores a
+  la última de la v1.62.0 (`20261126100000`); las anteriores no se tocan. Nada que no pueda ir en una transacción
+  (`CREATE INDEX CONCURRENTLY`), ni usar en la misma migración un valor de enum recién añadido.
 - Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
   la misma versión que deja de usarla: primero sale la versión que ya no la lee ni la escribe (con una migración que
-  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Durante un despliegue la
-  versión anterior sigue sirviendo sobre la base ya migrada, y si el despliegue falla después de migrar, Railway la
-  mantiene activa: si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
+  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Con volumen, Railway no
+  solapa versiones (hay unos segundos sin servicio), pero la versión anterior vuelve a servir sobre la base ya migrada si
+  el despliegue nuevo falla después de migrar (Railway mantiene la anterior) o si se vuelve atrás a mano (redesplegar
+  uno viejo, fijar una versión anterior en compose): si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
   obligatoria una columna: columna nueva, copiar los datos, usarla, y quitar la vieja una versión después.
 - No tocan `changelog.json`, `CHANGELOG.md`, la versión de `package.json`, `docs/MANUAL.md` ni `MANUAL.pdf`: los
   actualiza la sesión principal al cerrar la versión. Terminan su informe con lo que debería decir el manual.
@@ -284,7 +292,8 @@ Guardas que conviene conocer:
 - Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
   un vale (`POST …/release-attachments?plan=1`; `src/lib/zip-ticket.ts`, en memoria, por persona y proyecto), cada
   paquete se baja con `GET ?ticket=&part=&v=` y la página consulta su estado. Un POST sin `?plan=1` responde 400 (el
-  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe). El `Content-Length` lo pone
+  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe), y un paquete sin `?part=` o sin `?v=`
+  también (`zipPartRequired`; desde la ronda 59 no hay «primer paquete sin número» ni enlaces sin token). El `Content-Length` lo pone
   `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera interna
   `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
 - Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
@@ -329,7 +338,9 @@ llevan enlaces de sesión ni nombres de modelos.
 2. Rellenar en `changelog.json` el bloque nuevo: `changes` (`nuevas`, `mejoras`, `correcciones`, `tecnicos`) y
    `en: { summary, changes }`. Después `npm run version:bump -- --render`.
 3. Actualizar `docs/MANUAL.md` (las dos líneas de versión, `version: "vX"` y «Versión de la aplicación») y las
-   secciones afectadas. Generar el PDF: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH` si hace falta).
+   secciones afectadas. Generar el PDF en local para revisarlo: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH`
+   si hace falta; `pruebas` para `PRUEBAS.pdf`). **No se sube**: los dos PDF están en `.gitignore` y el workflow Release
+   los vuelve a generar desde `docs/` y los adjunta a la GitHub Release.
 4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
 5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
    sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
@@ -348,6 +359,10 @@ llevan enlaces de sesión ni nombres de modelos.
    de `src/lib/tech-info.ts`. Si cambian esos campos, actualiza a la vez el formulario y `tests/bug-report.test.ts`.
    El job solo mueve `stable` a un commit que ya está en `main` (`git merge-base --is-ancestor`); una etiqueta puesta
    en otra rama publica la imagen y la release, pero deja `stable` donde estaba (con un aviso en el job).
+   El job «Manual en PDF» (en paralelo con las imágenes) genera `MANUAL.pdf` y `PRUEBAS.pdf` con
+   `scripts/build-manual-pdf.mjs` y el Chrome del runner (`CHROME_PATH` = `CHROME_BIN`); «Imagen Docker» lo espera (si
+   falla no se etiqueta nada) y «GitHub Release» los adjunta al crear la release. Si hace falta cambiar uno después:
+   `gh release upload vX.Y.Z MANUAL.pdf --clobber`.
 6. **Secreto `STABLE_PUSH_TOKEN` (una vez).** GitHub no deja que `GITHUB_TOKEN` mueva una rama si entre su commit
    anterior y el nuevo cambia algún fichero de `.github/workflows/` (error «refusing to allow a GitHub App to create
    or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
@@ -395,7 +410,12 @@ llevan enlaces de sesión ni nombres de modelos.
 - **npm**, un PR mensual con todas las versiones menores y parches. Las versiones mayores no se proponen (se hacen a
   mano, leyendo sus notas de cambios). Las de seguridad llegan en cuanto hay aviso, en su propio PR (requiere
   *Settings → Code security → Dependabot security updates* activado).
-- En los dos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
+- **Imágenes base de Docker** (ecosistemas `docker`, el `Dockerfile`, y `docker-compose`, `deploy/compose.yml`), un PR
+  semanal por ecosistema. Van fijadas por digest con su etiqueta (`node:22-bookworm-slim@sha256:…`,
+  `caddy:2-alpine@sha256:…`, `postgres:16-alpine@sha256:…`): Dependabot propone el digest nuevo de la misma etiqueta,
+  nunca otra versión mayor (PostgreSQL 16 → 17 exige migrar los datos). A mano: `docker buildx imagetools inspect
+  <imagen:etiqueta>`, línea `Digest:` (la del índice multiarquitectura, no la de una plataforma).
+- En todos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
   seguridad no esperan).
 - **`overrides` en `package.json`**: `minimatch` 11 dentro de `@typescript-eslint/typescript-estree` (herramienta de
   lint, no va en la app) por el aviso GHSA-g3hv-75wg-m249; quitarlo cuando `typescript-eslint` traiga una versión
@@ -450,46 +470,47 @@ Cómo se revisa cada PR:
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
-- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:`. El anterior (sin
-  prefijo) se quitó con su compatibilidad; una entrada que aún lo traiga (copia de seguridad antigua restaurada) se
-  descarta al intentar aplicarla con «ya no se puede deshacer», también si se confirma (`isObsoleteFingerprint`,
+- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:b:` (`FP_CURRENT`:
+  la descripción por su hash y también el bloqueo de cada tarea, `blockedById`). Los anteriores (sin prefijo, y `v2:`
+  sin «b:», que no cubría el bloqueo) se quitaron con su compatibilidad (la de `v2:` en la ronda 59); una entrada que aún
+  traiga uno (copia de seguridad antigua restaurada) se descarta al intentar aplicarla con «ya no se puede deshacer»,
+  también si se confirma, y no se pone al día al aplicar otra (`isObsoleteFingerprint`, «no empieza por `v2:b:`»;
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
-  el formato, prefijo nuevo y el mismo trato para el anterior.
-  Ampliación compatible: las huellas `v2:b:` cubren también el bloqueo de cada tarea (`blockedById`). Siguen siendo v2;
-  una `v2:` sin «b:» guardada antes se compara calculándola como entonces (parámetro `like` de `fingerprintsOf`) y pasa
-  al formato nuevo cuando se reescribe. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
+  el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.62.0)** (explicadas con coste y recomendación en el informe final de la ronda 58):
+**Preguntas abiertas al propietario (tras la v1.63.0)** (explicadas con coste y recomendación en el informe final de la ronda 59):
 
-- Seguridad: cuota extra de acceso para cualquier dispositivo conocido (`KnownDevice`), para que 6 contraseñas falsas cada
-  15 min no bloqueen a quien no tiene 2FA; «Forzar cambio de contraseña» que también borre el calendario suscrito, los
-  canales de Telegram/WhatsApp y Google Drive; proyecto privado con solo miembros desactivados (contar solo activos);
-  `requireTLS` con `SMTP_*` por variables; log de Caddy sin la URI (tokens del .ics, `/reset`, `/confirm`); token de .ics
-  no válido → calendario vacío en vez de 404.
-- Coste: limpiezas con retención cada 23 h; `pool` en nodemailer; refresco en vivo de comentarios solo de la primera
-  página; contenido de cada release al desplegarla; enlaces a Pizarro en el plan para IA apagados por defecto (~27 % menos
-  texto); sin `@img/*musl*` en la imagen (~19 MB); una sola versión de `marked`; caché de miniaturas de 60–300 s;
-  diccionario de inglés de cliente y de servidor; `PDF_WORKER_MAX_MB` (un programa de 100 sesiones de 2 KB no cabe en 256 MB).
-- Uso: margen de disco libre también en las subidas; tope de «Compartir» por envío (hoy el de un archivo); fotos de 48 MP
-  en Documentación; confirmar «Regenerar enlace» del calendario; botón «Nuevo proyecto» también para miembros sin
-  proyectos; «Esta semana» de Mis tareas → «Próximos 7 días»; mismo avance de entregable en calendario e informe; la
-  repetición no hereda un entregable vencido; topes de la app (30 columnas, nombres de 40) al importar; healthcheck de
-  despliegue sin el disco; `get.sh` desde `stable`; imágenes base por digest y Dependabot para Docker; migraciones nuevas
-  entre `BEGIN`/`COMMIT`.
-- Retirar (pedido permiso): `admin/types/page.tsx` y `admin/page.tsx` (ya redirige `next.config.ts`),
-  `passwordChangeRequired`, `redoLast`, `capTitle`, la compatibilidad de huellas `v2:` sin `b:` (desde el 23-11-2026), la
-  tabla «Nombres antiguos» de `e2e/README.md`, juntar suites e2e solapadas, el ZIP del histórico sin `?part`/`?v=`,
-  `generateProjectReportPdf`, `CalendarFeed.rotatedAt` y `lastUsedAt` (o enseñar «último uso»), la rama `Uint8Array` de
-  `zipBodyStream`, `UPLOAD_DIR` en la guía de Railway, `"avif"` en `INPUT_FORMATS`, y `MANUAL.pdf`/`PRUEBAS.pdf` fuera del
-  repositorio (adjuntos de la release). La heurística vieja de `commentNoticesWhere` se puede quitar desde el 19-11-2027.
-- Copias: R2 no tiene versionado de objetos (sí bloqueos por antigüedad). Un bloqueo hace fallar la retención de Pizarro
-  (aviso «Retención: …» en cada copia) y no protege los adjuntos antiguos. Pendiente de lo que vea el propietario con el
-  prompt de Claude in Chrome; alternativas: segundo destino externo con versionado (p. ej. Backblaze B2) o
-  `BACKUP_LOCAL_FILES=1`.
-- Pendiente de antes: unificar «Nueva tarea» con el detalle (decidido: no); coste de almacenamiento de las imágenes que
-  copia cada repetición; React #185 (no se ha vuelto a ver).
+- Rendimiento: refresco en vivo que pida solo la tarea cambiada en vez del tablero entero a cada pestaña (el mayor ahorro de
+  servidor que queda); pintar en el servidor solo las primeras 40–60 tarjetas de cada columna; datos del tablero sin campos
+  nulos; búsqueda de releases con índice trigram.
+- Cuentas: una cookie de dispositivo por cuenta (hoy dos cuentas en el mismo navegador se pisan la de «Recordar»);
+  `__Host-` en la cookie; idioma de la persona invitada desde un proyecto; marca «Invitación pendiente» en los asignados.
+- Instalación: que `migrate.mjs` resuelva solo un `P3009` de una migración transaccional y reintente; aviso de «otra
+  instancia usa esta base»; filtrar también el log de errores de Caddy (comprobar en un VPS).
+- Emails: «Esperando» con la casilla de fechas; extracto «{actor} ha escrito:» y nombres reservados; baja en un clic
+  (`List-Unsubscribe`); aligerar el informe grande.
+- Otros: fechas en inglés con formato `en-US`; CSV de logs con «;» para Excel en español; aviso de cambios de otro
+  administrador en plantillas, textos legales y ajustes; volver a Logs con aviso al pasar el límite de CSV; portada de un
+  administrador con proyectos sin elegir.
+- Pendiente de antes: plan para IA sin enlaces a Pizarro (explicado en el informe de la ronda 59); copia de los adjuntos
+  fuera de R2 (R2 no tiene versionado); coste de almacenamiento de las imágenes que copia cada repetición.
+- Pruebas en real pendientes (`docs/PRUEBAS.md` §11 y §12; prompts de Claude in Chrome en el informe de la ronda 59):
+  Cloudflare y R2, instalación desde getpizarro.com, validar el Caddyfile en un VPS.
+
+**Decisiones de la ronda 59 (ya aplicadas):** administradores asignables a proyectos de equipo, aviso «te han añadido»,
+invitar por email desde el proyecto y «Copiar enlace»; margen de intentos para dispositivos conocidos; «Forzar cambio de
+contraseña» corta calendario, canales y Drive; privado sin miembros activos → de equipo; TLS obligatorio con `SMTP_*`
+(`SMTP_ALLOW_PLAINTEXT`); calendario vacío para enlaces no válidos y «Último uso»; releases que cargan su texto al
+desplegar; comentarios en vivo solo la primera página; limpiezas diarias; SMTP con `pool`; miniaturas 2 min; disco en
+subidas; Compartir con tope por archivo; importar con los topes de la app; `/api/health` 200 con aviso de disco; fotos
+grandes en Documentación; confirmaciones del calendario; «Nuevo proyecto» para miembros; «Próximos 7 días»; avance de
+entregables único; repeticiones sin entregable vencido; Caddy sin URI; imagen sin sharp musl; `get.sh` desde `stable`;
+imágenes por digest; migraciones entre `BEGIN`/`COMMIT`; PDF como adjuntos de la release; retiradas (páginas de admin,
+`redoLast`, `capTitle`, `generateProjectReportPdf` como envoltorio, `passwordChangeRequired`, huellas `v2:` sin `b:`,
+tabla «Nombres antiguos», suites solapadas, ZIP del histórico sin `?part`, una versión de `marked`); inglés americano;
+no subir `PDF_WORKER_MAX_MB`.
 
 **Decisiones de la ronda 58 (ya aplicadas):** borrar en un menú «⋯» en Releases y Documentación; informe semanal con
 margen de 3 días; `MALLOC_ARENA_MAX=2`; workflow «Comprobaciones» en cada PR; sin precargas con Ahorro de datos; retirados

@@ -82,7 +82,7 @@ describe("plantilla «Curso o máster»", () => {
     assert.equal(en.name, "Course or master's");
     const pe = expectOk(await createProject("Test master", { templateId: en.id }));
     const colsEn = await db.column.findMany({ where: { projectId: pe.id }, orderBy: { position: "asc" } });
-    assert.equal(colsEn.find((c) => c.role === "PROGRAM")!.name, "Programme");
+    assert.equal(colsEn.find((c) => c.role === "PROGRAM")!.name, "Program");
     assert.equal(colsEn.find((c) => c.role === "AI_PLAN")!.name, "AI work plan");
     assert.deepEqual((await db.project.findUniqueOrThrow({ where: { id: pe.id } })).taskFields, ["startDate"]);
   });

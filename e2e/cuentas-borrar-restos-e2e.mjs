@@ -5,13 +5,17 @@
 // activo recibe en la campana un aviso por cada proyecto privado que pasa a ser de equipo, en su idioma, con enlace al
 // proyecto (los borrados con la casilla, ninguno). Y un administrador que abre un proyecto de equipo que no está en su
 // lista (por el aviso, por un enlace o desde Proyectos existentes) ve el selector y la navegación de ese proyecto,
-// marcado «No está en tus proyectos» con «Añadir a mis proyectos»; un miembro sin acceso no lo ve.
-// Misma base y servidor que documentacion-indice-e2e.mjs (Google con valores de prueba, sin email): GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50.
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs      # PART=google,notice,outside,member
+// marcado «No está en tus proyectos» con «Añadir a mis proyectos»; un miembro sin acceso no lo ve. Y (caza de bugs 50b)
+// «Borrar mi cuenta» de quien entra con Google, en un servidor sin envío de emails, solo ofrece volver a entrar con Google,
+// sin hablar de un código por email que no existe, en español y en inglés (390 px, oscuro); la vuelta de Google se simula
+// en la base (como test:db), se borra la cuenta, su proyecto privado pasa a ser de equipo y un administrador lo ve y lo abre.
+// Misma base que board-e2e.mjs; servidor con Google configurado y SIN email (valores de prueba, no llama a Google):
+// GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50, sin MAIL_OUTBOX_DIR ni SMTP.
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs      # PART=google,notice,outside,member,googleonly
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "google,notice,outside,member").split(",");
+const only = (process.env.PART || "google,notice,outside,member,googleonly").split(",");
 
 // Restos de una pasada interrumpida.
 const cleanup = async () => {
@@ -258,6 +262,85 @@ if (only.includes("member")) {
   s.errors.splice(0, s.errors.length, ...s.errors.filter((e) => !/404/.test(e)));
   L.assertNoErrors("MEMBER", [s]);
   await s.ctx.close();
+}
+
+// --- Borrar mi cuenta con Google en un servidor sin email (caza de bugs 50b) -------------------------------------------
+// Al final: el borrado avisa a los administradores y convierte el privado en un proyecto de equipo (no debe contar en «notice»).
+if (only.includes("googleonly")) {
+  for (const lang of ["es", "en"]) {
+    const EN = lang === "en";
+    const M = EN ? "GOO-EN" : "GOO-ES";
+    L.scenario(`googleonly: ${EN ? "inglés, 390 px y modo oscuro" : "español"}`);
+    const id = `r51c_gonly_${lang}`;
+    const email = await person(id, EN ? "Google Only En" : "Solo Google Es", { locale: EN ? "EN" : "ES" });
+    if (EN) await L.q(`UPDATE "User" SET theme='DARK' WHERE id=$1`, [id]);
+    const s = await L.session({ email, ...(EN ? { viewport: { width: 390, height: 844 }, mobile: true } : {}) });
+    const { page, ctx } = s;
+    // Desde ahora entra con Google y su contraseña es una que nadie conoce; tiene un proyecto privado propio.
+    await L.q(`UPDATE "User" SET "googleSub"=$2, "passwordHash"='$2b$12$' || md5(random()::text) WHERE id=$1`, [id, `r51c-gonly-sub-${lang}`]);
+    const pid = `r51c_gonly_priv_${lang}`;
+    await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId","updatedAt") VALUES ($1,$2,true,$3,NOW())`, [pid, `Apuntes solo Google ${lang}`, id]);
+    await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [pid, id]);
+    await page.goto(`${L.BASE}/settings?tab=cuenta`);
+    const section = page.locator("#delete-account");
+    await section.waitFor({ timeout: 20000 });
+    await section.scrollIntoViewIfNeeded();
+    await section.getByRole("button", { name: EN ? "Delete my account" : "Borrar mi cuenta" }).click();
+    const dlg = page.getByRole("dialog", { name: EN ? "Delete my account" : "Borrar mi cuenta" });
+    await dlg.waitFor();
+    await dlg.getByText(EN ? "I sign in with Google and don't know my password" : "Entro con Google y no conozco mi contraseña").click();
+    const text = await dlg.innerText();
+    const hasEmail = (await dlg.getByRole("button", { name: EN ? "Send code" : "Enviar código" }).count()) > 0;
+    L.check(`${M}: servidor sin envío de emails (como el de las pruebas)`, !hasEmail, "arranca el servidor sin MAIL_OUTBOX_DIR ni SMTP");
+    L.check(`${M}: ofrece volver a entrar con Google`, await dlg.getByRole("link", { name: EN ? "Sign in with Google again" : "Volver a entrar con Google" }).isVisible());
+    L.check(`${M}: explica solo esa forma`, text.includes(EN ? "Confirm it by signing in with Google again." : "Confírmalo volviendo a entrar con Google."), text);
+    L.check(`${M}: no habla de un código por email que no hay`, !/email/i.test(text.replace(/\S+@\S+/g, "")), text);
+    L.eq(`${M}: ni pide un código`, await page.locator("#da-code").count(), 0);
+    if (EN) {
+      const fit = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, vw: window.innerWidth }));
+      L.check(`${M}: cabe en 390 px`, fit.sw <= fit.vw, JSON.stringify(fit));
+    }
+    await page.screenshot({ path: `${SHOTS}/baja-solo-google-${lang}.png` });
+    // El enlace va a Google con la marca de la baja (sin seguir la redirección: no se llama a Google).
+    const href = await dlg.getByRole("link", { name: EN ? "Sign in with Google again" : "Volver a entrar con Google" }).getAttribute("href");
+    const start = await page.request.get(`${L.BASE}${href}`, { maxRedirects: 0 });
+    const location = start.headers()["location"] ?? "";
+    L.check(`${M}: «Volver a entrar con Google» lleva a Google`, start.status() >= 300 && start.status() < 400 && location.startsWith("https://accounts.google.com/"), `${start.status()} ${location.slice(0, 80)}`);
+    const glogin = (await ctx.cookies()).find((c) => c.name === "pz_glogin");
+    L.check(`${M}: con la marca de la baja en la cookie del acceso con Google`, !!glogin && glogin.value.endsWith(".account-delete"), glogin?.value.split(".").length);
+    // La vuelta de Google con la misma cuenta (como la prueba test:db): queda confirmada para esta sesión.
+    const [sess] = await L.q(`SELECT id FROM "Session" WHERE "userId"=$1`, [id]);
+    await L.q(`DELETE FROM "LoginChallenge" WHERE "userId"=$1`, [id]);
+    await L.q(`INSERT INTO "LoginChallenge"(id,"userId",kind,"tokenHash",via,confirmed,next,"expiresAt") VALUES ($1,$2,'ACCOUNT_DELETE',md5(random()::text),'google',true,$3,NOW()+interval '10 minutes')`, [`r51c_gonly_ch_${lang}`, id, sess.id]);
+    await page.goto(`${L.BASE}/settings?tab=cuenta&delete=google#delete-account`);
+    await dlg.waitFor({ timeout: 15000 });
+    L.check(`${M}: a la vuelta, el diálogo se abre confirmado`, await dlg.getByTestId("delete-account-google-ok").waitFor({ timeout: 8000 }).then(() => true, () => false));
+    await page.fill("#da-word", EN ? "delete" : "borrar");
+    await dlg.getByRole("button", { name: EN ? "Delete my account" : "Borrar mi cuenta" }).click();
+    await page.waitForURL(/\/login\?info=account_deleted/, { timeout: 20000 });
+    L.eq(`${M}: la cuenta ya no existe`, (await L.q(`SELECT count(*)::int n FROM "User" WHERE id=$1`, [id]))[0].n, 0);
+    L.eq(`${M}: su proyecto privado pasa a ser de equipo, sin miembros`, (await L.q(`SELECT "isPrivate", (SELECT count(*)::int FROM "ProjectMember" WHERE "projectId"=$1) AS members FROM "Project" WHERE id=$1`, [pid]))[0], { isPrivate: false, members: 0 });
+    L.assertNoErrors(M, [s]);
+    await s.ctx.close();
+  }
+  // Un administrador encuentra después esos proyectos (Proyectos y Administración → Proyectos) y puede abrirlos.
+  L.scenario("googleonly: un administrador ve los proyectos que pasaron a ser de equipo");
+  const a = await L.session({ email: L.USER2 });
+  await L.q(`UPDATE "User" SET role='ADMIN' WHERE id='qa_user_2'`);
+  for (const url of ["/projects", "/admin/projects"]) {
+    await a.page.goto(`${L.BASE}${url}`);
+    await L.eqEventually(`ADMIN-VE: ${url} lista los dos`, async () => {
+      const main = await a.page.locator("main").innerText().catch(() => "");
+      return main.includes("Apuntes solo Google es") && main.includes("Apuntes solo Google en");
+    }, true, { timeout: 10000 });
+  }
+  // «Abrir» desde Proyectos: el tablero (vacío, sin columnas) se carga, no un «no encontrado».
+  const res = await a.page.goto(`${L.BASE}/p/r51c_gonly_priv_es`);
+  L.eq("ADMIN-VE: lo puede abrir", res?.status(), 200);
+  L.check("ADMIN-VE: …con su tablero", await a.page.getByText("0 tarjetas").first().waitFor({ timeout: 15000 }).then(() => true, () => false));
+  L.assertNoErrors("ADMIN-VE", [a]);
+  await a.ctx.close();
+  await L.q(`UPDATE "User" SET role='MEMBER' WHERE id='qa_user_2'`);
 }
 
 await cleanup();

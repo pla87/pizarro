@@ -38,7 +38,7 @@ In Pizarro, **Administration → Integrations → Sign in with Google** shows "P
 
 ## 4. Audience: who can sign in
 
-- **Internal:** only accounts in your Google Workspace organisation. Nothing needs to be published or verified.
+- **Internal:** only accounts in your Google Workspace organization. Nothing needs to be published or verified.
 - **External:** any Google account, including Gmail. While it is in **Testing**, only the **Test users** you add can sign in (up to 100). After **Publish app** (*In production*) anyone can, and Google does not ask for verification just to sign in.
 
 ## 5. Data Access: the scopes

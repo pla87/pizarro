@@ -1,8 +1,10 @@
 #!/bin/sh
 # Instalación de Pizarro en un paso (POSIX sh). Descarga el código, comprueba Docker y ejecuta deploy/install.sh.
 #
-#   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+#   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
 #
+# La dirección publicada es la de la rama «stable» (la última versión publicada; la mueve el workflow Release), no la de
+# main: así este script, y el código y la imagen que instala, son siempre los de una versión publicada.
 # Guía completa: docs/INSTALL.md. Opciones: ver --help.
 #
 # Todo el trabajo vive dentro de main(), que se llama en la última línea: si la descarga del script se corta,
@@ -12,6 +14,9 @@ set -eu
 REPO="pla87/pizarro"
 DIR="/opt/pizarro"
 REF="" # vacío = la última versión publicada
+# Primera versión que este script sabe instalar: la 1.38.0 trajo la imagen publicada (ghcr.io/pla87/pizarro:X.Y.Z) y
+# las opciones --version, --unpin y --build de deploy/install.sh, que este script le pasa (la 1.37.0 aún no las tenía).
+MIN_VERSION="1.38.0"
 VERSION=""
 BUILD=0
 DOMAIN_ARG=""
@@ -25,18 +30,27 @@ SUDO=""
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+# ¿$1 >= $2? (versiones X.Y.Z solo con números)
+version_ge() {
+  a1=$(printf '%s' "$1" | cut -d. -f1); a2=$(printf '%s' "$1" | cut -d. -f2); a3=$(printf '%s' "$1" | cut -d. -f3)
+  b1=$(printf '%s' "$2" | cut -d. -f1); b2=$(printf '%s' "$2" | cut -d. -f2); b3=$(printf '%s' "$2" | cut -d. -f3)
+  [ "$a1" -ne "$b1" ] && { [ "$a1" -gt "$b1" ]; return; }
+  [ "$a2" -ne "$b2" ] && { [ "$a2" -gt "$b2" ]; return; }
+  [ "$a3" -ge "$b3" ]
+}
 usage() {
   cat <<'EOT'
 Instalación de Pizarro en un paso (Docker Compose: Caddy + Pizarro + PostgreSQL 16).
 
-  curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+  curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
 
 Opciones:
   --domain <dominio>  Dominio público (HTTPS automático; el DNS ya debe apuntar a este servidor)
   --local             Solo red local, por HTTP y sin dominio
   --dir <ruta>        Carpeta de instalación, ruta absoluta (por defecto /opt/pizarro)
   --version <X.Y.Z>   Instala esa versión (código de la etiqueta vX.Y.Z e imagen ghcr.io/pla87/pizarro:X.Y.Z).
-                      Sin ella se instala la última versión publicada (si no se puede saber cuál es, se aborta; con --build se usa main)
+                      Desde la 1.38.0. Sin ella se instala la última versión publicada (si no se puede saber cuál es,
+                      se aborta; con --build se usa la rama stable, la de la última versión publicada)
   --ref <rama|tag>    Descarga el código de esa rama o etiqueta (una rama se construye en el servidor)
   --build             Construye la imagen en el servidor, desde el código, en vez de descargar la publicada
   --no-start          Prepara todo pero no arranca los contenedores
@@ -94,6 +108,17 @@ main() {
   fi
   case "$REF" in
     *[!A-Za-z0-9._/-]*|-*|*..*) die "La referencia «$REF» no es válida (solo letras, números, . _ - /, y sin «..»)." ;;
+  esac
+  # Una versión anterior a la 1.38.0 no tiene imagen publicada y su install.sh no entiende las opciones que se le pasan
+  # (fallaba con «Opción desconocida: --version» después de haber cambiado el código de la carpeta).
+  case "$REF" in
+    v[0-9]*.[0-9]*.[0-9]*)
+      v="${REF#v}"
+      case "$v" in
+        *[!0-9.]*|*.*.*.*) ;;
+        *) version_ge "$v" "$MIN_VERSION" \
+             || die "La versión $v es anterior a la $MIN_VERSION, la primera que instala este script (antes no había imagen publicada ni las opciones --version y --unpin). Elige la $MIN_VERSION o una posterior (https://github.com/$REPO/releases)." ;;
+      esac ;;
   esac
   case "$DIR" in
     *..*) die "--dir no puede contener «..»." ;;
@@ -161,7 +186,7 @@ main() {
 
   # --- Qué versión ---------------------------------------------------------------------
   # Sin --version ni --ref: la última release publicada (consulta a GitHub); si no hay ninguna o no se puede
-  # consultar: con una instalación existente se aborta sin tocarla; en una nueva hay que pedir --build / --ref main (no se construye en silencio).
+  # consultar: con una instalación existente se aborta sin tocarla; en una nueva hay que pedir --build / --ref stable (no se construye en silencio).
   # Una etiqueta vX.Y.Z (--version o --ref) fija esa imagen; sin ellas se sigue «latest».
   PIN_ARG=""
   if [ -z "$REF" ]; then
@@ -181,10 +206,11 @@ main() {
         # Ya hay una instalación: por un fallo de la consulta nunca se salta a construir main; se deja como está.
         die "$why. Se mantiene la instalación actual en $DIR sin tocar nada. Inténtalo más tarde o indica la versión: --version X.Y.Z (las publicadas están en https://github.com/$REPO/releases)."
       elif [ "$BUILD" = 1 ]; then
-        REF="main"
-        say "$why: se usa main y la imagen se construirá en este servidor (--build)."
+        # La rama stable es la última versión publicada (la mueve el workflow Release), nunca commits sueltos de main.
+        REF="stable"
+        say "$why: se usa la rama stable (la última versión publicada) y la imagen se construirá en este servidor (--build)."
       else
-        die "$why. Reintenta más tarde, indica una con --version X.Y.Z o, si quieres construir el código en este servidor, usa --build (o --ref main)."
+        die "$why. Reintenta más tarde, indica una con --version X.Y.Z o, si quieres construir el código en este servidor, usa --build (o --ref stable)."
       fi
     fi
   else

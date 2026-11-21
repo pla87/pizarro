@@ -1,7 +1,7 @@
 // Miembros de proyectos privados, contraseñas y cambio forzado, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout, waitForLockWaiter } from "./helpers";
 import { addProjectMember, deleteProject, removeProjectMember, updateProject } from "../../src/actions/projects";
 import { getTaskDetail, updateTask } from "../../src/actions/tasks";
 import { login, resetPassword, setNewPassword } from "../../src/actions/auth";
@@ -17,8 +17,12 @@ import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
 import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached } from "../../src/lib/rate-limit";
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
-import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
+import { hashAuthToken, hashDeviceId, newToken } from "../../src/lib/auth-token-core";
+import { DEVICE_COOKIE, isTrustedDevice } from "../../src/lib/devices";
 import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
+import { changePassword } from "../../src/actions/profile";
+import { encryptSecret } from "../../src/lib/crypto";
+import { hashFeedToken, newFeedToken } from "../../src/lib/calendar-feed-core";
 
 describe("miembros de proyectos privados", () => {
   test("un miembro añade y quita miembros; quien no lo es recibe «no encontrado»", async () => {
@@ -52,18 +56,12 @@ describe("miembros de proyectos privados", () => {
     expectFail(await getTaskDetail(task.id), NOT_FOUND);
   });
 
-  test("no se puede añadir a un usuario desactivado ni a un administrador en un proyecto de equipo", async () => {
+  test("no se puede añadir a un usuario desactivado (a un administrador sí: ver project-members.test.ts)", async () => {
     const owner = await makeUser();
     const inactive = await makeUser({ active: false });
     const p = await makeProject({ visibility: "PRIVATE", owner });
     await loginAs(owner);
     expectFail(await addProjectMember(p.project.id, inactive.id), /Usuario no válido/);
-
-    const admin = await makeUser({ role: "ADMIN" });
-    const pub = await makeProject();
-    await loginAs(admin);
-    // En un proyecto de equipo los administradores no se asignan (ven todos).
-    expectFail(await addProjectMember(pub.project.id, admin.id), /administradores ven todos/);
   });
 
   test("el último miembro no puede salir; con otro miembro sí", async () => {
@@ -116,9 +114,10 @@ describe("miembros de proyectos privados", () => {
 
 describe("contraseñas y cambio forzado", () => {
   test("ninguna acción de administración permite fijar la contraseña de otra persona", async () => {
-    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado y
-    // reenviar la invitación (el enlace va al email de la persona; el admin no lo ve).
-    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
+    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado,
+    // reenviar la invitación (el enlace va al email de la persona; el admin no lo ve) e invitar a un proyecto (cuenta con
+    // una contraseña aleatoria que nadie conoce; el enlace de un solo uso es para que la persona elija la suya).
+    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "inviteToProject", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
 
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();
@@ -126,7 +125,7 @@ describe("contraseñas y cambio forzado", () => {
     await db.user.update({ where: { id: target.id }, data: { passwordHash: hash } });
     await loginAs(admin);
     // Un campo de contraseña colado en updateUser se descarta (esquema estricto de campos conocidos).
-    expectOk(await updateUser(target.id, { name: "Otro nombre", email: target.email, role: "MEMBER", active: true, password: "hackeada-12345" } as never));
+    expectOk(await updateUser(target.id, { name: "Otro nombre", email: target.email, role: "MEMBER", active: true, expected: { name: target.name, email: target.email, role: "MEMBER", active: true }, password: "hackeada-12345" } as never));
     const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
     assert.equal(row.passwordHash, hash);
     assert.equal(row.name, "Otro nombre");
@@ -224,7 +223,7 @@ describe("contraseñas y cambio forzado", () => {
     const other = await makeUser();
     await loginAs(member);
     expectFail(await forcePasswordChange(other.id), FORBIDDEN);
-    expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true }), FORBIDDEN);
+    expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true, expected: { name: other.name, email: other.email, role: "MEMBER", active: true } }), FORBIDDEN);
     assert.equal((await db.user.findUniqueOrThrow({ where: { id: other.id } })).role, "MEMBER");
   });
 });
@@ -256,7 +255,7 @@ describe("enlaces pendientes al cambiar la contraseña", () => {
     const u = await makeUser();
     await issueAuthToken(u.id, "EMAIL_CHANGE", { email: "otra@example.com" });
     await loginAs(admin);
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false, expected: { name: u.name, email: u.email, role: "MEMBER", active: true } }));
     assert.equal(await db.authToken.count({ where: { userId: u.id } }), 0);
   });
 });
@@ -428,7 +427,7 @@ describe("accesos a medio completar (segundo paso pendiente) al cambiar la contr
     const b = await makeUser();
     const cb = await twoPending(b.id);
     await loginAs(admin);
-    expectOk(await updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: false, expected: { name: b.name, email: b.email, role: "MEMBER", active: true } }));
     await cannotFinish(b.id, cb);
 
     const g = await makeUser();
@@ -448,5 +447,257 @@ describe("accesos a medio completar (segundo paso pendiente) al cambiar la contr
     expectOk(await forcePasswordChange(target.id, { copyLink: true }));
     assert.equal(await halfDone(other.id), 2);
     logout();
+  });
+});
+
+describe("forzar el cambio de contraseña desconecta lo que funciona sin sesión", () => {
+  const realFetch = globalThis.fetch;
+
+  /** Calendario suscrito, Telegram (con un enlace de conexión a medio usar), WhatsApp y Google Drive. */
+  async function connectEverything(userId: string) {
+    await db.calendarFeed.create({ data: { userId, tokenHash: hashFeedToken(newFeedToken()) } });
+    await db.userChannel.create({ data: { userId, channel: "TELEGRAM", address: `77${userId.slice(-6)}` } });
+    await db.userChannel.create({ data: { userId, channel: "WHATSAPP", address: "+34600111222", consentAt: new Date(), verifiedAt: new Date() } });
+    await db.telegramLinkCode.create({ data: { hash: `link-${userId}`, userId, expiresAt: new Date(Date.now() + 600_000) } });
+    await db.googleAccount.create({ data: { userId, email: "drive@example.com", refreshTokenEnc: encryptSecret("refresh-de-prueba"), scope: "drive.file" } });
+  }
+  const connected = async (userId: string) => ({
+    feeds: await db.calendarFeed.count({ where: { userId } }),
+    channels: await db.userChannel.count({ where: { userId } }),
+    linkCodes: await db.telegramLinkCode.count({ where: { userId } }),
+    google: await db.googleAccount.count({ where: { userId } }),
+  });
+  const ALL = { feeds: 1, channels: 2, linkCodes: 1, google: 1 };
+
+  test("lo hace un administrador: borra el calendario suscrito, Telegram, WhatsApp y la conexión con Drive (retirando el permiso en Google)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser();
+    const bystander = await makeUser();
+    await connectEverything(target.id);
+    await connectEverything(bystander.id);
+    const revoked: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).startsWith("https://oauth2.googleapis.com/revoke")) {
+        revoked.push(new URLSearchParams(String(init?.body)).get("token") ?? "");
+        return new Response("{}", { status: 200 });
+      }
+      throw new Error(`fetch inesperado: ${String(input)}`);
+    }) as typeof fetch;
+    try {
+      await loginAs(admin);
+      expectOk(await forcePasswordChange(target.id, { copyLink: true }));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.deepEqual(await connected(target.id), { feeds: 0, channels: 0, linkCodes: 0, google: 0 });
+    assert.deepEqual(revoked, ["refresh-de-prueba"]);
+    // Lo de otras personas no se toca.
+    assert.deepEqual(await connected(bystander.id), ALL);
+  });
+
+  test("cambiar uno mismo la contraseña (Mi perfil o al elegir una nueva) o restablecerla con el enlace no desconecta nada", async () => {
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      throw new Error(`fetch inesperado: ${String(input)}`);
+    }) as typeof fetch;
+    try {
+      const self = await makeUser();
+      await db.user.update({ where: { id: self.id }, data: { passwordHash: await hashPassword("clave-original-123") } });
+      await connectEverything(self.id);
+      await loginAs(self);
+      expectOk(await changePassword("clave-original-123", "clave-nueva-desde-perfil-1"));
+      assert.deepEqual(await connected(self.id), ALL);
+
+      const pending = await makeUser({ mustChangePassword: true });
+      await connectEverything(pending.id);
+      await loginAs(pending);
+      expectOk(await setNewPassword("clave-elegida-al-entrar-1"));
+      assert.deepEqual(await connected(pending.id), ALL);
+
+      const reset = await makeUser();
+      await connectEverything(reset.id);
+      const token = await issueAuthToken(reset.id, "PASSWORD_RESET");
+      logout();
+      expectOk(await resetPassword(token, "clave-restablecida-segura-3"));
+      assert.deepEqual(await connected(reset.id), ALL);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});
+
+describe("límite de intentos de acceso por cuenta y dispositivos conocidos", () => {
+  const PASSWORD = "clave-de-acceso-1234";
+  const TOO_MANY = "Demasiados intentos. Espera unos minutos.";
+  const WRONG = "Credenciales incorrectas.";
+
+  async function attempt(email: string, password: string): Promise<{ error?: string; redirect?: string }> {
+    const form = new FormData();
+    form.set("email", email);
+    form.set("password", password);
+    try {
+      return await login({}, form);
+    } catch (err) {
+      const digest = (err as { digest?: string }).digest ?? "";
+      if (digest.startsWith("NEXT_REDIRECT")) return { redirect: digest.split(";")[2] };
+      throw err;
+    }
+  }
+
+  /** Cuenta sin verificación en dos pasos que ya ha entrado una vez desde «su» navegador (sin «Recordar»): sus cookies. */
+  async function accountWithDevice() {
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(PASSWORD) } });
+    logout();
+    assert.deepEqual(await attempt(user.email, PASSWORD), { redirect: "/" });
+    const device = await db.knownDevice.findFirstOrThrow({ where: { userId: user.id } });
+    assert.equal(device.trustedUntil, null, "sin «Recordar»: dispositivo conocido, no de confianza");
+    return { user, browser: saveSession() };
+  }
+
+  test("un tercero que gasta los intentos de la cuenta desde otro navegador no impide entrar desde un dispositivo conocido", async () => {
+    const { user, browser } = await accountWithDevice();
+    logout();
+    for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
+    // Desde un navegador sin la cookie, bloqueada (aun con la contraseña correcta).
+    assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
+    // Desde el suyo, entra.
+    restoreSession(browser);
+    assert.deepEqual(await attempt(user.email, PASSWORD), { redirect: "/" });
+  });
+
+  test("desde el dispositivo conocido el tope es LOGIN_ACCOUNT_LIMIT_TRUSTED; el de otra cuenta no da intentos extra", async () => {
+    const { user, browser } = await accountWithDevice();
+    const other = await accountWithDevice();
+    // El navegador de otra cuenta es desconocido para esta: se queda en LOGIN_ACCOUNT_LIMIT.
+    restoreSession(other.browser);
+    for (let i = 0; i < LOGIN_ACCOUNT_LIMIT; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG);
+    assert.equal((await attempt(user.email, "otra-clave-x-9999")).error, TOO_MANY);
+    // El suyo llega hasta LOGIN_ACCOUNT_LIMIT_TRUSTED y después también queda bloqueado.
+    restoreSession(browser);
+    for (let i = LOGIN_ACCOUNT_LIMIT; i < LOGIN_ACCOUNT_LIMIT_TRUSTED; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
+    assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
+  });
+});
+
+describe("cookie de dispositivo (pz_device) al iniciar sesión", () => {
+  const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
+  const enter = (user: { id: string; name: string; email: string }, rememberDevice = false) =>
+    completeLogin({ ...user, locale: "ES", mustChangePassword: false }, { method: "password+2fa", rememberDevice, path: "/login/verify" });
+
+  test("un valor plantado desde fuera no se adopta: se genera otro y con «Recordar» la confianza va al nuevo", async () => {
+    const victim = await makeUser();
+    const planted = "plantado-por-un-tercero-0123456789";
+    logout();
+    jar.set(DEVICE_COOKIE, planted);
+    await enter(victim, true);
+    const issued = jar.get(DEVICE_COOKIE)!;
+    assert.ok(issued && issued !== planted, "la cookie se sobrescribe");
+    assert.ok(Buffer.from(issued, "base64url").length >= 32);
+    const devices = await db.knownDevice.findMany({ where: { userId: victim.id } });
+    assert.deepEqual(devices.map((d) => d.deviceHash), [hashDeviceId(issued)]);
+    assert.ok(devices[0]!.trustedUntil && devices[0]!.trustedUntil > new Date());
+    // Quien plantó el valor no se salta el segundo paso con él.
+    logout();
+    jar.set(DEVICE_COOKIE, planted);
+    assert.equal(await isTrustedDevice(victim.id), false);
+    jar.set(DEVICE_COOKIE, issued);
+    assert.equal(await isTrustedDevice(victim.id), true);
+  });
+
+  test("un dispositivo ya conocido de la cuenta conserva su cookie (sin fila nueva); el de otra cuenta no vale", async () => {
+    const user = await makeUser();
+    const other = await makeUser();
+    logout();
+    await enter(user);
+    const mine = jar.get(DEVICE_COOKIE)!;
+    await enter(user, true);
+    assert.equal(jar.get(DEVICE_COOKIE), mine, "se adopta: es de esta cuenta");
+    const rows = await db.knownDevice.findMany({ where: { userId: user.id } });
+    assert.equal(rows.length, 1);
+    assert.ok(rows[0]!.trustedUntil, "«Recordar» marca el mismo dispositivo");
+    // Con la cookie de esta cuenta, otra cuenta recibe una propia.
+    await enter(other);
+    const theirs = jar.get(DEVICE_COOKIE)!;
+    assert.notEqual(theirs, mine);
+    assert.deepEqual((await db.knownDevice.findMany({ where: { userId: other.id } })).map((d) => d.deviceHash), [hashDeviceId(theirs)]);
+  });
+});
+
+describe("editar un usuario: dos administradores a la vez (Administración → Usuarios)", () => {
+  const STALE = /Los datos han cambiado mientras tanto: recarga la página/;
+  const seen = (u: { name: string; email: string; role: "ADMIN" | "MEMBER"; active: boolean }) => ({ name: u.name, email: u.email, role: u.role, active: u.active });
+  const row = (id: string) => db.user.findUniqueOrThrow({ where: { id }, select: { name: true, email: true, role: true, active: true } });
+
+  test("con la lista desfasada solo se aplica lo que se ha cambiado: corregir el nombre no reactiva a quien otro ha desactivado", async () => {
+    const [a, b, x] = [await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x); // A tiene la pantalla abierta
+    await loginAs(b);
+    expectOk(await updateUser(x.id, { ...seen(x), active: false, expected: seen(x) }));
+    await loginAs(a);
+    expectOk(await updateUser(x.id, { ...openedByA, name: "Nombre corregido", expected: openedByA }));
+    assert.deepEqual(await row(x.id), { ...openedByA, name: "Nombre corregido", active: false });
+  });
+
+  test("si otro ha cambiado el mismo campo, se rechaza sin pisarlo; sin los valores vistos, también", async () => {
+    const [a, b, x] = [await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x);
+    await loginAs(b);
+    expectOk(await updateUser(x.id, { ...seen(x), name: "Nombre de B", email: `b-${x.id}@example.com`, expected: seen(x) }));
+    const afterB = await row(x.id);
+    await loginAs(a);
+    expectFail(await updateUser(x.id, { ...openedByA, name: "Nombre de A", expected: openedByA }), STALE);
+    expectFail(await updateUser(x.id, { ...openedByA, email: `a-${x.id}@example.com`, expected: openedByA }), STALE);
+    assert.deepEqual(await row(x.id), afterB);
+    // Al mismo valor que ya dejó B no es un conflicto.
+    expectOk(await updateUser(x.id, { ...openedByA, name: "Nombre de B", expected: openedByA }));
+    // Una llamada sin los valores vistos (un navegador con la versión anterior) no se aplica.
+    expectFail(await updateUser(x.id, { ...seen(afterB), name: "Sin valores vistos" }), STALE);
+    assert.deepEqual(await row(x.id), afterB);
+  });
+
+  test("a la vez de verdad: el cambio de A espera al de B y compara con lo que B ha dejado", async () => {
+    const [a, x] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x);
+    await loginAs(a);
+    let rename: ReturnType<typeof updateUser> | null = null;
+    let reEmail: ReturnType<typeof updateUser> | null = null;
+    // «B» (la prueba) desactiva a X y le cambia el email con la fila bloqueada; A corrige el nombre y, por separado,
+    // intenta cambiar el email. Las dos acciones esperan a la fila y, al seguir, leen lo que dejó B.
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      await tx.user.update({ where: { id: x.id }, data: { active: false, email: `b-${x.id}@example.com` } });
+      rename = updateUser(x.id, { ...openedByA, name: "Corregido a la vez", expected: openedByA });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectOk(await rename!);
+    assert.deepEqual(await row(x.id), { ...openedByA, name: "Corregido a la vez", email: `b-${x.id}@example.com`, active: false });
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      await tx.user.update({ where: { id: x.id }, data: { email: `b2-${x.id}@example.com` } });
+      // A había abierto la pantalla tras el primer cambio de B (con el email `b-…`).
+      const seenByA = { ...openedByA, name: "Corregido a la vez", email: `b-${x.id}@example.com`, active: false };
+      reEmail = updateUser(x.id, { ...seenByA, email: `a-${x.id}@example.com`, expected: seenByA });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await reEmail!, STALE);
+    assert.equal((await row(x.id)).email, `b2-${x.id}@example.com`);
+  });
+
+  test("las asignaciones del cambio de rol se leen dentro de la transacción: cuenta el proyecto añadido mientras tanto", async () => {
+    const [a, x] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const before = await makeProject({ members: [x] });
+    const meanwhile = await makeProject({ members: [] });
+    await loginAs(a);
+    let promote: ReturnType<typeof updateUser> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      promote = updateUser(x.id, { ...seen(x), role: "ADMIN", expected: seen(x) });
+      await waitForLockWaiter();
+      // Otro administrador la añade a un proyecto de equipo mientras la acción espera.
+      await tx.projectMember.create({ data: { projectId: meanwhile.project.id, userId: x.id } });
+    }, { timeout: 10_000 });
+    expectOk(await promote!);
+    const picks = await db.adminProjectPick.findMany({ where: { userId: x.id }, select: { projectId: true } });
+    assert.deepEqual(picks.map((p) => p.projectId).sort(), [before.project.id, meanwhile.project.id].sort(), "los dos quedan elegidos");
   });
 });

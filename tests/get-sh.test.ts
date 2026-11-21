@@ -225,9 +225,9 @@ test("get.sh: --version valida el formato, no se mezcla con --ref y se pasa a in
   assert.match(run(["--version", "1.2.3", "--ref", "main"]).stderr, /no los dos/);
   const tar = makeTarball("v", full());
   const dir = join(root, "inst-v");
-  const r = run(["--domain", "pizarro.example.com", "--version", "v1.2.3", "--dir", dir, "--tarball", tar]);
+  const r = run(["--domain", "pizarro.example.com", "--version", "v1.38.0", "--dir", dir, "--tarball", tar]);
   assert.equal(r.status, 0, r.stderr + r.stdout);
-  assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com --version 1.2.3");
+  assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com --version 1.38.0");
   const b = run(["--domain", "pizarro.example.com", "--build", "--dir", dir, "--tarball", tar]);
   assert.equal(b.status, 0, b.stderr + b.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com --build");
@@ -235,6 +235,40 @@ test("get.sh: --version valida el formato, no se mezcla con --ref y se pasa a in
   const m = run(["--domain", "pizarro.example.com", "--ref", "main", "--dir", dir, "--tarball", tar]);
   assert.equal(m.status, 0, m.stderr + m.stdout);
   assert.match(readFileSync(join(dir, "deploy", "args.txt"), "utf8"), /--build/);
+});
+
+// La 1.38.0 trajo la imagen publicada y las opciones --version, --unpin y --build de install.sh (la 1.37.0 no las tenía):
+// una versión anterior fallaba con «Opción desconocida» después de haber cambiado ya el código de la carpeta.
+test("get.sh: rechaza con un mensaje claro --version (o --ref vX.Y.Z) anterior a la 1.38.0, antes de tocar nada", () => {
+  const dir = join(root, "inst-old");
+  for (const args of [["--version", "1.37.0"], ["--version", "v1.9.12"], ["--version", "0.99.99"], ["--ref", "v1.20.0"]]) {
+    const r = run([...args, "--local", "--dir", dir, "--tarball", "/nada"]);
+    assert.equal(r.status, 1, args.join(" "));
+    assert.match(r.stderr, /es anterior a la 1\.38\.0, la primera que instala este script/, args.join(" "));
+    assert.match(r.stderr, /--version y --unpin/);
+    assert.doesNotMatch(r.stdout, /Docker listo/, "falla antes de mirar Docker");
+    assert.equal(existsSync(dir), false);
+  }
+  // 1.38.0 y posteriores (orden numérico: 1.100.0 > 1.38.0) pasan la comprobación y siguen.
+  for (const v of ["1.38.0", "1.100.0", "2.0.0"]) {
+    const r = run(["--version", v, "--local", "--dir", dir, "--tarball", "/nada"]);
+    assert.doesNotMatch(r.stderr, /es anterior/, v);
+    assert.match(r.stderr, /No existe el fichero \/nada/, v);
+  }
+});
+
+// Se publica la dirección de la rama stable (la última versión publicada), no la de main, en todos los sitios.
+test("get.sh: la dirección publicada es la de la rama stable en el script, las guías, la web y el kit", () => {
+  const stable = "https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh";
+  for (const f of ["deploy/get.sh", "deploy/install.sh", "README.md", "docs/INSTALL.md", "docs/PRUEBA-VPS.md", "docs/web/instalar.md", "docs/web/en/install.md", "scripts/build-site.mjs"]) {
+    const src = readFileSync(f, "utf8");
+    assert.doesNotMatch(src, /pizarro\/main\/deploy\/get\.sh/, f);
+    assert.ok(src.includes(stable), f);
+  }
+  // Sin versión publicada a la vista, --build tampoco construye main: usa la rama stable.
+  const src = readFileSync(GET, "utf8");
+  assert.match(src, /REF="stable"/);
+  assert.doesNotMatch(src, /REF="main"/);
 });
 
 // install.sh de verdad (con --no-start: no llega a llamar a docker).

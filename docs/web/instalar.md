@@ -61,13 +61,13 @@ Los dos caminos acaban igual: en el asistente que crea tu cuenta de administrado
    terminal:
 
    ```bash
-   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
    ```
 
    Para usarlo solo en la red local, sin dominio, cambia el final por `--local`:
 
    ```bash
-   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --local
+   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --local
    ```
 
 4. **Responde si te pregunta.** Si el servidor no tiene Docker, el instalador te pregunta si lo instala con el script
@@ -122,14 +122,14 @@ aparte del código, y no se tocan al actualizar.
 > **¿Prefieres leer el script antes de ejecutarlo?** Descárgalo, revísalo y lánzalo después:
 >
 > ```bash
-> curl -fsSLO https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh
+> curl -fsSLO https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh
 > less get.sh
 > sh get.sh --domain pizarro.example.com
 > ```
 
 **Otras opciones del instalador** (se añaden al final del comando):
 
-- `--version 1.49.0` instala esa versión en vez de la última.
+- `--version 1.49.0` instala esa versión en vez de la última (de la 1.38.0 en adelante).
 - `--dir /srv/pizarro` usa otra carpeta (por defecto, `/opt/pizarro`).
 - `--yes` instala Docker sin preguntar, si falta.
 - `--build` construye Pizarro en el servidor en vez de descargarlo ya hecho (necesita 2 GB de RAM).
@@ -279,7 +279,7 @@ Si pierdes el servidor, necesitas el kit de recuperación y tu destino externo:
 1. **Prepara el servidor nuevo sin arrancar Pizarro:** el comando de instalación con `--no-start` al final.
 
    ```bash
-   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com --no-start
+   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com --no-start
    ```
 
 2. **Pon tus claves.** En `/opt/pizarro/deploy/.env`, sustituye `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y
@@ -305,7 +305,7 @@ Antes de actualizar, haz una copia: *Administración → Copias de seguridad →
 **En tu servidor,** repite el comando de instalación, sin `--domain`:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh
 ```
 
 Descarga la última versión publicada, la arranca y conserva tu configuración, el kit de recuperación y tus datos. Los
@@ -318,7 +318,7 @@ publica una versión.
 **Volver a una versión anterior** (o instalar una concreta): añade `--version` con su número.
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --version 1.49.0
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --version 1.49.0
 ```
 
 > [!WARNING]

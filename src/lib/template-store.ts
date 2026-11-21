@@ -4,9 +4,12 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, comparable, isBuiltinModified } from "./builtin-templates";
 import { localizeTemplate } from "./builtin-templates-en";
 import { POSITION_STEP } from "./positions";
+import { MAX_TEMPLATES } from "./project-templates-core";
 import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto } from "./project-templates";
 
 type Row = Parameters<typeof parseStoredTemplate>[0] & { builtinKey: string | null };
+/** Lo que usan estas funciones: el cliente o una transacción (`tx`). */
+type TemplateDb = Pick<PrismaClient, "projectTemplate" | "builtinTemplateSeeded">;
 
 /** Fila de la base de datos → plantilla de la interfaz, marcando las de serie que ya no coinciden con la canónica. */
 function toTemplateDto(row: Row): TemplateDto {
@@ -23,7 +26,7 @@ export async function listTemplatesSorted(db: PrismaClient, locale: "es" | "en" 
 }
 
 /** Claves de serie que no tienen plantilla ahora mismo (borradas por el administrador). */
-export async function missingBuiltinKeys(db: PrismaClient): Promise<string[]> {
+export async function missingBuiltinKeys(db: TemplateDb): Promise<string[]> {
   const present = new Set((await db.projectTemplate.findMany({ where: { builtinKey: { not: null } }, select: { builtinKey: true } })).map((r) => r.builtinKey));
   return BUILTIN_TEMPLATES.map((b) => b.key).filter((k) => !present.has(k));
 }
@@ -54,12 +57,12 @@ const contentOf = (data: TemplateData) => ({
 });
 
 /** Anota la huella del contenido canónico aplicado a la plantilla de serie `key`. */
-async function markApplied(db: PrismaClient, key: string, data: TemplateData): Promise<void> {
+async function markApplied(db: TemplateDb, key: string, data: TemplateData): Promise<void> {
   const appliedHash = templateFingerprint(data);
   await db.builtinTemplateSeeded.upsert({ where: { key }, create: { key, appliedHash }, update: { appliedHash } });
 }
 
-async function createBuiltin(db: PrismaClient, key: string): Promise<void> {
+async function createBuiltin(db: TemplateDb, key: string): Promise<void> {
   const data = canonicalTemplate(key);
   if (!data) return;
   const last = await db.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
@@ -123,15 +126,26 @@ export async function upgradeBuiltinTemplates(db: PrismaClient): Promise<string[
   return upgraded;
 }
 
-/** «Recuperar plantillas por defecto»: recrea las de serie que falten. Devuelve cuántas. */
-export async function restoreBuiltinTemplates(db: PrismaClient): Promise<number> {
+/**
+ * «Recuperar plantillas por defecto»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
+ * saltaba el tope: con 49 propias se llegaba a 64). Debe ir en la transacción con el candado de las altas
+ * (`lockTemplates`). Devuelve cuántas recuperó y cuántas se quedaron fuera por el tope.
+ */
+export async function restoreBuiltinTemplates(db: TemplateDb): Promise<{ restored: number; left: number }> {
   const missing = await missingBuiltinKeys(db);
-  for (const key of missing) {
+  const room = Math.max(0, MAX_TEMPLATES - (await db.projectTemplate.count()));
+  const restore = missing.slice(0, room);
+  for (const key of restore) {
     await createBuiltin(db, key);
     const canon = canonicalTemplate(key);
     if (canon) await markApplied(db, key, canon);
   }
-  return missing.length;
+  return { restored: restore.length, left: missing.length - restore.length };
+}
+
+/** Candado común de las altas de plantillas (crear y recuperar): dos a la vez no pasan del máximo. */
+export async function lockTemplates(tx: Pick<PrismaClient, "$executeRaw">): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:project-templates'))::text`;
 }
 
 /** «Restablecer»: deja la plantilla con el contenido canónico. Falso si no es de serie. */

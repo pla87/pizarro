@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, FORBIDDEN, assign, loginAs, makeKind, makeProject, restoreSession, saveSession, makeTask, makeUser, NOT_FOUND, SESSION_EXPIRED } from "./helpers";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
 import { addComment, createTask, deleteTask, getTaskDetail, moveTask, updateTask } from "../../src/actions/tasks";
-import { deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
+import { deleteRelease, deployRelease, getReleaseContent, getReleaseTaskDetails } from "../../src/actions/releases";
 import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setAdminProjectPick, setAttachmentLimits, setProjectVisibility } from "../../src/actions/projects";
 
 /** Tres proyectos (equipo con asignado, equipo sin asignados, privado) con dos administradores, un miembro y un ajeno. */
@@ -158,7 +158,7 @@ describe("releases", () => {
     return { task, inProd, res };
   }
 
-  test("deployRelease / getReleaseTaskDetails / deleteRelease: rechazadas en un proyecto privado ajeno y permitidas a los miembros", async () => {
+  test("deployRelease / getReleaseTaskDetails / getReleaseContent / deleteRelease: rechazadas en un proyecto privado ajeno y permitidas a los miembros", async () => {
     const w = await world();
     const task = await makeTask(w.priv, { columnId: w.priv.columns.done });
     await db.column.create({ data: { projectId: w.priv.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
@@ -176,9 +176,16 @@ describe("releases", () => {
     expectOk(await deployRelease(input));
     const release = await db.release.findFirstOrThrow({ where: { projectId: w.priv.project.id } });
 
+    // El texto del histórico, que se pide al desplegar la release: solo a quien ve el proyecto.
+    assert.deepEqual(expectOk(await getReleaseContent(release.id)), { content: "Cambios" });
+    expectFail(await getReleaseContent("no-existe"), /^The release doesn't exist\.$|^La release no existe\.$/);
+
     await loginAs(w.otherAdmin);
+    expectFail(await getReleaseContent(release.id), NOT_FOUND);
     expectFail(await deleteRelease(release.id), NOT_FOUND);
     assert.equal(await db.release.count({ where: { id: release.id } }), 1);
+    await loginAs(w.outsider);
+    expectFail(await getReleaseContent(release.id), NOT_FOUND);
     await loginAs(w.admin);
     expectOk(await deleteRelease(release.id));
   });
@@ -219,7 +226,7 @@ describe("usuario desactivado y sin sesión", () => {
     assert.equal(await db.session.count({ where: { userId: u.id } }), 1);
     const userCookie = saveSession();
     await loginAs(admin);
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false, expected: { name: u.name, email: u.email, role: "MEMBER", active: true } }));
     assert.equal(await db.session.count({ where: { userId: u.id } }), 0);
     restoreSession(userCookie);
     expectFail(await getTaskDetail(task.id), SESSION_EXPIRED);
@@ -270,9 +277,9 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     const other = await makeUser({ role: "ADMIN" });
     await asUser(other, async () => expectFail(await setProjectVisibility(created.id, "TEAM"), NOT_FOUND));
     await loginAs(admin);
-    // De vuelta a equipo: el miembro sigue asignado y el administrador pasa a proyecto elegido.
+    // De vuelta a equipo: los dos siguen asignados y el administrador, además, lo tiene elegido.
     expectOk(await setProjectVisibility(created.id, "TEAM"));
-    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 1);
+    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 2);
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
   });
 });
@@ -322,7 +329,7 @@ describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
 });
 
 describe("asignación de usuarios a proyectos", () => {
-  test("solo administradores gestionan los de equipo; los admins no se asignan; quitar desasigna tarjetas", async () => {
+  test("solo administradores gestionan los de equipo; también se asignan admins; quitar desasigna tarjetas", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const other = await makeUser({ role: "ADMIN" });
     const user = await makeUser();
@@ -331,7 +338,7 @@ describe("asignación de usuarios a proyectos", () => {
     await loginAs(user);
     expectFail(await addProjectMember(f.project.id, user.id), NOT_FOUND);
     await loginAs(admin);
-    expectFail(await addProjectMember(f.project.id, other.id), "Los administradores ven todos");
+    expectOk(await addProjectMember(f.project.id, other.id));
     expectOk(await addProjectMember(f.project.id, user.id));
     await db.task.update({ where: { id: task.id }, data: { assigneeId: user.id } });
     await loginAs(user);
@@ -355,7 +362,7 @@ describe("asignación de usuarios a proyectos", () => {
     await db.task.updateMany({ where: { id: { in: [kept.id, dropped.id, privTask.id] } }, data: { assigneeId: demoted.id } });
     await db.task.update({ where: { id: otherTask.id }, data: { assigneeId: boss.id } });
     await asUser(boss, async () => {
-      expectOk(await updateUser(demoted.id, { name: demoted.name, email: demoted.email, role: "MEMBER", active: true }));
+      expectOk(await updateUser(demoted.id, { name: demoted.name, email: demoted.email, role: "MEMBER", active: true, expected: { name: demoted.name, email: demoted.email, role: "ADMIN", active: true } }));
     });
     const assignee = async (id: string) => (await db.task.findUniqueOrThrow({ where: { id }, select: { assigneeId: true } })).assigneeId;
     // Sigue en el que había elegido (ahora como miembro) y en su privado; del otro de equipo sale y su tarjeta queda libre.

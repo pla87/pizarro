@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { countReleasesOn, deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
 import { RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS } from "../../src/lib/release";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 
 async function setup() {
   const user = await makeUser();
@@ -194,7 +194,7 @@ describe("deshacer un despliegue", () => {
     const a = await makeTask(f, { columnId: f.columns.done, position: 1000 });
     expectOk(await deployRelease({ projectId: f.project.id, title: "R", content: "x", destination: "IN_PRODUCTION", taskIds: [a.id] }));
     expectOk(await undoLast(f.project.id));
-    expectFail(await redoLast(f.project.id), /nada que rehacer/i);
+    expectFail(await redoChecked(f.project.id), /nada que rehacer/i);
   });
 
   test("aviso de cuota: el uso que da ya suma las copias de los adjuntos (antes «supera su cuota (0,6 de 1 MB)»)", async () => {

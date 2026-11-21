@@ -301,6 +301,21 @@ async function loadAccessibleRelease(user: Awaited<ReturnType<typeof requireUser
   return release;
 }
 
+/**
+ * Texto de una release del histórico, al desplegarla: la página solo manda la cabecera de cada una (el texto puede pesar
+ * hasta MAX_RELEASE_CONTENT y la página muestra hasta 200). El texto no cambia una vez desplegada.
+ */
+export async function getReleaseContent(releaseId: string) {
+  return runAction({ name: "releases.getReleaseContent", args: [releaseId] }, async (): Promise<{ content: string }> => {
+    const user = await requireUser();
+    const { releaseId: id } = releaseIdSchema.parse({ releaseId });
+    const release = await db.release.findUnique({ where: { id }, select: { projectId: true, content: true } });
+    if (!release) throw new AppError("La release no existe.");
+    await assertProjectAccess(user, release.projectId);
+    return { content: release.content };
+  });
+}
+
 /** Borra la release del histórico con sus adjuntos (no se puede deshacer); las tareas no se tocan y su número no se reutiliza. */
 export async function deleteRelease(releaseId: string) {
   return runAction({ name: "releases.deleteRelease", args: [releaseId] }, async () => {

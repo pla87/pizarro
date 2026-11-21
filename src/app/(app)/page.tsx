@@ -36,9 +36,15 @@ export default async function Home() {
           <Link href="/projects" className="font-medium text-brand-600 underline dark:text-brand-300">{t("Ver proyectos existentes")}</Link>.
         </p>
       )}
-      <p className="text-sm">
-        {user.role === "ADMIN" ? t("Crea uno desde el selector de proyectos del menú.") : t("Crea un proyecto privado desde el selector del menú o pide a un administrador que te dé acceso.")}
-      </p>
+      {user.role === "ADMIN" ? (
+        <p className="text-sm">{t("Crea uno desde el selector de proyectos del menú.")}</p>
+      ) : (
+        // Quien no es administrador puede crear sus proyectos privados: el mismo botón que el del administrador, aquí mismo.
+        <>
+          <p className="text-sm">{t("Crea un proyecto privado o pide a un administrador que te dé acceso.")}</p>
+          <NewProjectButton isAdmin={false} />
+        </>
+      )}
     </div>
   );
 }

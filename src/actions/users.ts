@@ -10,7 +10,9 @@ import { tasksN } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
-import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendProjectInviteMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { findManageableProject } from "@/lib/access";
+import { inviteProjectId, nameFromEmail } from "@/lib/project-invite";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
@@ -18,6 +20,8 @@ import { hashPassword, passwordSchema } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { eraseUser } from "@/lib/user-delete";
+import { HAS_ENTERED, invitePendingFrom } from "@/lib/user-entered";
+import { disconnectGoogleAccount } from "@/lib/google";
 import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
@@ -58,21 +62,9 @@ export async function createUser(input: z.input<typeof createSchema>) {
   return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role, locale: input.locale }] }, async () => {
     const admin = await requireAdmin();
     const data = createSchema.parse(input);
-    const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
     const invite = emailEnabled();
     const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
-    await assertUserSlot(db);
-    if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
-    // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
-    const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
-    // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
-    const created = await db.$transaction(async (tx) => {
-      await assertUserSlot(tx);
-      return tx.user.create({
-        data: { name: data.name, email: data.email, role: data.role, locale, mustChangePassword: true, passwordHash },
-        select: { id: true, name: true, email: true, locale: true },
-      });
-    });
+    const created = await insertUser(data, initial);
     revalidatePath("/admin/users");
     if (!invite) return { invited: false };
     try {
@@ -87,15 +79,85 @@ export async function createUser(input: z.input<typeof createSchema>) {
 }
 
 /**
- * ¿Invitación pendiente? Debe elegir contraseña y nunca ha entrado: sin sesiones, sin dispositivos conocidos (cada acceso
- * deja uno, que se conserva 400 días) y sin Google enlazado. Quien ya entró alguna vez usa «Forzar cambio de contraseña».
+ * Alta común de «Nuevo usuario» y de «Invitar por email» (un proyecto): tope de usuarios activos, email libre y
+ * contraseña inicial (sin ella, una aleatoria que nadie conoce). Con `projectId`, la cuenta entra ya en ese proyecto.
  */
+async function insertUser(data: { name: string; email: string; role: "ADMIN" | "MEMBER"; locale?: "ES" | "EN" }, initial: string | null, projectId?: string) {
+  const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
+  await assertUserSlot(db);
+  if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
+  // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
+  const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
+  // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
+  return db.$transaction(async (tx) => {
+    await assertUserSlot(tx);
+    const user = await tx.user.create({
+      data: { name: data.name, email: data.email, role: data.role, locale, mustChangePassword: true, passwordHash },
+      select: { id: true, name: true, email: true, locale: true },
+    });
+    if (projectId) await tx.projectMember.create({ data: { projectId, userId: user.id } });
+    return user;
+  });
+}
+
+/**
+ * «Invitar por email» en los miembros de un proyecto (solo administradores, que son quienes crean cuentas): da de alta a
+ * una persona sin cuenta como invitación (enlace de un solo uso, 72 h, para elegir su contraseña), la añade al proyecto y,
+ * al elegir la contraseña, la lleva a su tablero (el enlace guarda el proyecto). Con email configurado se le envía; con o
+ * sin email, se devuelve el enlace para «Copiar enlace». El nombre sale del email; la persona lo cambia en su perfil.
+ */
+export async function inviteToProject(projectId: string, email: string) {
+  return runAction({ name: "users.inviteToProject", args: [projectId] }, async () => {
+    const admin = await requireAdmin();
+    const project = await findManageableProject(admin, projectId);
+    if (!rateLimit(`project-invite:${admin.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const address = v.email.parse(email);
+    const existing = await db.user.findUnique({ where: { email: address }, select: { active: true } });
+    if (existing && !existing.active) throw new AppError("Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.");
+    if (existing) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
+    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER" }, null, project.id);
+    const token = await issueAuthToken(created.id, "INVITE", { projectId: project.id });
+    const link = `${appUrl()}/reset/${token}`;
+    let emailed = false;
+    let mailFailed = false;
+    if (emailEnabled()) {
+      try {
+        await sendProjectInviteMail(created, link, admin.name, project.name);
+        emailed = true;
+      } catch (err) {
+        logMailError("[users] invitación a un proyecto", err);
+        mailFailed = true;
+      }
+    }
+    // El enlace no se registra: solo quién, a qué proyecto y por dónde.
+    describeAction(`Invitó a «${created.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (por email)" : mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
+    revalidatePath("/", "layout");
+    return { name: created.name, link, emailed, mailFailed };
+  });
+}
+
+/** ¿Invitación pendiente? Debe elegir contraseña y nunca ha entrado (invitePendingFrom, user-entered.ts). */
 async function invitePending(userId: string): Promise<boolean> {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
   });
-  return !!user && user.mustChangePassword && !user.googleSub && user._count.sessions === 0 && user._count.knownDevices === 0;
+  return !!user && invitePendingFrom(user);
+}
+
+/**
+ * Proyecto al que lleva una invitación reenviada: el de la última invitación (si la persona aún está en él) o, si ya no
+ * queda ninguna (caducó y el mantenimiento la borró), su único proyecto. Con varios, o sin ninguno, la invitación genérica.
+ */
+async function inviteProject(userId: string): Promise<{ id: string; name: string } | null> {
+  const pending = await db.authToken.findFirst({ where: { userId, purpose: "INVITE" }, orderBy: { createdAt: "desc" }, select: { data: true } });
+  if (pending) {
+    const projectId = inviteProjectId(pending.data);
+    const member = projectId && (await db.projectMember.findFirst({ where: { projectId, userId }, select: { project: { select: { id: true, name: true } } } }));
+    return member ? member.project : null;
+  }
+  const members = await db.projectMember.findMany({ where: { userId }, select: { project: { select: { id: true, name: true } } }, take: 2 });
+  return members.length === 1 ? members[0]!.project : null;
 }
 
 /** «Reenviar invitación»: enlace nuevo (72 h) por email; el anterior deja de valer. Solo para quien aún no ha entrado. */
@@ -108,10 +170,13 @@ export async function resendInvite(userId: string) {
     if (!user) throw notFound();
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
+    const project = await inviteProject(user.id);
     try {
       // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
-      const token = await issueAuthToken(user.id, "INVITE");
-      await sendInviteMail(user, `${appUrl()}/reset/${token}`, admin.name);
+      const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
+      const link = `${appUrl()}/reset/${token}`;
+      if (project) await sendProjectInviteMail(user, link, admin.name, project.name);
+      else await sendInviteMail(user, link, admin.name);
     } catch (err) {
       logMailError("[users] reenviar invitación", err);
       throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.");
@@ -120,67 +185,64 @@ export async function resendInvite(userId: string) {
   });
 }
 
-const updateSchema = z.object({
+const userFields = {
   name: v.name,
   email: v.email,
   role: z.enum(["ADMIN", "MEMBER"]),
   active: z.boolean(),
+};
+
+const updateSchema = z.object({
+  ...userFields,
+  /**
+   * Los valores que vio quien edita (los de la lista al abrir «Editar»). Solo se aplican los campos que ha cambiado; si
+   * alguno de esos ha cambiado mientras tanto (otro administrador ha desactivado a la persona, le ha cambiado el email…),
+   * se rechaza. Sin ellos (un navegador con la versión anterior) no se sabe qué ha cambiado: también se rechaza.
+   */
+  expected: z.object({ name: z.string().max(200), email: z.string().max(200), role: userFields.role, active: z.boolean() }).optional(),
 });
+
+const STALE_USER = "Los datos han cambiado mientras tanto: recarga la página.";
 
 export async function updateUser(userId: string, input: z.input<typeof updateSchema>) {
   return runAction({ name: "users.updateUser", args: [userId, input] }, async () => {
     const admin = await requireAdmin();
-    const data = updateSchema.parse(input);
-    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true, role: true, active: true } });
-    if (!user) throw notFound();
-    if (user.id === admin.id && (data.role !== "ADMIN" || !data.active)) {
+    const { expected, ...wanted } = updateSchema.parse(input);
+    const id = v.id.parse(userId);
+    if (!expected) throw new AppError(STALE_USER, 409);
+    if (id === admin.id && (wanted.role !== "ADMIN" || !wanted.active)) {
       throw new AppError("No puedes quitarte el rol de administrador ni desactivarte a ti mismo.");
     }
-    const reactivating = data.active && !user.active;
-    if (reactivating) await assertUserSlot(db);
-    if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
-      throw new AppError("Ya existe un usuario con ese email.");
-    }
-    // Al cambiar de rol, la asignación a proyectos de equipo se traduce: un admin la lleva en AdminProjectPick
-    // y el resto en ProjectMember, así no se pierde ni se gana acceso por el cambio.
-    const roleSwitch: ((tx: Prisma.TransactionClient) => Promise<unknown>)[] = [];
+    const keys = ["name", "email", "role", "active"] as const;
+    const changed = new Set(keys.filter((k) => wanted[k] !== expected[k]));
     const unassigned = { count: 0, projectIds: [] as string[] };
-    if (data.role !== user.role) {
-      const teamOnly = { project: { isPrivate: false } };
-      if (data.role === "ADMIN") {
-        const rows = await db.projectMember.findMany({ where: { userId: user.id, ...teamOnly }, select: { projectId: true } });
-        roleSwitch.push(
-          (tx) => tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          (tx) => tx.projectMember.deleteMany({ where: { userId: user.id, ...teamOnly } }),
-        );
-      } else {
-        const rows = await db.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
-        roleSwitch.push(
-          (tx) => tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          (tx) => tx.adminProjectPick.deleteMany({ where: { userId: user.id } }),
-          // Como al quitar a alguien de un proyecto (removeProjectMember): las tarjetas que tenga asignadas en proyectos
-          // que deja de ver (de equipo que no había elegido; y, por si acaso, privados de los que no es miembro) quedan sin asignar.
-          async (tx) => {
-            const where = { assigneeId: user.id, project: { members: { none: { userId: user.id } } } };
-            const affected = await tx.task.findMany({ where, distinct: ["projectId"], select: { projectId: true } });
-            if (affected.length === 0) return;
-            unassigned.count = (await tx.task.updateMany({ where, data: { assigneeId: null } })).count;
-            unassigned.projectIds = affected.map((a) => a.projectId);
-          },
-        );
-      }
-    }
-    const emailChanged = data.email !== user.email;
-    const losesAdmin = user.role === "ADMIN" && user.active && (data.role !== "ADMIN" || !data.active);
-    await db.$transaction(async (tx) => {
-      // Reactivar ocupa una plaza: se vuelve a contar con el candado de altas (ver assertUserSlot).
-      if (reactivating) await assertUserSlot(tx);
-      // Quitar un administrador activo, con el mismo candado que «Borrar mi cuenta» (eraseUser): si quien lo hace
-      // acaba de borrarse a la vez, no se queda la instalación sin ninguno.
-      if (losesAdmin) {
+    const { user, data } = await db.$transaction(async (tx) => {
+      // Candados en orden fijo: plazas de usuarios (reactivar), administradores (quitar uno) y la fila de la persona.
+      // Así dos administradores que la editan a la vez van en fila y el segundo compara con lo que dejó el primero;
+      // «Borrar mi cuenta» (eraseUser) toma también pz:admins antes de borrar la fila.
+      if (changed.has("active") && wanted.active) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:max-users'))::text`;
+      if ((changed.has("role") && wanted.role !== "ADMIN") || (changed.has("active") && !wanted.active)) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
-        if ((await tx.user.count({ where: { id: { not: user.id }, role: "ADMIN", active: true } })) === 0) throw new AppError("Debe quedar al menos un administrador activo.");
       }
+      // NO KEY UPDATE: no bloquea crear sesiones ni dispositivos de la persona (sus claves foráneas solo piden KEY SHARE).
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR NO KEY UPDATE`;
+      const user = await tx.user.findUnique({ where: { id }, select: { id: true, name: true, email: true, locale: true, role: true, active: true } });
+      if (!user) throw notFound();
+      // Un campo cambiado aquí que otro ha cambiado entretanto (salvo al mismo valor): se rechaza, no se pisa.
+      if ([...changed].some((k) => user[k] !== expected[k] && user[k] !== wanted[k])) throw new AppError(STALE_USER, 409);
+      // Los que no se han tocado se quedan como están ahora (no como estaban al abrir el formulario).
+      const data = { name: changed.has("name") ? wanted.name : user.name, email: changed.has("email") ? wanted.email : user.email, role: changed.has("role") ? wanted.role : user.role, active: changed.has("active") ? wanted.active : user.active };
+      // Reactivar ocupa una plaza (ver assertUserSlot; el candado ya está tomado).
+      if (data.active && !user.active) await assertUserSlot(tx);
+      if (data.email !== user.email && (await tx.user.count({ where: { email: data.email, id: { not: user.id } } }))) {
+        throw new AppError("Ya existe un usuario con ese email.");
+      }
+      // Quitar un administrador activo, con el mismo candado que «Borrar mi cuenta» (eraseUser): si quien lo hace acaba de
+      // borrarse a la vez, no se queda la instalación sin ninguno. Como allí, solo cuenta quien ya ha entrado alguna vez.
+      if (user.role === "ADMIN" && user.active && (data.role !== "ADMIN" || !data.active)) {
+        if ((await tx.user.count({ where: { id: { not: user.id }, role: "ADMIN", active: true, ...HAS_ENTERED } })) === 0) throw new AppError("Debe quedar al menos un administrador activo.");
+      }
+      const emailChanged = data.email !== user.email;
       // Con otro email, la cuenta de Google vinculada deja de valer (era la de la dirección anterior).
       await tx.user.update({ where: { id: user.id }, data: emailChanged ? { ...data, googleSub: null } : data });
       // Y los enlaces pendientes enviados a la dirección anterior (invitación, restablecer, confirmar) ya no sirven.
@@ -188,13 +250,33 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
       if (emailChanged || !data.active) await tx.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } });
       // Los informes semanales que iban a su dirección anterior pasan a la nueva.
       if (emailChanged) await retargetReportSchedules(tx, user.email, data.email);
-      for (const op of roleSwitch) await op(tx);
+      // Al cambiar de rol, la asignación a proyectos de equipo se traduce, así no se pierde ni se gana acceso por el
+      // cambio: un admin nuevo sigue asignado (ProjectMember) y además los tiene elegidos (AdminProjectPick); quien deja de
+      // serlo pasa a estar asignado a los que tenía elegidos. Se lee aquí, con la fila bloqueada: lo que haya cambiado
+      // otro administrador mientras tanto también cuenta.
+      if (data.role !== user.role && data.role === "ADMIN") {
+        const rows = await tx.projectMember.findMany({ where: { userId: user.id, project: { isPrivate: false } }, select: { projectId: true } });
+        await tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true });
+      } else if (data.role !== user.role) {
+        const rows = await tx.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });
+        await tx.projectMember.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true });
+        await tx.adminProjectPick.deleteMany({ where: { userId: user.id } });
+        // Como al quitar a alguien de un proyecto (removeProjectMember): las tarjetas que tenga asignadas en proyectos
+        // que deja de ver (de equipo que no había elegido; y, por si acaso, privados de los que no es miembro) quedan sin asignar.
+        const where = { assigneeId: user.id, project: { members: { none: { userId: user.id } } } };
+        const affected = await tx.task.findMany({ where, distinct: ["projectId"], select: { projectId: true } });
+        if (affected.length) {
+          unassigned.count = (await tx.task.updateMany({ where, data: { assigneeId: null } })).count;
+          unassigned.projectIds = affected.map((a) => a.projectId);
+        }
+      }
       // Al desactivar o cambiar de rol se cierran sus sesiones.
       // Y los accesos a medio completar: al reactivar no deben «revivir», y con otro rol cambia si se exige el segundo paso.
       if (data.active !== user.active || data.role !== user.role) {
         await tx.session.deleteMany({ where: { userId: user.id } });
         await tx.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } });
       }
+      return { user, data };
     });
     // Aviso a la dirección antigua: si alguien se hiciera con la cuenta, el dueño se entera.
     if (data.email !== user.email && emailEnabled()) {
@@ -215,6 +297,9 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
  * la persona queda obligada a elegir una nueva, se cierran sus sesiones, se anulan sus enlaces pendientes y recibe un
  * enlace de restablecimiento (30 min) por email o el admin lo copia. Con Google (si lo tiene enlazado) sigue
  * pudiendo entrar, pero aterriza en «Elige una contraseña nueva» hasta elegirla.
+ * Como la cuenta puede estar en manos de otro, también se corta lo que sigue funcionando sin sesión: el calendario
+ * suscrito (su enlace deja de valer), Telegram y WhatsApp (los avisos dejan de llegar a ese chat o teléfono) y Google
+ * Drive (como «Desconectar» en Mi perfil). Cambiar o restablecer uno mismo la contraseña no toca nada de esto.
  */
 export async function forcePasswordChange(userId: string, opts?: { copyLink?: boolean }) {
   return runAction({ name: "users.forcePasswordChange", args: [userId, !!opts?.copyLink] }, async () => {
@@ -235,8 +320,15 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
       db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
       // También los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo).
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
+      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.
+      db.calendarFeed.deleteMany({ where: { userId: user.id } }),
+      db.userChannel.deleteMany({ where: { userId: user.id } }),
+      db.telegramLinkCode.deleteMany({ where: { userId: user.id } }),
     ]);
+    // revokeUser también vacía la caché de los calendarios suscritos: el enlace deja de dar sus tareas al momento.
     revokeUser(user.id);
+    // Google Drive, como «Desconectar» en Mi perfil (retira el permiso en Google y borra la conexión).
+    await disconnectGoogleAccount(user.id);
     // El token nunca se registra: describeAction solo dice qué se hizo.
     if (showLink) {
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
@@ -290,6 +382,7 @@ export async function unlinkGoogle(userId: string) {
       // Un acceso con Google a medio completar (falta el segundo paso) tampoco debe poder terminarse.
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
     ]);
+    // Solo el acceso con Google: Drive, el calendario suscrito y los canales siguen como estaban (el diálogo lo dice).
     revokeUser(user.id);
     describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);
     if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));

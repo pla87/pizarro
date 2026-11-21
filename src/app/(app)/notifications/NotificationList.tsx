@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
-import { notificationBody, notificationHeadline, type NotificationKind } from "@/lib/notification-text";
+import { assignedBatchCount, notificationBody, notificationHeadline, type NotificationKind } from "@/lib/notification-text";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -102,7 +102,9 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
         <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
           {items.map((n) => {
             const Icon = ICONS[n.type] ?? AtSign;
-            const body = notificationBody(n.type, n.excerpt, t, locale);
+            // Asignación en lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).
+            const batch = n.type === "ASSIGNED" && (assignedBatchCount(n.excerpt) ?? 0) > 1;
+            const body = batch ? "" : notificationBody(n.type, n.excerpt, t, locale);
             return (
               <li key={n.id} className={cn("flex items-stretch hover:bg-slate-50 dark:hover:bg-slate-800/50", !n.read && "bg-brand-50/50 dark:bg-brand-500/5")}>
                 <button onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
@@ -126,7 +128,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                       {n.project
                         // Aviso de proyecto: la cuenta borrada va en el extracto y el proyecto en lugar de la tarea.
                         ? notificationHeadline(n.type, t, { actor: n.excerpt || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }) })
-                        : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada") })}
+                        : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {body && <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">{body}</p>}

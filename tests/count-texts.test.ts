@@ -28,8 +28,8 @@ test("subtareas que no caben: las cuatro combinaciones de 1 y varias", () => {
 test("avisos de importación con un solo elemento, en singular en los dos idiomas", () => {
   const csv = "title,priority\nA,rarísima\n,alta";
   assert.deepEqual(parseForeign(csv, "csv", { t: es }).warnings.sort(), ["1 fila no tenía título y se ha ignorado.", "1 prioridad no se reconoció y se ha ignorado."]);
-  assert.deepEqual(parseForeign(csv, "csv", { t: en }).warnings.sort(), ["1 priority was not recognised and was ignored.", "1 row had no title and was ignored."]);
+  assert.deepEqual(parseForeign(csv, "csv", { t: en }).warnings.sort(), ["1 priority was not recognized and was ignored.", "1 row had no title and was ignored."]);
   // Con varios, el plural de siempre.
   const many = parseForeign("title,priority\nA,rara\nB,rarísima\n,x\n,y", "csv", { t: en }).warnings.sort();
-  assert.deepEqual(many, ["2 priorities were not recognised and were ignored.", "2 rows had no title and were ignored."]);
+  assert.deepEqual(many, ["2 priorities were not recognized and were ignored.", "2 rows had no title and were ignored."]);
 });

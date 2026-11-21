@@ -22,3 +22,16 @@ test("correo programado: a la hora en punto (+1 min) de la zona de la app, no a 
   // Zona no válida: la de UTC.
   assert.equal(msUntilMailPass(new Date("2026-06-30T06:37:20Z"), "No/Existe"), 23 * min + 40_000);
 });
+
+test("limpiezas con retención de días: una vez al día; deshacer sigue en cada pasada", async () => {
+  const { MAINTENANCE_JOBS } = await import("../src/lib/maintenance");
+  const every = (name: string) => {
+    const job = MAINTENANCE_JOBS.find((j) => j.name === name);
+    assert.ok(job, name);
+    return "everyMs" in job ? job.everyMs : undefined;
+  };
+  for (const name of ["nonImageCopies", "notifications", "authData", "taskHistory", "orphanFiles", "documentsTrashPurge"]) {
+    assert.equal(every(name), 23 * 60 * 60 * 1000, name);
+  }
+  assert.equal(every("undo"), undefined);
+});

@@ -1,12 +1,12 @@
 // Suscripción al calendario (.ics vivo) contra PostgreSQL real: token, permisos, regeneración y límite de ritmo.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "../../src/actions/calendar-feed";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
+import { calendarFeedUsage, createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "../../src/actions/calendar-feed";
 import { GET } from "../../src/app/api/calendar/[file]/route";
 import { onRequestError } from "../../src/instrumentation";
 import { createProject, removeProjectMember } from "../../src/actions/projects";
-import { cachedFeedIcs, defaultFeedScope, FEED_CACHE_MAX, FEED_CACHE_MAX_BYTES, FEED_CACHE_MS, feedCacheForTests, feedMaxAgeSec, resolveFeedToken } from "../../src/lib/calendar-feed";
+import { cachedFeedIcs, defaultFeedScope, EMPTY_FEED_ICS, FEED_CACHE_MAX, FEED_CACHE_MAX_BYTES, FEED_CACHE_MS, feedCacheForTests, feedMaxAgeSec, resolveFeedToken } from "../../src/lib/calendar-feed";
 import { revokeUser } from "../../src/lib/revoke";
 import pg from "pg";
 import { buildColumnIcs } from "../../src/lib/column-views";
@@ -26,6 +26,15 @@ async function fetchFeed(token: string, ip = `10.9.${Math.floor(n / 250)}.${(n++
   if (!cached) feedCacheForTests.clear();
   const res = await GET(new Request(`https://app.example.com/api/calendar/${token}.ics`, { headers: { "x-real-ip": ip, ...headers } }), { params: Promise.resolve({ file: `${token}.ics` }) });
   return { res, text: await res.text() };
+}
+
+/** Respuesta a un enlace con forma válida que no vale: el mismo calendario vacío para todos (sin eventos ni datos de nadie). */
+function assertEmptyFeed(r: { res: Response; text: string }, what = "") {
+  assert.equal(r.res.status, 200, what);
+  assert.equal(r.res.headers.get("content-type"), "text/calendar; charset=utf-8", what);
+  assert.equal(r.text, EMPTY_FEED_ICS, what);
+  assert.ok(!r.text.includes("BEGIN:VEVENT"), what);
+  assert.ok(r.text.startsWith("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n") && r.text.endsWith("END:VCALENDAR\r\n"), `${what}: .ics válido`);
 }
 
 const tokenOf = (https: string) => /\/api\/calendar\/([^/]+)\.ics$/.exec(https)![1]!;
@@ -75,23 +84,39 @@ describe("calendario suscrito", () => {
     assert.equal((await fetchFeed(a.token)).res.status, 200);
     const b = await feedFor(user);
     assert.notEqual(a.token, b.token);
-    assert.equal((await fetchFeed(a.token)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(a.token), "regenerado");
     assert.equal((await fetchFeed(b.token)).res.status, 200);
     expectOk(await disableCalendarFeed());
-    assert.equal((await fetchFeed(b.token)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(b.token), "desactivado");
     assert.equal(await db.calendarFeed.count({ where: { userId: user.id } }), 0);
     const c = await feedFor(user);
     assert.equal((await fetchFeed(c.token)).res.status, 200);
-    assert.equal((await fetchFeed(b.token)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(b.token), "desactivado y luego otro nuevo");
   });
 
-  test("todos los fallos dan el mismo 404 genérico", async () => {
-    const user = await makeUser();
+  test("un enlace con forma válida que no vale da el mismo calendario vacío (exista o no); otra forma, 404", async () => {
+    const user = await makeUser({ name: "Persona Calendario Vacío" });
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { title: "Tarea que no debe salir", dueDate: inDays(3) });
     const live = await feedFor(user);
+    const before = await fetchFeed(live.token);
+    assert.ok(before.text.includes("BEGIN:VEVENT"));
     expectOk(await disableCalendarFeed());
-    const cases = [live.token, "x".repeat(43), "corto", "a".repeat(200)];
+    // El que existió y uno inventado: misma respuesta, cabeceras incluidas (no se sabe cuál existió).
+    const revoked = await fetchFeed(live.token);
+    const invented = await fetchFeed("x".repeat(43));
+    for (const [what, r] of [["desactivado", revoked], ["inventado", invented]] as const) {
+      assertEmptyFeed(r, what);
+      for (const leak of [user.name, f.project.name, "Tarea que no debe salir", live.token]) assert.ok(!r.text.includes(leak), `${what}: ${leak}`);
+    }
+    const headersOf = (r: { res: Response }) => [...r.res.headers.entries()].filter(([k]) => k !== "date").sort();
+    assert.deepEqual(headersOf(revoked), headersOf(invented));
+    assert.match(revoked.text, /^X-WR-CALNAME:Pizarro\r$/m, "nombre genérico");
+    // Con su ETag, 304 (también es el mismo para todos).
+    assert.equal((await fetchFeed("y".repeat(43), undefined, { "if-none-match": revoked.res.headers.get("etag")! })).res.status, 304);
+    // Otra forma: 404 genérico.
     const seen = [];
-    for (const tok of cases) {
+    for (const tok of ["corto", "a".repeat(200), "x".repeat(42) + "!"]) {
       const { res, text } = await fetchFeed(tok);
       seen.push([res.status, text, res.headers.get("content-type")]);
     }
@@ -106,7 +131,7 @@ describe("calendario suscrito", () => {
     const a = await feedFor(inactive);
     assert.equal((await fetchFeed(a.token)).res.status, 200);
     await db.user.update({ where: { id: inactive.id }, data: { active: false } });
-    assert.equal((await fetchFeed(a.token)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(a.token), "usuario desactivado");
     await db.user.update({ where: { id: inactive.id }, data: { active: true } });
     assert.equal((await fetchFeed(a.token)).res.status, 200);
 
@@ -114,7 +139,7 @@ describe("calendario suscrito", () => {
     const b = await feedFor(gone);
     assert.equal((await fetchFeed(b.token)).res.status, 200);
     await db.user.delete({ where: { id: gone.id } });
-    assert.equal((await fetchFeed(b.token)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(b.token), "usuario borrado");
     assert.equal(await db.calendarFeed.count({ where: { tokenHash: (await import("../../src/lib/calendar-feed-core")).hashFeedToken(b.token) } }), 0);
   });
 
@@ -242,6 +267,61 @@ describe("calendario suscrito", () => {
     assert.equal(expectOk(await suggestedCalendarFeedScope()), "ALL", "con suscripción, la suya");
   });
 
+  test("«Último uso»: sin usar al generarlo, se anota al consultarlo, vuelve a «sin usar» al regenerar y desaparece al desactivar", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: false, lastUsedAt: null });
+    const a = await feedFor(user);
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: true, lastUsedAt: null });
+    const before = Date.now();
+    assert.equal((await fetchFeed(a.token)).res.status, 200);
+    // La ruta lo escribe sin esperar a la respuesta.
+    let used: string | null = null;
+    for (let i = 0; i < 50 && !used; i++) {
+      used = expectOk(await calendarFeedUsage()).lastUsedAt;
+      if (!used) await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.ok(used && Date.parse(used) >= before - 1000, "anotado al consultarlo");
+    // Solo el de quien pregunta.
+    await loginAs(await makeUser());
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: false, lastUsedAt: null });
+    await feedFor(user);
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: true, lastUsedAt: null }, "el enlace nuevo aún no se ha usado");
+    expectOk(await disableCalendarFeed());
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: false, lastUsedAt: null });
+  });
+
+  test("«Último uso»: una consulta con el enlace anterior que termina después de regenerarlo no lo anota en el nuevo", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { dueDate: inDays(3) });
+    const old = await feedFor(user);
+    // Con «Task» bloqueada, la consulta con el enlace anterior ya lo ha validado y se queda montando el .ics.
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => (release = resolve));
+    let lockedReady!: () => void;
+    const ready = new Promise<void>((r) => (lockedReady = r));
+    const lockTx = db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`LOCK TABLE "Task" IN ACCESS EXCLUSIVE MODE`);
+      lockedReady();
+      await locked;
+    }, { timeout: 30_000 });
+    let pending: ReturnType<typeof fetchFeed> | undefined;
+    try {
+      await ready;
+      pending = fetchFeed(old.token);
+      await waitForLockWaiter();
+      await feedFor(user); // regenerar mientras tanto
+    } finally {
+      release();
+      await lockTx;
+    }
+    assert.equal((await pending!).res.status, 200);
+    await new Promise((r) => setTimeout(r, 300)); // la ruta lo escribe sin esperar a la respuesta
+    await loginAs(user);
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: true, lastUsedAt: null }, "el enlace nuevo sigue «sin usar»");
+  });
+
   test("excluye archivadas, sin fecha y fuera de la ventana; el rango usa la fecha de inicio solo si el proyecto la activa", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
@@ -331,7 +411,7 @@ describe("calendario suscrito", () => {
     assert.ok(!JSON.stringify(ok).includes(token), "el token nunca va al registro");
     // Enlace regenerado que el calendario sigue pidiendo: se anota (una vez por IP y periodo), sin el token.
     const fresh = await feedFor(user);
-    for (let i = 0; i < 3; i++) assert.equal((await fetchFeed(token, "10.6.6.3")).res.status, 404);
+    for (let i = 0; i < 3; i++) assertEmptyFeed(await fetchFeed(token, "10.6.6.3"));
     const rejected = (await rows("calendar.feedRejected")).filter((r) => r.ip === "10.6.6.3");
     assert.equal(rejected.length, 1);
     assert.ok(!JSON.stringify(rejected).includes(token));
@@ -644,7 +724,7 @@ describe("memoria del calendario suscrito", () => {
     assert.ok((await fetchFeed(token)).text.includes(later.id));
   });
 
-  test("un enlace regenerado o desactivado da 404 aunque su calendario siga en la memoria", async () => {
+  test("un enlace regenerado o desactivado da el calendario vacío aunque el suyo siga en la memoria", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
     await makeTask(f, { dueDate: inDays(2) });
@@ -652,15 +732,15 @@ describe("memoria del calendario suscrito", () => {
     feedCacheForTests.clear();
     assert.equal((await fetchFeed(a.token, undefined, {}, true)).res.status, 200);
     const b = await feedFor(user);
-    assert.equal((await fetchFeed(a.token, undefined, {}, true)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(a.token, undefined, {}, true));
     assert.equal((await fetchFeed(b.token, undefined, {}, true)).res.status, 200);
     expectOk(await disableCalendarFeed());
-    assert.equal((await fetchFeed(b.token, undefined, {}, true)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(b.token, undefined, {}, true));
     // Usuario desactivado: también.
     const c = await feedFor(user);
     assert.equal((await fetchFeed(c.token, undefined, {}, true)).res.status, 200);
     await db.user.update({ where: { id: user.id }, data: { active: false } });
-    assert.equal((await fetchFeed(c.token, undefined, {}, true)).res.status, 404);
+    assertEmptyFeed(await fetchFeed(c.token, undefined, {}, true));
   });
 
   test("consultas simultáneas del mismo enlace comparten la generación; caduca al minuto; el alcance cambia la clave", async () => {

@@ -1,7 +1,8 @@
 import "server-only";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
-import { formatDate } from "./format";
-import { appUrl, escapeHtml, sendMail, type MailMessage } from "./mail";
+import { formatDateTimeZone } from "./format";
+import { getInstanceSettings } from "./instance";
+import { appUrl, escapeHtml, noReplyNote, sendMail, type MailMessage } from "./mail";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
@@ -63,14 +64,49 @@ export function sendPasswordResetMail(user: Recipient, url: string): Promise<voi
   }));
 }
 
-export function sendInviteMail(user: Recipient, url: string, invitedBy: string): Promise<void> {
+/** Invitación a una cuenta nueva: con el nombre de la organización (Administración → Ajustes), si lo hay, para que se sepa de quién viene. */
+export async function sendInviteMail(user: Recipient, url: string, invitedBy: string): Promise<void> {
+  const { orgName: org } = await getInstanceSettings();
   return send(user, user.locale, (t) => ({
-    subject: t("Te han invitado a Pizarro"),
+    subject: org ? t("Te han invitado al Pizarro de {org}", { org }) : t("Te han invitado a Pizarro"),
     paragraphs: [
       t("Hola, {name}:", { name: user.name }),
-      t("{admin} te ha dado de alta en Pizarro. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, n: hours(TOKEN_TTL_MS.INVITE) }),
+      org
+        ? t("{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, org, n: hours(TOKEN_TTL_MS.INVITE) })
+        : t("{admin} te ha dado de alta en Pizarro. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, n: hours(TOKEN_TTL_MS.INVITE) }),
     ],
     button: { label: t("Elegir mi contraseña"), url },
+  }));
+}
+
+/** Invitación desde los ajustes de un proyecto: la cuenta nueva ya está en el proyecto y, tras elegir la contraseña, entra en su tablero. */
+export async function sendProjectInviteMail(user: Recipient, url: string, invitedBy: string, projectName: string): Promise<void> {
+  // Con el nombre de la organización, como sendInviteMail: así se sabe de quién viene.
+  const { orgName: org } = await getInstanceSettings();
+  return send(user, user.locale, (t) => ({
+    subject: org
+      ? t("{admin} te ha invitado al proyecto «{project}» en el Pizarro de {org}", { admin: invitedBy, project: projectName, org })
+      : t("{admin} te ha invitado al proyecto «{project}» en Pizarro", { admin: invitedBy, project: projectName }),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      org
+        ? t("{admin} te ha dado de alta en el Pizarro de {org} y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, org, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) })
+        : t("{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) }),
+    ],
+    button: { label: t("Elegir mi contraseña"), url },
+  }));
+}
+
+/** Aviso a quien ya tiene cuenta: otra persona le ha añadido a un proyecto. El enlace lleva a su tablero. */
+export function sendProjectAddedMail(user: Recipient, addedBy: string, projectName: string, url: string): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("{name} te ha añadido al proyecto «{project}»", { name: addedBy, project: projectName }),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.", { name: addedBy, project: projectName }),
+    ],
+    button: { label: t("Abrir el tablero"), url },
+    note: `${t("Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».")} ${noReplyNote(t)}`,
   }));
 }
 
@@ -141,7 +177,7 @@ export function sendNewLoginMail(user: Recipient, info: { when: Date; device: st
       t("Se ha iniciado sesión en tu cuenta desde un dispositivo que no habíamos visto antes."),
     ],
     details: [
-      [t("Fecha"), formatDate(info.when, "dateTime", intlLocale(toLocale(user.locale)))],
+      [t("Fecha"), formatDateTimeZone(info.when, intlLocale(toLocale(user.locale)))],
       [t("Dispositivo"), info.device],
       [t("IP"), info.ip ?? t("Desconocida")],
     ],
@@ -209,7 +245,7 @@ export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | n
       subject: t("Pizarro: la última copia de seguridad es mucho menor que la anterior"),
       paragraphs: [
         t("Hola, {name}:", { name: admin.name }),
-        shrinkText(shrink, t, (iso) => formatDate(iso, "dateTimeSeconds", intlLocale(toLocale(admin.locale)))),
+        shrinkText(shrink, t, (iso) => formatDateTimeZone(iso, intlLocale(toLocale(admin.locale)), "dateTimeSeconds")),
         t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla.", { stem: shrink.goodStem }),
         t("Si has borrado datos a propósito, confírmalo en Administración → Copias de seguridad con «La reducción es correcta»."),
       ],
@@ -223,10 +259,10 @@ export function sendBackupAlertMail(admin: Recipient, info: { lastAt: string | n
       t("Hola, {name}:", { name: admin.name }),
       info.external
         ? info.lastAt
-          ? t("La última copia subida correctamente al destino externo es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
+          ? t("La última copia subida correctamente al destino externo es del {date}, hace más de 48 horas.", { date: formatDateTimeZone(info.lastAt, intlLocale(toLocale(admin.locale))) })
           : t("Todavía no se ha subido ninguna copia al destino externo configurado.")
         : info.lastAt
-          ? t("La última copia de seguridad correcta es del {date}, hace más de 48 horas.", { date: formatDate(info.lastAt, "dateTime", intlLocale(toLocale(admin.locale))) })
+          ? t("La última copia de seguridad correcta es del {date}, hace más de 48 horas.", { date: formatDateTimeZone(info.lastAt, intlLocale(toLocale(admin.locale))) })
           : t("Todavía no hay ninguna copia de seguridad correcta y la clave BACKUP_KEY está configurada."),
       t("Revisa los Logs de Administración y prueba «Crear copia ahora» en Administración → Copias de seguridad."),
     ],

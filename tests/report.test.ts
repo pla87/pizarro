@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildReport, deliverableStatus, type ReportInput } from "../src/lib/report";
+import { deliverableProgress } from "../src/lib/deliverable-progress";
 
 const base: ReportInput = {
   project: { name: "P", description: "" },
@@ -42,6 +43,35 @@ test("entregables: avance y estado", () => {
   assert.equal(beta!.pct, 33);
   assert.equal(beta!.daysLeft, 4);
   assert.equal(beta!.status, "En riesgo");
+});
+
+test("avance de un entregable: criterio único (archivadas = hechas; las fijas no cuentan)", () => {
+  assert.deepEqual(deliverableProgress([]), { total: 0, done: 0 });
+  assert.deepEqual(
+    deliverableProgress([
+      { evergreen: false, archived: false, inDoneColumn: false, count: 3 }, // pendientes
+      { evergreen: false, archived: false, inDoneColumn: true }, // en una columna terminada
+      { evergreen: false, archived: true, inDoneColumn: false, count: 2 }, // archivadas (desde cualquier columna)
+      { evergreen: true, archived: false, inDoneColumn: false, count: 4 }, // fijas: fuera
+      { evergreen: true, archived: false, inDoneColumn: true },
+      { evergreen: true, archived: true, inDoneColumn: false },
+    ]),
+    { total: 6, done: 3 },
+  );
+});
+
+test("entregables del informe: sin las fijas y, con `progress` (de la BD), con las archivadas", () => {
+  const withFixed: ReportInput = {
+    ...base,
+    tasks: [...base.tasks, { id: "e", title: "Fija", kind: "Funcionalidad", columnId: "todo", assigneeName: null, dueDate: null, deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0, evergreen: true }],
+  };
+  const [beta] = buildReport(withFixed).deliverables;
+  assert.equal(beta!.total, 3);
+  assert.equal(beta!.done, 1);
+  const [counted] = buildReport({ ...withFixed, deliverables: [{ ...withFixed.deliverables[0]!, progress: { total: 5, done: 3 } }] }).deliverables;
+  assert.equal(counted!.total, 5);
+  assert.equal(counted!.done, 3);
+  assert.equal(counted!.pct, 60);
 });
 
 test("estado de entregable", () => {
@@ -110,4 +140,31 @@ test("tareas fijas: fuera del avance y de las pendientes, contadas aparte", () =
   assert.deepEqual(r.people, plain.people);
   assert.deepEqual(r.types, plain.types);
   assert.equal(plain.kpis.fixed, 0);
+});
+
+// Antes el informe leía las primeras 2.000 tareas y calculaba con ellas el avance, las vencidas y la carga por persona,
+// sin avisar. Ahora los recuentos llegan de la BD sobre todas (`counts`) y el PDF dice cuántas salen en los listados.
+test("recuentos de todas las tareas: avance, vencidas, columnas, tipos y personas no dependen de las listadas", () => {
+  const counts: NonNullable<ReportInput["counts"]> = {
+    rows: [
+      { columnId: "todo", assigneeName: "Ana", kind: "Corrección", count: 1500, overdue: 300, dueSoon: 100, withoutDue: 200 },
+      { columnId: "todo", assigneeName: null, kind: "Funcionalidad", count: 1000, overdue: 50, dueSoon: 0, withoutDue: 900 },
+      { columnId: "done", assigneeName: "Ana", kind: "Funcionalidad", count: 500, overdue: 500, dueSoon: 0, withoutDue: 0 },
+    ],
+    fixed: 2,
+  };
+  const r = buildReport({ ...base, counts });
+  assert.deepEqual(
+    { total: r.kpis.total, done: r.kpis.done, open: r.kpis.open, pct: r.kpis.progressPct, overdue: r.kpis.overdue, soon: r.kpis.dueSoon, unassigned: r.kpis.unassignedOpen, noDue: r.kpis.withoutDueOpen, fixed: r.kpis.fixed },
+    { total: 3000, done: 500, open: 2500, pct: 17, overdue: 350, soon: 100, unassigned: 1000, noDue: 1100, fixed: 2 },
+  );
+  assert.deepEqual(r.columns.map((c) => [c.name, c.count, c.overdue]), [["Backlog", 2500, 350], ["Cerrado", 500, 0]]);
+  assert.deepEqual(r.people, [{ name: "Ana", open: 1500, done: 500, overdue: 300 }, { name: "Sin asignar", open: 1000, done: 0, overdue: 50 }]);
+  assert.deepEqual(r.types, [{ label: "Funcionalidad", open: 1000, done: 500 }, { label: "Corrección", open: 1500, done: 0 }]);
+  // Se listan 4 de 3.002 (con las fijas).
+  assert.equal(r.omittedTasks, 2998);
+  // Las listas siguen siendo las de las tareas leídas.
+  assert.deepEqual(r.overdue.map((t) => t.title), ["Vencida"]);
+  // Sin recuentos de la BD (todas leídas), los mismos números salen de las tareas y no se omite ninguna.
+  assert.equal(buildReport(base).omittedTasks, 0);
 });

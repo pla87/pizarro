@@ -8,7 +8,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { AI_PLAN_ZIP_FOLDER, aiPlanZipRoot } from "@/lib/ai-plan";
 import { aiPlanZipName, attachmentFileNames, isoDate, plainAttachmentFileNames, RELEASE_MAX_ATTACHMENT_TASKS, releaseZipName } from "@/lib/release";
-import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipHeadResponse, zipSlotBusy, zipVersionConflict, type ZipEntry, type ZipSendOutcome } from "@/lib/release-zip";
+import { acquireZipSlot, planZipEntries, prepareZipPart, sizedZipEntries, zipPartBody, zipPlanBody, zipRateKey, zipRequestMode, zipHeadResponse, zipSlotBusy, zipVersionConflict, zipPartRequired, type ZipEntry, type ZipSendOutcome } from "@/lib/release-zip";
 import { findZipTicket, issueZipTicket } from "@/lib/zip-ticket";
 import { clientIp, isSameOrigin } from "@/lib/request";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
@@ -104,7 +104,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
     return Response.json(ticket.status(), { headers: { "Cache-Control": "private, no-store" } });
   }
   const mode = zipRequestMode(req.url);
-  if (!mode || mode.kind !== "part" || !mode.explicit) return new Response(t("Datos no válidos"), { status: 400 });
+  if (mode?.kind === "incomplete") return zipPartRequired(t);
+  if (!mode || mode.kind !== "part") return new Response(t("Datos no válidos"), { status: 400 });
   ticket.reset(mode.part);
   const rate = zipRateKey(mode, user.id);
   const name = sp.get("name");

@@ -16,7 +16,7 @@ export const web: Record<string, string> = {
     "The Pizarro board with the columns To do, In progress, Review, Next release and Done, and cards showing their owner, due date, labels and subtasks",
 
   // Problema y solución
-  "Para organizar a cinco personas no hace falta una herramienta enorme": "Five people don't need a huge tool to get organised",
+  "Para organizar a cinco personas no hace falta una herramienta enorme": "Five people don't need a huge tool to get organized",
   "Las aplicaciones de proyectos crecen cada año: más menús, más opciones y una factura que sube con cada persona que invitas. Pizarro va en la dirección contraria: hace pocas cosas, las hace bien y es tuyo.":
     "Project apps grow every year: more menus, more options and a bill that goes up with every person you invite. Pizarro goes the other way: it does a few things, does them well, and it's yours.",
   "Se entiende a la primera": "Makes sense at first sight",
@@ -26,7 +26,7 @@ export const web: Record<string, string> = {
   // Cómo funciona
   "Cómo funciona": "How it works",
   "Todo el trabajo del equipo, de un vistazo": "All of your team's work, at a glance",
-  "Lo justo para organizarse, bien resuelto. Estas capturas son de la aplicación real.": "Just what you need to get organised, done well. These screenshots are of the real app.",
+  "Lo justo para organizarse, bien resuelto. Estas capturas son de la aplicación real.": "Just what you need to get organized, done well. These screenshots are of the real app.",
   "Cada tarea, con todo lo que necesita": "Every task, with everything it needs",
   "Cada columna es una fase y cada tarjeta, una tarea. Arrástralas según avanzan; al abrir una tienes la descripción, las subtareas, los archivos y la conversación en el mismo sitio.":
     "Each column is a stage and each card is a task. Drag them along as they progress; open one and the description, subtasks, files and conversation are all in one place.",
@@ -73,7 +73,7 @@ export const web: Record<string, string> = {
   // Funciones
   "Y todo lo demás que hace falta": "And everything else you need",
   "Sin módulos ni planes: todo viene incluido desde el primer día.": "No add-ons and no plans: everything is included from day one.",
-  "Calendario mensual de Pizarro con las tareas de cada día coloreadas por tipo": "Pizarro's monthly calendar with each day's tasks coloured by type",
+  "Calendario mensual de Pizarro con las tareas de cada día coloreadas por tipo": "Pizarro's monthly calendar with each day's tasks colored by type",
   "Arrastra tareas de un día a otro y suscríbete desde el calendario del móvil.": "Drag tasks from one day to another and subscribe from your phone's calendar.",
   "Tu bandeja del día con lo que llevas en todos los proyectos.": "Your daily inbox with what you're handling across every project.",
   "El estado del proyecto en una página, también por email cada semana.": "The project's status on one page, also by email every week.",
@@ -124,10 +124,10 @@ export const web: Record<string, string> = {
   // Preguntas sobre la licencia (web y presentación)
   "¿Qué es uso personal?": "What counts as personal use?",
   "¿Qué pasa si no pago?": "What happens if I don't pay?",
-  "Pizarro funciona exactamente igual: no hay versión de prueba, ni funciones recortadas, ni fecha de caducidad. La licencia se basa en la buena voluntad. Si lo usas para trabajar, comprarla ({price} € + IVA, una sola vez) es lo que permite seguir mejorándolo.": "Pizarro works exactly the same: there is no trial version, no cut-down features and no expiry date. The licence relies on good faith. If you use it for work, buying it (€{price} + VAT, once) is what keeps it improving.",
+  "Pizarro funciona exactamente igual: no hay versión de prueba, ni funciones recortadas, ni fecha de caducidad. La licencia se basa en la buena voluntad. Si lo usas para trabajar, comprarla ({price} € + IVA, una sola vez) es lo que permite seguir mejorándolo.": "Pizarro works exactly the same: there is no trial version, no cut-down features and no expiry date. The license relies on good faith. If you use it for work, buying it (€{price} + VAT, once) is what keeps it improving.",
   "¿Me lo va a recordar?": "Will it remind me?",
   "¿Se bloquea algo?": "Is anything ever blocked?",
-  "No. Nada se bloquea nunca y la licencia no se comprueba por internet.": "No. Nothing is ever blocked, and the licence is never checked over the internet.",
+  "No. Nada se bloquea nunca y la licencia no se comprueba por internet.": "No. Nothing is ever blocked, and the license is never checked over the internet.",
 
   // Web del producto: textos generales, precio y licencia
   "Pizarro: un tablero Kanban sencillo en tu propio servidor": "Pizarro: a simple Kanban board on your own server",
@@ -146,14 +146,14 @@ export const web: Record<string, string> = {
   "Todas las funciones, sin límite de tiempo": "Every feature, with no time limit",
   "Actualizaciones gratis": "Free updates",
   "En tu propio servidor": "On your own server",
-  "Licencia para cualquier otro uso": "Licence for any other use",
+  "Licencia para cualquier otro uso": "License for any other use",
   "Sin suscripción ni cuota por usuario": "No subscription and no per-user fee",
   "Todas las actualizaciones futuras, gratis": "All future updates, free",
   "Sin soporte incluido": "No support included",
-  "Comprar licencia": "Buy a licence",
+  "Comprar licencia": "Buy a license",
   "Próximamente": "Coming soon",
-  "Mientras tanto puedes usar Pizarro con normalidad: la licencia se basa en la buena voluntad.": "Meanwhile you can use Pizarro as normal: the licence relies on good faith.",
-  "Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal; para cualquier otro uso necesitas licencia.": "Pizarro is source-available software: you can read all of its code. Free for personal use; any other use needs a licence.",
+  "Mientras tanto puedes usar Pizarro con normalidad: la licencia se basa en la buena voluntad.": "Meanwhile you can use Pizarro as normal: the license relies on good faith.",
+  "Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal; para cualquier otro uso necesitas licencia.": "Pizarro is source-available software: you can read all of its code. Free for personal use; any other use needs a license.",
   "Código en GitHub": "Code on GitHub",
   "Página no encontrada": "Page not found",
   "Esta dirección no existe en getpizarro.com.": "This address doesn't exist on getpizarro.com.",
@@ -164,16 +164,16 @@ export const web: Record<string, string> = {
   "Para ti y tu familia sin fines comerciales, y para la enseñanza: colegios, institutos, universidades y academias.":
     "For you and your family, non-commercially, and for education: schools, universities and academies.",
   "Empresas, autónomos y profesionales, asociaciones, administraciones y cualquier otra organización.":
-    "Companies, freelancers and professionals, associations, public bodies and any other organisation.",
+    "Companies, freelancers and professionals, associations, public bodies and any other organization.",
   "Sí, para uso personal y familiar no comercial, y para la enseñanza en colegios, institutos, universidades, academias y otros centros educativos. Cualquier otro uso (empresa, autónomo, asociación, administración…) necesita la licencia.":
-    "Yes, for personal and non-commercial family use, and for teaching in schools, universities, academies and other educational institutions. Any other use (business, freelancer, association, public body…) needs the licence.",
+    "Yes, for personal and non-commercial family use, and for teaching in schools, universities, academies and other educational institutions. Any other use (business, freelancer, association, public body…) needs the license.",
   "El de una persona en su propio servidor, para fines personales, domésticos o familiares: organizar la casa, tus aficiones o tus proyectos propios sin fines comerciales. Si lo usas en una empresa, como autónomo o profesional, o en cualquier otra organización (también asociaciones, ONG y administraciones), necesitas licencia; la enseñanza es la excepción.":
-    "Use by an individual on their own server, for personal, household or family purposes: organising the home, your hobbies or your own non-commercial projects. If you use it in a company, as a freelancer or professional, or in any other organisation (including associations, NGOs and public bodies), you need a licence; education is the exception.",
+    "Use by an individual on their own server, for personal, household or family purposes: organizing the home, your hobbies or your own non-commercial projects. If you use it in a company, as a freelancer or professional, or in any other organization (including associations, NGOs and public bodies), you need a license; education is the exception.",
   "Solo a los administradores, con un aviso discreto como mucho una vez al mes, y nunca en la primera semana. Desaparece para siempre al registrar la licencia o al declarar que es uso personal o educativo en Administración → Licencia.":
-    "Only administrators, with a discreet notice at most once a month, and never in the first week. It goes away for good once you register the licence or declare personal or educational use in Administration → Licence.",
+    "Only administrators, with a discreet notice at most once a month, and never in the first week. It goes away for good once you register the license or declare personal or educational use in Administration → License.",
   "¿Y los centros educativos?": "What about schools and universities?",
   "También es gratis. Colegios, institutos, universidades, centros de formación profesional y academias, públicos o privados, con su profesorado y su alumnado, pueden usarlo sin pagar para dar clase, aprender, investigar y organizar el propio centro. Solo necesita licencia la actividad comercial ajena a la enseñanza.":
-    "It's free for them too. Schools, universities, vocational training centres and academies, public or private, with their teachers and students, can use it at no cost to teach, learn, do research and run the institution itself. Only commercial activity unrelated to teaching needs a licence.",
+    "It's free for them too. Schools, universities, vocational training centers and academies, public or private, with their teachers and students, can use it at no cost to teach, learn, do research and run the institution itself. Only commercial activity unrelated to teaching needs a license.",
 
   // Web: textos revisados (uso educativo, funciones)
   "Pizarro es un tablero Kanban sencillo para equipos pequeños y familias. Pagas una vez y es tuyo; tus datos se quedan en tu servidor. Gratis para uso personal y educativo.":
@@ -185,9 +185,9 @@ export const web: Record<string, string> = {
   "Una columna puede sumar el presupuesto, juntar las subtareas en una lista o sacar el PDF de la semana.":
     "A column can add up the budget, gather subtasks into one list or print the week's plan as a PDF.",
   "Pizarro es software de código disponible: puedes leer todo el código. Gratis para uso personal y educativo; para cualquier otro uso necesitas licencia.":
-    "Pizarro is source-available software: you can read all of its code. Free for personal and educational use; any other use needs a licence.",
+    "Pizarro is source-available software: you can read all of its code. Free for personal and educational use; any other use needs a license.",
   "Licencia de código disponible: gratis para uso personal y educativo, y de pago único por servidor para empresas y profesionales.":
-    "Source-available licence: free for personal and educational use, one-time payment per server for companies and professionals.",
+    "Source-available license: free for personal and educational use, one-time payment per server for companies and professionals.",
 
   // Portada sin precio en la entrada
   "Pizarro es un Kanban que se instala en tu propio servidor: tareas, comentarios y notas de versión, sin suscripción ni cuota por persona.":

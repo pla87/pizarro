@@ -7,7 +7,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, restoreSession, saveSession, SESSION_EXPIRED } from "./helpers";
 import { deleteMyAccount, sendAccountDeleteCode } from "../../src/actions/profile";
-import { deleteUser } from "../../src/actions/users";
+import { deleteUser, updateUser } from "../../src/actions/users";
 import { getCurrentUser } from "../../src/lib/session";
 import { hashPassword } from "../../src/lib/password";
 import { encryptSecret } from "../../src/lib/crypto";
@@ -18,7 +18,7 @@ import { GET as googleCallback } from "../../src/app/api/auth/google/callback/ro
 import { generateTotpSecret, hashEmailCode, totpAt } from "../../src/lib/two-factor-core";
 import { loadTaskHistory } from "../../src/lib/task-events";
 import { flushLogs } from "../../src/lib/log";
-import { eraseUser } from "../../src/lib/user-delete";
+import { deletionBlock, eraseUser, soloPrivateProjectIdsByUser, soloPrivateProjects } from "../../src/lib/user-delete";
 import { ADMINS_LOCK_NAME } from "../../src/lib/advisory-locks";
 import { makeT } from "../../src/i18n/core";
 import { visibleProjectsWhere } from "../../src/lib/access";
@@ -107,6 +107,61 @@ describe("borrar mi cuenta", () => {
     assert.equal((await gone(a.id)) !== (await gone(b.id)), true);
   });
 
+  test("el último administrador que ha entrado no puede irse dejando solo a otros con la invitación pendiente", async () => {
+    const admin = await member({ role: "ADMIN" });
+    await makeUser();
+    await aloneAsAdmin(admin.id, async () => {
+      // Invitada como administradora: debe elegir contraseña y nunca ha entrado (el criterio de «Invitación pendiente»).
+      const ana = await makeUser({ role: "ADMIN", mustChangePassword: true, name: `Ana ${randomBytes(3).toString("hex")}` });
+      try {
+        assert.deepEqual(await deletionBlock(admin.id), { reason: "pending-admin", name: ana.name });
+        expectFail(await deleteMyAccount({ password: PASSWORD }), new RegExp(`^Espera a que ${ana.name} entre por primera vez antes de borrar tu cuenta\\.$`));
+        // Con dos pendientes, el aviso genérico.
+        const bea = await makeUser({ role: "ADMIN", mustChangePassword: true });
+        expectFail(await deleteMyAccount({ password: PASSWORD }), /Los demás administradores aún no han entrado nunca/);
+        assert.equal(await gone(admin.id), false);
+        // En cuanto una entra (una sesión; también valdría un dispositivo conocido o Google enlazado), ya se puede.
+        await loginAs(bea);
+        assert.equal(await deletionBlock(admin.id), null);
+        await loginAs(admin);
+        expectOk(await deleteMyAccount({ password: PASSWORD }));
+        await db.user.updateMany({ where: { id: { in: [bea.id] } }, data: { active: false } });
+      } finally {
+        await db.user.update({ where: { id: ana.id }, data: { active: false } });
+      }
+    });
+    assert.ok(await gone(admin.id));
+  });
+
+  test("quitar el rol a otro administrador cuenta solo a los que ya han entrado (a la vez que quien lo quita se borra)", async () => {
+    const a = await member({ role: "ADMIN" });
+    await aloneAsAdmin(a.id, async () => {
+      const b = await makeUser({ role: "ADMIN" });
+      await loginAs(b);
+      const pending = await makeUser({ role: "ADMIN", mustChangePassword: true });
+      await loginAs(a);
+      try {
+        // A se borra (va primero en la cola del candado) y, a la vez, le quita el rol a B: al llegar a quitarlo, el único
+        // otro administrador activo nunca ha entrado, así que se rechaza.
+        let erase: Promise<unknown> | null = null;
+        let demote: ReturnType<typeof updateUser> | null = null;
+        await db.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
+          erase = eraseUser(a.id, { self: true });
+          await lockWaiters(1);
+          demote = updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: true, expected: { name: b.name, email: b.email, role: "ADMIN", active: true } });
+          await lockWaiters(2);
+        }, { timeout: 10_000 });
+        await erase!;
+        expectFail(await demote!, /Debe quedar al menos un administrador activo/);
+        assert.equal((await db.user.findUniqueOrThrow({ where: { id: b.id } })).role, "ADMIN");
+        assert.ok(await gone(a.id));
+      } finally {
+        await db.user.updateMany({ where: { id: { in: [b.id, pending.id] } }, data: { active: false } });
+      }
+    });
+  });
+
   test("contraseña incorrecta: no se borra, y a los 5 intentos se corta", async () => {
     const u = await member();
     for (let i = 0; i < 5; i++) expectFail(await deleteMyAccount({ password: "no-es-esta-clave" }), /contraseña actual no es correcta/);
@@ -154,6 +209,37 @@ describe("borrar mi cuenta", () => {
     assert.equal(await db.task.count({ where: { projectId: a.project.id } }), 0);
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: b.project.id } })).isPrivate, false, "el no marcado pasa a ser de equipo");
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: joined.project.id } })).isPrivate, true, "el que ya tiene otro miembro sigue privado");
+  });
+
+  test("un privado cuyos demás miembros están desactivados cuenta como suyo: pasa a ser de equipo, sin miembros ni asignados", async () => {
+    const u = await member();
+    const inactive = await makeUser({ active: false });
+    const active = await makeUser();
+    const admin = await makeUser({ role: "ADMIN" });
+    const lonely = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive] });
+    const shared = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive, active] });
+    const dropped = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive] });
+    const assigned = await makeTask(lonely);
+    await db.task.update({ where: { id: assigned.id }, data: { assigneeId: inactive.id } });
+    const sharedTask = await makeTask(shared);
+    await db.task.update({ where: { id: sharedTask.id }, data: { assigneeId: inactive.id } });
+    // Lo que se enseña al confirmar: los dos con solo miembros desactivados, no el que tiene otro miembro activo.
+    assert.deepEqual((await soloPrivateProjects(u.id)).map((p) => p.id).sort(), [lonely.project.id, dropped.project.id].sort());
+    const byUser = await soloPrivateProjectIdsByUser();
+    assert.deepEqual((byUser.get(u.id) ?? []).sort(), [lonely.project.id, dropped.project.id].sort());
+    assert.equal(byUser.get(active.id), undefined);
+
+    expectOk(await deleteMyAccount({ password: PASSWORD, deleteProjects: [dropped.project.id] }));
+    const p = await db.project.findUniqueOrThrow({ where: { id: lonely.project.id }, select: { isPrivate: true, privateOwnerId: true, _count: { select: { members: true } } } });
+    assert.deepEqual([p.isPrivate, p.privateOwnerId, p._count.members], [false, null, 0], "de equipo, sin miembros");
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: assigned.id } })).assigneeId, null, "la tarjeta del desactivado queda sin asignar");
+    assert.equal(await db.project.count({ where: { id: lonely.project.id, ...visibleProjectsWhere({ id: admin.id, role: "ADMIN" } as CurrentUser) } }), 1, "lo ven los administradores");
+    // El marcado para borrar se borra aunque tuviera miembros desactivados.
+    assert.equal(await db.project.count({ where: { id: dropped.project.id } }), 0);
+    // Con otro miembro activo sigue privado y el desactivado sigue en él, con su tarjeta.
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: shared.project.id } })).isPrivate, true);
+    assert.deepEqual((await db.projectMember.findMany({ where: { projectId: shared.project.id } })).map((m) => m.userId).sort(), [inactive.id, active.id].sort());
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: sharedTask.id } })).assigneeId, inactive.id);
   });
 
   test("Administración → Usuarios: la misma regla y la misma casilla", async () => {

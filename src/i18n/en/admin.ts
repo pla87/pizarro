@@ -210,7 +210,6 @@ export const admin: Record<string, string> = {
   "Este aviso se repite como mucho una vez al día mientras el problema continúe.": "This notice repeats at most once a day while the problem continues.",
   // Tareas de mantenimiento (JobRun)
   "Tareas de mantenimiento": "Maintenance jobs",
-  "Se ejecutan cada hora, en un solo proceso a la vez. Aquí sale la última ejecución de cada una.": "They run every hour, in one process at a time. Each one's last run is shown here.",
   "Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).": "None has run yet (the first pass is one minute after startup).",
   "En curso": "Running",
   "Copias de ficheros no imagen antiguas": "Old non-image file copies",
@@ -336,4 +335,24 @@ export const admin: Record<string, string> = {
   "nombre@gmail.com": "name@gmail.com",
   "nombre@example.com": "name@example.com",
   "privacidad@example.com": "privacy@example.com",
+  // Administración → Logs: descarga CSV (una a la vez, con tope y aviso de recorte) y nombres de las categorías
+  "Ya tienes una descarga de logs en curso. Espera a que termine.": "You already have a log download in progress. Wait for it to finish.",
+  "Demasiadas descargas de logs. Espera unos minutos.": "Too many log downloads. Wait a few minutes.",
+  "Recortado a {n} filas: acorta el intervalo.": "Cut off at {n} rows: shorten the date range.",
+  "Acciones": "Actions",
+  "API": "API",
+  "Acceso": "Sign-in",
+  "Navegador": "Browser",
+  "Google": "Google",
+  "Páginas": "Pages",
+  // Mantenimiento: las limpiezas de días, una vez al día
+  "La pasada es cada hora, en un solo proceso a la vez; la limpieza de huérfanos, la papelera y las de datos de días o meses, una vez al día. Aquí sale la última ejecución de cada una.": "The pass runs every hour, in one process at a time; the orphan cleanup, the trash and the ones for data kept for days or months, once a day. Each one's last run is shown here.",
+  // Aviso de disco casi lleno (Administración y punto junto a «Administración»)
+  "El disco del servidor está casi lleno: quedan {free} libres (el mínimo es {min}).": "The server's disk is almost full: {free} free (the minimum is {min}).",
+  "Con el disco lleno no se pueden subir archivos ni hacer copias de seguridad. Libera espacio o amplía el volumen.": "With a full disk, files can't be uploaded and backups can't be made. Free up space or enlarge the volume.",
+  "Ver el almacenamiento": "See storage",
+  "El disco del servidor está casi lleno": "The server's disk is almost full",
+  // Integraciones → Email: aviso de APP_URL (ronda 59)
+  "Falta la variable APP_URL del servidor (la dirección pública de Pizarro): los enlaces de los emails llevarán a http://localhost:3000 y no funcionarán. Defínela (por ejemplo https://pizarro.tuempresa.com) y redespliega.": "The server's APP_URL variable is missing (Pizarro's public address): links in emails will point to http://localhost:3000 and won't work. Set it (for example https://pizarro.yourcompany.com) and redeploy.",
+  "Entras por {current} pero APP_URL es {app}, y los enlaces de los emails salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.": "You are visiting {current} but APP_URL is {app}, and links in emails come from APP_URL. That is normal if you still use the old address; to use {current}, change APP_URL (Railway → Variables) and redeploy.",
 };

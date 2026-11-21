@@ -15,7 +15,8 @@ import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 import { mbNumber, quotaError } from "@/lib/quota-message";
 import { attachmentLimitProblem, createAttachmentWithinLimit, roundMb, type AttachmentLimitProblem } from "@/lib/attachment-limit";
-import { uploadWriteError } from "@/lib/disk-space";
+import { assertDiskRoom, uploadWriteError } from "@/lib/disk-space";
+import { uploadDir } from "@/lib/upload-dir";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveRawAttachmentFile } from "@/lib/uploads";
 import { attachmentTotals } from "@/lib/board";
 import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
@@ -77,6 +78,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     // Cola de imágenes llena: se rechaza antes de leer el cuerpo (no se sabe si es imagen, pero el servidor está saturado).
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
+    // Antes de leer el cuerpo, como importar o duplicar: si el archivo no cabe en el disco (con el margen), un 507 con el
+    // mismo aviso en vez de recibirlo entero y fallar al escribirlo. Sin Content-Length, con el máximo del proyecto.
+    await assertDiskRoom(uploadDir(), length ?? maxBytes);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
     release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
     if (!release) {

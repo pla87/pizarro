@@ -21,12 +21,12 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **443** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 49 | ~1 min |
-| **Tablero** | | **762** | |
+| **Tablero** | | **771** | |
 | Tablero | `e2e/board-e2e.mjs` | 364 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 107 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
-| Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado y copia provisional con la red lenta (ronda 55) | `e2e/tablero-fijas-e2e.mjs` | 75 | ~1 min |
+| Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 87 | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
 | **Detalle de la tarea** | | **56** | |
@@ -43,24 +43,23 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Tareas que se repiten (calendario, .ics —una descarga por columna a la vez— y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 50 | ~1 min |
 | **Releases** | | **55** | |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
-| **Plan de trabajo para IA** | | **283** | |
+| **Plan de trabajo para IA** | | **274** | |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 154 | ~1 min |
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 102 | ~1 min |
-| Plan de trabajo para IA: Markdown con descripciones raras, fijas entre paneles, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 27 | ~40 s |
+| Plan de trabajo para IA: Markdown con descripciones raras, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 18 | ~30 s |
 | **Plantillas y programa del curso** | | **182** | |
 | Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/plantillas-aplicar-e2e.mjs` | 39 | ~1 min |
 | Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/plantillas-aplicar-opciones-e2e.mjs` | 26 | ~40 s |
 | Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/plantillas-aplicar-columnas-e2e.mjs` | 22 | ~20 s |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/plantillas-curso-e2e.mjs` | 57 | ~40 s |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/plantillas-programa-e2e.mjs` | 38 | ~1 min |
-| **Documentación y formatos del material** | | **235** | |
+| **Documentación y formatos del material** | | **197** | |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/documentacion-formatos-e2e.mjs` | 107 | ~1 min |
-| Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, y UTF-8 con un `<meta>` de 8 bits mal puesto (ronda 52) | `e2e/documentacion-enlaces-e2e.mjs` | 52 | ~1 min |
-| Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/documentacion-enlaces-bom-e2e.mjs` | 37 | ~30 s |
-| Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/documentacion-indice-e2e.mjs` | 39 | ~30 s |
-| **Cuentas** | | **133** | |
+| Enlaces dentro de los HTML de Documentación: entre documentos (ida, vuelta, #apartado, inexistente, otro proyecto), al propio documento y con nombres arreglados, e índice (#apartado, también en SVG, sin `ping`); HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, UTF-8 con un `<meta>` de 8 bits mal puesto y binarios con BOM de UTF-16 (ronda 52, cazas de bugs 50b y 52) | `e2e/documentacion-enlaces-e2e.mjs` | 90 | ~1,5 min |
+| **Cuentas** | | **189** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
-| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/cuentas-borrar-restos-e2e.mjs` | 72 | ~45 s |
+| Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |
+| Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 28 | ~40 s |
 | **Interfaz y textos** | | **302** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
@@ -70,10 +69,10 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Accesibilidad** | | **90** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
 | Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 54 | ~30 s |
-| **Red, sin conexión y formularios** | | **147** | |
+| **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
-| Sin conexión y pestañas (caza de bugs 48b) | `e2e/red-sin-conexion-e2e.mjs` | 121 | ~3 min |
-| **Total** | | **3210** | |
+| Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
+| **Total** | | **3238** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -84,7 +83,7 @@ la carpeta temporal del sistema).
 
 Los ficheros se nombran por tema (`tablero-*`, `importar-*`, `plantillas-*`, `documentacion-*`…), no por la ronda en
 que se escribieron; una suite nueva va con el prefijo de su tema, en su grupo de la tabla y de las secciones de abajo, y
-con su entrada en `e2e/suites.json`. Los nombres antiguos (`bhNN*`, `rNN-*`) están al final.
+con su entrada en `e2e/suites.json`.
 
 ## Todas seguidas o solo las afectadas
 
@@ -224,10 +223,12 @@ lista se puede volver a arrastrar (antes dnd-kit perdía su registro). Con el te
 Escape, o Espacio sobre su panel, la deja con el foco en su fila (también después de pasar con el ratón por la lista y
 volver, cuando la fila se vuelve a montar). Con las acciones de servidor retrasadas 2,5 s, la copia provisional de un
 arrastre con Ctrl va marcada (aria-busy) y ni los atajos (Alt+M, F2, Alt+↑, Espacio, Alt+Mayús+D) ni otra tarjeta soltada
-encima mandan su id al servidor; al responder no quedan tarjetas fantasma. Misma base y servidor:
+encima mandan su id al servidor; al responder no quedan tarjetas fantasma. Y (caza de bugs 51a) una tarea fija
+arrastrada del panel «Siempre en el plan» de una columna al de otra (o desde «Siempre en la release») pasa allí como fija y
+se deshace con Ctrl+Z; soltada en su propio panel, no cambia. Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs   # PART=scroll,copia,vaiven,foco,provisional
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs   # PART=scroll,copia,vaiven,foco,provisional,planes
 ```
 
 ### Canal en vivo, presencia, filtros, móvil y capas (ronda 56)
@@ -449,17 +450,17 @@ un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que 
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-zip-e2e.mjs   # PART=zip,en,ritmo,vacias,salir
 ```
 
-### Plan de trabajo para IA: Markdown, fijas entre paneles, título y límite (caza de bugs 51a)
+### Plan de trabajo para IA: Markdown, título y límite (caza de bugs 51a)
 
 El plan generado con descripciones raras: un bloque de código sin cerrar se cierra tras su última línea (antes se tragaba
 las tareas siguientes y el pie), ``` dentro de un bloque de ```` queda tal cual, un título setext («Notas» subrayado con
----) pasa a ##### y se conservan los saltos de línea forzados y las tablas; una tarea fija arrastrada del panel «Siempre
-en el plan» de una columna al de otra (o desde «Siempre en la release») pasa allí como fija y se deshace con Ctrl+Z; a
-390 px el título de «Generar plan de trabajo» y de «Generar release» conserva el icono y recorta el paso con «…»; y con
-más de 500 tareas marcadas «Generar» se desactiva con su motivo. Misma base y servidor:
+---) pasa a ##### y se conservan los saltos de línea forzados y las tablas; a 390 px el título de «Generar plan de
+trabajo» y de «Generar release» conserva el icono y recorta el paso con «…»; y con más de 500 tareas marcadas «Generar»
+se desactiva con su motivo. Las fijas arrastradas entre los paneles de dos planes están en `tablero-fijas-e2e.mjs`
+(`PART=planes`). Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e2e.mjs   # PART=markdown,fijas,titulo,limite
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e2e.mjs   # PART=markdown,titulo,limite
 ```
 
 ## Plantillas y programa del curso
@@ -560,48 +561,24 @@ de prueba, no llama a Google): arráncalo con `GOOGLE_CLIENT_ID=r50 GOOGLE_CLIEN
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-formatos-e2e.mjs   # PART=relclose,nbsp,slides,html
 ```
 
-### Enlaces entre HTML y codificaciones en Documentación (ronda 52)
+### Enlaces y codificaciones de los HTML de Documentación (ronda 52, cazas de bugs 50b y 52)
 
 Dos HTML de la misma Documentación enlazados entre sí (`./Tema2.HTML#apartado`, `tema%20tres.html`): el enlace abre el otro
 documento en el visor de la app (pestaña nueva, el marco sigue sin permisos) y lleva al apartado; la vuelta funciona igual;
 un enlace a un fichero que no está, o que solo existe en otro proyecto (aunque se llame igual), queda desactivado con su
-title y no abre nada; un documento en la papelera no se enlaza. Y ficheros HTML, texto y Markdown en Latin-1, Windows-1252
-(con o sin `<meta charset>`), UTF-16 LE/BE y UTF-8 con BOM que se ven con tildes y ñ, con la descarga tal cual. Misma base
-y servidor:
+title y no abre nada; un documento en la papelera no se enlaza. Ficheros HTML, texto y Markdown en Latin-1, Windows-1252
+(con o sin `<meta charset>`), UTF-16 LE/BE y UTF-8 con BOM que se ven con tildes y ñ, con la descarga tal cual. Un enlace
+al propio documento por su nombre («indice.html#abajo» dentro de indice.html, o «./INDICE.HTML») se desplaza dentro del
+marco (antes abría una pestaña nueva con el mismo documento en cada clic); un enlace sin ruta («», «?v=2#abajo») es el
+propio documento y no sale desactivado; «a%20%20b.html» encuentra «a b.html» (los espacios seguidos se juntan al subir) y
+un nombre con tildes descompuestas (NFD, el de macOS) encuentra el suyo. Un binario que empieza por FF FE o FE FF (el BOM
+de UTF-16) se sube como fichero para descargar y no como texto, el UTF-16 de verdad se sigue viendo y un HTML con
+`<meta charset="unicode">` sin BOM se ve con sus tildes. Y un documento con índice: «Ir al tema 2» (`#tema-2`), «#» y un
+enlace interno dentro de un SVG se desplazan dentro del marco aislado, que sigue en el documento (antes cargaba en el
+marco la página de la app y quedaba un error), y lo que se pinta no lleva `ping`. Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs   # PART=enlaces,codificacion
-```
-
-### Enlaces de un HTML a sí mismo, binarios con BOM y borrador sin red (caza de bugs 52)
-
-En un HTML de Documentación, un enlace al propio documento por su nombre («indice.html#abajo» dentro de indice.html, o
-«./INDICE.HTML») se desplaza dentro del marco (antes abría una pestaña nueva con el mismo documento en cada clic); un enlace
-sin ruta («», «?v=2#abajo») es el propio documento y no sale desactivado; «a%20%20b.html» encuentra «a b.html» (los espacios
-seguidos se juntan al subir) y un nombre con tildes descompuestas (NFD, el de macOS) encuentra el suyo. Un binario que
-empieza por FF FE o FE FF (el BOM de UTF-16) se sube como fichero para descargar y no como texto, el UTF-16 de verdad se
-sigue viendo y un HTML con `<meta charset="unicode">` sin BOM se ve con sus tildes. Y archivar o borrar desde el detalle
-sin red con la descripción a medio escribir: la tarjeta vuelve y, al abrirla otra vez, lo escrito sigue ahí y se puede
-guardar (antes se perdía). Misma base y servidor:
-
-```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-bom-e2e.mjs   # PART=enlaces,binario,borrador
-```
-
-### Índice de un HTML y baja con Google sin email (caza de bugs 50b)
-
-Un documento HTML de *Documentación* con índice: «Ir al tema 2» (`#tema-2`), «#» y un enlace interno dentro de un SVG
-se desplazan dentro del marco aislado, que sigue en el documento (antes cargaba en el marco la página de la app y quedaba
-un error), y lo que se pinta no lleva `ping`. *Borrar mi cuenta* de quien entra con Google en un servidor sin envío de
-emails: «Entro con Google y no conozco mi contraseña» explica solo «Confírmalo volviendo a entrar con Google.» (sin
-hablar de un código por email ni pedirlo), en español y en inglés a 390 px en modo oscuro; el enlace lleva a Google con la
-marca de la baja (sin seguir la redirección); la vuelta de Google se simula en la base, como en test:db; se borra la
-cuenta y su proyecto privado pasa a ser de equipo, y un administrador lo ve en *Proyectos* y *Administración → Proyectos*
-y lo abre. Misma base; servidor con Google configurado (valores de prueba, no llama a Google) y **sin** email:
-`GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`, sin `MAIL_OUTBOX_DIR` ni SMTP.
-
-```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-indice-e2e.mjs   # PART=anchor,googleonly
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs   # PART=enlaces,codificacion,propio,binario,indice
 ```
 
 ## Cuentas
@@ -635,10 +612,32 @@ móvil, el menú del título lo marca «Not in your projects» y lo añade a su 
 equipo que no está en su lista por enlace (ya en el HTML) o desde *Proyectos existentes* (navegación de la app) lo ve en
 el selector marcado «No está en tus proyectos», con la navegación del proyecto; «Añadir a mis proyectos» lo añade (y
 solo ese); en el calendario deja de mostrarse. Un miembro sin acceso recibe 404 y no lo ve. Crea sus propias personas y
-proyectos (`r51c_*`). Misma base; servidor como el de `documentacion-indice` (Google con valores de prueba, sin email):
+proyectos (`r51c_*`). Al final (caza de bugs 50b), *Borrar mi cuenta* de quien entra con Google en un servidor sin envío
+de emails: «Entro con Google y no conozco mi contraseña» explica solo «Confírmalo volviendo a entrar con Google.» (sin
+hablar de un código por email ni pedirlo), en español y en inglés a 390 px en modo oscuro; el enlace lleva a Google con la
+marca de la baja (sin seguir la redirección); la vuelta de Google se simula en la base, como en test:db; se borra la
+cuenta y su proyecto privado pasa a ser de equipo, y un administrador lo ve en *Proyectos* y *Administración → Proyectos*
+y lo abre. Misma base; servidor con Google configurado (valores de prueba, no llama a Google) y **sin** email:
+`GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50`, sin `MAIL_OUTBOX_DIR` ni SMTP.
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs   # PART=google,notice,outside,member
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs   # PART=google,notice,outside,member,googleonly
+```
+
+### Miembros de un proyecto: administradores asignados e invitaciones (ronda 59)
+
+*Ajustes del proyecto → General*: «Añadir miembro…» ofrece a otro administrador; al añadirlo sale en la lista con la marca
+«admin», queda asignado y con el proyecto elegido, y el recuadro del enlace muestra el del tablero (`APP_URL/p/<id>`), que
+«Copiar enlace» deja en el portapapeles; quitarlo de asignados le conserva la elección. *Administración → Proyectos*:
+«Asignar usuario…» también ofrece administradores, que salen como asignados (con la marca) y no como botón «elegido / no
+elegido». «Invitar por email» (servidor sin email): crea la cuenta como invitación ya dentro del proyecto, con el nombre
+sacado del email, y el recuadro da el enlace de invitación para pasarlo a mano; la persona lo abre en otro navegador,
+elige su contraseña, «Iniciar sesión» lleva `?next=/p/<id>` y entra directamente en el tablero. Un miembro (no admin) de
+un privado añade miembros pero no ve «Invitar por email». A 390 px el recuadro del enlace cabe sin desbordar. Crea sus
+propios proyectos y la persona invitada (`inv59_*`). Misma base y servidor que `board-e2e` (sin email):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile
 ```
 
 ## Interfaz y textos
@@ -796,52 +795,11 @@ cerrar y enlaces a tareas que no están; sin red, los diálogos cargados aparte 
 release) esperan a la red sin recargar la página y, ya precargados, se abren sin red; el detalle, su historial y
 Archivadas abiertos sin red se cargan al volver; conflictos del texto campo a campo (otra persona cambia la descripción:
 el título se guarda y el detalle muestra la descripción nueva; el mismo campo sí es un conflicto); el foco tras Escape
-en la descripción y el nombre accesible de los campos del detalle. Partes sueltas con `PART=lazy,detail,…` (ver la
-cabecera del script). Misma base y servidor (por HTTP, sin TLS). Es la que más inicios de sesión hace: lánzala con el
+en la descripción y el nombre accesible de los campos del detalle; y (caza de bugs 52) archivar o borrar desde el detalle
+sin red con la descripción a medio escribir: la tarjeta vuelve y, al abrirla otra vez, lo escrito sigue ahí y se puede
+guardar (antes se perdía). Partes sueltas con `PART=lazy,detail,borrador,…` (ver la cabecera del script). Misma base y servidor (por HTTP, sin TLS). Es la que más inicios de sesión hace: lánzala con el
 servidor recién arrancado.
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node red-sin-conexion-e2e.mjs
 ```
-
-## Nombres antiguos
-
-Hasta la v1.59.0 las suites se nombraban por la ronda o la caza de bugs en que se escribieron. Se renombraron sin
-tocar sus comprobaciones (`git log --follow e2e/<nuevo>.mjs` sigue su historia):
-
-| Antes | Ahora |
-|---|---|
-| `bh48a-e2e.mjs` | `tablero-cabecera-e2e.mjs` |
-| `bh48b-e2e.mjs` | `red-sin-conexion-e2e.mjs` |
-| `bh48c-e2e.mjs` | `detalle-comentarios-e2e.mjs` |
-| `bh49-e2e.mjs` | `copias-imagen-sin-red-e2e.mjs` |
-| `bh50a-e2e.mjs` | `plantillas-aplicar-columnas-e2e.mjs` |
-| `bh50b-e2e.mjs` | `documentacion-indice-e2e.mjs` |
-| `bh51a-e2e.mjs` | `plan-ia-markdown-e2e.mjs` |
-| `bh51b-e2e.mjs` | `tablero-teclado-e2e.mjs` |
-| `bh51c-e2e.mjs` | `releases-grandes-e2e.mjs` |
-| `bh52-e2e.mjs` | `documentacion-enlaces-bom-e2e.mjs` |
-| `bh52b-e2e.mjs` | `accesibilidad-columnas-e2e.mjs` |
-| `bh53-e2e.mjs` | `importar-pegar-foco-e2e.mjs` |
-| `bh54-e2e.mjs` | `accesibilidad-releases-e2e.mjs` |
-| `r49-account-e2e.mjs` | `cuentas-borrar-e2e.mjs` |
-| `r49-copy-e2e.mjs` | `copias-adjuntos-e2e.mjs` |
-| `r49-infra-e2e.mjs` | `red-formularios-e2e.mjs` |
-| `r49-repeat-e2e.mjs` | `calendario-repetir-e2e.mjs` |
-| `r49-textos-e2e.mjs` | `interfaz-textos-e2e.mjs` |
-| `r49-ui-e2e.mjs` | `interfaz-carga-e2e.mjs` |
-| `r50-curso-e2e.mjs` | `plantillas-curso-e2e.mjs` |
-| `r50-formatos-e2e.mjs` | `documentacion-formatos-e2e.mjs` |
-| `r50-plantilla-e2e.mjs` | `plantillas-aplicar-e2e.mjs` |
-| `r50-seleccion-e2e.mjs` | `tablero-seleccion-e2e.mjs` |
-| `r51-cuenta-e2e.mjs` | `cuentas-borrar-restos-e2e.mjs` |
-| `r51-plan-e2e.mjs` | `plan-ia-e2e.mjs` |
-| `r51-plantilla-e2e.mjs` | `plantillas-aplicar-opciones-e2e.mjs` |
-| `r51-programa-e2e.mjs` | `plantillas-programa-e2e.mjs` |
-| `r51-ui-e2e.mjs` | `interfaz-esqueletos-e2e.mjs` |
-| `r52-html-e2e.mjs` | `documentacion-enlaces-e2e.mjs` |
-| `r52-plan-e2e.mjs` | `plan-ia-zip-e2e.mjs` |
-| `r52-ui-e2e.mjs` | `interfaz-detalle-iconos-e2e.mjs` |
-| `r53-json-e2e.mjs` | `importar-json-detalle-e2e.mjs` |
-| `r54-import-e2e.mjs` | `importar-exportar-e2e.mjs` |
-| `r55-tablero-e2e.mjs` | `tablero-fijas-e2e.mjs` |

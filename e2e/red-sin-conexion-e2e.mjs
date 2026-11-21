@@ -5,13 +5,15 @@
 // cerrar y un enlace a una tarea que no está avisa; diálogos cargados aparte (Archivadas, Varias tareas, Generar release)
 // y detalle, historial y archivadas abiertos sin red (esperan a la red, sin recargar la página); conflictos del texto
 // campo a campo (título y descripción por separado); foco tras Escape en la descripción y nombre de los campos del
-// detalle. Partes: PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y. Misma base y servidor que
-// board-e2e.mjs (por HTTP, sin TLS):
+// detalle; archivar o borrar desde el detalle sin red, con la descripción a medio escribir: la tarjeta vuelve y, al
+// abrirla otra vez, lo escrito sigue ahí (caza de bugs 52; antes se perdía). Partes:
+// PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador. Misma base y servidor que board-e2e.mjs (por
+// HTTP, sin TLS):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node red-sin-conexion-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
-const only = (process.env.PART || "off,down,tabs,gone,title,col,url,lazy,detail,field,a11y").split(",");
+const only = (process.env.PART || "off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador").split(",");
 
 await L.q(`DELETE FROM "Column" WHERE id='bh48b_col'`); // de una pasada anterior interrumpida
 await L.prepareUsers();
@@ -560,6 +562,60 @@ if (only.includes("a11y")) try {
   await s.ctx.close();
 } catch (e) {
   L.check("A11Y: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
+}
+
+// --- Borrador tras archivar o borrar sin red: lo escrito no se pierde ---------------------------------------------------
+if (only.includes("borrador")) try {
+  L.scenario("borrador: archivar o borrar desde el detalle sin red no pierde lo escrito");
+  await L.cleanBoard();
+  const [me] = await L.q(`SELECT id, "editorMode" FROM "User" WHERE email=$1`, [L.ADMIN]);
+  await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG' WHERE id=$1`, [me.id]);
+  await L.seedTasks(L.COL.backlog, ["Archivo sin red", "Borro sin red", "Otra tarea"]);
+  const s = await L.session({ viewport: U.WIDE });
+  const p = s.page;
+  const descOf = async (title) => (await L.q(`SELECT description FROM "Task" WHERE title=$1`, [title]))[0]?.description ?? null;
+  async function typeDescription(text) {
+    const d = U.dialog(p);
+    await d.getByRole("button", { name: "Añade una descripción…" }).click();
+    await d.locator("[role=textbox][contenteditable]").first().click();
+    await p.keyboard.type(text);
+    await sleep(600); // el borrador recoge el texto con un pequeño retardo
+  }
+  for (const [title, action] of [["Archivo sin red", "archivar"], ["Borro sin red", "borrar"]]) {
+    const text = `Lo que escribí antes de ${action}`;
+    await U.openTask(p, title);
+    await typeDescription(text);
+    await s.ctx.setOffline(true);
+    if (action === "archivar") await U.dialog(p).getByRole("button", { name: "Archivar" }).first().click();
+    else {
+      // El de la tarea (con la descripción abierta también hay un «Borrar» del texto).
+      await U.dialog(p).getByRole("button", { name: "Borrar", exact: true }).last().click();
+      await p.locator("[role=dialog]").filter({ hasText: "¿Borrar esta tarea" }).getByRole("button", { name: "Borrar", exact: true }).click();
+    }
+    await U.dialog(p).waitFor({ state: "detached", timeout: 3000 });
+    await L.checkEventually(`${action} sin red: la tarjeta vuelve`, async () => (await L.cardLoc(p, title).count()) === 1, { timeout: 8000 });
+    await s.ctx.setOffline(false);
+    await sleep(800);
+    await U.openTask(p, title);
+    await L.checkEventually(`${action} sin red: al abrirla otra vez, lo escrito sigue en la descripción`, async () => (await U.dialog(p).locator("[role=textbox][contenteditable]").first().innerText().catch(() => "")).includes(text), { timeout: 5000 });
+    await U.dialog(p).locator("[role=textbox][contenteditable]").first().click();
+    await p.keyboard.press("Control+Enter");
+    await L.eqEventually(`${action} sin red: … y se guarda`, () => descOf(title), text, { timeout: 8000 });
+    await U.closeDialog(p);
+    L.eq(`${action} sin red: sigue en la BD, sin archivar`, (await L.q(`SELECT "archivedAt" IS NULL AS a FROM "Task" WHERE title=$1`, [title]))[0]?.a, true);
+  }
+  // Una tarea sin borrador se abre limpia (no hereda el de otra).
+  await U.openTask(p, "Otra tarea");
+  await sleep(800);
+  L.check("borrador: otra tarea no recibe el texto de ninguna", !(await U.dialog(p).innerText()).includes("Lo que escribí"));
+  await U.closeDialog(p);
+  s.errors = s.errors.filter((e) => !/ERR_INTERNET_DISCONNECTED/.test(e));
+  L.assertNoErrors("borrador", [s]);
+  await s.ctx.close();
+  await L.q(`UPDATE "User" SET "editorMode"=$2 WHERE id=$1`, [me.id, me.editorMode]);
+  await L.cleanBoard();
+} catch (e) {
+  L.check("BORRADOR: el escenario termina sin excepción", false, String(e?.message ?? e).slice(0, 300));
 }
 
 await L.closeBrowser();

@@ -1,5 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { getBackupAlert } from "@/lib/backup-alert";
+import { lowDiskSpace } from "@/lib/health";
+import { uploadDir } from "@/lib/upload-dir";
 import { listVisibleProjects } from "@/lib/access";
 import { visibleNotificationsWhere } from "@/lib/notification-access";
 import { outsideListProject } from "@/lib/project-visit";
@@ -16,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUserPage();
   const isAdmin = user.role === "ADMIN";
   // En paralelo: estas consultas van en cada página.
-  const [projects, unread, backupAlert, updateAvailable, licenseNudge] = await Promise.all([
+  const [projects, unread, backupAlert, updateAvailable, diskLow, licenseNudge] = await Promise.all([
     listVisibleProjects(user),
     // Con tope: la interfaz muestra «99+» a partir de 100, así que no hace falta contar más allá (AppShell).
     db.notification.count({ where: { ...visibleNotificationsWhere(user), readAt: null }, take: 100 }),
@@ -25,6 +27,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isAdmin ? getBackupAlert().then((a) => (a?.active ? (a.reason === "shrunk" ? ("shrunk" as const) : true) : false), () => false) : false,
     // Punto discreto si hay una versión nueva sin descartar (consulta cacheada 12 h; nunca falla).
     isAdmin ? getUpdateNotice().then((n) => n !== null) : false,
+    // Punto si el disco de las subidas está casi lleno (un statfs; /api/health ya no da 503 por esto).
+    isAdmin ? lowDiskSpace(uploadDir()).then((d) => d !== null) : false,
     // Recordatorio de licencia (solo admins, como mucho una vez al mes; nunca falla): a dónde lleva «Comprar».
     isAdmin
       ? licenseNudgeFor(user).then(async (show) => (show ? buyHref(await getPublicContactEmail().catch(() => ""), user.locale === "EN" ? "en" : "es") : null))
@@ -37,7 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pathProject = isAdmin ? /^\/p\/([^/?#]+)/.exec((await headers()).get("x-pz-path") ?? "")?.[1] : undefined;
   const outside = pathProject && !projects.some((p) => p.id === pathProject) ? await outsideListProject(user, pathProject).catch(() => null) : null;
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} backupAlert={backupAlert} updateAvailable={updateAvailable} licenseNudge={licenseNudge}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} licenseNudge={licenseNudge}>
       {children}
     </AppShell>
   );

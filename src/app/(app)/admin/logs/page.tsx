@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { appTimeZone } from "@/lib/board";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, LOG_RANGES, logQuery, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { addDays, dayInZone } from "@/lib/log-range";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
@@ -35,6 +35,18 @@ const LEVELS = [
   { value: "error", label: "Error", badge: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200" },
 ] as const;
 
+// Nombre de cada categoría (el valor sigue siendo el código que se guarda: auth, page…); una desconocida, tal cual.
+const CATEGORY_LABELS: Record<string, string> = {
+  action: "Acciones",
+  api: "API",
+  auth: "Acceso",
+  client: "Navegador",
+  google: "Google",
+  notify: "Avisos",
+  page: "Páginas",
+  system: "Sistema",
+};
+
 const field =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900";
 
@@ -56,17 +68,23 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
+  const categoryLabel = (c: string) => (CATEGORY_LABELS[c] ? t(CATEGORY_LABELS[c]!) : c);
 
   // Escribe los eventos pendientes para que los más recientes aparezcan.
   await flushLogs();
 
+  // «Cargar más» sigue desde la última fila de la página anterior (paginación por clave: fecha e id). Si esa fila ya no
+  // existe (se purgó), la lista queda vacía, como con el cursor de Prisma.
+  const after = cursor ? await db.appLog.findUnique({ where: { id: cursor }, select: { id: true, createdAt: true } }) : null;
+  const where = logWhere(filters, mine);
   const [rows, levelCounts, categories, users] = await Promise.all([
-    db.appLog.findMany({
-      where: logWhere(filters, mine),
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: PAGE_SIZE + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    }),
+    cursor && !after
+      ? []
+      : db.appLog.findMany({
+          where: after ? { AND: [where, logsAfter(after)] } : where,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: PAGE_SIZE + 1,
+        }),
     db.appLog.groupBy({ by: ["level"], where: logWhere(filters, mine, false), _count: { _all: true } }),
     logCategories(),
     db.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -144,8 +162,8 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {t("Categoría")}
           <select name="category" defaultValue={filters.category} className={field}>
             <option value="">{t("Todas")}</option>
-            {categories.map((c) => (
-              <option key={c.category} value={c.category}>{c.category}</option>
+            {categories.map((c) => ({ value: c.category, label: categoryLabel(c.category) })).sort((a, b) => a.label.localeCompare(b.label, locale)).map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
         </label>
@@ -215,7 +233,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-mono text-xs text-slate-500">{formatTime(r.createdAt, tz, locale)}</span>
                       <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", level.badge)}>{t(level.label)}</span>
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800">{r.category}</span>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs dark:bg-slate-800" title={r.category}>{categoryLabel(r.category)}</span>
                       <span className="font-mono text-xs font-semibold">{r.action}</span>
                       {r.userName && <span className="text-xs text-slate-600 dark:text-slate-300">· {r.userName}</span>}
                       {r.durationMs != null && <span className="ml-auto font-mono text-xs text-slate-500">{r.durationMs} ms</span>}

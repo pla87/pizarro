@@ -2,9 +2,9 @@
 // deshacer, aviso en vivo con la tarea, y el refresco de comentarios del detalle abierto. Contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, expectApplied } from "./helpers";
 import { addComment, archiveTask, deleteComment, editComment, getRecentComments, getTaskDetail } from "../../src/actions/tasks";
-import { redoLast, undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
 import { mentionToken } from "../../src/lib/mentions";
 import { subscribeProject } from "../../src/lib/realtime";
 
@@ -104,7 +104,7 @@ describe("editar un comentario", () => {
     let row = await db.taskComment.findUniqueOrThrow({ where: { id: c.id } });
     assert.equal(row.body, "primera versión");
     assert.equal(row.editedAt, null);
-    expectOk(await redoLast(f.project.id));
+    expectApplied(await redoChecked(f.project.id));
     row = await db.taskComment.findUniqueOrThrow({ where: { id: c.id } });
     assert.equal(row.body, "segunda versión");
     assert.ok(row.editedAt);
@@ -121,7 +121,7 @@ describe("editar un comentario", () => {
     try {
       expectOk(await editComment(c.id, "hola de nuevo"));
       // Las lecturas no se anuncian (si lo hicieran, cada refresco provocaría otro).
-      expectOk(await getRecentComments(task.id, null));
+      expectOk(await getRecentComments(task.id));
     } finally {
       off();
     }
@@ -130,7 +130,7 @@ describe("editar un comentario", () => {
 });
 
 describe("refresco de los comentarios que se ven", () => {
-  test("desde el más antiguo cargado hasta el último, con los recuentos; exige acceso", async () => {
+  test("solo la primera página (no todo lo cargado), con los recuentos; exige acceso", async () => {
     const author = await makeUser();
     const outsider = await makeUser();
     const f = await makeProject({ members: [author] });
@@ -140,24 +140,29 @@ describe("refresco de los comentarios que se ven", () => {
     await loginAs(author);
     const detail = expectOk(await getTaskDetail(task.id));
     assert.equal(detail.comments.length, 20);
-    const first = detail.comments[0]!;
 
-    // Otra persona comenta, edita y borra: el refresco lo trae todo, y no se pierde lo ya cargado.
+    // Otra persona comenta, edita y borra: el refresco trae la primera página de ahora (la misma que el detalle al abrirse).
     const newest = expectOk(await addComment(task.id, "nuevo"));
     expectOk(await editComment(detail.comments[5]!.id, "editado"));
     expectOk(await deleteComment(detail.comments[6]!.id));
-    const r = expectOk(await getRecentComments(task.id, { createdAt: first.createdAt, id: first.id }));
-    assert.equal(r.comments[0]!.id, first.id, "incluye el cursor");
-    assert.equal(r.comments.at(-1)!.id, newest.id);
+    const r = expectOk(await getRecentComments(task.id));
+    const fresh = expectOk(await getTaskDetail(task.id));
+    assert.deepEqual(r.comments, fresh.comments);
     assert.equal(r.comments.length, 20);
+    assert.equal(r.comments.at(-1)!.id, newest.id);
     assert.equal(r.comments.find((x) => x.id === detail.comments[5]!.id)?.body, "editado");
     assert.ok(!r.comments.some((x) => x.id === detail.comments[6]!.id));
     assert.equal(r.olderComments, 10);
+    assert.equal(r.olderComments, fresh.olderComments);
     assert.equal(r.commentCount, 30);
-    // Sin cursor (no había ninguno cargado): la primera página.
-    assert.equal(expectOk(await getRecentComments(task.id, null)).comments.length, 20);
+
+    // Con menos de una página, la lista entera y sin anteriores.
+    const small = await makeTask(f);
+    expectOk(await addComment(small.id, "uno"));
+    const s = expectOk(await getRecentComments(small.id));
+    assert.deepEqual([s.comments.length, s.olderComments, s.commentCount], [1, 0, 1]);
 
     await loginAs(outsider);
-    expectFail(await getRecentComments(task.id, null), NOT_FOUND);
+    expectFail(await getRecentComments(task.id), NOT_FOUND);
   });
 });

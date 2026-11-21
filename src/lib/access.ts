@@ -21,11 +21,12 @@ export function visibleProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInpu
 /**
  * Proyectos en los que el usuario trabaja: los que salen en selectores, menús y filtros. Para quien no es
  * administrador son todos los accesibles; un administrador, solo los de equipo que ha elegido en su perfil
- * (AdminProjectPick) y los privados de los que es miembro.
+ * (AdminProjectPick) y los privados de los que es miembro. Asignar a un administrador a un proyecto de equipo
+ * (ProjectMember) también lo marca como elegido; si después lo quita de sus proyectos, deja de salirle aunque siga asignado.
  */
 export function workingProjectsWhere(user: CurrentUser): Prisma.ProjectWhereInput {
   if (user.role !== "ADMIN") return visibleProjectsWhere(user);
-  return { OR: [{ isPrivate: false, adminPicks: { some: { userId: user.id } } }, { members: { some: { userId: user.id } } }] };
+  return { OR: [{ isPrivate: false, adminPicks: { some: { userId: user.id } } }, { isPrivate: true, members: { some: { userId: user.id } } }] };
 }
 
 /** Usuarios que pueden ver y usar un proyecto: sus miembros y, si no es privado, también todos los administradores. */
@@ -56,7 +57,7 @@ export async function assertProjectAccess(user: CurrentUser, projectId: string):
 }
 
 /**
- * Proyecto sobre el que el usuario puede actuar (renombrar, borrar, cambiar miembros): los administradores
+ * Proyecto sobre el que el usuario puede actuar (renombrar, borrar, cambiar miembros, invitar): los administradores
  * en cualquier proyecto que vean; el resto, solo en privados de los que son miembros (las
  * consultas ya filtran por visibilidad, así que un privado ajeno no existe para nadie).
  */

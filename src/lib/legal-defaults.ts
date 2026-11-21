@@ -106,7 +106,7 @@ We process your data to:
 - Identification and contact: name, email address and, if you provided them, your phone number or profile picture. Your password is stored only as a hash, never in clear text.
 - Content you upload or write: projects, tasks, descriptions, comments, attachments and links. You are responsible for not including unnecessary data or special-category data.
 - Usage, technical and security data: IP address, browser, access dates, remembered devices, sign-in attempts and activity events.
-- If you use Google: your name, email and basic profile to recognise your account, and access only to files created by the app itself; we cannot see the rest of your Drive.
+- If you use Google: your name, email and basic profile to recognize your account, and access only to files created by the app itself; we cannot see the rest of your Drive.
 
 We use no third-party analytics or advertising, and we do not profile you in ways that produce legal effects.
 
@@ -119,7 +119,7 @@ We do not sell or give your data to third parties for their own purposes. The fo
 - The backup storage provider, if an external one is used.
 - Google, only if sign-in with Google or the Docs, Sheets and Slides integration is used.
 
-The controller should name the specific providers it uses here. Within your organisation, other members of a project see the content and your name in that project, and administrators can manage accounts and projects.
+The controller should name the specific providers it uses here. Within your organization, other members of a project see the content and your name in that project, and administrators can manage accounts and projects.
 
 ## 6. International transfers
 
@@ -127,7 +127,7 @@ If any of the providers above processes data outside the European Economic Area,
 
 ## 7. Retention periods
 
-- Account and content: while your account is active. When it is closed, your data is deleted or anonymised, except what must be kept to meet legal obligations (blocked until liability expires).
+- Account and content: while your account is active. When it is closed, your data is deleted or anonymized, except what must be kept to meet legal obligations (blocked until liability expires).
 - Technical and security logs (with IP): 7 days by default (the administrator may extend this up to 90 days).
 - Task activity history: up to 365 days.
 - Backups: daily backups of the last two weeks and monthly backups of the last six months are kept; deleted data disappears from backups as they rotate.
@@ -139,7 +139,7 @@ You can exercise your rights of access, rectification, erasure, objection, restr
 
 ## 9. Security
 
-We apply appropriate technical and organisational measures: encrypted connections in transit (HTTPS), hashed passwords, two-factor authentication (2FA) available and mandatory for administrators, per-project access control, sign-in attempt limits and encrypted backups. If a breach affecting you occurs, you will be notified as required by law.
+We apply appropriate technical and organizational measures: encrypted connections in transit (HTTPS), hashed passwords, two-factor authentication (2FA) available and mandatory for administrators, per-project access control, sign-in attempt limits and encrypted backups. If a breach affecting you occurs, you will be notified as required by law.
 
 ## 10. Cookies
 
@@ -211,7 +211,7 @@ These terms govern the use of this installation of Pizarro, a team task and proj
 
 ## 2. Access and accounts
 
-Only people whom {responsable} has registered or invited may use the service. You are responsible for keeping your credentials confidential and for activity carried out with your account; let us know as soon as possible at {email} if you suspect unauthorised use. You must provide truthful data and not share your account.
+Only people whom {responsable} has registered or invited may use the service. You are responsible for keeping your credentials confidential and for activity carried out with your account; let us know as soon as possible at {email} if you suspect unauthorized use. You must provide truthful data and not share your account.
 
 ## 3. Acceptable use
 
@@ -219,7 +219,7 @@ You may not use the service for unlawful purposes, to infringe third-party right
 
 ## 4. User content
 
-The content you upload or write remains yours (or that of whoever licenses it to you or of your organisation). You grant {responsable} the permission needed to store it, show it to the members of your projects and copy it into backups, solely to provide the service. You are responsible for having the right to upload it and for it not being unlawful, offensive or infringing third-party rights.
+The content you upload or write remains yours (or that of whoever licenses it to you or of your organization). You grant {responsable} the permission needed to store it, show it to the members of your projects and copy it into backups, solely to provide the service. You are responsible for having the right to upload it and for it not being unlawful, offensive or infringing third-party rights.
 
 ## 5. Availability and backups
 
@@ -237,9 +237,9 @@ To the extent permitted by law, {responsable} is not liable for indirect damages
 
 How your personal data is processed is described in this installation's privacy policy.
 
-## 9. Software licence
+## 9. Software license
 
-Pizarro is used under its own licence, which you can read at [/licencia](/licencia?lang=en). Use for business or professional purposes requires a commercial licence, and {responsable} is responsible for holding it for this installation.
+Pizarro is used under its own license, which you can read at [/licencia](/licencia?lang=en). Use for business or professional purposes requires a commercial license, and {responsable} is responsible for holding it for this installation.
 
 ## 10. Changes
 

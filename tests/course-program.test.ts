@@ -113,7 +113,7 @@ describe("sesiones del programa", () => {
 
   test("nombre del documento guardado en Documentación, con la versión, en cada idioma", () => {
     assert.equal(programDocumentName(es, "2026-11-13", 1), "Programa – 2026-11-13_v1.pdf");
-    assert.equal(programDocumentName(en, "2026-11-13", 12), "Programme – 2026-11-13_v12.pdf");
+    assert.equal(programDocumentName(en, "2026-11-13", 12), "Program – 2026-11-13_v12.pdf");
   });
 
   test("tope de sesiones de una columna «Programa»: solo PROGRAM, contando las no archivadas", () => {
@@ -149,7 +149,7 @@ describe("plantilla «Curso o máster»", () => {
     }
     const es = canonicalTemplate("curso-master")!;
     assert.deepEqual(es.columns.map((c) => c.name), ["Ideas", "Materiales", "Ejercicios y exámenes", "Plan de trabajo para IA", "Programa", "Seguimiento de alumnos"]);
-    assert.deepEqual(canonicalTemplateEn("curso-master")!.columns.map((c) => c.name), ["Ideas", "Materials", "Exercises and exams", "AI work plan", "Programme", "Student follow-up"]);
+    assert.deepEqual(canonicalTemplateEn("curso-master")!.columns.map((c) => c.name), ["Ideas", "Materials", "Exercises and exams", "AI work plan", "Program", "Student follow-up"]);
     assert.deepEqual(es.kinds.map((k) => k.name), ["Sesión", "Preparar material", "Preparar ejercicio", "Preparar examen", "Revisar perfil de alumno", "Corregir", "Tutoría"]);
     // Los encargos de preparación llevan formato de entrega y notas para el agente; la sesión (sale en el PDF), no.
     for (const name of ["Preparar material", "Preparar ejercicio", "Preparar examen"]) {
@@ -190,7 +190,7 @@ describe("PDF del programa", () => {
   test("en inglés", async () => {
     const pdf = await renderInWorker({ kind: "program", locale: "en", input: { project: "Test master", today: "2026-11-13", withAssignee: false, sessions: sessions(en, "en-GB").map((s) => ({ ...s, assignee: null })) } });
     const text = pdfRuns(pdf).join("");
-    for (const s of ["COURSE PROGRAMME", "3 sessions", "Session 1: Presentación", "Tuesday, 12 January 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
+    for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación", "Tuesday, 12 January 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
     assert.ok(!text.includes("Profesora Uno"));
   });
 

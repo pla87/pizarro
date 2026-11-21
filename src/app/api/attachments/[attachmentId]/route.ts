@@ -73,9 +73,11 @@ async function serve(req: Request, ctx: { params: Promise<{ attachmentId: string
   const headers: Record<string, string> = {
     ETag: etag,
     // Caché solo del navegador (nunca compartida). Las imágenes en línea se reutilizan 10 s sin preguntar al servidor
-    // (después se revalidan con ETag: 304 sin cuerpo; si se quita el acceso, deja de verse en unos segundos). Las
-    // descargas explícitas y los ficheros no imagen se revalidan siempre, para que queden registradas.
-    "Cache-Control": download ? "private, no-cache" : "private, max-age=10",
+    // (después se revalidan con ETag: 304 sin cuerpo; si se quita el acceso, deja de verse en unos segundos); las
+    // miniaturas, 2 min: el tablero pinta decenas y cada refresco revalidaba todas (una petición por miniatura), y un
+    // adjunto nuevo o cambiado tiene otro id. Las descargas explícitas y los ficheros no imagen se revalidan siempre,
+    // para que queden registradas.
+    "Cache-Control": download ? "private, no-cache" : variant === "thumb" ? "private, max-age=120" : "private, max-age=10",
     Vary: "Cookie",
     "X-Content-Type-Options": "nosniff",
   };
