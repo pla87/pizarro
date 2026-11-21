@@ -131,7 +131,7 @@ export const mensajeria: Record<string, string> = {
   "Avisos por Telegram desactivados, pero Telegram ha respondido con un error.": "Telegram notices turned off, but Telegram replied with an error.",
 
   // Administración → Integraciones → WhatsApp: la primera vez no se activa sola
-  "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Enable” to start sending notices (paid).",
+  "Configuración de WhatsApp guardada. Pulsa «Activar» para empezar a enviar avisos (de pago).": "WhatsApp settings saved. Press “Turn on” to start sending notices (paid).",
 
   // Mi perfil → Avisos: la prueba falla porque el bot está bloqueado
   "Telegram no deja enviarte mensajes (has bloqueado el bot o borrado el chat), así que se ha desconectado. Vuelve a conectarlo para recibir avisos.": "Telegram won't let us message you (you blocked the bot or deleted the chat), so it has been disconnected. Connect it again to get notices.",
