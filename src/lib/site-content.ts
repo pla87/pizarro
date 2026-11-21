@@ -11,6 +11,14 @@ type SiteIcon =
 /** Integraciones de la portada («Se conecta con…»); build-site les pone icono y enlaces a sus guías. */
 type SiteConnect = "email" | "messaging" | "google-login" | "google-docs";
 
+/**
+ * Claves que genera en el navegador el botón «Generar mis variables» de la guía de instalación (paso de Railway):
+ * bytes aleatorios (crypto.getRandomValues) en base64. Las tres primeras piden al menos 32 caracteres (lib/keyring.ts):
+ * 48 bytes dan 64. BACKUP_KEY tiene que ser exactamente 32 bytes (parseBackupKey, lib/backup-core.ts). Lo mismo que
+ * `openssl rand -base64 48` y `openssl rand -base64 32`.
+ */
+export const RAILWAY_KEY_BYTES = { SESSION_SECRET: 48, TOKEN_SECRET: 48, ENCRYPTION_KEY: 48, BACKUP_KEY: 32 } as const;
+
 // `_priceEur`: ya no lo usa ningún texto (el precio está en su sección, con licenseFaq y buyNote); se mantiene la firma.
 export function siteText(t: T, _priceEur: number) {
   return {
@@ -189,6 +197,9 @@ export function siteText(t: T, _priceEur: number) {
     codeTerminal: t("Terminal"),
     codeVariables: t("Variables"),
     codeOutput: t("Lo que verás"),
+    genButton: t("Generar mis variables"),
+    genAgain: t("Generar otras"),
+    genDone: t("Listo: claves nuevas, creadas en tu navegador. Pulsa «Copiar» y pégalas en Railway."),
     calloutNote: t("Nota"),
     calloutTip: t("Consejo"),
     calloutImportant: t("Importante"),

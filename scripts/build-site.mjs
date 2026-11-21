@@ -15,6 +15,8 @@
 // Markdown convertido por src/lib/site-markdown.ts (sin dependencias; el HTML que traiga el texto se escapa).
 // Guía de instalación (/instalar/, /en/install/): docs/web/instalar.md y docs/web/en/install.md, con índice, avisos y
 // botón «Copiar» en cada comando. Si falta una de las dos, falla. La referencia técnica sigue en docs/INSTALL.md.
+// El bloque «```railway-env» de la guía lleva además el botón «Generar mis variables»: otro script mínimo en línea que
+// crea las claves en el navegador (crypto.getRandomValues) y no envía nada a ningún sitio.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,7 +27,7 @@ const imp = (p) => import(pathToFileURL(join(root, p)).href);
 
 const product = await imp("src/lib/product.ts");
 const { landingFaq, licenseFaq } = await imp("src/lib/landing-content.ts");
-const { siteText } = await imp("src/lib/site-content.ts");
+const { siteText, RAILWAY_KEY_BYTES } = await imp("src/lib/site-content.ts");
 const { markdownToHtml, parseGuide, safeHref } = await imp("src/lib/site-markdown.ts");
 
 // Diccionario de inglés: todos los ficheros de src/i18n/en (index.ts los reúne con imports que Node no resuelve).
@@ -245,6 +247,12 @@ const ext = (href, html, cls = "") => `<a href="${esc(href)}"${cls ? ` class="${
 const checks = (items) => `<ul class="checks">${items.map((x) => `<li>${check}<span>${esc(x)}</span></li>`).join("")}</ul>`;
 /** El único JavaScript de la web: los botones «Copiar» (ocultos hasta que el script los muestra). */
 const COPY_SCRIPT = `<script>document.querySelectorAll("[data-copy]").forEach(function(b){b.hidden=false;b.addEventListener("click",function(){var c=document.getElementById(b.dataset.copy),o=b.textContent;if(!navigator.clipboard)return;navigator.clipboard.writeText(c.textContent).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=o},1800)})})})</script>`;
+/**
+ * Botón «Generar mis variables» (bloque «```railway-env» de la guía de instalación): sustituye en el bloque el valor de
+ * cada clave de RAILWAY_KEY_BYTES por bytes aleatorios del navegador en base64. Todo ocurre en la página: no hay
+ * peticiones. Sin crypto.getRandomValues (o sin JavaScript) el botón no aparece y queda la alternativa de openssl.
+ */
+const GEN_SCRIPT = `<script>(function(){var c=window.crypto;if(!c||!c.getRandomValues)return;document.querySelectorAll("[data-gen-for]").forEach(function(g){var code=document.getElementById(g.dataset.genFor),b=g.querySelector("button"),st=g.querySelector("[role=status]");if(!code||!b)return;g.hidden=false;b.addEventListener("click",function(){var t=code.textContent;g.dataset.keys.split(" ").forEach(function(k){var p=k.split(":"),a=new Uint8Array(+p[1]),s="";c.getRandomValues(a);for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);t=t.replace(new RegExp("^"+p[0]+"=.*$","m"),p[0]+"="+btoa(s))});code.textContent=t;b.textContent=b.dataset.again;st.textContent=st.dataset.done})})})()</script>`;
 /** Rótulos de los avisos «> [!NOTE]»… en el idioma de la página. */
 const calloutLabels = (s) => ({ note: s.calloutNote, tip: s.calloutTip, important: s.calloutImportant, warning: s.calloutWarning, caution: s.calloutCaution });
 
@@ -578,14 +586,22 @@ ${rest.length ? `<nav class="guide-more" aria-labelledby="mas-guias"><h2 id="mas
  * Bloque de código de la guía de instalación: una barra con su rótulo y, en los comandos y variables, el botón
  * «Copiar». «text» es lo que muestra la pantalla: se ve igual, pero sin botón.
  */
-function codeBlock(s) {
+function codeBlock(s, file) {
   let n = 0;
   return (text, lang) => {
-    const copyable = ["bash", "sh", "shell", "env"].includes(lang);
-    const label = lang === "env" ? s.codeVariables : copyable ? s.codeTerminal : s.codeOutput;
+    const gen = lang === "railway-env";
+    const copyable = gen || ["bash", "sh", "shell", "env"].includes(lang);
+    const label = lang === "env" || gen ? s.codeVariables : copyable ? s.codeTerminal : s.codeOutput;
     const id = `codigo-${++n}`;
     const button = copyable ? `<button class="copy" type="button" data-copy="${id}" data-done="${esc(s.copied)}" hidden>${esc(s.copy)}</button>` : "";
-    return `<div class="code${copyable ? "" : " code-out"}"><div class="code-bar"><span>${esc(label)}</span>${button}</div><pre tabindex="0"><code id="${id}">${esc(text)}</code></pre></div>`;
+    const block = `<div class="code${copyable ? "" : " code-out"}"><div class="code-bar"><span>${esc(label)}</span>${button}</div><pre tabindex="0"><code id="${id}">${esc(text)}</code></pre></div>`;
+    if (!gen) return block;
+    // Cada clave debe estar en el bloque como «NOMBRE=…» en su propia línea: es la línea que el botón rellena.
+    const keys = Object.entries(RAILWAY_KEY_BYTES);
+    const lack = keys.filter(([k]) => !new RegExp(`^${k}=`, "m").test(text)).map(([k]) => k);
+    if (lack.length) throw new Error(`${file}: el bloque «railway-env» debe llevar las líneas ${lack.map((k) => `${k}=…`).join(", ")}`);
+    const spec = keys.map(([k, bytes]) => `${k}:${bytes}`).join(" ");
+    return `<div class="gen" data-gen-for="${id}" data-keys="${spec}" hidden><button class="btn btn-primary" type="button" data-again="${esc(s.genAgain)}">${esc(s.genButton)}</button><p class="gen-status" role="status" data-done="${esc(s.genDone)}"></p></div>${block}`;
   };
 }
 
@@ -597,7 +613,7 @@ function installPage(locale) {
   const doc = INSTALL[locale];
   const other = locale === "es" ? "Read it in English" : "Léela en español";
   const headings = [];
-  const body = markdownToHtml(doc.body, { link: docLink(locale, doc.file), headings, callouts: calloutLabels(s), code: codeBlock(s) });
+  const body = markdownToHtml(doc.body, { link: docLink(locale, doc.file), headings, callouts: calloutLabels(s), code: codeBlock(s, doc.file) });
   const ids = new Set(headings.map((h) => h.id));
   const lack = INSTALL_ANCHORS[locale].filter((id) => !ids.has(id));
   if (lack.length) throw new Error(`${doc.file}: faltan las secciones con identificador fijo ${lack.map((id) => `{#${id}}`).join(", ")} (las enlazan la portada y la app)`);
@@ -620,6 +636,7 @@ ${body}
 </div>
 </div>
 ${COPY_SCRIPT}
+${body.includes("data-gen-for") ? GEN_SCRIPT : ""}
 `;
   return page(locale, { path: l.install, alt: L[l.other].install, title: `${doc.title} · Pizarro`, description: doc.description, main, onHome: false });
 }
