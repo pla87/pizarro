@@ -164,8 +164,8 @@ export function plainAttachmentFileNames(attachments: ReleaseAttachmentInput[]):
  */
 const NAME_BASE_BYTES = 180;
 
-/** Nombres que Windows reserva para dispositivos (también con extensión: «CON.txt»): no se pueden crear allí. */
-const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+/** Nombres que Windows reserva para dispositivos (también con extensión: «CON.txt», y COM¹…LPT³): no se pueden crear allí. */
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])$/i;
 
 /** Corta un texto a `max` bytes en UTF-8 sin partir ningún carácter. */
 function cutUtf8(text: string, max: number): string {
@@ -186,8 +186,9 @@ function namedAttachmentFiles(prefix: string, attachments: ReleaseAttachmentInpu
     const isImage = a.isImage ?? true;
     const base = a.originalName.replace(/\.[^.]+$/, "");
     const cleaned = cutUtf8(`${prefix}${base}`.replace(/\s+/g, "_").replace(/[^\p{L}\p{N}._-]/gu, "_"), NAME_BASE_BYTES);
-    // «.» o «..» (o solo puntos) serían rutas especiales dentro del ZIP («adjuntos/03-x/..»): se sustituyen.
-    const safe = cleaned && !/^\.+$/.test(cleaned) ? cleaned : "adjunto";
+    // Sin puntos ni espacios al final: Windows los quita («informe.» chocaría con «informe»). Así «.» o «..», que serían
+    // rutas especiales dentro del ZIP («adjuntos/03-x/..»), quedan vacíos y se sustituyen.
+    const safe = cleaned.replace(/[. ]+$/, "") || "adjunto";
     // CON, NUL, LPT1…: con «_» delante, para que el ZIP se pueda descomprimir en Windows.
     const clean = WINDOWS_RESERVED.test(safe.split(".")[0]!) ? `_${safe}` : safe;
     // Extensión original (saneada) para los no imagen; .webp para las imágenes.
