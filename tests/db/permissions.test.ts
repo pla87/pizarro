@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, FORBIDDEN, assign, loginAs, makeKind, makeProject, restoreSession, saveSession, makeTask, makeUser, NOT_FOUND, SESSION_EXPIRED } from "./helpers";
 import { assertAssignable, assertProjectAccess, assertTaskAccess, listVisibleProjects, visibleProjectsWhere } from "../../src/lib/access";
 import { addComment, createTask, deleteTask, getTaskDetail, moveTask, updateTask } from "../../src/actions/tasks";
-import { deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
+import { deleteRelease, deployRelease, getReleaseContent, getReleaseTaskDetails } from "../../src/actions/releases";
 import { addProjectMember, createProject, removeProjectMember, setMyProjectPicks, setAdminProjectPick, setAttachmentLimits, setProjectVisibility } from "../../src/actions/projects";
 
 /** Tres proyectos (equipo con asignado, equipo sin asignados, privado) con dos administradores, un miembro y un ajeno. */
@@ -158,7 +158,7 @@ describe("releases", () => {
     return { task, inProd, res };
   }
 
-  test("deployRelease / getReleaseTaskDetails / deleteRelease: rechazadas en un proyecto privado ajeno y permitidas a los miembros", async () => {
+  test("deployRelease / getReleaseTaskDetails / getReleaseContent / deleteRelease: rechazadas en un proyecto privado ajeno y permitidas a los miembros", async () => {
     const w = await world();
     const task = await makeTask(w.priv, { columnId: w.priv.columns.done });
     await db.column.create({ data: { projectId: w.priv.project.id, name: "En producción", position: 4000, role: "IN_PRODUCTION" } });
@@ -176,9 +176,16 @@ describe("releases", () => {
     expectOk(await deployRelease(input));
     const release = await db.release.findFirstOrThrow({ where: { projectId: w.priv.project.id } });
 
+    // El texto del histórico, que se pide al desplegar la release: solo a quien ve el proyecto.
+    assert.deepEqual(expectOk(await getReleaseContent(release.id)), { content: "Cambios" });
+    expectFail(await getReleaseContent("no-existe"), /^The release doesn't exist\.$|^La release no existe\.$/);
+
     await loginAs(w.otherAdmin);
+    expectFail(await getReleaseContent(release.id), NOT_FOUND);
     expectFail(await deleteRelease(release.id), NOT_FOUND);
     assert.equal(await db.release.count({ where: { id: release.id } }), 1);
+    await loginAs(w.outsider);
+    expectFail(await getReleaseContent(release.id), NOT_FOUND);
     await loginAs(w.admin);
     expectOk(await deleteRelease(release.id));
   });

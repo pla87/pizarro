@@ -15,8 +15,8 @@ export async function generateMetadata({ params }: { params: Promise<{ projectId
 
 const PAGE_STEP = 50;
 /**
- * Releases que puede mostrar la página como mucho, con «Cargar más» (?limit=) o con búsqueda: cada una va con su
- * contenido entero (hasta MAX_RELEASE_CONTENT, 200 KB), así que más daría páginas de decenas de MB. Las más antiguas se
+ * Releases que puede mostrar la página como mucho, con «Cargar más» (?limit=) o con búsqueda. Solo va la cabecera de
+ * cada una: el texto (hasta MAX_RELEASE_CONTENT, 200 KB) se pide al desplegarla (getReleaseContent). Las más antiguas se
  * encuentran buscando.
  */
 const LIST_MAX = 200;
@@ -69,7 +69,6 @@ export default async function ReleasesPage({
           id: true,
           number: true,
           title: true,
-          content: true,
           deployedAt: true,
           createdBy: { select: { name: true } },
           attachments: { orderBy: { position: "asc" }, select: { fileName: true } },
@@ -111,7 +110,6 @@ export default async function ReleasesPage({
             id: r.id,
             number: r.number,
             title: r.title,
-            content: r.content,
             deployedAt: r.deployedAt.toISOString(),
             author: r.createdBy?.name ?? null,
             taskCount: taskCount.get(r.id) ?? 0,
