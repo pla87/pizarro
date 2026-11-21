@@ -586,3 +586,35 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 - Con el móvil en modo oscuro, los textos en rojo (Borrar…) y los enlaces de color se leen bien.
 - Cambia el día del informe semanal a otro posterior de la misma semana tras un envío: si han pasado 3 días o más, llega.
 - Cierra sesión y abre `/login?next=/.//example.com`: tras entrar, debes quedarte en Pizarro.
+
+## 12. Novedades de la v1.63.0
+
+### 12.1 Miembros e invitaciones (con email configurado)
+
+1. En *Ajustes del proyecto → General*, añade a un administrador como miembro: sale con la marca «admin».
+2. Añade a una persona que ya tiene cuenta: debe recibir «… te ha añadido al proyecto «X»» con el botón *Abrir el tablero*. Quítala y vuelve a añadirla: no recibe un segundo email ese día.
+3. *Invitar por email* a una dirección tuya sin cuenta: llega la invitación al proyecto; al elegir la contraseña entras directamente en el tablero.
+4. *Copiar enlace* tras añadir o invitar: pégalo en otro navegador y comprueba que lleva al sitio correcto.
+
+### 12.2 Móvil (en el teléfono)
+
+- Todas las columnas llegan hasta abajo, también «Siguiente salto» con su panel «Siempre en la release».
+- En una columna larga no hay barra de desplazamiento fija a la derecha.
+- Dicta una tarea larga sin tocar la pantalla: la pantalla no se apaga y el dictado no se corta.
+- En *Documentación*, sube una foto de la cámara (12–48 MP): se ve su vista previa.
+
+### 12.3 Servidor propio (VPS)
+
+1. Antes de actualizar: `docker run --rm -v $PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro -e DOMAIN=:80 caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile` (en la carpeta del repositorio de la versión nueva) debe decir «Valid configuration».
+2. Actualiza con `curl … /pizarro/stable/deploy/get.sh | sh`. Tras actualizar, `docker compose logs caddy` muestra peticiones sin la ruta.
+3. Si usas `SMTP_*` en el `.env` con un servidor que no es local y un puerto distinto de 465: envía un email de prueba. Si falla por STARTTLS, el diagnóstico lo avisa (`smtp_starttls_required`).
+
+### 12.4 Emails
+
+- El informe semanal a una persona que usa Pizarro en inglés llega en inglés, con el nombre de la organización y quién lo configuró.
+- Los emails llevan el pie «No respondas a este email…» y, si el remitente no tiene nombre, el de la organización.
+- El aviso de nuevo inicio de sesión muestra la hora con la zona (por ejemplo «(CET)»).
+
+### 12.5 Publicar la versión
+
+- En la GitHub Release de la v1.63.0 deben aparecer adjuntos `MANUAL.pdf` y `PRUEBAS.pdf`, y el enlace «Manual en PDF» de getpizarro.com debe descargarlo.
