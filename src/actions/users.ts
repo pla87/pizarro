@@ -126,7 +126,7 @@ export async function inviteToProject(projectId: string, email: string) {
       }
     }
     // El enlace no se registra: solo quién, a qué proyecto y por dónde.
-    describeAction(`Invitó a «${created.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (por email)" : mailFailed ? " (falló el email; enlace copiado a mano)" : " (con enlace, sin email)"}`);
+    describeAction(`Invitó a «${created.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (por email)" : mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
     revalidatePath("/", "layout");
     return { name: created.name, link, emailed, mailFailed };
   });

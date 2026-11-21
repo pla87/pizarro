@@ -11,6 +11,7 @@ import { afterDone, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, m
 import { addProjectMember, removeProjectMember, setProjectVisibility } from "../../src/actions/projects";
 import { findUsableToken } from "../../src/lib/auth-token";
 import { workingProjectsWhere } from "../../src/lib/access";
+import { outsideListProject } from "../../src/lib/project-visit";
 import type { CurrentUser } from "../../src/lib/session";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
@@ -76,6 +77,8 @@ describe("administradores asignados a un proyecto de equipo", () => {
     await db.adminProjectPick.deleteMany({ where: { projectId: f.project.id, userId: boss.id } });
     assert.equal(await working(boss, f.project.id), false);
     assert.ok(await isMember(f.project.id, boss.id));
+    // Al abrirlo, el selector lo marca «No está en tus proyectos», como a cualquier otro sin elegir.
+    assert.deepEqual(await outsideListProject(boss, f.project.id), { id: f.project.id, name: f.project.name });
   });
 
   test("en un privado los administradores siguen siendo miembros como antes (sin elección); al pasar a equipo siguen asignados y además lo eligen", async () => {

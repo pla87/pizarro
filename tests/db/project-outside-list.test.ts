@@ -7,7 +7,7 @@ import { addProjectToMine, projectOutsideList } from "../../src/actions/project-
 import { outsideListProject } from "../../src/lib/project-visit";
 
 describe("proyecto de equipo fuera de la lista del administrador", () => {
-  test("de equipo, sin elegir y sin ser miembro: se muestra; elegido, miembro, privado o inexistente: no", async () => {
+  test("de equipo y sin elegir (aunque esté asignado): se muestra; elegido, privado o inexistente: no", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const other = await makeUser();
     const team = await makeProject({ members: [] });
@@ -18,7 +18,8 @@ describe("proyecto de equipo fuera de la lista del administrador", () => {
     const me = { id: admin.id, role: "ADMIN" as const };
     assert.deepEqual(await outsideListProject(me, team.project.id), { id: team.project.id, name: team.project.name });
     assert.equal(await outsideListProject(me, picked.project.id), null);
-    assert.equal(await outsideListProject(me, memberOf.project.id), null);
+    // Asignado pero sin elegir (lo quitó de sus proyectos): fuera de su lista, como en sus selectores (workingProjectsWhere).
+    assert.deepEqual(await outsideListProject(me, memberOf.project.id), { id: memberOf.project.id, name: memberOf.project.name });
     assert.equal(await outsideListProject(me, foreignPrivate.project.id), null, "un privado ajeno no existe para él");
     assert.equal(await outsideListProject(me, "no-existe"), null);
     assert.equal(await outsideListProject(me, "x".repeat(41)), null);
