@@ -81,4 +81,13 @@ export const importar: Record<string, string> = {
   "{n} tarjetas llevan un comentario con quién las tenía asignadas o las creó en el original, porque esas personas no están aquí.":
     "{n} cards have a comment saying who they were assigned to or created by in the original, because those people are not here.",
   "«{name}» importado (1 tarjeta).": "“{name}” imported (1 card).",
+  // Importar un proyecto con los topes de la aplicación (30 columnas, nombres de 40)
+  "El proyecto tenía {total} columnas y el máximo es {max}: la última se ha unido a «{name}», con sus tareas.":
+    "The project had {total} columns and the maximum is {max}: the last one has been merged into “{name}”, with its tasks.",
+  "El proyecto tenía {total} columnas y el máximo es {max}: las {n} últimas se han unido a «{name}», con sus tareas.":
+    "The project had {total} columns and the maximum is {max}: the last {n} have been merged into “{name}”, with their tasks.",
+  "1 nombre de tipo pasaba de {max} caracteres y se ha recortado.": "1 type name was longer than {max} characters and has been shortened.",
+  "{n} nombres de tipo pasaban de {max} caracteres y se han recortado.": "{n} type names were longer than {max} characters and have been shortened.",
+  "1 nombre de etiqueta pasaba de {max} caracteres y se ha recortado.": "1 label name was longer than {max} characters and has been shortened.",
+  "{n} nombres de etiqueta pasaban de {max} caracteres y se han recortado.": "{n} label names were longer than {max} characters and have been shortened.",
 };

@@ -37,6 +37,7 @@ import { mapMentions } from "./mentions";
 import { openProjectArchive, type ProjectArchive } from "./read";
 import type { ProjectExportData } from "./types";
 import { cutText } from "../graphemes";
+import { fitImportLimits, IMPORT_MAX_COLUMNS, IMPORT_MAX_NAME } from "./fit-limits";
 
 export interface ImportUser {
   id: string;
@@ -150,9 +151,27 @@ export async function importProjectFile(file: string, user: ImportUser, opts: Im
   }
 }
 
-async function runImport({ zip, data, files, manifest }: ProjectArchive, user: ImportUser, opts: ImportOptions): Promise<ImportSummary> {
+async function runImport({ zip, data: fileData, files, manifest }: ProjectArchive, user: ImportUser, opts: ImportOptions): Promise<ImportSummary> {
   const t = opts.t ?? (await getT());
   const warnings: string[] = [];
+  // Con los topes de la aplicación (30 columnas, nombres de 40): lo que pasa de ahí se ajusta, con su aviso.
+  const { data, report: fit } = fitImportLimits(fileData);
+  if (fit.mergedColumns) {
+    const { count, total, into } = fit.mergedColumns;
+    warnings.push(count === 1
+      ? t("El proyecto tenía {total} columnas y el máximo es {max}: la última se ha unido a «{name}», con sus tareas.", { total, max: IMPORT_MAX_COLUMNS, name: into })
+      : t("El proyecto tenía {total} columnas y el máximo es {max}: las {n} últimas se han unido a «{name}», con sus tareas.", { total, max: IMPORT_MAX_COLUMNS, n: count, name: into }));
+  }
+  if (fit.cutKindNames) {
+    warnings.push(fit.cutKindNames === 1
+      ? t("1 nombre de tipo pasaba de {max} caracteres y se ha recortado.", { max: IMPORT_MAX_NAME })
+      : t("{n} nombres de tipo pasaban de {max} caracteres y se han recortado.", { n: fit.cutKindNames, max: IMPORT_MAX_NAME }));
+  }
+  if (fit.cutLabelNames) {
+    warnings.push(fit.cutLabelNames === 1
+      ? t("1 nombre de etiqueta pasaba de {max} caracteres y se ha recortado.", { max: IMPORT_MAX_NAME })
+      : t("{n} nombres de etiqueta pasaban de {max} caracteres y se han recortado.", { n: fit.cutLabelNames, max: IMPORT_MAX_NAME }));
+  }
   const zipTimeZone = manifest.timeZone;
   // Una columna «Programa del curso» admite como mucho PROGRAM_MAX_SESSIONS sesiones (como al crear o mover tareas).
   const overLimit = programColumnsOverLimit(data.columns, data.tasks)[0];
