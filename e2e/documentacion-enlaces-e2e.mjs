@@ -114,7 +114,7 @@ if (only.includes("enlaces")) {
     L.eq(`ENL: ${id}: sin dirección, desactivado, con su title`, [await attr(id, "href"), await attr(id, "title"), await attr(id, "aria-disabled")], [null, "Enlace a otro archivo que no está en la Documentación", "true"]);
   }
   L.eq("ENL: «ajeno.html» (solo existe en otro proyecto) no apunta a ningún documento", await attr("ajeno", "href"), null);
-  L.eq("ENL: el enlace externo sigue igual (otra pestaña)", [await attr("fuera", "href"), await attr("fuera", "target")], ["https://example.com/tema2.html", null]);
+  L.eq("ENL: el enlace externo sigue igual y se abre en otra pestaña (target _blank, también si el documento decía _top o _self)", [await attr("fuera", "href"), await attr("fuera", "target")], ["https://example.com/tema2.html", "_blank"]);
   L.eq("ENL: javascript: sigue bloqueado", await frame.locator("#js").getAttribute("href"), null);
   const srcdoc = await frameEl.getAttribute("srcdoc");
   L.check("ENL: la CSP sin red y sin scripts sigue en el marco", srcdoc.includes(`content="default-src 'none'`) && !/<script|onerror=|javascript:/i.test(srcdoc));
