@@ -43,6 +43,9 @@ export function proxy(req: NextRequest) {
     pathname === "/setup" || pathname.startsWith("/setup/") || pathname === "/login" || pathname.startsWith("/login/") || pathname === "/forgot-password" || pathname === "/presentacion" || pathname === "/privacy" || pathname === "/terms" || pathname === "/licencia" || pathname.startsWith("/reset/") || pathname.startsWith("/confirm/") ||
     // Públicas también: informe de errores del navegador (la pantalla de acceso no tiene sesión), versión en curso y salida limpia.
     pathname === "/api/client-errors" || pathname === "/api/version" || pathname === "/api/auth/reset" ||
+    // Baja de un tipo de email desde su enlace (página de confirmación y POST de la baja en un clic, RFC 8058): el token
+    // firmado del enlace es la credencial; los gestores de correo hacen el POST sin sesión.
+    /^\/unsubscribe\/[A-Za-z0-9_.-]+$/.test(pathname) || /^\/api\/unsubscribe\/[A-Za-z0-9_.-]+$/.test(pathname) ||
     // Suscripción al calendario (.ics vivo): la dirección con su token larga es la credencial (la ruta limita el ritmo y lo comprueba).
     (req.method === "GET" && /^\/api\/calendar\/[A-Za-z0-9_-]+\.ics$/.test(pathname));
   const token = req.cookies.get(sessionCookieName())?.value;

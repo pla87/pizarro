@@ -168,3 +168,37 @@ test("recuentos de todas las tareas: avance, vencidas, columnas, tipos y persona
   // Sin recuentos de la BD (todas leídas), los mismos números salen de las tareas y no se omite ninguna.
   assert.equal(buildReport(base).omittedTasks, 0);
 });
+
+// Informe semanal por email de un proyecto enorme: como mucho N tareas por listado (las más urgentes), con cuántas faltan
+// contadas sobre todas (también las que no se leen) para el «… y N más» con enlace al tablero.
+test("tope por listado (informe semanal): columnas, plazos y campos opcionales recortados, con lo que falta", () => {
+  const many = Array.from({ length: 40 }, (_, i) => ({
+    id: `t${i}`, title: `Tarea ${i}`, kind: "Funcionalidad", columnId: "todo", assigneeName: null,
+    // 10 vencidas, 10 próximas y 20 sin plazo.
+    dueDate: i < 10 ? `2026-10-0${(i % 9) + 1}` : i < 20 ? "2026-10-25" : null,
+    deliverableId: null, subtaskTotal: 0, subtaskDone: 0, fields: { cost: "1.00", costPaid: false, estimatedHours: null, actualHours: null, priority: null, client: null, startDate: null },
+  }));
+  const input: ReportInput = { ...base, tasks: many, taskFields: ["cost"], listLimit: 15, boardUrl: "https://pizarro.example.com/p/1" };
+  const r = buildReport(input);
+  const [todo] = r.columns;
+  assert.equal(todo!.tasks.length, 15);
+  assert.equal(todo!.more, 25);
+  assert.equal(todo!.count, 40, "el total de la columna no cambia");
+  // Primero las más urgentes: las 10 vencidas y luego las próximas.
+  assert.ok(todo!.tasks.slice(0, 10).every((t) => t.daysLeft! < 0));
+  assert.equal(r.overdue.length + r.upcoming.length, 15);
+  assert.equal(r.overdue.length, 10, "las vencidas, antes que las próximas");
+  assert.equal(r.more.planned, 5);
+  assert.equal(r.fields!.rows.length, 15);
+  assert.equal(r.more.fields, 25);
+  assert.equal(r.fields!.totals.cost, "40.00", "los totales cuentan todas las tareas");
+  assert.equal(r.kpis.total, 40);
+  assert.deepEqual([r.listLimit, r.boardUrl], [15, "https://pizarro.example.com/p/1"]);
+  // Con recuentos de la BD, lo que falta se cuenta sobre todas (no solo las leídas).
+  const counted = buildReport({ ...input, counts: { rows: [{ columnId: "todo", assigneeName: null, kind: "Funcionalidad", count: 5000, overdue: 10, dueSoon: 0, withoutDue: 4980 }], fixed: 0 } });
+  assert.equal(counted.columns[0]!.more, 4985);
+  // Sin tope (la descarga desde la app), todas y nada que añadir.
+  const all = buildReport({ ...input, listLimit: undefined });
+  assert.equal(all.columns[0]!.tasks.length, 40);
+  assert.deepEqual([all.columns[0]!.more, all.more.planned, all.more.fields, all.listLimit], [0, 0, 0, null]);
+});

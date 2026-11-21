@@ -206,12 +206,29 @@ test("avisos: email por tipo y preferencias", () => {
   assert.match(mentionEmail({ ...msg, type: "ASSIGNED" }).subject, /Ana te ha asignado «Pantalla»/);
   assert.match(mentionEmail({ ...msg, type: "REPLY" }, makeT("en")).subject, /replied to your comment/);
   assert.match(mentionEmail({ ...msg, type: "DUE_CHANGED", excerpt: "2026-10-01>2026-10-05" }).text, /→/);
+  // Un comentario (o una respuesta, o una mención) va como cita de quien lo ha escrito, separada de la cabecera: un
+  // nombre o un texto no puede pasar por un mensaje de Pizarro.
+  const comment = mentionEmail({ ...msg, type: "COMMENT", actorName: "Soporte <x>", excerpt: "Tu cuenta caduca hoy" });
+  assert.ok(comment.text.startsWith("Soporte <x> ha comentado en «Pantalla» (Web)\n\nSoporte <x> ha escrito:\n> Tu cuenta caduca hoy\n\nAbrir la tarea: "), comment.text);
+  assert.match(comment.html, /<p style="[^"]*">Soporte &lt;x&gt; ha escrito:<\/p>\n<blockquote[^>]*>Tu cuenta caduca hoy<\/blockquote>/);
+  assert.match(mentionEmail({ ...msg, type: "REPLY" }, makeT("en")).text, /\n\nAna wrote:\n> Hola\n/);
+  // El cambio de fecha no lo ha escrito nadie: sin «ha escrito».
+  assert.doesNotMatch(mentionEmail({ ...msg, type: "DUE_CHANGED", excerpt: "2026-10-01>2026-10-05" }).text, /ha escrito/);
+  // Enlace de baja al pie (texto y HTML), solo si lo hay.
+  const unsub = mentionEmail({ ...msg, type: "MENTION" }, makeT("es"), { unsubscribeUrl: "https://a.b/unsubscribe/mX.y" });
+  assert.match(unsub.text, /\nDejar de recibir estos emails: https:\/\/a\.b\/unsubscribe\/mX\.y\nNo respondas/);
+  assert.match(unsub.html, /<a href="https:\/\/a\.b\/unsubscribe\/mX\.y"[^>]*>Dejar de recibir estos emails<\/a>/);
+  assert.doesNotMatch(mentionEmail({ ...msg, type: "MENTION" }).text, /Dejar de recibir/);
   const prefs = { notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false };
   assert.equal(emailWanted("MENTION", prefs), true);
   assert.equal(emailWanted("ASSIGNED", prefs), false);
   assert.equal(emailWanted("DUE_CHANGED", prefs), true);
   assert.equal(emailWanted("COMMENT", prefs), false);
   assert.equal(emailWanted("REPLY", prefs), false);
+  // Los recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp), no con las menciones.
+  assert.equal(emailWanted("WAITING", prefs), true);
+  assert.equal(emailWanted("WAITING", { ...prefs, notifyEmail: true, notifyDueEmail: false }), false);
+  assert.equal(emailWanted("PROJECT_TO_TEAM", { ...prefs, notifyEmail: false }), false);
 });
 
 // --- Menciones en el título ---

@@ -117,6 +117,38 @@ describe("envío externo de avisos", () => {
     assert.equal((await readdir(dir)).filter((n) => n.endsWith(".json")).length, 1);
     await rm(dir, { recursive: true, force: true });
   });
+
+  // Antes los recordatorios de «Esperando» salían por email con «Avisos de menciones» (y por Telegram/WhatsApp con las
+  // fechas límite): ahora, en todos los canales, con «fechas límite y recordatorios de “Esperando”».
+  test("recordatorio de «Esperando»: el email lo decide la casilla de las fechas límite, no la de menciones", async () => {
+    const mentionsOnly = await makeUser();
+    const dueOnly = await makeUser();
+    await db.user.update({ where: { id: mentionsOnly.id }, data: { notifyEmail: true, notifyDueEmail: false } });
+    await db.user.update({ where: { id: dueOnly.id }, data: { notifyEmail: false, notifyDueEmail: true } });
+    const f = await makeProject({ members: [mentionsOnly, dueOnly] });
+    const task = await makeTask(f);
+    const created = await db.notification.createManyAndReturn({
+      data: [mentionsOnly, dueOnly].map((u) => ({ userId: u.id, actorId: null, taskId: task.id, type: "WAITING" as const, excerpt: "4" })),
+      select: { id: true, userId: true },
+    });
+    const dir = await mkdtemp(join(tmpdir(), "pz-outbox-waiting-"));
+    const prev = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = dir;
+    try {
+      await deliver(created.map((c) => c.id));
+      const sent = await db.notification.findMany({ where: { id: { in: created.map((c) => c.id) } }, select: { userId: true, emailSentAt: true } });
+      assert.equal(sent.find((n) => n.userId === mentionsOnly.id)?.emailSentAt, null);
+      assert.ok(sent.find((n) => n.userId === dueOnly.id)?.emailSentAt);
+      const [file] = (await readdir(dir)).filter((x) => x.endsWith(".json"));
+      const mail = JSON.parse(await readFile(join(dir, file!), "utf8")) as { subject: string; text: string };
+      assert.match(mail.subject, /sigue esperando respuesta/);
+      // Su baja apaga esa misma casilla (la «d» de las fechas límite).
+      assert.match(mail.text, /\/unsubscribe\/d/);
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = prev ?? "";
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("avisos de asignación en lote", () => {

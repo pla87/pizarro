@@ -4,20 +4,22 @@ import type { Prisma } from "@/generated/prisma/client";
 import { intlLocale, makeT, toLocale, type Locale, type T } from "../i18n/core";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
-import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail } from "./mail";
+import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { ellipsize } from "./graphemes";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { notificationHeadline, type NotificationKind } from "./notification-text";
+import { notificationHeadline, quotesWriting, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
-  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
+  CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, quoteIntro, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
 } from "./messaging-core";
 import { disconnectTelegramChat, sendTelegramMessage } from "./telegram";
 import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
+import { EMAIL_PREF_FIELD, noticeEmailKind } from "./unsubscribe-core";
+import { unsubscribeLinks } from "./unsubscribe";
 
 // Avisos (menciones, asignaciones, cambios de fecha, comentarios y respuestas): en la app (tabla Notification), por
 // email (SMTP) y por los canales que cada persona conecta en Mi perfil → Avisos (Telegram y WhatsApp, si el
@@ -29,11 +31,17 @@ export { emailEnabled };
 /** Datos de un aviso para el email y los mensajes (mismo contenido en todos los canales). */
 type MentionMessage = NoticeMessage;
 
-/** Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). */
-export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
+/**
+ * Email de un aviso: asunto, texto plano y HTML (todo el contenido del usuario va escapado). Lo que ha escrito una
+ * persona (comentario, respuesta, texto con la mención) va como cita suya: «Ana ha escrito:» y el extracto en un bloque
+ * de cita, separado de la cabecera, para que un nombre o un texto no pueda pasar por un mensaje de Pizarro.
+ * `unsubscribeUrl`: el enlace del pie para dejar de recibir este tipo de aviso (lib/unsubscribe.ts).
+ */
+export function mentionEmail(m: MentionMessage, t: T = makeT("es"), opts: { unsubscribeUrl?: string } = {}) {
   const type = m.type ?? "MENTION";
   // Sin repetir el título en una asignación (ya va en el asunto y en la cabecera).
   const body = noticeBody(m, t);
+  const quoted = body !== "" && quotesWriting(type);
   // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés. Recortado como en Telegram y
   // WhatsApp: un título de cientos de caracteres no cabe en el asunto (muchos programas lo cortan o lo parten).
   const task = t("«{title}»", { title: ellipsize(m.taskTitle.replace(/\s+/g, " ").trim(), 120) });
@@ -41,13 +49,17 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const open = noticeLinkLabel(m, t);
   const optOut = t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro.");
   const noReply = noReplyNote(t);
-  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${open}: ${m.url}\n\n${optOut}\n${noReply}\n`;
+  const unsub = unsubscribeFooter(opts.unsubscribeUrl, t);
+  const intro = quoted ? quoteIntro(m, t) : "";
+  const bodyText = !body ? "" : quoted ? `\n\n${intro}\n${body.split("\n").map((l) => `> ${l}`).join("\n")}` : `:\n\n${body}`;
+  const text = `${subject} (${m.projectName})${bodyText}\n\n${open}: ${m.url}\n\n${optOut}\n${unsub.text}${noReply}\n`;
   const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt });
+  const quote = `<blockquote style="margin:${quoted ? "4px" : "12px"} 0 12px;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
-${body ? `<blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>` : ""}
+${quoted ? `<p style="margin:12px 0 0;color:#475569">${escapeHtml(intro)}</p>\n` : ""}${body ? quote : ""}
 <p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }
 
@@ -64,16 +76,13 @@ function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; proj
   };
 }
 
-/** ¿Quiere esta persona el email de este tipo de aviso? (en la app se crean siempre) */
+/**
+ * ¿Quiere esta persona el email de este tipo de aviso? (en la app se crean siempre). Grupos en noticeEmailKind: los
+ * recordatorios de «Esperando» van con las fechas límite (como en Telegram y WhatsApp, channelWants; hasta la v1.63
+ * salían con «Avisos de menciones») y los de administración (un proyecto pasa a ser de equipo), con las menciones.
+ */
 export function emailWanted(type: NotificationKind, u: { notifyEmail: boolean; notifyAssignedEmail: boolean; notifyDueEmail: boolean; notifyCommentEmail: boolean }): boolean {
-  switch (type) {
-    case "ASSIGNED": return u.notifyAssignedEmail;
-    case "DUE_CHANGED": return u.notifyDueEmail;
-    case "COMMENT":
-    case "REPLY": return u.notifyCommentEmail;
-    // Menciones y avisos de administración (un proyecto pasa a ser de equipo): «Avisos de menciones» de Mi perfil.
-    default: return u.notifyEmail;
-  }
+  return u[EMAIL_PREF_FIELD[noticeEmailKind(type)]];
 }
 
 const CHANNEL_SELECT = { channel: true, address: true, verifiedAt: true, consentAt: true, notifyMention: true, notifyAssigned: true, notifyDue: true, notifyComment: true } as const;
@@ -147,7 +156,9 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     if (emailEnabled() && emailWanted(n.type, n.user)) {
       const t0 = performance.now();
       try {
-        await sendMail({ to: n.user.email, ...mentionEmail(msg, t) });
+        // Con su enlace de baja (solo este grupo de avisos) y las cabeceras de la baja en un clic.
+        const unsub = unsubscribeLinks(noticeEmailKind(n.type), n.user.id, n.user.email);
+        await sendMail({ to: n.user.email, ...mentionEmail(msg, t, { unsubscribeUrl: unsub.page }), headers: unsub.headers });
         update.emailSentAt = new Date();
         logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       } catch (err) {

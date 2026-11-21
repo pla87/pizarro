@@ -48,7 +48,7 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
         </label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={form.notifyDueEmail} onChange={(e) => set("notifyDueEmail", e.target.checked)} />
-          <span>{t("Email cuando cambia la fecha límite de una tarea mía")}</span>
+          <span>{t("Email con los cambios de fecha límite y los recordatorios de «Esperando»")}</span>
         </label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={form.notifyCommentEmail} onChange={(e) => set("notifyCommentEmail", e.target.checked)} />

@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
-import { assignedBatchCount, notificationBody, notificationHeadline, type NotificationKind } from "@/lib/notification-text";
+import { assignedBatchCount, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "@/lib/notification-text";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -131,7 +131,8 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                         : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
-                    {body && <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">{body}</p>}
+                    {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
+                    {body && <p className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-l-2 border-slate-300 pl-2 dark:border-slate-600")}>{body}</p>}
                     <p className="mt-1 flex items-center gap-2 text-xs text-slate-400">
                       {formatDate(n.createdAt, "dateTimeShort", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}

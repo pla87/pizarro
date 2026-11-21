@@ -2,7 +2,8 @@ import "server-only";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDateTimeZone } from "./format";
 import { getInstanceSettings } from "./instance";
-import { appUrl, escapeHtml, noReplyNote, sendMail, type MailMessage } from "./mail";
+import { appUrl, escapeHtml, noReplyNote, sendMail, unsubscribeFooter, type MailMessage } from "./mail";
+import { unsubscribeLinks } from "./unsubscribe";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
@@ -21,21 +22,25 @@ interface Layout {
   details?: [label: string, value: string][];
   button?: { label: string; url: string };
   note?: string;
+  /** Baja de este tipo de aviso (solo en los que dependen de una casilla de Mi perfil): enlace del pie y cabeceras. */
+  unsubscribe?: { page: string; headers: Record<string, string> };
 }
 
 /** Texto plano y HTML a partir de las mismas piezas: nada del contenido llega al HTML sin escapar. */
-function render(layout: Layout): { text: string; html: string } {
+function render(layout: Layout, t: T): { text: string; html: string } {
+  const unsub = unsubscribeFooter(layout.unsubscribe?.page, t);
   const text = [
     ...layout.paragraphs,
     ...(layout.details ? [layout.details.map(([l, v]) => `${l}: ${v}`).join("\n")] : []),
     ...(layout.button ? [`${layout.button.label}: ${layout.button.url}`] : []),
     ...(layout.note ? [layout.note] : []),
+    ...(unsub.text ? [unsub.text.trimEnd()] : []),
   ].join("\n\n") + "\n";
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 ${layout.paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 ${layout.details ? `<table style="margin:12px 0;border-collapse:collapse">${layout.details.map(([l, v]) => `<tr><td style="padding:2px 12px 2px 0;color:#64748b">${escapeHtml(l)}</td><td style="padding:2px 0">${escapeHtml(v)}</td></tr>`).join("")}</table>` : ""}
 ${layout.button ? `<p><a href="${escapeHtml(layout.button.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(layout.button.label)}</a></p><p style="color:#64748b;font-size:12px;word-break:break-all">${escapeHtml(layout.button.url)}</p>` : ""}
-${layout.note ? `<p style="color:#94a3b8;font-size:12px">${escapeHtml(layout.note)}</p>` : ""}</div>`;
+${layout.note || unsub.html ? `<p style="color:#94a3b8;font-size:12px">${layout.note ? escapeHtml(layout.note) : ""}${unsub.html}</p>` : ""}</div>`;
   return { text, html };
 }
 
@@ -45,8 +50,9 @@ const hours = (ms: number) => Math.round(ms / 3_600_000);
 type Builder = (t: T) => { subject: string } & Layout;
 
 async function send(to: Recipient | string, locale: string, build: Builder): Promise<void> {
-  const { subject, ...layout } = build(makeT(toLocale(locale)));
-  const message: MailMessage = { to: typeof to === "string" ? to : to.email, subject, ...render(layout) };
+  const t = makeT(toLocale(locale));
+  const { subject, ...layout } = build(t);
+  const message: MailMessage = { to: typeof to === "string" ? to : to.email, subject, ...render(layout, t), ...(layout.unsubscribe ? { headers: layout.unsubscribe.headers } : {}) };
   await sendMail(message);
 }
 
@@ -98,8 +104,11 @@ export async function sendProjectInviteMail(user: Recipient, url: string, invite
 }
 
 /** Aviso a quien ya tiene cuenta: otra persona le ha añadido a un proyecto. El enlace lleva a su tablero. */
-export function sendProjectAddedMail(user: Recipient, addedBy: string, projectName: string, url: string): Promise<void> {
+export function sendProjectAddedMail(user: Recipient & { id: string }, addedBy: string, projectName: string, url: string): Promise<void> {
+  // Depende de «Avisos de menciones» (como el de un proyecto que pasa a ser de equipo): su baja apaga esa casilla.
+  const unsubscribe = unsubscribeLinks("mention", user.id, user.email);
   return send(user, user.locale, (t) => ({
+    unsubscribe,
     subject: t("{name} te ha añadido al proyecto «{project}»", { name: addedBy, project: projectName }),
     paragraphs: [
       t("Hola, {name}:", { name: user.name }),

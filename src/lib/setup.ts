@@ -6,6 +6,7 @@ import { AppError } from "./errors";
 import { validTimeZone } from "./format";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, invalidateInstance } from "./instance";
 import { hashPassword, passwordSchema } from "./password";
+import { isReservedName } from "./reserved-names";
 import { createInitialAdmin, seed } from "./seed";
 import { generateSetupCode, hashSetupCode, parseSetupEmail, parseStoredCode, setupPending, verifySetupCode, type StoredSetupCode } from "./setup-core";
 
@@ -78,6 +79,8 @@ function validateSetupInput(i: Omit<SetupInput, "code">): { orgName: string; adm
   if (!validTimeZone(i.timeZone)) throw new AppError("Zona horaria no válida.");
   const adminName = i.adminName.trim();
   if (!adminName || adminName.length > 100) throw new AppError("Escribe tu nombre (hasta 100 caracteres).");
+  // «Administrador» sí vale (ver reserved-names.ts); «Pizarro», «Soporte», «Sistema»… no.
+  if (isReservedName(adminName)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
   const adminEmail = parseSetupEmail(i.adminEmail);
   if (!adminEmail) throw new AppError("El email no es válido.");
   const pw = passwordSchema().safeParse(i.adminPassword);

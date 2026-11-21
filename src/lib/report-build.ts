@@ -145,7 +145,11 @@ interface PdfRequestOpts {
   signal?: AbortSignal;
 }
 
-export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string }): Promise<ProjectReportPdf | null> {
+/**
+ * Informe de estado de un proyecto. `listLimit` y `boardUrl`: tareas por listado y enlace al tablero en el informe
+ * semanal por email (ReportInput.listLimit); sin ellos (la descarga desde la app), todas.
+ */
+export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string; listLimit?: number; boardUrl?: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
@@ -230,6 +234,8 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),
     counts,
+    listLimit: opts.listLimit,
+    boardUrl: opts.boardUrl,
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);

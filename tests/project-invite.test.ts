@@ -9,6 +9,10 @@ test("nameFromEmail: la parte de antes de la arroba, con separadores como espaci
   assert.equal(nameFromEmail("luis_perez-gil@example.com"), "Luis Perez Gil");
   assert.equal(nameFromEmail("bea+pizarro@example.com"), "Bea");
   assert.equal(nameFromEmail("x@example.com"), "X");
+  // Un nombre reservado («Soporte», «Pizarro»…): el email entero, que no se confunde con un mensaje del sistema.
+  assert.equal(nameFromEmail("soporte@example.com"), "soporte@example.com");
+  assert.equal(nameFromEmail("pizarro+x@example.com"), "pizarro+x@example.com");
+  assert.equal(nameFromEmail("ana.pizarro@example.com"), "Ana Pizarro");
   // Sin nada aprovechable antes de la arroba, el email entero (recortado al máximo de un nombre).
   assert.equal(nameFromEmail("..@example.com"), "..@example.com");
   assert.equal(nameFromEmail(`${"a".repeat(120)}@example.com`).length, 80);
