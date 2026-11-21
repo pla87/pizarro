@@ -689,7 +689,9 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       patching.current = true;
       const startedAt = performance.now();
       const cursor = liveCursor.current;
-      fetch(liveTasksUrl(data.project.id, ids), { cache: "no-store" })
+      // Con tiempo máximo: una petición colgada dejaría «patching» a true y la pestaña sin ver los cambios de los demás (el
+      // catch recarga el tablero entero).
+      fetch(liveTasksUrl(data.project.id, ids), { cache: "no-store", signal: AbortSignal.timeout(15_000) })
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           return (await res.json()) as { boot?: unknown; tasks?: unknown };
