@@ -313,4 +313,8 @@ export const cuentas: Record<string, string> = {
   "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.": "The invitation could not be sent. Check email sending in Administration → Integrations.",
   // Quitar el rol de administrador
   "Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.": "Cards assigned to them in team projects they do not work on will be unassigned.",
+  // Verificación en dos pasos al entrar: qué hacer si no tienes los códigos
+  "¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único, sigue la guía":
+    "Can't get your codes? Ask an administrator to reset your two-step verification; if you are the only one, follow the guide",
+  "«Nadie puede entrar como administrador»": "“No administrator can sign in”",
 };

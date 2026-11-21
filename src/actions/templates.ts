@@ -8,14 +8,13 @@ import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { templateInputSchema, type TemplateDto, type TemplateInput } from "@/lib/project-templates";
-import { listTemplatesSorted, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
+import { MAX_TEMPLATES } from "@/lib/project-templates-core";
+import { listTemplatesSorted, lockTemplates, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
 import * as v from "@/lib/validation";
 import { getLocale, getT } from "@/i18n/server";
 import { cutText } from "@/lib/graphemes";
-
-const MAX_TEMPLATES = 50;
 
 /** Plantillas de proyecto (solo administradores), por orden alfabético. */
 export async function listTemplates() {
@@ -41,7 +40,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
     }
     // Recuento y alta con un candado común: dos altas a la vez no pasan del máximo.
     const created = await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:project-templates'))::text`;
+      await lockTemplates(tx);
       if ((await tx.projectTemplate.count()) >= MAX_TEMPLATES) {
         const t = await getT();
         throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
@@ -72,13 +71,23 @@ export async function resetTemplate(templateId: string) {
   });
 }
 
-/** Recrea las plantillas de serie que se borraron. Devuelve cuántas. */
+/**
+ * Recrea las plantillas de serie que se borraron, hasta el máximo de plantillas. Devuelve cuántas recuperó y cuántas no
+ * cabían; si faltaba alguna y no cabe ninguna, falla con el mismo error que crear una.
+ */
 export async function restoreDefaultTemplates() {
   return runAction({ name: "templates.restoreDefaultTemplates" }, async () => {
     await requireAdmin();
-    const restored = await restoreBuiltinTemplates(db);
+    const res = await db.$transaction(async (tx) => {
+      await lockTemplates(tx);
+      return restoreBuiltinTemplates(tx);
+    });
+    if (!res.restored && res.left) {
+      const t = await getT();
+      throw new AppError(t("Máximo {n} plantillas.", { n: MAX_TEMPLATES }));
+    }
     revalidatePath("/admin/templates");
-    return { restored };
+    return res;
   });
 }
 

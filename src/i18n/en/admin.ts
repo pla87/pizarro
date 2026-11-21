@@ -336,4 +336,14 @@ export const admin: Record<string, string> = {
   "nombre@gmail.com": "name@gmail.com",
   "nombre@example.com": "name@example.com",
   "privacidad@example.com": "privacy@example.com",
+  // Administración → Logs: descarga CSV (una a la vez, con tope y aviso de recorte) y nombres de las categorías
+  "Ya tienes una descarga de logs en curso. Espera a que termine.": "You already have a log download in progress. Wait for it to finish.",
+  "Demasiadas descargas de logs. Espera unos minutos.": "Too many log downloads. Wait a few minutes.",
+  "Recortado a {n} filas: acorta el intervalo.": "Cut off at {n} rows: shorten the date range.",
+  "Acciones": "Actions",
+  "API": "API",
+  "Acceso": "Sign-in",
+  "Navegador": "Browser",
+  "Google": "Google",
+  "Páginas": "Pages",
 };

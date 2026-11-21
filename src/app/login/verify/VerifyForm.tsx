@@ -4,13 +4,15 @@ import { Loader2 } from "lucide-react";
 import { useActionState, useMemo, useState } from "react";
 import { resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/two-factor";
 import { reloadForNewVersion } from "@/components/VersionWatcher";
-import { useT } from "@/i18n/client";
+import { useLocale, useT } from "@/i18n/client";
+import { installSectionUrl } from "@/lib/product";
 import { BackToLogin } from "./BackToLogin";
 import { guardFormAction } from "@/lib/guard-action";
 import { useActionTransition } from "@/components/useActionTransition";
 
 export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; emailSent: boolean }) {
   const t = useT();
+  const locale = useLocale();
   // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
   const guarded = useMemo(() => guardFormAction(verifyLoginCode, t, reloadForNewVersion), [t]);
   const [state, action, pending] = useActionState<VerifyState, FormData>(guarded, {});
@@ -56,6 +58,14 @@ export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; em
         ) : <span />}
         <BackToLogin />
       </div>
+      {/* Sin el móvil, la app o el email no hay forma de pasar de aquí: a quién pedírselo y, si no hay nadie, la guía. */}
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        {t("¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único, sigue la guía")}{" "}
+        <a href={installSectionUrl("lockedOut", locale)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">
+          {t("«Nadie puede entrar como administrador»")}
+        </a>
+        .
+      </p>
     </div>
   );
 }

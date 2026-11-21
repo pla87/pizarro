@@ -18,7 +18,7 @@ import type { EditorModeValue } from "@/lib/types";
 import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
-import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS } from "@/lib/project-templates-core";
+import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -179,7 +179,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
     start(async () => {
       const res = await restoreDefaultTemplates();
       if (!res.ok) return toast(res.error, "error");
-      toast(res.data.restored === 1 ? t("1 plantilla recuperada") : t("{n} plantillas recuperadas", { n: res.data.restored }));
+      const { restored, left } = res.data;
+      if (left) toast(t("Recuperadas {n} de {total}: las demás no caben (máximo {max} plantillas).", { n: restored, total: restored + left, max: MAX_TEMPLATES }), "error");
+      else toast(restored === 1 ? t("1 plantilla recuperada") : t("{n} plantillas recuperadas", { n: restored }));
       router.refresh();
     });
   };

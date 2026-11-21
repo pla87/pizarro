@@ -1,15 +1,26 @@
 import { db } from "@/lib/db";
-import { flushLogs, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { flushLogs, logEvent, logRetentionDays } from "@/lib/log";
+import { isMaskedLog, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { appTimeZone } from "@/lib/board";
 import { parseExportRange } from "@/lib/log-range";
+import { rateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
-import { getT } from "@/i18n/server";
+import { intlLocale } from "@/i18n/core";
+import { getLocale, getT } from "@/i18n/server";
 
 export const runtime = "nodejs";
 
 const PAGE = 1000;
 const MAX_ROWS = 200_000;
+/** Descargas por administrador cada 10 minutos (cada una puede leer 200 000 filas). */
+const CSV_LIMIT = 5;
+
+// Una descarga a la vez por administrador (en globalThis, como el limitador): id → cuándo empezó. Se libera al terminar,
+// fallar o cortarse; por si un flujo quedara sin cerrar, una marca de más de 10 minutos ya no cuenta.
+const BUSY_MAX_MS = 10 * 60_000;
+const g = globalThis as unknown as { __pzLogsCsvBusy?: Map<string, number> };
+const busy = (g.__pzLogsCsvBusy ??= new Map());
 
 /** Celda CSV: comillas dobles y neutralización de fórmulas (=, +, -, @) al abrir en Excel. */
 function cell(v: unknown): string {
@@ -37,25 +48,57 @@ export async function GET(req: Request) {
     return new Response(msg, { status: 400 });
   }
 
-  await flushLogs();
-  const mine = await memberPrivateProjectIds(user.id);
-  const where = logWhere({ ...parseLogFilters(Object.fromEntries(params)), period: { gte: range.gte, lt: range.lt } }, mine);
+  if (Date.now() - (busy.get(user.id) ?? 0) < BUSY_MAX_MS) {
+    return new Response(t("Ya tienes una descarga de logs en curso. Espera a que termine."), { status: 429, headers: { "Cache-Control": "no-store" } });
+  }
+  if (!rateLimit(`logs-csv:${user.id}`, CSV_LIMIT, 10 * 60_000)) {
+    return new Response(t("Demasiadas descargas de logs. Espera unos minutos."), { status: 429, headers: { "Cache-Control": "no-store" } });
+  }
+
+  const filters = parseLogFilters(Object.fromEntries(params));
+  // Quién descargó qué intervalo. Los filtros, sin datos personales: ni la persona ni el texto buscado (solo si lo había).
+  logEvent({
+    category: "api",
+    action: "admin.logsCsv",
+    message: `Descarga de los logs en CSV (del ${range.from} al ${range.to})`,
+    userId: user.id,
+    userName: user.name,
+    path: "/api/admin/logs",
+    ip: clientIp(req.headers),
+    details: { from: range.from, to: range.to, level: filters.level || null, category: filters.category || null, search: !!filters.q, reads: filters.reads },
+  });
+  const startedAt = Date.now();
+  busy.set(user.id, startedAt);
+  // Solo la suya: si caducó y ya empezó otra, no la libera.
+  const release = () => {
+    if (busy.get(user.id) === startedAt) busy.delete(user.id);
+  };
+  let mine: string[];
+  try {
+    await flushLogs();
+    mine = await memberPrivateProjectIds(user.id);
+  } catch (err) {
+    release();
+    throw err;
+  }
+  const where = logWhere({ ...filters, period: { gte: range.gte, lt: range.lt } }, mine);
+  const truncatedLine = t("Recortado a {n} filas: acorta el intervalo.", { n: MAX_ROWS.toLocaleString(intlLocale(await getLocale())) });
 
   const fmt = new Intl.DateTimeFormat("sv-SE", { timeZone: tz, dateStyle: "short", timeStyle: "medium" });
   const header = ["fecha", "nivel", "categoria", "accion", "usuario", "usuario_id", "proyecto_id", "mensaje", "duracion_ms", "ruta", "ip", "detalles"];
   const enc = new TextEncoder();
-  let cursor: string | null = null;
+  let last: { createdAt: Date; id: string } | null = null;
   let sent = 0;
   let first = true;
-  // Se escribe por páginas de 1000 filas (paginación por cursor): nunca hay todo el CSV en memoria.
+  // Se escribe por páginas de 1000 filas (paginación por clave, desde la última fila enviada): nunca hay todo el CSV en
+  // memoria y cada página empieza en el índice donde acabó la anterior.
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        const rows: Awaited<ReturnType<typeof db.appLog.findMany>> = sent >= MAX_ROWS ? [] : await db.appLog.findMany({
-          where,
+        const rows = await db.appLog.findMany({
+          where: last ? { AND: [where, logsAfter(last)] } : where,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: Math.min(PAGE, MAX_ROWS - sent),
-          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         });
         const lines: string[] = first ? [header.map(cell).join(",")] : [];
         for (const r of rows) {
@@ -70,14 +113,26 @@ export async function GET(req: Request) {
               .join(","),
           );
         }
+        sent += rows.length;
+        last = rows.at(-1) ?? last;
+        const done = rows.length < PAGE || sent >= MAX_ROWS;
+        // En el tope, si quedaban filas, lo dice la última línea (antes se cortaba sin avisar).
+        if (sent >= MAX_ROWS && last && (await db.appLog.findFirst({ where: { AND: [where, logsAfter(last)] }, select: { id: true } }))) {
+          lines.push(cell(truncatedLine));
+        }
         if (lines.length) controller.enqueue(enc.encode((first ? "\uFEFF" : "\r\n") + lines.join("\r\n")));
         first = false;
-        sent += rows.length;
-        cursor = rows.at(-1)?.id ?? null;
-        if (rows.length < PAGE || sent >= MAX_ROWS) controller.close();
+        if (done) {
+          release();
+          controller.close();
+        }
       } catch (err) {
+        release();
         controller.error(err);
       }
+    },
+    cancel() {
+      release();
     },
   });
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");

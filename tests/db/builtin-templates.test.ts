@@ -1,7 +1,7 @@
 // Plantillas de serie: sembrado único, recuperar y restablecer, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { createProject } from "../../src/actions/projects";
 import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
 import { applyTemplateChange } from "../../src/actions/template-apply";
@@ -29,8 +29,20 @@ describe("plantillas de proyecto de serie", () => {
     expectOk(await deleteTemplate(negocio.id));
     assert.equal((await seedBuiltinTemplates(db)).length, 0);
     assert.equal(await db.projectTemplate.count({ where: { builtinKey: "negocio" } }), 0);
-    assert.equal(expectOk(await restoreDefaultTemplates()).restored, 1);
-    assert.equal(expectOk(await restoreDefaultTemplates()).restored, 0);
+    assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 1, left: 0 });
+    assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 0, left: 0 });
+
+    // «Recuperar» no pasa del máximo de 50 plantillas (antes se lo saltaba): solo las que caben, y si no cabe ninguna, error.
+    const three = BUILTIN_KEYS.slice(0, 3);
+    await db.projectTemplate.deleteMany({ where: { builtinKey: { in: three } } });
+    const own = 50 - 1 - (await db.projectTemplate.count());
+    await db.projectTemplate.createMany({ data: Array.from({ length: own }, (_, i) => ({ name: `Propia ${i}`, columns: [{ name: "Por hacer" }], position: 100_000 + i })) });
+    assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 1, left: 2 });
+    assert.equal(await db.projectTemplate.count(), 50);
+    expectFail(await restoreDefaultTemplates(), /Máximo 50 plantillas/);
+    assert.equal(await db.projectTemplate.count(), 50);
+    await db.projectTemplate.deleteMany({ where: { name: { startsWith: "Propia " } } });
+    assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 2, left: 0 });
 
     // Editada: figura como modificada y «Restablecer» la devuelve a su contenido.
     const vibe = expectOk(await listTemplates()).find((t) => t.builtinKey === "vibecoding")!;

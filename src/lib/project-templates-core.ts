@@ -4,3 +4,5 @@
 export const MAX_TEMPLATE_COLUMNS = 20;
 export const MAX_TEMPLATE_KINDS = 30;
 export const MAX_TEMPLATE_LABELS = 50;
+/** Máximo de plantillas (de serie y propias): crear una o recuperar las de serie no pasa de aquí. */
+export const MAX_TEMPLATES = 50;
