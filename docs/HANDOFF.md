@@ -18,6 +18,17 @@ antes de empezar. No contiene datos personales: el repositorio es público y deb
    auditorías que manda pueden llevar nombres, dominios y datos de su instalación: no se suben ni se copian a los briefs.
 6. Antes de cada fusión en `main`, busca en el diff, en los PDF y en los mensajes de commit los términos personales que
    indique el propietario (no se apuntan aquí: el repositorio es público).
+7. Trampas del entorno de la nube vistas en las rondas 58 y 59:
+   - `createdb`/`dropdb` con `PGPASSWORD=postgres … -h localhost … </dev/null` (sin eso se quedan esperando la contraseña).
+   - `NODE_OPTIONS` trae `--max-old-space-size=8192`: lanza `npm test` y las pruebas de PDF con
+     `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
+   - Las bases de `tests/db/` sueltas deben llamarse `pizarro_test_<hex>` (lo exige `tests/db/helpers.ts`).
+   - Tras borrar una página, `rm -rf .next/types` antes de `tsc` (los tipos viejos de la build la siguen citando).
+   - Los agentes no pueden lanzar `npx --yes knip@5` ni instalar paquetes del sistema (p. ej. Caddy): lo hace la sesión
+     principal o se deja para el VPS.
+   - Las rondas grandes llenan la memoria (15 GB, 4 CPU): no más de 4–5 agentes a la vez y, salvo encargo expreso, que no
+     compilen ni pasen e2e (lo hace la sesión principal al final, con la build de producción).
+8. Prompts para Claude in Chrome pendientes: `docs/PRUEBAS-CHROME.md` (se actualizan al cerrar cada ronda).
 
 ## 1. Qué es Pizarro
 
@@ -69,6 +80,21 @@ Método que ha funcionado:
 
 Preferencias del propietario: respuestas en español, claras y sin tecnicismos innecesarios; le gusta que se le
 expliquen las opciones con su coste y beneficio y una recomendación.
+
+Lo que ha funcionado en las rondas 58 y 59 para «Revisa el código» y «Bug hunt» (con «10 vueltas o hasta que no salgan»):
+
+- Un brief común en un fichero temporal para los revisores (solo lectura; cuatro miradas: persona usuaria,
+  administración, programación y atacante, más coste; cada hallazgo con `fichero:línea`, gravedad, escenario, arreglo y
+  la marca **evidente** u **opcional**; y una lista aparte de «candidatos a retirar» con la prueba de que no se usan) y
+  otro para los agentes que implementan (§3 más: no compilar ni pasar e2e salvo encargo, verificar antes de cambiar,
+  pruebas en el fichero del tema, informe con lo que debe decir el manual).
+- Cada vuelta, revisores por **áreas distintas** (acceso y permisos, ficheros, tablero, tareas de fondo, importar y
+  exportar, releases y PDF, navegador, experiencia de uso y código sin uso, calendario, instalación; en la 59:
+  administración, emails y mensajes, varias instancias, cuentas nuevas, rendimiento medido con datos grandes). Después,
+  vueltas sobre el **diff de la propia ronda** (servidor y cliente, este probado en navegador) hasta que solo salgan
+  detalles. Los hallazgos se guardan en ficheros temporales y se reparten entre arregladores sin ficheros en común.
+- Lo evidente se arregla; lo opcional y lo de retirar va a la lista numerada de decisiones del informe final, con una
+  recomendación entre paréntesis para que el propietario conteste «sí/no» por número.
 
 ## 3. Brief común para los agentes
 
@@ -341,6 +367,8 @@ llevan enlaces de sesión ni nombres de modelos.
    secciones afectadas. Generar el PDF en local para revisarlo: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH`
    si hace falta; `pruebas` para `PRUEBAS.pdf`). **No se sube**: los dos PDF están en `.gitignore` y el workflow Release
    los vuelve a generar desde `docs/` y los adjunta a la GitHub Release.
+   Actualiza también `docs/PRUEBAS.md` (sección nueva con lo que hay que probar en real) y `docs/PRUEBAS-CHROME.md`
+   (los prompts de Claude in Chrome que sigan pendientes, con lo nuevo de la versión).
 4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
 5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
    sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
@@ -480,24 +508,45 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Preguntas abiertas al propietario (tras la v1.63.0)** (explicadas con coste y recomendación en el informe final de la ronda 59):
+**Estado al cerrar la ronda 59:** v1.63.0 fusionada en `main` (PR #81), **sin publicar** (el propietario la publica con
+*Actions → Release*; desde esta versión el workflow genera y adjunta `MANUAL.pdf` y `PRUEBAS.pdf`). Antes de anunciarla:
+validar el `deploy/Caddyfile` nuevo con Caddy real en un VPS (`PRUEBAS.md` §12.3; en la nube no se pudo instalar Caddy).
+Quien use `SMTP_*` con un relay sin cifrar necesita `SMTP_ALLOW_PLAINTEXT=1` (está en las notas de la versión). Las
+entradas de deshacer guardadas antes de la v1.57 dicen «ya no se puede deshacer» (caducan solas a los 7 días).
 
-- Rendimiento: refresco en vivo que pida solo la tarea cambiada en vez del tablero entero a cada pestaña (el mayor ahorro de
-  servidor que queda); pintar en el servidor solo las primeras 40–60 tarjetas de cada columna; datos del tablero sin campos
-  nulos; búsqueda de releases con índice trigram.
-- Cuentas: una cookie de dispositivo por cuenta (hoy dos cuentas en el mismo navegador se pisan la de «Recordar»);
-  `__Host-` en la cookie; idioma de la persona invitada desde un proyecto; marca «Invitación pendiente» en los asignados.
-- Instalación: que `migrate.mjs` resuelva solo un `P3009` de una migración transaccional y reintente; aviso de «otra
-  instancia usa esta base»; filtrar también el log de errores de Caddy (comprobar en un VPS).
-- Emails: «Esperando» con la casilla de fechas; extracto «{actor} ha escrito:» y nombres reservados; baja en un clic
-  (`List-Unsubscribe`); aligerar el informe grande.
-- Otros: fechas en inglés con formato `en-US`; CSV de logs con «;» para Excel en español; aviso de cambios de otro
-  administrador en plantillas, textos legales y ajustes; volver a Logs con aviso al pasar el límite de CSV; portada de un
-  administrador con proyectos sin elegir.
-- Pendiente de antes: plan para IA sin enlaces a Pizarro (explicado en el informe de la ronda 59); copia de los adjuntos
-  fuera de R2 (R2 no tiene versionado); coste de almacenamiento de las imágenes que copia cada repetición.
-- Pruebas en real pendientes (`docs/PRUEBAS.md` §11 y §12; prompts de Claude in Chrome en el informe de la ronda 59):
-  Cloudflare y R2, instalación desde getpizarro.com, validar el Caddyfile en un VPS.
+**Preguntas abiertas al propietario (tras la v1.63.0)**, con la numeración del informe final de la ronda 59 (entre
+paréntesis, la recomendación que se le dio):
+
+1. Refresco en vivo que pida solo la tarjeta cambiada y no el tablero entero en cada pestaña (con 10 personas y 1.000
+   tarjetas, cada movimiento cuesta unas 9 recargas completas; `Board.tsx` `router.refresh()` en `drainIncoming`;
+   `loadBoardTask` ya existe). Ronda propia. (SÍ)
+2. Pintar en el servidor solo las primeras 40–60 tarjetas de cada columna (hoy 5 MB de HTML y >1 s de bloqueo en el móvil
+   con 1.000 tarjetas; `ColumnView.tsx`). (SÍ, después del 1)
+3. Datos del tablero sin campos nulos o por defecto (~40 % menos que analizar; `toBoardTask`). (SÍ)
+4. Búsqueda de releases con índice trigram (migración). (Más adelante)
+5. Plan para IA sin los enlaces a Pizarro, con interruptor (~3 % del texto; la IA no puede abrirlos). (SÍ)
+6. Una cookie de dispositivo por cuenta (hoy dos cuentas en el mismo navegador se pisan «Recordar» y avisan de nuevo
+   inicio de sesión; `src/lib/devices.ts`). Cada navegador avisaría una vez. (SÍ)
+7. Invitación desde un proyecto en el idioma de quien invita (hoy, el de la instalación). (SÍ)
+8. «Invitación pendiente» en la lista de asignados del proyecto. (SÍ)
+9. `scripts/migrate.mjs`: deshacer y reintentar solo un `P3009` de una migración transaccional. (SÍ)
+10. Aviso de «otra instancia de Pizarro usa esta base» (bloqueo consultivo de vida del proceso). (SÍ)
+11. Recordatorios de «Esperando» por email con la casilla de fechas límite y renombrarla (`notify.ts` `emailWanted`). (SÍ)
+12. Contra suplantaciones: extracto «{persona} ha escrito:» y nombres reservados («Pizarro», «Administración»). (SÍ)
+13. Baja en un clic (`List-Unsubscribe`). (Más adelante)
+14. Informe semanal más corto en proyectos enormes («y N más» por columna). (SÍ)
+15. Fechas en inglés con formato `en-US` (`intlLocale("en")` devuelve hoy `en-GB`; cambia PDF y pruebas). (SÍ)
+16. CSV de logs con «;» y cabecera traducida para Excel en español. (SÍ)
+17. Aviso si otro administrador cambió mientras tanto una plantilla, un texto legal o los ajustes. (SÍ)
+18. Al pasar el límite del CSV de logs, volver a Logs con aviso en vez de una página de texto. (SÍ)
+19. Portada de un administrador con proyectos de equipo sin elegir: frase exacta y botón «Nuevo proyecto». (SÍ)
+20. Copias de los adjuntos (R2 no tiene versionado): (a) segundo destino con versionado (p. ej. Backblaze B2), (b) también
+    en el servidor (`BACKUP_LOCAL_FILES=1`) o (c) dejarlo; se decide con el informe del prompt 1 de `PRUEBAS-CHROME.md`. (a)
+
+Menores sin numerar: subir el `socketTimeout` del SMTP reutilizable (hoy la conexión se cierra a los 15 s; NO por ahora);
+filtrar también el log de errores de Caddy (comprobar en el VPS); id del comentario editado en el aviso en vivo; código de
+error propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores; coste de
+almacenamiento de las imágenes que copia cada repetición; React #185 (no se ha vuelto a ver).
 
 **Decisiones de la ronda 59 (ya aplicadas):** administradores asignables a proyectos de equipo, aviso «te han añadido»,
 invitar por email desde el proyecto y «Copiar enlace»; margen de intentos para dispositivos conocidos; «Forzar cambio de
