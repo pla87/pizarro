@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTemplateApplication, summarizeTemplate, templateInputSchema } from "../src/lib/project-templates";
 import { POSITION_STEP } from "../src/lib/positions";
+import { generalKindUsed, setGeneralKindUsed } from "../src/lib/project-templates-core";
 
 const base = {
   name: "Web",
@@ -65,4 +66,28 @@ test("plantillas de release: por defecto vacías, topes por tipo y posiciones po
   const t = templateInputSchema.parse({ ...base, releaseTemplates: [{ kind: "FOOTER", name: "F1", content: "" }, { kind: "HEADER", name: "H1", content: "a" }, { kind: "HEADER", name: "H2", content: "b" }] });
   const app = buildTemplateApplication(t, []);
   assert.deepEqual(app.releaseTemplates.map((r) => [r.kind, r.name, r.position]), [["HEADER", "H1", POSITION_STEP], ["HEADER", "H2", 2 * POSITION_STEP], ["FOOTER", "F1", POSITION_STEP]]);
+});
+
+test("editor de plantillas: tipos generales en positivo sobre el formato guardado (ocultos y «ocultar todos»)", () => {
+  const generals = ["Funcionalidad", "Corrección", "Respuesta"];
+  const used = (tpl: { hiddenGeneralKinds: string[]; hideAllGeneralKinds: boolean }) => generals.filter((n) => generalKindUsed(tpl, n));
+  // Como las de serie: «ocultar todos» y además dos ocultos por nombre. Ninguno sale como usado (antes, con la casilla
+  // en negativo, solo esos dos salían marcados y parecía que «Respuesta» sí se usaba).
+  const serie = { hiddenGeneralKinds: ["Funcionalidad", "Corrección"], hideAllGeneralKinds: true };
+  assert.deepEqual(used(serie), []);
+  // Desmarcar uno que ya no se usa no cambia nada.
+  assert.equal(setGeneralKindUsed(serie, generals, "Respuesta", false), serie);
+  // Marcar uno con «ocultar todos»: solo se usa ese; los nombres que ya no existen se conservan.
+  const one = setGeneralKindUsed({ ...serie, hiddenGeneralKinds: [...serie.hiddenGeneralKinds, "Viejo"] }, generals, "Respuesta", true);
+  assert.deepEqual(one, { hideAllGeneralKinds: false, hiddenGeneralKinds: ["Funcionalidad", "Corrección", "Viejo"] });
+  assert.deepEqual(used(one), ["Respuesta"]);
+  // Sin «ocultar todos»: marcar quita de los ocultos y desmarcar añade.
+  const none = { hiddenGeneralKinds: [], hideAllGeneralKinds: false };
+  assert.deepEqual(used(none), generals);
+  const off = setGeneralKindUsed(none, generals, "Corrección", false);
+  assert.deepEqual(off.hiddenGeneralKinds, ["Corrección"]);
+  assert.deepEqual(setGeneralKindUsed(off, generals, "Corrección", true).hiddenGeneralKinds, []);
+  // Lo guardado da el mismo resultado al crear el proyecto que lo que muestra el editor.
+  const app = buildTemplateApplication({ ...base, kinds: [{ name: "Propio", color: "#000000", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] }], hiddenGeneralKinds: one.hiddenGeneralKinds, hideAllGeneralKinds: one.hideAllGeneralKinds, labels: [] } as never, generals.map((name) => ({ id: name, name })));
+  assert.deepEqual(app.hiddenKindIds, ["Funcionalidad", "Corrección"]);
 });

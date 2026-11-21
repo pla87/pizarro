@@ -175,8 +175,10 @@ describe("plantillas de proyecto de serie", () => {
         assert.deepEqual(kinds.map((k) => [k.name, k.subtaskTemplate]), canon.kinds.map((k) => [k.name, k.subtaskTemplate]), at);
         const labels = await db.label.findMany({ where: { projectId: created.id } });
         assert.deepEqual(labels.map((l) => l.name).sort(), canon.labels.map((l) => l.name).sort(), at);
-        const project = await db.project.findUniqueOrThrow({ where: { id: created.id }, select: { taskFields: true } });
+        const project = await db.project.findUniqueOrThrow({ where: { id: created.id }, select: { taskFields: true, description: true } });
         assert.deepEqual([...project.taskFields].sort(), [...canon.taskFields].sort(), at);
+        // El proyecto toma la descripción de la plantilla (en su idioma).
+        assert.equal(project.description, canon.description.trim(), `${at}: descripción`);
         if (canon.columns.some((c) => c.role === "BUDGET")) assert.ok(project.taskFields.includes("cost"), `${at}: coste`);
       }
       // «Aplicar plantilla» a un proyecto existente con tareas: añadir lo que falte y cambiar a la plantilla (con la

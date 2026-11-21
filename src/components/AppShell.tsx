@@ -527,8 +527,9 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
     start(async () => {
       const res = await createProject(name, { templateId: origin.kind === "template" ? origin.id : null, exampleKey: exampleKey || null, isPrivate });
       if (!res.ok) return toast(res.error, "error");
-      // Primero los ajustes del proyecto nuevo (columnas, tipos, miembros…); desde ahí se va al tablero.
-      const dest = `/p/${res.data.id}/settings`;
+      // Con una plantilla o un ejemplo, al tablero: ya trae columnas, tipos y etiquetas, y lo siguiente es crear tareas
+      // (antes se abrían siempre los ajustes). En blanco, a los ajustes, para adaptar las columnas por defecto y los tipos.
+      const dest = origin.kind === "blank" ? `/p/${res.data.id}/settings` : `/p/${res.data.id}`;
       setTarget(dest);
       router.push(dest);
     });

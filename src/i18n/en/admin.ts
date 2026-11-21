@@ -91,7 +91,6 @@ export const admin: Record<string, string> = {
   "{n} etiquetas": "{n} labels",
   "1 general oculto": "1 general type hidden",
   "todos los generales ocultos": "all general types hidden",
-  "Ocultar todos los tipos generales": "Hide all general types",
   "{n} generales ocultos": "{n} general types hidden",
   "Elegir otro color": "Pick another color",
   "Plantilla actualizada": "Template updated",
@@ -130,7 +129,6 @@ export const admin: Record<string, string> = {
   "Título automático (opcional)": "Automatic title (optional)",
   "Texto inicial de la descripción (opcional)": "Initial description text (optional)",
   "Añadir tipo": "Add type",
-  "Tipos generales que no se usarán": "General types that won't be used",
   "Si no hay tipos propios, siempre queda al menos uno visible.": "Without project types, at least one always stays visible.",
   "{name} (ya no existe)": "{name} (no longer exists)",
   "Nombre de la etiqueta {n}": "Name of label {n}",
@@ -382,4 +380,8 @@ export const admin: Record<string, string> = {
   "La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.": "The server's MAX_USERS variable is not a valid whole number: the default maximum, {max}, is used.",
   "El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.": "The maximum of {max} is the default: the server's MAX_USERS variable is not set.",
   "Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.": "To change it, set MAX_USERS to the number you want (Railway → Variables; with Docker, in the .env file) and restart Pizarro. Deactivated people don't count.",
+  // Plantillas de proyecto: tipos generales en positivo, como en los ajustes del proyecto
+  "Tipos generales que se usan": "General types in use",
+  "Ninguno (ocultar todos los tipos generales)": "None (hide all general types)",
+  "Ocultos que ya no existen:": "Hidden ones that no longer exist:",
 };

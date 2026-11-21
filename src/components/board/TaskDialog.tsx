@@ -30,7 +30,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { applyKindTemplate } from "@/lib/kinds-special";
+import { switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
@@ -989,11 +989,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return res.link;
   };
 
-  /** Cambio de tipo; con «Respuesta» también se guardan título y descripción predefinidos. */
+  /**
+   * Cambio de tipo; si el tipo tiene plantilla también se guardan título y descripción (kinds-special.ts, `switchKind…`):
+   * lo que sigue tal como lo puso el tipo anterior se sustituye por lo del nuevo («Presupuesto: Fontanero» pasa a
+   * «Permiso: Fontanero» y el formulario sin rellenar del anterior se cambia por el del nuevo); lo cambiado se conserva.
+   */
   const changeKind = (kindId: string) => {
     const kind = board.kindById.get(kindId);
-    const preset = detail && kind ? applyKindTemplate(kind, { title, description: detail.description }) : null;
-    if (!preset) return save({ kindId }, { kindId });
+    const prev = board.kindById.get(task.kindId);
+    const nextTitle = detail && kind ? switchKindTitle(prev, kind, title) : title;
+    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId });
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
