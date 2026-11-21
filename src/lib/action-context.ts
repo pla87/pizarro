@@ -24,6 +24,11 @@ export interface ActionContext {
   undo?: UndoOp[];
   /** Tarea afectada si es solo una (null si son varias): contexto del deshacer. */
   taskId?: string | null;
+  /**
+   * Todas las tarjetas que la acción ha creado, cambiado o quitado del tablero (noteTask y noteTasks). El canal en vivo
+   * las anuncia y las demás pestañas piden solo esas en vez del tablero entero (ver livePatch.ts).
+   */
+  liveTaskIds?: Set<string>;
   /** Historial de tareas: si la acción lo fija, sustituye al que se deduce de la etiqueta; [] = no anotar nada. */
   events?: TaskEventInput[];
   /** La acción cambió datos que el cliente no recibe en su resultado (p. ej. posiciones de otras tarjetas): su propia pestaña también debe refrescarse. */
@@ -66,6 +71,18 @@ export function noteTask(taskId: string | null | undefined): void {
   if (!store || !taskId) return;
   if (store.taskId === undefined) store.taskId = taskId;
   else if (store.taskId !== taskId) store.taskId = null;
+  (store.liveTaskIds ??= new Set()).add(taskId);
+}
+
+/**
+ * Otras tarjetas que la acción ha creado, cambiado o quitado (las de una acción en bloque, la copia de un duplicado, la
+ * siguiente aparición de una repetición): solo para el canal en vivo, sin tocar la tarea del deshacer (`taskId`).
+ */
+export function noteTasks(taskIds: Iterable<string>): void {
+  const store = actionContext.getStore();
+  if (!store) return;
+  const set = (store.liveTaskIds ??= new Set());
+  for (const id of taskIds) set.add(id);
 }
 
 /** Proyecto afectado por la acción (lo anotan las comprobaciones de acceso). */

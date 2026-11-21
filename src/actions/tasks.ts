@@ -10,7 +10,7 @@ import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasks
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { EVERGREEN_COLUMN_ROLES, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
-import { describeAction, needOwnRefresh, noteProject, noteTask, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
+import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
 import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
@@ -429,6 +429,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
       });
     });
     addUndo({ t: "task.remove", id: copy.id });
+    noteTasks([copy.id]);
     if (evergreen) describeAction("Duplicó «{title}» como fija en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
     else if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
     else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
@@ -802,6 +803,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     });
     // En bloque entre dos vecinas también se recolocan las que ya estaban en la columna.
     const toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
+    noteTasks(toMove.map((t) => t.id));
     const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const moved = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
@@ -905,6 +907,7 @@ export async function archiveTasks(taskIds: string[]) {
     const active = (await db.task.findMany({ where: { id: { in: ids }, archivedAt: null }, select: { id: true } })).map((t) => t.id);
     // Las que ya estaban archivadas (otra pestaña) no cuentan ni se registran: sin ninguna activa no se toca nada.
     if (!active.length) return { archived: 0, spawned: [] as Awaited<ReturnType<typeof spawnRecurrences>> };
+    noteTasks(active);
     addUndo(...(await captureTasks(active, ARCHIVE_FIELDS)));
     // Filas bloqueadas antes, en orden de id: el UPDATE solo las bloquearía en el orden en que las recorre (40P01).
     await db.$transaction(async (tx) => {
@@ -1020,6 +1023,7 @@ export async function deleteTasks(taskIds: string[]) {
     // Todas deben ser del mismo proyecto: el deshacer se guarda por proyecto.
     if (new Set(tasks.map((t) => t.projectId)).size > 1) throw new AppError("Las tareas son de proyectos distintos.");
     noteProject(tasks[0]?.projectId);
+    noteTasks(ids);
     addUndo(...(await dependentLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
     describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });

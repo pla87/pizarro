@@ -10,10 +10,12 @@
 // controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
 // tarjetas se anuncia en un solo sitio. Además: con red lenta, abrir y cerrar una tarea deprisa no deja la burbuja
 // fantasma (y reabrirla deprisa sigue mostrando la burbuja); una columna cuya única coincidencia es una fija del panel no dice «Ninguna tarjeta coincide»; y en el móvil un
-// cambio de otra pestaña no saca de la columna elegida a mano con la búsqueda activa.
+// cambio de otra pestaña no saca de la columna elegida a mano con la búsqueda activa. Y las tarjetas sueltas: mover,
+// editar o archivar una tarjeta desde otra sesión pide solo esa tarjeta (/board-tasks), sin recargar el tablero, y deja
+// la selección y la búsqueda como estaban; renombrar una columna sí recarga el tablero entero.
 // Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
-//   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe
+//   # PART=ping,presencia,filtros,vacio,lupa,parche,movil,capas,cls,altp,rueda,axe
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -21,7 +23,7 @@ import path from "node:path";
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep, COL } = L;
-const only = (process.env.PART || "ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe").split(",");
+const only = (process.env.PART || "ping,presencia,filtros,vacio,lupa,parche,movil,capas,cls,altp,rueda,axe").split(",");
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 const MOBILE = { viewport: { width: 390, height: 844 }, mobile: true };
 
@@ -210,15 +212,74 @@ if (only.includes("lupa")) {
   // búsqueda o los filtros (antes, matchingIds era un Set nuevo con cada cambio de las tareas).
   const other = await L.session();
   await L.liveOpen(other.page);
-  const refreshed = page.waitForResponse((r) => r.request().headers()["rsc"] === "1", { timeout: 10000 }).then(() => true, () => false);
+  // Un movimiento es un cambio de una tarjeta: el móvil pide solo esa (refresco en vivo de tarjetas sueltas).
+  const refreshed = page.waitForResponse((r) => r.url().includes("/board-tasks?"), { timeout: 10000 }).then(() => true, () => false);
   await U.drag(other.page, "Beta r56", { column: COL.doing }, COL.backlog);
   await L.eqEventually("LUPA: la otra pestaña mueve una tarjeta", async () => (await L.dbTask("Beta r56"))?.columnName, COL.doing);
-  L.check("LUPA: el móvil recibe el cambio (recarga el tablero)", await refreshed);
+  L.check("LUPA: el móvil recibe el cambio (pide la tarjeta movida)", await refreshed);
   await sleep(1000);
   L.eq("LUPA: tras un cambio de otra pestaña sigue en la columna elegida a mano", await activeTab(page), COL.backlog);
   await other.ctx.close();
   await page.getByRole("button", { name: "Quitar el filtro" }).last().tap();
   L.assertNoErrors("lupa", [s]);
+  await s.ctx.close();
+}
+
+// --- Tarjetas sueltas: lo de otra persona pide solo esas tarjetas; un cambio de estructura recarga el tablero -----------
+if (only.includes("parche")) {
+  L.scenario("parche: mover, editar y archivar desde otra sesión pide solo esas tarjetas; renombrar una columna recarga");
+  await L.cleanBoard();
+  const [idA, idB, idC] = await L.seedTasks(COL.backlog, ["Parche A", "Parche B", "Parche C"]);
+  const s = await L.session({ viewport: { width: 1600, height: 950 } });
+  const other = await L.session({ email: L.USER2, viewport: { width: 1600, height: 950 } });
+  const { page } = s;
+  await Promise.all([L.liveOpen(page), L.liveOpen(other.page)]);
+  const full = [];
+  const patches = [];
+  page.on("request", (r) => {
+    const h = r.headers();
+    if (h.rsc === "1" && !h["next-router-prefetch"]) full.push(r.url());
+    if (r.url().includes("/board-tasks?")) patches.push(new URL(r.url()).searchParams.get("ids"));
+  });
+  // Selección y búsqueda de esta pestaña: deben seguir igual tras los cambios de la otra.
+  await L.cardLoc(page, "Parche A").locator('[aria-label="Seleccionar"]').click();
+  await L.waitFor(() => L.cardLoc(page, "Parche A").getAttribute("aria-pressed").then((v) => v === "true"), { timeout: 3000 });
+  await boardSearch(page).fill("Parche");
+  await U.drag(other.page, "Parche B", { column: COL.doing }, COL.backlog);
+  await L.eqEventually("PARCHE: la tarjeta que mueve la otra persona llega a «En progreso»", () => U.uiOrder(page, COL.doing), ["Parche B"], { timeout: 10000 });
+  L.eq("PARCHE: sin recargar el tablero entero", full.length, 0);
+  L.eq("PARCHE: pide solo la tarjeta movida", patches, [idB]);
+  L.eq("PARCHE: la selección sigue", await L.cardLoc(page, "Parche A").getAttribute("aria-pressed"), "true");
+  L.eq("PARCHE: y la búsqueda también", await boardSearch(page).inputValue(), "Parche");
+  // Editar el título (detalle de la otra sesión) y archivar desde su barra de selección.
+  await L.cardLoc(other.page, "Parche B").click();
+  const title = U.dialog(other.page).getByRole("textbox", { name: "Título", exact: true });
+  await title.fill("Parche B2");
+  await title.press("Enter");
+  await L.eqEventually("PARCHE: el título nuevo se guarda", async () => (await L.q(`SELECT title FROM "Task" WHERE id=$1`, [idB]))[0]?.title, "Parche B2");
+  await U.closeDialog(other.page);
+  await L.checkEventually("PARCHE: el título nuevo llega a esta pestaña", () => L.cardLoc(page, "Parche B2").isVisible(), { timeout: 10000 });
+  await L.cardLoc(other.page, "Parche C").locator('[aria-label="Seleccionar"]').click();
+  await other.page.locator("[data-selection-bar]").getByRole("button", { name: "Archivar" }).click();
+  await L.eqEventually("PARCHE: la archivada desaparece de esta pestaña", () => U.uiOrder(page, COL.backlog), ["Parche A"], { timeout: 10000 });
+  L.eq("PARCHE: todo sin recargar el tablero entero", full.length, 0);
+  L.check("PARCHE: cada petición lleva solo las tarjetas cambiadas", patches.length >= 3 && patches.every((ids) => ids === idB || ids === idC), JSON.stringify(patches));
+  L.eq("PARCHE: la seleccionada (no tocada) sigue seleccionada", await L.cardLoc(page, "Parche A").getAttribute("aria-pressed"), "true");
+  // Un cambio de estructura (renombrar una columna) sí recarga el tablero entero.
+  await L.colLoc(other.page, COL.closed).getByRole("button", { name: "Opciones de columna" }).click();
+  await other.page.getByRole("menuitem", { name: "Renombrar" }).click();
+  const rename = other.page.getByRole("dialog", { name: "Renombrar columna" });
+  await rename.waitFor();
+  await sleep(300);
+  await rename.locator("input").fill("Cerrado parche");
+  await rename.locator("input").press("Enter");
+  await L.checkEventually("PARCHE: renombrar una columna recarga el tablero entero", () => full.length > 0, { timeout: 10000 });
+  await L.checkEventually("PARCHE: y se ve el nombre nuevo", () => page.locator("section[aria-label='Cerrado parche']").first().isVisible());
+  L.check("PARCHE: el id de A no se ha pedido nunca (no ha cambiado)", !patches.some((ids) => ids?.split(",").includes(idA)));
+  await L.q(`UPDATE "Column" SET name=$1 WHERE name='Cerrado parche'`, [COL.closed]);
+  await boardSearch(page).fill("");
+  L.assertNoErrors("parche", [s, other]);
+  await other.ctx.close();
   await s.ctx.close();
 }
 

@@ -1,5 +1,5 @@
 // Aviso dentro de la página de cada cambio que llega por el canal en vivo del proyecto (ver Board.tsx): el tablero se
-// refresca por su cuenta; los componentes que muestran algo que el refresco del tablero no trae (los comentarios del
+// refresca por su cuenta (entero, o solo las tarjetas cambiadas: livePatch.ts); los componentes que muestran algo que el refresco del tablero no trae (los comentarios del
 // detalle abierto) lo escuchan para ponerse al día.
 
 export const REMOTE_CHANGE_EVENT = "pz:remote-change";
@@ -48,13 +48,14 @@ export function announceOnArrival(change: unknown, currentUserId: string): boole
 }
 
 /**
- * Decide la cola cuando no quedan acciones en vuelo: lo que no es de una acción propia refresca el tablero y, si no se
- * reenvió al llegar, se reenvía ahora. Retira de `own` los ids ya vistos.
+ * Decide la cola cuando no quedan acciones en vuelo: lo que no es de una acción propia refresca el tablero (`changes`:
+ * esos avisos, para decidir si basta con pedir sus tarjetas, livePatch.ts) y, si no se reenvió al llegar, se reenvía
+ * ahora. Retira de `own` los ids ya vistos.
  */
-export function settleIncoming(queue: IncomingChange[], own: Set<string>): { announce: unknown[]; refresh: boolean } {
+export function settleIncoming(queue: IncomingChange[], own: Set<string>): { announce: unknown[]; refresh: boolean; changes: unknown[] } {
   const foreign = queue.filter(({ cid }) => !cid || !own.has(cid));
   for (const { cid } of queue) if (cid) own.delete(cid);
-  return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: foreign.length > 0 };
+  return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: foreign.length > 0, changes: foreign.map((c) => c.change) };
 }
 
 /** Retardo máximo por defecto antes de refrescar el tablero por un cambio de otra persona (LIVE_REFRESH_JITTER_MS). */

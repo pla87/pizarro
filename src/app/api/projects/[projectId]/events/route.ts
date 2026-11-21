@@ -80,7 +80,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
         lastPresence = json;
         send(`event: presence\ndata: ${json}\n\n`);
       };
-      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, at: c.at, seq: c.seq, cid: c.cid })}\n\n`));
+      const unsubscribe = subscribeProject(project.id, (c) => send(`event: change\ndata: ${JSON.stringify({ userId: c.userId, action: c.action, taskId: c.taskId ?? null, ...(c.taskIds ? { taskIds: c.taskIds } : {}), ...(c.full ? { full: true } : {}), at: c.at, seq: c.seq, cid: c.cid })}\n\n`));
       // Saludo: último aviso publicado en el proyecto. La pestaña que reabre el canal (estuvo oculta o se cortó) sabe así si
       // se perdió alguno y solo entonces pide el tablero (ver Board.tsx).
       send(`event: hello\ndata: ${JSON.stringify({ ...liveCursor(project.id), stream: streamId })}\n\n`);

@@ -7,6 +7,7 @@ import { nextOccurrenceDue } from "./recurrence-date";
 import { POSITION_STEP } from "./positions";
 import { lastPositionIn, lockColumns } from "./task-positions";
 import { addUndo } from "./undo";
+import { noteTasks } from "./action-context";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
 import { logEvent } from "./log";
@@ -325,6 +326,8 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     }
   }
   await flush();
+  // Las demás pestañas piden también las apariciones nuevas (canal en vivo; fuera de una acción no hace nada).
+  noteTasks(created);
   // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue
   // siendo un éxito (las descripciones conservan la referencia a los de la anterior).
   await copyDescriptionAttachments(spawned).catch((err) =>
