@@ -349,7 +349,9 @@ if (only.includes("rel")) {
   L.eq("REL: sin pestañas Editar / Vista previa", [await dlg.getByRole("tab").count(), await dlg.getByText("Vista previa").count()], [0, 0]);
   L.eq("REL: sin el campo de Markdown", await dlg.locator("textarea[aria-label='Contenido de la release']").count(), 0);
   L.check("REL: barra de formato (Negrita, Lista…)", (await dlg.getByRole("toolbar").getByRole("button", { name: /Negrita/ }).count()) === 1);
-  L.check("REL: el editor muestra el texto con formato (negrita, sin asteriscos)", (await editor.locator("strong", { hasText: "R1F1" }).count()) === 1 && !(await editor.innerText()).includes("**"));
+  // El número de la release depende de las que hubo antes en el proyecto (borrar una no libera su número): se lee del texto.
+  const code = /\*\*(R\d+)F1\*\*/.exec(markdownText ?? "")?.[1] ?? "R1";
+  L.check("REL: el editor muestra el texto con formato (negrita, sin asteriscos)", (await editor.locator("strong", { hasText: `${code}F1` }).count()) === 1 && !(await editor.innerText()).includes("**"));
   await page.screenshot({ path: `${SHOTS}/r49-release-barra.png` });
 
   // Sin tocar nada: Copiar todo, .md y .txt dan exactamente lo mismo que con Markdown.
@@ -365,9 +367,9 @@ if (only.includes("rel")) {
   await page.keyboard.type(" editada");
   const edited = await downloadMd(page, dlg);
   // El punto editado sale como lo escribe el editor (la descripción, en su párrafo sangrado debajo); todo lo demás, idéntico.
-  const editedItem = /- \*\*R1F1\*\* · Tarea Alfa editada\n\n {2}Descripción de Alfa/;
+  const editedItem = new RegExp(`- \\*\\*${code}F1\\*\\* · Tarea Alfa editada\n\n {2}Descripción de Alfa`);
   L.check("REL: tras editar, la tarea editada lleva el cambio", editedItem.test(edited), edited);
-  L.eq("REL: tras editar, el resto queda idéntico (cabecera con #, enlace <…>, sangrías, pie)", edited.replace(editedItem, "@@"), markdownText.replace("- **R1F1** · Tarea Alfa\n\n  Descripción de Alfa", "@@"));
+  L.eq("REL: tras editar, el resto queda idéntico (cabecera con #, enlace <…>, sangrías, pie)", edited.replace(editedItem, "@@"), markdownText.replace(`- **${code}F1** · Tarea Alfa\n\n  Descripción de Alfa`, "@@"));
   await dlg.getByRole("button", { name: "Copiar todo" }).click();
   await sleep(300);
   L.eq("REL: Copiar todo tras editar = .md", await page.evaluate(() => navigator.clipboard.readText()), edited);
@@ -382,7 +384,7 @@ if (only.includes("rel")) {
   await dlg.locator("#rel-header").selectOption({ label: "Ninguna" });
   await sleep(300);
   const noHeader = await downloadMd(page, dlg);
-  L.check("REL: sin cabecera, el texto empieza por la primera sección", noHeader.startsWith("### Funcionalidad\n- **R1F1** · Tarea Alfa editada"), noHeader.slice(0, 80));
+  L.check("REL: sin cabecera, el texto empieza por la primera sección", noHeader.startsWith(`### Funcionalidad\n- **${code}F1** · Tarea Alfa editada`), noHeader.slice(0, 80));
 
   // Formato con la barra: negrita sobre una palabra nueva sale como **…** en el Markdown.
   await caretAfter(page, "Tarea Gamma");
