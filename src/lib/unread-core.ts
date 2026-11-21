@@ -2,7 +2,7 @@
 export const UNREAD_COUNT_CAP = 100;
 
 /** Avisos marcados como leídos en esta pestaña: `read` de ellos o todos. */
-export type UnreadChange = { read: number } | { all: true };
+type UnreadChange = { read: number } | { all: true };
 
 /**
  * Recuento de la cabecera tras marcar avisos como leídos en el navegador, sin volver a pedir la página. En el tope no se
