@@ -217,7 +217,6 @@ const LOCALE_OPTIONS = [["ES", "Español"], ["EN", "English"]] as const;
 
 function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
   const t = useT();
-  const router = useRouter();
   const toast = useToast();
   const [locale, setLocale] = useState(initial);
   const choose = async (value: "ES" | "EN") => {
@@ -231,7 +230,6 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
       setLocale(previous);
       return toast(res.error, "error");
     }
-    router.refresh();
   };
   const group = useRadioGroup(LOCALE_OPTIONS.length, LOCALE_OPTIONS.findIndex(([v]) => v === locale), (i) => choose(LOCALE_OPTIONS[i]![0]));
   return (
@@ -256,7 +254,6 @@ function LanguageSection({ initial }: { initial: "ES" | "EN" }) {
 
 function EditorModeSection({ initial }: { initial: EditorModeValue }) {
   const t = useT();
-  const router = useRouter();
   const toast = useToast();
   const [mode, setMode] = useState(initial);
   const choose = async (value: EditorModeValue) => {
@@ -267,7 +264,6 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
       setMode(previous);
       return toast(res.error, "error");
     }
-    router.refresh();
   };
   return (
     <section className="card p-5">
@@ -416,7 +412,6 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
       applyTheme(previous);
       return toast(res.error, "error");
     }
-    router.refresh();
   };
   const [accent, setAccent] = useState(initialAccent);
   const chooseAccent = async (value: AccentValue) => {
@@ -429,7 +424,6 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
       applyAccent(previous);
       return toast(res.error, "error");
     }
-    router.refresh();
   };
   const accentGroup = useRadioGroup(ACCENTS.length, ACCENTS.findIndex((a) => a.value === accent), (i) => chooseAccent(ACCENTS[i]!.value));
   const sample = "#6366f1";

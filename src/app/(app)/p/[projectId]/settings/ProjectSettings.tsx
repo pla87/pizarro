@@ -145,7 +145,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              run(async () => updateProject(project.id, { name, description }), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => updateProject(project.id, { name, description }), t("Proyecto actualizado"));
             }}
           >
             <div>
@@ -202,7 +202,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               disabled={pending}
               onClick={async () => {
                 if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso como miembros las personas asignadas ahora ({n}, contándote a ti) y conservan sus tarjetas. Los administradores que no estén asignados (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
-                run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"), () => router.refresh());
+                run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"));
               }}
             >
               {t("Guardar visibilidad")}
@@ -217,7 +217,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             className="space-y-2"
             onSubmit={(e) => {
               e.preventDefault();
-              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => setGoogleShareMode(project.id, shareMode), t("Proyecto actualizado"));
             }}
           >
             {GOOGLE_SHARE_MODES.map((m) => {
@@ -283,7 +283,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             type="button"
             className="btn-primary mt-3"
             disabled={pending || (taskFields.length === project.taskFields.length && taskFields.every((f) => project.taskFields.includes(f)))}
-            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"), () => router.refresh())}
+            onClick={() => run(async () => setTaskFields(project.id, taskFields), t("Proyecto actualizado"))}
           >
             {t("Guardar")}
           </button>
@@ -371,7 +371,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
                 toast(t("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto."), "error");
                 return;
               }
-              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"), () => router.refresh());
+              run(async () => setAttachmentLimits(project.id, file, task, zip), t("Proyecto actualizado"));
             }}
           >
             <div>
@@ -486,7 +486,6 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (!res.ok) return toast(res.error, "error");
       toast(success);
       after?.();
-      router.refresh();
     });
   const add = () => {
     const name = users.find((u) => u.id === candidate)?.name ?? "";
@@ -496,7 +495,6 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
       setShared({ kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
-      router.refresh();
     });
   };
   const invite = () =>
@@ -507,7 +505,6 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       else toast(res.data.emailed ? t("Invitación enviada") : t("Invitación creada"));
       setInviteEmail("");
       setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
-      router.refresh();
     });
   const resend = (m: MemberRow) =>
     start(async () => {
@@ -843,7 +840,6 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
   const locale = useLocale();
   // Los tipos de serie se guardan en español: se muestran en el idioma de la interfaz (se envía igual su id).
   const shown = <K extends { id: string; name: string }>(k: K) => localizeGeneralKind(k, locale);
-  const router = useRouter();
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [disabling, setDisabling] = useState<(KindOption & { taskCount: number }) | null>(null);
@@ -855,7 +851,6 @@ function GeneralKinds({ projectId, generalKinds, projectKinds }: {
       if (!res.ok) return toast(res.error, "error");
       toast(enabled ? t("Tipo activado en el proyecto") : t("Tipo desactivado en el proyecto"));
       setDisabling(null);
-      router.refresh();
     });
 
   const targets = (kindId: string) => [
