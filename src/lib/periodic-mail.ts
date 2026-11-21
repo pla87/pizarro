@@ -8,9 +8,11 @@ import { db } from "./db";
 import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
-import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail } from "./mail";
+import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
+import { unsubscribeLinks } from "./unsubscribe";
 import { getInstanceSettings } from "./instance";
 import { generateProjectReportPdf } from "./report-build";
+import { WEEKLY_REPORT_LIST_LIMIT } from "./report";
 import { PDF_OUT_OF_MEMORY_MESSAGE } from "./report-render";
 import { digestDue, reportDue } from "./schedule";
 import type { CurrentUser } from "./session";
@@ -104,7 +106,8 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
     const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
     if (digest.empty) return false; // sin novedades no se manda nada (el día queda reservado)
     const t: T = makeT(toLocale(u.locale));
-    await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl(), period: digestPeriod(u.lastDigestAt, now) }, t) });
+    const unsub = unsubscribeLinks("digest", u.id, u.email);
+    await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl(), period: digestPeriod(u.lastDigestAt, now), unsubscribeUrl: unsub.page }, t), headers: unsub.headers });
     logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     return true;
   } catch (err) {
@@ -115,18 +118,19 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
 }
 
 /** Correo del informe semanal: el PDF va adjunto. Dice de qué organización es y quién lo configuró. */
-function reportMail(opts: { projectName: string; url: string; orgName: string; setBy: string }, t: T) {
+function reportMail(opts: { projectName: string; url: string; orgName: string; setBy: string; unsubscribeUrl: string }, t: T) {
   const subject = t("Informe semanal de «{project}»", { project: opts.projectName });
   const intro = opts.orgName
     ? t("Adjuntamos el informe PDF de estado del proyecto «{project}» de {org}.", { project: opts.projectName, org: opts.orgName })
     : t("Adjuntamos el informe PDF de estado del proyecto «{project}».", { project: opts.projectName });
   const note = t("Recibes este correo porque {name} configuró el informe semanal en los ajustes del proyecto.", { name: opts.setBy });
   const noReply = noReplyNote(t);
-  const text = `${intro}\n\n${t("Abrir el proyecto")}: ${opts.url}\n\n${note}\n${noReply}\n`;
+  const unsub = unsubscribeFooter(opts.unsubscribeUrl, t);
+  const text = `${intro}\n\n${t("Abrir el proyecto")}: ${opts.url}\n\n${note}\n${unsub.text}${noReply}\n`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${escapeHtml(intro)}</p>
 <p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir el proyecto"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(note)}<br>${escapeHtml(noReply)}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(note)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }
 
@@ -219,11 +223,15 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
   try {
     const person = await db.user.findFirst({ where: { email: { equals: s.recipient, mode: "insensitive" }, active: true }, select: { locale: true } });
     const locale = toLocale(person ? person.locale : creator.locale);
-    const report = await generate(s.projectId, { generatedBy: creator.name, locale });
+    // Corto aunque el proyecto sea enorme: como mucho WEEKLY_REPORT_LIST_LIMIT tareas por listado, con «… y N más» y un
+    // enlace al tablero (la descarga desde la app sigue con todas).
+    const report = await generate(s.projectId, { generatedBy: creator.name, locale, listLimit: WEEKLY_REPORT_LIST_LIMIT, boardUrl: url });
     if (!report) throw new Error("proyecto no encontrado");
     const { orgName } = await getInstanceSettings();
-    const mail = reportMail({ projectName: report.project.name, url, orgName, setBy: creator.name }, makeT(locale));
-    await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
+    // La baja de este email apaga este informe (el destinatario puede no tener cuenta en Pizarro).
+    const unsub = unsubscribeLinks("report", s.projectId, s.recipient);
+    const mail = reportMail({ projectName: report.project.name, url, orgName, setBy: creator.name, unsubscribeUrl: unsub.page }, makeT(locale));
+    await sendMail({ to: s.recipient, ...mail, headers: unsub.headers, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
     clearReportFailure(s.projectId);
     logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     return true;

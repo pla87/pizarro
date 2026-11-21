@@ -17,6 +17,8 @@ import { createSession, currentSessionId, destroySession, requireUser } from "@/
 import { disconnectGoogleAccount, googleEnabled } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
 import * as v from "@/lib/validation";
+import { isReservedName } from "@/lib/reserved-names";
+import { sameName } from "@/lib/name-spaces";
 import { revokeSession as cutSessionStreams } from "@/lib/revoke";
 import { describeAction } from "@/lib/action-context";
 import { accountDeleteChallenge, accountDeleteGoogleConfirmed, checkCode, sendEmailCode } from "@/lib/two-factor";
@@ -28,7 +30,10 @@ import { googlePolicyEnv } from "@/lib/google-config";
 export async function updateProfileName(name: string) {
   return runAction({ name: "profile.updateProfileName", args: [name] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { name: v.name.parse(name) } });
+    const next = v.name.parse(name);
+    // Solo al cambiarlo: quien ya se llamaba así (de antes de la regla) puede seguir guardando su nombre.
+    if (!sameName(next, user.name) && isReservedName(next)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
+    await db.user.update({ where: { id: user.id }, data: { name: next } });
   });
 }
 

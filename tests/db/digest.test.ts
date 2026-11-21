@@ -155,7 +155,8 @@ describe("email del resumen diario", () => {
       await db.notification.create({ data: { userId: user.id, actorId: other.id, taskId: task.id, type: "ASSIGNED", excerpt: "Vencida y asignada" } });
       const now = new Date();
       await db.user.updateMany({ where: { id: { not: user.id } }, data: { dailyDigest: false } });
-      await db.user.update({ where: { id: user.id }, data: { locale: "EN", dailyDigest: true, digestHour: 0, lastDigestAt: new Date(now.getTime() - 20 * 3_600_000) } });
+      // Hace 26 h: siempre otro día en la zona de la app (con 20 h, de 20:00 a medianoche era «hoy» y no tocaba).
+      await db.user.update({ where: { id: user.id }, data: { locale: "EN", dailyDigest: true, digestHour: 0, lastDigestAt: new Date(now.getTime() - 26 * 3_600_000) } });
       assert.equal(await sendDueDigests(now), 1);
       const files = (await readdir(outbox)).filter((n) => n.endsWith(".json"));
       assert.equal(files.length, 1);

@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { T } from "../i18n/shared";
 import { markdownToPlain } from "./ics";
-import { assignedBatchCount, isProjectNotice, notificationBody, notificationHeadline, type NotificationKind } from "./notification-text";
+import { assignedBatchCount, isProjectNotice, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "./notification-text";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 import { ellipsize } from "./graphemes";
 
@@ -208,13 +208,19 @@ function commentExcerptPlain(excerpt: string): string {
 }
 
 /**
+ * «Ana ha escrito:», delante de la cita de lo que ha escrito. Contra las suplantaciones: lo escrito por una persona va
+ * siempre como cita suya, separado del texto del aviso, y nunca como si fuera un titular de Pizarro.
+ */
+export const quoteIntro = (m: Pick<NoticeMessage, "actorName">, t: T): string => t("{name} ha escrito:", { name: ellipsize(oneLine(m.actorName), 80) });
+
+/**
  * Texto bajo la cabecera del aviso (el extracto: comentario, cambio de fecha…). En una asignación el extracto es el
  * título de la tarea, que ya va en la cabecera: si coincide (o es su principio recortado), no se repite. Si la tarea
  * cambió de título desde el aviso, el extracto (el título de entonces) sí se muestra.
  */
 export function noticeBody(m: NoticeMessage, t: T): string {
   const type = m.type ?? "MENTION";
-  if (type === "MENTION" || type === "COMMENT" || type === "REPLY") return commentExcerptPlain(m.excerpt);
+  if (quotesWriting(type)) return commentExcerptPlain(m.excerpt);
   const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
   if (type === "ASSIGNED") {
     // Lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).
@@ -232,7 +238,9 @@ export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string =>
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {
   const body = oneLine(noticeBody(m, t));
   const lines = [telegramHtml`<b>${noticeHeadline(m, t)}</b>`, telegramPlain(ellipsize(oneLine(m.projectName), 100))];
-  if (body) lines.push(telegramHtml`<i>${ellipsize(body, 300)}</i>`);
+  // Lo escrito por una persona, como cita suya («Ana ha escrito:» y el texto en un bloque de cita).
+  if (body && quotesWriting(m.type)) lines.push(telegramPlain(""), telegramPlain(quoteIntro(m, t)), telegramHtml`<blockquote>${ellipsize(body, 300)}</blockquote>`);
+  else if (body) lines.push(telegramHtml`<i>${ellipsize(body, 300)}</i>`);
   lines.push(telegramPlain(""), telegramHtml`<a href="${m.url}">${noticeLinkLabel(m, t)}</a>`);
   return joinTelegramHtml(lines);
 }

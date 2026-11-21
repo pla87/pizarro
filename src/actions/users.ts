@@ -26,13 +26,14 @@ import { ADMINS_LOCK_NAME } from "@/lib/advisory-locks";
 import { requireAdmin } from "@/lib/session";
 import { clearTwoFactor } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
+import { isReservedName } from "@/lib/reserved-names";
 import { getT } from "@/i18n/server";
 import { getInstanceSettings } from "@/lib/instance";
 import { revokeUser } from "@/lib/revoke";
 import { publishChange } from "@/lib/realtime";
 
 const createSchema = z.object({
-  name: v.name,
+  name: v.personName,
   email: v.email,
   /** Solo se pide sin email configurado; con email, la persona elige la suya desde la invitación. */
   password: z.string().max(200).optional(),
@@ -215,6 +216,8 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     }
     const keys = ["name", "email", "role", "active"] as const;
     const changed = new Set(keys.filter((k) => wanted[k] !== expected[k]));
+    // Solo al cambiar el nombre: los que ya existen se pueden seguir guardando tal cual.
+    if (changed.has("name") && isReservedName(wanted.name)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
     const unassigned = { count: 0, projectIds: [] as string[] };
     const { user, data } = await db.$transaction(async (tx) => {
       // Candados en orden fijo: plazas de usuarios (reactivar), administradores (quitar uno) y la fila de la persona.
