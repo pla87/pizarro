@@ -8,7 +8,7 @@ import { applyTemplateChange } from "../../src/actions/template-apply";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { resetRateLimit } from "../../src/lib/rate-limit";
-import { seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
+import { listTemplatesSorted, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
 
 describe("plantillas de proyecto de serie", () => {
   test("se siembran una sola vez, se pueden recuperar y restablecer", async () => {
@@ -19,9 +19,13 @@ describe("plantillas de proyecto de serie", () => {
 
     assert.equal((await seedBuiltinTemplates(db)).length, BUILTIN_KEYS.length);
     assert.equal((await seedBuiltinTemplates(db)).length, 0);
-    const list = expectOk(await listTemplates());
-    const names = list.map((t) => t.name);
+    // Al diálogo «Nuevo proyecto» solo van nombre y descripción, por orden alfabético; el resto se queda en el servidor.
+    const offered = expectOk(await listTemplates());
+    const names = offered.map((t) => t.name);
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, "es")));
+    assert.ok(offered.every((t) => Object.keys(t).sort().join() === "description,id,name"));
+    const list = await listTemplatesSorted(db);
+    assert.deepEqual(list.map((t) => [t.id, t.name, t.description]), offered.map((t) => [t.id, t.name, t.description]));
     assert.ok(list.every((t) => t.builtinKey && !t.builtinModified));
 
     // Borrada: no vuelve al arrancar de nuevo, pero sí con «Recuperar».
@@ -45,12 +49,12 @@ describe("plantillas de proyecto de serie", () => {
     assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 2, left: 0 });
 
     // Editada: figura como modificada y «Restablecer» la devuelve a su contenido.
-    const vibe = expectOk(await listTemplates()).find((t) => t.builtinKey === "vibecoding")!;
+    const vibe = (await listTemplatesSorted(db)).find((t) => t.builtinKey === "vibecoding")!;
     expectOk(await saveTemplate({ ...vibe, name: "Mi vibecoding" }, vibe.id));
-    const edited = expectOk(await listTemplates()).find((t) => t.id === vibe.id)!;
+    const edited = (await listTemplatesSorted(db)).find((t) => t.id === vibe.id)!;
     assert.equal(edited.builtinModified, true);
     expectOk(await resetTemplate(vibe.id));
-    const back = expectOk(await listTemplates()).find((t) => t.id === vibe.id)!;
+    const back = (await listTemplatesSorted(db)).find((t) => t.id === vibe.id)!;
     assert.equal(back.name, "Vibecoding");
     assert.equal(back.builtinModified, false);
   });
@@ -78,7 +82,7 @@ describe("plantillas de proyecto de serie", () => {
     assert.deepEqual(await upgradeBuiltinTemplates(db), []);
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
-    const list = expectOk(await listTemplates());
+    const list = await listTemplatesSorted(db);
     assert.equal(list.find((t) => t.builtinKey === "eventos")!.builtinModified, true);
     assert.equal(list.find((t) => t.builtinKey === "negocio")!.builtinModified, false);
 
@@ -136,7 +140,7 @@ describe("plantillas de proyecto de serie", () => {
     assert.ok(list.some((t) => t.name === "House move"));
     assert.ok(!list.some((t) => t.name === "Mudanza"));
 
-    const mudanza = list.find((t) => t.builtinKey === "mudanza")!;
+    const mudanza = list.find((t) => t.name === "House move")!;
     const created = expectOk(await createProject("Move", { templateId: mudanza.id }));
     const cols = await db.column.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
     assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Moving day", "Done"]);
@@ -147,7 +151,7 @@ describe("plantillas de proyecto de serie", () => {
 
     // Modificada por el administrador: se ofrece y se aplica tal como está guardada.
     await db.projectTemplate.update({ where: { builtinKey: "viajes" }, data: { name: "Mis viajes" } });
-    const viajes = expectOk(await listTemplates()).find((t) => t.builtinKey === "viajes")!;
+    const viajes = (await listTemplatesSorted(db, "en")).find((t) => t.builtinKey === "viajes")!;
     assert.equal(viajes.name, "Mis viajes");
     assert.equal(viajes.columns[0]!.name, "Ideas");
     assert.equal(viajes.kinds[0]!.name, "Transporte");

@@ -6,7 +6,8 @@ import { db, expectOk, loginAs, makeUser } from "./helpers";
 import { saveLegalIdentity, saveLegalPage } from "../../src/actions/legal";
 import { saveInstallationSettings, saveMaxCommentsPerTask } from "../../src/actions/settings";
 import { saveStorageQuotas } from "../../src/actions/storage";
-import { listTemplates, resetTemplate, saveTemplate } from "../../src/actions/templates";
+import { resetTemplate, saveTemplate } from "../../src/actions/templates";
+import { listTemplatesSorted } from "../../src/lib/template-store";
 import { getLegalSettings } from "../../src/lib/legal";
 import { invalidateInstance } from "../../src/lib/instance";
 import { invalidateAppSettings } from "../../src/lib/app-settings";
@@ -89,7 +90,7 @@ describe("plantillas de proyecto", () => {
     await loginAs(await makeUser({ role: "ADMIN" }));
     const created = expectOk(await saveTemplate({ name: `Conflicto ${Date.now()}`, description: "", columns: [{ name: "Hacer", role: "NONE", isDone: false }], kinds: [], hiddenGeneralKinds: [], labels: [] }));
     try {
-      const opened = expectOk(await listTemplates()).find((t) => t.id === created.id)!;
+      const opened = (await listTemplatesSorted(db)).find((t) => t.id === created.id)!;
       assert.ok(opened.version);
       const first = expectOk(await saveTemplate({ ...opened, description: "De Ana" }, opened.id, opened.version));
       assert.ok(first.version && first.version !== opened.version);
@@ -103,10 +104,10 @@ describe("plantillas de proyecto", () => {
       await db.projectTemplate.deleteMany({ where: { id: created.id } });
     }
     // Una de serie restablecida por otra persona también cuenta.
-    const builtin = expectOk(await listTemplates()).find((t) => t.builtinKey);
+    const builtin = (await listTemplatesSorted(db)).find((t) => t.builtinKey);
     if (builtin) {
       expectOk(await resetTemplate(builtin.id));
-      const fresh = expectOk(await listTemplates()).find((t) => t.id === builtin.id)!;
+      const fresh = (await listTemplatesSorted(db)).find((t) => t.id === builtin.id)!;
       expectOk(await saveTemplate({ ...fresh, name: "Cambiada" }, fresh.id, fresh.version));
       expectOk(await resetTemplate(builtin.id));
       expectConflict(await saveTemplate({ ...fresh, name: "Cambiada otra vez" }, fresh.id, fresh.version));
