@@ -1620,28 +1620,21 @@ export async function getOlderComments(taskId: string, cursor: { createdAt: stri
   });
 }
 
-/** Tope de comentarios que devuelve un refresco (el máximo configurable por tarea es 1000). */
-const COMMENTS_REFRESH_MAX = 1000;
-
 /**
- * Refresco en vivo de los comentarios que ya se ven (otra persona comentó, editó o borró): todos desde `cursor` (el más
- * antiguo cargado, incluido) hasta el más reciente; sin cursor, la primera página. Solo lectura.
+ * Refresco en vivo de los comentarios (otra persona comentó, editó o borró): la primera página, la misma que trae el
+ * detalle al abrirse (lo nuevo siempre cae en ella), con los recuentos. No relee lo cargado con «Ver anteriores»: un
+ * cambio en un comentario más antiguo se ve al volver a abrir la tarea. Solo lectura.
  */
-export async function getRecentComments(taskId: string, cursor?: { createdAt: string; id: string } | null) {
-  return runAction({ name: "tasks.getRecentComments", args: [taskId, cursor] }, async (): Promise<{ comments: CommentInfo[]; olderComments: number; commentCount: number }> => {
+export async function getRecentComments(taskId: string) {
+  return runAction({ name: "tasks.getRecentComments", args: [taskId] }, async (): Promise<{ comments: CommentInfo[]; olderComments: number; commentCount: number }> => {
     const user = await requireUser();
     await assertTaskAccess(user, v.id.parse(taskId));
-    const c = cursor ? commentCursor.parse(cursor) : null;
-    const from = c ? { createdAt: new Date(c.createdAt), id: c.id } : null;
-    const where: Prisma.TaskCommentWhereInput = from
-      ? { taskId, OR: [{ createdAt: { gt: from.createdAt } }, { createdAt: from.createdAt, id: { gte: from.id } }] }
-      : { taskId };
     const [rows, commentCount] = await Promise.all([
-      db.taskComment.findMany({ where, orderBy: COMMENT_ORDER, take: from ? COMMENTS_REFRESH_MAX : COMMENTS_FIRST_PAGE, select: commentSelect }),
+      db.taskComment.findMany({ where: { taskId }, orderBy: COMMENT_ORDER, take: COMMENTS_FIRST_PAGE, select: commentSelect }),
       db.taskComment.count({ where: { taskId, deletedAt: null } }),
     ]);
-    const oldest = rows.at(-1) ?? from;
-    const olderComments = oldest ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
+    const oldest = rows.at(-1);
+    const olderComments = oldest && rows.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(taskId, oldest) }) : 0;
     return { comments: rows.reverse().map(toCommentInfo), olderComments, commentCount };
   });
 }

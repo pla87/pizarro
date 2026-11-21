@@ -51,15 +51,27 @@ async function warm(id: string) {
 }
 
 describe("/api/attachments: caché y acceso", () => {
-  test("con acceso: 200 con ETag, max-age=10 en línea y 304 al revalidar", async () => {
+  test("con acceso: 200 con ETag, max-age=120 la miniatura, 10 la imagen en línea y 304 al revalidar", async () => {
     const member = await makeUser();
     const f = await makeProject({ members: [member] });
     const { att } = await makeAttachment(f);
     await loginAs(member);
     const res = await get(att.id, { thumb: true });
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get("cache-control"), "private, max-age=10");
+    assert.equal(res.headers.get("cache-control"), "private, max-age=120");
     assert.equal(await res.text(), "thumb-im");
+    const full = await get(att.id);
+    assert.equal(full.headers.get("cache-control"), "private, max-age=10");
+    assert.equal(await full.text(), "full-img");
+    // La descarga de la miniatura, como cualquier descarga.
+    const thumbDl = await get(att.id, { thumb: true, download: true });
+    assert.equal(thumbDl.headers.get("cache-control"), "private, no-cache");
+    await thumbDl.arrayBuffer();
+    // Un fichero que no es imagen no tiene miniatura: ?thumb=1 lo descarga, sin caché.
+    const { att: pdf } = await makeAttachment(f, { isImage: false });
+    const pdfRes = await get(pdf.id, { thumb: true });
+    assert.equal(pdfRes.headers.get("cache-control"), "private, no-cache");
+    await pdfRes.arrayBuffer();
     // La descarga explícita se revalida siempre (queda registrada).
     const dl = await get(att.id, { download: true });
     assert.equal(dl.headers.get("cache-control"), "private, no-cache");

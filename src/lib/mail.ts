@@ -8,7 +8,7 @@ import { logEvent } from "./log";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
 import type { MailConfig } from "./mail-settings-core";
 import { logMailError, maskEmailsIn } from "./mask-email";
-import { trackInFlight } from "./shutdown";
+import { onShutdown, trackInFlight } from "./shutdown";
 
 // Envío de emails: SMTP con nodemailer. La configuración sale de las variables SMTP_* del servidor o, si no hay, de lo
 // que un administrador guarda en Administración → Integraciones (lib/mail-config.ts). Con MAIL_OUTBOX_DIR (solo desarrollo y
@@ -45,27 +45,65 @@ export function appUrl(): string {
 
 export { escapeHtml } from "./html-escape";
 
-let transport: { t: ReturnType<typeof nodemailer.createTransport>; signature: string } | null = null;
-/** Transporte de nodemailer; se rehace cuando cambia la configuración (al guardar los ajustes o cambiar las variables). */
-function mailer(c: MailConfig) {
-  const signature = JSON.stringify(c);
-  if (!transport || transport.signature !== signature) {
-    transport?.t.close();
-    transport = {
-      signature,
-      t: nodemailer.createTransport({
-        host: c.host,
-        port: c.port,
-        secure: c.secure,
-        requireTLS: c.requireTLS,
-        auth: c.user ? { user: c.user, pass: c.pass } : undefined,
-        connectionTimeout: 10_000,
-        socketTimeout: 15_000,
-      }),
-    };
-  }
-  return transport.t;
+interface Transport {
+  t: ReturnType<typeof nodemailer.createTransport>;
+  signature: string;
+  /** Envíos en curso por este transporte (en su cola o en la conexión). */
+  sending: number;
+  /** Sustituido (otra configuración) o cerrado al apagar: se cierra en cuanto termina su último envío. */
+  retired: boolean;
 }
+
+// En globalThis: instrumentation.ts (el apagado) y las rutas se compilan en paquetes distintos y deben ver el mismo.
+const mailState = ((globalThis as unknown as { __pzMailTransport?: { current: Transport | null } }).__pzMailTransport ??= { current: null });
+
+/** Cierra el transporte si ya no se usa: los envíos que esperan en su cola salen antes (cerrarlo los haría fallar). */
+function closeIfDone(tr: Transport): void {
+  if (tr.retired && tr.sending === 0) tr.t.close();
+}
+
+function retire(tr: Transport): void {
+  tr.retired = true;
+  closeIfDone(tr);
+}
+
+/**
+ * Transporte de nodemailer con una conexión SMTP que se reutiliza (`pool`, una sola: los servidores de correo limitan
+ * las conexiones a la vez y los envíos van en fila). Antes cada email abría su conexión, con su TLS y su AUTH. Si el
+ * servidor la cierra (o se cae), nodemailer la quita y abre otra con el siguiente envío; un email cuya conexión se cierra
+ * a medias vuelve a la cola, y la que lleva 4 min sin usarse la cierra nodemailer antes de que lo haga el servidor. Se
+ * rehace cuando cambia la configuración (al guardar los ajustes o cambiar las variables) y se cierra al apagar.
+ */
+function mailer(c: MailConfig): Transport {
+  const signature = JSON.stringify(c);
+  const cur = mailState.current;
+  if (cur && cur.signature === signature) return cur;
+  if (cur) retire(cur);
+  const t = nodemailer.createTransport({
+    pool: true,
+    maxConnections: 1,
+    host: c.host,
+    port: c.port,
+    secure: c.secure,
+    requireTLS: c.requireTLS,
+    auth: c.user ? { user: c.user, pass: c.pass } : undefined,
+    connectionTimeout: 10_000,
+    socketTimeout: 15_000,
+  });
+  // Un fallo de la conexión ya llega al envío que la usaba; esto solo evita un «error» sin escuchar.
+  t.on("error", (err) => logMailError("[mail] conexión SMTP", err));
+  return (mailState.current = { t, signature, sending: 0, retired: false });
+}
+
+/** Cierra la conexión SMTP (al apagar): los envíos en curso terminan antes. El siguiente envío abriría otra. */
+export function closeMailTransport(): void {
+  const cur = mailState.current;
+  if (!cur) return;
+  mailState.current = null;
+  retire(cur);
+}
+
+onShutdown("mail", closeMailTransport);
 
 export interface MailAttachment {
   filename: string;
@@ -106,7 +144,14 @@ async function deliverMail(m: MailMessage): Promise<void> {
     return;
   }
   if (!config.host) throw new Error("El envío de emails no está configurado.");
-  await mailer(config).sendMail({ from: config.from, ...m });
+  const tr = mailer(config);
+  tr.sending++;
+  try {
+    await tr.t.sendMail({ from: config.from, ...m });
+  } finally {
+    tr.sending--;
+    closeIfDone(tr);
+  }
 }
 
 /**

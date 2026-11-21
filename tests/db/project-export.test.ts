@@ -1135,6 +1135,69 @@ test("freeProjectName: el nombre largo con emojis se recorta sin partir ninguno,
   assert.equal(await freeProjectName(importer, wanted, "(importado)"), `${"m".repeat(67)} (importado)`);
 });
 
+describe("importar: con los topes de la aplicación", () => {
+  test("más de 30 columnas: las que sobran se unen a la última, con sus tareas; nombres de tipo y de etiqueta a 40", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    // 33 columnas, desordenadas en el archivo: cuenta la posición. c1 es de rutinas y manda las suyas a c33.
+    const columns = Array.from({ length: 33 }, (_, i) => ({
+      ref: `c${i + 1}`, name: `Columna ${i + 1}`, position: (i + 1) * 1000, role: i === 0 ? "ROUTINES" : i === 32 ? "NEXT_RELEASE" : "NONE", isDone: false, waitingDays: null,
+      routineTargetRef: i === 0 ? "c33" : null,
+    })).reverse() as ProjectExportData["columns"];
+    const long = (s: string) => `${s}${"x".repeat(50 - s.length)}`;
+    const data = minimal(
+      [
+        { title: "En la 30", columnRef: "c30", position: 5000 },
+        { title: "En la 32", columnRef: "c32", position: 100 },
+        { title: "En la 31 b", columnRef: "c31", position: 200 },
+        { title: "En la 31 a", columnRef: "c31", position: 100 },
+        { title: "Fija en la 33", columnRef: "c33", position: 1, evergreen: true, evergreenEvery: 3 },
+        { title: "Archivada de la 32", columnRef: "c1", archivedAt: "2026-01-03T00:00:00.000Z", archivedFromColumnRef: "c32", labelRefs: ["l1", "l2"] },
+      ],
+      {
+        columns,
+        kinds: [{ ref: "k1", name: long("Tipo con un nombre larguísimo"), color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" }],
+        // Dos etiquetas que, recortadas, se llaman igual: quedan en una.
+        labels: [{ ref: "l1", name: `${"E".repeat(40)}uno`, color: "#3b82f6" }, { ref: "l2", name: `${"E".repeat(40)}dos`, color: "#ef4444" }, { ref: "l3", name: "Corta", color: "#10b981" }],
+      },
+    );
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    const cols = await db.column.findMany({ where: { projectId: s.projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, role: true, routineTargetColumnId: true } });
+    assert.equal(cols.length, 30);
+    assert.equal(s.counts.columns, 30);
+    const last = cols.at(-1)!;
+    assert.equal(last.name, "Columna 30");
+    assert.equal(cols[0]!.routineTargetColumnId, last.id, "el destino de las rutinas que se quitó pasa a la última");
+    assert.ok(!cols.some((c) => c.role === "NEXT_RELEASE"));
+    const inLast = await db.task.findMany({ where: { columnId: last.id, archivedAt: null }, orderBy: { position: "asc" }, select: { title: true, evergreen: true, evergreenEvery: true } });
+    assert.deepEqual(inLast.map((x) => x.title), ["En la 30", "En la 31 a", "En la 31 b", "En la 32", "Fija en la 33"], "al final de la última, en su orden");
+    assert.deepEqual([inLast.at(-1)!.evergreen, inLast.at(-1)!.evergreenEvery], [false, 1], "una columna sin rol de release no tiene fijas");
+    const archived = await db.task.findFirstOrThrow({ where: { projectId: s.projectId, title: "Archivada de la 32" }, select: { archivedFromColumnId: true, labels: { select: { label: { select: { name: true } } } } } });
+    assert.equal(archived.archivedFromColumnId, last.id);
+    assert.deepEqual(archived.labels.map((l) => l.label.name), ["E".repeat(40)]);
+    const kind = await db.taskKind.findFirstOrThrow({ where: { projectId: s.projectId }, select: { name: true } });
+    assert.equal(kind.name, long("Tipo con un nombre larguísimo").slice(0, 40));
+    assert.deepEqual((await db.label.findMany({ where: { projectId: s.projectId }, orderBy: { name: "asc" }, select: { name: true } })).map((l) => l.name), ["Corta", "E".repeat(40)]);
+    assert.ok(s.warnings.includes("El proyecto tenía 33 columnas y el máximo es 30: las 3 últimas se han unido a «Columna 30», con sus tareas."), s.warnings.join(" | "));
+    assert.ok(s.warnings.includes("1 nombre de tipo pasaba de 40 caracteres y se ha recortado."), s.warnings.join(" | "));
+    assert.ok(s.warnings.includes("2 nombres de etiqueta pasaban de 40 caracteres y se han recortado."), s.warnings.join(" | "));
+  });
+
+  test("un archivo dentro de los topes se importa igual, sin avisos", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const columns = Array.from({ length: 30 }, (_, i) => ({ ref: `c${i + 1}`, name: `C${i + 1}`, position: i + 1, role: "NONE", isDone: false, waitingDays: null, routineTargetRef: null })) as ProjectExportData["columns"];
+    const data = minimal([{ title: "Una", columnRef: "c30" }], {
+      columns,
+      kinds: [{ ref: "k1", name: "K".repeat(40), color: "#3b82f6", position: 1, titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [], scope: "project" }],
+      labels: [{ ref: "l1", name: "L".repeat(40), color: "#3b82f6" }],
+    });
+    const s = await importProjectFile(await craft(data), asImporter(admin), { isPrivate: false });
+    assert.equal(await db.column.count({ where: { projectId: s.projectId } }), 30);
+    assert.equal((await db.label.findFirstOrThrow({ where: { projectId: s.projectId } })).name, "L".repeat(40));
+    assert.equal((await db.taskKind.findFirstOrThrow({ where: { projectId: s.projectId } })).name, "K".repeat(40));
+    assert.deepEqual(s.warnings, []);
+  });
+});
+
 describe("importar: numeración de las releases", () => {
   test("el suelo sale de los códigos de los títulos y de las releases importadas: la siguiente no repite un número retirado", async () => {
     const admin = await makeUser({ role: "ADMIN" });

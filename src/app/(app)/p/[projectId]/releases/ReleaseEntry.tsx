@@ -1,9 +1,9 @@
 "use client";
 
 import { appTimeZone } from "@/lib/format";
-import { ChevronDown, ClipboardCopy, Download, FileArchive, MoreHorizontal, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardCopy, Download, FileArchive, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { useCallback, useContext, useEffect, useState } from "react";
-import { deleteRelease, deleteReleaseAttachments } from "@/actions/releases";
+import { deleteRelease, deleteReleaseAttachments, getReleaseContent } from "@/actions/releases";
 import { copyText, downloadText } from "@/components/ui/clipboard";
 import { startDownload } from "@/components/board/attachments-zip";
 import { cn } from "@/components/ui/cn";
@@ -17,10 +17,11 @@ import { ProjectsContext } from "@/components/ProjectMenu";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
-import { actionThrowResult } from "@/lib/stale-action";
+import { loadWhenOnline } from "@/lib/connection";
+import { actionThrowMessage, actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
-  release: { id: string; number: number; title: string; content: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
+  release: { id: string; number: number; title: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
 }
 
 export function ReleaseEntry({ release }: Props) {
@@ -34,9 +35,25 @@ export function ReleaseEntry({ release }: Props) {
   // Nombre del proyecto para el ZIP (el mismo que da el diálogo de generar la release).
   const { projects, currentId } = useContext(ProjectsContext);
   const projectName = projects.find((p) => p.id === currentId)?.name ?? null;
+  // El texto llega al desplegarla (la página solo trae la cabecera de cada release) y se guarda: una release desplegada
+  // no cambia. Sin red se pide al volver la conexión.
+  const [content, setContent] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loaded = content !== null;
+  useEffect(() => {
+    if (!open || loaded) return;
+    return loadWhenOnline(
+      () => getReleaseContent(release.id),
+      (res) => {
+        setLoadError(res.ok ? null : res.error);
+        if (res.ok) setContent(res.data.content);
+      },
+      (err) => setLoadError(actionThrowMessage(err, t)),
+    );
+  }, [open, loaded, release.id, t]);
   // Lo que se copia y se descarga: las releases guardadas con el editor con barra en versiones anteriores pueden traer párrafos
   // vacíos como «&nbsp;» (salen como una línea en blanco; el resto, idéntico).
-  const text = blankEmptyParagraphs(release.content);
+  const text = content === null ? null : blankEmptyParagraphs(content);
   const [busy, setBusy] = useState(false);
   const [attachments, setAttachments] = useState(release.attachments);
   // Las copias de los adjuntos se guardan unos segundos después del despliegue: al refrescar la página
@@ -157,13 +174,14 @@ export function ReleaseEntry({ release }: Props) {
       {open && (
         <div className="border-t border-slate-200 px-4 py-3 dark:border-slate-800">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <button className="btn-secondary py-1.5" onClick={async () => { if (await copyText(text)) toast(t("Copiado al portapapeles")); else toast(t("No se pudo copiar"), "error"); }}>
+            {/* Hasta que llega el texto, Copiar y las descargas esperan (desactivados). */}
+            <button className="btn-secondary py-1.5" disabled={text === null} onClick={async () => { if (text === null) return; if (await copyText(text)) toast(t("Copiado al portapapeles")); else toast(t("No se pudo copiar"), "error"); }}>
               <ClipboardCopy size={15} /> {t("Copiar")}
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
+            <button className="btn-secondary py-1.5" disabled={text === null} onClick={() => text !== null && downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary py-1.5" onClick={() => downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
+            <button className="btn-secondary py-1.5" disabled={text === null} onClick={() => text !== null && downloadText(text, releaseFileName({ day: isoDate(date, appTimeZone()), number: release.number, project: projectName }, "txt"), "text/plain")}>
               <Download size={15} /> .txt
             </button>
             {/* Borrar va aparte, en «⋯» al final de la fila: junto a Copiar/.md/.txt se pulsaba sin querer. */}
@@ -199,7 +217,13 @@ export function ReleaseEntry({ release }: Props) {
               <p className="mt-1 break-words text-xs text-slate-500">{attachments.join(", ")}</p>
             </div>
           )}
-          <LazyMarkdown>{release.content}</LazyMarkdown>
+          {content !== null ? (
+            <LazyMarkdown>{content}</LazyMarkdown>
+          ) : loadError ? (
+            <p className="text-sm text-red-600">{loadError}</p>
+          ) : (
+            <p className="flex items-center gap-1.5 text-sm text-slate-500" role="status"><Loader2 size={15} className="animate-spin" aria-hidden /> {t("Cargando…")}</p>
+          )}
         </div>
       )}
     </article>

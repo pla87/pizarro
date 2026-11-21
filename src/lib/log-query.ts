@@ -38,6 +38,7 @@ export const READ_ACTIONS = [
   "columnViews.getPendingSubtasks",
   "releases.getReleaseTaskDetails",
   "releases.countReleasesOn",
+  "releases.getReleaseContent",
   "aiPlan.getAiPlanSetup",
   "aiPlan.getAiPlanTaskDetails",
   "templates.listTemplates",
