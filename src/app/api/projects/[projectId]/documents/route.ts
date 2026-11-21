@@ -15,7 +15,8 @@ import { quotaError } from "@/lib/quota-message";
 import { roundMb } from "@/lib/attachment-limit";
 import { confirmDocumentKind, detectDocumentKind, documentMime, sanitizeDocumentName, type DocumentKindName } from "@/lib/document-kind";
 import { createDocumentWithinLimit, documentLimitProblem, type DocumentLimitProblem } from "@/lib/documents";
-import { uploadWriteError } from "@/lib/disk-space";
+import { assertDiskRoom, uploadWriteError } from "@/lib/disk-space";
+import { uploadDir } from "@/lib/upload-dir";
 import { IMAGE_QUEUE_FULL_MESSAGE, imageQueueFull, newFileId, processImage, removeDocumentFiles, sanitizeMime, saveDocumentFile } from "@/lib/uploads";
 import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLength, readBodyLimited, UPLOAD_TOO_SLOW_MESSAGE, UploadTooSlowError } from "@/lib/upload-slots";
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
@@ -66,6 +67,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     // Antes de leer el cuerpo: si la petición ya declara más que el archivo máximo (más el envoltorio multipart), se rechaza.
     if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
+    // Antes de leer el cuerpo, como importar o duplicar: si el archivo no cabe en el disco (con el margen), un 507 con el
+    // mismo aviso en vez de recibirlo entero y fallar al escribirlo. Sin Content-Length, con el máximo del proyecto.
+    await assertDiskRoom(uploadDir(), length ?? maxBytes);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
     release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
     if (!release) {
