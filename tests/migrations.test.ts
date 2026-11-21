@@ -53,3 +53,11 @@ test("migraciones: la comprobación de BEGIN;/COMMIT; acepta comentarios alreded
   assert.match(transactionProblem("BEGIN;\nCOMMIT;\n")!, /nada entre/);
   assert.match(transactionProblem("-- solo un comentario\n")!, /vacía/);
 });
+
+test("migraciones: nada en medio que cierre la transacción o no pueda ir en ella (el reintento de P3009 repetiría lo confirmado)", () => {
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nCOMMIT;\nCREATE INDEX CONCURRENTLY i ON t (x);\nBEGIN;\nSELECT 2;\nCOMMIT;\n")!, /entre BEGIN; y COMMIT;/);
+  assert.match(transactionProblem("BEGIN;\nCREATE INDEX CONCURRENTLY i ON t (x);\nCOMMIT;\n")!, /CONCURRENTLY/);
+  assert.match(transactionProblem("BEGIN;\nSELECT 1;\nROLLBACK;\nSELECT 2;\nCOMMIT;\n")!, /ROLLBACK/);
+  // Los BEGIN/END de un bloque DO o de una función entre $$ son suyos, no de la transacción.
+  assert.equal(transactionProblem("BEGIN;\nDO $$\nBEGIN\n  PERFORM 1;\nEND\n$$;\nCREATE FUNCTION f() RETURNS int LANGUAGE plpgsql AS $fn$ BEGIN RETURN 1; END; $fn$;\nCOMMIT;\n"), null);
+});

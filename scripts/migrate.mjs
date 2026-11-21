@@ -91,6 +91,11 @@ export function transactionProblem(sql) {
   if (!/^BEGIN;$/i.test(b[0])) return `no empieza por «BEGIN;» (empieza por «${b[0]}»)`;
   if (!/^COMMIT;$/i.test(b.at(-1))) return `no termina en «COMMIT;» (termina en «${b.at(-1)}»)`;
   if (b.length < 3) return "no tiene nada entre BEGIN; y COMMIT;";
+  // Nada en medio que cierre o abra otra transacción ni que no pueda ir dentro de una (CONCURRENTLY): si no, un reintento
+  // repetiría lo ya confirmado. Lo que va entre $$ (cuerpos de funciones y bloques DO, con su BEGIN/END propios) no cuenta.
+  const outside = b.slice(1, -1).join("\n").replace(/\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g, "''").replace(/--[^\n]*/g, "");
+  const bad = /\b(?:BEGIN|COMMIT|ROLLBACK|END|START\s+TRANSACTION)\s*;|\bCONCURRENTLY\b/i.exec(outside);
+  if (bad) return `tiene «${bad[0].trim()}» entre BEGIN; y COMMIT;`;
   return null;
 }
 

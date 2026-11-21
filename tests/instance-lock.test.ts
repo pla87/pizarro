@@ -40,8 +40,9 @@ test("PgBouncer en modo transacción: no hay avisos falsos", () => {
   assert.equal(poolerInUrl("postgresql://u:p@pooler.example.com:6543/db?pgbouncer=true"), true);
   assert.equal(poolerInUrl("postgresql://u:p@db.example.com:5432/db?sslmode=require"), false);
   assert.equal(poolerInUrl("no es una url"), false);
-  // La base sin responder no es otra copia.
-  assert.deepEqual(nextLockStatus({ status: "waiting", since: 0, holderSince: null }, { kind: "error", message: "ECONNREFUSED" }, 1, OWN), { status: "error", message: "ECONNREFUSED" });
+  // La base sin responder no es otra copia (ni adelanta el aviso): desde el arranque queda «error»; durante una espera, se
+  // conserva la espera tal cual.
+  assert.deepEqual(nextLockStatus({ status: "starting" }, { kind: "error", message: "ECONNREFUSED" }, 1, OWN), { status: "error", message: "ECONNREFUSED" });
 });
 
 test("aviso de Administración: el de este proceso o el que dejó la otra copia hace poco", () => {
@@ -56,4 +57,12 @@ test("aviso de Administración: el de este proceso o el que dejó la otra copia 
   assert.equal(otherInstanceNotice({ status: "held", since: 0 }, null, now), null);
   assert.equal(parseStoredNotice("{roto"), null);
   assert.equal(parseStoredNotice(JSON.stringify({ at: "x", since: "y" })), null);
+});
+
+test("un corte de la conexión durante una espera o un conflicto no reinicia el plazo ni repite el aviso", () => {
+  const conflict: InstanceLockStatus = { status: "conflict", since: 0, holderSince: OTHER.since };
+  assert.equal(nextLockStatus(conflict, { kind: "error", message: "ECONNRESET" }, 5_000_000, OWN), conflict);
+  const waiting: InstanceLockStatus = { status: "waiting", since: 10, holderSince: null };
+  assert.equal(nextLockStatus(waiting, { kind: "error", message: "ECONNRESET" }, 20, OWN), waiting);
+  assert.equal(nextLockStatus({ status: "held", since: 0 }, { kind: "error", message: "x" }, 1, OWN).status, "error");
 });

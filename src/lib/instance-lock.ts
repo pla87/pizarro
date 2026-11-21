@@ -85,7 +85,7 @@ export class InstanceLockMonitor {
         return { kind: "acquired" };
       }
       const holder = await client.query<{ app: string | null; since: Date | null }>(
-        "SELECT a.application_name AS app, a.backend_start AS since FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype = 'advisory' AND l.granted AND l.classid = 0 AND l.objid = $1 AND l.objsubid = 1 LIMIT 1",
+        "SELECT a.application_name AS app, a.backend_start AS since FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype = 'advisory' AND l.granted AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database()) AND l.classid = 0 AND l.objid = $1 AND l.objsubid = 1 LIMIT 1",
         [LOCK_INSTANCE],
       );
       const h = holder.rows[0];

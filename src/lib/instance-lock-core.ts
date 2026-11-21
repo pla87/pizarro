@@ -55,7 +55,9 @@ export function nextLockStatus(prev: InstanceLockStatus, attempt: LockAttempt, n
     case "lost":
       return { status: "pooler" };
     case "error":
-      return { status: "error", message: attempt.message };
+      // Un corte de la conexión durante una espera o un conflicto no reinicia el plazo ni repite el aviso: se conserva el
+      // estado (la siguiente comprobación dirá si sigue la otra copia).
+      return prev.status === "waiting" || prev.status === "conflict" ? prev : { status: "error", message: attempt.message };
     case "busy": {
       const name = attempt.holder?.appName;
       // Lo tiene una sesión que no es de otra copia de Pizarro: con conexión directa no puede pasar (la clave es solo
