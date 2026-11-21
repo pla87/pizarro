@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildReport, deliverableStatus, type ReportInput } from "../src/lib/report";
+import { deliverableProgress } from "../src/lib/deliverable-progress";
 
 const base: ReportInput = {
   project: { name: "P", description: "" },
@@ -42,6 +43,35 @@ test("entregables: avance y estado", () => {
   assert.equal(beta!.pct, 33);
   assert.equal(beta!.daysLeft, 4);
   assert.equal(beta!.status, "En riesgo");
+});
+
+test("avance de un entregable: criterio único (archivadas = hechas; las fijas no cuentan)", () => {
+  assert.deepEqual(deliverableProgress([]), { total: 0, done: 0 });
+  assert.deepEqual(
+    deliverableProgress([
+      { evergreen: false, archived: false, inDoneColumn: false, count: 3 }, // pendientes
+      { evergreen: false, archived: false, inDoneColumn: true }, // en una columna terminada
+      { evergreen: false, archived: true, inDoneColumn: false, count: 2 }, // archivadas (desde cualquier columna)
+      { evergreen: true, archived: false, inDoneColumn: false, count: 4 }, // fijas: fuera
+      { evergreen: true, archived: false, inDoneColumn: true },
+      { evergreen: true, archived: true, inDoneColumn: false },
+    ]),
+    { total: 6, done: 3 },
+  );
+});
+
+test("entregables del informe: sin las fijas y, con `progress` (de la BD), con las archivadas", () => {
+  const withFixed: ReportInput = {
+    ...base,
+    tasks: [...base.tasks, { id: "e", title: "Fija", kind: "Funcionalidad", columnId: "todo", assigneeName: null, dueDate: null, deliverableId: "d1", subtaskTotal: 0, subtaskDone: 0, evergreen: true }],
+  };
+  const [beta] = buildReport(withFixed).deliverables;
+  assert.equal(beta!.total, 3);
+  assert.equal(beta!.done, 1);
+  const [counted] = buildReport({ ...withFixed, deliverables: [{ ...withFixed.deliverables[0]!, progress: { total: 5, done: 3 } }] }).deliverables;
+  assert.equal(counted!.total, 5);
+  assert.equal(counted!.done, 3);
+  assert.equal(counted!.pct, 60);
 });
 
 test("estado de entregable", () => {
