@@ -376,6 +376,22 @@ if (only.includes("tipos")) {
     await L.eqEventually("TIPOS: detalle: el título pasa a «Presupuesto: fontanería R60»", async () => (await row())?.title, "Presupuesto: fontanería R60");
     const after = await row();
     L.check("TIPOS: detalle: la descripción pasa a la de «Presupuesto», sin la de «Permisos»", /^\*\*Empresa o profesional:\*\*/.test(after?.description ?? "") && !after.description.includes("Trámite"), after?.description);
+    // 4b. Con la descripción abierta y sin guardar: cambiar de tipo parte de lo escrito y no lo pierde (antes el editor se
+    // volvía a montar con lo guardado). El editor sigue abierto y la descripción no se guarda hasta pulsar Guardar.
+    await dlg.getByRole("button", { name: "Editar", exact: true }).first().click();
+    await sleep(400);
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Nota R60 sin guardar");
+    await sleep(400);
+    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Permisos y licencias" }).click();
+    await L.eqEventually("TIPOS: detalle con la descripción abierta: el título pasa a «Permiso: fontanería R60»", async () => (await row())?.title, "Permiso: fontanería R60");
+    const typedDesc = await descText();
+    L.check("TIPOS: detalle: lo escrito sin guardar sigue en el editor, con el formulario de «Permisos»", typedDesc.includes("Nota R60 sin guardar") && typedDesc.includes("Trámite"), typedDesc);
+    L.check("TIPOS: detalle: la descripción sin guardar no se guarda sola", /^\*\*Empresa o profesional:\*\*/.test((await row())?.description ?? ""), (await row())?.description);
+    await dlg.getByRole("button", { name: "Cancelar", exact: true }).first().click();
+    await sleep(300);
     await page.keyboard.press("Escape");
     await dlg.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
 
