@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { checkUploads, DEFAULT_MIN_FREE_MB, evaluateHealth, minFreeBytes } from "../src/lib/health";
+import { checkUploads, DEFAULT_MIN_FREE_MB, evaluateHealth, isLowDisk, lowDiskSpace, minFreeBytes } from "../src/lib/health";
 import { shouldExitOnUncaught } from "../src/lib/process-errors";
 import { appTimeZone, formatDate } from "../src/lib/format";
 
@@ -17,7 +17,30 @@ test("salud: todo bien → ok", () => {
 test("salud: motivos en orden de gravedad", () => {
   assert.deepEqual(evaluateHealth({ dbOk: false, uploads: { writable: false, freeBytes: 0 }, minFreeBytes: 200 * MB }), { ok: false, reason: "database" });
   assert.deepEqual(evaluateHealth({ dbOk: true, uploads: { writable: false, freeBytes: 0 }, minFreeBytes: 200 * MB }), { ok: false, reason: "uploads_not_writable" });
-  assert.deepEqual(evaluateHealth({ dbOk: true, uploads: { writable: true, freeBytes: 199 * MB }, minFreeBytes: 200 * MB }), { ok: false, reason: "low_disk_space" });
+});
+
+test("salud: el disco casi lleno es un aviso, no un fallo (Railway no desplegaba con un 503)", () => {
+  assert.deepEqual(evaluateHealth({ dbOk: true, uploads: { writable: true, freeBytes: 199 * MB }, minFreeBytes: 200 * MB }), { ok: true, warnings: ["low_disk_space"] });
+  // Lo grave sigue mandando aunque además falte disco.
+  assert.deepEqual(evaluateHealth({ dbOk: false, uploads: { writable: true, freeBytes: 0 }, minFreeBytes: 200 * MB }), { ok: false, reason: "database" });
+  assert.equal(isLowDisk(199 * MB, 200 * MB), true);
+  assert.equal(isLowDisk(200 * MB, 200 * MB), false);
+  assert.equal(isLowDisk(null, 200 * MB), false);
+  assert.equal(isLowDisk(0, 0), false);
+});
+
+test("lowDiskSpace: con el mínimo por encima de lo libre da libres y mínimo; si cabe, o sin carpeta, null", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pz-health-"));
+  try {
+    const huge = 1024 ** 5;
+    const low = await lowDiskSpace(dir, huge);
+    assert.ok(low && low.minBytes === huge && low.freeBytes > 0 && low.freeBytes < huge);
+    assert.equal(await lowDiskSpace(dir, 1), null);
+    assert.equal(await lowDiskSpace(dir, 0), null);
+    assert.equal(await lowDiskSpace(path.join(dir, "no-existe"), huge), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("salud: espacio desconocido o comprobación desactivada no fallan", () => {

@@ -59,6 +59,8 @@ interface Props {
   backupAlert?: boolean | "shrunk";
   /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
   updateAvailable?: boolean;
+  /** Disco de las subidas casi lleno (por debajo de HEALTH_MIN_FREE_MB): punto de aviso junto a «Administración» (solo admins). */
+  diskLow?: boolean;
   /** Recordatorio de licencia para este administrador: destino de «Comprar» (null: no se muestra). */
   licenseNudge?: string | null;
   children: React.ReactNode;
@@ -78,7 +80,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects: listed, version, unread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, licenseNudge = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -116,7 +118,7 @@ function Shell({ user, projects: listed, version, unread, lastProjectId = null, 
   if (licenseNudge && licenseNudge !== nudgeHref) setNudgeHref(licenseNudge);
 
   const sidebar = (
-    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} />
+    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} />
   );
 
   return (
@@ -280,10 +282,11 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
   return <NavLink href={`/p/${projectId}/docs`} icon={FileText} active={active} extra={extra} highlight={over}>{t("Documentación")}</NavLink>;
 }
 
-function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable }: {
+function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable, diskLow }: {
   unread: number;
   backupAlert: boolean | "shrunk";
   updateAvailable: boolean;
+  diskLow: boolean;
   user: CurrentUser;
   projects: ShellProject[];
   current: ShellProject | null;
@@ -338,6 +341,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
               title={backupAlert === "shrunk" ? t("La última copia es mucho menor que la anterior") : t("Copia de seguridad atrasada")}
             />
           )}
+          {diskLow && <span className="h-2 w-2 rounded-full bg-red-500" role="img" aria-label={t("El disco del servidor está casi lleno")} title={t("El disco del servidor está casi lleno")} />}
           {updateAvailable && <span className="h-2 w-2 rounded-full bg-sky-500" role="img" aria-label={t("Hay una versión nueva de Pizarro")} title={t("Hay una versión nueva de Pizarro")} />}
         </NavLink>}
         <NavLink href="/changelog" icon={History} active={pathname === "/changelog"}>{t("Historial de versiones")}</NavLink>

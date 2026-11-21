@@ -498,7 +498,7 @@ Notas:
 
 ## 7. Estado y diagnóstico
 
-- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta, la carpeta de subidas se puede escribir y quedan al menos `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres en su disco. Si no, 503 con un motivo: `database`, `uploads_not_writable` o `low_disk_space`. Docker la usa para marcar el contenedor como *unhealthy*.
+- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta y la carpeta de subidas se puede escribir. Si no, 503 con un motivo: `database` o `uploads_not_writable` (y `shutting_down` mientras se apaga). Docker la usa para marcar el contenedor como *unhealthy* y Railway, para dar por bueno un despliegue. Si a su disco le quedan menos de `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres, sigue en 200 con el aviso `"warnings":["low_disk_space"]` (así se puede desplegar una versión nueva) y *Administración* lo avisa.
 - **Tareas de fondo:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra cuándo se ejecutó cada tarea y si falló.
 - **Logs:** *Administración → Logs* (errores de la app, incluidos los no capturados) y `docker compose logs app`.
 - **Diagnóstico para soporte:** si pides ayuda, adjunta el diagnóstico: *Administración → Ajustes → Descargar diagnóstico*, o por consola
@@ -531,7 +531,7 @@ Notas:
 | `/setup` da 404 | Ya hay usuarios (la instalación está configurada) o se definió `SEED_ADMIN_*` | Entra en `/login`. Para empezar de cero hay que vaciar la base de datos. |
 | `[start] ERROR: faltan variables de entorno: SESSION_SECRET(>=32)` | Secreto vacío o corto | `./install.sh` (genera los que falten) o `openssl rand -base64 48` y `docker compose up -d`. |
 | El navegador avisa de certificado no válido | El DNS aún no apunta al servidor o los puertos 80/443 están cerrados | Comprueba el registro DNS y el cortafuegos; mira `docker compose logs caddy`. |
-| La app queda *unhealthy* y `/api/health` dice `low_disk_space` | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
+| *Administración* avisa de que el disco está casi lleno (y `/api/health` lleva `low_disk_space` en `warnings`) | Disco casi lleno | Libera espacio (`docker system prune` borra imágenes viejas) o amplía el disco. |
 | `/api/health` dice `uploads_not_writable` | El volumen de subidas no se puede escribir | `docker compose restart app` (el arranque corrige el propietario); revisa el disco. |
 | `/api/health` dice `database` | PostgreSQL parado o contraseña distinta | `docker compose ps`; si cambiaste `POSTGRES_PASSWORD` después de la primera instalación, vuelve a la original (la base ya se creó con ella). |
 | El log dice `[start] PostgreSQL aún no responde` | Al arrancar, la app espera a la base de datos (reintenta cada 3 s durante 3 min y arranca en cuanto responde) | Si se resuelve solo, nada. Si a los 3 min sale `[start] ERROR: No se puede conectar con PostgreSQL`, el contenedor se reinicia y lo vuelve a intentar: comprueba `docker compose ps`, `docker compose logs --tail 50 postgres`, el disco (`df -h`) y la memoria (`free -m`); en Railway, que el servicio de PostgreSQL está activo y que `DATABASE_URL` es `${{Postgres.DATABASE_URL}}`. |
