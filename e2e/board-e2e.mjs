@@ -1178,9 +1178,10 @@ if (only.includes("r46")) {
     await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-plantilla.png` });
     await sel.selectOption({ label: "Familia y casa" });
     await nd.getByLabel("Crear como proyecto privado inicialmente").check();
+    const from = new URL(p.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    // Con un ejemplo o una plantilla se abre el tablero (en blanco, los ajustes: BH1, más abajo).
-    await p.waitForURL(/\/p\/[^/?#]+$/, { timeout: 15000 });
+    // Con un ejemplo o una plantilla se abre el tablero del proyecto nuevo (en blanco, los ajustes: BH1, más abajo).
+    await p.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
     L.check("R46M1: con un ejemplo, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     const [made] = await L.q(`SELECT p.id, p."isPrivate", (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks FROM "Project" p WHERE name='Mi casa R46'`);
     L.check("R46M1: crea el proyecto del ejemplo, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
@@ -1189,8 +1190,9 @@ if (only.includes("r46")) {
     await L.eqEventually("R46M1: las plantillas llegan al desplegable", async () => (await structure(nd))[2]?.group, "Plantillas");
     await nd.locator("#project-start").selectOption({ label: firstTemplate });
     await nd.locator("#project-name").fill("Plantilla R46");
+    const fromTplPage = new URL(p.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await p.waitForURL(/\/p\/[^/?#]+$/, { timeout: 15000 });
+    await p.waitForURL((u) => u.pathname !== fromTplPage && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
     L.check("R46M1: con una plantilla, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     await sleep(500);
     const [fromTpl] = await L.q(`SELECT p.id, (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks, (SELECT json_agg(c.name ORDER BY c.position) FROM "Column" c WHERE c."projectId"=p.id) AS cols FROM "Project" p WHERE name='Plantilla R46'`);

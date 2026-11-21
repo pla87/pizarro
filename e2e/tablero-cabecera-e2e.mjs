@@ -278,11 +278,14 @@ if (only.includes("tipos")) {
   L.scenario("tipos: proyecto de «Reformas y obras», tipo marcado con su plantilla y cambios de tipo sin acumular");
   const NAME = "Reformas R60";
   await L.q(`DELETE FROM "Project" WHERE name=$1`, [NAME]);
-  // «Plantillas» en «Nuevo proyecto» es de administradores.
-  await L.q(`UPDATE "User" SET role='ADMIN' WHERE email=$1`, [L.ADMIN]);
+  // «Plantillas» en «Nuevo proyecto» es de administradores: la sesión se abre como miembro (sin el segundo paso de
+  // acceso de los administradores) y pasa a admin.
   const s = await L.session();
   const { page } = s;
   try {
+    await L.q(`UPDATE "User" SET role='ADMIN' WHERE email=$1`, [L.ADMIN]);
+    await L.reload(page);
+    await L.board(page);
     await page.locator("aside").first().locator("button[aria-haspopup]").first().click();
     await page.getByRole("menuitem", { name: "Nuevo proyecto" }).click();
     const nd = page.locator("[role=dialog]").filter({ has: page.locator("#project-name") });
@@ -290,8 +293,10 @@ if (only.includes("tipos")) {
     await L.waitFor(async () => (await nd.locator("#project-start optgroup[label=Plantillas] option", { hasText: "Reformas y obras" }).count()) === 1, { timeout: 8000 });
     await nd.locator("#project-start").selectOption({ label: "Reformas y obras" });
     await nd.locator("#project-name").fill(NAME);
+    const from = new URL(page.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    await page.waitForURL(/\/p\/[^/?#]+$/, { timeout: 15000 });
+    // Ya se estaba en un tablero: se espera a otro (el del proyecto nuevo) o a sus ajustes.
+    await page.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
     L.check("TIPOS: con una plantilla, al crear el proyecto se abre su tablero (no los ajustes)", !page.url().includes("/settings"), page.url());
     const [proj] = await L.q(`SELECT id, description FROM "Project" WHERE name=$1`, [NAME]);
     L.check("TIPOS: el proyecto toma la descripción de la plantilla", /^Reformar una vivienda o local/.test(proj?.description ?? ""), proj?.description);
