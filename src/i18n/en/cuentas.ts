@@ -333,4 +333,6 @@ export const cuentas: Record<string, string> = {
   // Invitación con el nombre de la organización (ronda 59)
   "Te han invitado al Pizarro de {org}": "You've been invited to {org}'s Pizarro",
   "{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.": "{admin} has created your account in {org}'s Pizarro. Use this link to choose your password. It expires in {n} hours and works only once.",
+  // Invitar por email a un proyecto: el email es de una cuenta desactivada
+  "Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.": "There is a deactivated account with that email: activate it in Administration → Users.",
 };

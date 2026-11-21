@@ -1,7 +1,7 @@
 // Suscripción al calendario (.ics vivo) contra PostgreSQL real: token, permisos, regeneración y límite de ritmo.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { calendarFeedUsage, createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "../../src/actions/calendar-feed";
 import { GET } from "../../src/app/api/calendar/[file]/route";
 import { onRequestError } from "../../src/instrumentation";
@@ -289,6 +289,37 @@ describe("calendario suscrito", () => {
     assert.deepEqual(expectOk(await calendarFeedUsage()), { active: true, lastUsedAt: null }, "el enlace nuevo aún no se ha usado");
     expectOk(await disableCalendarFeed());
     assert.deepEqual(expectOk(await calendarFeedUsage()), { active: false, lastUsedAt: null });
+  });
+
+  test("«Último uso»: una consulta con el enlace anterior que termina después de regenerarlo no lo anota en el nuevo", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { dueDate: inDays(3) });
+    const old = await feedFor(user);
+    // Con «Task» bloqueada, la consulta con el enlace anterior ya lo ha validado y se queda montando el .ics.
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => (release = resolve));
+    let lockedReady!: () => void;
+    const ready = new Promise<void>((r) => (lockedReady = r));
+    const lockTx = db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`LOCK TABLE "Task" IN ACCESS EXCLUSIVE MODE`);
+      lockedReady();
+      await locked;
+    }, { timeout: 30_000 });
+    let pending: ReturnType<typeof fetchFeed> | undefined;
+    try {
+      await ready;
+      pending = fetchFeed(old.token);
+      await waitForLockWaiter();
+      await feedFor(user); // regenerar mientras tanto
+    } finally {
+      release();
+      await lockTx;
+    }
+    assert.equal((await pending!).res.status, 200);
+    await new Promise((r) => setTimeout(r, 300)); // la ruta lo escribe sin esperar a la respuesta
+    await loginAs(user);
+    assert.deepEqual(expectOk(await calendarFeedUsage()), { active: true, lastUsedAt: null }, "el enlace nuevo sigue «sin usar»");
   });
 
   test("excluye archivadas, sin fecha y fuera de la ventana; el rango usa la fecha de inicio solo si el proyecto la activa", async () => {

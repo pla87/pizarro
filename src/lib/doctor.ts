@@ -5,7 +5,7 @@ import path from "node:path";
 import pkg from "../../package.json";
 import { parseBackupFileName } from "./backup-core";
 import { db } from "./db";
-import { configFlags, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
+import { configFlags, configWarnings, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
 import { checkUploads, evaluateHealth, minFreeBytes } from "./health";
 import { backupsDir, uploadDir } from "./upload-dir";
 
@@ -100,6 +100,7 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     },
     env: envPresence(),
     features: configFlags(),
+    warnings: configWarnings(),
   };
   // Email configurado en Administración → Integraciones (sin valores: solo si hay servidor y remitente guardados). Las variables SMTP_* mandan.
   await section(async () => {

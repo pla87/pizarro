@@ -1,6 +1,7 @@
 import { parseBackupKey } from "./backup-core";
 import { trustProxy } from "./client-ip";
 import { validTimeZone } from "./format";
+import { isLocalSmtpHost, smtpPlaintextAllowed } from "./mail-settings-core";
 import { parseWhatsappSettings, resolveWhatsappConfig, TELEGRAM_ENABLED_KEY, TELEGRAM_TOKEN_KEY, telegramMode } from "./messaging-core";
 
 // Parte pura del diagnóstico para soporte (Administración → Ajustes → «Descargar diagnóstico» y node dist/doctor.mjs):
@@ -70,6 +71,24 @@ export function configFlags(env: Env = process.env) {
     // ¿Se toma la IP del cliente de X-Real-IP / X-Forwarded-For? (TRUST_PROXY o, sin ella, Docker y Railway)
     trustProxy: trustProxy(env),
   };
+}
+
+/**
+ * Avisos de configuración para quien lee el diagnóstico (sin valores). `smtp_starttls_required`: con SMTP_HOST en otra
+ * máquina, un puerto distinto de 465 y sin SMTP_ALLOW_PLAINTEXT, el envío exige STARTTLS (envMailConfig,
+ * mail-settings-core.ts). Antes se enviaba sin cifrar si el servidor no lo ofrecía; tras actualizar, con un servidor
+ * así los emails dejan de salir.
+ */
+export function configWarnings(env: Env = process.env): { code: string; text: string }[] {
+  const out: { code: string; text: string }[] = [];
+  const host = env.SMTP_HOST?.trim();
+  if (host && !isLocalSmtpHost(host) && Number(env.SMTP_PORT ?? 465) !== 465 && !smtpPlaintextAllowed(env)) {
+    out.push({
+      code: "smtp_starttls_required",
+      text: "SMTP_HOST apunta a otro servidor con un puerto distinto de 465: ahora se exige STARTTLS. Si el servidor no lo ofrece, los emails no salen; usa el puerto 465 (TLS directo) o, para un relay de la red privada sin TLS, SMTP_ALLOW_PLAINTEXT=1 (todo irá en claro).",
+    });
+  }
+  return out;
 }
 
 /**

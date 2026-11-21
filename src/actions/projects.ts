@@ -1,6 +1,6 @@
 "use server";
 
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, rateLimitReached } from "@/lib/rate-limit";
 import { sendProjectAddedMail } from "@/lib/auth-mail";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { revalidatePath } from "next/cache";
@@ -258,9 +258,13 @@ export async function addProjectMember(projectId: string, userId: string) {
     });
     const link = `${appUrl()}/p/${project.id}`;
     // Solo a quien entra ahora (no al repetir la asignación ni al asignarse uno mismo), con email y con esos avisos
-    // activos. El tope por persona que añade evita usar la lista de miembros para mandar correo en masa.
+    // activos. El tope por persona que añade evita usar la lista de miembros para mandar correo en masa; el de cada
+    // pareja (quien añade, persona, proyecto), que añadir, quitar y volver a añadir repita el email: uno al día.
+    const pairKey = `project-added-mail:${user.id}:${target.id}:${project.id}`;
     const emailed = created && target.id !== user.id && target.notifyEmail && emailEnabled()
-      && rateLimit(`project-added-mail:${user.id}`, 40, 60 * 60_000);
+      && !rateLimitReached(pairKey, 1)
+      && rateLimit(`project-added-mail:${user.id}`, 40, 60 * 60_000)
+      && rateLimit(pairKey, 1, 24 * 60 * 60_000);
     if (emailed) sendMailInBackground("aviso de proyecto añadido", () => sendProjectAddedMail(target, user.name, project.name, link));
     describeAction(`Añadió a «${target.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (avisado por email)" : ""}`);
     revalidatePath("/", "layout");
