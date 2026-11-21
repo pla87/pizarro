@@ -4,7 +4,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { intlLocale, makeT, toLocale, type Locale, type T } from "../i18n/core";
 import { projectUsersWhere } from "./access";
 import { db } from "./db";
-import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
+import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail } from "./mail";
+import { ellipsize } from "./graphemes";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
@@ -33,17 +34,20 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es")) {
   const type = m.type ?? "MENTION";
   // Sin repetir el título en una asignación (ya va en el asunto y en la cabecera).
   const body = noticeBody(m, t);
-  // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés.
-  const task = t("«{title}»", { title: m.taskTitle });
-  const subject = notificationHeadline(type, t, { actor: m.actorName, task });
+  // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés. Recortado como en Telegram y
+  // WhatsApp: un título de cientos de caracteres no cabe en el asunto (muchos programas lo cortan o lo parten).
+  const task = t("«{title}»", { title: ellipsize(m.taskTitle.replace(/\s+/g, " ").trim(), 120) });
+  const subject = notificationHeadline(type, t, { actor: m.actorName, task, excerpt: m.excerpt });
   const open = noticeLinkLabel(m, t);
-  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${open}: ${m.url}\n`;
-  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>` });
+  const optOut = t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro.");
+  const noReply = noReplyNote(t);
+  const text = `${subject} (${m.projectName})${body ? `:\n\n${body}` : ""}\n\n${open}: ${m.url}\n\n${optOut}\n${noReply}\n`;
+  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt });
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
 ${body ? `<blockquote style="margin:12px 0;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>` : ""}
 <p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro."))}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}</p></div>`;
   return { subject, text, html };
 }
 

@@ -67,7 +67,6 @@ export const colaboracion: Record<string, string> = {
   "Hora": "Time",
   "Informe semanal de «{project}»": "Weekly report for “{project}”",
   "Adjuntamos el informe PDF de estado del proyecto «{project}».": "Attached is the status PDF report for the project “{project}”.",
-  "Recibes este correo porque alguien configuró el informe semanal en los ajustes del proyecto.": "You are receiving this email because someone set up the weekly report in the project settings.",
   "Abrir el proyecto": "Open the project",
   "Lunes": "Monday",
   "Martes": "Tuesday",
@@ -85,4 +84,15 @@ export const colaboracion: Record<string, string> = {
   "Cambió la cadencia en la release a «{to}»": "Changed the release cadence to “{to}”",
   // Mis tareas: grupo de los 7 días siguientes a hoy
   "Próximos 7 días": "Next 7 days",
+  // Emails de avisos, resumen e informe: pie, lote de asignaciones, periodo del resumen y organización (ronda 59)
+  "No respondas a este email: contesta en Pizarro.": "Don't reply to this email: reply in Pizarro.",
+  "{actor} te ha asignado {n} tareas (entre ellas {task})": "{actor} assigned you {n} tasks (including {task})",
+  "Hola, {name}: esto ha pasado en tus proyectos desde el último resumen.": "Hi {name}: here is what happened in your projects since the last summary.",
+  "Hola, {name}: esto ha pasado en tus proyectos en las últimas 48 horas.": "Hi {name}: here is what happened in your projects in the last 48 hours.",
+  "Adjuntamos el informe PDF de estado del proyecto «{project}» de {org}.": "Attached is the status PDF report for the project “{project}” at {org}.",
+  "Recibes este correo porque {name} configuró el informe semanal en los ajustes del proyecto.": "You are receiving this email because {name} set up the weekly report in the project settings.",
+  "No se ha podido enviar el informe semanal de «{project}»": "The weekly report for “{project}” could not be sent",
+  "El informe semanal del proyecto «{project}» no se ha enviado esta vez: el proyecto tiene tantas tareas que el PDF no cabe en la memoria que Pizarro reserva para generarlo.": "The weekly report for the project “{project}” was not sent this time: the project has so many tasks that the PDF doesn't fit in the memory Pizarro sets aside to create it.",
+  "Para que vuelva a salir, haz el informe más corto: deja menos tareas pendientes (borra o termina las que ya no hagan falta) o archiva las tareas cerradas. El próximo informe se intentará el día y a la hora de siempre.": "To get it sent again, make the report shorter: leave fewer pending tasks (delete or finish the ones no longer needed) or archive the closed tasks. The next report will be attempted on the usual day and time.",
+  "Si necesitas el informe tal como está, pide a un administrador que dé más memoria al generador de PDF (PDF_WORKER_MAX_MB).": "If you need the report as it is, ask an administrator to give the PDF generator more memory (PDF_WORKER_MAX_MB).",
 };

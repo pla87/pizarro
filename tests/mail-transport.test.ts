@@ -14,12 +14,14 @@ interface FakeSmtp {
   connections: number;
   /** Emails recibidos (asunto). */
   subjects: string[];
+  /** Cabeceras de cada email recibido. */
+  heads: string[];
   sockets: Set<Socket>;
 }
 
 /** Servidor SMTP de pruebas: saluda, acepta cualquier remitente y destinatario y guarda el asunto de cada email. */
 async function fakeSmtp(): Promise<FakeSmtp> {
-  const state = { connections: 0, subjects: [] as string[], sockets: new Set<Socket>() } as FakeSmtp;
+  const state = { connections: 0, subjects: [] as string[], heads: [] as string[], sockets: new Set<Socket>() } as FakeSmtp;
   state.server = createServer((socket) => {
     state.connections++;
     state.sockets.add(socket);
@@ -38,6 +40,7 @@ async function fakeSmtp(): Promise<FakeSmtp> {
           buf = buf.slice(end + 5);
           inData = false;
           state.subjects.push(/^Subject: (.*)$/m.exec(body)?.[1] ?? "");
+          state.heads.push(body.split("\r\n\r\n")[0] ?? "");
           socket.write("250 OK\r\n");
           continue;
         }
@@ -138,5 +141,26 @@ describe("transporte SMTP", () => {
     await waitFor(() => other.sockets.size === 0);
     await sendMail({ to: "a@example.com", subject: "después", text: "z" });
     assert.equal(other.connections, 2);
+  });
+});
+
+describe("cabeceras y remitente", () => {
+  test("cada email lleva Auto-Submitted y X-Auto-Response-Suppress (sin respuestas automáticas)", async () => {
+    const { sendMail } = await import("../src/lib/mail");
+    useServer(smtp);
+    await sendMail({ to: "a@example.com", subject: "cabeceras", text: "x" });
+    const head = smtp.heads.at(-1)!;
+    assert.match(head, /^Auto-Submitted: auto-generated$/m);
+    assert.match(head, /^X-Auto-Response-Suppress: All$/m);
+    assert.match(head, /^From: Pizarro <pizarro@example\.com>$/m);
+  });
+
+  test("un remitente sin nombre sale con el de la organización o, sin ella, «Pizarro»", async () => {
+    const { sendMail } = await import("../src/lib/mail");
+    useServer(smtp);
+    // Sin base de datos (esta prueba no la tiene) no hay nombre de organización: «Pizarro».
+    process.env.SMTP_FROM = "avisos@example.com";
+    await sendMail({ to: "a@example.com", subject: "sin nombre", text: "x" });
+    assert.match(smtp.heads.at(-1)!, /^From: Pizarro <avisos@example\.com>$/m);
   });
 });

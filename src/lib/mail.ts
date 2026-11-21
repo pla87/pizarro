@@ -5,8 +5,9 @@ import { join } from "node:path";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { logEvent } from "./log";
+import { getInstanceSettings } from "./instance";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
-import type { MailConfig } from "./mail-settings-core";
+import { withSenderName, type MailConfig } from "./mail-settings-core";
 import { logMailError, maskEmailsIn } from "./mask-email";
 import { onShutdown, trackInFlight } from "./shutdown";
 
@@ -44,6 +45,9 @@ export function appUrl(): string {
 }
 
 export { escapeHtml } from "./html-escape";
+
+/** Pie de los avisos, el resumen y el informe: la dirección del remitente no la lee nadie. */
+export const noReplyNote = (t: (key: string) => string): string => t("No respondas a este email: contesta en Pizarro.");
 
 interface Transport {
   t: ReturnType<typeof nodemailer.createTransport>;
@@ -119,6 +123,19 @@ export interface MailMessage {
   attachments?: MailAttachment[];
 }
 
+/**
+ * Cabeceras de todo email de Pizarro: lo envía un programa, no una persona (RFC 3834). Así los contestadores automáticos
+ * («Estoy de vacaciones…») no responden y Outlook/Exchange no manda sus respuestas automáticas a la dirección del
+ * remitente, que nadie lee.
+ */
+const AUTO_MAIL_HEADERS: Readonly<Record<string, string>> = { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" };
+
+/** Remitente efectivo: sin nombre configurado, el de la organización (Administración → Ajustes) o «Pizarro». */
+async function senderOf(from: string): Promise<string> {
+  if (!from || from.includes("<")) return from;
+  return withSenderName(from, (await getInstanceSettings()).orgName);
+}
+
 /** Envía un email; lanza si falla. El apagado ordenado del servidor espera a los envíos en curso (lib/shutdown.ts). */
 export function sendMail(m: MailMessage): Promise<void> {
   return trackInFlight(() => deliverMail(m));
@@ -140,14 +157,15 @@ async function deliverMail(m: MailMessage): Promise<void> {
       await writeFile(join(dir, file), a.content, { mode: 0o600 });
       saved.push({ filename: a.filename, bytes: a.content.length, file });
     }
-    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, headers: AUTO_MAIL_HEADERS, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
     return;
   }
   if (!config.host) throw new Error("El envío de emails no está configurado.");
+  const from = await senderOf(config.from);
   const tr = mailer(config);
   tr.sending++;
   try {
-    await tr.t.sendMail({ from: config.from, ...m });
+    await tr.t.sendMail({ from, headers: { ...AUTO_MAIL_HEADERS }, ...m });
   } finally {
     tr.sending--;
     closeIfDone(tr);

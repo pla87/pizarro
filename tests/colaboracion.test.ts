@@ -7,7 +7,7 @@ process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 const { followerIds, isFollowing } = await import("../src/lib/followers");
 const { digestDue, localParts, reportDue } = await import("../src/lib/schedule");
 const { bucketOf, groupByDue, matchesFilter, parseFilter } = await import("../src/lib/my-tasks");
-const { buildDigest, digestEmail, emptyDigestInput, DIGEST_MAX_ITEMS } = await import("../src/lib/digest");
+const { buildDigest, digestEmail, digestPeriod, emptyDigestInput, DIGEST_MAX_ITEMS } = await import("../src/lib/digest");
 const { dueChangeExcerpt, dueChangeText, parseDueChange } = await import("../src/lib/notification-text");
 const { splitMentions, mentionToken } = await import("../src/lib/mentions");
 const { eventsOf } = await import("../src/lib/task-events");
@@ -167,6 +167,29 @@ test("resumen: el correo escapa el HTML, usa menciones en texto plano y enlaza c
   assert.ok(!mail.text.includes("user:u1"));
   assert.ok(mail.text.includes("https://app.example.com/p/p1?task=t1"));
   assert.match(digestEmail(buildDigest(input), { name: "Luz", baseUrl: "https://a.b" }, makeT("en")).subject, /daily summary/);
+});
+
+test("resumen: el asunto cuenta tareas distintas, el texto dice desde cuándo y el pie, que no se responda", () => {
+  const input = emptyDigestInput();
+  const item = (taskId: string) => ({ taskId, title: `T-${taskId}`, projectId: "p", projectName: "P" });
+  // La misma tarea asignada, vencida y comentada: una sola en el asunto (antes salía «(5)»).
+  input.assigned = [item("1"), item("2")];
+  input.overdue = [item("1")];
+  input.comments = [{ ...item("1"), count: 2 }, item("2")];
+  const digest = buildDigest(input);
+  assert.equal(digest.taskCount, 2);
+  const es = digestEmail(digest, { name: "Luz", baseUrl: "https://app.example.com", period: "sinceLast" }, makeT("es"));
+  assert.equal(es.subject, "Tu resumen diario de Pizarro (2)");
+  assert.match(es.text, /^Hola, Luz: esto ha pasado en tus proyectos desde el último resumen\./);
+  for (const body of [es.text, es.html]) assert.ok(body.includes("No respondas a este email: contesta en Pizarro."));
+  const en = digestEmail(digest, { name: "Luz", baseUrl: "https://app.example.com" }, makeT("en"));
+  assert.match(en.text, /in the last 24 hours/);
+  assert.ok(en.text.includes("Don't reply to this email: reply in Pizarro."));
+  assert.match(en.html, /Don(&#39;|&#x27;|')t reply to this email: reply in Pizarro\./);
+  const now = new Date("2026-11-21T08:00:00Z");
+  assert.equal(digestPeriod(null, now), "24h");
+  assert.equal(digestPeriod(new Date("2026-11-20T08:00:00Z"), now), "sinceLast");
+  assert.equal(digestPeriod(new Date("2026-11-15T08:00:00Z"), now), "48h");
 });
 
 // --- Avisos ---

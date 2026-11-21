@@ -384,6 +384,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   const x: Ctx = { t, locale };
   const generated = formatDay(r.today, undefined, locale);
   const k = r.kpis;
+  const num = (n: number) => n.toLocaleString(locale);
   const pendingColumns = r.columns.filter((c) => !c.isDone && c.count > 0);
   const people = r.people.filter((p) => p.open > 0);
   const attention = [
@@ -399,7 +400,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
 
   const build = (big: boolean): Block[] => [
     {
-      units: 22 + (r.project.description ? textUnits(r.project.description, 110) : 0),
+      units: 22 + (r.omittedTasks ? 2 : 0) + (r.project.description ? textUnits(r.project.description, 110) : 0),
       node: (
         <>
           <View style={s.header}>
@@ -425,6 +426,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
             {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
             {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
             {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
+            {r.omittedTasks ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.", { n: num(k.total + k.fixed - r.omittedTasks), total: num(k.total + k.fixed) })}</Text> : null}
           </View>
         </>
       ),

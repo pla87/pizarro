@@ -5,7 +5,7 @@ import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT
 import { addComment, createTask, createTasks, updateTask } from "../../src/actions/tasks";
 import { mentionToken } from "../../src/lib/mentions";
 import { deliver, mentionEmail } from "../../src/lib/notify";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationBody } from "../../src/lib/notification-text";
@@ -147,6 +147,25 @@ describe("avisos de asignación en lote", () => {
     const mail = mentionEmail({ type: "ASSIGNED", actorName: "X", taskTitle: "a", projectName: "P", excerpt: n.excerpt, url: "https://example.com" }, en);
     assert.match(mail.text, /3 tasks/);
     assert.doesNotMatch(mail.text + mail.html, /tareas/);
+    // Por email, la cabecera dice cuántas son (antes el asunto nombraba una tarea y el cuerpo decía «3 tareas»).
+    const dir = await mkdtemp(join(tmpdir(), "pz-outbox-batch-"));
+    const prev = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = dir;
+    try {
+      await db.user.update({ where: { id: assignee.id }, data: { notifyAssignedEmail: true } });
+      await deliver([n.id]);
+      const [file] = (await readdir(dir)).filter((x) => x.endsWith(".json"));
+      const sent = JSON.parse(await readFile(join(dir, file!), "utf8")) as { subject: string; text: string };
+      const first = await db.task.findUniqueOrThrow({ where: { id: n.taskId! }, select: { title: true } });
+      const actorName = (await db.user.findUniqueOrThrow({ where: { id: actor.id }, select: { name: true } })).name;
+      assert.equal(sent.subject, `${actorName} assigned you 3 tasks (including “${first.title}”)`);
+      assert.match(sent.text, /assigned you 3 tasks \(including “a”\)/);
+      assert.doesNotMatch(sent.text, /\n\n3 tasks\n/);
+      assert.ok(sent.text.includes("Don't reply to this email: reply in Pizarro."));
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = prev ?? "";
+      await rm(dir, { recursive: true, force: true });
+    }
     // Una sola tarea: el extracto sigue siendo su título.
     expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: assignee.id, tasks: [{ title: "Sola", kindId: f.kindId }] }));
     const one = await db.notification.findFirstOrThrow({ where: { userId: assignee.id, type: "ASSIGNED", excerpt: { not: n.excerpt } } });

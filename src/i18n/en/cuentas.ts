@@ -330,4 +330,7 @@ export const cuentas: Record<string, string> = {
   "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
   // Editar un usuario: otro administrador lo ha cambiado mientras tanto
   "Los datos han cambiado mientras tanto: recarga la página.": "The data has changed in the meantime: reload the page.",
+  // Invitación con el nombre de la organización (ronda 59)
+  "Te han invitado al Pizarro de {org}": "You've been invited to {org}'s Pizarro",
+  "{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.": "{admin} has created your account in {org}'s Pizarro. Use this link to choose your password. It expires in {n} hours and works only once.",
 };

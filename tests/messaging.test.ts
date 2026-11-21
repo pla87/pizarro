@@ -188,13 +188,18 @@ test("asignación: el título va en la cabecera y no se repite debajo (Telegram 
   // Título largo: el extracto es su principio recortado.
   const longTitle = "x".repeat(300);
   assert.doesNotMatch(core.telegramNoticeText({ ...m, taskTitle: longTitle, excerpt: `${"x".repeat(179)}…` }, makeT("es")), /<i>/);
-  // Si la tarea cambió de título desde el aviso, el de entonces sí se ve; y en un lote, «3 tareas».
+  // Si la tarea cambió de título desde el aviso, el de entonces sí se ve.
   assert.match(core.telegramNoticeText({ ...m, excerpt: "Portada" }, makeT("es")), /<i>Portada<\/i>/);
-  assert.match(core.telegramNoticeText({ ...m, excerpt: assignedBatchExcerpt(3) }, makeT("es")), /<i>3 tareas<\/i>/);
+  // En un lote, el número va en la cabecera (antes el asunto nombraba una tarea y el cuerpo decía «3 tareas»).
+  const batch = { ...m, excerpt: assignedBatchExcerpt(3) };
+  assert.equal(core.telegramNoticeText(batch, makeT("es")), '<b>Ana te ha asignado 3 tareas (entre ellas «Pantalla de inicio»)</b>\nWeb\n\n<a href="https://pizarro.example.com/p/1?task=2">Abrir la tarea</a>');
+  assert.equal(mentionEmail(batch, makeT("en")).subject, "Ana assigned you 3 tasks (including “Pantalla de inicio”)");
+  assert.doesNotMatch(mentionEmail(batch, makeT("es")).html, /<blockquote/);
+  assert.equal(core.whatsappPayload("+34600111222", batch, { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", legacy: false }, makeT("es")).template.components[0]!.parameters[0]!.text, "Ana te ha asignado 3 tareas (entre ellas «Pantalla de inicio»)");
   // Los demás avisos conservan su extracto aunque coincida con el título.
   assert.match(core.telegramNoticeText({ ...m, type: "MENTION" }, makeT("es")), /<i>Pantalla de inicio<\/i>/);
   const mail = mentionEmail(m, makeT("es"));
-  assert.equal(mail.text, "Ana te ha asignado «Pantalla  de\ninicio» (Web)\n\nAbrir la tarea: https://pizarro.example.com/p/1?task=2\n");
+  assert.equal(mail.text, "Ana te ha asignado «Pantalla de inicio» (Web)\n\nAbrir la tarea: https://pizarro.example.com/p/1?task=2\n\nPuedes desactivar estos avisos en «Mi perfil» de Pizarro.\nNo respondas a este email: contesta en Pizarro.\n");
   assert.doesNotMatch(mail.html, /<blockquote/);
   assert.match(mentionEmail({ ...m, type: "COMMENT", excerpt: "Mira esto" }, makeT("es")).html, /<blockquote[^>]*>Mira esto</);
   const wa = core.whatsappPayload("+34600111222", m, { templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", legacy: false }, makeT("es"));

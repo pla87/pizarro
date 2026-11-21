@@ -52,6 +52,31 @@ export interface ReportInput {
   archivedCount: number;
   /** Campos opcionales que el proyecto tiene activados (el informe solo incluye esos). */
   taskFields?: TaskFieldKey[];
+  /**
+   * Recuentos de TODAS las tareas activas, hechos en la BD (`tasks` puede ser solo las primeras): de ellos salen el avance,
+   * las vencidas, los totales por columna, tipo y persona. Sin ellos se cuentan las de `tasks` (countsFromTasks).
+   */
+  counts?: ReportCounts;
+}
+
+/**
+ * Tareas activas (no archivadas ni fijas) de una misma columna, responsable y tipo: cuántas son y cuántas vencidas
+ * (plazo antes de hoy), con plazo en los próximos 7 días (hoy incluido) y sin plazo.
+ */
+interface ReportCountRow {
+  columnId: string;
+  assigneeName: string | null;
+  kind: string;
+  count: number;
+  overdue: number;
+  dueSoon: number;
+  withoutDue: number;
+}
+
+export interface ReportCounts {
+  rows: ReportCountRow[];
+  /** Tareas fijas activas. */
+  fixed: number;
 }
 
 /** Una tarea con algún campo opcional relleno, para la tabla «Campos opcionales» del informe. */
@@ -120,7 +145,15 @@ export interface Report {
   releases: ReportInput["releases"];
   /** null si el proyecto no tiene ningún campo opcional activado. */
   fields: ReportFields | null;
+  /**
+   * Tareas activas que no salen en los listados (el informe lee como mucho las primeras REPORT_MAX_TASKS; los recuentos
+   * sí son de todas). 0 si salen todas.
+   */
+  omittedTasks: number;
 }
+
+/** Máximo de tareas que lee el informe para sus listados (los recuentos se hacen en la BD sobre todas). */
+export const REPORT_MAX_TASKS = 2000;
 
 const pct = (part: number, total: number) => (total ? Math.round((part / total) * 100) : 0);
 
@@ -131,6 +164,27 @@ export function deliverableStatus(total: number, done: number, daysLeft: number 
   if (daysLeft < 0) return "Retrasado";
   if (daysLeft <= RISK_DAYS && pct(done, total) < 75) return "En riesgo";
   return "En plazo";
+}
+
+/** Recuentos a partir de las tareas recibidas (cuando no llegan hechos en la BD). */
+function countsFromTasks(tasks: ReportInput["tasks"], today: string): ReportCounts {
+  const rows = new Map<string, ReportCountRow>();
+  let fixed = 0;
+  for (const t of tasks) {
+    if (t.evergreen) {
+      fixed++;
+      continue;
+    }
+    const key = JSON.stringify([t.columnId, t.assigneeName, t.kind]);
+    const row = rows.get(key) ?? { columnId: t.columnId, assigneeName: t.assigneeName, kind: t.kind, count: 0, overdue: 0, dueSoon: 0, withoutDue: 0 };
+    const daysLeft = t.dueDate ? daysBetween(today, t.dueDate) : null;
+    row.count++;
+    if (daysLeft === null) row.withoutDue++;
+    else if (daysLeft < 0) row.overdue++;
+    else if (daysLeft <= RISK_DAYS) row.dueSoon++;
+    rows.set(key, row);
+  }
+  return { rows: [...rows.values()], fixed };
 }
 
 export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
@@ -154,10 +208,16 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
   });
 
   const all = input.tasks.map(toReportTask);
+  const counts = fullInput.counts ?? countsFromTasks(fullInput.tasks, today);
+  const rowDone = (r: ReportCountRow) => columnById.get(r.columnId)?.isDone ?? false;
+  const sum = (rows: ReportCountRow[], pick: (r: ReportCountRow) => number) => rows.reduce((n, r) => n + pick(r), 0);
+  const openRows = counts.rows.filter((r) => !rowDone(r));
   // Tipos configurados y, al final, cualquier otro que aparezca en las tareas.
-  const kindNames = [...new Set([...input.kinds, ...input.tasks.map((t) => t.kind)])];
+  const kindNames = [...new Set([...input.kinds, ...counts.rows.map((r) => r.kind), ...input.tasks.map((t) => t.kind)])];
   const open = all.filter((t) => !t.done);
-  const done = all.length - open.length;
+  const total = sum(counts.rows, (r) => r.count);
+  const openCount = sum(openRows, (r) => r.count);
+  const done = total - openCount;
   const overdue = open.filter((t) => t.daysLeft !== null && t.daysLeft < 0).sort((a, b) => a.daysLeft! - b.daysLeft!);
   const upcoming = open
     .filter((t) => t.daysLeft !== null && t.daysLeft >= 0 && t.daysLeft <= UPCOMING_DAYS)
@@ -165,12 +225,13 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
 
   const columns = input.columns.map((c) => {
     const tasks = input.tasks.filter((t) => t.columnId === c.id).map(toReportTask);
+    const rows = counts.rows.filter((r) => r.columnId === c.id);
     return {
       name: c.name,
       isDone: c.isDone,
-      count: tasks.length,
-      overdue: tasks.filter((t) => !t.done && t.daysLeft !== null && t.daysLeft < 0).length,
-      byType: kindNames.map((kind) => ({ label: kind, count: tasks.filter((t) => t.kind === kind).length })).filter((x) => x.count > 0),
+      count: sum(rows, (r) => r.count),
+      overdue: c.isDone ? 0 : sum(rows, (r) => r.overdue),
+      byType: kindNames.map((kind) => ({ label: kind, count: sum(rows.filter((r) => r.kind === kind), (r) => r.count) })).filter((x) => x.count > 0),
       // Pendientes primero por plazo; sin plazo al final.
       tasks: tasks.sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity)),
     };
@@ -195,12 +256,14 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
   });
 
   const peopleMap = new Map<string, { name: string; open: number; done: number; overdue: number }>();
-  for (const t of all) {
-    const name = t.assignee ?? tr("Sin asignar");
+  for (const r of counts.rows) {
+    const name = r.assigneeName ?? tr("Sin asignar");
     const p = peopleMap.get(name) ?? { name, open: 0, done: 0, overdue: 0 };
-    if (t.done) p.done++;
-    else p.open++;
-    if (!t.done && t.daysLeft !== null && t.daysLeft < 0) p.overdue++;
+    if (rowDone(r)) p.done += r.count;
+    else {
+      p.open += r.count;
+      p.overdue += r.overdue;
+    }
     peopleMap.set(name, p);
   }
 
@@ -210,27 +273,27 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
     today,
     time: input.time ?? null,
     kpis: {
-      total: all.length,
+      total,
       done,
-      open: open.length,
-      progressPct: pct(done, all.length),
-      overdue: overdue.length,
-      dueSoon: open.filter((t) => t.daysLeft !== null && t.daysLeft >= 0 && t.daysLeft <= RISK_DAYS).length,
-      unassignedOpen: open.filter((t) => !t.assignee).length,
-      withoutDueOpen: open.filter((t) => !t.dueDate).length,
+      open: openCount,
+      progressPct: pct(done, total),
+      overdue: sum(openRows, (r) => r.overdue),
+      dueSoon: sum(openRows, (r) => r.dueSoon),
+      unassignedOpen: sum(openRows.filter((r) => !r.assigneeName), (r) => r.count),
+      withoutDueOpen: sum(openRows, (r) => r.withoutDue),
       archived: input.archivedCount,
-      fixed,
+      fixed: counts.fixed,
     },
     columns,
     deliverables,
     overdue,
     upcoming,
     people: [...peopleMap.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name)),
-    types: kindNames.map((kind) => ({
-      label: kind,
-      open: open.filter((t) => t.kind === kind).length,
-      done: all.filter((t) => t.done && t.kind === kind).length,
-    })).filter((x) => x.open + x.done > 0),
+    types: kindNames.map((kind) => {
+      const rows = counts.rows.filter((r) => r.kind === kind);
+      const openN = sum(rows.filter((r) => !rowDone(r)), (r) => r.count);
+      return { label: kind, open: openN, done: sum(rows, (r) => r.count) - openN };
+    }).filter((x) => x.open + x.done > 0),
     recentDone: input.tasks
       // Fecha de cierre (historial); sin ella (p. ej. creada ya terminada), la última modificación.
       .map((t) => ({ t, at: t.doneAt ?? t.updatedAt }))
@@ -240,6 +303,7 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
       .map(({ t }) => toReportTask(t)),
     releases: input.releases,
     fields: buildReportFields(fullInput, columnById),
+    omittedTasks: fullInput.counts ? Math.max(0, total + counts.fixed - fullInput.tasks.length) : 0,
   };
 }
 
