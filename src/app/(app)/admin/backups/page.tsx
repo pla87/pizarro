@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { listJobRuns } from "@/lib/jobs";
 import { SCHEDULED_JOBS } from "@/lib/maintenance";
 import { requireAdminPage } from "@/lib/session";
+import { runsOnRailway } from "@/lib/update-check";
 import { getT } from "@/i18n/server";
 import { BackupsAdmin } from "./BackupsAdmin";
 
@@ -37,6 +38,7 @@ export default async function BackupsPage() {
       destinations={masked.destinations}
       externalRunning={externalCopyRunning()}
       paused={backupPaused()}
+      railway={runsOnRailway()}
     />
   );
 }

@@ -10,7 +10,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { backupStem, parseBackupFileName, selectBackupsToKeep } from "./backup-core";
 import { decodeManifest, encryptFileObject, mapLimit, objectKey, objectSize, selectGarbage, uniqueObjects, FILES_PREFIX, type FullManifest, type ManifestFile } from "./backup-files";
-import { parseS3Env, S3Client, type UploadBody } from "./backup-s3";
+import { isDeleteRefused, parseS3Env, S3Client, type UploadBody } from "./backup-s3";
 
 export type DestinationId = "local" | "dir" | "s3";
 
@@ -482,8 +482,12 @@ export async function syncBackup(
       result.bytes += manifest.db.bytes;
     }
   }
-  await dest.put(manifestKey(manifest.stem), manifestBytes);
-  result.bytes += manifestBytes.length;
+  // Ya subido (p. ej. «Copiar ahora a destino externo» con la copia que ya estaba): no se vuelve a escribir. Es el mismo
+  // fichero (el manifiesto de una copia no cambia), y con un bloqueo de retención en el bucket sobrescribirlo falla.
+  if ((await dest.head(manifestKey(manifest.stem))) !== manifestBytes.length) {
+    await dest.put(manifestKey(manifest.stem), manifestBytes);
+    result.bytes += manifestBytes.length;
+  }
   return result;
 }
 
@@ -495,6 +499,48 @@ interface PruneResult {
   gcSkipped: string | null;
   /** Temporales abandonados borrados (solo en carpetas). */
   removedTemp?: number;
+  /**
+   * Objetos que tocaba borrar y el destino no dejó (bloqueo de retención del bucket o clave sin permiso para borrar; ver
+   * isDeleteRefused): siguen allí y se vuelve a intentar en la próxima poda. No es un fallo.
+   */
+  retained?: number;
+}
+
+/**
+ * Si los primeros GIVE_UP_AFTER borrados de una poda se rechazan todos (clave sin permiso para borrar, o un bloqueo que
+ * cubre todo lo que toca borrar), el resto ni se intenta en esa pasada: cuenta como retenido y se reintenta en la próxima
+ * (como mucho una por copia subida, una vez al día). Así no se hacen miles de peticiones inútiles cada día.
+ */
+const GIVE_UP_AFTER = 50;
+
+/** Borrados de una poda que toleran los rechazos del destino (bloqueo de retención): los cuenta y sigue. */
+class TolerantDeleter {
+  deleted = 0;
+  retained = 0;
+  private refused = 0;
+  constructor(private readonly dest: BackupDestination) {}
+
+  private get gaveUp(): boolean {
+    return this.deleted === 0 && this.refused >= GIVE_UP_AFTER;
+  }
+
+  /** Borra `key`: true si se borró, false si el destino lo retiene. Cualquier otro error se lanza. */
+  async delete(key: string): Promise<boolean> {
+    if (this.gaveUp) {
+      this.retained++;
+      return false;
+    }
+    try {
+      await this.dest.delete(key);
+      this.deleted++;
+      return true;
+    } catch (err) {
+      if (!isDeleteRefused(err)) throw err;
+      this.refused++;
+      this.retained++;
+      return false;
+    }
+  }
 }
 
 /**
@@ -522,24 +568,39 @@ async function pruneBackups(dest: BackupDestination, key: Buffer, opts: { daily?
   // Copias que se conservan siempre (la última buena, ver lastGoodCopy), con sus ficheros.
   for (const stem of opts.protect ?? []) if (stems.some((s) => s.stem === stem && !s.partial)) keep.add(dumpKey(stem));
   let removedBackups = 0;
+  const deleter = new TolerantDeleter(dest);
+  /** Copias que tocaba borrar y siguen con su manifiesto (el destino no dejó borrarlo): retienen sus ficheros. */
+  const stillThere = new Set<string>();
   for (const s of stems) {
     if (s.partial ? opts.now - (stemDate(s.stem)?.getTime() ?? 0) < TEMP_MAX_AGE_MS : keep.has(dumpKey(s.stem))) continue;
-    // El manifiesto primero: una copia sin manifiesto ya no retiene objetos.
-    for (const k of [manifestKey(s.stem), dumpKey(s.stem), ...(opts.extraKeys?.(s.stem) ?? [])]) await dest.delete(k);
-    removedBackups++;
+    // El manifiesto primero: una copia sin manifiesto ya no retiene objetos. Si el destino no deja borrar una de sus
+    // claves (bloqueo de retención), no se intentan las demás: la copia sigue entera y se reintenta en la próxima poda.
+    const keys = [manifestKey(s.stem), dumpKey(s.stem), ...(opts.extraKeys?.(s.stem) ?? [])];
+    let complete = true;
+    for (const [i, k] of keys.entries()) {
+      if (await deleter.delete(k)) continue;
+      deleter.retained += keys.length - i - 1;
+      if (i === 0 && s.hasManifest) stillThere.add(s.stem);
+      complete = false;
+      break;
+    }
+    if (complete) removedBackups++;
   }
   const kept: { files: { o: string }[] }[] = [];
   for (const s of stems) {
-    if (!keep.has(dumpKey(s.stem)) || !s.hasManifest) continue;
+    if ((!keep.has(dumpKey(s.stem)) && !stillThere.has(s.stem)) || !s.hasManifest) continue;
     try {
       const m = await readManifest(dest, s.stem, key);
       // Sin ficheros en este destino, las copias hechas así no retienen nada (sus ficheros están en el externo).
       if (dest.files || m.localFiles !== false) kept.push({ files: m.files.map((f) => ({ o: f.o })) });
     } catch (err) {
-      return { removedBackups, removedObjects: 0, gcSkipped: `${s.stem}: ${err instanceof Error ? err.message : err}` };
+      return { removedBackups, removedObjects: 0, gcSkipped: `${s.stem}: ${err instanceof Error ? err.message : err}`, ...retainedField(deleter.retained) };
     }
   }
   const garbage = selectGarbage(await listObjectKeys(dest), kept);
-  for (const k of garbage) await dest.delete(k);
-  return { removedBackups, removedObjects: garbage.length, gcSkipped: null };
+  let removedObjects = 0;
+  for (const k of garbage) if (await deleter.delete(k)) removedObjects++;
+  return { removedBackups, removedObjects, gcSkipped: null, ...retainedField(deleter.retained) };
 }
+
+const retainedField = (n: number): { retained?: number } => (n > 0 ? { retained: n } : {});

@@ -54,6 +54,12 @@ describe("asistente de primer arranque", () => {
     assert.equal(await checkSetupCode(db, "OTRO-CODE", Date.now(), ENV), false);
   });
 
+  test("en Railway sin APP_URL, el enlace del log usa la dirección pública de Railway", async () => {
+    const lines: string[] = [];
+    const code = await announceSetup(db, (m) => lines.push(m), { RAILWAY_PUBLIC_DOMAIN: "pizarro-production.up.railway.app" });
+    assert.ok(lines.some((l) => l.includes(`Abre https://pizarro-production.up.railway.app/setup e introduce el código: ${code}`)), lines.join("\n"));
+  });
+
   test("un código incorrecto no crea nada", async () => {
     await assert.rejects(completeSetup(db, input("AAAA-AAAA"), ENV), /código/);
     assert.equal(await db.user.count(), 0);

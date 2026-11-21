@@ -72,6 +72,8 @@ export interface ExternalRun {
   bytes?: number;
   removedBackups?: number;
   removedObjects?: number;
+  /** Objetos que la retención debía borrar y el destino no dejó (bloqueo de retención del bucket): siguen allí. */
+  retained?: number;
   durationMs?: number;
   error?: string;
   warning?: string;
@@ -512,11 +514,11 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
         } catch (err) {
           warning = `Retención: ${message(err)}`;
         }
-        run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, durationMs: Date.now() - started, warning };
+        run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, ...(pruned?.retained ? { retained: pruned.retained } : {}), durationMs: Date.now() - started, warning };
         logEvent({
           level: warning ? "warn" : "info", category: "system", action: "backup.external",
-          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${logSize(sync.bytes)})${warning ? `. ${warning}` : ""}`,
-          durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null },
+          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${logSize(sync.bytes)})${pruned?.retained ? `. ${pruned.retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza)` : ""}${warning ? `. ${warning}` : ""}`,
+          durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null, retained: pruned?.retained ?? 0 },
         });
       } catch (err) {
         run = { at: at(), ok: false, label: dest.label, file: manifest.stem, durationMs: Date.now() - started, error: message(err) };

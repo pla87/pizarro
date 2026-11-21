@@ -5,6 +5,7 @@
 //   (en desarrollo: npx tsx scripts/reset-link.ts persona@example.com)
 //
 // Variables: DATABASE_URL y APP_URL (las mismas que la app).
+import { resolveAppUrl } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { createResetLink } from "@/lib/reset-link";
 
@@ -17,7 +18,7 @@ async function main() {
     process.exitCode = 2;
     return;
   }
-  const res = await createResetLink(emails[0]!, { appUrl: process.env.APP_URL ?? "http://localhost:3000", reset2fa: flags.includes("--reset-2fa") });
+  const res = await createResetLink(emails[0]!, { appUrl: resolveAppUrl().url ?? "http://localhost:3000", reset2fa: flags.includes("--reset-2fa") });
   if (!res.ok) {
     console.error(`[reset-link] ${res.error}`);
     process.exitCode = 1;

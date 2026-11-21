@@ -15,6 +15,8 @@ type Mod = {
   p3009Help: (names: string[], env?: Record<string, string | undefined>) => string[];
   transientDbError: (e: unknown) => boolean;
   dbTarget: (url: string | undefined) => string;
+  autoResolvePlan: (names: string[], sqlOf: (name: string) => string | null, rows: { migration_name: string; rolled_back_at: Date | null }[] | null) => { ok: boolean; reason?: string };
+  isPrismaInfoLine: (line: string) => boolean;
 };
 // Especificador no literal: el script es .mjs (lo ejecuta node sin compilar) y tsc no tiene sus tipos.
 const SCRIPT = new URL("../scripts/migrate.mjs", import.meta.url);
@@ -173,10 +175,49 @@ test("migrate.mjs: P3009 de prisma sale con error y la explicación en español"
     assert.match(r.stderr, /falló a medias \(P3009\): 20261126100000_quitar_indice/);
     assert.match(r.stderr, /migrate resolve --rolled-back 20261126100000_quitar_indice/);
     // Otro fallo de prisma: su código de salida, sin la ayuda de P3009.
+    // Es de las antiguas (sin BEGIN;/COMMIT;): no se marca como revertida sola, y se dice por qué.
+    assert.match(r.stdout, /no se reintenta sola: 20261126100000_quitar_indice es de las antiguas/);
+    assert.doesNotMatch(r.stdout, /se vuelve a aplicar/);
+    assert.equal(readFileSync(join(dir, "llamado"), "utf8").trim(), "migrate deploy");
     const dir2 = workdir("otro", "Error: P3018\n", 1);
     const r2 = await run(dir2, portOf(pg));
     assert.equal(r2.status, 1);
     assert.doesNotMatch(r2.stderr, /falló a medias/);
+  } finally {
+    await close(pg);
+  }
+});
+
+test("migrate.mjs: solo se reintenta sola una migración en una transacción, posterior a la v1.62.0 y por primera vez", () => {
+  const nueva = "20270101000000_nueva";
+  const tx = "-- Qué hace\nBEGIN;\nALTER TABLE \"Task\" ADD COLUMN \"x\" TEXT;\nCOMMIT;\n";
+  const sql = (text: string | null) => () => text;
+  const failed = [{ migration_name: nueva, rolled_back_at: null }];
+  assert.deepEqual(m.autoResolvePlan([nueva], sql(tx), failed), { ok: true });
+  // Ya se volvió a aplicar una vez (fila revertida) y ha vuelto a fallar: no se repite en cada arranque.
+  assert.match(m.autoResolvePlan([nueva], sql(tx), [{ migration_name: nueva, rolled_back_at: new Date() }, ...failed]).reason!, /ya se volvió a aplicar una vez/);
+  // Antiguas (hasta 20261126100000, sin transacción) o sin BEGIN;/COMMIT;: pudo quedar a medias.
+  assert.match(m.autoResolvePlan(["20261126100000_quitar_indice"], sql(tx), failed).reason!, /antiguas/);
+  assert.match(m.autoResolvePlan([nueva], sql("ALTER TABLE \"Task\" ADD COLUMN \"x\" TEXT;\n"), failed).reason!, /no empieza por «BEGIN;»/);
+  assert.match(m.autoResolvePlan([nueva], sql(null), failed).reason!, /no se encuentra/);
+  // Varias: todas deben cumplirlo. Sin nombre o sin poder leer la base, no.
+  assert.equal(m.autoResolvePlan([nueva, "20261120000000_vieja"], sql(tx), failed).ok, false);
+  assert.equal(m.autoResolvePlan([], sql(tx), failed).ok, false);
+  assert.match(m.autoResolvePlan([nueva], sql(tx), null).reason!, /estado/);
+});
+
+test("migrate.mjs: las líneas informativas de Prisma van a stdout (Railway pinta stderr en rojo); los errores siguen en stderr", async () => {
+  for (const l of ["Loaded Prisma config from prisma.config.ts.", "", "Prisma schema loaded from prisma/schema.prisma.", 'Datasource "db": PostgreSQL database "pizarro"']) assert.equal(m.isPrismaInfoLine(l), true, l);
+  for (const l of ["Error: P3009", "migrate found failed migrations", "Error: ERROR: current transaction is aborted"]) assert.equal(m.isPrismaInfoLine(l), false, l);
+  const pg = await fakePg();
+  try {
+    const dir = workdir("info", "Loaded Prisma config from prisma.config.ts.\n\nPrisma schema loaded from prisma/schema.prisma.\nwarn algo raro\n", 0);
+    const r = await run(dir, portOf(pg));
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /Loaded Prisma config from prisma\.config\.ts\.\n\nPrisma schema loaded from prisma\/schema\.prisma\./);
+    assert.doesNotMatch(r.stderr, /Loaded Prisma config|Prisma schema loaded/);
+    assert.match(r.stderr, /^warn algo raro$/m);
+    assert.match(r.stdout, /Base de datos al día \(migraciones: \d+,\d s\)/);
   } finally {
     await close(pg);
   }

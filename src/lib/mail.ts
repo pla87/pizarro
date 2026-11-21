@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { after } from "next/server";
 import nodemailer from "nodemailer";
+import { resolveAppUrl } from "./app-url";
 import { logEvent } from "./log";
 import { getInstanceSettings } from "./instance";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
@@ -41,7 +42,8 @@ export function emailEnabled(): boolean {
 
 /** URL pública de la app; todos los enlaces de los emails salen de aquí, nunca de la petición. */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  // Sin APP_URL, la dirección pública de Railway (lib/app-url.ts, la misma regla que el arranque).
+  return (resolveAppUrl().url ?? "http://localhost:3000").replace(/\/$/, "");
 }
 
 export { escapeHtml } from "./html-escape";
