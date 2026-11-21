@@ -18,7 +18,7 @@ import { GET as googleCallback } from "../../src/app/api/auth/google/callback/ro
 import { generateTotpSecret, hashEmailCode, totpAt } from "../../src/lib/two-factor-core";
 import { loadTaskHistory } from "../../src/lib/task-events";
 import { flushLogs } from "../../src/lib/log";
-import { eraseUser } from "../../src/lib/user-delete";
+import { eraseUser, soloPrivateProjectIdsByUser, soloPrivateProjects } from "../../src/lib/user-delete";
 import { ADMINS_LOCK_NAME } from "../../src/lib/advisory-locks";
 import { makeT } from "../../src/i18n/core";
 import { visibleProjectsWhere } from "../../src/lib/access";
@@ -154,6 +154,37 @@ describe("borrar mi cuenta", () => {
     assert.equal(await db.task.count({ where: { projectId: a.project.id } }), 0);
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: b.project.id } })).isPrivate, false, "el no marcado pasa a ser de equipo");
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: joined.project.id } })).isPrivate, true, "el que ya tiene otro miembro sigue privado");
+  });
+
+  test("un privado cuyos demás miembros están desactivados cuenta como suyo: pasa a ser de equipo, sin miembros ni asignados", async () => {
+    const u = await member();
+    const inactive = await makeUser({ active: false });
+    const active = await makeUser();
+    const admin = await makeUser({ role: "ADMIN" });
+    const lonely = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive] });
+    const shared = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive, active] });
+    const dropped = await makeProject({ visibility: "PRIVATE", owner: u, members: [inactive] });
+    const assigned = await makeTask(lonely);
+    await db.task.update({ where: { id: assigned.id }, data: { assigneeId: inactive.id } });
+    const sharedTask = await makeTask(shared);
+    await db.task.update({ where: { id: sharedTask.id }, data: { assigneeId: inactive.id } });
+    // Lo que se enseña al confirmar: los dos con solo miembros desactivados, no el que tiene otro miembro activo.
+    assert.deepEqual((await soloPrivateProjects(u.id)).map((p) => p.id).sort(), [lonely.project.id, dropped.project.id].sort());
+    const byUser = await soloPrivateProjectIdsByUser();
+    assert.deepEqual((byUser.get(u.id) ?? []).sort(), [lonely.project.id, dropped.project.id].sort());
+    assert.equal(byUser.get(active.id), undefined);
+
+    expectOk(await deleteMyAccount({ password: PASSWORD, deleteProjects: [dropped.project.id] }));
+    const p = await db.project.findUniqueOrThrow({ where: { id: lonely.project.id }, select: { isPrivate: true, privateOwnerId: true, _count: { select: { members: true } } } });
+    assert.deepEqual([p.isPrivate, p.privateOwnerId, p._count.members], [false, null, 0], "de equipo, sin miembros");
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: assigned.id } })).assigneeId, null, "la tarjeta del desactivado queda sin asignar");
+    assert.equal(await db.project.count({ where: { id: lonely.project.id, ...visibleProjectsWhere({ id: admin.id, role: "ADMIN" } as CurrentUser) } }), 1, "lo ven los administradores");
+    // El marcado para borrar se borra aunque tuviera miembros desactivados.
+    assert.equal(await db.project.count({ where: { id: dropped.project.id } }), 0);
+    // Con otro miembro activo sigue privado y el desactivado sigue en él, con su tarjeta.
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: shared.project.id } })).isPrivate, true);
+    assert.deepEqual((await db.projectMember.findMany({ where: { projectId: shared.project.id } })).map((m) => m.userId).sort(), [inactive.id, active.id].sort());
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: sharedTask.id } })).assigneeId, inactive.id);
   });
 
   test("Administración → Usuarios: la misma regla y la misma casilla", async () => {

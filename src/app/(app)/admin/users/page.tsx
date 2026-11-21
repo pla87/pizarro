@@ -4,6 +4,7 @@ import { googleEnabled } from "@/lib/google";
 import { emailEnabled } from "@/lib/mail";
 import { getInstanceSettings } from "@/lib/instance";
 import { requireAdminPage } from "@/lib/session";
+import { soloPrivateProjectIdsByUser } from "@/lib/user-delete";
 import { getT } from "@/i18n/server";
 import { UsersAdmin } from "./UsersAdmin";
 
@@ -21,11 +22,9 @@ export default async function UsersPage() {
       _count: { select: { sessions: true, knownDevices: true } },
     },
   });
-  // De los proyectos privados en los que cada usuario es el único miembro solo se pasan los ids (los administradores no
-  // ven sus nombres): al borrarlo pasan a ser de equipo, o se borran con él si se marca la casilla.
-  const privates = await db.project.findMany({ where: { isPrivate: true }, select: { id: true, members: { select: { userId: true } } } });
-  const sole = new Map<string, string[]>();
-  for (const p of privates) if (p.members.length === 1) sole.set(p.members[0]!.userId, [...(sole.get(p.members[0]!.userId) ?? []), p.id]);
+  // De los proyectos privados en los que cada usuario es el único miembro activo solo se pasan los ids (los
+  // administradores no ven sus nombres): al borrarlo pasan a ser de equipo, o se borran con él si se marca la casilla.
+  const sole = await soloPrivateProjectIdsByUser();
   const rows = users.map(({ twoFactorMethod, googleSub, _count, ...u }) => ({
     ...u,
     twoFactor: twoFactorMethod !== null,

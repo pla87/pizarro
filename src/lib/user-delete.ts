@@ -21,15 +21,37 @@ import { DELETION_BLOCK_MESSAGES, deletionBlockFor, type DeletionBlock } from ".
 // documentos y releases; la pantalla lo muestra como «Usuario eliminado». El historial de las tareas guarda el nombre
 // en texto (TaskEvent.userName): se vacía aquí y también se muestra como «Usuario eliminado».
 
-/** Proyectos privados en los que la persona es el único miembro. */
-const soloPrivateWhere = (userId: string): Prisma.ProjectWhereInput => ({ isPrivate: true, members: { some: { userId }, none: { userId: { not: userId } } } });
+/**
+ * Proyectos privados en los que la persona es el único miembro activo: los demás, si los hay, están desactivados. Es la
+ * misma cuenta que removeProjectMember (el último miembro activo no puede salir): al borrar la cuenta nadie activo
+ * seguiría viéndolo, así que no puede quedarse privado.
+ */
+const soloPrivateWhere = (userId: string): Prisma.ProjectWhereInput => ({
+  isPrivate: true,
+  members: { some: { userId }, none: { userId: { not: userId }, user: { active: true } } },
+});
 
 /**
- * Proyectos privados en los que la persona es el único miembro, por nombre. Al borrar la cuenta pasan a ser proyectos de
- * equipo (sin miembros: los ven los administradores) salvo que se pida borrarlos también (eraseUser).
+ * Proyectos privados en los que la persona es el único miembro activo, por nombre. Al borrar la cuenta pasan a ser
+ * proyectos de equipo (sin miembros: los ven los administradores) salvo que se pida borrarlos también (eraseUser).
  */
 export async function soloPrivateProjects(userId: string): Promise<{ id: string; name: string }[]> {
   return db.project.findMany({ where: soloPrivateWhere(userId), orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true } });
+}
+
+/**
+ * Lo mismo para todas las cuentas a la vez (Administración → Usuarios): de cada persona, los ids de los proyectos privados
+ * en los que es el único miembro activo. Con un proyecto sin ningún miembro activo, cuenta para cada uno de sus miembros.
+ */
+export async function soloPrivateProjectIdsByUser(): Promise<Map<string, string[]>> {
+  const privates = await db.project.findMany({ where: { isPrivate: true }, select: { id: true, members: { select: { userId: true, user: { select: { active: true } } } } } });
+  const sole = new Map<string, string[]>();
+  for (const p of privates) {
+    const active = p.members.filter((m) => m.user.active);
+    const candidates = active.length === 1 ? active : active.length === 0 ? p.members : [];
+    for (const m of candidates) sole.set(m.userId, [...(sole.get(m.userId) ?? []), p.id]);
+  }
+  return sole;
 }
 
 /** ¿Se puede borrar esta cuenta? null si sí. */
@@ -55,8 +77,9 @@ interface EraseResult {
  * esa comprobación, aún con el candado, se descartan su historial de deshacer y sus exportaciones (liberando los
  * ficheros que solo ellos retenían): si la baja no puede seguir, no se ha perdido nada.
  *
- * Proyectos privados de los que es el único miembro: en la misma transacción pasan a ser proyectos de equipo, sin
- * miembros (los ven los administradores, como un proyecto de equipo cuyo único miembro se ha ido); queda anotado en el
+ * Proyectos privados de los que es el único miembro activo: en la misma transacción pasan a ser proyectos de equipo, sin
+ * miembros (los ven los administradores, como un proyecto de equipo cuyo único miembro se ha ido; los miembros
+ * desactivados que tuviera salen de él y sus tarjetas quedan sin asignar, como en removeProjectMember); queda anotado en el
  * registro de actividad. Los que vengan en `deleteProjects` (los que se le enseñaron a quien confirma) se borran después,
  * con todo lo que tienen, si siguen privados y sin miembros; si el borrado falla, pasan también a ser de equipo. Los
  * privados con más miembros siguen privados, sin la persona. Los que pasan a ser de equipo se avisan a los demás
@@ -80,6 +103,14 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     const reportsOff = await tx.reportSchedule.findMany({ where: { enabled: true, recipient: { equals: user.email, mode: "insensitive" } }, select: { projectId: true } });
     if (reportsOff.length) await tx.reportSchedule.updateMany({ where: { projectId: { in: reportsOff.map((r) => r.projectId) } }, data: { enabled: false } });
     const solo = await tx.project.findMany({ where: soloPrivateWhere(userId), orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true } });
+    // Los demás miembros de esos proyectos están desactivados: salen, como si se les quitara del proyecto (sus tarjetas
+    // quedan sin asignar). Así el proyecto queda sin miembros, igual que cuando la persona era la única.
+    for (const p of solo) {
+      const rest = await tx.projectMember.findMany({ where: { projectId: p.id, userId: { not: userId } }, select: { userId: true } });
+      if (!rest.length) continue;
+      await tx.projectMember.deleteMany({ where: { projectId: p.id, userId: { not: userId } } });
+      await tx.task.updateMany({ where: { projectId: p.id, assigneeId: { in: rest.map((m) => m.userId) } }, data: { assigneeId: null } });
+    }
     const toTeam = solo.filter((p) => !wanted.has(p.id)).map((p) => p.id);
     if (toTeam.length) await tx.project.updateMany({ where: { id: { in: toTeam } }, data: { isPrivate: false, privateOwnerId: null } });
     await tx.taskEvent.updateMany({ where: { userId }, data: { userName: "" } });
@@ -117,7 +148,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     revokeProject(p.id);
     logEvent({
       category: "action", action: "users.privateProjectToTeam",
-      message: `El proyecto privado «${p.name}» pasa a ser de equipo al borrarse la cuenta de «${userName}», su único miembro: ahora lo ven los administradores`,
+      message: `El proyecto privado «${p.name}» pasa a ser de equipo al borrarse la cuenta de «${userName}», su único miembro activo: ahora lo ven los administradores`,
       userId: opts.actor?.id ?? null, userName: opts.actor?.name ?? null, projectId: p.id, details: { deletedUserId: userId },
     });
   }

@@ -347,7 +347,7 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
 
 /**
  * Aviso a cada administrador activo de que un proyecto privado ha pasado a ser de equipo al borrarse la cuenta de su
- * único miembro (eraseUser): uno por proyecto y administrador, con enlace al proyecto. En la campana siempre; por
+ * único miembro activo (eraseUser): uno por proyecto y administrador, con enlace al proyecto. En la campana siempre; por
  * email, Telegram y WhatsApp según sus preferencias de «Avisos de menciones» (emailWanted, channelWants). El texto se
  * escribe al leerlo, en el idioma de cada uno. `deletedName` queda en el extracto (la cuenta ya no existe). `excludeId`:
  * el administrador que ha borrado la cuenta, que acaba de ver la lista al confirmar.
