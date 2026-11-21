@@ -24,6 +24,13 @@ export async function onRequestError(
 // Arranque del servidor: registra los errores del proceso y lanza el mantenimiento periódico (solo runtime Node; imports dinámicos para no tocar el bundle edge).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Lo primero: sin APP_URL, la dirección pública de Railway (lib/app-url.ts). Todo lo que viene después la lee.
+  try {
+    const { applyAppUrlFallback } = await import("@/lib/app-url");
+    applyAppUrlFallback(process.env, (m) => console.log(`[start] ${m}`));
+  } catch (err) {
+    console.error("[instrumentation] no se pudo completar APP_URL", err);
+  }
   // Dirección de la conexión en cada petición (la IP del cliente sin proxy delante; ver lib/client-ip.ts y TRUST_PROXY).
   try {
     const { installPeerIpHeader } = await import("@/lib/peer-ip");
@@ -68,6 +75,13 @@ export async function register() {
     startMaintenance();
   } catch (err) {
     console.error("[instrumentation] no se pudo iniciar el mantenimiento", err);
+  }
+  // ¿Otra copia de Pizarro con esta misma base de datos? Solo avisa (log y Administración), nunca impide arrancar.
+  try {
+    const { startInstanceLock } = await import("@/lib/instance-lock");
+    startInstanceLock();
+  } catch (err) {
+    console.error("[instrumentation] no se pudo comprobar si hay otra copia usando la base de datos", err);
   }
   // Configuración del envío de emails guardada en Administración: emailEnabled() es síncrona y lee esta copia en memoria.
   try {

@@ -102,6 +102,17 @@ L.eq("ARR: se registra system.boot", (await L.q(`SELECT count(*)::int n FROM "Ap
 L.check("ARR: plantillas de proyecto de serie creadas", (await L.q(`SELECT count(*)::int n FROM "ProjectTemplate"`))[0].n > 0);
 L.check("ARR: historial de versiones sincronizado", (await L.q(`SELECT count(*)::int n FROM "AppVersionLog"`))[0].n > 0);
 L.eq("ARR: ningún usuario (lo crea el asistente)", (await L.q(`SELECT count(*)::int n FROM "User"`))[0].n, 0);
+{
+  // Páginas HTML con «no-transform» (Cloudflare no reescribe los emails), sin quitar lo que pone Next; el JSON, sin él.
+  const html = (await fetch(`${L.BASE}/login`)).headers.get("cache-control") ?? "";
+  L.check("ARR: el HTML lleva Cache-Control con no-transform (y lo de Next)", /no-transform/.test(html) && /no-store|no-cache|max-age|s-maxage/.test(html), html);
+  const json = (await fetch(`${L.BASE}/api/health`)).headers.get("cache-control") ?? "";
+  L.check("ARR: /api/health (JSON) sin no-transform", !/no-transform/.test(json), json);
+  // El servidor tiene el bloqueo de «una sola copia por base de datos» (src/lib/instance-lock.ts) y no avisa de nada.
+  const held = async () => (await L.q(`SELECT count(*)::int n FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid WHERE l.locktype = 'advisory' AND l.granted AND l.objid = 741031006 AND a.application_name LIKE 'pizarro-instance:%' AND a.datname = current_database()`))[0].n;
+  L.check("ARR: el servidor tiene el bloqueo de instancia de esta base", await L.waitFor(async () => (await held()) === 1, { timeout: 10000 }));
+  L.check("ARR: sin aviso de otra copia en el log", !/otra copia de Pizarro/.test(out), out.slice(-800));
+}
 
 // --- 2. Asistente: cambiar de idioma no lo reinicia ---------------------------------------------------------------------
 L.scenario("asistente /setup");
@@ -202,6 +213,11 @@ await w.page.locator("section#instalacion").waitFor({ timeout: 15000 }); // la p
 await L.waitFor(async () => (await w.page.evaluate(() => document.documentElement.dataset.tz)) === "Atlantic/Canary", { timeout: 10000 });
 L.eq("INST: el navegador ya usa la zona nueva (data-tz)", await w.page.evaluate(() => document.documentElement.dataset.tz), "Atlantic/Canary");
 L.check("INST: el título lleva el nombre nuevo", (await w.page.title()).includes("Acme Iberia"), await w.page.title());
+{
+  const appUrl = await w.page.locator("[data-testid=instance-app-url]").innerText().catch(() => "");
+  L.check("INST: muestra APP_URL y que sale de la variable", appUrl.includes(L.BASE) && /APP_URL/.test(appUrl), appUrl);
+  L.eq("INST: sin aviso de otra copia usando la base", await w.page.locator("[data-testid=instance-notice]").count(), 0);
+}
 await L.waitFor(async () => (await L.q(`SELECT count(*)::int n FROM "AppLog" WHERE action='settings.saveInstallationSettings'`))[0].n > 0, { timeout: 10000 });
 L.eq("INST: queda en el registro de actividad", (await L.q(`SELECT message FROM "AppLog" WHERE action='settings.saveInstallationSettings' ORDER BY "createdAt" DESC LIMIT 1`))[0]?.message, "Cambió los ajustes de la instalación");
 {

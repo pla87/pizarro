@@ -103,7 +103,6 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
    TOKEN_SECRET=${{secret(48)}}
    ENCRYPTION_KEY=${{secret(48)}}
    BACKUP_KEY=${{secret(64, "0123456789abcdef")}}
-   APP_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
    UPLOAD_DIR=/app/uploads
    ```
 

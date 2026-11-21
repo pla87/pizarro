@@ -33,7 +33,8 @@ if [ -n "$missing" ]; then
   sleep 20
   exit 1
 fi
-[ -n "$APP_URL" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
+# Sin APP_URL en Railway se usa su dirección pública (RAILWAY_PUBLIC_DOMAIN; lo dice el log del servidor, src/lib/app-url.ts).
+[ -n "$APP_URL" ] || [ -n "$RAILWAY_PUBLIC_DOMAIN" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
 
 # Espera a que PostgreSQL responda (hasta 3 min; sin espera si ya responde) y aplica las migraciones
 # (migrator/). Si falla, explica en español qué comprobar (base caída, migración a medias: P3009).

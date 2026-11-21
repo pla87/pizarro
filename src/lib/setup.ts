@@ -2,6 +2,7 @@
 // Sin "server-only" ni imports de Next: lo usa también scripts/boot.ts (empaquetado con esbuild).
 import type { PrismaClient } from "@/generated/prisma/client";
 import { LOCK_SETUP } from "./advisory-locks";
+import { resolveAppUrl } from "./app-url";
 import { AppError } from "./errors";
 import { validTimeZone } from "./format";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, invalidateInstance } from "./instance";
@@ -44,7 +45,8 @@ export async function announceSetup(db: PrismaClient, log: (msg: string) => void
     return null;
   }
   const { code } = await issueSetupCode(db);
-  const base = (env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  // Misma regla que el servidor (lib/app-url.ts): sin APP_URL, la dirección pública de Railway.
+  const base = (resolveAppUrl(env).url ?? "http://localhost:3000").replace(/\/$/, "");
   const bar = "=".repeat(64);
   log(bar);
   log("[setup] PIZARRO ESTÁ SIN CONFIGURAR");

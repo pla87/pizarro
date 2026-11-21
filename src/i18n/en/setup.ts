@@ -40,4 +40,9 @@ export const setup: Record<string, string> = {
   "Zona horaria no válida.": "Invalid time zone.",
   "Escribe tu nombre (hasta 100 caracteres).": "Enter your name (up to 100 characters).",
   "Contraseña no válida.": "Invalid password.",
+  // Ajustes → Instalación: dirección pública (APP_URL) y de dónde sale
+  "Dirección pública (APP_URL)": "Public address (APP_URL)",
+  "Fijada por la variable APP_URL del servidor.": "Set by the server's APP_URL variable.",
+  "Sin APP_URL: es la dirección pública que da Railway (RAILWAY_PUBLIC_DOMAIN). Si usas un dominio propio, define APP_URL en Variables y vuelve a desplegar.": "No APP_URL: this is the public address Railway provides (RAILWAY_PUBLIC_DOMAIN). If you use your own domain, set APP_URL under Variables and redeploy.",
+  "Sin definir: los enlaces de los emails llevarán a http://localhost:3000. Define APP_URL en el servidor (por ejemplo https://pizarro.example.com) y vuelve a arrancar.": "Not set: links in emails will point to http://localhost:3000. Set APP_URL on the server (for example https://pizarro.example.com) and restart.",
 };

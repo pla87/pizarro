@@ -64,7 +64,7 @@ function keyProblemText(p: BackupKeyDiagnosis | null, t: (s: string, v?: Record<
 }
 
 /** Panel «Copias de seguridad»: estado de la última copia, de la copia externa y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning, paused = false }: {
+export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning, paused = false, railway = false }: {
   keyState: "ok" | "missing" | "invalid";
   keyProblem: BackupKeyDiagnosis | null;
   status: BackupStatus;
@@ -76,6 +76,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   externalRunning: boolean;
   /** BACKUP_PAUSE=1: las tareas automáticas de copia están detenidas. */
   paused?: boolean;
+  /** La app corre en Railway: las variables se añaden en el panel del servicio. */
+  railway?: boolean;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -84,6 +86,15 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const enabled = keyState === "ok";
+  // Tareas de copia que terminan sin hacer nada (y JobRun las da por correctas): se dice por qué, en vez de «Correcta».
+  const jobSkipped = (name: string): string | null => {
+    const backupJob = name === "backup" || name === "backupExternal" || name === "restoreTest" || name === "backupAlert";
+    if (!backupJob) return null;
+    if (keyState !== "ok") return t("Omitida: sin BACKUP_KEY");
+    if (paused && name !== "backupAlert") return t("Omitida: BACKUP_PAUSE");
+    if (name === "backupExternal" && destinations.external.length === 0 && destinations.errors.length === 0) return t("Omitida: sin destino externo");
+    return null;
+  };
   // Descarga protegida: se pide la contraseña (o un código de la app) y solo entonces se pide el fichero con un token de un solo uso.
   const [dlOpen, setDlOpen] = useState(false);
   const [useCode, setUseCode] = useState(false);
@@ -179,6 +190,11 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>
         )}
+        {r.ok && r.retained ? (
+          <p className="mt-1 text-slate-500" data-testid="backup-retained">
+            {t("{n} objetos retenidos por el bloqueo del bucket: la retención no puede borrarlos todavía y lo intentará en la próxima copia.", { n: r.retained })}
+          </p>
+        ) : null}
         {r.warning && <p className="mt-1 break-words text-amber-700 dark:text-amber-300">{r.warning}</p>}
         {!r.ok && lastOkAt && <p className="mt-1 text-slate-500">{t("Última subida correcta: {date}", { date: formatDate(lastOkAt, "dateTime", locale) })}</p>}
       </div>
@@ -303,6 +319,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           destinations.errors.length === 0 && (
             <p className="text-sm text-amber-700 dark:text-amber-300">
               {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
+              {railway && <>{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}{" "}</>}
               <a href={installSectionUrl("backups", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
           )
@@ -366,20 +383,23 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           <p className="text-sm text-slate-500">{t("Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).")}</p>
         ) : (
           <ul className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
-            {jobs.map((j) => (
-              <li key={j.name} className="py-1.5">
+            {jobs.map((j) => {
+              const skipped = j.lastOk ? jobSkipped(j.name) : null;
+              return (
+              <li key={j.name} className="py-1.5" data-job={j.name}>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span>{jobLabel(t, j.name)}</span>
                   <span className="flex items-center gap-2 text-slate-500">
                     {j.lastStartedAt && formatDate(j.lastStartedAt, "dateTimeShort", locale)}
-                    <span className={j.lastOk === false ? "badge bg-red-50 text-red-700 ring-red-500/20" : j.lastOk ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-slate-50 text-slate-600 ring-slate-500/20"}>
-                      {j.lastOk === false ? t("Con error") : j.lastOk ? t("Correcta") : t("En curso")}
+                    <span className={j.lastOk === false ? "badge bg-red-50 text-red-700 ring-red-500/20" : skipped ? "badge bg-amber-50 text-amber-800 ring-amber-500/20" : j.lastOk ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-slate-50 text-slate-600 ring-slate-500/20"}>
+                      {j.lastOk === false ? t("Con error") : skipped ?? (j.lastOk ? t("Correcta") : t("En curso"))}
                     </span>
                   </span>
                 </div>
                 {j.lastOk === false && j.lastError && <p className="mt-0.5 break-words text-xs text-red-600 dark:text-red-400">{j.lastError}</p>}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

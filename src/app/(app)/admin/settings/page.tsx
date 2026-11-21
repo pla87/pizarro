@@ -4,6 +4,7 @@ import { getT } from "@/i18n/server";
 import { storageAdminView } from "@/lib/storage-stats";
 import { getInstanceSettings } from "@/lib/instance";
 import { getAppIcon } from "@/lib/app-icon";
+import { resolveAppUrl } from "@/lib/app-url";
 import { appTimeZone, DEFAULT_TIME_ZONE, envTimeZone } from "@/lib/format";
 import { SettingsAdmin } from "./SettingsAdmin";
 
@@ -21,6 +22,8 @@ export default async function SettingsPage() {
   const zoneLocked = envTimeZone() !== null;
   const zones = zoneLocked ? [] : typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [DEFAULT_TIME_ZONE];
   if (!zoneLocked && !zones.includes("UTC")) zones.push("UTC");
-  const installation = { orgName: instance.orgName, locale: instance.locale, timeZone: zoneLocked ? appTimeZone() : instance.timeZone || appTimeZone(), zoneLocked, zones };
+  // APP_URL y de dónde sale (la variable o, sin ella, la dirección pública de Railway: lib/app-url.ts).
+  const appUrl = resolveAppUrl();
+  const installation = { orgName: instance.orgName, locale: instance.locale, timeZone: zoneLocked ? appTimeZone() : instance.timeZone || appTimeZone(), zoneLocked, zones, appUrl: appUrl.url, appUrlSource: appUrl.source };
   return <SettingsAdmin maxComments={maxComments} storage={storage} installation={installation} appIcon={appIcon} />;
 }

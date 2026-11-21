@@ -5,9 +5,12 @@
 // la respuesta sale con «Transfer-Encoding: chunked». Sin el tamaño, el navegador no puede enseñar el progreso ni el
 // tiempo que queda de una descarga larga (los ZIP de adjuntos). Una ruta que conoce el tamaño exacto de lo que envía
 // lo pone en DECLARED_LENGTH_HEADER, y aquí, al escribir las cabeceras, pasa a ser el Content-Length de verdad.
+//
+// El mismo gancho añade «no-transform» al Cache-Control de las páginas HTML (ver html-no-transform.ts).
 
 import http from "node:http";
 import https from "node:https";
+import { applyHtmlNoTransform } from "./html-no-transform";
 
 /** Cabecera interna con el tamaño exacto del cuerpo; no sale al cliente. */
 export const DECLARED_LENGTH_HEADER = "x-pz-content-length";
@@ -39,7 +42,11 @@ export function installDeclaredLength(): void {
           const writeHead = res.writeHead;
           // Cabeceras implícitas (el primer write) también pasan por writeHead.
           res.writeHead = function (this: http.ServerResponse, ...a: unknown[]) {
-            if (!this.headersSent) applyDeclaredLength(this);
+            if (!this.headersSent) {
+              applyDeclaredLength(this);
+              // Y en las páginas HTML, «no-transform» en el Cache-Control (lib/html-no-transform.ts: Cloudflare y los emails).
+              applyHtmlNoTransform(this);
+            }
             return (writeHead as (...x: unknown[]) => http.ServerResponse).apply(this, a);
           } as typeof res.writeHead;
         }

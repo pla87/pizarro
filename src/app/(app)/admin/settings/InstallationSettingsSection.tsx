@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { Locale } from "@/i18n/shared";
 import { actionThrowResult } from "@/lib/stale-action";
+import type { AppUrlSource } from "@/lib/app-url";
 
 export interface InstallationView {
   orgName: string;
@@ -16,6 +17,9 @@ export interface InstallationView {
   /** APP_TIMEZONE manda: la zona se muestra como texto, sin selector (y `zones` va vacía). */
   zoneLocked: boolean;
   zones: string[];
+  /** Dirección pública (APP_URL) y de dónde sale: la variable, la de Railway (RAILWAY_PUBLIC_DOMAIN) o ninguna. */
+  appUrl: string | null;
+  appUrlSource: AppUrlSource;
 }
 
 /** «Instalación»: lo que se eligió en el asistente de primer arranque (nombre, idioma por defecto y zona horaria). */
@@ -78,6 +82,17 @@ export function InstallationSettingsSection({ view }: { view: InstallationView }
             </select>
           </label>
         )}
+      </div>
+      <div className="text-sm" data-testid="instance-app-url">
+        <span className="font-medium">{t("Dirección pública (APP_URL)")}</span>
+        {view.appUrl && <p className="mt-1 break-all font-mono text-sm">{view.appUrl}</p>}
+        <span className={`block text-xs ${view.appUrlSource === "none" ? "mt-1 text-amber-700 dark:text-amber-300" : "text-slate-500"}`}>
+          {view.appUrlSource === "env"
+            ? t("Fijada por la variable APP_URL del servidor.")
+            : view.appUrlSource === "railway"
+              ? t("Sin APP_URL: es la dirección pública que da Railway (RAILWAY_PUBLIC_DOMAIN). Si usas un dominio propio, define APP_URL en Variables y vuelve a desplegar.")
+              : t("Sin definir: los enlaces de los emails llevarán a http://localhost:3000. Define APP_URL en el servidor (por ejemplo https://pizarro.example.com) y vuelve a arrancar.")}
+        </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn-primary py-1.5" onClick={save} disabled={pending || !dirty || !validName}>

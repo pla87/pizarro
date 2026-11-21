@@ -355,4 +355,12 @@ export const admin: Record<string, string> = {
   // Integraciones → Email: aviso de APP_URL (ronda 59)
   "Falta la variable APP_URL del servidor (la dirección pública de Pizarro): los enlaces de los emails llevarán a http://localhost:3000 y no funcionarán. Defínela (por ejemplo https://pizarro.tuempresa.com) y redespliega.": "The server's APP_URL variable is missing (Pizarro's public address): links in emails will point to http://localhost:3000 and won't work. Set it (for example https://pizarro.yourcompany.com) and redeploy.",
   "Entras por {current} pero APP_URL es {app}, y los enlaces de los emails salen de APP_URL. Es normal si aún usas la dirección antigua; para usar {current}, cambia APP_URL (Railway → Variables) y redespliega.": "You are visiting {current} but APP_URL is {app}, and links in emails come from APP_URL. That is normal if you still use the old address; to use {current}, change APP_URL (Railway → Variables) and redeploy.",
+  // Administración: otra copia con la misma base de datos y copias de seguridad (omitidas, bloqueo del bucket, Railway)
+  "Hay otra copia de Pizarro usando esta misma base de datos (desde {date}).": "Another copy of Pizarro is using this same database (since {date}).",
+  "Dos copias a la vez se pisan: el bot de Telegram por sondeo pierde mensajes, las tareas de fondo y las copias de seguridad se reparten entre las dos y cada una tiene sus propios archivos subidos. Para la que sobra: otro servicio o un despliegue antiguo en Railway, otro servidor o una prueba con esta misma DATABASE_URL.": "Two copies at once get in each other's way: the Telegram bot in polling mode loses messages, background tasks and backups are split between them, and each one has its own uploaded files. Stop the one you don't need: another service or an old deployment on Railway, another server, or a test using this same DATABASE_URL.",
+  "Omitida: sin BACKUP_KEY": "Skipped: no BACKUP_KEY",
+  "Omitida: BACKUP_PAUSE": "Skipped: BACKUP_PAUSE",
+  "Omitida: sin destino externo": "Skipped: no external destination",
+  "{n} objetos retenidos por el bloqueo del bucket: la retención no puede borrarlos todavía y lo intentará en la próxima copia.": "{n} objects held by the bucket lock: retention can't delete them yet and will try again with the next backup.",
+  "En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.": "On Railway: add the BACKUP_S3_* variables under Variables in the Pizarro service and redeploy.",
 };
