@@ -52,18 +52,12 @@ describe("miembros de proyectos privados", () => {
     expectFail(await getTaskDetail(task.id), NOT_FOUND);
   });
 
-  test("no se puede añadir a un usuario desactivado ni a un administrador en un proyecto de equipo", async () => {
+  test("no se puede añadir a un usuario desactivado (a un administrador sí: ver project-members.test.ts)", async () => {
     const owner = await makeUser();
     const inactive = await makeUser({ active: false });
     const p = await makeProject({ visibility: "PRIVATE", owner });
     await loginAs(owner);
     expectFail(await addProjectMember(p.project.id, inactive.id), /Usuario no válido/);
-
-    const admin = await makeUser({ role: "ADMIN" });
-    const pub = await makeProject();
-    await loginAs(admin);
-    // En un proyecto de equipo los administradores no se asignan (ven todos).
-    expectFail(await addProjectMember(pub.project.id, admin.id), /administradores ven todos/);
   });
 
   test("el último miembro no puede salir; con otro miembro sí", async () => {
@@ -116,9 +110,10 @@ describe("miembros de proyectos privados", () => {
 
 describe("contraseñas y cambio forzado", () => {
   test("ninguna acción de administración permite fijar la contraseña de otra persona", async () => {
-    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado y
-    // reenviar la invitación (el enlace va al email de la persona; el admin no lo ve).
-    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
+    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado,
+    // reenviar la invitación (el enlace va al email de la persona; el admin no lo ve) e invitar a un proyecto (cuenta con
+    // una contraseña aleatoria que nadie conoce; el enlace de un solo uso es para que la persona elija la suya).
+    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "inviteToProject", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
 
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();

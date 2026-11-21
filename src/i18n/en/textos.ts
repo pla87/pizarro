@@ -6,7 +6,6 @@ export const textos: Record<string, string> = {
   "Tendrá que configurar uno nuevo al entrar.": "They will have to set up a new one when they sign in.",
   "Podrá volver a activarla en «Mi perfil».": "They can turn it on again in “My profile”.",
   "También deja de ser miembro de los proyectos privados que comparte con otras personas.": "They also stop being a member of the private projects they share with other people.",
-  "Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos y eligen en cuáles trabajan pulsando su nombre (o en su perfil).": "Members only see the projects they are assigned to. Administrators see them all and choose which ones they work on by clicking their name (or in their profile).",
   "No queda nadie por asignar": "Nobody left to assign",
   "Se elige una al crear el proyecto. Cambiar una plantilla no afecta a los proyectos ya creados.": "You pick one when creating the project. Changing a template doesn't affect projects already created.",
   "Cada tipo es una sección de las release notes, en este orden. Los tipos propios de cada proyecto se gestionan en sus ajustes y van detrás.": "Each type is a section of the release notes, in this order. Each project's own types are managed in its settings and come after.",

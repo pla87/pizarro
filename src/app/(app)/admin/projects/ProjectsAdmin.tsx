@@ -20,7 +20,7 @@ interface AdminUser {
 interface Row {
   id: string;
   name: string;
-  /** Usuarios no administradores asignados al proyecto. */
+  /** Usuarios asignados al proyecto (administradores incluidos). */
   memberIds: string[];
   /** Administradores que lo tienen entre sus proyectos de trabajo. */
   pickedAdminIds: string[];
@@ -34,7 +34,7 @@ export function ProjectsAdmin({ projects, users }: { projects: Row[]; users: Adm
     <div className="space-y-4">
       <p className="flex items-center gap-1 text-sm text-slate-500">
         {t("Proyectos de equipo y quién está asignado. Los privados no salen aquí.")}
-        <InfoTip topic={t("Proyectos")}>{t("Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos y eligen en cuáles trabajan pulsando su nombre (o en su perfil).")}</InfoTip>
+        <InfoTip topic={t("Proyectos")}>{t("Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos: se les puede asignar como a cualquiera y, si no están asignados, eligen en cuáles trabajan pulsando su nombre (o en su perfil).")}</InfoTip>
       </p>
       {projects.length === 0 && <p className="card p-5 text-sm text-slate-500">{t("No hay proyectos de equipo.")}</p>}
       <ul className="space-y-3">
@@ -54,10 +54,10 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
   const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
   const assigned = new Set(project.memberIds);
-  // Los administradores no se asignan: ven todos los proyectos de equipo.
-  const candidates = users.filter((u) => u.role !== "ADMIN" && !assigned.has(u.id));
+  const candidates = users.filter((u) => !assigned.has(u.id));
   const members = project.memberIds.map((id) => byId.get(id)).filter((u): u is AdminUser => !!u);
-  const admins = users.filter((u) => u.role === "ADMIN");
+  // Los administradores sin asignar ven el proyecto igualmente: su botón lo añade o quita de sus proyectos de trabajo.
+  const admins = users.filter((u) => u.role === "ADMIN" && !assigned.has(u.id));
   const pickedAdmins = new Set(project.pickedAdminIds);
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -79,13 +79,17 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
         {members.map((u) => (
           <li key={u.id} className="inline-flex max-w-full items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-2.5 pr-1 text-sm dark:bg-slate-800">
             <span className="truncate">{u.name}</span>
+            {u.role === "ADMIN" && <span className="shrink-0 text-xs text-slate-500">{t("admin")}</span>}
             <button
               type="button"
               className="btn-icon h-6 w-6 shrink-0 hover:text-red-600"
               disabled={pending}
               aria-label={t("Quitar a {name}", { name: u.name })}
               onClick={async () => {
-                if (!(await confirm({ title: t("Quitar del proyecto"), message: t("¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.", { name: u.name, project: project.name }), confirmLabel: t("Quitar"), danger: true }))) return;
+                const message = u.role === "ADMIN"
+                  ? t("¿Quitar a {name} de los asignados de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.", { name: u.name, project: project.name })
+                  : t("¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.", { name: u.name, project: project.name });
+                if (!(await confirm({ title: t("Quitar del proyecto"), message, confirmLabel: t("Quitar"), danger: true }))) return;
                 run(() => removeProjectMember(project.id, u.id), t("Asignación quitada"));
               }}
             >

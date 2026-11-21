@@ -378,6 +378,17 @@
       "src/app/(app)/admin/users/**",
       "src/app/api/auth/google/**"
     ],
+    "cuentas-invitar-e2e": [
+      "src/actions/users.ts",
+      "src/actions/projects.ts",
+      "src/lib/auth-mail.ts",
+      "src/lib/auth-token*.ts",
+      "src/lib/project-invite.ts",
+      "src/app/(app)/p/[projectId]/settings/**",
+      "src/app/(app)/admin/projects/**",
+      "src/app/reset/**",
+      "src/app/login/**"
+    ],
     "cuentas-borrar-restos-e2e": [
       "src/actions/profile.ts",
       "src/actions/users.ts",

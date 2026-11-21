@@ -270,9 +270,9 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     const other = await makeUser({ role: "ADMIN" });
     await asUser(other, async () => expectFail(await setProjectVisibility(created.id, "TEAM"), NOT_FOUND));
     await loginAs(admin);
-    // De vuelta a equipo: el miembro sigue asignado y el administrador pasa a proyecto elegido.
+    // De vuelta a equipo: los dos siguen asignados y el administrador, además, lo tiene elegido.
     expectOk(await setProjectVisibility(created.id, "TEAM"));
-    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 1);
+    assert.equal(await db.projectMember.count({ where: { projectId: created.id } }), 2);
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
   });
 });
@@ -322,7 +322,7 @@ describe("topes de adjuntos del proyecto (setAttachmentLimits)", () => {
 });
 
 describe("asignación de usuarios a proyectos", () => {
-  test("solo administradores gestionan los de equipo; los admins no se asignan; quitar desasigna tarjetas", async () => {
+  test("solo administradores gestionan los de equipo; también se asignan admins; quitar desasigna tarjetas", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const other = await makeUser({ role: "ADMIN" });
     const user = await makeUser();
@@ -331,7 +331,7 @@ describe("asignación de usuarios a proyectos", () => {
     await loginAs(user);
     expectFail(await addProjectMember(f.project.id, user.id), NOT_FOUND);
     await loginAs(admin);
-    expectFail(await addProjectMember(f.project.id, other.id), "Los administradores ven todos");
+    expectOk(await addProjectMember(f.project.id, other.id));
     expectOk(await addProjectMember(f.project.id, user.id));
     await db.task.update({ where: { id: task.id }, data: { assigneeId: user.id } });
     await loginAs(user);

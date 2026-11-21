@@ -1,6 +1,8 @@
 "use server";
 
 import { rateLimit } from "@/lib/rate-limit";
+import { sendProjectAddedMail } from "@/lib/auth-mail";
+import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@/generated/prisma/client";
@@ -181,7 +183,8 @@ export async function setGoogleShareMode(projectId: string, mode: string) {
  * PRIVATE: solo sus miembros (quien lo marca como privado es el primero; ni el resto de administradores).
  * Al pasar a privado los usuarios asignados (ProjectMember) se CONSERVAN como miembros y quien lo marca pasa a serlo;
  * pierden el acceso los administradores que lo veían solo por haberlo elegido en su perfil (se quitan sus elecciones)
- * y se desasignan únicamente las tarjetas de esas personas; al pasar a equipo se conservan los miembros (los administradores pasan a «proyecto en el que trabajo»).
+ * y se desasignan únicamente las tarjetas de esas personas; al pasar a equipo se conservan los miembros como asignados (los
+ * administradores, además, con el proyecto elegido en «Proyectos en los que trabajo»).
  * Si ya estaba en ese modo, no cambia nada (los usuarios se gestionan con addProjectMember/removeProjectMember).
  */
 export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PRIVATE") {
@@ -204,10 +207,10 @@ export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PR
         db.task.updateMany({ where: { projectId: id, assigneeId: { not: null, notIn: keep } }, data: { assigneeId: null } }),
       ]);
     } else {
+      // Los miembros siguen asignados; los administradores, además, con el proyecto elegido.
       const admins = await db.projectMember.findMany({ where: { projectId: id, user: { role: "ADMIN" } }, select: { userId: true } });
       await db.$transaction([
         db.project.update({ where: { id }, data: { isPrivate: false, privateOwnerId: null } }),
-        db.projectMember.deleteMany({ where: { projectId: id, user: { role: "ADMIN" } } }),
         db.adminProjectPick.createMany({ data: admins.map((a) => ({ projectId: id, userId: a.userId })), skipDuplicates: true }),
       ]);
     }
@@ -231,23 +234,37 @@ export async function deleteProject(projectId: string, confirmName: string) {
 // --- Usuarios asignados al proyecto -----------------------------------------------
 
 /**
- * Asigna a un usuario activo al proyecto. En uno privado, cualquier miembro puede hacerlo; en uno de equipo,
- * los administradores (que ya ven todos los de equipo, así que no se asignan: lo eligen en su perfil).
+ * Asigna a un usuario activo al proyecto. En uno privado, cualquier miembro puede hacerlo; en uno de equipo, los
+ * administradores. Un administrador asignado a uno de equipo queda además con el proyecto elegido (AdminProjectPick),
+ * para que le salga en sus selectores. Si la persona no estaba ya en el proyecto (y no es quien la añade), recibe un email
+ * con el enlace al tablero, salvo que haya desactivado los avisos por email de menciones y administración (los mismos que el
+ * aviso «el proyecto pasa a ser de equipo», ver emailWanted en notify.ts). Devuelve ese enlace para
+ * pasárselo por otro canal (botón «Copiar enlace»).
  */
 export async function addProjectMember(projectId: string, userId: string) {
   return runAction({ name: "projects.addProjectMember", args: [projectId, userId] }, async () => {
     const user = await requireUser();
     const project = await findManageableProject(user, projectId);
-    const target = await db.user.findFirst({ where: { id: v.id.parse(userId), active: true }, select: { id: true, name: true, role: true } });
-    if (!target) throw new AppError("Usuario no válido.");
-    if (!project.isPrivate && target.role === "ADMIN") throw new AppError("Los administradores ven todos los proyectos de equipo: lo eligen en su perfil.");
-    await db.projectMember.upsert({
-      where: { projectId_userId: { projectId: project.id, userId: target.id } },
-      create: { projectId: project.id, userId: target.id },
-      update: {},
+    const target = await db.user.findFirst({
+      where: { id: v.id.parse(userId), active: true },
+      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true },
     });
-    describeAction(`Añadió a «${target.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»`);
+    if (!target) throw new AppError("Usuario no válido.");
+    const pick = !project.isPrivate && target.role === "ADMIN";
+    const created = await db.$transaction(async (tx) => {
+      const { count } = await tx.projectMember.createMany({ data: [{ projectId: project.id, userId: target.id }], skipDuplicates: true });
+      if (pick) await tx.adminProjectPick.createMany({ data: [{ projectId: project.id, userId: target.id }], skipDuplicates: true });
+      return count === 1;
+    });
+    const link = `${appUrl()}/p/${project.id}`;
+    // Solo a quien entra ahora (no al repetir la asignación ni al asignarse uno mismo), con email y con esos avisos
+    // activos. El tope por persona que añade evita usar la lista de miembros para mandar correo en masa.
+    const emailed = created && target.id !== user.id && target.notifyEmail && emailEnabled()
+      && rateLimit(`project-added-mail:${user.id}`, 40, 60 * 60_000);
+    if (emailed) sendMailInBackground("aviso de proyecto añadido", () => sendProjectAddedMail(target, user.name, project.name, link));
+    describeAction(`Añadió a «${target.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (avisado por email)" : ""}`);
     revalidatePath("/", "layout");
+    return { link, emailed };
   });
 }
 
@@ -263,9 +280,11 @@ export async function removeProjectMember(projectId: string, userId: string) {
     const targetId = v.id.parse(userId);
     const member = await db.projectMember.findUnique({
       where: { projectId_userId: { projectId: project.id, userId: targetId } },
-      select: { user: { select: { name: true } } },
+      select: { user: { select: { name: true, role: true } } },
     });
     if (!member) throw notFound();
+    // Un administrador que deja de estar asignado a uno de equipo sigue viéndolo (y conserva su elección y sus tarjetas).
+    const keepsAccess = !project.isPrivate && member.user.role === "ADMIN";
     await db.$transaction(async (tx) => {
       // Bloquea el proyecto: dos miembros que salen a la vez no pueden dejar un privado sin nadie.
       await tx.$queryRaw`SELECT "id" FROM "Project" WHERE "id" = ${project.id} FOR UPDATE`;
@@ -274,10 +293,10 @@ export async function removeProjectMember(projectId: string, userId: string) {
         if (others === 0) throw new AppError("Eres el último miembro: no puedes salir del proyecto, bórralo si ya no lo necesitas.");
       }
       await tx.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: targetId } } });
-      await tx.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } });
+      if (!keepsAccess) await tx.task.updateMany({ where: { projectId: project.id, assigneeId: targetId }, data: { assigneeId: null } });
     });
     // Quien sale deja de ver el tablero en vivo al momento (los demás se reconectan solos).
-    revokeProject(project.id);
+    if (!keepsAccess) revokeProject(project.id);
     const kind = project.isPrivate ? "privado " : "";
     describeAction(targetId === user.id ? `Salió del proyecto ${kind}«${project.name}»` : `Quitó a «${member.user.name}» del proyecto ${kind}«${project.name}»`);
     revalidatePath("/", "layout");

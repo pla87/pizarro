@@ -35,12 +35,14 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
+import { inviteToProject } from "@/actions/users";
+import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
 interface Props {
   isAdmin: boolean;
   currentUserId: string;
-  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; googleShareMode: GoogleShareMode; fileMaxMb: number; taskFields: TaskFieldKey[]; budgetColumns: number; members: { id: string; name: string; active: boolean }[] };
+  project: { id: string; name: string; description: string; visibility: "TEAM" | "PRIVATE"; releaseZipMaxMb: number; taskAttachMaxMb: number; googleShareMode: GoogleShareMode; fileMaxMb: number; taskFields: TaskFieldKey[]; budgetColumns: number; members: MemberRow[] };
   labels: LabelOption[];
   kinds: KindRow[];
   /** Todos los tipos generales, con si el proyecto los usa y cuántas tareas tienen aquí. */
@@ -187,9 +189,9 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
             <div className="mt-3">
               <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
                 {isPrivateProject ? t("Miembros") : t("Usuarios asignados")}
-                {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.")}</InfoTip>}
+                {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.")}</InfoTip>}
               </div>
-              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={isPrivateProject ? users : users.filter((u) => u.role !== "ADMIN")} isPrivate={isPrivateProject} />
+              <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite />
             </div>
           )}
           {visibility !== project.visibility && (
@@ -441,13 +443,20 @@ function LimitLabel({ htmlFor, label, children }: { htmlFor: string; label: stri
   );
 }
 
-/** Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan los administradores. */
-function MemberManager({ projectId, currentUserId, members, users, isPrivate }: {
+type MemberRow = { id: string; name: string; active: boolean; /** Administrador asignado a un proyecto de equipo. */ admin?: boolean };
+
+/**
+ * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
+ * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
+ * da de alta a alguien sin cuenta. Tras añadir o invitar queda a la vista el enlace para pasárselo («Copiar enlace»).
+ */
+function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false }: {
   projectId: string;
   currentUserId: string;
-  members: { id: string; name: string; active: boolean }[];
+  members: MemberRow[];
   users: { id: string; name: string }[];
   isPrivate: boolean;
+  canInvite?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -455,6 +464,8 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
   const confirm = useConfirm();
   const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [shared, setShared] = useState<SharedLink | null>(null);
   const memberIds = new Set(members.map((m) => m.id));
   const candidates = users.filter((u) => !memberIds.has(u.id));
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -463,6 +474,27 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
       if (!res.ok) return toast(res.error, "error");
       toast(success);
       after?.();
+      router.refresh();
+    });
+  const add = () => {
+    const name = users.find((u) => u.id === candidate)?.name ?? "";
+    start(async () => {
+      const res = await addProjectMember(projectId, candidate);
+      if (!res.ok) return toast(res.error, "error");
+      toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
+      setCandidate("");
+      setShared({ kind: "board", name, link: res.data.link, emailed: res.data.emailed });
+      router.refresh();
+    });
+  };
+  const invite = () =>
+    start(async () => {
+      const res = await inviteToProject(projectId, inviteEmail);
+      if (!res.ok) return toast(res.error, "error");
+      if (res.data.mailFailed) toast(t("Invitación creada, pero no se pudo enviar el email: pásale el enlace."), "error");
+      else toast(res.data.emailed ? t("Invitación enviada") : t("Invitación creada"));
+      setInviteEmail("");
+      setShared({ kind: "invite", name: res.data.name, link: res.data.link, emailed: res.data.emailed });
       router.refresh();
     });
   const activeCount = members.filter((m) => m.active).length;
@@ -477,6 +509,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
             <li key={m.id} className="flex items-center gap-3 px-3 py-2 text-sm">
               <span className="min-w-0 flex-1 truncate">
                 {m.name}
+                {m.admin && <span className="ml-1 text-xs text-slate-500">{t("admin")}</span>}
                 {isMe && <span className="ml-1 text-xs text-slate-500">{t("(tú)")}</span>}
                 {!m.active && <span className="ml-1 text-xs text-slate-500">{t("(desactivado)")}</span>}
               </span>
@@ -508,14 +541,58 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate }: 
           <option value="">{t("Añadir miembro…")}</option>
           {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
-        <button
-          type="button"
-          className="btn-primary shrink-0"
-          disabled={pending || !candidate}
-          onClick={() => run(() => addProjectMember(projectId, candidate), t("Miembro añadido"), () => setCandidate(""))}
-        >
+        <button type="button" className="btn-primary shrink-0" disabled={pending || !candidate} onClick={add}>
           {t("Añadir")}
         </button>
+      </div>
+      {canInvite && (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            invite();
+          }}
+        >
+          <input
+            type="email"
+            className="input min-w-0 max-w-xs flex-1"
+            placeholder={t("Invitar por email")}
+            aria-label={t("Invitar por email")}
+            autoComplete="off"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+            maxLength={200}
+            required
+          />
+          <button className="btn-secondary shrink-0" disabled={pending || !inviteEmail.trim()}>{t("Invitar")}</button>
+          <InfoTip topic={t("Invitar por email")}>{t("Para alguien que aún no tiene cuenta: se crea como invitación, entra en este proyecto y elige su contraseña con un enlace de un solo uso (72 horas). Después llega directamente al tablero.")}</InfoTip>
+        </form>
+      )}
+      {shared && <SharedLinkNote shared={shared} onClose={() => setShared(null)} />}
+    </div>
+  );
+}
+
+type SharedLink = { kind: "board" | "invite"; name: string; link: string; emailed: boolean };
+
+/** El enlace del último alta, para pasarlo por otro canal (WhatsApp…): el del tablero o el de la invitación. */
+function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () => void }) {
+  const t = useT();
+  const toast = useToast();
+  const text = shared.kind === "board"
+    ? t("Enlace al tablero para pasárselo a {name}:", { name: shared.name })
+    : shared.emailed
+      ? t("Le hemos enviado la invitación por email. También puedes pasarle este enlace a {name}; caduca en 72 horas y sirve una sola vez:", { name: shared.name })
+      : t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name: shared.name });
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800" data-testid="member-link-note">
+      <div className="flex items-start gap-2">
+        <p className="min-w-0 flex-1">{text}</p>
+        <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
+      </div>
+      <div className="flex gap-2">
+        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" />
+        <button type="button" className="btn-secondary shrink-0" onClick={async () => ((await copyText(shared.link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
       </div>
     </div>
   );

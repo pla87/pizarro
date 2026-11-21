@@ -34,9 +34,9 @@ test("visibilidad: un privado solo lo ven sus miembros, también siendo admin", 
   assert.deepEqual(visibleProjectsWhere(user("MEMBER")), member);
 });
 
-test("proyectos de trabajo: el admin solo ve los de equipo que ha elegido y sus privados", () => {
+test("proyectos de trabajo: el admin solo ve los de equipo que ha elegido y sus privados (estar asignado a uno de equipo no basta)", () => {
   assert.deepEqual(workingProjectsWhere(user("ADMIN")), {
-    OR: [{ isPrivate: false, adminPicks: { some: { userId: "u1" } } }, { members: { some: { userId: "u1" } } }],
+    OR: [{ isPrivate: false, adminPicks: { some: { userId: "u1" } } }, { isPrivate: true, members: { some: { userId: "u1" } } }],
   });
   assert.deepEqual(workingProjectsWhere(user("MEMBER")), visibleProjectsWhere(user("MEMBER")));
 });

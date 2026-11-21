@@ -32,13 +32,11 @@ export const proyectos: Record<string, string> = {
   "Los usuarios asignados y todos los administradores.": "Assigned users and all administrators.",
   "Miembros": "Members",
   "Usuarios asignados": "Assigned users",
-  "Los administradores ven todos los proyectos de equipo; eligen en su perfil en cuáles trabajan.": "Administrators see all team projects; they choose which ones they work on (in their profile, or here by clicking their name).",
   "Proyectos en los que trabajo": "Projects I work on",
   "Solo estos salen en tus selectores y menús.": "Only these appear in your pickers and menus.",
   "Privado, siempre aparece": "Private, always shown",
   "No hay proyectos.": "There are no projects.",
   "Proyectos actualizados": "Projects updated",
-  "Los administradores ven todos los proyectos de equipo: lo eligen en su perfil.": "Administrators see all team projects: they choose theirs in their profile.",
   // Exportar e importar un proyecto (.pizarro.zip)
   "Exportar proyecto": "Export project",
   "Todo el proyecto en un .pizarro.zip, como copia o para otra instalación.": "The whole project in a .pizarro.zip, as a backup or for another installation.",
@@ -161,4 +159,24 @@ export const proyectos: Record<string, string> = {
   "El proyecto tiene más de 50.000 ficheros adjuntos distintos y el archivo no se podría importar. Expórtalo sin adjuntos o con «Solo el tablero».": "The project has more than 50,000 distinct attached files and the archive could not be imported. Export it without attachments or with “Board only”.",
   // Textos guardados por versiones anteriores: los errores de importar guardados en TransferJob (se traducen al leerlos)
   "El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Export the project without attachments or with “Board only”.",
+  // Miembros de un proyecto: administradores asignados, «Invitar por email» y «Copiar enlace»
+  "Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.":
+    "Administrators see all team projects. If you assign one, the project shows up in their pickers and they count as assigned, like everyone else.",
+  "Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos: se les puede asignar como a cualquiera y, si no están asignados, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
+    "Members only see the projects they are assigned to. Administrators see them all: they can be assigned like anyone else and, if they are not, they choose which ones they work on by clicking their name (or in their profile).",
+  "¿Quitar a {name} de los asignados de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the people assigned to “{project}”? As an administrator, they still see it and keep their cards.",
+  "admin": "admin",
+  "Miembro añadido y avisado por email": "Member added and notified by email",
+  "Invitación creada, pero no se pudo enviar el email: pásale el enlace.": "Invitation created, but the email could not be sent: give them the link.",
+  "Invitación enviada": "Invitation sent",
+  "Invitación creada": "Invitation created",
+  "Invitar por email": "Invite by email",
+  "Invitar": "Invite",
+  "Para alguien que aún no tiene cuenta: se crea como invitación, entra en este proyecto y elige su contraseña con un enlace de un solo uso (72 horas). Después llega directamente al tablero.":
+    "For someone who doesn't have an account yet: it is created as an invitation, added to this project, and they choose their password with a single-use link (72 hours). Then they go straight to the board.",
+  "Enlace al tablero para pasárselo a {name}:": "Link to the board to give {name}:",
+  "Le hemos enviado la invitación por email. También puedes pasarle este enlace a {name}; caduca en 72 horas y sirve una sola vez:": "We've sent the invitation by email. You can also give {name} this link; it expires in 72 hours and can only be used once:",
+  "Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:": "Give {name} this link to choose their password; it expires in 72 hours and can only be used once:",
+  "Enlace al tablero": "Link to the board",
+  "Enlace de invitación": "Invitation link",
 };

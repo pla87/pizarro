@@ -58,9 +58,10 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Enlaces entre HTML de la misma Documentación (ida, vuelta, #apartado, inexistente, otro proyecto) y HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, y UTF-8 con un `<meta>` de 8 bits mal puesto (ronda 52) | `e2e/documentacion-enlaces-e2e.mjs` | 52 | ~1 min |
 | Enlaces de un HTML a sí mismo y nombres arreglados, binarios con BOM de UTF-16 y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/documentacion-enlaces-bom-e2e.mjs` | 37 | ~30 s |
 | Índice de un HTML en Documentación y baja con Google sin email (caza de bugs 50b) | `e2e/documentacion-indice-e2e.mjs` | 39 | ~30 s |
-| **Cuentas** | | **133** | |
+| **Cuentas** | | **157** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51) | `e2e/cuentas-borrar-restos-e2e.mjs` | 72 | ~45 s |
+| Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 24 | ~40 s |
 | **Interfaz y textos** | | **302** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
@@ -639,6 +640,22 @@ proyectos (`r51c_*`). Misma base; servidor como el de `documentacion-indice` (Go
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs   # PART=google,notice,outside,member
+```
+
+### Miembros de un proyecto: administradores asignados e invitaciones (ronda 59)
+
+*Ajustes del proyecto → General*: «Añadir miembro…» ofrece a otro administrador; al añadirlo sale en la lista con la marca
+«admin», queda asignado y con el proyecto elegido, y el recuadro del enlace muestra el del tablero (`APP_URL/p/<id>`), que
+«Copiar enlace» deja en el portapapeles; quitarlo de asignados le conserva la elección. *Administración → Proyectos*:
+«Asignar usuario…» también ofrece administradores, que salen como asignados (con la marca) y no como botón «elegido / no
+elegido». «Invitar por email» (servidor sin email): crea la cuenta como invitación ya dentro del proyecto, con el nombre
+sacado del email, y el recuadro da el enlace de invitación para pasarlo a mano; la persona lo abre en otro navegador,
+elige su contraseña, «Iniciar sesión» lleva `?next=/p/<id>` y entra directamente en el tablero. Un miembro (no admin) de
+un privado añade miembros pero no ve «Invitar por email». A 390 px el recuadro del enlace cabe sin desbordar. Crea sus
+propios proyectos y la persona invitada (`inv59_*`). Misma base y servidor que `board-e2e` (sin email):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile
 ```
 
 ## Interfaz y textos
