@@ -22,6 +22,8 @@ export async function connectPgClient(
     connectionString: url,
     connectionTimeoutMillis: connectTimeoutMs,
     keepAlive: true,
+    // Primer sondeo de keepalive al minuto de inactividad (por defecto, el del sistema: unas 2 h en Linux).
+    keepAliveInitialDelayMillis: 60_000,
     ...(applicationName ? { application_name: applicationName } : {}),
   });
   // Sin este oyente, un corte de la conexión inactiva sería una excepción no capturada (y con

@@ -91,9 +91,10 @@ expliquen las opciones con su coste y beneficio y una recomendación.
   (`CREATE INDEX CONCURRENTLY`), ni usar en la misma migración un valor de enum recién añadido.
 - Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
   la misma versión que deja de usarla: primero sale la versión que ya no la lee ni la escribe (con una migración que
-  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Durante un despliegue la
-  versión anterior sigue sirviendo sobre la base ya migrada, y si el despliegue falla después de migrar, Railway la
-  mantiene activa: si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
+  solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Con volumen, Railway no
+  solapa versiones (hay unos segundos sin servicio), pero la versión anterior vuelve a servir sobre la base ya migrada si
+  el despliegue nuevo falla después de migrar (Railway mantiene la anterior) o si se vuelve atrás a mano (redesplegar
+  uno viejo, fijar una versión anterior en compose): si la migración quitó algo que esa versión usa, falla. Igual para cambiar un tipo o volver
   obligatoria una columna: columna nueva, copiar los datos, usarla, y quitar la vieja una versión después.
 - No tocan `changelog.json`, `CHANGELOG.md`, la versión de `package.json`, `docs/MANUAL.md` ni `MANUAL.pdf`: los
   actualiza la sesión principal al cerrar la versión. Terminan su informe con lo que debería decir el manual.

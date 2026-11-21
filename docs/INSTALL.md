@@ -4,7 +4,7 @@
 
 Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio y no cambia nada del despliegue en Railway.
 
-> Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un solapamiento breve durante una actualización no duplica nada, pero no lo escales a varias réplicas.
+> Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un reinicio o una herramienta de consola contra la misma base no duplican nada, pero no lo escales a varias réplicas (el canal en vivo, los límites de intentos y los vales de descarga viven en la memoria de cada proceso). No uses un *pooler* en modo transacción (PgBouncer en modo `transaction`): los bloqueos de las tareas de fondo necesitan una conexión de sesión.
 
 ## Instalación en un paso
 
