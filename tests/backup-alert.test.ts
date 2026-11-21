@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BACKUP_STALE_MS, backupAlertFor, backupAlertMailDue, shrinkText } from "../src/lib/backup-alert-core";
-import { formatDate } from "../src/lib/format";
+import { formatDate, formatDateTimeZone } from "../src/lib/format";
 
 const now = Date.parse("2026-10-30T12:00:00Z");
 const h = (n: number) => n * 3600_000;
@@ -63,3 +63,12 @@ test("aviso de reducción: la hora de las copias lleva segundos (dos copias del 
   // Las demás fechas siguen sin segundos.
   assert.doesNotMatch(formatDate("2026-10-30T03:15:42.000Z", "dateTime", "es-ES"), /:42/);
 });
+
+// Las fechas con hora de los emails llevan la zona: quien lo lee puede estar en otra (antes salía «30 oct 2026, 4:15» sin más).
+test("fecha y hora de los emails con la zona horaria de la app", () => {
+  for (const locale of ["es-ES", "en-GB", "en-US"]) {
+    assert.match(formatDateTimeZone("2026-10-30T03:15:42.000Z", locale), /\d{1,2}:15( [AP]M)? \((CET|CEST|GMT[+-]\d+|UTC|[A-Z]{2,5})\)$/, locale);
+    assert.match(formatDateTimeZone("2026-10-30T03:15:42.000Z", locale, "dateTimeSeconds"), /:15:42\b.*\(/, locale);
+  }
+});
+

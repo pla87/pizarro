@@ -8,7 +8,7 @@ import { after, before, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeUser } from "./helpers";
 import { findUsableToken } from "../../src/lib/auth-token";
-import { INSTANCE_LOCALE_KEY, invalidateInstance } from "../../src/lib/instance";
+import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
 process.env.MAX_USERS = "100000";
@@ -24,7 +24,7 @@ after(async () => {
   if (prevOutbox === undefined) delete process.env.MAIL_OUTBOX_DIR;
   else process.env.MAIL_OUTBOX_DIR = prevOutbox;
   await rm(outbox, { recursive: true, force: true });
-  await db.appState.deleteMany({ where: { key: INSTANCE_LOCALE_KEY } });
+  await db.appState.deleteMany({ where: { key: { in: [INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY] } } });
   invalidateInstance();
 });
 
@@ -68,6 +68,29 @@ describe("idioma de la persona invitada", () => {
     expectOk(await createUser({ name: "Elegido", email: to, role: "MEMBER", locale: "EN" }));
     assert.equal((await db.user.findUniqueOrThrow({ where: { email: to } })).locale, "EN");
     assert.equal((await mailsTo(to))[0]?.subject, "You've been invited to Pizarro");
+  });
+});
+
+describe("organización en la invitación", () => {
+  // Antes la invitación decía solo «Pizarro»: quien la recibía no sabía de qué empresa venía.
+  test("con nombre de organización en Ajustes, el asunto y el texto la nombran, en el idioma de la persona", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    await db.appState.upsert({ where: { key: INSTANCE_ORG_KEY }, create: { key: INSTANCE_ORG_KEY, value: "Acme" }, update: { value: "Acme" } });
+    invalidateInstance();
+    try {
+      const es = email("org-es");
+      expectOk(await createUser({ name: "Invitada", email: es, role: "MEMBER", locale: "ES" }));
+      const [mail] = await mailsTo(es);
+      assert.equal(mail?.subject, "Te han invitado al Pizarro de Acme");
+      assert.match(mail?.text ?? "", /te ha dado de alta en el Pizarro de Acme\./);
+      const en = email("org-en");
+      expectOk(await createUser({ name: "Invited", email: en, role: "MEMBER", locale: "EN" }));
+      assert.equal((await mailsTo(en))[0]?.subject, "You've been invited to Acme's Pizarro");
+    } finally {
+      await db.appState.deleteMany({ where: { key: INSTANCE_ORG_KEY } });
+      invalidateInstance();
+    }
   });
 });
 

@@ -328,4 +328,7 @@ export const cuentas: Record<string, string> = {
   "Abrir el tablero": "Open the board",
   "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notices you get by email in “My profile → Notifications”.",
   "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
+  // Invitación con el nombre de la organización (ronda 59)
+  "Te han invitado al Pizarro de {org}": "You've been invited to {org}'s Pizarro",
+  "{admin} te ha dado de alta en el Pizarro de {org}. Usa este enlace para elegir tu contraseña. Caduca en {n} horas y solo sirve una vez.": "{admin} has created your account in {org}'s Pizarro. Use this link to choose your password. It expires in {n} hours and works only once.",
 };

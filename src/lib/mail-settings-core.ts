@@ -107,6 +107,17 @@ export function formatFrom(name: string, address: string): string {
   return clean ? `"${clean}" <${address}>` : address;
 }
 
+/**
+ * Remitente con nombre: si `from` es solo una dirección (sin nombre en Administración, o SMTP_FROM sin él), le pone
+ * `fallbackName` (el nombre de la organización o «Pizarro»). Sin nombre, muchos programas de correo muestran solo la
+ * dirección y el aviso parece de un desconocido. Si ya trae nombre («Nombre <dirección>»), no se toca.
+ */
+export function withSenderName(from: string, fallbackName: string): string {
+  const f = from.trim();
+  if (!f || f.includes("<")) return from;
+  return formatFrom(fallbackName.trim() || "Pizarro", f);
+}
+
 /** Configuración efectiva para enviar. */
 export interface MailConfig {
   /** De dónde sale: variables del servidor, ajustes de Administración o ninguno. */

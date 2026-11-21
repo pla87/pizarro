@@ -324,4 +324,6 @@ export const server: Record<string, string> = {
   "Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)": "Pinned tasks: {n} (always in the release or the plan; not counted in progress or pending)",
   // PDF: la petición se canceló mientras esperaba turno o se pintaba
   "Petición cancelada": "Request cancelled",
+  // Informe PDF: más tareas de las que caben en los listados (ronda 59)
+  "Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.": "The lists show the first {n} of {total} tasks; progress and counts include all of them.",
 };

@@ -29,6 +29,30 @@ test("email de mención escapa HTML", () => {
   assert.ok(m.text.includes(msg.url));
 });
 
+test("aviso de comentario: el Markdown sale como texto (email y Telegram) y un «<b>» escrito tal cual se conserva", async () => {
+  const { telegramNoticeText } = await import("../src/lib/messaging-core");
+  const { excerpt } = await import("../src/lib/mentions");
+  const { makeT } = await import("../src/i18n/core");
+  const body = "**Urgente**: revisa [el documento](https://example.com/doc) \\* 5 &lt;b&gt; @[Ana](user:u1)";
+  const m = { ...msg, type: "COMMENT" as const, excerpt: excerpt(body) };
+  const mail = mentionEmail(m);
+  assert.ok(mail.text.includes("Urgente: revisa el documento (https://example.com/doc) * 5 <b> @Ana"), mail.text);
+  assert.ok(!mail.text.includes("**"));
+  assert.ok(mail.html.includes("Urgente: revisa el documento (https://example.com/doc) * 5 &lt;b&gt; @Ana"), mail.html);
+  const tg = telegramNoticeText(m, makeT("es"));
+  assert.ok(tg.includes("<i>Urgente: revisa el documento (https://example.com/doc) * 5 &lt;b&gt; @Ana</i>"), tg);
+});
+
+test("email de aviso: asunto con el título recortado y pie en texto y HTML", () => {
+  const m = mentionEmail({ ...msg, taskTitle: "t".repeat(400) });
+  assert.ok(m.subject.length < 200, String(m.subject.length));
+  assert.match(m.subject, /t…»$/);
+  for (const body of [m.text, m.html]) {
+    assert.ok(body.includes("Puedes desactivar estos avisos en «Mi perfil» de Pizarro."));
+    assert.ok(body.includes("No respondas a este email: contesta en Pizarro."));
+  }
+});
+
 test("payload de WhatsApp: plantilla antigua mencion_pizarro con 4 parámetros", () => {
   const p = whatsappPayload("+34600111222", msg, { templateName: "mencion_pizarro", templateLang: "es", templateLangEn: "", legacy: true }, makeT("es"));
   assert.equal(p.to, "34600111222");

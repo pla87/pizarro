@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  envMailConfig, formatFrom, GMAIL_PRESET, isLocalSmtpHost, parseMailSettings, resolveMailConfig, sanitizeSmtpError, smtpPlaintextAllowed, validateMailSettings, EMPTY_MAIL_SETTINGS,
+  envMailConfig, formatFrom, withSenderName, GMAIL_PRESET, isLocalSmtpHost, parseMailSettings, resolveMailConfig, sanitizeSmtpError, smtpPlaintextAllowed, validateMailSettings, EMPTY_MAIL_SETTINGS,
 } from "../src/lib/mail-settings-core";
 
 const saved = { ...EMPTY_MAIL_SETTINGS, host: "smtp.example.com", port: 587, secure: false, user: "u@example.com", fromName: "Pizarro", fromAddress: "p@example.com", hasPassword: true };
@@ -65,6 +65,16 @@ describe("ajustes de email (parte pura)", () => {
   test("el nombre del remitente no puede inyectar cabeceras", () => {
     assert.equal(formatFrom('Evil"\r\nBcc: x@example.com <', "p@example.com"), '"Evil Bcc: x@example.com" <p@example.com>');
     assert.equal(formatFrom("", "p@example.com"), "p@example.com");
+  });
+
+  test("remitente sin nombre: el de la organización o «Pizarro»; con nombre, no se toca", () => {
+    assert.equal(withSenderName("p@example.com", "Acme"), '"Acme" <p@example.com>');
+    assert.equal(withSenderName("p@example.com", "  "), '"Pizarro" <p@example.com>');
+    assert.equal(withSenderName('"Soporte" <p@example.com>', "Acme"), '"Soporte" <p@example.com>');
+    assert.equal(withSenderName("Soporte <p@example.com>", "Acme"), "Soporte <p@example.com>");
+    assert.equal(withSenderName("", "Acme"), "");
+    // El nombre de la organización tampoco puede inyectar cabeceras.
+    assert.equal(withSenderName("p@example.com", 'A"\r\nBcc: x@example.com'), '"A Bcc: x@example.com" <p@example.com>');
   });
 
   test("validación", () => {

@@ -139,3 +139,36 @@ describe("resumen diario y apagado ordenado", () => {
     }
   });
 });
+
+describe("email del resumen diario", () => {
+  test("asunto con tareas distintas, «desde el último resumen» y pie en el idioma de la persona", async () => {
+    const outbox = await mkdtemp(path.join(tmpdir(), "pz-digest-mail-"));
+    const prevOutbox = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = outbox;
+    try {
+      const user = await makeUser();
+      const other = await makeUser();
+      const f = await makeProject({ members: [user, other] });
+      // Una tarea suya, asignada hoy y ya vencida: sale en dos secciones, pero es una sola.
+      const task = await makeTask(f, { title: "Vencida y asignada", createdById: user.id, dueDate: new Date(Date.now() - 3 * 86_400_000) });
+      await db.task.update({ where: { id: task.id }, data: { assigneeId: user.id } });
+      await db.notification.create({ data: { userId: user.id, actorId: other.id, taskId: task.id, type: "ASSIGNED", excerpt: "Vencida y asignada" } });
+      const now = new Date();
+      await db.user.updateMany({ where: { id: { not: user.id } }, data: { dailyDigest: false } });
+      await db.user.update({ where: { id: user.id }, data: { locale: "EN", dailyDigest: true, digestHour: 0, lastDigestAt: new Date(now.getTime() - 20 * 3_600_000) } });
+      assert.equal(await sendDueDigests(now), 1);
+      const files = (await readdir(outbox)).filter((n) => n.endsWith(".json"));
+      assert.equal(files.length, 1);
+      const mail = JSON.parse(await readFile(path.join(outbox, files[0]!), "utf8")) as { subject: string; text: string; html: string; headers: Record<string, string> };
+      assert.match(mail.subject, /\(1\)$/, "antes salía (2): la tarea contaba en «Asignadas» y en «Vencidas»");
+      assert.match(mail.text, /since the last summary\./);
+      assert.ok(mail.text.includes("Don't reply to this email: reply in Pizarro."), mail.text);
+      assert.match(mail.html, /Don(&#39;|&#x27;|')t reply to this email: reply in Pizarro\./);
+      assert.equal(mail.headers["Auto-Submitted"], "auto-generated");
+    } finally {
+      if (prevOutbox === undefined) delete process.env.MAIL_OUTBOX_DIR;
+      else process.env.MAIL_OUTBOX_DIR = prevOutbox;
+      await rm(outbox, { recursive: true, force: true });
+    }
+  });
+});

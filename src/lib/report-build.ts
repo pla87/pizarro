@@ -2,13 +2,13 @@ import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
-import { dateToIso, todayIso } from "./dates";
+import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { slugify } from "./search-accents";
-import { buildReport, RECENT_DONE_DAYS } from "./report";
+import { buildReport, RECENT_DONE_DAYS, REPORT_MAX_TASKS, type ReportCounts } from "./report";
 import { deliverableProgressByIds } from "./deliverable-progress-db";
 import type { PdfJob } from "./report-pdf";
 import { renderInWorker } from "./report-render";
@@ -154,12 +154,13 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
   if (!project) return null;
 
-  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released]] = await Promise.all([
+  const today = todayIso(appTimeZone());
+  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],
-      take: 2000,
+      take: REPORT_MAX_TASKS,
       select: {
         id: true,
         title: true,
@@ -188,6 +189,7 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
         select: { taskId: true, release: { select: { deployedAt: true } } },
       }),
     ]),
+    reportCounts(projectId, today, opts.locale),
   ]);
   const doneAt = new Map<string, string>();
   const noteDone = (taskId: string | null, at: Date | null | undefined) => {
@@ -200,13 +202,13 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
   const progress = await deliverableProgressByIds(deliverables.map((d) => d.id));
 
   const locale = intlLocale(opts.locale);
-  const today = todayIso(appTimeZone());
   const report = buildReport({
     project: { name: project.name, description: project.description },
     generatedBy: opts.generatedBy,
     today,
     timeZone: appTimeZone(),
-    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()),
+    // Con la zona («14:05 CET»): el PDF se envía por email y puede leerse en otra.
+    time: new Intl.DateTimeFormat(locale, { timeZone: appTimeZone(), hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).format(new Date()),
     columns,
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({
@@ -231,11 +233,53 @@ async function buildProjectReportPdf(projectId: string, opts: PdfRequestOpts & {
     releases: releases.map((r) => ({ number: r.number, title: r.title, deployedAt: r.deployedAt.toISOString(), taskCount: r.taskCount })),
     archivedCount,
     taskFields: normalizeTaskFields(project.taskFields),
+    counts,
   }, t);
 
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);
   const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
+}
+
+/**
+ * Recuentos del informe sobre TODAS las tareas activas del proyecto (los listados solo leen las primeras
+ * REPORT_MAX_TASKS): por columna, responsable y tipo, cuántas hay, vencidas, con plazo en 7 días y sin plazo, y las fijas.
+ * Antes el avance, las vencidas y la carga por persona salían de esas 2.000 sin avisar.
+ */
+export async function reportCounts(projectId: string, today: string, locale: Locale): Promise<ReportCounts> {
+  const active = { projectId, archivedAt: null, evergreen: false };
+  const group = (where: Prisma.TaskWhereInput) => db.task.groupBy({ by: ["columnId", "assigneeId", "kindId"], where: { ...active, ...where }, _count: { _all: true } });
+  const day = isoToDate(today);
+  const [all, overdue, dueSoon, withoutDue, fixed] = await Promise.all([
+    group({}),
+    group({ dueDate: { lt: day } }),
+    group({ dueDate: { gte: day, lte: isoToDate(addDaysIso(today, 7)) } }),
+    group({ dueDate: null }),
+    db.task.count({ where: { projectId, archivedAt: null, evergreen: true } }),
+  ]);
+  const key = (g: { columnId: string; assigneeId: string | null; kindId: string }) => `${g.columnId}|${g.assigneeId ?? ""}|${g.kindId}`;
+  const countOf = (groups: Awaited<ReturnType<typeof group>>) => new Map(groups.map((g) => [key(g), g._count._all]));
+  const [overdueN, soonN, noDueN] = [countOf(overdue), countOf(dueSoon), countOf(withoutDue)];
+  const userIds = [...new Set(all.flatMap((g) => (g.assigneeId ? [g.assigneeId] : [])))];
+  const kindIds = [...new Set(all.map((g) => g.kindId))];
+  const [users, kinds] = await Promise.all([
+    userIds.length ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } }) : [],
+    kindIds.length ? db.taskKind.findMany({ where: { id: { in: kindIds } }, select: { id: true, name: true } }) : [],
+  ]);
+  const userName = new Map(users.map((u) => [u.id, u.name]));
+  const kindName = new Map(localizeGeneralKinds(kinds, locale).map((k) => [k.id, k.name]));
+  return {
+    rows: all.map((g) => ({
+      columnId: g.columnId,
+      assigneeName: g.assigneeId ? (userName.get(g.assigneeId) ?? null) : null,
+      kind: kindName.get(g.kindId) ?? "—",
+      count: g._count._all,
+      overdue: overdueN.get(key(g)) ?? 0,
+      dueSoon: soonN.get(key(g)) ?? 0,
+      withoutDue: noDueN.get(key(g)) ?? 0,
+    })),
+    fixed,
+  };
 }
 
 const slugOf = (name: string, fallback: string) => slugify(name) || fallback;

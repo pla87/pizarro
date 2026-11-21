@@ -246,7 +246,7 @@ firstToken = tokenOf(mails(INVITED)[0]);
 // Sin selector, el idioma se pone a mano para poder seguir con el resto del recorrido.
 if (!hasLocale) await L.q(`UPDATE "User" SET locale='EN' WHERE email=$1`, [INVITED]);
 L.eq("USR: la cuenta se crea con el idioma elegido", (await L.q(`SELECT locale FROM "User" WHERE email=$1`, [INVITED]))[0]?.locale, "EN");
-L.eq("USR: y la invitación sale en ese idioma", mails(INVITED)[0]?.subject, "You've been invited to Pizarro");
+L.eq("USR: y la invitación sale en ese idioma, con el nombre de la organización", mails(INVITED)[0]?.subject, "You've been invited to Acme Iberia's Pizarro");
 const row = w.page.locator("li").filter({ hasText: INVITED });
 await row.getByText("Invitation pending").waitFor({ timeout: 15000 });
 L.check("USR: la fila dice «Invitation pending»", await row.getByText("Invitation pending").isVisible());

@@ -5,12 +5,13 @@ import { visibleProjectsWhere, workingProjectsWhere } from "./access";
 import { appTimeZone } from "./board";
 import { isoToDate, todayIso } from "./dates";
 import { db } from "./db";
-import { buildDigest, digestEmail, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
+import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
-import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
+import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail } from "./mail";
 import { getInstanceSettings } from "./instance";
 import { generateProjectReportPdf } from "./report-build";
+import { PDF_OUT_OF_MEMORY_MESSAGE } from "./report-render";
 import { digestDue, reportDue } from "./schedule";
 import type { CurrentUser } from "./session";
 import { isShuttingDown, trackInFlight } from "./shutdown";
@@ -103,7 +104,7 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
     const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
     if (digest.empty) return false; // sin novedades no se manda nada (el día queda reservado)
     const t: T = makeT(toLocale(u.locale));
-    await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl() }, t) });
+    await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl(), period: digestPeriod(u.lastDigestAt, now) }, t) });
     logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     return true;
   } catch (err) {
@@ -113,17 +114,48 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
   }
 }
 
-/** Correo del informe semanal: el PDF va adjunto. */
-function reportMail(opts: { projectName: string; url: string }, t: T) {
+/** Correo del informe semanal: el PDF va adjunto. Dice de qué organización es y quién lo configuró. */
+function reportMail(opts: { projectName: string; url: string; orgName: string; setBy: string }, t: T) {
   const subject = t("Informe semanal de «{project}»", { project: opts.projectName });
-  const intro = t("Adjuntamos el informe PDF de estado del proyecto «{project}».", { project: opts.projectName });
-  const note = t("Recibes este correo porque alguien configuró el informe semanal en los ajustes del proyecto.");
-  const text = `${intro}\n\n${t("Abrir el proyecto")}: ${opts.url}\n\n${note}\n`;
+  const intro = opts.orgName
+    ? t("Adjuntamos el informe PDF de estado del proyecto «{project}» de {org}.", { project: opts.projectName, org: opts.orgName })
+    : t("Adjuntamos el informe PDF de estado del proyecto «{project}».", { project: opts.projectName });
+  const note = t("Recibes este correo porque {name} configuró el informe semanal en los ajustes del proyecto.", { name: opts.setBy });
+  const noReply = noReplyNote(t);
+  const text = `${intro}\n\n${t("Abrir el proyecto")}: ${opts.url}\n\n${note}\n${noReply}\n`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${escapeHtml(intro)}</p>
 <p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir el proyecto"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(note)}</p></div>`;
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(note)}<br>${escapeHtml(noReply)}</p></div>`;
   return { subject, text, html };
+}
+
+/**
+ * Aviso a quien configuró el informe de que esta semana no ha salido porque el PDF no cabe en la memoria del generador
+ * (proyecto con muchísimas tareas): qué pasa y qué puede hacer, sin tecnicismos.
+ */
+function reportTooLargeMail(opts: { name: string; projectName: string; url: string }, t: T) {
+  const subject = t("No se ha podido enviar el informe semanal de «{project}»", { project: opts.projectName });
+  const paragraphs = [
+    t("Hola, {name}:", { name: opts.name }),
+    t("El informe semanal del proyecto «{project}» no se ha enviado esta vez: el proyecto tiene tantas tareas que el PDF no cabe en la memoria que Pizarro reserva para generarlo.", { project: opts.projectName }),
+    t("Para que vuelva a salir, haz el informe más corto: deja menos tareas pendientes (borra o termina las que ya no hagan falta) o archiva las tareas cerradas. El próximo informe se intentará el día y a la hora de siempre."),
+    t("Si necesitas el informe tal como está, pide a un administrador que dé más memoria al generador de PDF (PDF_WORKER_MAX_MB)."),
+  ];
+  const open = t("Abrir el proyecto");
+  const noReply = noReplyNote(t);
+  const text = `${paragraphs.join("\n\n")}\n\n${open}: ${opts.url}\n\n${noReply}\n`;
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
+${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
+<p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
+<p style="color:#94a3b8;font-size:12px">${escapeHtml(noReply)}</p></div>`;
+  return { subject, text, html };
+}
+
+/** ¿Falló el PDF porque el generador se quedó sin memoria? (report-render.ts) */
+function pdfOutOfMemory(err: unknown): boolean {
+  const e = err as { message?: unknown; cause?: { code?: unknown } } | null;
+  return (typeof e?.message === "string" && e.message.startsWith(PDF_OUT_OF_MEMORY_MESSAGE)) || e?.cause?.code === "ERR_WORKER_OUT_OF_MEMORY";
 }
 
 // Si el envío de un informe falla (SMTP caído, PDF atascado…), no se reintenta en cada pasada del mantenimiento:
@@ -140,8 +172,13 @@ export function reportRetryAllowed(projectId: string, now: Date): boolean {
 export const noteReportFailure = (projectId: string, now: Date) => void reportFailures.set(projectId, now.getTime());
 export const clearReportFailure = (projectId: string) => void reportFailures.delete(projectId);
 
-/** Envía los informes semanales cuyo día y hora han llegado. Devuelve cuántos ha enviado. */
-export async function sendDueReports(now: Date = new Date()): Promise<number> {
+type GenerateReport = typeof generateProjectReportPdf;
+
+/**
+ * Envía los informes semanales cuyo día y hora han llegado. Devuelve cuántos ha enviado. `generate`: quién hace el PDF
+ * (las pruebas lo sustituyen para simular un fallo).
+ */
+export async function sendDueReports(now: Date = new Date(), opts: { generate?: GenerateReport } = {}): Promise<number> {
   if (!emailEnabled()) return 0;
   await getInstanceSettings();
   const tz = appTimeZone();
@@ -151,7 +188,7 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
     if (!reportDue(now, tz, s)) continue;
     if (!reportRetryAllowed(s.projectId, now)) continue;
     // La persona que lo configuró debe seguir activa y con acceso al proyecto (si no, no se manda nada de un proyecto que ya no ve).
-    const creator = s.createdById ? await db.user.findFirst({ where: { id: s.createdById, active: true }, select: { id: true, name: true, role: true, locale: true } }) : null;
+    const creator = s.createdById ? await db.user.findFirst({ where: { id: s.createdById, active: true }, select: { id: true, name: true, email: true, role: true, locale: true } }) : null;
     const allowed = creator ? await db.project.count({ where: { id: s.projectId, ...visibleProjectsWhere(creator as CurrentUser) } }) : 0;
     // El destinatario también se comprueba al enviar: pudo perder el acceso después de programarlo.
     const recipientOk = creator && allowed ? await reportRecipientAllowed(s.projectId, s.recipient, creator.role) : false;
@@ -161,32 +198,61 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
       continue;
     }
     if (isShuttingDown()) break;
-    if (await trackInFlight(() => sendReport(s, creator, now))) sent++;
+    if (await trackInFlight(() => sendReport(s, creator, now, opts.generate ?? generateProjectReportPdf))) sent++;
   }
   return sent;
 }
 
 type Schedule = { projectId: string; recipient: string; lastSentAt: Date | null };
+type Creator = { id: string; name: string; email: string; locale: string | null };
 
-/** Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado. */
-async function sendReport(s: Schedule, creator: { id: string; name: string; locale: string | null }, now: Date): Promise<boolean> {
+/**
+ * Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado. Va en el idioma
+ * del destinatario si es una persona de Pizarro; a una dirección externa, en el de quien lo configuró.
+ */
+async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean> {
   const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
   if (claim.count !== 1) return false;
   const t0 = performance.now();
   const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
+  const url = `${appUrl()}/p/${s.projectId}`;
   try {
-    const locale = toLocale(creator.locale);
-    const report = await generateProjectReportPdf(s.projectId, { generatedBy: creator.name, locale });
+    const person = await db.user.findFirst({ where: { email: { equals: s.recipient, mode: "insensitive" }, active: true }, select: { locale: true } });
+    const locale = toLocale(person ? person.locale : creator.locale);
+    const report = await generate(s.projectId, { generatedBy: creator.name, locale });
     if (!report) throw new Error("proyecto no encontrado");
-    const mail = reportMail({ projectName: report.project.name, url: `${appUrl()}/p/${s.projectId}` }, makeT(locale));
+    const { orgName } = await getInstanceSettings();
+    const mail = reportMail({ projectName: report.project.name, url, orgName, setBy: creator.name }, makeT(locale));
     await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
     clearReportFailure(s.projectId);
     logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     return true;
   } catch (err) {
+    if (pdfOutOfMemory(err)) {
+      // Sin memoria para el PDF: reintentarlo cada hora volvería a fallar y ocuparía la cola de PDF todo el día. Se deja
+      // la reserva (ya no se intenta más hasta el próximo envío, tampoco en otro proceso) y se avisa una vez a quien lo
+      // configuró.
+      clearReportFailure(s.projectId);
+      logEvent({ ...base, level: "error", action: "report.scheduledTooLarge", message: `Informe semanal no enviado a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}. No se reintenta hasta el próximo envío; se avisa a quien lo configuró`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
+      await notifyReportTooLarge(s.projectId, creator, url);
+      return false;
+    }
     noteReportFailure(s.projectId, now);
     await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
     logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
     return false;
+  }
+}
+
+/** Email a quien configuró el informe de que no ha salido por su tamaño (en su idioma). Un fallo solo se registra. */
+async function notifyReportTooLarge(projectId: string, creator: Creator, url: string): Promise<void> {
+  const base = { category: "notify", userId: creator.id, userName: creator.name, projectId };
+  try {
+    const project = await db.project.findUnique({ where: { id: projectId }, select: { name: true } });
+    if (!project) return;
+    await sendMail({ to: creator.email, ...reportTooLargeMail({ name: creator.name, projectName: project.name, url }, makeT(toLocale(creator.locale))) });
+    logEvent({ ...base, action: "report.tooLargeNotified", message: `Aviso a ${creator.name}: el informe semanal de «${project.name}» es demasiado grande`, details: { to: maskEmail(creator.email) } });
+  } catch (err) {
+    logEvent({ ...base, level: "error", action: "report.tooLargeNotifyFailed", message: `Fallo al avisar a ${creator.name} del informe demasiado grande: ${maskEmailsIn((err as Error).message)}` });
   }
 }
