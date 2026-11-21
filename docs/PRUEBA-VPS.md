@@ -118,13 +118,13 @@ Esperado: devuelve `IP-DEL-SERVIDOR` en «Address». Si dice `NXDOMAIN` o devuel
 En el servidor. Con dominio:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
 ```
 
 O, para probar por IP sin dominio:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --local
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --local
 ```
 
 Qué verás, en orden:
@@ -267,7 +267,7 @@ Esta es la prueba que de verdad importa. Lo único que sobrevivirá es lo que ha
 5. Instala **sin arrancar** (prepara todo pero no levanta la app):
 
    ```bash
-   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com --no-start --yes
+   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com --no-start --yes
    ```
 
 6. Edita el `.env` nuevo:
@@ -321,13 +321,13 @@ Actualizar es repetir el mismo comando. Conserva `.env`, el kit y los datos.
 2. Vuelve a ejecutar el instalador, con el mismo dominio (o `--local`):
 
    ```bash
-   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+   curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
    ```
 
    Esperado: `Actualizando el código en /opt/pizarro (se conservan deploy/.env y el kit de recuperación)...`, `Los secretos ya existían: no se ha cambiado ninguno.` y al final `La instalación ya estaba configurada: entra con tu usuario.` (sin código de `/setup`).
    Esperado también: `Última versión publicada: vX.Y.Z.` y, en lugar de una compilación, `Descargando la imagen de Pizarro...` (segundos).
 3. Comprueba que tus datos siguen ahí y que la versión es la esperada (la misma si no hay novedades, o la nueva).
-4. **Fijar o volver a una versión** (opcional): añade `--version X.Y.Z` al mismo comando (por ejemplo `... | sh -s -- --domain pizarro.example.com --version 1.37.0`). Instala el código y la imagen de esa versión. Ojo: las migraciones de la base de datos solo avanzan; si la versión nueva ya migró los datos, volver atrás puede exigir restaurar antes una copia de seguridad (sección 7 y siguientes), así que no cuentes con un «rollback inmediato».
+4. **Fijar o volver a una versión** (opcional): añade `--version X.Y.Z` al mismo comando (por ejemplo `... | sh -s -- --domain pizarro.example.com --version 1.49.0`; desde la 1.38.0). Instala el código y la imagen de esa versión. Ojo: las migraciones de la base de datos solo avanzan; si la versión nueva ya migró los datos, volver atrás puede exigir restaurar antes una copia de seguridad (sección 7 y siguientes), así que no cuentes con un «rollback inmediato».
 5. **Privacidad:** Pizarro consulta `api.github.com` cada 12 horas para avisar de versiones nuevas (solo pide la última versión, no envía datos de tu instalación). Para desactivarlo, pon `UPDATE_CHECK=0` en `/opt/pizarro/deploy/.env` y ejecuta `docker compose up -d`.
 
 ## 11. Desinstalar y limpiar

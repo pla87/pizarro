@@ -51,3 +51,45 @@ updates:
       # Security → Dependabot y se hace a mano.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+
+  # Imágenes base, fijadas por digest (etiqueta@sha256:…): la del Dockerfile (node:22-bookworm-slim) y las de
+  # deploy/compose.yml (caddy:2-alpine y postgres:16-alpine). Dependabot propone el digest nuevo de la misma etiqueta
+  # (parches de seguridad del sistema base). Misma cadencia y espera que las acciones. Nunca otra versión mayor: Node
+  # se sube a mano, y PostgreSQL de la 16 a la 17 exige migrar los datos (la imagen nueva no abre el volumen viejo).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "docker"
+    groups:
+      imagen-base:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Madrid
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "docker"
+    groups:
+      imagenes-compose:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

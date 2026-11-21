@@ -33,10 +33,13 @@ Railway. Se está preparando para venderse como producto.
   publicadas; la mueve el workflow Release al publicar). Fusionar en `main` no despliega nada: hay que publicar la
   versión (sección 5). Si un despliegue no llega, en Railway ⌘K → «Deploy Latest Commit». Dominio propio en `APP_URL`.
 - **Versión actual:** la de `package.json` y el primer bloque de `changelog.json`.
-- **Cómo funciona todo:** `docs/MANUAL.md` (y `MANUAL.pdf`, generado). Instalación: `docs/INSTALL.md`. Prueba en un
+- **Cómo funciona todo:** `docs/MANUAL.md`. Su PDF, `MANUAL.pdf`, no está en el repositorio: el workflow Release lo
+  genera y lo adjunta a cada GitHub Release (la web enlaza a
+  `https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf`). Instalación: `docs/INSTALL.md`. Prueba en un
   VPS: `docs/PRUEBA-VPS.md`.
-- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `PRUEBAS.pdf`, en la
-  raíz, generado desde `docs/PRUEBAS.md` con `node scripts/build-manual-pdf.mjs pruebas` (con `CHROME_PATH` si hace falta).
+- **Pruebas que el dueño hace en real** (Google, WhatsApp, Telegram, email, Stripe, Railway, móvil): `docs/PRUEBAS.md`;
+  su PDF, `PRUEBAS.pdf`, también va adjunto a cada release (en local: `node scripts/build-manual-pdf.mjs pruebas`, con
+  `CHROME_PATH` si hace falta). Los dos PDF están en `.gitignore`.
 
 ## 2. Cómo trabaja el propietario (protocolo de cada ronda)
 
@@ -82,6 +85,10 @@ expliquen las opciones con su coste y beneficio y una recomendación.
   repetidas entre ficheros (`npm run i18n:unused` las cuenta).
 - Migraciones nuevas: carpeta `prisma/migrations/<timestamp>_<nombre>` con un timestamp posterior al último. Las ya
   publicadas no se editan nunca (cambia su checksum y `prisma migrate deploy` falla en las instalaciones que la aplicaron).
+  El SQL de cada migración nueva va **entre `BEGIN;` y `COMMIT;`** (solo comentarios antes y después): si una sentencia
+  falla, no queda la base con media migración aplicada. Lo comprueba `tests/migrations.test.ts` para las posteriores a
+  la última de la v1.62.0 (`20261126100000`); las anteriores no se tocan. Nada que no pueda ir en una transacción
+  (`CREATE INDEX CONCURRENTLY`), ni usar en la misma migración un valor de enum recién añadido.
 - Migraciones: **expandir y luego contraer**. No se borra ni se renombra una columna (o tabla, o valor de un enum) en
   la misma versión que deja de usarla: primero sale la versión que ya no la lee ni la escribe (con una migración que
   solo añade, si hace falta) y la columna se quita en una migración de la versión siguiente. Durante un despliegue la
@@ -329,7 +336,9 @@ llevan enlaces de sesión ni nombres de modelos.
 2. Rellenar en `changelog.json` el bloque nuevo: `changes` (`nuevas`, `mejoras`, `correcciones`, `tecnicos`) y
    `en: { summary, changes }`. Después `npm run version:bump -- --render`.
 3. Actualizar `docs/MANUAL.md` (las dos líneas de versión, `version: "vX"` y «Versión de la aplicación») y las
-   secciones afectadas. Generar el PDF: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH` si hace falta).
+   secciones afectadas. Generar el PDF en local para revisarlo: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH`
+   si hace falta; `pruebas` para `PRUEBAS.pdf`). **No se sube**: los dos PDF están en `.gitignore` y el workflow Release
+   los vuelve a generar desde `docs/` y los adjunta a la GitHub Release.
 4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
 5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
    sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
@@ -348,6 +357,10 @@ llevan enlaces de sesión ni nombres de modelos.
    de `src/lib/tech-info.ts`. Si cambian esos campos, actualiza a la vez el formulario y `tests/bug-report.test.ts`.
    El job solo mueve `stable` a un commit que ya está en `main` (`git merge-base --is-ancestor`); una etiqueta puesta
    en otra rama publica la imagen y la release, pero deja `stable` donde estaba (con un aviso en el job).
+   El job «Manual en PDF» (en paralelo con las imágenes) genera `MANUAL.pdf` y `PRUEBAS.pdf` con
+   `scripts/build-manual-pdf.mjs` y el Chrome del runner (`CHROME_PATH` = `CHROME_BIN`); «Imagen Docker» lo espera (si
+   falla no se etiqueta nada) y «GitHub Release» los adjunta al crear la release. Si hace falta cambiar uno después:
+   `gh release upload vX.Y.Z MANUAL.pdf --clobber`.
 6. **Secreto `STABLE_PUSH_TOKEN` (una vez).** GitHub no deja que `GITHUB_TOKEN` mueva una rama si entre su commit
    anterior y el nuevo cambia algún fichero de `.github/workflows/` (error «refusing to allow a GitHub App to create
    or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
@@ -395,7 +408,12 @@ llevan enlaces de sesión ni nombres de modelos.
 - **npm**, un PR mensual con todas las versiones menores y parches. Las versiones mayores no se proponen (se hacen a
   mano, leyendo sus notas de cambios). Las de seguridad llegan en cuanto hay aviso, en su propio PR (requiere
   *Settings → Code security → Dependabot security updates* activado).
-- En los dos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
+- **Imágenes base de Docker** (ecosistemas `docker`, el `Dockerfile`, y `docker-compose`, `deploy/compose.yml`), un PR
+  semanal por ecosistema. Van fijadas por digest con su etiqueta (`node:22-bookworm-slim@sha256:…`,
+  `caddy:2-alpine@sha256:…`, `postgres:16-alpine@sha256:…`): Dependabot propone el digest nuevo de la misma etiqueta,
+  nunca otra versión mayor (PostgreSQL 16 → 17 exige migrar los datos). A mano: `docker buildx imagetools inspect
+  <imagen:etiqueta>`, línea `Digest:` (la del índice multiarquitectura, no la de una plataforma).
+- En todos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
   seguridad no esperan).
 - **`overrides` en `package.json`**: `minimatch` 11 dentro de `@typescript-eslint/typescript-estree` (herramienta de
   lint, no va en la app) por el aviso GHSA-g3hv-75wg-m249; quitarlo cuando `typescript-eslint` traiga una versión

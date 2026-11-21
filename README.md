@@ -4,9 +4,9 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Instalar:** guía paso a paso en la web, [getpizarro.com/instalar](https://getpizarro.com/instalar/) ([English](https://getpizarro.com/en/install/)): requisitos, instalación en un comando, primeros pasos, Railway, copias, actualizar y problemas frecuentes. Se genera desde `docs/web/instalar.md` y `docs/web/en/install.md`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas).
 - **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
-- **Documentación:** [Manual de operaciones (PDF)](MANUAL.pdf) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
+- **Documentación:** [Manual de operaciones (PDF)](https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf) (adjunto de la última versión publicada) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
 - **Errores:** con el formulario de [incidencias](https://github.com/pla87/pizarro/issues/new/choose) (o *Informar de un error* en *Historial de versiones* dentro de la app). Solo se atienden versiones publicadas sin modificar. Los fallos de seguridad, en privado: [SECURITY.md](SECURITY.md).
 
 ---
@@ -67,7 +67,7 @@ Para generar un `SESSION_SECRET`: `openssl rand -base64 48`.
 | `npm run db:seed` | Seed idempotente: crea el admin si no hay usuarios y un proyecto de ejemplo si no hay proyectos. |
 | `npm run changelog:sync` | Sincroniza `changelog.json` con la tabla `AppVersionLog`. |
 | `npm run version:bump -- <patch\|minor\|major>` | Registra una nueva versión de la app (ver abajo). |
-| `npm run docs:pdf` | Regenera `MANUAL.pdf` a partir de `docs/MANUAL.md`. |
+| `npm run docs:pdf` | Genera `MANUAL.pdf` a partir de `docs/MANUAL.md`, para revisarlo en local (no se sube: el workflow Release lo adjunta a cada [release](https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf)). |
 
 ### Tests de integración (base de datos real)
 

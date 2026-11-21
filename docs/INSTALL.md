@@ -22,16 +22,16 @@ Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
 En el servidor, como root (o con `sudo` disponible):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com
 ```
 
-Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--version X.Y.Z` (instala esa versión; sin ella, la última publicada), `--ref <rama|tag>` (código de una rama o etiqueta; una rama se construye en el servidor), `--build` (construye la imagen en el servidor en vez de descargarla, ver «Construir la imagen en tu servidor»), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
+Opciones: `--local` (solo red local, por HTTP y sin dominio), `--dir /opt/pizarro` (carpeta; por defecto esa), `--version X.Y.Z` (instala esa versión, de la 1.38.0 en adelante; sin ella, la última publicada), `--ref <rama|tag>` (código de una rama o etiqueta; una rama se construye en el servidor), `--build` (construye la imagen en el servidor en vez de descargarla, ver «Construir la imagen en tu servidor»), `--no-start`, `--yes` (instala Docker sin preguntar) y `--help`. Sin `--domain` ni `--local`, el script los pregunta.
 
 El script:
 
 1. Comprueba Linux (x86_64 o arm64) y que eres root o tienes `sudo`.
 2. Comprueba Docker y el plugin `docker compose`. Si faltan, **te pregunta** si los instala con el script oficial de `get.docker.com` (con `--yes` no pregunta). Si dices que no, se detiene.
-3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Muestra la versión que va a instalar. Si no puede saber cuál es la última (sin red, límite de GitHub o todavía no hay ninguna publicada), **no construye `main` a escondidas**: en una instalación nueva se detiene y sugiere `--build` o `--ref main`, y en una ya existente la deja intacta y sugiere `--version X.Y.Z` o reintentar más tarde.
+3. Averigua la última versión publicada (o usa la que pidas con `--version`), descarga el código de esa etiqueta de GitHub (sin necesitar `git`), comprueba que está completo y lo deja en la carpeta de instalación. Muestra la versión que va a instalar. Si no puede saber cuál es la última (sin red, límite de GitHub o todavía no hay ninguna publicada), **no construye `main` a escondidas**: en una instalación nueva se detiene y sugiere `--build` (que usa la rama `stable`, la de la última versión publicada) o `--ref stable`, y en una ya existente la deja intacta y sugiere `--version X.Y.Z` o reintentar más tarde.
 4. Ejecuta `deploy/install.sh`: descarga la **imagen ya construida** (ver «La imagen ya construida»), crea `deploy/.env` con secretos aleatorios, arranca los contenedores, espera a que la app esté sana y muestra la dirección, el código de `/setup` y el kit de recuperación.
 
 Repetir el mismo comando **actualiza** Pizarro a la última versión (sección 5): prepara el código nuevo aparte y lo cambia de golpe (si se interrumpe, la instalación anterior sigue intacta), y conserva `deploy/.env`, `deploy/recovery-kit.txt` y los datos (que viven en volúmenes de Docker, fuera de la carpeta). Si al actualizar pasas un `--domain` (o `--local`) distinto del que ya está en `deploy/.env`, el script avisa y mantiene el actual; para cambiarlo, edita `DOMAIN` y `APP_URL` en `deploy/.env` y ejecuta `docker compose up -d` en `deploy/`. Haz antes una copia (sección 4). Si prefieres revisar el script antes de ejecutarlo, descárgalo con `curl -fsSLO <url>`, léelo y lánzalo con `sh get.sh --domain …`.
@@ -168,7 +168,7 @@ El script se puede repetir sin riesgo. Hace esto:
 2. Pregunta el dominio (o la dirección, en modo local) y crea `deploy/.env` con `DOMAIN` y `APP_URL`.
 3. Genera `POSTGRES_PASSWORD`, `SESSION_SECRET` y `BACKUP_KEY` con aleatorios fuertes (`openssl rand`, o `/dev/urandom` si no hay `openssl`). **Nunca pisa un secreto que ya existe** en el `.env`.
 4. Escribe el **kit de recuperación** `deploy/recovery-kit.txt` (permisos 600) con las cuatro claves que hacen falta para recuperar las copias (`SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`) y los pasos para restaurar en un servidor nuevo (los de la sección 6.3). La contraseña de PostgreSQL no va en el kit: el servidor nuevo crea la suya.
-5. Descarga las imágenes (`docker compose pull`: la de Pizarro, y también las de Caddy y PostgreSQL, que así reciben sus actualizaciones sin cambiar de versión mayor), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen de Pizarro en el servidor en su lugar (y descarga solo las de Caddy y PostgreSQL).
+5. Descarga las imágenes (`docker compose pull`: la de Pizarro, y también las de Caddy y PostgreSQL, fijadas por digest en `compose.yml`; sus actualizaciones, sin cambiar de versión mayor, llegan con el `compose.yml` de cada versión de Pizarro), ejecuta `docker compose up -d` y espera a que la app esté sana. Con `--build` construye la imagen de Pizarro en el servidor en su lugar (y descarga solo las de Caddy y PostgreSQL).
 6. Muestra la dirección del asistente de configuración y el **código de un solo uso** que lee del log de la app.
 
 > **Guarda `recovery-kit.txt` FUERA del servidor** (gestor de contraseñas, otro equipo) y bórralo de aquí si quieres. Sin `BACKUP_KEY` las copias no se pueden leer; si se pierde o cambia `SESSION_SECRET`, todo el mundo tiene que volver a entrar y configurar de nuevo su verificación en dos pasos.
@@ -390,12 +390,12 @@ Antes de actualizar, haz una copia (sección 4). Las migraciones de la base de d
 **Servidor propio, la forma más sencilla:** repite el comando de instalación. Averigua la última versión publicada, descarga su código y su imagen, y conserva tu configuración y tus datos:
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh
 ```
 
 (No hace falta repetir `--domain`: se conserva el de `deploy/.env`.)
 
-**Solo las imágenes** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`). `docker compose pull` descarga la de Pizarro y también las de Caddy y PostgreSQL:
+**Solo las imágenes** (más rápido, si no necesitas cambios en `deploy/`; sigue la etiqueta `latest`). `docker compose pull` descarga la de Pizarro y también las de Caddy y PostgreSQL (estas dos, exactamente las que fija por digest tu `deploy/compose.yml`: para recibir las nuevas, repite el comando de instalación):
 
 ```bash
 cd /opt/pizarro/deploy
@@ -409,14 +409,14 @@ Esto solo funciona si no fijaste una versión (ver abajo): una instalación fija
 **Fijar una versión o volver a una anterior:**
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --version 1.37.0
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --version 1.49.0
 ```
 
-Instala el código de la etiqueta `v1.37.0` y fija la imagen `ghcr.io/pla87/pizarro:1.37.0` (`PIZARRO_IMAGE` en `deploy/.env`). Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
+Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/pizarro:1.49.0` (`PIZARRO_IMAGE` en `deploy/.env`). Admite de la 1.38.0 en adelante (la primera con imagen publicada); una anterior se rechaza con un aviso. Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
 
 **Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada). Despliega desde la rama **`stable`**: el workflow *Release* la mueve al commit de cada versión publicada, así que Railway se actualiza solo al publicarse una versión, nunca con commits sueltos de `main`. Para quedarte en una versión, desactiva el despliegue automático del servicio (o apúntalo a la etiqueta `vX.Y.Z` si tu Railway lo permite). Cambiar una instalación que hoy sigue `main`: README, «Guía de despliegue en Railway», paso 2.
 
-**Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. Solo reciben `main` quienes lo piden expresamente (`--ref main`, `--build` sin versiones publicadas o Railway apuntado a `main`).
+**Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. El propio `get.sh` se descarga de la rama `stable`. Solo reciben `main` quienes lo piden expresamente (`--ref main` o Railway apuntado a `main`); `--build` sin poder consultar la última versión usa `stable`.
 
 **Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Es una petición a `api.github.com` cada 12 horas desde tu servidor: solo pide un dato público (la última versión) y no se envía nada de tu instalación, pero GitHub ve la dirección IP del servidor. Si no quieres esa conexión saliente, desactívalo (abajo). Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
 

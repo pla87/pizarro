@@ -15,7 +15,9 @@ x-logging: &logging
 
 services:
   caddy:
-    image: caddy:2-alpine
+    # Fijada por digest, como las acciones de GitHub por SHA: etiqueta caddy:2-alpine (índice multiarquitectura).
+    # Dependabot (ecosistema docker-compose) propone el digest nuevo; a mano: docker buildx imagetools inspect caddy:2-alpine
+    image: caddy:2-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
     restart: unless-stopped
     depends_on:
       - app
@@ -87,7 +89,10 @@ services:
     logging: *logging
 
   postgres:
-    image: postgres:16-alpine
+    # Fijada por digest: etiqueta postgres:16-alpine (índice multiarquitectura). Dependabot propone el digest nuevo de
+    # la misma etiqueta, nunca otra versión mayor (de la 16 a la 17 hay que migrar los datos a mano).
+    # A mano: docker buildx imagetools inspect postgres:16-alpine
+    image: postgres:16-alpine@sha256:1d5b02d3a9941fbd52437db4107f8c52d6297dac553ca1e5c299ebb3756b4857
     restart: unless-stopped
     environment:
       POSTGRES_USER: pizarro

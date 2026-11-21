@@ -52,12 +52,13 @@ if (license.length !== 2) throw new Error("LICENSE.md debe tener exactamente un 
 
 const SITE = product.SITE_URL.replace(/\/$/, "");
 const BUY = product.BUY_URL.trim();
-const GET_SH = "curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/main/deploy/get.sh | sh -s -- --domain pizarro.example.com";
+const GET_SH = "curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com";
 const BLOB = `${product.REPO_URL}/blob/main`;
 const LINKS = {
   image: product.IMAGE_URL,
   manual: `${BLOB}/docs/MANUAL.md`,
-  manualPdf: `${BLOB}/MANUAL.pdf`,
+  // El PDF no está en el repositorio: el workflow Release lo genera y lo adjunta a cada GitHub Release.
+  manualPdf: `${product.REPO_URL}/releases/latest/download/MANUAL.pdf`,
   changelog: `${BLOB}/CHANGELOG.md`,
 };
 // Autoría: una línea discreta en el pie de la web (solo aquí; ni en la app ni en el manual).

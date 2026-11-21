@@ -1,9 +1,13 @@
 # Imagen multi-stage de Pizarro:
 #   deps → build (Next standalone + script de arranque) → migrator (Prisma CLI aislado) → runner
-ARG NODE_IMAGE=node:22-bookworm-slim
 
 # --- Base común: OpenSSL es necesario para que Prisma elija el motor correcto ---
-FROM ${NODE_IMAGE} AS base
+# Imagen base fijada por digest, como las acciones de GitHub por SHA: etiqueta node:22-bookworm-slim (Node 22 sobre
+# Debian 12 con glibc). El digest es el del índice multiarquitectura (amd64 y arm64). Dependabot (ecosistema docker,
+# .github/dependabot.yml) propone el digest nuevo cuando la etiqueta cambia; a mano:
+#   docker buildx imagetools inspect node:22-bookworm-slim   (línea «Digest:»)
+# Va en el FROM y no en un ARG: Dependabot no sigue las variables.
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS base
 RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
