@@ -5,7 +5,8 @@
 // avisa con «Limpiar filtros» y «Generar Release» dice que incluye las tareas ocultas; en el móvil la lupa da el foco al
 // campo al primer toque, la búsqueda salta a la columna con resultados, la columna nueva se muestra al crearla, se recuerda
 // la última columna vista y las pestañas avisan de que hay más; los botones flotantes no tapan el diálogo de una tarea ni
-// la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS); Alt+P abre el selector de proyectos
+// la vista previa de un documento; el asa táctil no mueve nada al hidratar (CLS), y una columna larga llega del servidor con
+// solo sus 50 primeras tarjetas y las demás se pintan después sin salto; Alt+P abre el selector de proyectos
 // con el foco en el buscador; la rueda sobre el detalle de una tarea no desplaza la columna de detrás; y axe no encuentra
 // controles anidados ni nombres que no contienen el texto visible en las tarjetas y el panel de fijas, y el recuento de
 // tarjetas se anuncia en un solo sitio. Además: con red lenta, abrir y cerrar una tarea deprisa no deja la burbuja
@@ -396,6 +397,34 @@ if (only.includes("cls")) {
   const d = await L.session();
   L.eq("CLS: en escritorio (ratón) el asa no se ve", await d.page.locator("[data-task-card] [aria-label='Arrastrar para reordenar']:visible").count(), 0);
   await d.ctx.close();
+
+  // Columna larga: el servidor pinta solo las primeras 50 tarjetas; el resto llega después de hidratar, sin salto, y la
+  // búsqueda, el recuento y «Seleccionar todas» cuentan con todas.
+  await L.cleanBoard();
+  const LONG = 180;
+  await L.seedTasks(COL.backlog, Array.from({ length: LONG }, (_, i) => `Larga ${i + 1} con un título que ocupa dos líneas en el móvil`));
+  const m = await L.session({ ...MOBILE, init: "window.__cls = 0; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: 'layout-shift', buffered: true }); } catch {}" });
+  const html = await (await m.page.request.get(`${L.BASE}/p/${p.id}`)).text();
+  const served = (html.match(/data-task-card="/g) ?? []).length;
+  L.check("CLS: el HTML del servidor lleva como mucho 50 tarjetas de la columna larga", served > 0 && served <= 50, String(served));
+  L.check("CLS: con el hueco reservado para las demás", html.includes("data-cards-pending"));
+  await L.goto(m.page, `${L.BASE}/p/${p.id}`);
+  await L.liveOpen(m.page);
+  await L.eqEventually("CLS: después de hidratar se pintan todas", () => L.colLoc(m.page, COL.backlog).locator("[data-task-card]").count(), LONG, { timeout: 10000 });
+  L.eq("CLS: ya sin hueco", await m.page.locator("[data-cards-pending]").count(), 0);
+  await sleep(500);
+  const clsLong = await m.page.evaluate(() => window.__cls);
+  L.note("CLS medido con una columna de 180 tarjetas", String(clsLong));
+  L.check("CLS: menos de 0,02 también con la columna larga", clsLong < 0.02, String(clsLong));
+  L.check("CLS: el recuento de la columna cuenta todas", (await L.colLoc(m.page, COL.backlog).locator("header").innerText()).includes(String(LONG)));
+  await m.ctx.close();
+  const w = await L.session();
+  await boardSearch(w.page).fill(`Larga ${LONG} `);
+  await L.checkEventually("CLS: la búsqueda encuentra una tarjeta del final de la columna", () => L.cardLoc(w.page, `Larga ${LONG} con un título que ocupa dos líneas en el móvil`).isVisible());
+  await boardSearch(w.page).fill("");
+  L.assertNoErrors("cls larga", [w]);
+  await w.ctx.close();
+  await L.cleanBoard();
 }
 
 // --- Alt+P con el foco en el buscador ------------------------------------------------------------------------------------

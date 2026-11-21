@@ -549,6 +549,7 @@
       "src/app/api/projects/[projectId]/events/route.ts",
       "src/app/api/projects/[projectId]/board-tasks/route.ts",
       "src/components/board/livePatch.ts",
+      "src/components/board/deferredCards.ts",
       "src/app/api/tasks/[taskId]/viewers/route.ts",
       "src/lib/presence.ts",
       "src/lib/realtime.ts",
