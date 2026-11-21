@@ -23,8 +23,12 @@ export function isOfflineMessage(message: string, t: (s: string) => string): boo
   return message === OFFLINE_MESSAGE || message === t(OFFLINE_MESSAGE);
 }
 
-/** Un sondeo correcto vale unos instantes: varios refrescos seguidos no repiten la comprobación. */
-const PROBE_FRESH_MS = 1500;
+/**
+ * Un sondeo correcto (o un mensaje del canal en vivo: reportServerHeard) vale unos instantes: varios refrescos seguidos no
+ * repiten la comprobación. 3 s cubren el refresco que provoca un aviso del canal (200 ms de agrupación y hasta 2 s de espera
+ * al azar con un cambio de otra persona, remoteChange.ts).
+ */
+const PROBE_FRESH_MS = 3000;
 const PROBE_TIMEOUT_MS = 8000;
 /** Reintentos mientras no hay conexión: 2 s, 4 s, 8 s… hasta 30 s. */
 const RETRY_MIN_MS = 2000;
@@ -208,6 +212,26 @@ export function importWhenOnline<T>(load: () => Promise<T>): Promise<T> {
     };
     attempt();
   });
+}
+
+/**
+ * ¿Ha pedido el navegador ahorrar datos (`navigator.connection.saveData`: «Ahorro de datos» de Chrome en Android, o la
+ * cabecera `Save-Data`)? Entonces no se precarga nada por adelantado (diálogos en reposo, enlaces al pasar el ratón, el
+ * detalle de la tarea al hacer clic): solo se descarga lo que se abre. Fuera del navegador, o sin la API (Firefox,
+ * Safari), false.
+ */
+export function saveDataOn(nav: unknown = typeof navigator === "undefined" ? undefined : navigator): boolean {
+  return (nav as { connection?: { saveData?: unknown } } | undefined)?.connection?.saveData === true;
+}
+
+/**
+ * Ha llegado un mensaje del canal en vivo del tablero: el servidor responde, igual que con un sondeo correcto (el refresco
+ * que provoca el aviso no vuelve a pedir /api/health). Al apagarse, el servidor cierra los canales antes de dejar de servir
+ * páginas, así que un mensaje recibido vale lo mismo que un sondeo. Si se daba por perdida la conexión, ha vuelto.
+ */
+export function reportServerHeard(): void {
+  lastOkAt = performance.now();
+  if (offline) goOnline();
 }
 
 /** Una petición acaba de llegar al servidor: si se daba por perdida la conexión, ha vuelto. */

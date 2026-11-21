@@ -170,6 +170,8 @@ export async function resetPassword(token: string, password: string) {
     const row = await findUsableToken(String(token), ["PASSWORD_RESET", "INVITE"]);
     if (!row || !(await consumeToken(row.id))) throw new AppError(INVALID_LINK);
     await applyNewPassword(row.userId, await hashPassword(pw), { notice: row.purpose === "PASSWORD_RESET" });
+    // Quien demuestra que controla su email sale del bloqueo por intentos fallidos (si no, seguía sin poder entrar).
+    resetRateLimit(loginRateKeys(ip, row.user.email).account);
     logEvent({
       category: "auth", action: row.purpose === "INVITE" ? "auth.inviteAccepted" : "auth.passwordReset",
       message: row.purpose === "INVITE" ? `${row.user.name} ha elegido su contraseña inicial` : `${row.user.name} ha restablecido su contraseña`,

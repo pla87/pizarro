@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertProjectAccess } from "@/lib/access";
-import { AppError } from "@/lib/errors";
+import { AppError, notFound } from "@/lib/errors";
+import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
 import { logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
@@ -22,6 +23,9 @@ import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
 
+/** Lo que se lee del principio del fichero para confirmar su tipo: algo más que la muestra de looksLikeText (64 KB). */
+const KIND_SAMPLE_BYTES = 64 * 1024 + 16;
+
 /** Máximo de documentos o cuota superados: el mismo error en la comprobación previa y en la definitiva. */
 async function limitError(problem: DocumentLimitProblem, projectId: string, isAdmin: boolean): Promise<AppError> {
   const t = await getT();
@@ -40,7 +44,10 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
   try {
     if (!isSameOrigin(req)) throw new AppError("Origen no permitido.", 403);
     const user = await requireUser();
-    const { projectId } = await ctx.params;
+    // Un id con caracteres que PostgreSQL no admite (el nulo) es «no encontrado», no un 500 (22021) en los logs.
+    const parsedId = v.id.safeParse((await ctx.params).projectId);
+    if (!parsedId.success) throw notFound();
+    const projectId = parsedId.data;
     await assertProjectAccess(user, projectId);
     // Tope de subidas por persona (el mismo cubo y el mismo tope que los adjuntos de tareas): evita llenar disco o memoria con un bucle.
     if (!rateLimit(`upload:${user.id}`, 300, 60_000)) {
@@ -60,8 +67,13 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) throw await tooBig();
     if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
     // Como mucho unas pocas subidas a la vez en todo el servidor (cada una se lee entera en memoria).
-    release = await acquireUploadSlot(user.id);
-    if (!release) throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
+    release = await acquireUploadSlot(user.id, undefined, { signal: req.signal });
+    if (!release) {
+      // El navegador se fue mientras esperaba turno («Descartar cambios», pestaña cerrada): nadie lee la respuesta y no es
+      // un servidor saturado, así que no se anota como fallo.
+      if (req.signal.aborted) return new Response(null, { status: 499 });
+      throw new AppError("Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.", 429, "upload_busy");
+    }
     // Con tope real al leer: sin Content-Length (o si miente un proxy intermedio) se corta al superar el máximo.
     const form = await readBodyLimited(req, maxBytes + MULTIPART_OVERHEAD_BYTES, "formData").catch(async (err) => {
       if (err instanceof UploadTooSlowError) throw new AppError(UPLOAD_TOO_SLOW_MESSAGE, 408);
@@ -73,23 +85,27 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     if (file.size > maxBytes) throw await tooBig();
     if (file.size === 0) throw new AppError("El archivo está vacío.");
 
-    const buffer = Buffer.from(await file.arrayBuffer());
     const name = sanitizeDocumentName(file.name);
     // El tipo sale de la extensión y se confirma con el contenido (cabecera de PDF, UTF-8 válido, sharp para imágenes).
-    let kind: DocumentKindName = confirmDocumentKind(detectDocumentKind(name, file.type), buffer);
-    let stored: Buffer = buffer;
+    // Para eso basta el principio del fichero (confirmDocumentKind mira como mucho los primeros 64 KB); solo sharp
+    // necesita el contenido entero en un Buffer. El resto se escribe en flujo desde el File, sin otra copia en memoria.
+    const declared = detectDocumentKind(name, file.type);
+    let kind: DocumentKindName = declared === "IMAGE" ? declared : confirmDocumentKind(declared, new Uint8Array(await file.slice(0, KIND_SAMPLE_BYTES).arrayBuffer()));
+    let stored: Buffer | Blob = file;
     if (kind === "IMAGE") {
-      const image = await processImage(buffer).catch((err) => {
+      // Sin miniatura: la Documentación solo guarda la imagen completa.
+      const image = await processImage(Buffer.from(await file.arrayBuffer()), { thumb: false }).catch((err) => {
         if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
         return null;
       });
       if (image) stored = image.full;
       else kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
     }
+    const storedBytes = Buffer.isBuffer(stored) ? stored.length : stored.size;
     const mimeType = documentMime(kind, sanitizeMime(file.type));
     // Comprobación previa, orientativa y sin candado (la definitiva va con el alta, más abajo): si ya no cabe, se rechaza
     // con el mismo mensaje antes de escribir nada en el disco.
-    const early = await documentLimitProblem(projectId, stored.length);
+    const early = await documentLimitProblem(projectId, storedBytes);
     if (early) throw await limitError(early, projectId, user.role === "ADMIN");
     // Primero el fichero y después la fila (ver newFileId): un corte entre medias deja como mucho un fichero sin fila, que
     // borra la limpieza de huérfanos; nunca un documento roto que además cuenta en la cuota.
@@ -98,9 +114,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
       await saveDocumentFile(id, stored);
     } catch (err) {
       await removeDocumentFiles([id]);
-      throw uploadWriteError(err, { action: "documents.noSpace", bytes: stored.length, details: { projectId } });
+      throw uploadWriteError(err, { action: "documents.noSpace", bytes: storedBytes, details: { projectId } });
     }
-    const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: stored.length, kind, createdById: user.id }).catch(async (err) => {
+    const created = await createDocumentWithinLimit({ id, projectId, name, mimeType, size: storedBytes, kind, createdById: user.id }).catch(async (err) => {
       await removeDocumentFiles([id]);
       throw err;
     });
@@ -110,9 +126,9 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     }
     const document = created.document;
     logEvent({
-      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(stored.length)})`,
+      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(storedBytes)})`,
       userId: user.id, userName: user.name, path: `/api/projects/${projectId}/documents`, ip, durationMs: performance.now() - start,
-      details: { projectId, documentId: document.id, original: fileInfo, storedBytes: stored.length, kind, mime: mimeType, sizeMb: roundMb(stored.length) },
+      details: { projectId, documentId: document.id, original: fileInfo, storedBytes, kind, mime: mimeType, sizeMb: roundMb(storedBytes) },
     });
     publishChange({ projectId, userId: user.id, action: "documents.upload" });
     return NextResponse.json(document, { status: 201 });

@@ -127,3 +127,22 @@ describe("Mi perfil → Avisos → Probar con el bot bloqueado", () => {
     assert.equal(await db.userChannel.count({ where: { userId: user.id, channel: "TELEGRAM" } }), 1);
   });
 });
+
+// El sondeo de Telegram da una vuelta cada ~25 s: con la caché normal (30 s) releía y descifraba la configuración casi en
+// cada vuelta. Pide una copia de hasta 10 min; guardar en Administración la rehace al momento (reloadMessagingConfig).
+describe("configuración en memoria para el sondeo de Telegram", () => {
+  test("con maxAgeMs se usa la copia aunque haya pasado la caché normal; sin él, se relee", async () => {
+    await reloadMessagingConfig();
+    const first = await loadMessagingConfig();
+    await db.appState.upsert({ where: { key: "telegram.botUsername" }, create: { key: "telegram.botUsername", value: "otro_bot" }, update: { value: "otro_bot" } });
+    const realNow = Date.now;
+    const later = realNow() + 60_000;
+    Date.now = () => later;
+    try {
+      assert.equal(await loadMessagingConfig({ maxAgeMs: 10 * 60_000 }), first, "sin ir a la base de datos");
+      assert.equal((await loadMessagingConfig()).telegramSettings.botUsername, "otro_bot");
+    } finally {
+      Date.now = realNow;
+    }
+  });
+});

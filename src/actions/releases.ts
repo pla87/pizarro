@@ -330,14 +330,23 @@ export async function deleteRelease(releaseId: string) {
   });
 }
 
-/** Borra solo los adjuntos de la release (filas y ficheros); el texto se conserva. */
+/**
+ * Borra solo los adjuntos de la release (filas y ficheros); el texto se conserva. Si aún se estaban copiando (justo
+ * después de desplegarla), la copia se cancela: se quita el pendiente con la release bloqueada y la copia, que lo
+ * comprueba antes de cada adjunto con el mismo bloqueo (createIfStillPending), no crea ninguno más.
+ */
 export async function deleteReleaseAttachments(releaseId: string) {
   return runAction({ name: "releases.deleteReleaseAttachments", args: [releaseId] }, async () => {
     const user = await requireUser();
     const { releaseId: id } = releaseIdSchema.parse({ releaseId });
     await loadAccessibleRelease(user, id);
-    const ids = (await db.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } })).map((a) => a.id);
-    await db.releaseAttachment.deleteMany({ where: { releaseId: id } });
+    const ids = await db.$transaction(async (tx) => {
+      // El UPDATE bloquea la fila de la release aunque el pendiente ya fuera null.
+      await tx.release.updateMany({ where: { id }, data: { attachmentsPending: Prisma.DbNull } });
+      const rows = await tx.releaseAttachment.findMany({ where: { releaseId: id }, select: { id: true } });
+      await tx.releaseAttachment.deleteMany({ where: { releaseId: id } });
+      return rows.map((a) => a.id);
+    });
     await removeReleaseAttachmentFiles(ids);
     return { id };
   });
@@ -351,7 +360,11 @@ async function releaseStorageWarning(projectId: string, job: PendingJob | null):
   try {
     const limits = await getQuotaLimits(projectId);
     if (limits.project === null) return null;
-    const copies = job ? (await db.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId: { in: job.items.map((i) => i.taskId) } } }))._sum.size ?? 0 : 0;
+    // Solo lo que se va a copiar: las tareas que entraron en la release (job.allowed) y de este proyecto, como en
+    // copyAttachments (job.items lo manda el navegador y podía nombrar otras: el aviso sumaba sus adjuntos).
+    const allowed = new Set(job?.allowed);
+    const taskIds = job ? job.items.map((i) => i.taskId).filter((id) => allowed.has(id)) : [];
+    const copies = taskIds.length ? (await db.taskAttachment.aggregate({ _sum: { size: true }, where: { taskId: { in: taskIds }, task: { projectId } } }))._sum.size ?? 0 : 0;
     const usage = await storageUsage(projectId, db, { total: false });
     const q = checkQuota(usage, copies, { project: limits.project, total: null });
     if (!q) return null;

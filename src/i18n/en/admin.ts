@@ -163,9 +163,9 @@ export const admin: Record<string, string> = {
   "Pizarro: la copia de seguridad externa está atrasada": "Pizarro: the external backup is overdue",
   "Destino local: {dir}, con los ficheros.": "Local destination: {dir}, with the files.",
   "Destino local: {dir}, solo la base de datos (BACKUP_LOCAL_FILES=0: los ficheros van solo al destino externo).": "Local destination: {dir}, database only (BACKUP_LOCAL_FILES=0: files go only to the external destination).",
-  "Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en docs/INSTALL.md).": "Downloads only the database, encrypted: it opens with the BACKUP_KEY. To restore a full backup use node dist/restore.mjs (steps in docs/INSTALL.md).",
+  "Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en «Restaurar» de la guía de instalación, en getpizarro.com).": "Downloads only the database, encrypted: it opens with the BACKUP_KEY. To restore a full backup use node dist/restore.mjs (steps under \"Restore\" in the installation guide, at getpizarro.com).",
   "Destino externo": "External destination",
-  "Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR); ver docs/INSTALL.md.": "No external destination: the backups are on the same disk they protect. Configure S3-compatible storage (BACKUP_S3_*) or a mounted folder (BACKUP_EXTERNAL_DIR); see docs/INSTALL.md.",
+  "Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).": "No external destination: the backups are on the same disk they protect. Configure S3-compatible storage (BACKUP_S3_*) or a mounted folder (BACKUP_EXTERNAL_DIR).",
   "Copiando…": "Copying…",
   "Copiar ahora a destino externo": "Copy to external destination now",
   "Tras cada copia diaria se sube a cada destino lo que aún no tenga (si se corta, sigue a la hora siguiente). Se avisa si la última subida correcta tiene más de 48 horas.": "After each daily backup, whatever each destination is missing is uploaded (if interrupted, it resumes the next hour). You are warned if the last successful upload is more than 48 hours old.",
@@ -332,4 +332,8 @@ export const admin: Record<string, string> = {
   "Acciones de {name}": "Actions for {name}",
   // Administración → Integraciones: email, Google, Telegram y WhatsApp (ronda 57)
   "Integraciones": "Integrations",
+  // Ejemplos en los campos de email (Integraciones, Textos legales, Informes programados)
+  "nombre@gmail.com": "name@gmail.com",
+  "nombre@example.com": "name@example.com",
+  "privacidad@example.com": "privacy@example.com",
 };

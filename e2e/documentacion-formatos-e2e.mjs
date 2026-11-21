@@ -200,7 +200,7 @@ if (only.includes("nbsp")) {
   L.check("NBSP: lo no tocado sale igual (cabecera con «#», pie)", md.startsWith("# Novedades r50\n") && md.endsWith(`${FOOTER}\n`));
   // Desplegar guarda el mismo texto.
   await dlg.getByRole("button", { name: "Marcar como desplegado" }).click();
-  await page.locator("[role=dialog]").filter({ hasText: "Desplegar la release" }).getByRole("button", { name: "Continuar" }).click();
+  await page.locator("[role=dialog]").filter({ hasText: "Desplegar la release" }).getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.waitFor(async () => (await L.q(`SELECT count(*)::int n FROM "Release"`))[0].n === 1, { timeout: 15000 });
   const [saved] = await L.q(`SELECT content FROM "Release"`);
   L.eq("NBSP: lo guardado al desplegar = .md", saved.content, md);

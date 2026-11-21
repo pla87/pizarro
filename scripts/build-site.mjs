@@ -135,7 +135,10 @@ const L = {
 // cada versión (scripts/release-notes.mjs): si falta una, falla.
 // ---------------------------------------------------------------------------------------------------------------
 const INSTALL_DOC = { es: WEB_DOCS[0], en: WEB_DOCS[1] };
-const INSTALL_ANCHORS = { es: ["railway", "email", "actualizar"], en: ["railway", "email", "update"] };
+const INSTALL_ANCHORS = {
+  es: ["railway", "email", "actualizar", ...Object.values(product.INSTALL_SECTIONS).map((s) => s.es)],
+  en: ["railway", "email", "update", ...Object.values(product.INSTALL_SECTIONS).map((s) => s.en)],
+};
 const INSTALL = {};
 for (const locale of ["es", "en"]) {
   const file = INSTALL_DOC[locale];

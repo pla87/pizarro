@@ -12,7 +12,11 @@ const isDev = process.env.NODE_ENV !== "production";
 // no depende de ninguna plataforma y cambia en cada compilación distinta.
 const version = (JSON.parse(readFileSync("package.json", "utf8")) as { version?: string }).version ?? "0.0.0";
 const commit = (process.env.GIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || "").replace(/[^0-9a-z]/gi, "").slice(0, 12);
-const buildId = `${version}-${commit || Date.now().toString(36)}` + (isDev ? "-dev" : "");
+// Sin commit, la hora se fija una vez en el entorno: `next build` vuelve a leer este fichero en sus procesos hijos (que
+// heredan el entorno) y, con un Date.now() en cada uno, el cliente, el servidor y el deploymentId salían con ids
+// distintos y el navegador creía que había una versión nueva (y recargaba) en la primera comprobación.
+const stamp = (process.env.PIZARRO_BUILD_STAMP ||= Date.now().toString(36));
+const buildId = `${version}-${commit || stamp}` + (isDev ? "-dev" : "");
 // ¿Build oficial sin modificar? (imagen del workflow Release o Railway desde la rama stable del repositorio oficial;
 // ver src/lib/bug-report-core.ts). Solo entonces la app ofrece «Informar de un error».
 const official = isDev ? null : officialBuild(process.env, version);

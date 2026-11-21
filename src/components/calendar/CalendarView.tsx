@@ -19,6 +19,7 @@ import { Popover } from "@/components/ui/Popover";
 import { CalendarSubscribe } from "./CalendarSubscribe";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
+import { useMidnightRefresh } from "@/components/useMidnightRefresh";
 import { initialsOf } from "@/lib/graphemes";
 import type { RecurrenceRule } from "@/lib/recurrence-date";
 import { recurrenceLabel } from "@/components/board/recurrence-ui";
@@ -131,8 +132,9 @@ interface Props {
   filters: Filters;
   /** Se alcanzó el tope de tareas cargadas. */
   truncated: boolean;
-  /** Suscripción viva (.ics) de la persona: si la tiene activa y qué incluye. */
-  feed: { active: boolean; scope: "MINE" | "ALL" };
+  /** Suscripción viva (.ics) de la persona: si la tiene activa y qué incluye (null sin suscripción: la opción que se
+   * propone se pide al abrir «Suscribirse»). */
+  feed: { active: boolean; scope: "MINE" | "ALL" | null };
 }
 
 /** Chips visibles por día antes de «+N más». */
@@ -187,6 +189,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   const locale = useIntlLocale();
   const router = useRouter();
   const safeRefresh = useSafeRefresh();
+  // A medianoche (zona de la app) cambian «Hoy», las vencidas y, sin ?month, el mes mostrado: se pide la página de nuevo.
+  useMidnightRefresh(today, safeRefresh);
   const toast = useToast();
   const [navigating, startNav] = useTransition();
   // Fechas cambiadas aquí y aún no reflejadas en los datos del servidor (cambio optimista).

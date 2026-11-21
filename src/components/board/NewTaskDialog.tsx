@@ -25,6 +25,7 @@ import { DictationButton, insertIntoField } from "../ui/DictationButton";
 import { pasteAsOneLine } from "../ui/textarea-edit";
 import { pasteClaimed, pastedFiles, usePasteFiles } from "../ui/pasteFiles";
 import { copyText } from "../ui/clipboard";
+import { appTimeZone, formatDate } from "@/lib/format";
 import { parseTasksText, strictJsonFormat, stringifyTaskJson } from "@/lib/task-json";
 import { fillNewTaskForm, foldName, newTaskFormJson, type FormProject } from "@/lib/task-json-form";
 import { acceptsPastedText, eventIsFor } from "./taskClipboard";
@@ -84,7 +85,7 @@ let subtaskSeq = 0;
 const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, text });
 
 function captureTitle(t: T, locale: string): string {
-  return t("Captura") + " " + new Date().toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+  return t("Captura") + " " + formatDate(new Date(), "dateTimeShort", locale);
 }
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
@@ -454,7 +455,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
    * escrito, pregunta antes de sustituirlo. Lo que el formulario no admite se avisa. `true` si se importó.
    */
   const importForm = async (text: string): Promise<boolean> => {
-    const read = parseTasksText(text);
+    // Con la zona horaria de la aplicación, como el resto de importaciones: la fecha límite de Trello (un instante UTC)
+    // cae en su día de aquí, no en el de UTC.
+    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    if (read.error) {
+      toast(read.error, "error");
+      return false;
+    }
     if (read.tasks.length > 1 || read.tooMany) {
       toast(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }), "error");
       return false;

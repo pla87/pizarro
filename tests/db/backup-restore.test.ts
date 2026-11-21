@@ -13,7 +13,7 @@ import { after, before, describe, test } from "node:test";
 import { db, makeProject, makeTask, makeUser } from "./helpers";
 import { startFakeS3, type FakeS3 } from "../fake-s3";
 
-const { createBackup, readStatus, runRestoreTest, syncExternal } = await import("../../src/lib/backup");
+const { createBackup, monthlyRestoreTestJob, readStatus, runRestoreTest, syncExternal } = await import("../../src/lib/backup");
 const { computeBackupAlert } = await import("../../src/lib/backup-alert");
 const { applyMigrations, listMigrations, parseSource, restoreBackup } = await import("../../src/lib/backup-restore");
 const { connectPg, withDatabase } = await import("../../src/lib/backup-pg");
@@ -199,6 +199,8 @@ describe("copias completas", () => {
     const bad = await runRestoreTest();
     assert.equal(bad.ok, false);
     assert.match(bad.error ?? "", /Faltan 1 de/);
+    // La tarea programada también falla (antes terminaba bien y Tareas de mantenimiento la daba por correcta).
+    await assert.rejects(monthlyRestoreTestJob(Date.now() + 2 * 24 * 3600 * 1000), /Faltan 1 de/);
   });
 
   test("aviso: destino externo configurado sin ninguna subida correcta", async () => {

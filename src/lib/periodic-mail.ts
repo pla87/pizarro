@@ -9,13 +9,18 @@ import { buildDigest, digestEmail, emptyDigestInput, type DigestInput, type Dige
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { appUrl, emailEnabled, escapeHtml, sendMail } from "./mail";
+import { getInstanceSettings } from "./instance";
 import { generateProjectReportPdf } from "./report-build";
 import { digestDue, reportDue } from "./schedule";
 import type { CurrentUser } from "./session";
+import { isShuttingDown, trackInFlight } from "./shutdown";
 
 // Envíos periódicos por email (resumen diario e informe semanal). Los lanza el mantenimiento cada hora;
 // ver schedule.ts para cuándo toca cada uno. Se «reserva» el envío antes de hacerlo (compare-and-set de la
 // fecha del último) para que dos procesos no manden el mismo correo, y se devuelve la reserva si falla.
+// Reserva, envío y devolución van juntos como trabajo en curso (trackInFlight): un apagado a mitad (reunir los datos,
+// generar el PDF) los espera dentro de su plazo en vez de salir con el día reservado y el correo sin mandar. Con el
+// apagado ya en marcha no se reserva nada más (lo que quede sale en la primera pasada del proceso nuevo).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_ROWS = 300;
@@ -70,6 +75,8 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
 /** Envía el resumen diario a quien lo tiene activado, ya es su hora y hoy no lo ha recibido. Devuelve cuántos ha enviado. */
 export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   if (!emailEnabled()) return 0;
+  // La zona horaria guardada en Ajustes (appTimeZone la lee de la copia en memoria que rellena getInstanceSettings).
+  await getInstanceSettings();
   const tz = appTimeZone();
   const users = await db.user.findMany({
     where: { active: true, dailyDigest: true },
@@ -78,23 +85,32 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   let sent = 0;
   for (const u of users) {
     if (!digestDue(now, tz, { hour: u.digestHour, lastSentAt: u.lastDigestAt })) continue;
-    // Reserva del envío: si otro proceso se adelantó, no hace nada.
-    const claim = await db.user.updateMany({ where: { id: u.id, lastDigestAt: u.lastDigestAt }, data: { lastDigestAt: now } });
-    if (claim.count !== 1) continue;
-    const t0 = performance.now();
-    try {
-      const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
-      if (digest.empty) continue; // sin novedades no se manda nada (el día queda reservado)
-      const t: T = makeT(toLocale(u.locale));
-      await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl() }, t) });
-      sent++;
-      logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
-    } catch (err) {
-      await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
-      logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
-    }
+    if (isShuttingDown()) break;
+    if (await trackInFlight(() => sendDigest(u, now, tz))) sent++;
   }
   return sent;
+}
+
+type DigestUser = { id: string; name: string; email: string; locale: string | null; role: "ADMIN" | "MEMBER"; lastDigestAt: Date | null };
+
+/** Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado. */
+async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean> {
+  // Reserva del envío: si otro proceso se adelantó, no hace nada.
+  const claim = await db.user.updateMany({ where: { id: u.id, lastDigestAt: u.lastDigestAt }, data: { lastDigestAt: now } });
+  if (claim.count !== 1) return false;
+  const t0 = performance.now();
+  try {
+    const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
+    if (digest.empty) return false; // sin novedades no se manda nada (el día queda reservado)
+    const t: T = makeT(toLocale(u.locale));
+    await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl() }, t) });
+    logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
+    return true;
+  } catch (err) {
+    await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
+    logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
+    return false;
+  }
 }
 
 /** Correo del informe semanal: el PDF va adjunto. */
@@ -127,6 +143,7 @@ export const clearReportFailure = (projectId: string) => void reportFailures.del
 /** Envía los informes semanales cuyo día y hora han llegado. Devuelve cuántos ha enviado. */
 export async function sendDueReports(now: Date = new Date()): Promise<number> {
   if (!emailEnabled()) return 0;
+  await getInstanceSettings();
   const tz = appTimeZone();
   const schedules = await db.reportSchedule.findMany({ where: { enabled: true } });
   let sent = 0;
@@ -143,24 +160,33 @@ export async function sendDueReports(now: Date = new Date()): Promise<number> {
       logEvent({ level: "warn", category: "notify", action: "report.scheduleDisabled", message: "Informe semanal desactivado: quien lo configuró o su destinatario ya no tiene acceso al proyecto", projectId: s.projectId });
       continue;
     }
-    const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
-    if (claim.count !== 1) continue;
-    const t0 = performance.now();
-    const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
-    try {
-      const locale = toLocale(creator.locale);
-      const report = await generateProjectReportPdf(s.projectId, { generatedBy: creator.name, locale });
-      if (!report) throw new Error("proyecto no encontrado");
-      const mail = reportMail({ projectName: report.project.name, url: `${appUrl()}/p/${s.projectId}` }, makeT(locale));
-      await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
-      sent++;
-      clearReportFailure(s.projectId);
-      logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
-    } catch (err) {
-      noteReportFailure(s.projectId, now);
-      await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
-      logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
-    }
+    if (isShuttingDown()) break;
+    if (await trackInFlight(() => sendReport(s, creator, now))) sent++;
   }
   return sent;
+}
+
+type Schedule = { projectId: string; recipient: string; lastSentAt: Date | null };
+
+/** Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado. */
+async function sendReport(s: Schedule, creator: { id: string; name: string; locale: string | null }, now: Date): Promise<boolean> {
+  const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
+  if (claim.count !== 1) return false;
+  const t0 = performance.now();
+  const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
+  try {
+    const locale = toLocale(creator.locale);
+    const report = await generateProjectReportPdf(s.projectId, { generatedBy: creator.name, locale });
+    if (!report) throw new Error("proyecto no encontrado");
+    const mail = reportMail({ projectName: report.project.name, url: `${appUrl()}/p/${s.projectId}` }, makeT(locale));
+    await sendMail({ to: s.recipient, ...mail, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
+    clearReportFailure(s.projectId);
+    logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
+    return true;
+  } catch (err) {
+    noteReportFailure(s.projectId, now);
+    await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
+    logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
+    return false;
+  }
 }

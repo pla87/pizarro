@@ -207,8 +207,11 @@ if (only.includes("codificacion")) {
   L.check("COD: utf16.txt (UTF-16 con BOM): tildes bien y sin BOM", (await page.locator("[data-testid=doc-text]").innerText()) === `Nota ${TXT}`);
   await page.keyboard.press("Escape");
   await openDoc(page, p.id, "guia.md");
-  const md = await page.locator("[data-testid=doc-markdown]").innerText();
-  L.check("COD: guia.md (Latin-1): tildes bien", md.includes(TXT) && md.includes("ñoño é"), md);
+  // El Markdown llega aparte (LazyMarkdown): mientras tanto se ve el texto tal cual, con los asteriscos.
+  await L.checkEventually("COD: guia.md (Latin-1): tildes bien", async () => {
+    const md = await page.locator("[data-testid=doc-markdown]").innerText();
+    return [md.includes(TXT) && md.includes("ñoño é"), md];
+  });
   await page.keyboard.press("Escape");
   await openDoc(page, p.id, "roto.html");
   L.check("COD: un .html binario sigue sin vista previa", (await page.locator("iframe[data-testid=doc-html]").count()) === 0 && await U.dialog(page).getByText(/no tiene vista previa/).isVisible());

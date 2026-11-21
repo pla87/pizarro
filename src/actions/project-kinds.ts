@@ -44,7 +44,7 @@ export async function setGeneralKindEnabled(projectId: string, kindId: string, e
           target = replacementId ? v.id.parse(replacementId) : null;
           if (!target || !remaining.some((k) => k.id === target)) {
             const t = await getT();
-            throw new AppError(t("Hay {n} tarea(s) de tipo «{kind}»: elige a qué tipo pasan.", { n: inUse, kind: kind.name }));
+            throw new AppError(inUse === 1 ? t("Hay 1 tarea de tipo «{kind}»: elige a qué tipo pasa.", { kind: kind.name }) : t("Hay {n} tareas de tipo «{kind}»: elige a qué tipo pasan.", { n: inUse, kind: kind.name }));
           }
           await tx.task.updateMany({ where: { projectId: pid, kindId: kid }, data: { kindId: target } });
         }

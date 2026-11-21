@@ -14,6 +14,11 @@ export const FEED_MAX_TASKS = 2000;
 export const FEED_MAX_DELIVERABLES = 500;
 /** Tope de tareas recurrentes cuyas apariciones futuras van como serie (una RRULE por tarea). */
 export const FEED_MAX_REPEATS = 500;
+/**
+ * Nombre de la memoria (boundedMemo) del .ics ya hecho de cada enlace. Aquí y no en calendar-feed.ts: revoke.ts la vacía
+ * al cambiar quién ve un proyecto o al desactivar a alguien, sin cargar todo el calendario.
+ */
+export const FEED_CACHE_NAME = "calendar-feed";
 /** Cada cuántos minutos se sugiere a los clientes volver a consultar. */
 export const FEED_REFRESH_MINUTES = 60;
 

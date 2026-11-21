@@ -1,6 +1,109 @@
 {
   "versions": [
     {
+      "version": "1.62.0",
+      "date": "2026-11-21",
+      "releasedAt": "2026-11-21T01:40:59+01:00",
+      "summary": "PDF grandes en segundos, borrar en un menú «⋯», arranque que espera a la base de datos, tablero y calendario más ligeros, mejor contraste en oscuro, y revisión de seguridad, eficiencia y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "En Releases y en Documentación, borrar va en un menú «⋯» al final de la fila, para no pulsarlo sin querer.",
+          "Al arrancar, Pizarro espera hasta 3 minutos a que la base de datos responda, en vez de caerse; si una actualización se cortó a mitad de una migración, el registro explica qué hacer.",
+          "Comprobaciones automáticas (tipos, lint, pruebas y traducciones) en cada propuesta de cambio del repositorio."
+        ],
+        "mejoras": [
+          "Los PDF largos (programa del curso, lista consolidada, entrega, informe, plan semanal) salen en segundos: uno de 150 páginas pasa de más de un minuto a unos 8 s. Si cierras la pestaña, el PDF deja de generarse.",
+          "El informe semanal no se repite si el último salió hace menos de 3 días: si lo cambias del lunes al viernes después de enviarlo, el viernes llega.",
+          "El resumen diario y el informe semanal salen a la hora elegida (un minuto después), no en cualquier momento de esa hora.",
+          "El tablero se abre más rápido en servidores con mucho historial, y guardar o mover una tarjeta lee menos datos.",
+          "Ajustes, Documentación, Releases y los textos legales cargan unos 44 KB menos; con el editor Markdown, el tablero no descarga el editor con barra.",
+          "Marcar subtareas ya no recarga el tablero entero de quien las marca; menos comprobaciones de red al llegar cambios de otras personas y al volver a la pestaña.",
+          "Con «Ahorro de datos» en el navegador no se descarga nada por adelantado.",
+          "El servidor usa casi la mitad de memoria al procesar imágenes, y las subidas grandes ya no se copian dos veces en memoria.",
+          "Mejor contraste en modo oscuro (textos rojos y de color) y en los textos grises que hay que leer.",
+          "Un administrador sin proyectos ve «Aún no hay proyectos» y un botón «Nuevo proyecto».",
+          "Sin email configurado, «¿Olvidaste tu contraseña?» muestra la orden exacta para generar el enlace desde el servidor.",
+          "La app y el asistente enlazan a la guía de instalación de la web (en tu idioma), no a un fichero del repositorio.",
+          "Calendario y Mis tareas cambian «Hoy» a medianoche aunque sigan abiertos; quitar a alguien de un proyecto se nota en su calendario suscrito en un minuto.",
+          "Al actualizar en un servidor propio se actualizan también Caddy y PostgreSQL; la contraseña de administrador de la base ya no llega al contenedor de la app.",
+          "En inglés: «Sign in» y «Sign out» en toda la app, y plurales escritos enteros.",
+          "La búsqueda de releases avisa si hay más de 200 coincidencias."
+        ],
+        "correcciones": [
+          "Tras iniciar sesión, un enlace preparado («/.//otra-web») podía llevar a otra web.",
+          "Restablecer la contraseña por email no levantaba el bloqueo por intentos fallidos.",
+          "Cada petición HEAD a un adjunto o documento dejaba un fichero abierto en el servidor.",
+          "Tras «Descartar cambios», una subida que esperaba turno se subía igualmente.",
+          "Un reinicio durante el envío del informe semanal o del resumen diario lo daba por enviado sin enviarlo.",
+          "Una copia de seguridad o una prueba de restauración fallida aparecía como «Correcta» en las tareas de mantenimiento.",
+          "Dos cambios a la vez en las etiquetas de una tarea fallaban; archivar y mover a la vez dejaba mal la columna de origen; dos «Recuperar» a la vez salían bien los dos.",
+          "El «Resumen para el cliente» se veía montado si una tarea tenía muchas subtareas hechas.",
+          "«Borrar adjuntos» justo después de desplegar: los adjuntos volvían a aparecer.",
+          "Importar un proyecto: un archivo preparado podía llenar el disco o frenar el servidor durante minutos; fechas del año 0 fallaban al final sin explicar por qué; las tareas mensuales sin día caían el 28.",
+          "Una zona horaria mal escrita en APP_TIMEZONE dejaba la app sin funcionar.",
+          "La memoria del calendario suscrito no soltaba lo caducado.",
+          "Nombres de adjuntos muy largos o reservados en Windows (CON, NUL…) no se podían extraer del ZIP.",
+          "Una descripción con HTML sin cerrar se tragaba el resto del plan para IA.",
+          "Restaurar en un servidor nuevo siguiendo la guía fallaba si PostgreSQL aún no había arrancado."
+        ],
+        "tecnicos": [
+          "Retirados el envío del ZIP por POST sin vale y la presencia sin `?open=` (pestañas de antes de la v1.60: si una no deja descargar los adjuntos, recárgala).",
+          "Recuentos del tablero en una sola consulta con índices; `boundedMemo` con barrido y tope en bytes; HEAD propio en las descargas; subidas en flujo; `acquireUploadSlot` con señal; lotes de 10 en los avisos de fecha; transferencias con una sola consulta en reposo.",
+          "`MALLOC_ARENA_MAX=2` en la imagen; `scripts/migrate.mjs` (espera a la base y detecta P3009); id de compilación único sin `GIT_SHA`; workflow «Comprobaciones» (`ci.yml`)."
+        ]
+      },
+      "en": {
+        "summary": "Large PDFs in seconds, delete in a «⋯» menu, startup that waits for the database, lighter board and calendar, better dark-mode contrast, and a security, efficiency and bug-hunting review",
+        "changes": {
+          "nuevas": [
+            "In Releases and Documentation, delete is in a «⋯» menu at the end of the row, so it isn't pressed by accident.",
+            "On startup, Pizarro waits up to 3 minutes for the database to respond instead of crashing; if an update stopped halfway through a migration, the log explains what to do.",
+            "Automatic checks (types, lint, tests and translations) on every pull request to the repository."
+          ],
+          "mejoras": [
+            "Long PDFs (course programme, consolidated list, delivery, report, weekly plan) come out in seconds: a 150-page one goes from over a minute to about 8 s. If you close the tab, the PDF stops being generated.",
+            "The weekly report isn't repeated if the last one went out less than 3 days ago: if you move it from Monday to Friday after sending it, Friday's arrives.",
+            "The daily digest and the weekly report go out at the chosen time (one minute after), not at any point in that hour.",
+            "The board opens faster on servers with a lot of history, and saving or moving a card reads less data.",
+            "Settings, Documentation, Releases and the legal texts load about 44 KB less; with the Markdown editor, the board doesn't download the toolbar editor.",
+            "Ticking subtasks no longer reloads the whole board for the person ticking them; fewer network checks when other people's changes arrive and when you return to the tab.",
+            "With the browser's «Data saver» on, nothing is downloaded in advance.",
+            "The server uses almost half the memory when processing images, and large uploads are no longer copied twice in memory.",
+            "Better contrast in dark mode (red and coloured text) and in grey text that needs reading.",
+            "An administrator with no projects sees «No projects yet» and a «New project» button.",
+            "With no email set up, «Forgot your password?» shows the exact command to generate the link on the server.",
+            "The app and the setup wizard link to the installation guide on the website (in your language), not to a file in the repository.",
+            "Calendar and My tasks change «Today» at midnight even if left open; removing someone from a project shows in their subscribed calendar within a minute.",
+            "Updating on your own server now also updates Caddy and PostgreSQL; the database admin password no longer reaches the app container.",
+            "In English: «Sign in» and «Sign out» throughout the app, and plurals written out in full.",
+            "The release search warns when there are more than 200 matches."
+          ],
+          "correcciones": [
+            "After signing in, a crafted link («/.//other-site») could take you to another website.",
+            "Resetting the password by email didn't lift the lockout from failed attempts.",
+            "Every HEAD request to an attachment or document left a file open on the server.",
+            "After «Discard changes», an upload waiting its turn was uploaded anyway.",
+            "A restart while sending the weekly report or the daily digest marked it as sent without sending it.",
+            "A failed backup or restore test showed as «OK» in the maintenance tasks.",
+            "Two simultaneous label changes on a task failed; archiving and moving at the same time left the wrong source column; two simultaneous «Restore» both succeeded.",
+            "The «Client summary» came out garbled if a task had many done subtasks.",
+            "«Delete attachments» right after deploying: the attachments came back.",
+            "Project import: a crafted archive could fill the disk or slow the server for minutes; dates in year 0 failed at the end without explanation; monthly tasks without a day fell on the 28th.",
+            "A misspelt time zone in APP_TIMEZONE left the app not working.",
+            "The subscribed calendar's memory didn't release expired entries.",
+            "Very long attachment names, or names reserved on Windows (CON, NUL…), couldn't be extracted from the ZIP.",
+            "A description with unclosed HTML swallowed the rest of the AI plan.",
+            "Restoring on a new server by following the guide failed if PostgreSQL hadn't started yet."
+          ],
+          "tecnicos": [
+            "Removed sending the ZIP by POST without a ticket and presence without `?open=` (tabs from before v1.60: if one won't download attachments, reload it).",
+            "Board counts in a single indexed query; `boundedMemo` with sweeping and a byte cap; dedicated HEAD on downloads; streamed uploads; `acquireUploadSlot` with a signal; due-date notices in batches of 10; transfers with a single query when idle.",
+            "`MALLOC_ARENA_MAX=2` in the image; `scripts/migrate.mjs` (waits for the database and detects P3009); a single build id without `GIT_SHA`; «Comprobaciones» workflow (`ci.yml`)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.61.0",
       "date": "2026-11-20",
       "releasedAt": "2026-11-20T17:52:09+01:00",

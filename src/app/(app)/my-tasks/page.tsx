@@ -7,6 +7,7 @@ import { localizeGeneralKind } from "@/lib/kinds-localize";
 import { TypeBadge } from "@/components/ui/TypeBadge";
 import { MentionText } from "@/components/ui/MentionText";
 import { cn } from "@/components/ui/cn";
+import { MidnightRefresh } from "@/components/useMidnightRefresh";
 import { appTimeZone } from "@/lib/board";
 import { dateToIso, dueStatus, formatDay, todayIso } from "@/lib/dates";
 import { bucketOf, groupByDue, matchesFilter, parseFilter, type TaskBucket, type TaskFilter } from "@/lib/my-tasks";
@@ -73,6 +74,8 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
+      {/* A medianoche (zona de la app) las de «Hoy» pasan a «Vencidas»: se pide la página de nuevo. */}
+      <MidnightRefresh today={today} />
       <h1 className="mb-1 text-xl font-semibold">{t("Mis tareas asignadas")}</h1>
       <p className="mb-4 text-sm text-slate-500">{total === 1 ? t("1 tarea en todos tus proyectos.") : t("{n} tareas en todos tus proyectos.", { n: total })}</p>
       {total > tasks.length && (

@@ -1,7 +1,11 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { mkdir, open, rename, rm, stat, writeFile } from "node:fs/promises";
+import { constants as fsConstants, createWriteStream } from "node:fs";
+import { copyFile, mkdir, open, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeWebStream } from "node:stream/web";
 import sharp from "sharp";
 import { forgetAttachments } from "./attachment-cache";
 import { AppError } from "./errors";
@@ -20,7 +24,6 @@ sharp.concurrency(2);
  */
 export const newFileId = (): string => `c${randomBytes(12).toString("hex")}`;
 
-/** Los ids son cuid: nunca contienen separadores, pero se valida igualmente. */
 /**
  * Imágenes: `<id>.webp` y `<id>.thumb.webp`. Cualquier otro fichero se guarda tal cual
  * (sin conversión) como `<id>.bin`: el nombre y el tipo reales viven en la base de datos.
@@ -56,21 +59,30 @@ export function safeDownloadMime(stored: string): string {
   return SAFE_MIME.has(stored) ? stored : "application/octet-stream";
 }
 
-interface ProcessedImage {
+interface FullImage {
   full: Buffer;
-  thumb: Buffer;
   width: number;
   height: number;
 }
 
-/** Redimensiona a 1280px de ancho máximo, WebP calidad 75, y genera una miniatura. */
-export async function processImage(input: Buffer): Promise<ProcessedImage> {
+interface ProcessedImage extends FullImage {
+  thumb: Buffer;
+}
+
+/** Sin miniatura: para quien solo guarda la imagen completa (Documentación, adjuntos de releases importados). */
+type NoThumb = { thumb: false };
+
+/** Redimensiona a 1280px de ancho máximo, WebP calidad 75, y genera una miniatura (salvo con `{ thumb: false }`). */
+// La de siempre (con miniatura) va la última: es la que toma ReturnType<typeof processImage>.
+export async function processImage(input: Buffer, opts: NoThumb): Promise<FullImage>;
+export async function processImage(input: Buffer): Promise<ProcessedImage>;
+export async function processImage(input: Buffer, opts?: NoThumb): Promise<ProcessedImage | FullImage> {
   // Como máximo dos imágenes procesándose a la vez: acota la memoria del contenedor.
   // Y como mucho MAX_WAITING esperando turno: más allá se rechaza (503) en vez de acumular buffers en memoria.
   if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
   await acquire();
   try {
-    return await processImageNow(input);
+    return await processImageNow(input, opts?.thumb !== false);
   } finally {
     release();
   }
@@ -81,23 +93,30 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
  * se valida con sharp y se conserva tal cual (sin volver a comprimir), generando solo la miniatura. Cualquier otra
  * cosa pasa por el mismo procesado que una subida normal.
  */
-export async function processImportedImage(input: Buffer): Promise<ProcessedImage> {
+// La de siempre (con miniatura) va la última: es la que toma ReturnType<typeof processImportedImage>.
+export async function processImportedImage(input: Buffer, opts: NoThumb): Promise<FullImage>;
+export async function processImportedImage(input: Buffer): Promise<ProcessedImage>;
+export async function processImportedImage(input: Buffer, opts?: NoThumb): Promise<ProcessedImage | FullImage> {
   if (imageQueueFull()) throw new AppError(IMAGE_QUEUE_FULL_MESSAGE, 503);
-  let kept: ProcessedImage | null = null;
+  const withThumb = opts?.thumb !== false;
+  let kept: ProcessedImage | FullImage | null = null;
   await acquire();
   try {
     const meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata().catch(() => {
       throw new AppError("El archivo no es una imagen válida.");
     });
     if (meta.format === "webp" && meta.width && meta.height && meta.width <= 1280 && meta.height <= 16384 && (meta.pages ?? 1) <= 1) {
-      const thumb = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
-        .catch(() => { throw new AppError("El archivo no es una imagen válida."); });
-      kept = { full: input, thumb, width: meta.width, height: meta.height };
+      if (!withThumb) kept = { full: input, width: meta.width, height: meta.height };
+      else {
+        const thumb = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
+          .catch(() => { throw new AppError("El archivo no es una imagen válida."); });
+        kept = { full: input, thumb, width: meta.width, height: meta.height };
+      }
     }
   } finally {
     release();
   }
-  return kept ?? processImage(input);
+  return kept ?? (withThumb ? processImage(input) : processImage(input, { thumb: false }));
 }
 
 const MAX_CONCURRENT = 2;
@@ -122,7 +141,7 @@ function release(): void {
 
 const MAX_INPUT_PIXELS = 30_000_000;
 
-async function processImageNow(input: Buffer): Promise<ProcessedImage> {
+async function processImageNow(input: Buffer, withThumb: boolean): Promise<ProcessedImage | FullImage> {
   let meta: Awaited<ReturnType<ReturnType<typeof sharp>["metadata"]>>;
   try {
     meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
@@ -141,14 +160,20 @@ async function processImageNow(input: Buffer): Promise<ProcessedImage> {
     .catch(() => {
       throw new AppError("No se pudo procesar la imagen (¿es demasiado grande?).");
     });
+  if (!withThumb) return { full: full.data, width: full.info.width, height: full.info.height };
   const thumb = await sharp(full.data).resize({ width: 480, height: 360, fit: "inside", withoutEnlargement: true }).webp({ quality: 70 }).toBuffer();
   return { full: full.data, thumb, width: full.info.width, height: full.info.height };
 }
 
-async function writeAtomic(file: string, data: Buffer): Promise<void> {
+/**
+ * Escribe en un temporal y lo renombra. Un Blob (el File de un multipart) se escribe en flujo desde su contenido, sin
+ * copiarlo antes a otro Buffer: con `Buffer.from(await file.arrayBuffer())` una subida de 100 MB ocupaba 200 en memoria.
+ */
+async function writeAtomic(file: string, data: Buffer | Blob): Promise<void> {
   const tmp = `${file}.${process.pid}.tmp`;
   try {
-    await writeFile(tmp, data);
+    if (Buffer.isBuffer(data)) await writeFile(tmp, data);
+    else await pipeline(Readable.fromWeb(data.stream() as NodeWebStream<Uint8Array>), createWriteStream(tmp));
     await rename(tmp, file);
   } catch (err) {
     // Disco lleno o similar: no se deja el temporal a medias.
@@ -168,8 +193,8 @@ export async function saveAttachmentFiles(id: string, image: ProcessedImage): Pr
   for (const r of results) if (r.status === "rejected") throw r.reason;
 }
 
-/** Guarda un adjunto que no es imagen, sin transformarlo. */
-export async function saveRawAttachmentFile(id: string, data: Buffer): Promise<void> {
+/** Guarda un adjunto que no es imagen, sin transformarlo (un Blob, en flujo). */
+export async function saveRawAttachmentFile(id: string, data: Buffer | Blob): Promise<void> {
   await mkdir(uploadDir(), { recursive: true });
   await writeAtomic(attachmentPath(id, "file"), data);
 }
@@ -235,6 +260,24 @@ export async function saveReleaseAttachmentFile(id: string, data: Buffer, kind: 
   await writeAtomic(releaseAttachmentPath(id, kind), data);
 }
 
+/**
+ * Copia tal cual un fichero (un adjunto que no es imagen) como copia de histórico `.bin`, sin leerlo en memoria: con
+ * COPYFILE_FICLONE, en un sistema de ficheros que lo admite (btrfs, XFS, APFS) es una copia por referencia, y si no, una
+ * copia normal del núcleo. A un temporal y renombrado, como las demás escrituras.
+ */
+export async function copyReleaseAttachmentFile(id: string, source: string): Promise<void> {
+  const file = releaseAttachmentPath(id, "bin");
+  await mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    await copyFile(source, tmp, fsConstants.COPYFILE_FICLONE);
+    await rename(tmp, file);
+  } catch (err) {
+    await rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
+}
+
 export async function removeReleaseAttachmentFiles(ids: string[]): Promise<void> {
   // Cada id por separado: un id raro o un fallo no impide borrar los demás.
   await Promise.all(
@@ -256,7 +299,8 @@ export function documentPath(id: string): string {
   return path.join(/*turbopackIgnore: true*/ uploadDir(), "documents", `${id}.bin`);
 }
 
-export async function saveDocumentFile(id: string, data: Buffer): Promise<void> {
+/** Guarda un documento (un Blob, en flujo). */
+export async function saveDocumentFile(id: string, data: Buffer | Blob): Promise<void> {
   const file = documentPath(id);
   await mkdir(path.dirname(file), { recursive: true });
   await writeAtomic(file, data);

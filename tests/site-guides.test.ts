@@ -156,7 +156,11 @@ describe("guías de docs/guias", () => {
 
 describe("guía de instalación de la web (docs/web)", () => {
   // Las anclas que enlazan la portada (#railway, #email), la app (UPDATE_DOCS_URL) y las notas de cada versión.
-  const anchors = { "docs/web/instalar.md": ["railway", "email", "actualizar"], "docs/web/en/install.md": ["railway", "email", "update"] };
+  // También las secciones que enlaza la app desde sus pantallas (INSTALL_SECTIONS, src/lib/product.ts).
+  const anchors = {
+    "docs/web/instalar.md": ["railway", "email", "actualizar", "copias-de-seguridad", "restaurar", "problemas", "sin-acceso"],
+    "docs/web/en/install.md": ["railway", "email", "update", "backups", "restore", "troubleshooting", "locked-out"],
+  };
   test("existe en español y en inglés, con título, descripción, las mismas secciones y sus anclas fijas", () => {
     const sections: number[] = [];
     for (const [file, ids] of Object.entries(anchors)) {
@@ -177,6 +181,11 @@ describe("guía de instalación de la web (docs/web)", () => {
     assert.equal(product.INSTALL_URL, "https://getpizarro.com/instalar/");
     assert.equal(product.installUrl("en"), "https://getpizarro.com/en/install/");
     assert.equal(product.installUrl("es"), product.INSTALL_URL);
+    assert.equal(product.installSectionUrl("restore", "es"), "https://getpizarro.com/instalar/#restaurar");
+    assert.equal(product.installSectionUrl("troubleshooting", "en"), "https://getpizarro.com/en/install/#troubleshooting");
+    for (const s of Object.values(product.INSTALL_SECTIONS)) {
+      assert.ok(anchors["docs/web/instalar.md"].includes(s.es) && anchors["docs/web/en/install.md"].includes(s.en), s.es);
+    }
     const update = await import("../src/lib/update-check-core");
     assert.equal(update.updateDocsUrl("es"), "https://getpizarro.com/instalar/#actualizar");
     assert.equal(update.updateDocsUrl("en"), "https://getpizarro.com/en/install/#update");

@@ -1,6 +1,6 @@
 // Rutas del ZIP de adjuntos (release-attachments con vale y /api/releases/[id]/attachments) contra PostgreSQL real: el
 // vale solo da por terminado un paquete enviado entero (cortado o cancelado queda como fallido, para que la página lo
-// avise) y HEAD no reserva el hueco del ZIP ni lee nada.
+// avise), HEAD no reserva el hueco del ZIP ni lee nada y un POST sin `?plan=1` ya no envía el ZIP en la respuesta.
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,7 +31,7 @@ async function setup() {
   const { ticket, v } = (await plan.json()) as { ticket: string; v: string };
   const partUrl = `${base}?ticket=${encodeURIComponent(ticket)}&part=1&v=${v}`;
   const status = async () => (await (await ticketGet(new Request(`${base}?ticket=${encodeURIComponent(ticket)}&status=1`), ctx)).json()) as { started: number[]; done: number[]; errors: Record<string, { status: number }> };
-  return { user, f, ctx, partUrl, status };
+  return { user, f, task, base, ctx, partUrl, status };
 }
 
 const slotFree = (userId: string) => {
@@ -75,5 +75,21 @@ describe("HEAD sobre las rutas del ZIP", () => {
     const rel = await releaseHead();
     assert.equal(rel.status, 405);
     assert.ok(slotFree(user.id));
+  });
+});
+
+describe("POST sin ?plan=1 (envío directo de antes de la v1.60)", () => {
+  test("responde 400 con un texto claro, sin ZIP, sin vale y sin reservar el hueco", async () => {
+    const { user, task, base, ctx } = await setup();
+    for (const query of ["", "?part=1", "?part=2&v=0123456789abcdef", "?plan=0"]) {
+      const res = await planPost(
+        new Request(`${base}${query}`, { method: "POST", headers: { origin: "http://localhost", host: "localhost", "content-type": "application/json" }, body: JSON.stringify({ items: [{ taskId: task.id, code: "A1" }] }) }),
+        ctx,
+      );
+      assert.equal(res.status, 400, query);
+      assert.doesNotMatch(res.headers.get("content-type") ?? "", /zip/, query);
+      assert.match(await res.text(), /\?plan=1/, query);
+      assert.ok(slotFree(user.id), query);
+    }
   });
 });

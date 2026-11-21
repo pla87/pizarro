@@ -27,14 +27,33 @@ export function useFloatingRect(ref: RefObject<HTMLElement | null>, active: bool
       }
       setRect((prev) => (sameRect(prev, next) ? prev : next));
     };
-    const frame = requestAnimationFrame(measure);
-    // Los paneles cambian de tamaño al cargar su contenido: se vuelve a comprobar con calma.
-    const timer = setInterval(measure, 400);
-    window.addEventListener("resize", measure);
+    // Se mide una vez por fotograma como mucho, solo cuando algo cambia (antes, cada 400 ms con el modal abierto).
+    let frame = requestAnimationFrame(measure);
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    // Los paneles cambian de tamaño al cargar su contenido (y con él, al estar centrados, de sitio): se observan los
+    // diálogos y el propio elemento. Los diálogos se pintan en un portal directo de <body>: al abrirse o cerrarse otro
+    // (la pareja de modales, una confirmación, el visor de imágenes) se vuelve a mirar cuáles hay.
+    const sizes = new ResizeObserver(schedule);
+    const observeAll = () => {
+      sizes.disconnect();
+      if (ref.current) sizes.observe(ref.current);
+      for (const d of document.querySelectorAll("[role=dialog]")) sizes.observe(d);
+    };
+    observeAll();
+    const dialogs = new MutationObserver(() => {
+      observeAll();
+      schedule();
+    });
+    dialogs.observe(document.body, { childList: true });
+    window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
-      clearInterval(timer);
-      window.removeEventListener("resize", measure);
+      sizes.disconnect();
+      dialogs.disconnect();
+      window.removeEventListener("resize", schedule);
     };
   }, [ref, active]);
   return active ? rect : null;

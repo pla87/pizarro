@@ -42,7 +42,12 @@ export function isSafeEntryName(name: string): boolean {
 const MAX_CD_BYTES = 64 * 1024 * 1024;
 
 export class ZipFile {
-  private constructor(private readonly fh: FileHandle, readonly entries: ZipEntryInfo[], private readonly fileSize: number) {}
+  /** Entradas por nombre (únicos: `open` rechaza los repetidos): `find` en tiempo constante, no un recorrido por llamada. */
+  private readonly byName: Map<string, ZipEntryInfo>;
+
+  private constructor(private readonly fh: FileHandle, readonly entries: ZipEntryInfo[], private readonly fileSize: number) {
+    this.byName = new Map(entries.map((e) => [e.name, e]));
+  }
 
   static async open(file: string, limits: ZipReadLimits = DEFAULT_ZIP_LIMITS): Promise<ZipFile> {
     const fh = await open(file, "r");
@@ -112,7 +117,7 @@ export class ZipFile {
   }
 
   find(name: string): ZipEntryInfo | undefined {
-    return this.entries.find((e) => e.name === name);
+    return this.byName.get(name);
   }
 
   /** Posición del primer byte de datos (tras la cabecera local, cuyo nombre debe coincidir con el del directorio central). */

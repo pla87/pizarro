@@ -4,6 +4,7 @@ import { Download } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useIntlLocale, useT } from "@/i18n/client";
+import { formatDate } from "@/lib/format";
 import { TRANSFER_QUEUED_EVENT, isFinal, type TransferJobView } from "./client";
 import { TransferProgress } from "./TransferProgress";
 
@@ -26,7 +27,8 @@ export function DownloadButton({ id, size, className = "btn-primary" }: { id: st
 function Row({ job }: { job: TransferJobView }) {
   const t = useT();
   const locale = useIntlLocale();
-  const when = new Date(job.createdAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+  // En la zona de la app, como el resto de fechas (no en la del equipo).
+  const when = formatDate(job.createdAt, "dateTimeShort", locale);
   const exp = job.kind === "EXPORT";
   const result = job.result;
   return (
@@ -40,7 +42,7 @@ function Row({ job }: { job: TransferJobView }) {
         {job.status === "DONE" && !exp && job.projectId && <Link className="btn-secondary" href={`/p/${job.projectId}`}>{t("Abrir proyecto")}</Link>}
       </div>
       {(job.status === "QUEUED" || job.status === "RUNNING") && <TransferProgress job={job} />}
-      {job.status === "DONE" && exp && <p className="text-xs text-slate-500">{t("Disponible hasta {date}.", { date: job.expiresAt ? new Date(job.expiresAt).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" }) : "" })}</p>}
+      {job.status === "DONE" && exp && <p className="text-xs text-slate-500">{t("Disponible hasta {date}.", { date: job.expiresAt ? formatDate(job.expiresAt, "dateTimeShort", locale) : "" })}</p>}
       {job.status === "DONE" && !exp && result && "name" in result && "counts" in result && <p className="text-xs text-slate-500">{result.counts.tasks === 1 ? t("«{name}» importado (1 tarjeta).", { name: result.name }) : t("«{name}» importado ({tasks} tarjetas).", { name: result.name, tasks: result.counts.tasks })}</p>}
       {job.status === "FAILED" && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{job.error ?? t("No se pudo completar.")}</p>}
       {job.status === "EXPIRED" && <p className="text-xs text-slate-500">{t("El archivo ha caducado (24 h). Vuelve a exportar el proyecto.")}</p>}

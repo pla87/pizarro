@@ -2,11 +2,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope } from "../../src/actions/calendar-feed";
+import { createCalendarFeed, disableCalendarFeed, setCalendarFeedScope, suggestedCalendarFeedScope } from "../../src/actions/calendar-feed";
 import { GET } from "../../src/app/api/calendar/[file]/route";
 import { onRequestError } from "../../src/instrumentation";
-import { createProject } from "../../src/actions/projects";
-import { cachedFeedIcs, defaultFeedScope, FEED_CACHE_MAX, FEED_CACHE_MS, feedCacheForTests, resolveFeedToken } from "../../src/lib/calendar-feed";
+import { createProject, removeProjectMember } from "../../src/actions/projects";
+import { cachedFeedIcs, defaultFeedScope, FEED_CACHE_MAX, FEED_CACHE_MAX_BYTES, FEED_CACHE_MS, feedCacheForTests, feedMaxAgeSec, resolveFeedToken } from "../../src/lib/calendar-feed";
+import { revokeUser } from "../../src/lib/revoke";
 import pg from "pg";
 import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
@@ -229,6 +230,16 @@ describe("calendario suscrito", () => {
     assert.equal(await defaultFeedScope(dev), "MINE");
     // Sin ninguna tarea pendiente, «Todas».
     assert.equal(await defaultFeedScope(await makeUser()), "ALL");
+  });
+
+  test("«Suscribirse» pide la opción propuesta al abrirse (no en cada visita al Calendario): la guardada o la de por defecto", async () => {
+    const dev = await makeUser();
+    const f = await makeProject({ members: [dev] });
+    await db.task.update({ where: { id: (await makeTask(f)).id }, data: { assigneeId: dev.id } });
+    await loginAs(dev);
+    assert.equal(expectOk(await suggestedCalendarFeedScope()), "MINE", "sin suscripción, defaultFeedScope");
+    await feedFor(dev, "ALL");
+    assert.equal(expectOk(await suggestedCalendarFeedScope()), "ALL", "con suscripción, la suya");
   });
 
   test("excluye archivadas, sin fecha y fuera de la ventana; el rango usa la fecha de inicio solo si el proyecto la activa", async () => {
@@ -688,6 +699,53 @@ describe("memoria del calendario suscrito", () => {
     feedCacheForTests.clear();
   });
 
+  test("quitar a alguien de un proyecto o desactivar a una persona vacía la memoria: el calendario cambia al momento", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const user = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner: admin, members: [admin, user] });
+    const task = await makeTask(f, { title: "Del proyecto", dueDate: inDays(3) });
+    const { token } = await feedFor(user);
+    feedCacheForTests.clear();
+    assert.ok((await fetchFeed(token, undefined, {}, true)).text.includes(task.id));
+    assert.equal(feedCacheForTests.size(), 1);
+    await loginAs(admin);
+    expectOk(await removeProjectMember(f.project.id, user.id));
+    assert.equal(feedCacheForTests.size(), 0, "revokeProject vacía la memoria del calendario");
+    assert.ok(!(await fetchFeed(token, undefined, {}, true)).text.includes(task.id), "sin esperar al minuto");
+    assert.equal(feedCacheForTests.size(), 1);
+    revokeUser(user.id);
+    assert.equal(feedCacheForTests.size(), 0, "revokeUser también");
+  });
+
+  test("Cache-Control: lo que le queda en la memoria del servidor (como mucho un minuto entre las dos)", async () => {
+    assert.equal(feedMaxAgeSec(1_000_000, 1_000_000), FEED_CACHE_MS / 1000);
+    assert.equal(feedMaxAgeSec(1_000_000, 1_000_000 + 15_500), Math.floor((FEED_CACHE_MS - 15_500) / 1000));
+    assert.equal(feedMaxAgeSec(1_000_000, 1_000_000 + FEED_CACHE_MS + 5), 0);
+    // Reloj hacia atrás: nunca más de un minuto.
+    assert.equal(feedMaxAgeSec(1_000_000, 900_000), FEED_CACHE_MS / 1000);
+    assert.ok(FEED_CACHE_MS <= 60_000);
+    const user = await makeUser();
+    const { token } = await feedFor(user);
+    feedCacheForTests.clear();
+    const first = await fetchFeed(token, undefined, {}, true);
+    const maxAge = Number(/max-age=(\d+)/.exec(first.res.headers.get("cache-control") ?? "")?.[1]);
+    assert.ok(maxAge >= FEED_CACHE_MS / 1000 - 2 && maxAge <= FEED_CACHE_MS / 1000, `max-age=${maxAge}`);
+  });
+
+  test("la memoria guarda el .ics en UTF-8, cuenta sus bytes y no pasa del tope", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await makeTask(f, { title: "Reunión – café ☕", dueDate: inDays(2) });
+    const { token } = await feedFor(user);
+    feedCacheForTests.clear();
+    const { text } = await fetchFeed(token, undefined, {}, true);
+    assert.ok(text.includes("Reunión – café ☕"), "el texto llega bien");
+    assert.equal(feedCacheForTests.bytes(), Buffer.byteLength(text, "utf8"));
+    assert.ok(FEED_CACHE_MAX_BYTES >= 16 * 1024 * 1024 && FEED_CACHE_MAX_BYTES <= 256 * 1024 * 1024);
+    feedCacheForTests.clear();
+    assert.equal(feedCacheForTests.bytes(), 0);
+  });
+
   test("descripciones largas: solo se lee su comienzo de la base", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
@@ -701,5 +759,18 @@ describe("memoria del calendario suscrito", () => {
     const unfolded = m.result.text.replace(/\r\n /g, "");
     assert.ok(unfolded.includes("Inicio de la descripción. palabra"));
     assert.ok(m.bytes < 40_000, `leídos ${m.bytes} bytes con descripciones de ${long.length}`);
+    // .ics de la columna Agenda: tampoco lee la descripción entera, y lleva LAST-MODIFIED y SEQUENCE como la suscripción.
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
+    const col = await countQueries(() => buildColumnIcs(f.project.id, f.columns.todo));
+    assert.ok(col.result);
+    assert.ok(col.bytes < 40_000, `columna: leídos ${col.bytes} bytes con descripciones de ${long.length}`);
+    const colUnfolded = col.result.ics.replace(/\r\n /g, "");
+    assert.ok(colUnfolded.includes("Inicio de la descripción. palabra"));
+    const own = colUnfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}@pizarro`))!;
+    const serie = colUnfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}-repeat@pizarro`))!;
+    for (const block of [own, serie]) {
+      assert.match(block, /\r\nLAST-MODIFIED:\d{8}T\d{6}Z\r\n/);
+      assert.match(block, /\r\nSEQUENCE:\d+\r\n/);
+    }
   });
 });

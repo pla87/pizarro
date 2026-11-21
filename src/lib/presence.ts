@@ -6,8 +6,8 @@ import { randomUUID } from "node:crypto";
 //  - los logs (cualquier acción),
 //  - los canales en vivo abiertos (api/projects/[id]/events): tener el tablero a la vista cuenta como actividad mientras
 //    el canal esté abierto (la pestaña oculta lo cierra) y, al cerrarse, la persona sigue 5 minutos entre los activos;
-//  - la tarea abierta, anunciada una vez con el id del canal (api/tasks/[id]/viewers?stream=…): dura lo que el canal o
-//    hasta que se cierra el diálogo;
+//  - la tarea abierta, anunciada una vez con el id del canal y del montaje del diálogo (api/tasks/[id]/viewers?stream=…&open=…):
+//    dura lo que el canal o hasta que se cierra el diálogo;
 //  - y, sin canal en vivo, los sondeos de respaldo de siempre (api/projects/[id]/presence y api/tasks/[id]/viewers).
 // Los canales reciben el evento `presence` cuando cambia algo (subscribePresence).
 

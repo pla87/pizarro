@@ -3,10 +3,11 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import { LOCK_SETUP } from "./advisory-locks";
 import { AppError } from "./errors";
+import { validTimeZone } from "./format";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, INSTANCE_TZ_KEY, invalidateInstance } from "./instance";
 import { hashPassword, passwordSchema } from "./password";
 import { createInitialAdmin, seed } from "./seed";
-import { generateSetupCode, hashSetupCode, parseSetupEmail, parseStoredCode, setupPending, validTimeZone, verifySetupCode, type StoredSetupCode } from "./setup-core";
+import { generateSetupCode, hashSetupCode, parseSetupEmail, parseStoredCode, setupPending, verifySetupCode, type StoredSetupCode } from "./setup-core";
 
 export const SETUP_CODE_KEY = "setup.code";
 

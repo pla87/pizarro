@@ -2,11 +2,12 @@
 // (UPDATE … FROM (VALUES …), DELETE … ANY y la limpieza de tareas fijas fuera de su columna): otra persona que mueve o
 // archiva esas mismas tarjetas en bloque (también en orden de id) espera en vez de cruzarse con él (40P01).
 // Lo mismo para «Mover a…» y archivar en bloque (moveTasks, archiveTasks), y el tipo de bloqueo de lockTaskRows (FOR NO
-// KEY UPDATE: no frena las altas que solo apuntan a la tarea). Contra PostgreSQL real.
+// KEY UPDATE: no frena las altas que solo apuntan a la tarea), y devolver las etiquetas de una tarea mientras otra persona
+// las cambia. Contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import pg from "pg";
-import { db, loginAs, makeProject, makeTask, makeUser, type Fixture } from "./helpers";
+import { db, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter, type Fixture } from "./helpers";
 import { applyUndo, type UndoOp } from "../../src/lib/undo";
 import { archiveTasks, moveTasks } from "../../src/actions/tasks";
 import { lockTaskRows } from "../../src/lib/task-positions";
@@ -229,5 +230,24 @@ describe("lockTaskRows", () => {
     } finally {
       await probe.end();
     }
+  });
+});
+
+describe("deshacer: etiquetas de una tarea que otra persona cambia a la vez", () => {
+  test("espera a que termine y deja las del deshacer (antes chocaba con sus filas y no se aplicaba)", async () => {
+    const f = await makeProject();
+    const task = await makeTask(f);
+    const [x, y, z] = await Promise.all(["X", "Y", "Z"].map((name) => db.label.create({ data: { projectId: f.project.id, name, color: "#ff0000" } })));
+    let pending: Promise<number> | null = null;
+    await db.$transaction(async (tx) => {
+      // Otra persona «está guardando» X e Y (fila bloqueada, etiquetas sin confirmar).
+      await lockTaskRows(tx, [task.id]);
+      await tx.taskLabel.createMany({ data: [x!, y!].map((l) => ({ taskId: task.id, labelId: l.id })) });
+      pending = applyUndo(f.project.id, [{ t: "task.set", id: task.id, data: {}, labelIds: [x!.id, z!.id] }]);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    assert.equal(await pending!, 0, "ninguna operación se queda sin aplicar");
+    const labels = await db.taskLabel.findMany({ where: { taskId: task.id }, select: { labelId: true } });
+    assert.deepEqual(labels.map((l) => l.labelId).sort(), [x!.id, z!.id].sort());
   });
 });

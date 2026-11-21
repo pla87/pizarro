@@ -100,7 +100,7 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
                 required
                 maxLength={200}
                 autoComplete="off"
-                placeholder="nombre@example.com"
+                placeholder={t("nombre@example.com")}
                 aria-label={t("Dirección externa")}
                 data-testid="rs-email"
               />

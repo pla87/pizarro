@@ -336,6 +336,12 @@ test("compose: usa la imagen publicada por defecto y compose.build.yml permite c
   const c = readFileSync("deploy/compose.yml", "utf8");
   assert.match(c, /image: \$\{PIZARRO_IMAGE:-ghcr\.io\/pla87\/pizarro:latest\}/);
   assert.doesNotMatch(c, /^\s+build:/m);
+  // env_file pasa todo .env a la app: las contraseñas de PostgreSQL se vacían (ya van en DATABASE_URL).
+  const app = /^ {2}app:\n((?: {4}.*\n|\n)+)/m.exec(c)?.[1] ?? "";
+  assert.match(app, /^ {4}env_file: \.env$/m);
+  assert.match(app, /^ {6}POSTGRES_PASSWORD: ""$/m);
+  assert.match(app, /^ {6}APP_DB_PASSWORD: ""$/m);
+  assert.match(app, /^ {6}DATABASE_URL: postgresql:\/\/\$\{APP_DB_USER:-pizarro\}:\$\{APP_DB_PASSWORD:-\$\{POSTGRES_PASSWORD:/m);
   const b = readFileSync("deploy/compose.build.yml", "utf8");
   assert.match(b, /^\s+build:/m);
   assert.match(b, /dockerfile: Dockerfile/);

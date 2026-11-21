@@ -1,7 +1,7 @@
 // Cuándo toca enviar los envíos periódicos (resumen diario, informe semanal). Funciones puras.
 //
-// El mantenimiento se ejecuta cada hora, no en punto: un envío «a las 8» sale en la primera pasada a
-// partir de las 8 (hora local de la app) de ese día, y solo una vez al día.
+// La pasada del correo va a cada hora en punto (+1 min) de la zona de la app (maintenance.ts): un envío «a las 8» sale
+// en la primera pasada a partir de las 8 (hora local de la app) de ese día, y solo una vez al día.
 
 interface LocalParts {
   /** YYYY-MM-DD en la zona horaria indicada. */
@@ -28,15 +28,11 @@ function sentToday(lastSentAt: Date | null, now: Date, timeZone: string): boolea
   return !!lastSentAt && localParts(lastSentAt, timeZone).date === localParts(now, timeZone).date;
 }
 
-/** Lunes (YYYY-MM-DD) de la semana local de un instante. */
-function weekStart(at: Date, timeZone: string): string {
-  const { date, weekday } = localParts(at, timeZone);
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1, d! - (weekday - 1))).toISOString().slice(0, 10);
-}
+/** Margen del informe semanal: no se repite si el último salió hace menos de esto (3 días). */
+const REPORT_MIN_GAP_MS = 3 * 24 * 60 * 60 * 1000;
 
-function sentThisWeek(lastSentAt: Date | null, now: Date, timeZone: string): boolean {
-  return !!lastSentAt && weekStart(lastSentAt, timeZone) === weekStart(now, timeZone);
+function sentRecently(lastSentAt: Date | null, now: Date): boolean {
+  return !!lastSentAt && now.getTime() - lastSentAt.getTime() < REPORT_MIN_GAP_MS;
 }
 
 /** Resumen diario: ya es la hora elegida (o pasó) y hoy todavía no se ha enviado. */
@@ -45,10 +41,10 @@ export function digestDue(now: Date, timeZone: string, s: { hour: number; lastSe
 }
 
 /**
- * Informe semanal: hoy es el día elegido, ya es la hora (o pasó) y esta semana (de lunes a domingo, hora local) todavía
- * no se ha enviado. Si se cambia el día a otro posterior de la misma semana después del envío, no se repite.
+ * Informe semanal: hoy es el día elegido, ya es la hora (o pasó) y el último salió hace al menos 3 días. Así, si se
+ * envía el lunes y se cambia al viernes, el viernes llega; si se cambia al martes, no se repite al día siguiente.
  */
 export function reportDue(now: Date, timeZone: string, s: { weekday: number; hour: number; lastSentAt: Date | null }): boolean {
   const local = localParts(now, timeZone);
-  return local.weekday === s.weekday && local.hour >= s.hour && !sentThisWeek(s.lastSentAt, now, timeZone);
+  return local.weekday === s.weekday && local.hour >= s.hour && !sentRecently(s.lastSentAt, now);
 }

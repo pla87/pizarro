@@ -5,6 +5,7 @@ import { FolderKanban } from "lucide-react";
 import { listVisibleProjects } from "@/lib/access";
 import { requireUserPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
+import { NewProjectButton } from "@/components/AppShell";
 
 export default async function Home() {
   const user = await requireUserPage();
@@ -15,6 +16,16 @@ export default async function Home() {
   if (target) redirect(`/p/${target.id}`);
   // Un administrador sin proyectos elegidos puede tener proyectos de equipo a los que sí tiene acceso.
   const available = user.role === "ADMIN" ? (await listVisibleProjects(user, { all: true })).length : 0;
+  // Instalación recién estrenada (o sin ningún proyecto que pueda ver): el administrador lo crea desde aquí mismo.
+  if (user.role === "ADMIN" && available === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
+        <FolderKanban size={40} className="text-slate-300" />
+        <p className="font-medium text-slate-700 dark:text-slate-300">{t("Aún no hay proyectos.")}</p>
+        <NewProjectButton isAdmin />
+      </div>
+    );
+  }
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
       <FolderKanban size={40} className="text-slate-300" />

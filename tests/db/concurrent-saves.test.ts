@@ -1,5 +1,6 @@
 // Acciones a la vez de dos personas, contra PostgreSQL real: el texto de una tarea guardado por dos (conflicto dentro
-// de la transacción), una tarea archivada mientras se despliega la release y ocultar a la vez los dos últimos tipos.
+// de la transacción), sus etiquetas cambiadas por dos, una tarea archivada mientras se despliega la release y ocultar a la
+// vez los dos últimos tipos.
 import assert from "node:assert/strict";
 import type { AsyncLocalStorage } from "node:async_hooks";
 import { describe, test } from "node:test";
@@ -213,6 +214,29 @@ describe("updateTask: conflicto de texto campo a campo", () => {
     await loginAs(a);
     expectFail(await updateTask(task.id, { title: "x" }, { version: 1, title: "x".repeat(100) } as never));
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "T");
+  });
+});
+
+describe("updateTask: etiquetas cambiadas a la vez", () => {
+  test("dos personas cambian las etiquetas a la vez: se guardan las dos, sin «Los datos han cambiado», y queda la última", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const b = await makeUser({ name: "Bea" });
+    const f = await makeProject({ members: [a, b] });
+    const task = await makeTask(f);
+    const [x, y, z] = await Promise.all(["X", "Y", "Z"].map((name) => db.label.create({ data: { projectId: f.project.id, name, color: "#ff0000" } })));
+    await loginAs(b);
+    // Ana «está guardando» X e Y: la fila de la tarea bloqueada y sus etiquetas escritas sin confirmar. El guardado de
+    // Bea (X y Z) debe esperar a que termine y sustituirlas; antes chocaba con la X de Ana y fallaba.
+    let pending: ReturnType<typeof updateTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ${task.id} FOR NO KEY UPDATE`;
+      await tx.taskLabel.createMany({ data: [x!, y!].map((l) => ({ taskId: task.id, labelId: l.id })) });
+      pending = updateTask(task.id, { labelIds: [x!.id, z!.id] });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectOk(await pending!);
+    const labels = await db.taskLabel.findMany({ where: { taskId: task.id }, select: { labelId: true } });
+    assert.deepEqual(labels.map((l) => l.labelId).sort(), [x!.id, z!.id].sort());
   });
 });
 

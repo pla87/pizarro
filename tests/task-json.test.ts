@@ -325,3 +325,19 @@ test("task-json-core: sin imports (lo usa el código del navegador) y reexportad
   assert.equal(core.isObject({}), true);
   assert.equal(core.isObject([]), false);
 });
+
+test("los diálogos que importan tareas leen con la zona horaria de la aplicación y el idioma de quien importa", async () => {
+  // Sin zona horaria, la fecha límite de Trello (un instante UTC) caía en el día de UTC: 23:30Z en Madrid ya es el siguiente.
+  const card = JSON.stringify({ id: "c", idBoard: "b", name: "Tarjeta", due: "2026-12-15T23:30:00.000Z" });
+  assert.equal(parseTasksText(card, { timeZone: "Europe/Madrid" }).tasks[0]!.task.dueDate, "2026-12-16");
+  const { readFileSync } = await import("node:fs");
+  for (const file of ["NewTaskDialog.tsx", "TaskDialog.tsx", "ImportTasksDialog.tsx"]) {
+    const src = readFileSync(new URL(`../src/components/board/${file}`, import.meta.url), "utf8");
+    const calls = src.match(/parseTasksText\([^)]*\)/g) ?? [];
+    assert.ok(calls.length > 0, file);
+    for (const call of calls) assert.match(call, /, \{ t, timeZone: appTimeZone\(\)$/, `${file}: ${call}`);
+  }
+  // Y el error de un formato reconocido que no se puede leer se enseña (no «No hay ninguna tarea en JSON.»).
+  const form = readFileSync(new URL("../src/components/board/NewTaskDialog.tsx", import.meta.url), "utf8");
+  assert.match(form, /if \(read\.error\) \{\s*toast\(read\.error, "error"\);/);
+});

@@ -8,7 +8,7 @@ test("permite rutas internas", () => {
 });
 
 test("bloquea redirecciones externas", () => {
-  for (const bad of ["https://evil.com", "//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "evil", "", "javascript:alert(1)"]) {
+  for (const bad of ["https://evil.com", "//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "evil", "", "javascript:alert(1)", "/.//evil.com", "/a/..//evil.com", "/%2e//evil.com", "/%2E%2E//evil.com", "/./\\evil.com"]) {
     assert.equal(safeNextPath(bad), "/", JSON.stringify(bad));
   }
 });

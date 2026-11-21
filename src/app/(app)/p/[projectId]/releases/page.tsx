@@ -14,7 +14,12 @@ export async function generateMetadata({ params }: { params: Promise<{ projectId
 }
 
 const PAGE_STEP = 50;
-const SEARCH_MAX = 200;
+/**
+ * Releases que puede mostrar la página como mucho, con «Cargar más» (?limit=) o con búsqueda: cada una va con su
+ * contenido entero (hasta MAX_RELEASE_CONTENT, 200 KB), así que más daría páginas de decenas de MB. Las más antiguas se
+ * encuentran buscando.
+ */
+const LIST_MAX = 200;
 
 const ACCENTS = "áàäâãéèëêíìïîóòöôõúùüûñç";
 const PLAIN = "aaaaaeeeeiiiiooooouuuunc";
@@ -34,19 +39,22 @@ export default async function ReleasesPage({
   // Sin NUL (PostgreSQL no lo admite en un texto: ?q=a%00b daba el error 22021 y la página de error).
   const q = (Array.isArray(sp.q) ? sp.q[0] : sp.q)?.replaceAll("\u0000", "").trim().slice(0, 200) ?? "";
   const rawLimit = Number(Array.isArray(sp.limit) ? sp.limit[0] : sp.limit);
-  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), 500) : PAGE_STEP;
+  const limit = Number.isFinite(rawLimit) && rawLimit >= PAGE_STEP ? Math.min(Math.floor(rawLimit), LIST_MAX) : PAGE_STEP;
   // Primero el acceso: la búsqueda no debe tocar proyectos ajenos.
   if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) notFound();
-  // Con búsqueda se recorre todo el histórico del proyecto (hasta SEARCH_MAX coincidencias, las más recientes); sin ella, las últimas `limit`.
+  // Con búsqueda se recorre todo el histórico del proyecto (hasta LIST_MAX coincidencias, las más recientes); sin ella, las últimas `limit`.
   // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos.
   let where: { id?: { in: string[] } } = {};
+  // Más coincidencias que LIST_MAX: se avisa (se pide una de más para saberlo).
+  let searchTruncated = false;
   if (q) {
     const needle = `%${unaccent(q.toLowerCase()).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const rows = await db.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
         AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})
-      ORDER BY "deployedAt" DESC LIMIT ${SEARCH_MAX}`;
-    where = { id: { in: rows.map((r) => r.id) } };
+      ORDER BY "deployedAt" DESC LIMIT ${LIST_MAX + 1}`;
+    searchTruncated = rows.length > LIST_MAX;
+    where = { id: { in: rows.slice(0, LIST_MAX).map((r) => r.id) } };
   }
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
@@ -96,7 +104,9 @@ export default async function ReleasesPage({
         <ReleasesList
           query={q}
           resultCount={q ? releases.length : null}
-          moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
+          moreHref={hasMore && limit < LIST_MAX ? `?limit=${Math.min(limit + PAGE_STEP, LIST_MAX)}` : null}
+          olderHidden={hasMore && limit >= LIST_MAX}
+          searchTruncated={searchTruncated}
           releases={releases.map((r) => ({
             id: r.id,
             number: r.number,

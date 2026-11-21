@@ -3,7 +3,7 @@
 import { ExternalLink, Loader2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { saveLegalIdentity, saveLegalPage } from "@/actions/legal";
-import { Markdown } from "@/components/ui/Markdown";
+import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
 import { DescriptionField } from "@/components/ui/DescriptionField";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
@@ -57,7 +57,7 @@ export function LegalAdmin({ settings, editorMode }: { settings: LegalSettings; 
           </label>
           <label className="block text-sm">
             <span className="font-medium">{t("Email de contacto público (opcional)")}</span>
-            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} placeholder="privacidad@example.com" autoComplete="off" />
+            <input className="input mt-1 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} placeholder={t("privacidad@example.com")} autoComplete="off" />
             <span className="mt-1 block text-xs text-slate-500">{t("Sustituye a {email}. Es el de Integraciones → Acceso con Google.")}</span>
           </label>
         </div>
@@ -128,7 +128,7 @@ function LegalEditor({ kind, title, href, settings, editorMode, responsible, ema
       </p>
       {preview ? (
         <div className="rounded-lg border border-slate-200 p-4 text-sm dark:border-slate-800" data-testid={`legal-preview-${kind}`}>
-          <Markdown>{previewMd}</Markdown>
+          <LazyMarkdown>{previewMd}</LazyMarkdown>
         </div>
       ) : (
         <div key={lang}>

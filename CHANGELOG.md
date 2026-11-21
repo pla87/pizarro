@@ -2,6 +2,59 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.62.0 — 2026-11-21 01:40
+
+PDF grandes en segundos, borrar en un menú «⋯», arranque que espera a la base de datos, tablero y calendario más ligeros, mejor contraste en oscuro, y revisión de seguridad, eficiencia y caza de bugs
+
+### Nuevas funcionalidades
+
+- En Releases y en Documentación, borrar va en un menú «⋯» al final de la fila, para no pulsarlo sin querer.
+- Al arrancar, Pizarro espera hasta 3 minutos a que la base de datos responda, en vez de caerse; si una actualización se cortó a mitad de una migración, el registro explica qué hacer.
+- Comprobaciones automáticas (tipos, lint, pruebas y traducciones) en cada propuesta de cambio del repositorio.
+
+### Mejoras
+
+- Los PDF largos (programa del curso, lista consolidada, entrega, informe, plan semanal) salen en segundos: uno de 150 páginas pasa de más de un minuto a unos 8 s. Si cierras la pestaña, el PDF deja de generarse.
+- El informe semanal no se repite si el último salió hace menos de 3 días: si lo cambias del lunes al viernes después de enviarlo, el viernes llega.
+- El resumen diario y el informe semanal salen a la hora elegida (un minuto después), no en cualquier momento de esa hora.
+- El tablero se abre más rápido en servidores con mucho historial, y guardar o mover una tarjeta lee menos datos.
+- Ajustes, Documentación, Releases y los textos legales cargan unos 44 KB menos; con el editor Markdown, el tablero no descarga el editor con barra.
+- Marcar subtareas ya no recarga el tablero entero de quien las marca; menos comprobaciones de red al llegar cambios de otras personas y al volver a la pestaña.
+- Con «Ahorro de datos» en el navegador no se descarga nada por adelantado.
+- El servidor usa casi la mitad de memoria al procesar imágenes, y las subidas grandes ya no se copian dos veces en memoria.
+- Mejor contraste en modo oscuro (textos rojos y de color) y en los textos grises que hay que leer.
+- Un administrador sin proyectos ve «Aún no hay proyectos» y un botón «Nuevo proyecto».
+- Sin email configurado, «¿Olvidaste tu contraseña?» muestra la orden exacta para generar el enlace desde el servidor.
+- La app y el asistente enlazan a la guía de instalación de la web (en tu idioma), no a un fichero del repositorio.
+- Calendario y Mis tareas cambian «Hoy» a medianoche aunque sigan abiertos; quitar a alguien de un proyecto se nota en su calendario suscrito en un minuto.
+- Al actualizar en un servidor propio se actualizan también Caddy y PostgreSQL; la contraseña de administrador de la base ya no llega al contenedor de la app.
+- En inglés: «Sign in» y «Sign out» en toda la app, y plurales escritos enteros.
+- La búsqueda de releases avisa si hay más de 200 coincidencias.
+
+### Correcciones
+
+- Tras iniciar sesión, un enlace preparado («/.//otra-web») podía llevar a otra web.
+- Restablecer la contraseña por email no levantaba el bloqueo por intentos fallidos.
+- Cada petición HEAD a un adjunto o documento dejaba un fichero abierto en el servidor.
+- Tras «Descartar cambios», una subida que esperaba turno se subía igualmente.
+- Un reinicio durante el envío del informe semanal o del resumen diario lo daba por enviado sin enviarlo.
+- Una copia de seguridad o una prueba de restauración fallida aparecía como «Correcta» en las tareas de mantenimiento.
+- Dos cambios a la vez en las etiquetas de una tarea fallaban; archivar y mover a la vez dejaba mal la columna de origen; dos «Recuperar» a la vez salían bien los dos.
+- El «Resumen para el cliente» se veía montado si una tarea tenía muchas subtareas hechas.
+- «Borrar adjuntos» justo después de desplegar: los adjuntos volvían a aparecer.
+- Importar un proyecto: un archivo preparado podía llenar el disco o frenar el servidor durante minutos; fechas del año 0 fallaban al final sin explicar por qué; las tareas mensuales sin día caían el 28.
+- Una zona horaria mal escrita en APP_TIMEZONE dejaba la app sin funcionar.
+- La memoria del calendario suscrito no soltaba lo caducado.
+- Nombres de adjuntos muy largos o reservados en Windows (CON, NUL…) no se podían extraer del ZIP.
+- Una descripción con HTML sin cerrar se tragaba el resto del plan para IA.
+- Restaurar en un servidor nuevo siguiendo la guía fallaba si PostgreSQL aún no había arrancado.
+
+### Cambios técnicos / DB
+
+- Retirados el envío del ZIP por POST sin vale y la presencia sin `?open=` (pestañas de antes de la v1.60: si una no deja descargar los adjuntos, recárgala).
+- Recuentos del tablero en una sola consulta con índices; `boundedMemo` con barrido y tope en bytes; HEAD propio en las descargas; subidas en flujo; `acquireUploadSlot` con señal; lotes de 10 en los avisos de fecha; transferencias con una sola consulta en reposo.
+- `MALLOC_ARENA_MAX=2` en la imagen; `scripts/migrate.mjs` (espera a la base y detecta P3009); id de compilación único sin `GIT_SHA`; workflow «Comprobaciones» (`ci.yml`).
+
 ## v1.61.0 — 2026-11-20 17:52
 
 Plantillas de serie para trabajo real, Compartir con Pizarro, Administración con Integraciones, cabecera más limpia, roles en submenú, archivadas en lectura, avisos abajo en el móvil, y revisión y caza de bugs

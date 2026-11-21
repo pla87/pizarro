@@ -96,8 +96,8 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
         ))}
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {!error && items === null && <p className="py-6 text-center text-sm text-slate-400">{t("Cargando…")}</p>}
-      {items && items.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{t("No hay subtareas en esta columna.")}</p>}
+      {!error && items === null && <p className="py-6 text-center text-sm text-slate-500">{t("Cargando…")}</p>}
+      {items && items.length === 0 && <p className="py-6 text-center text-sm text-slate-500">{t("No hay subtareas en esta columna.")}</p>}
       <div className="space-y-4">
         {groups.map((g) => (
           <section key={g.key} aria-label={g.label}>

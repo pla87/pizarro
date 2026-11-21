@@ -64,7 +64,7 @@ describe("tarea abierta: cerrar el diálogo", () => {
     const f = await makeProject({ members: [user, other] });
     const task = await makeTask(f);
     const ctx = { params: Promise.resolve({ taskId: task.id }) };
-    const url = `http://localhost/api/tasks/${task.id}/viewers?stream=${randomUUID()}`;
+    const url = `http://localhost/api/tasks/${task.id}/viewers?stream=${randomUUID()}&open=m1`;
     await loginAs(user);
     const res = await viewersGet(new Request(url), ctx);
     assert.equal((await res.json()).live, false, "canal desconocido: aviso con caducidad");
@@ -72,6 +72,28 @@ describe("tarea abierta: cerrar el diálogo", () => {
     const del = await viewersDelete(new Request(url, { method: "DELETE", headers: { origin: "http://localhost", host: "localhost" } }), ctx);
     assert.equal(del.status, 204);
     assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "deja de tenerla abierta al momento, no a los 150 s");
+  });
+});
+
+describe("tarea abierta: ?stream= sin ?open= (pestañas de antes de la v1.60) ya no se admite", () => {
+  test("GET y DELETE con canal pero sin montaje, o con alguno mal formado: 400 y nada anotado", async () => {
+    const user = await makeUser();
+    const other = await makeUser();
+    const f = await makeProject({ members: [user, other] });
+    const task = await makeTask(f);
+    const ctx = { params: Promise.resolve({ taskId: task.id }) };
+    await loginAs(user);
+    const base = `http://localhost/api/tasks/${task.id}/viewers`;
+    for (const query of [`?stream=${randomUUID()}`, `?stream=${randomUUID()}&open=`, `?stream=${randomUUID()}&open=a-b`, "?stream=x&open=m1"]) {
+      assert.equal((await viewersGet(new Request(`${base}${query}`), ctx)).status, 400, query);
+      const del = await viewersDelete(new Request(`${base}${query}`, { method: "DELETE", headers: { origin: "http://localhost", host: "localhost" } }), ctx);
+      assert.equal(del.status, 400, query);
+    }
+    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id), [], "ni aviso con caducidad ni tarea retenida");
+    // Sin canal (sondeo de respaldo), sin parámetros: sigue valiendo.
+    const res = await viewersGet(new Request(base), ctx);
+    assert.equal((await res.json()).live, false);
+    assert.deepEqual(taskViewersExcept(task.id, f.project.id, other.id).map((p) => p.id), [user.id]);
   });
 });
 

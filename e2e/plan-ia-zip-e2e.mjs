@@ -133,11 +133,13 @@ if (only.includes("zip")) {
   L.eq("ZIP: una tarea que no es del proyecto, 404", (await post([{ taskId: "no_existe", folder: "adjuntos/01-x" }])).status, 404);
   const rel = await post([{ taskId: "r52_t1", code: "F1" }]);
   L.check("ZIP: con códigos (release) sigue funcionando, un paquete", rel.status === 200 && rel.body.parts.length === 1, JSON.stringify(rel));
-  const relZip = await page.evaluate(async (url) => {
-    const r = await fetch(`${url}?part=1`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [{ taskId: "r52_t1", code: "F1" }] }) });
-    return { status: r.status, disp: r.headers.get("content-disposition"), n: (await r.arrayBuffer()).byteLength };
-  }, `/api/projects/${PID}/release-attachments`);
-  L.check("ZIP: el de la release, con nombre de release", relZip.status === 200 && /release-.*-adjuntos\.zip/.test(relZip.disp ?? ""), JSON.stringify(relZip));
+  // Cada paquete se pide con el vale del plan (GET); sin `name`, el servidor le pone el nombre de release.
+  const relZip = await page.request.get(`${L.BASE}/api/projects/${PID}/release-attachments?ticket=${encodeURIComponent(rel.body.ticket)}&part=1&v=${rel.body.v}`);
+  const relDisp = relZip.headers()["content-disposition"] ?? "";
+  L.check("ZIP: el de la release, con nombre de release", relZip.status() === 200 && /release-.*-adjuntos\.zip/.test(relDisp), `${relZip.status()} ${relDisp}`);
+  // El envío directo del ZIP en la respuesta del POST (sin plan ni vale) ya no existe: 400 con un texto, no un ZIP.
+  const direct = await page.request.post(`${L.BASE}/api/projects/${PID}/release-attachments?part=1`, { data: { items: [{ taskId: "r52_t1", code: "F1" }] }, headers: { origin: L.BASE } });
+  L.check("ZIP: un POST sin ?plan=1 responde 400 y no un ZIP", direct.status() === 400 && !/zip/.test(direct.headers()["content-type"] ?? "") && (await direct.text()).includes("?plan=1"), `${direct.status()} ${direct.headers()["content-type"]}`);
   // Una persona sin acceso al proyecto no obtiene nada.
   const outsider = await L.session({ email: L.USER2 });
   await L.q(`DELETE FROM "ProjectMember" WHERE "projectId"=$1 AND "userId"=(SELECT id FROM "User" WHERE email=$2)`, [PID, L.USER2]);

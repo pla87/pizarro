@@ -35,8 +35,13 @@ if [ -n "$missing" ]; then
 fi
 [ -n "$APP_URL" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
 
-echo "[start] Aplicando migraciones..."
-(cd migrator && ./node_modules/.bin/prisma migrate deploy)
+# Espera a que PostgreSQL responda (hasta 3 min; sin espera si ya responde) y aplica las migraciones
+# (migrator/). Si falla, explica en español qué comprobar (base caída, migración a medias: P3009).
+if ! node scripts/migrate.mjs; then
+  # Espera antes de salir para no reiniciar en bucle rápido.
+  sleep 20
+  exit 1
+fi
 
 # Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios.
 node dist/boot.mjs

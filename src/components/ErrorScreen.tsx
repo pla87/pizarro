@@ -20,7 +20,7 @@ export function ErrorScreen({ error, reset, className }: { error: Error & { dige
   return (
     <div className={className}>
       <p className="text-lg font-semibold">{t("Algo ha fallado")}</p>
-      <p className="text-sm text-slate-500">{t("Inténtalo de nuevo. El error ha quedado registrado en los logs.")}</p>
+      <p className="text-sm text-slate-500">{t("Inténtalo de nuevo. El error ha quedado registrado en los logs. Si se repite, avisa a quien administra Pizarro.")}</p>
       <div className="flex flex-wrap justify-center gap-2">
         <button onClick={reset} className="btn-primary">{t("Reintentar")}</button>
         <button onClick={() => window.location.reload()} className="btn-secondary">{t("Recargar")}</button>

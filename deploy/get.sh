@@ -324,10 +324,17 @@ main() {
   $SUDO sh ./install.sh "$@" </dev/null
 
   say ""
-  say "Hecho. Próximos pasos:"
-  say "  1. Abre la dirección que ha mostrado el instalador (/setup) y crea el primer administrador con el código."
-  say "  2. Guarda $DIR/deploy/recovery-kit.txt FUERA del servidor (sin él, las copias de seguridad no se pueden leer)."
-  say "  3. Configura el email en Administración → Ajustes y revisa las copias (docs/INSTALL.md, sección 4)."
+  if [ "$NOSTART" = 1 ]; then
+    # Sin arrancar (p. ej. para restaurar una copia en un servidor nuevo): no hay asistente que abrir todavía.
+    say "Hecho. No se ha arrancado nada (--no-start). Cuando esté listo deploy/.env: cd $DIR/deploy && docker compose up -d"
+  elif [ "$EXISTING" = 0 ]; then
+    say "Hecho. Próximos pasos:"
+    say "  1. Abre la dirección que ha mostrado el instalador (/setup) y crea el primer administrador con el código."
+    say "  2. Guarda $DIR/deploy/recovery-kit.txt FUERA del servidor (sin él, las copias de seguridad no se pueden leer)."
+    say "  3. Configura el email en Administración → Integraciones y revisa las copias (docs/INSTALL.md, sección 4)."
+  else
+    say "Hecho: Pizarro está actualizado."
+  fi
   say "Para actualizar más adelante, repite el mismo comando: conserva tu configuración y tus datos."
   say "Para volver a una versión anterior: el mismo comando con --version X.Y.Z (docs/INSTALL.md, sección 5)."
 }

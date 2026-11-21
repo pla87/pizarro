@@ -1,6 +1,7 @@
 // Documentos PDF (@react-pdf/renderer). Este módulo solo se carga en el worker de PDF (report-pdf-worker.ts): el
 // proceso web importa de aquí únicamente tipos, así @react-pdf/renderer no entra en el servidor de Next.
-import { Document, Font, Link, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Children, cloneElement, Fragment, isValidElement, type ReactElement, type ReactNode } from "react";
+import { Document, Font, Link, Page, pdf, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
@@ -10,6 +11,7 @@ import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan
 import { RECENT_DONE_DAYS, UPCOMING_DAYS, type DeliverableStatus, type Report, type ReportFieldRow, type ReportTask } from "./report";
 import { formatEuro, formatHours, PRIORITY_LABEL } from "./task-fields";
 import { pdfSafeData, pdfWordParts } from "./pdf-text";
+import { chunkBlocks, PDF_CHUNK_UNITS, PDF_SINGLE_PAGE_UNITS, pickCut, textUnits, totalUnits, type PdfBlockSize } from "./pdf-chunks";
 
 // Sin partición de palabras por sílabas (en español quedaba «re-sumen»), salvo las palabras muy largas (URLs, textos
 // sin espacios), que se pueden cortar en trozos para no salirse de la celda ni de la página.
@@ -99,10 +101,24 @@ interface Col<T> {
   render: (row: T) => React.ReactNode;
 }
 
+/**
+ * Trozo de una tabla partida en bloques (documentos largos, ver tableBlocks): «first» lleva la cabecera y el borde de
+ * arriba, «last» el de abajo y «middle» solo los laterales. Uno debajo de otro se ven como la tabla entera.
+ */
+type TablePart = "only" | "first" | "middle" | "last";
+
+const TABLE_PART_STYLE = {
+  only: s.table,
+  first: { ...s.table, borderBottomWidth: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
+  middle: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.line },
+  last: { ...s.table, borderTopWidth: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+};
+
 /** Tabla sin cabecera suelta: la cabecera viaja junto a las primeras filas y ninguna fila se parte. */
-function Table<T>({ cols, rows }: { cols: Col<T>[]; rows: T[] }) {
+function Table<T>({ cols, rows, part = "only", "data-pz": tag }: { cols: Col<T>[]; rows: T[]; part?: TablePart; "data-pz"?: number }) {
   if (!rows.length) return null;
-  const header = (
+  const closes = part === "only" || part === "last";
+  const head = (
     <View style={[s.tr, s.th]}>
       {cols.map((c) => (
         <Text key={c.label} style={[s.td, { width: c.width }]}>{c.label}</Text>
@@ -110,7 +126,7 @@ function Table<T>({ cols, rows }: { cols: Col<T>[]; rows: T[] }) {
     </View>
   );
   const row = (r: T, i: number) => (
-    <View key={i} style={i === rows.length - 1 ? s.trLast : s.tr} wrap={false}>
+    <View key={i} style={closes && i === rows.length - 1 ? s.trLast : s.tr} wrap={false}>
       {cols.map((c) => {
         const v = c.render(r);
         return (
@@ -121,17 +137,203 @@ function Table<T>({ cols, rows }: { cols: Col<T>[]; rows: T[] }) {
       })}
     </View>
   );
+  if (part === "middle" || part === "last") return <View style={TABLE_PART_STYLE[part]} data-pz={tag}>{rows.map(row)}</View>;
   const HEAD_ROWS = 2;
   return (
-    <View style={s.table}>
+    <View style={TABLE_PART_STYLE[part]} data-pz={tag}>
       <View wrap={false}>
-        {header}
+        {head}
         {rows.slice(0, HEAD_ROWS).map((r, i) => row(r, i))}
       </View>
       {rows.slice(HEAD_ROWS).map((r, i) => row(r, i + HEAD_ROWS))}
     </View>
   );
 }
+
+// --- Documentos largos en tramos (ver pdf-chunks.ts) ---------------------------------------------------------------------
+
+/** Trozo de un documento: uno o varios hijos directos de <Page> (con <>…</>) y su tamaño estimado. */
+interface Block extends PdfBlockSize {
+  node: React.ReactNode;
+}
+
+/** Tamaño de una fila de tabla: sus líneas en la columna del título (`chars` caracteres por línea). */
+const rowUnits = (text: string, chars: number) => 0.4 + textUnits(text, chars);
+
+/**
+ * En un documento largo, las tablas y listas van fila a fila (un bloque por fila: así casi cualquier salto de página
+ * cae entre dos bloques, ver pickCut), salvo las primeras, que van con su título para que no se quede solo al pie.
+ */
+const HEAD_BLOCK_ROWS = 5;
+
+/** Filas en bloques: las HEAD_BLOCK_ROWS primeras juntas y luego de una en una (documento largo); si no, todas juntas. */
+const rowRuns = <T,>(rows: T[], big: boolean): T[][] =>
+  big && rows.length > HEAD_BLOCK_ROWS + 1 ? [rows.slice(0, HEAD_BLOCK_ROWS), ...rows.slice(HEAD_BLOCK_ROWS).map((r) => [r])] : [rows];
+
+/**
+ * Una tabla en bloques. En un documento corto (`big` falso), un solo bloque: `wrap(<Table/>, true, true)`, como siempre.
+ * En uno largo, en trozos (ver rowRuns; el primero con la cabecera) que, uno debajo de otro, se ven como la tabla entera.
+ * `wrap(tabla, primero, último)` añade lo que va alrededor (el título de la sección, el margen de después).
+ */
+function tableBlocks<T>(
+  rows: T[], cols: Col<T>[], units: (r: T) => number, big: boolean,
+  wrap: (table: React.ReactNode, first: boolean, last: boolean) => React.ReactNode, leadUnits = 0,
+): Block[] {
+  const runs = rowRuns(rows, big);
+  return runs.map((run, i) => {
+    const last = i === runs.length - 1;
+    const part: TablePart = runs.length === 1 ? "only" : i === 0 ? "first" : last ? "last" : "middle";
+    return {
+      node: wrap(<Table cols={cols} rows={run} part={part} />, i === 0, last),
+      units: run.reduce((n, r) => n + units(r), i === 0 ? leadUnits + 1 : 0),
+    };
+  });
+}
+
+/** Un documento por bloques: `build(big)` da sus bloques (con `big`, las tablas y listas largas en trozos). */
+interface PagedDoc {
+  title: string;
+  build: (big: boolean) => Block[];
+  footer: React.ReactNode;
+}
+
+/**
+ * En un documento largo, el primer elemento de cada bloque lleva su número (data-pz), para saber en qué página empieza.
+ * Sin envolver el bloque en otra vista: un nivel más de anidamiento hacía que @react-pdf montara filas unas sobre otras
+ * al partir la página. Un bloque que empieza por una tabla pasa el número a su vista (Table lo acepta).
+ */
+function tagFirst(node: ReactNode, tag: number): ReactNode {
+  if (!isValidElement(node)) return node;
+  if (node.type === Fragment) {
+    const kids = Children.toArray((node as ReactElement<{ children?: ReactNode }>).props.children);
+    const i = kids.findIndex(isValidElement);
+    if (i >= 0) kids[i] = tagFirst(kids[i], tag) as (typeof kids)[number];
+    return <>{kids}</>;
+  }
+  return cloneElement(node as ReactElement<{ "data-pz"?: number }>, { "data-pz": tag });
+}
+
+const tagged = (b: Block, i: number) => <Fragment key={i}>{tagFirst(b.node, i)}</Fragment>;
+
+/**
+ * Pinta un documento con una sola raíz de @react-pdf para todo el worker. renderToBuffer crea una raíz nueva en cada
+ * llamada y no la suelta nunca, con todo su árbol (medido: ~1,5 MB por cada ventana de unas páginas): con las ventanas
+ * que se maquetan para cortar los tramos, un informe de 2.000 tareas pasaba del tope de memoria del worker (256 MB). De
+ * uno en uno (la raíz es compartida); al terminar se le deja un documento vacío, para soltar el árbol.
+ */
+let pdfRoot: ReturnType<typeof pdf> | null = null;
+let pdfRendering: Promise<unknown> = Promise.resolve();
+function renderDoc(doc: ReactElement): Promise<Buffer> {
+  const run = pdfRendering.then(async () => {
+    const root = (pdfRoot ??= pdf());
+    try {
+      root.updateContainer(doc);
+      // Si un componente lanza al pintar, React desmonta la raíz y queda el <Document /> vacío del PDF anterior: sin esta
+      // comprobación salía un PDF en blanco en vez del error. Todos los documentos llevan al menos un <Page>.
+      const pages = (root as unknown as { container?: { document?: { children?: unknown[] } } }).container?.document?.children?.length;
+      if (pages === 0) throw new Error("El PDF no tiene páginas: falló al pintar el documento.");
+      const stream = await root.toBuffer();
+      return await new Promise<Buffer>((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        stream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        stream.on("end", () => resolve(Buffer.concat(chunks)));
+        stream.on("error", reject);
+      });
+    } finally {
+      root.updateContainer(<Document />);
+    }
+  });
+  pdfRendering = run.catch(() => {});
+  return run;
+}
+
+type LayoutData = { children?: { children?: { props?: Record<string, unknown> }[] }[] };
+
+/**
+ * Maqueta unos bloques en un solo <Page> (como el documento entero, sin pie) y devuelve, de cada página, los bloques que
+ * tiene (uno partido sale en las dos). Lee la maquetación que @react-pdf pasa a `onRender`; sin ella, null.
+ */
+async function layoutPages(blocks: Block[]): Promise<number[][] | null> {
+  let pages: number[][] | null = null;
+  const onRender = ({ _INTERNAL__LAYOUT__DATA_: layout }: { _INTERNAL__LAYOUT__DATA_?: LayoutData }) => {
+    // Lo que no lleva número (el resto de un bloque de varios elementos) cuenta como -1.
+    pages = layout?.children?.map((p) => (p.children ?? []).filter((c) => !c.props?.fixed).map((c) => (typeof c.props?.["data-pz"] === "number" ? (c.props["data-pz"] as number) : -1))) ?? null;
+  };
+  await renderDoc(
+    <Document onRender={onRender as () => void}>
+      <Page size="A4" style={s.page}>{blocks.map(tagged)}</Page>
+    </Document>,
+  );
+  return pages;
+}
+
+/**
+ * Tramos de un documento largo cortados donde el documento entero salta de página: se maqueta una ventana de bloques
+ * (PDF_CHUNK_UNITS, unas 5 páginas), se corta donde una página empieza con un bloque nuevo (pickCut) y se sigue desde
+ * ahí. Cada tramo sale igual que esas páginas del documento entero. Si no hay dónde cortar, la ventana crece con los
+ * bloques que vienen detrás (otros PDF_CHUNK_UNITS): doblarla volvía a maquetar lo mismo cuando la ventana era un solo
+ * bloque enorme. Solo si tampoco así hay una página que empiece limpia se corta antes de un bloque partido. Si
+ * @react-pdf no da la maquetación, tramos por tamaño estimado.
+ */
+async function naturalChunks(blocks: Block[]): Promise<Block[][]> {
+  const chunks: Block[][] = [];
+  /** Bloques desde `from` hasta sumar al menos `units` (como mínimo uno). */
+  const extend = (from: number, units: number) => {
+    let end = from;
+    for (let u = 0; end < blocks.length && (end === from || u < units); end++) u += blocks[end]!.units;
+    return end;
+  };
+  let start = 0;
+  let end = extend(0, PDF_CHUNK_UNITS);
+  let grown = 0;
+  while (start < blocks.length) {
+    if (end >= blocks.length) {
+      chunks.push(blocks.slice(start));
+      break;
+    }
+    const window = blocks.slice(start, end);
+    const pages = await layoutPages(window);
+    if (!pages) return [...chunks, ...chunkBlocks(blocks.slice(start))];
+    const cut = pickCut(pages, { unclean: grown > 0, keep: (i) => !!window[i]?.keep });
+    if (!cut) {
+      end = extend(end, PDF_CHUNK_UNITS);
+      grown++;
+      continue;
+    }
+    chunks.push(blocks.slice(start, start + cut));
+    start += cut;
+    end = extend(start, PDF_CHUNK_UNITS);
+    grown = 0;
+  }
+  return chunks;
+}
+
+/**
+ * Pinta un documento. Uno corto, en un solo <Page> (como siempre). Uno largo, en tramos (un <Page> por tramo, ver
+ * pdf-chunks.ts), todos con el mismo estilo y el mismo pie fijo, que numera sobre el total de páginas.
+ */
+async function pagedPdf(doc: PagedDoc, singlePageUnits: number): Promise<Buffer> {
+  const small = doc.build(false);
+  const big = totalUnits(small) > singlePageUnits;
+  const chunks = big ? await naturalChunks(doc.build(true)) : [small];
+  return renderDoc(
+    <Document title={doc.title} author="Pizarro" creator="Pizarro" producer="Pizarro">
+      {chunks.map((chunk, i) => (
+        <Page key={i} size="A4" style={s.page}>
+          {big ? chunk.map(tagged) : chunk.map((b, j) => <Fragment key={j}>{b.node}</Fragment>)}
+          {doc.footer}
+        </Page>
+      ))}
+    </Document>,
+  );
+}
+
+const Footer = ({ left }: { left: React.ReactNode }) => (
+  <View style={s.footer} fixed>
+    <Text>{left}</Text>
+    <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
+  </View>
+);
 
 function Kv({ label, value, color = C.text }: { label: string; value: number; color?: string }) {
   return (
@@ -151,7 +353,7 @@ function dueCell(today: string, x: Ctx) {
 }
 
 /** Tabla con los campos opcionales activados (coste, horas, prioridad, cliente, inicio, enlace) y sus totales. */
-function FieldsSection({ r, t, locale }: { r: Report; t: T; locale: string }) {
+function fieldsBlocks(r: Report, t: T, locale: string, big: boolean): Block[] {
   const f = r.fields!;
   const has = (k: string) => (f.enabled as string[]).includes(k);
   const totals: string[] = [];
@@ -165,16 +367,20 @@ function FieldsSection({ r, t, locale }: { r: Report; t: T; locale: string }) {
   if (has("cost")) extra.push({ label: t("Coste"), width: "14%", render: (x) => (x.cost === null ? "—" : `${formatEuro(x.cost, locale)}${x.costPaid ? ` (${t("pagado")})` : ""}`) });
   if (has("hours")) extra.push({ label: t("Horas (est./real)"), width: "12%", render: (x) => `${formatHours(x.estimatedHours, locale) || "—"} / ${formatHours(x.actualHours, locale) || "—"}` });
   const used = extra.reduce((n, c) => n + parseInt(c.width, 10), 0);
-  return (
+  const titleWidth = Math.max(20, 100 - used);
+  const cols: Col<ReportFieldRow>[] = [{ label: t("Tarea"), width: `${titleWidth}%`, render: (x) => x.title }, ...extra];
+  const lead = (
     <>
       <Text style={s.h2} minPresenceAhead={70}>{t("Campos opcionales")}</Text>
       {totals.map((line) => <Text key={line} style={[s.small, { marginBottom: 2, fontFamily: "Helvetica-Bold" }]}>{line}</Text>)}
-      <Table rows={f.rows} cols={[{ label: t("Tarea"), width: `${Math.max(20, 100 - used)}%`, render: (x) => x.title }, ...extra]} />
     </>
   );
+  // Sin filas, el título y los totales solos (como siempre: Table no pinta nada).
+  if (!f.rows.length) return [{ node: lead, units: 3 + totals.length }];
+  return tableBlocks(f.rows, cols, (x) => rowUnits(x.title, titleWidth), big, (table, first) => <>{first ? lead : null}{table}</>, 2 + totals.length);
 }
 
-function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
+function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   const x: Ctx = { t, locale };
   const generated = formatDay(r.today, undefined, locale);
   const k = r.kpis;
@@ -186,144 +392,112 @@ function ReportDocument({ r, t, locale }: { r: Report; t: T; locale: string }) {
   ].filter(Boolean);
   const pendingTypes = r.types.filter((t) => t.open > 0).map((t) => `${t.label} ${t.open}`).join(" · ");
   const planned = [...r.overdue, ...r.upcoming];
-  return (
-    <Document title={`${t("Informe")} · ${r.project.name}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.eyebrow}>{t("Informe de estado del proyecto")}</Text>
-          <Text style={s.title}>{r.project.name}</Text>
-          <Text style={s.meta}>{r.time ? t("Generado el {date} a las {time} por {name}", { date: generated, time: r.time, name: r.generatedBy }) : t("Generado el {date} por {name}", { date: generated, name: r.generatedBy })}</Text>
-          {r.project.description ? <Text style={s.desc}>{r.project.description}</Text> : null}
-        </View>
+  const h2 = (text: string) => <Text style={s.h2} minPresenceAhead={70}>{text}</Text>;
+  /** Una sección «título + tabla»; si la tabla se trocea, el título va solo con el primer trozo. */
+  const section = <R,>(title: string, rows: R[], cols: Col<R>[], units: (row: R) => number, big: boolean): Block[] =>
+    rows.length ? tableBlocks(rows, cols, units, big, (table, first) => <>{first ? h2(title) : null}{table}</>, 3) : [];
 
-        {/* Resumen */}
-        <View style={{ marginBottom: 8 }} wrap={false}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
-            <Text style={{ fontFamily: "Helvetica-Bold" }}>{t("Avance: {pct}%", { pct: k.progressPct })}</Text>
-            <Text style={s.small}>{t("{done} de {total} tarjetas terminadas", { done: k.done, total: k.total })}</Text>
+  const build = (big: boolean): Block[] => [
+    {
+      units: 22 + (r.project.description ? textUnits(r.project.description, 110) : 0),
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Informe de estado del proyecto")}</Text>
+            <Text style={s.title}>{r.project.name}</Text>
+            <Text style={s.meta}>{r.time ? t("Generado el {date} a las {time} por {name}", { date: generated, time: r.time, name: r.generatedBy }) : t("Generado el {date} por {name}", { date: generated, name: r.generatedBy })}</Text>
+            {r.project.description ? <Text style={s.desc}>{r.project.description}</Text> : null}
           </View>
-          <Bar value={k.progressPct} color={C.green} />
-          <View style={[s.kpis, { marginTop: 8 }]}>
-            <Kv label={t("Pendientes")} value={k.open} />
-            <Kv label={t("Vencidas")} value={k.overdue} color={k.overdue ? C.red : C.text} />
-            <Kv label={t("Vencen en 7 días")} value={k.dueSoon} color={k.dueSoon ? C.amber : C.text} />
-            <Kv label={t("Terminadas")} value={k.done} color={C.green} />
+
+          {/* Resumen */}
+          <View style={{ marginBottom: 8 }} wrap={false}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+              <Text style={{ fontFamily: "Helvetica-Bold" }}>{t("Avance: {pct}%", { pct: k.progressPct })}</Text>
+              <Text style={s.small}>{t("{done} de {total} tarjetas terminadas", { done: k.done, total: k.total })}</Text>
+            </View>
+            <Bar value={k.progressPct} color={C.green} />
+            <View style={[s.kpis, { marginTop: 8 }]}>
+              <Kv label={t("Pendientes")} value={k.open} />
+              <Kv label={t("Vencidas")} value={k.overdue} color={k.overdue ? C.red : C.text} />
+              <Kv label={t("Vencen en 7 días")} value={k.dueSoon} color={k.dueSoon ? C.amber : C.text} />
+              <Kv label={t("Terminadas")} value={k.done} color={C.green} />
+            </View>
+            {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
+            {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
+            {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
           </View>
-          {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
-          {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
-          {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
-        </View>
+        </>
+      ),
+    },
 
-        {/* Pendiente por columna */}
-        {pendingColumns.length ? <Text style={s.h2} minPresenceAhead={70}>{t("Pendiente")}</Text> : null}
-        {pendingColumns.map((c) => (
-          <View key={c.name} style={{ marginBottom: 6 }}>
-            <Text style={s.h3} minPresenceAhead={60}>{c.name} · {c.count}</Text>
-            <Table
-              rows={c.tasks}
-              cols={[
-                { label: t("Tarea"), width: "40%", render: titleCell },
-                { label: t("Tipo"), width: "16%", render: (t) => t.kind },
-                { label: t("Responsable"), width: "16%", render: (t) => t.assignee ?? "—" },
-                { label: t("Plazo"), width: "19%", render: dueCell(r.today, x) },
-                { label: t("Subtareas"), width: "9%", render: (t) => t.checklist ?? "—" },
-              ]}
-            />
+    // Pendiente por columna
+    ...pendingColumns.flatMap((c, ci) => tableBlocks(
+      c.tasks,
+      [
+        { label: t("Tarea"), width: "40%", render: titleCell },
+        { label: t("Tipo"), width: "16%", render: (t) => t.kind },
+        { label: t("Responsable"), width: "16%", render: (t) => t.assignee ?? "—" },
+        { label: t("Plazo"), width: "19%", render: dueCell(r.today, x) },
+        { label: t("Subtareas"), width: "9%", render: (t) => t.checklist ?? "—" },
+      ],
+      (task) => rowUnits(task.title, 40),
+      big,
+      // Troceada (documento largo): el título y el margen van con el primer y el último trozo; los de en medio, solos.
+      (table, first, last) => (first || last ? (
+        <>
+          {ci === 0 && first ? h2(t("Pendiente")) : null}
+          <View style={{ marginBottom: last ? 6 : 0 }}>
+            {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {c.count}</Text> : null}
+            {table}
           </View>
-        ))}
+        </>
+      ) : table),
+      ci === 0 ? 5 : 2,
+    )),
 
-        {/* Plazos: solo si hay vencidos o próximos */}
-        {planned.length ? (
-          <>
-            <Text style={s.h2} minPresenceAhead={70}>{t("Plazos: vencidos y próximos {n} días", { n: UPCOMING_DAYS })}</Text>
-            <Table
-              rows={planned}
-              cols={[
-                { label: t("Tarea"), width: "36%", render: titleCell },
-                { label: t("Columna"), width: "18%", render: (t) => t.column },
-                { label: t("Responsable"), width: "17%", render: (t) => t.assignee ?? "—" },
-                { label: t("Plazo"), width: "29%", render: dueCell(r.today, x) },
-              ]}
-            />
-          </>
-        ) : null}
+    // Plazos: solo si hay vencidos o próximos
+    ...section(t("Plazos: vencidos y próximos {n} días", { n: UPCOMING_DAYS }), planned, [
+      { label: t("Tarea"), width: "36%", render: titleCell },
+      { label: t("Columna"), width: "18%", render: (t) => t.column },
+      { label: t("Responsable"), width: "17%", render: (t) => t.assignee ?? "—" },
+      { label: t("Plazo"), width: "29%", render: dueCell(r.today, x) },
+    ], (task) => rowUnits(task.title, 36), big),
 
-        {/* Entregables */}
-        {r.deliverables.length ? (
-          <>
-            <Text style={s.h2} minPresenceAhead={70}>{t("Entregables")}</Text>
-            <Table
-              rows={r.deliverables}
-              cols={[
-                { label: t("Entregable"), width: "34%", render: (d) => <View><Text style={{ fontFamily: "Helvetica-Bold" }}>{d.name}</Text>{d.description ? <Text style={s.small}>{d.description}</Text> : null}</View> },
-                { label: t("Fecha objetivo"), width: "20%", render: (d) => dueLabel({ dueDate: d.dueDate, daysLeft: d.daysLeft, done: d.status === "Completado" }, r.today, x) },
-                { label: t("Avance"), width: "24%", render: (d) => <View><Text style={s.small}>{d.done}/{d.total} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
-                { label: t("Estado"), width: "22%", render: (d) => <View style={{ flexDirection: "row" }}><Text style={[s.pill, { backgroundColor: STATUS_COLOR[d.status] }]}>{t(d.status)}</Text></View> },
-              ]}
-            />
-          </>
-        ) : null}
+    // Entregables
+    ...section(t("Entregables"), r.deliverables, [
+      { label: t("Entregable"), width: "34%", render: (d) => <View><Text style={{ fontFamily: "Helvetica-Bold" }}>{d.name}</Text>{d.description ? <Text style={s.small}>{d.description}</Text> : null}</View> },
+      { label: t("Fecha objetivo"), width: "20%", render: (d) => dueLabel({ dueDate: d.dueDate, daysLeft: d.daysLeft, done: d.status === "Completado" }, r.today, x) },
+      { label: t("Avance"), width: "24%", render: (d) => <View><Text style={s.small}>{d.done}/{d.total} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
+      { label: t("Estado"), width: "22%", render: (d) => <View style={{ flexDirection: "row" }}><Text style={[s.pill, { backgroundColor: STATUS_COLOR[d.status] }]}>{t(d.status)}</Text></View> },
+    ], (d) => 1.5 + rowUnits(d.name, 34) + (d.description ? textUnits(d.description, 40) : 0), big),
 
-        {/* Carga por persona */}
-        {people.length ? (
-          <>
-            <Text style={s.h2} minPresenceAhead={70}>{t("Carga por persona")}</Text>
-            <Table
-              rows={people}
-              cols={[
-                { label: t("Persona"), width: "60%", render: (p) => p.name },
-                { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
-                { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
-              ]}
-            />
-          </>
-        ) : null}
+    // Carga por persona
+    ...section(t("Carga por persona"), people, [
+      { label: t("Persona"), width: "60%", render: (p) => p.name },
+      { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
+      { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
+    ], (p) => rowUnits(p.name, 60), big),
 
-        {/* Terminadas recientemente */}
-        {r.recentDone.length ? (
-          <>
-            <Text style={s.h2} minPresenceAhead={70}>{t("Terminadas en los últimos {n} días", { n: RECENT_DONE_DAYS })}</Text>
-            <Table
-              rows={r.recentDone}
-              cols={[
-                { label: t("Tarea"), width: "58%", render: titleCell },
-                { label: t("Tipo"), width: "20%", render: (t) => t.kind },
-                { label: t("Columna"), width: "22%", render: (t) => t.column },
-              ]}
-            />
-          </>
-        ) : null}
+    // Terminadas recientemente
+    ...section(t("Terminadas en los últimos {n} días", { n: RECENT_DONE_DAYS }), r.recentDone, [
+      { label: t("Tarea"), width: "58%", render: titleCell },
+      { label: t("Tipo"), width: "20%", render: (t) => t.kind },
+      { label: t("Columna"), width: "22%", render: (t) => t.column },
+    ], (task) => rowUnits(task.title, 58), big),
 
-        {/* Campos opcionales del proyecto */}
-        {r.fields ? <FieldsSection r={r} t={t} locale={locale} /> : null}
+    // Campos opcionales del proyecto
+    ...(r.fields ? fieldsBlocks(r, t, locale, big) : []),
 
-        {/* Releases */}
-        {r.releases.length ? (
-          <>
-            <Text style={s.h2} minPresenceAhead={70}>{t("Últimas releases")}</Text>
-            <Table
-              rows={r.releases}
-              cols={[
-                { label: t("Nº"), width: "9%", render: (x) => `R${x.number}` },
-                { label: t("Título"), width: "56%", render: (x) => x.title },
-                { label: t("Fecha"), width: "21%", render: (x) => formatDay(x.deployedAt.slice(0, 10), r.today, locale) },
-                { label: t("Tareas"), width: "14%", render: (x) => String(x.taskCount) },
-              ]}
-            />
-          </>
-        ) : null}
+    // Releases
+    ...section(t("Últimas releases"), r.releases, [
+      { label: t("Nº"), width: "9%", render: (x) => `R${x.number}` },
+      { label: t("Título"), width: "56%", render: (x) => x.title },
+      { label: t("Fecha"), width: "21%", render: (x) => formatDay(x.deployedAt.slice(0, 10), r.today, locale) },
+      { label: t("Tareas"), width: "14%", render: (x) => String(x.taskCount) },
+    ], (rel) => rowUnits(rel.title, 56), big),
+  ];
 
-        <View style={s.footer} fixed>
-          <Text>{r.project.name} · {t("Informe del {date}", { date: generated })}</Text>
-          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
-    </Document>
-  );
-}
-
-function renderReportPdf(report: Report, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
-  return renderToBuffer(<ReportDocument r={report} t={t} locale={locale} />);
+  return { title: `${t("Informe")} · ${r.project.name}`, build, footer: <Footer left={<>{r.project.name} · {t("Informe del {date}", { date: generated })}</>} /> };
 }
 
 export interface WeekPlanPdfInput {
@@ -335,44 +509,41 @@ export interface WeekPlanPdfInput {
   sections: WeekPlanSection[];
 }
 
-function WeekPlanDocument({ r, t, locale }: { r: WeekPlanPdfInput; t: T; locale: string }) {
+function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
   const byDay = r.groupBy === "day";
   const total = r.sections.reduce((n, sec) => n + sec.tasks.length, 0);
+  const titleWidth = byDay ? 52 : 50;
   const cols: Col<WeekPlanTask>[] = [
-    { label: t("Tarea"), width: byDay ? "52%" : "50%", render: (x) => x.title },
+    { label: t("Tarea"), width: `${titleWidth}%`, render: (x) => x.title },
     { label: t("Tipo"), width: "18%", render: (x) => x.kind },
     byDay
       ? { label: t("Responsable"), width: "30%", render: (x) => x.assigneeName ?? "—" }
       : { label: t("Fecha"), width: "32%", render: (x) => (x.dueDate ? formatDay(x.dueDate, r.today, locale) : "—") },
   ];
-  return (
-    <Document title={`${t("Planificación semanal")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
-          <Text style={s.title}>{r.column}</Text>
-          <Text style={s.meta}>
-            {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
-          </Text>
-        </View>
-        {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
-        {r.sections.map((sec) => (
-          <View key={sec.key}>
-            <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length})</Text></Text>
-            <Table rows={sec.tasks} cols={cols} />
+  const build = (big: boolean): Block[] => [
+    {
+      units: 8,
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
+            <Text style={s.title}>{r.column}</Text>
+            <Text style={s.meta}>
+              {r.project} · {t("Semana del {date}", { date: formatDay(r.today, undefined, locale) })} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
+            </Text>
           </View>
-        ))}
-        <View style={s.footer} fixed>
-          <Text>{r.project} · {r.column}</Text>
-          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
-    </Document>
-  );
-}
-
-function renderWeekPlanPdf(input: WeekPlanPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
-  return renderToBuffer(<WeekPlanDocument r={input} t={t} locale={locale} />);
+          {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
+        </>
+      ),
+    },
+    ...r.sections.flatMap((sec) => tableBlocks(sec.tasks, cols, (x) => rowUnits(x.title, titleWidth), big, (table, first) => (first ? (
+      <View>
+        <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length})</Text></Text>
+        {table}
+      </View>
+    ) : table), 2)),
+  ];
+  return { title: `${t("Planificación semanal")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
 export interface ChecklistPdfInput {
@@ -383,45 +554,50 @@ export interface ChecklistPdfInput {
   groups: ChecklistGroup[];
 }
 
-function ChecklistDocument({ r, t, locale }: { r: ChecklistPdfInput; t: T; locale: string }) {
+function checklistDoc(r: ChecklistPdfInput, t: T, locale: string): PagedDoc {
   const total = r.groups.reduce((n, g) => n + g.items.length, 0);
   const done = r.groups.reduce((n, g) => n + g.items.filter((i) => i.done).length, 0);
-  return (
-    <Document title={`${t("Lista consolidada")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.eyebrow}>{t("Lista consolidada")}</Text>
-          <Text style={s.title}>{r.column}</Text>
-          <Text style={s.meta}>
-            {r.project} · {formatDay(r.today, undefined, locale)} · {r.by === "card" ? t("Por tarjeta") : t("Por tipo de tarea")} · {t("{done} de {total} hechas", { done, total })}
-          </Text>
-        </View>
-        {r.groups.length === 0 && <Text style={s.small}>{t("No hay subtareas en esta columna.")}</Text>}
-        {r.groups.map((g) => (
-          <View key={g.key}>
-            <Text style={s.h3} minPresenceAhead={40}>{g.label} <Text style={s.small}>({g.items.filter((i) => i.done).length}/{g.items.length})</Text></Text>
-            {g.items.map((it) => (
-              <View key={it.id} style={{ flexDirection: "row", marginBottom: 2 }} wrap={false}>
-                <Text style={{ width: 16, fontFamily: "Helvetica-Bold", color: it.done ? C.green : C.muted }}>{it.done ? "[x]" : "[ ]"}</Text>
-                <Text style={{ flex: 1, color: it.done ? C.muted : C.text }}>
-                  {it.title}
-                  {r.by === "kind" ? <Text style={s.small}>  ({it.taskTitle})</Text> : null}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ))}
-        <View style={s.footer} fixed>
-          <Text>{r.project} · {r.column}</Text>
-          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
-    </Document>
+  type Item = ChecklistGroup["items"][number];
+  const itemUnits = (it: Item) => 0.2 + textUnits(r.by === "kind" ? `${it.title}  (${it.taskTitle})` : it.title, 105);
+  const item = (it: Item) => (
+    <View key={it.id} style={{ flexDirection: "row", marginBottom: 2 }} wrap={false}>
+      <Text style={{ width: 16, fontFamily: "Helvetica-Bold", color: it.done ? C.green : C.muted }}>{it.done ? "[x]" : "[ ]"}</Text>
+      <Text style={{ flex: 1, color: it.done ? C.muted : C.text }}>
+        {it.title}
+        {r.by === "kind" ? <Text style={s.small}>  ({it.taskTitle})</Text> : null}
+      </Text>
+    </View>
   );
-}
-
-function renderChecklistPdf(input: ChecklistPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
-  return renderToBuffer(<ChecklistDocument r={input} t={t} locale={locale} />);
+  // En un documento largo, el título del grupo con sus primeras subtareas y luego cada subtarea en su bloque (ver rowRuns).
+  const groupBlocks = (g: ChecklistGroup, big: boolean): Block[] =>
+    rowRuns(g.items, big).map((run, i) => ({
+      units: run.reduce((n, it) => n + itemUnits(it), i === 0 ? 2 : 0),
+      node: i === 0 ? (
+        <View>
+          <Text style={s.h3} minPresenceAhead={40}>{g.label} <Text style={s.small}>({g.items.filter((i) => i.done).length}/{g.items.length})</Text></Text>
+          {run.map(item)}
+        </View>
+      ) : item(run[0]!),
+    }));
+  const build = (big: boolean): Block[] => [
+    {
+      units: 8,
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Lista consolidada")}</Text>
+            <Text style={s.title}>{r.column}</Text>
+            <Text style={s.meta}>
+              {r.project} · {formatDay(r.today, undefined, locale)} · {r.by === "card" ? t("Por tarjeta") : t("Por tipo de tarea")} · {t("{done} de {total} hechas", { done, total })}
+            </Text>
+          </View>
+          {r.groups.length === 0 && <Text style={s.small}>{t("No hay subtareas en esta columna.")}</Text>}
+        </>
+      ),
+    },
+    ...r.groups.flatMap((g) => groupBlocks(g, big)),
+  ];
+  return { title: `${t("Lista consolidada")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
 /** Tarea tal como se entrega al cliente: sin comentarios, notas internas ni datos de personas. */
@@ -440,40 +616,58 @@ export interface DeliveryPdfInput {
   tasks: DeliveryTask[];
 }
 
-function DeliveryDocument({ r, t, locale }: { r: DeliveryPdfInput; t: T; locale: string }) {
-  return (
-    <Document title={`${t("Resumen para el cliente")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
-          <Text style={s.title}>{r.project}</Text>
-          <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length })}</Text>
-        </View>
-        {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
-        {r.tasks.map((x, i) => (
-          <View key={i} style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={false}>
-            <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
-            <Text style={s.small}>
-              {x.kind}
-              {x.dueDate ? ` · ${t("Fecha")}: ${formatDay(x.dueDate, r.today, locale)}` : ""}
-              {x.subtaskTotal > 0 ? ` · ${t("{done} de {total} subtareas hechas", { done: x.doneSubtasks.length, total: x.subtaskTotal })}` : ""}
-            </Text>
-            {x.doneSubtasks.map((title, j) => (
-              <Text key={j} style={{ marginLeft: 8, marginTop: 1 }}>- {title}</Text>
-            ))}
-          </View>
-        ))}
-        <View style={s.footer} fixed>
-          <Text>{r.project}</Text>
-          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
-    </Document>
-  );
-}
+/** Tamaño de una tarjeta del resumen para el cliente: título, línea de datos y una línea (o más) por subtarea hecha. */
+const deliveryUnits = (x: DeliveryTask) => 2 + textUnits(x.title, 85) + x.doneSubtasks.reduce((n, title) => n + textUnits(`- ${title}`, 110), 0);
 
-function renderDeliveryPdf(input: DeliveryPdfInput, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
-  return renderToBuffer(<DeliveryDocument r={input} t={t} locale={locale} />);
+/**
+ * Hasta este tamaño la tarjeta no se parte (si no cabe al final de una página, pasa entera a la siguiente). Una más
+ * larga podría no caber en una página: @react-pdf la aplastaba sobre la primera (texto encima de texto). Esa se parte
+ * entre subtareas; el título y la línea de datos van juntos y con algunas subtareas detrás.
+ */
+const DELIVERY_UNBROKEN_UNITS = 40;
+
+function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
+  const card = (x: DeliveryTask, units: number) => {
+    const unbroken = units <= DELIVERY_UNBROKEN_UNITS;
+    const head = (
+      <>
+        <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
+        <Text style={s.small}>
+          {x.kind}
+          {x.dueDate ? ` · ${t("Fecha")}: ${formatDay(x.dueDate, r.today, locale)}` : ""}
+          {x.subtaskTotal > 0 ? ` · ${t("{done} de {total} subtareas hechas", { done: x.doneSubtasks.length, total: x.subtaskTotal })}` : ""}
+        </Text>
+      </>
+    );
+    return (
+      <View style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={!unbroken}>
+        {unbroken ? head : <View wrap={false} minPresenceAhead={36}>{head}</View>}
+        {x.doneSubtasks.map((title, j) => (
+          <Text key={j} style={{ marginLeft: 8, marginTop: 1 }}>- {title}</Text>
+        ))}
+      </View>
+    );
+  };
+  const build = (): Block[] => [
+    {
+      units: 8,
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
+            <Text style={s.title}>{r.project}</Text>
+            <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length })}</Text>
+          </View>
+          {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
+        </>
+      ),
+    },
+    ...r.tasks.map((x) => {
+      const units = deliveryUnits(x);
+      return { units, node: card(x, units) };
+    }),
+  ];
+  return { title: `${t("Resumen para el cliente")} · ${r.project}`, build, footer: <Footer left={r.project} /> };
 }
 
 // --- Markdown de las descripciones (bloques de pdf-markdown.ts) ---------------------------------------------------------
@@ -500,6 +694,32 @@ function Runs({ runs }: { runs: PdfRun[] }) {
 
 const HEADING_SIZE = [11.5, 10.5, 10, 9.5, 9, 9];
 
+const CODE_STYLE = { marginTop: 3, padding: 5, fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderWidth: 1, borderColor: C.line, borderRadius: 3 };
+/** Una línea de un bloque de código partido por líneas: la caja se reparte entre la primera, las de en medio y la última. */
+const CODE_LINE = { fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderColor: C.line, paddingLeft: 5, paddingRight: 5, borderLeftWidth: 1, borderRightWidth: 1 };
+const CODE_LINE_STYLE = {
+  first: { ...CODE_LINE, marginTop: 3, paddingTop: 5, borderTopWidth: 1, borderTopLeftRadius: 3, borderTopRightRadius: 3 },
+  middle: CODE_LINE,
+  last: { ...CODE_LINE, paddingBottom: 5, borderBottomWidth: 1, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+};
+
+type ListBlock = Extract<PdfBlock, { t: "list" }>;
+/** Estilo de la fila de un trozo: márgenes y, en el último de una sesión, el borde de abajo (ver sessionParts). */
+type PartStyle = { marginTop?: number; paddingLeft?: number; paddingBottom?: number; borderBottomWidth?: number; borderBottomColor?: string };
+
+/** Elemento `j` de una lista: su viñeta (o número, o casilla) y su contenido, con `style` en la fila. */
+function listItem(b: ListBlock, j: number, style: PartStyle, extra?: { minPresenceAhead?: number }) {
+  const item = b.items[j]!;
+  return (
+    <View key={j} style={{ flexDirection: "row", ...style }} minPresenceAhead={extra?.minPresenceAhead}>
+      <Text style={{ width: b.ordered || item.checked !== null ? 18 : 10, color: item.checked ? C.green : C.muted, fontFamily: item.checked !== null ? "Helvetica-Bold" : "Helvetica" }}>
+        {item.checked !== null ? (item.checked ? "[x]" : "[ ]") : b.ordered ? `${b.start + j}.` : "•"}
+      </Text>
+      <View style={{ flex: 1 }}><MarkdownBlocks blocks={item.blocks} tight /></View>
+    </View>
+  );
+}
+
 /** Bloques de Markdown. `tight`: dentro de un elemento de lista, el primero sin margen superior (va junto a su viñeta). */
 function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?: boolean }) {
   return (
@@ -509,19 +729,12 @@ function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?:
         switch (b.t) {
           case "p": return <Text key={i} style={{ marginTop: top }}><Runs runs={b.runs} /></Text>;
           case "h": return <Text key={i} style={{ marginTop: 6, fontSize: HEADING_SIZE[b.level - 1], fontFamily: "Helvetica-Bold", color: "#312e81" }} minPresenceAhead={20}><Runs runs={b.runs} /></Text>;
-          case "code": return <Text key={i} style={{ marginTop: 3, padding: 5, fontFamily: "Courier", fontSize: 8, backgroundColor: C.soft, borderWidth: 1, borderColor: C.line, borderRadius: 3 }}>{b.text}</Text>;
+          case "code": return <Text key={i} style={CODE_STYLE}>{b.text}</Text>;
           case "hr": return <View key={i} style={{ marginVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }} />;
           case "quote": return <View key={i} style={{ marginTop: 3, paddingLeft: 7, borderLeftWidth: 2, borderLeftColor: C.line, color: C.muted }}><MarkdownBlocks blocks={b.blocks} /></View>;
           case "list": return (
             <View key={i} style={{ marginTop: top }}>
-              {b.items.map((item, j) => (
-                <View key={j} style={{ flexDirection: "row", marginTop: j === 0 ? 0 : 2 }}>
-                  <Text style={{ width: b.ordered || item.checked !== null ? 18 : 10, color: item.checked ? C.green : C.muted, fontFamily: item.checked !== null ? "Helvetica-Bold" : "Helvetica" }}>
-                    {item.checked !== null ? (item.checked ? "[x]" : "[ ]") : b.ordered ? `${b.start + j}.` : "•"}
-                  </Text>
-                  <View style={{ flex: 1 }}><MarkdownBlocks blocks={item.blocks} tight /></View>
-                </View>
-              ))}
+              {b.items.map((item, j) => listItem(b, j, { marginTop: j === 0 ? 0 : 2 }))}
             </View>
           );
           case "table": return (
@@ -542,67 +755,160 @@ function MarkdownBlocks({ blocks, tight = false }: { blocks: PdfBlock[]; tight?:
   );
 }
 
+/**
+ * Un trozo de la descripción de una sesión (ver sessionParts): su tamaño, si pide ir con lo siguiente y cómo se pinta
+ * con el estilo del trozo (`style`: el hueco del número a la izquierda y, en el último, el borde de abajo).
+ */
+interface MarkdownPart {
+  units: number;
+  keep?: boolean;
+  render: (style: PartStyle) => React.ReactNode;
+}
+
+/** Envuelve un bloque en una vista con el estilo del trozo (lo que no puede llevarlo en sí mismo). */
+function wrapped(node: React.ReactNode, keep?: boolean): MarkdownPart["render"] {
+  return function wrap(style) {
+    return <View style={style} minPresenceAhead={keep ? 20 : undefined}>{node}</View>;
+  };
+}
+
+/**
+ * Un bloque de Markdown en trozos que, uno debajo de otro, se ven igual que el bloque entero: una lista, elemento a
+ * elemento (cada fila lleva el margen que tenía en la lista y el estilo del trozo, sin vistas de más: con miles de
+ * elementos, cada vista cuenta en la memoria del worker); un bloque de código, línea a línea (la caja repartida entre
+ * ellas). Así ninguna lista ni ningún código largo es un trozo de varias páginas, que habría que maquetar entero una y
+ * otra vez para encontrar dónde cortar (ver naturalChunks). Lo demás, en un trozo.
+ */
+function markdownParts(b: PdfBlock): MarkdownPart[] {
+  if (b.t === "list" && b.items.length > 1) {
+    return b.items.map((item, j) => ({
+      units: 0.2 + markdownUnits(item.blocks),
+      render: (style) => listItem(b, j, { marginTop: j === 0 ? 3 : 2, ...style }),
+    }));
+  }
+  if (b.t === "code" && b.text.includes("\n")) {
+    const lines = b.text.split("\n");
+    return lines.map((line, j) => ({
+      units: (j === 0 ? 1.5 : 0) + textUnits(line, 110),
+      // wrap={false}: si el salto de página caía tras el hueco de arriba de la primera línea, esta se partía y pasaba a la
+      // página siguiente encima de la segunda.
+      render: wrapped(<Text wrap={false} style={CODE_LINE_STYLE[j === 0 ? "first" : j === lines.length - 1 ? "last" : "middle"]}>{line || " "}</Text>),
+    }));
+  }
+  return [{ units: markdownUnits([b]), keep: b.t === "h", render: wrapped(<MarkdownBlocks blocks={[b]} />, b.t === "h") }];
+}
+
 // --- Programa del curso (columna PROGRAM) -------------------------------------------------------------------------------
 
-function ProgramDocument({ r, t, locale }: { r: ProgramPdfDocument; t: T; locale: string }) {
+/** Tamaño de unos bloques de Markdown: líneas de texto (unos 95 caracteres por línea) más un poco por bloque. */
+function markdownUnits(blocks: PdfBlock[]): number {
+  const runsText = (runs: PdfRun[]) => runs.map((r) => r.text).join("");
+  return blocks.reduce((n, b) => {
+    switch (b.t) {
+      case "p": case "h": return n + 0.5 + textUnits(runsText(b.runs), 95);
+      case "code": return n + 1.5 + textUnits(b.text, 110);
+      case "hr": return n + 1;
+      case "quote": return n + 0.5 + markdownUnits(b.blocks);
+      case "list": return n + b.items.reduce((m, item) => m + 0.2 + markdownUnits(item.blocks), 0);
+      case "table": return n + 1 + [b.header, ...b.rows].reduce((m, row) => m + 0.4 + Math.max(1, ...row.map((cell) => textUnits(runsText(cell), Math.max(10, Math.floor(95 / Math.max(1, row.length)))))), 0);
+      default: return n;
+    }
+  }, 0);
+}
+
+type ProgramSessionPdf = ProgramPdfDocument["sessions"][number];
+
+const SESSION_ROW = { flexDirection: "row", gap: 10 } as const;
+const SESSION_END = { paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line };
+
+function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
   const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length });
-  return (
-    <Document title={`${t("Programa")} · ${r.project}`} author="Pizarro" creator="Pizarro" producer="Pizarro">
-      <Page size="A4" style={s.page}>
-        <View style={s.header}>
-          <Text style={s.eyebrow}>{t("Programa del curso")}</Text>
-          <Text style={s.title}>{r.project}</Text>
-          <Text style={s.meta}>{count} · {t("Publicado el {date}", { date: formatDay(r.today, undefined, locale) })}</Text>
-        </View>
-        {r.sessions.length === 0 && <Text style={s.small}>{t("Aún no hay sesiones en esta columna.")}</Text>}
-        {r.sessions.map((x) => (
-          <View key={x.n} style={{ flexDirection: "row", gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line }}>
-            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.brandSoft, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5, color: C.brand }}>{x.n}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <View wrap={false} minPresenceAhead={30}>
-                <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11.5, lineHeight: 1.25 }}>{t("Sesión {n}", { n: x.n })}: {x.title}</Text>
-                <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.faint, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
-                {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
-              </View>
-              <MarkdownBlocks blocks={x.blocks} />
-            </View>
-          </View>
-        ))}
-        <View style={s.footer} fixed>
-          <Text>{r.project}</Text>
-          <Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
-    </Document>
+  const circle = (x: ProgramSessionPdf) => (
+    <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.brandSoft, alignItems: "center", justifyContent: "center" }}>
+      <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5, color: C.brand }}>{x.n}</Text>
+    </View>
   );
+  const head = (x: ProgramSessionPdf) => (
+    <View wrap={false} minPresenceAhead={30}>
+      <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11.5, lineHeight: 1.25 }}>{t("Sesión {n}", { n: x.n })}: {x.title}</Text>
+      <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.faint, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
+      {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
+    </View>
+  );
+  /**
+   * La sesión en trozos que, uno debajo de otro, se ven igual que la sesión entera: el número y la cabecera en el
+   * primero (sin partir: antes el número podía quedarse solo al pie y el título pasar a la página siguiente); luego la
+   * descripción en trozos (markdownParts), con un hueco del ancho del número; el borde de abajo en el último. Así las
+   * páginas suelen empezar con un trozo entero (ver pickCut), y lo que pedía seguir con algo detrás (la cabecera, los
+   * títulos) lo pide el propio trozo.
+   */
+  const sessionParts = (x: ProgramSessionPdf): Block[] => {
+    const md = x.blocks.flatMap(markdownParts);
+    const only = md.length === 0;
+    const parts: Block[] = [{
+      units: 4 + textUnits(x.title, 70),
+      keep: !only,
+      node: (
+        <View style={{ ...SESSION_ROW, paddingTop: 8, ...(only ? SESSION_END : {}) }} wrap={false} minPresenceAhead={only ? undefined : 30}>
+          {circle(x)}
+          <View style={{ flex: 1 }}>{head(x)}</View>
+        </View>
+      ),
+    }];
+    md.forEach((part, i) => {
+      const last = i === md.length - 1;
+      // El hueco del número (26) y su separación (10) como margen izquierdo del trozo.
+      parts.push({ units: part.units, keep: part.keep, node: part.render({ paddingLeft: 36, ...(last ? SESSION_END : {}) }) });
+    });
+    return parts;
+  };
+  const build = (): Block[] => [
+    {
+      units: 8,
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Programa del curso")}</Text>
+            <Text style={s.title}>{r.project}</Text>
+            <Text style={s.meta}>{count} · {t("Publicado el {date}", { date: formatDay(r.today, undefined, locale) })}</Text>
+          </View>
+          {r.sessions.length === 0 && <Text style={s.small}>{t("Aún no hay sesiones en esta columna.")}</Text>}
+        </>
+      ),
+    },
+    ...r.sessions.flatMap(sessionParts),
+  ];
+  return { title: `${t("Programa")} · ${r.project}`, build, footer: <Footer left={r.project} /> };
 }
 
-function renderProgramPdf(input: ProgramPdfDocument, t: T = makeT("es"), locale = "es-ES"): Promise<Buffer> {
-  return renderToBuffer(<ProgramDocument r={input} t={t} locale={locale} />);
-}
-
-/** Trabajo para el worker de PDF: datos ya preparados (serializables) y el idioma de quien lo pide. */
-export type PdfJob =
+/**
+ * Trabajo para el worker de PDF: datos ya preparados (serializables) y el idioma de quien lo pide. `singlePageUnits`:
+ * solo para las pruebas, el tamaño hasta el que el documento va en un solo <Page> (PDF_SINGLE_PAGE_UNITS).
+ */
+export type PdfJob = (
   | { kind: "report"; locale: Locale; input: Report }
   | { kind: "weekPlan"; locale: Locale; input: WeekPlanPdfInput }
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
   | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput }
-  | { kind: "program"; locale: Locale; input: ProgramPdfInput };
+  | { kind: "program"; locale: Locale; input: ProgramPdfInput }
+) & { singlePageUnits?: number };
 
-/** Pinta el PDF de un trabajo (en el worker). Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
-export function renderPdfJob(raw: PdfJob): Promise<Buffer> {
-  // El programa llega con el Markdown de cada sesión: aquí (en el worker) se convierte en bloques, antes de adaptar los textos.
-  if (raw.kind === "program") return renderProgramPdf(pdfSafeData(programBlocks(raw.input)), makeT(raw.locale), intlLocale(raw.locale));
-  const job = { ...raw, input: pdfSafeData(raw.input) } as PdfJob;
-  const t = makeT(job.locale);
-  const locale = intlLocale(job.locale);
-  switch (job.kind) {
-    case "report": return renderReportPdf(job.input, t, locale);
-    case "weekPlan": return renderWeekPlanPdf(job.input, t, locale);
-    case "checklist": return renderChecklistPdf(job.input, t, locale);
-    case "delivery": return renderDeliveryPdf(job.input, t, locale);
-    default: throw new Error(`Tipo de PDF desconocido: ${(job as { kind: unknown }).kind}`);
+/** El documento de un trabajo. Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
+function jobDoc(raw: PdfJob): PagedDoc {
+  const t = makeT(raw.locale);
+  const locale = intlLocale(raw.locale);
+  switch (raw.kind) {
+    // El programa llega con el Markdown de cada sesión: aquí (en el worker) se convierte en bloques, antes de adaptar los textos.
+    case "program": return programDoc(pdfSafeData(programBlocks(raw.input)), t, locale);
+    case "report": return reportDoc(pdfSafeData(raw.input), t, locale);
+    case "weekPlan": return weekPlanDoc(pdfSafeData(raw.input), t, locale);
+    case "checklist": return checklistDoc(pdfSafeData(raw.input), t, locale);
+    case "delivery": return deliveryDoc(pdfSafeData(raw.input), t, locale);
+    default: throw new Error(`Tipo de PDF desconocido: ${(raw as { kind: unknown }).kind}`);
   }
+}
+
+/** Pinta el PDF de un trabajo (en el worker). */
+export async function renderPdfJob(raw: PdfJob): Promise<Buffer> {
+  return pagedPdf(jobDoc(raw), raw.singlePageUnits ?? PDF_SINGLE_PAGE_UNITS);
 }

@@ -151,19 +151,25 @@ export async function createTask(input: z.input<typeof createSchema>) {
     const user = await requireUser();
     const data = createSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    await assertColumnInProject(data.columnId, data.projectId);
-    await assertLabelsInProject(data.labelIds, data.projectId);
-    if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
-    await assertDeliverableInProject(data.deliverableId, data.projectId);
-    await assertKindsInProject([data.kindId], data.projectId);
     const optional = pickTaskFields(data);
-    if (patchedFieldKeys(optional).length) {
-      const enabled = await enabledTaskFields(data.projectId);
-      await assertFieldsEnabled(enabled, optional);
-      assertStartBeforeDue(enabled, data.startDate, data.dueDate);
-    }
     // Solo se admite evergreen en la columna de la release o en una de plan de trabajo para IA.
-    const evergreen = data.evergreen && (await db.column.count({ where: { id: data.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } })) > 0;
+    const evergreenColumn = data.evergreen ? db.column.count({ where: { id: data.columnId, role: { in: [...EVERGREEN_COLUMN_ROLES] } } }) : Promise.resolve(0);
+    // Con el acceso ya comprobado, las comprobaciones van a la vez (como en updateTask); si fallan varias, gana la
+    // primera en el orden de siempre.
+    const checks = await Promise.allSettled([
+      assertColumnInProject(data.columnId, data.projectId),
+      assertLabelsInProject(data.labelIds, data.projectId),
+      data.assigneeId ? assertAssignable(data.projectId, data.assigneeId) : null,
+      assertDeliverableInProject(data.deliverableId, data.projectId),
+      assertKindsInProject([data.kindId], data.projectId),
+      patchedFieldKeys(optional).length ? enabledTaskFields(data.projectId).then(async (enabled) => {
+        await assertFieldsEnabled(enabled, optional);
+        assertStartBeforeDue(enabled, data.startDate, data.dueDate);
+      }) : null,
+      evergreenColumn,
+    ]);
+    for (const c of checks) if (c.status === "rejected") throw c.reason;
+    const evergreen = data.evergreen && (await evergreenColumn) > 0;
     const repeat = normalizeRecurrence(data.recurrence, data.recurrenceDay, data.dueDate, todayIso(appTimeZone()));
     assertTaskCreateRate(user.id);
     const task = await db.$transaction(async (tx) => {
@@ -264,20 +270,25 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const user = await requireUser();
     const data = createManySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    await assertColumnInProject(data.columnId, data.projectId);
-    await assertLabelsInProject(data.labelIds, data.projectId);
-    if (data.assigneeId) await assertAssignable(data.projectId, data.assigneeId);
-    await assertDeliverableInProject(data.deliverableId, data.projectId);
-    await assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId);
     const optional = pickTaskFields({ priority: data.priority, client: data.client });
-    if (patchedFieldKeys(optional).length) await assertFieldsEnabled(await enabledTaskFields(data.projectId), optional);
+    const kindTemplates = data.applySubtaskTemplates
+      ? db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } })
+      : Promise.resolve([]);
+    // A la vez, como en createTask; si fallan varias, gana la primera en el orden de siempre.
+    const checks = await Promise.allSettled([
+      assertColumnInProject(data.columnId, data.projectId),
+      assertLabelsInProject(data.labelIds, data.projectId),
+      data.assigneeId ? assertAssignable(data.projectId, data.assigneeId) : null,
+      assertDeliverableInProject(data.deliverableId, data.projectId),
+      assertKindsInProject(data.tasks.map((t) => t.kindId), data.projectId),
+      patchedFieldKeys(optional).length ? enabledTaskFields(data.projectId).then((enabled) => assertFieldsEnabled(enabled, optional)) : null,
+      kindTemplates,
+    ]);
+    for (const c of checks) if (c.status === "rejected") throw c.reason;
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const templates = new Map<string, string[]>();
-    if (data.applySubtaskTemplates) {
-      const kinds = await db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } });
-      for (const k of kinds) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
-    }
+    for (const k of await kindTemplates) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
     assertTaskCreateRate(user.id, data.tasks.length);
     const ids = await db.$transaction(async (tx) => {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
@@ -476,7 +487,7 @@ const updateSchema = z.object({
 /** Anota en el historial qué ha cambiado realmente al editar la tarea (una línea por cambio). */
 async function recordUpdateEvents(
   taskId: string,
-  prev: { title: string; description: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number; blockedById: string | null },
+  prev: { title: string; description?: string; kindId: string; assigneeId: string | null; dueDate: Date | null; color: string | null; linkUrl: string | null; deliverableId: string | null; evergreen: boolean; evergreenEvery: number; blockedById: string | null },
   data: z.infer<typeof updateSchema>,
   dueDate: string | null | undefined,
   optional: Record<string, unknown> = {},
@@ -581,10 +592,13 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
     // fija, repetición, valores para deshacer y valores anteriores para el historial y los avisos.
     // Las relaciones (etiquetas) van en una consulta aparte en paralelo: como relación, Prisma la haría después.
     const id = v.id.parse(taskId);
-    const [task, labels] = await Promise.all([
-      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT }),
+    // La descripción (hasta 20 KB) solo si se edita: es lo único que la usa (deshacer, conflicto e historial).
+    const editsDescription = data.description !== undefined;
+    const [loaded, labels] = await Promise.all([
+      loadTaskWithAccess(user, id, { id: true, ...TASK_UNDO_SELECT, description: editsDescription }),
       data.labelIds !== undefined ? db.taskLabel.findMany({ where: { taskId: id }, select: { labelId: true } }) : undefined,
     ]);
+    const task = loaded as Omit<typeof loaded, "description"> & { description?: string };
     const { projectId } = task;
     assertNotArchivedRow(task);
     const editsText = data.title !== undefined || data.description !== undefined;
@@ -632,7 +646,8 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       ...(editsText ? { contentUpdatedAt: new Date(), contentUpdatedById: user.id } : {}),
     };
     const changed = Object.keys(fields).filter((k) => k !== "labelIds") as TaskField[];
-    addUndo(taskSetOp(task, changed, labels));
+    // `changed` solo incluye la descripción si se edita, y entonces se ha leído.
+    addUndo(taskSetOp(task as typeof loaded, changed, labels));
     const prev = task;
     const newMentions = await db.$transaction(async (tx) => {
       // Bloqueo: la comprobación de antes vale para el mensaje rápido, pero la definitiva va aquí, con el candado del
@@ -647,14 +662,19 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       // la de fuera, pero aquí el segundo ya ve el texto del primero y recibe el 409.
       let added: string[] = [];
       if (data.description !== undefined || checkConflict) {
-        const [before] = await tx.$queryRaw<{ title: string; description: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "title", "description", "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
+        const description = editsDescription ? Prisma.sql`, "description"` : Prisma.empty;
+        const [before] = await tx.$queryRaw<{ title: string; description?: string; contentUpdatedAt: Date | null; contentUpdatedById: string | null }[]>`SELECT "title"${description}, "contentUpdatedAt", "contentUpdatedById" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`;
         if (checkConflict && before) await assertNoTextConflict(id, before, user.id, since, data, tx);
         if (data.description !== undefined) {
           const old = new Set(extractMentionIds(before?.description ?? ""));
           added = extractMentionIds(data.description).filter((id) => !old.has(id));
         }
+      } else if (labelIds) {
+        // Las etiquetas se borran y se vuelven a crear con la fila bloqueada (la consulta de arriba ya la bloquea): dos
+        // cambios a la vez creaban las mismas filas y el segundo fallaba con «Los datos han cambiado mientras tanto».
+        await lockTaskRow(tx, taskId);
       }
-      await tx.task.update({ where: { id: taskId }, data: fields });
+      await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
@@ -685,6 +705,11 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
       await queueDueChange({ taskId, recipientId: assigneeNow, actorId: user.id, from: oldDue, to: dueDate });
     }
   }
+}
+
+/** Una escritura no ha encontrado la tarea activa: se ha archivado o borrado después de comprobarlo. */
+async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string): Promise<Error> {
+  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Recupérala para modificarla.") : notFound();
 }
 
 /**
@@ -731,7 +756,10 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       const undoPosition = placed.rebalanced && fromColumnId === columnId
         ? (await tx.task.findUniqueOrThrow({ where: { id: taskId }, select: { position: true } })).position
         : task.position;
-      await tx.task.update({ where: { id: taskId }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
+      // Solo si sigue activa: otra persona puede haberla archivado después de la comprobación de arriba (quedaría
+      // archivada en la columna nueva y con la de antes como origen).
+      const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
+      if (!count) throw await inactiveTaskError(tx, taskId);
       return { position: placed.position, undoPosition };
     });
     addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}) } });
@@ -851,10 +879,13 @@ export async function archiveTask(taskId: string) {
     const user = await requireUser();
     const task = await loadTaskWithAccess(user, v.id.parse(taskId), { archivedAt: true });
     assertNotArchivedRow(task);
-    const { columnId } = task;
     describeAction("Archivó «{title}»", { title: (await taskLabel(taskId)).title }, { taskId });
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.task.update({ where: { id: taskId }, data: { archivedAt: new Date(), archivedFromColumnId: columnId, evergreen: false, evergreenEvery: 1 } });
+    // La columna de origen, la que tiene al archivarla (como archiveTasks): si otra persona la mueve a la vez, la leída
+    // antes ya no vale. Y solo si sigue activa (archivada a la vez desde otra pestaña).
+    const now = new Date();
+    const archived = await db.$executeRaw`UPDATE "Task" SET "archivedAt" = ${now}, "archivedFromColumnId" = "columnId", "evergreen" = false, "evergreenEvery" = 1, "updatedAt" = ${now} WHERE "id" = ${taskId} AND "archivedAt" IS NULL`;
+    if (!archived) throw await inactiveTaskError(db, taskId);
     return { spawned: await spawnRecurrences([taskId], user.id) };
   });
 }
@@ -1182,7 +1213,9 @@ export async function reorderSubtask(subtaskId: string, prevId: string | null, n
     const next = await neighbour(nextId);
     let position = positionBetween(prev, next);
     if (needsRebalance(prev, next)) {
-      // Posiciones agotadas (muy raro): se renumera la lista y se recalcula.
+      // Posiciones agotadas (muy raro): se renumera la lista y se recalcula. Cambian las posiciones de todas, no solo la
+      // devuelta: la propia pestaña también se refresca (la acción va en ECHO_SAFE_ACTIONS).
+      needOwnRefresh();
       const all = await db.subtask.findMany({ where: { taskId: sub.taskId }, orderBy: { position: "asc" }, select: { id: true } });
       await db.$transaction(all.map((s, i) => db.subtask.update({ where: { id: s.id }, data: { position: (i + 1) * POSITION_STEP } })));
       const fresh = async (id: string | null) => (id ? (await db.subtask.findUnique({ where: { id }, select: { position: true } }))?.position ?? null : null);
@@ -1478,7 +1511,9 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
         await lockBlocking(tx, projectId);
         if (await blockProblem(id, fields.blockedById, projectId, tx)) delete fields.blockedById;
       }
-      if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields });
+      // Etiquetas: borrar y volver a crear con la fila bloqueada, como updateTask.
+      if (labelsChanged) await lockTaskRow(tx, id);
+      if (Object.keys(fields).length) await tx.task.update({ where: { id }, data: fields, select: { id: true } });
       if (labelsChanged) {
         await tx.taskLabel.deleteMany({ where: { taskId: id } });
         await tx.taskLabel.createMany({ data: wantedLabels.map((labelId) => ({ taskId: id, labelId })) });
@@ -1531,16 +1566,17 @@ export async function restoreTask(taskId: string) {
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
     await db.$transaction(async (tx) => {
-      // Se vuelve a comprobar dentro de la transacción: otra pestaña pudo recuperarla entre medias.
-      const fresh = await tx.task.findUnique({ where: { id: taskId }, select: { archivedAt: true } });
-      if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
+      // Se vuelve a comprobar dentro de la transacción y con la fila bloqueada (después de los candados del proyecto y
+      // la columna, como al mover): otra pestaña pudo recuperarla entre medias, y sin el bloqueo las dos salían bien.
+      const [fresh] = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`;
+      if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
       await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
-      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null } });
+      await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
     });
     describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
@@ -1767,6 +1803,11 @@ export async function createGoogleFile(taskId: string, kind: GoogleFileKind, tit
     if (!rateLimit(`google-file:${user.id}`, 20, 60_000)) throw new AppError("Demasiados documentos creados seguidos. Espera un minuto.");
     const fileKind = z.enum(GOOGLE_FILE_KINDS).parse(kind);
     const name = v.title.parse(title);
+    // El mismo tope de documentos por tarea que al pegar o importar; se mira antes de crear el archivo en Google Drive.
+    if ((await db.taskLink.count({ where: { taskId } })) >= MAX_TASK_DOCS) {
+      const t = await getT();
+      throw new AppError(t("Esta tarea ya tiene el máximo de {max} documentos de Google.", { max: MAX_TASK_DOCS }));
+    }
     // Con quién se comparte lo decide el proyecto (googleShareMode); en uno privado nunca es con el dominio.
     const project = await db.project.findUnique({
       where: { id: projectId },

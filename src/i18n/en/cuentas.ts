@@ -116,7 +116,7 @@ export const cuentas: Record<string, string> = {
   "La contraseña nueva debe ser distinta de la actual.": "The new password must be different from the current one.",
   "No se pudo enviar el email de confirmación. Inténtalo más tarde.": "The confirmation email could not be sent. Try again later.",
   "Ese ya es tu email.": "That is already your email.",
-  "Esta es tu sesión actual: usa «Cerrar sesión».": "This is your current session: use “Log out”.",
+  "Esta es tu sesión actual: usa «Cerrar sesión».": "This is your current session: use “Sign out”.",
   "Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.":
     "User created, but the invitation could not be sent. Check email sending and click “Resend invitation” on their row.",
   "Para cambiar tu propia contraseña usa «Mi perfil».": "To change your own password use “My profile”.",
@@ -291,7 +291,8 @@ export const cuentas: Record<string, string> = {
   "Por eso no podemos enviarte un enlace para elegir una contraseña nueva. Estas son las opciones:": "So we cannot send you a link to choose a new password. These are your options:",
   "Entra con tu cuenta de Google, si tu email está dado de alta.": "Sign in with your Google account, if your email is registered.",
   "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
-  "Si eres quien administra el servidor: la sección «Altas, bajas y contraseñas» del manual explica cómo recuperar el acceso, o configura el envío de emails (SMTP).": "If you run the server: the \"Altas, bajas y contraseñas\" (adding, removing users and passwords) section of the manual explains how to regain access, or configure email sending (SMTP).",
+  "Si eres quien administra el servidor, genera el enlace desde su terminal:": "If you run the server, generate the link from its terminal:",
+  "(en Railway, en la terminal del servicio). También puedes configurar el envío de emails (SMTP).": "(on Railway, in the service's terminal). You can also set up email sending (SMTP).",
   "Sin email ni acceso con Google: quien olvide su contraseña tendrá que pedirte que le fuerces el cambio.": "No email or Google sign-in: anyone who forgets their password will have to ask you to force a change.",
 
   // Códigos de recuperación: contador con 1

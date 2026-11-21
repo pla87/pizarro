@@ -70,6 +70,8 @@ test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserv
   assert.equal(r1.status, 0, r1.stderr + r1.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--domain pizarro.example.com");
   assert.match(r1.stdout, /Próximos pasos/);
+  assert.match(r1.stdout, /crea el primer administrador/);
+  assert.match(r1.stdout, /Administración → Integraciones/);
 
   // El usuario ya tiene configuración, datos locales y un fichero que el código nuevo ya no trae.
   writeFileSync(join(dir, "deploy", ".env"), 'SESSION_SECRET="keep"\nAPP_URL="https://tablero.example.com"\n');
@@ -80,6 +82,9 @@ test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserv
   const r2 = run(["--local", "--dir", dir, "--tarball", tar2]);
   assert.equal(r2.status, 0, r2.stderr + r2.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--local");
+  // Una actualización no pide crear el primer administrador.
+  assert.doesNotMatch(r2.stdout, /primer administrador/);
+  assert.match(r2.stdout, /Pizarro está actualizado/);
   // Pedir --local sobre una instalación con dominio avisa de que se mantiene el actual y explica cómo cambiarlo.
   assert.match(r2.stdout, /AVISO: esta instalación ya usa https:\/\/tablero\.example\.com/);
   assert.match(r2.stdout, /DOMAIN y APP_URL/);
@@ -95,6 +100,8 @@ test("get.sh: instala, pasa --domain a install.sh y en la 2ª ejecución conserv
   const r3 = run(["--dir", dir, "--tarball", tar2, "--no-start"]);
   assert.equal(r3.status, 0, r3.stderr + r3.stdout);
   assert.equal(readFileSync(join(dir, "deploy", "args.txt"), "utf8").trim(), "--no-start");
+  assert.doesNotMatch(r3.stdout, /primer administrador/);
+  assert.match(r3.stdout, /No se ha arrancado nada \(--no-start\)/);
 });
 
 test("get.sh: --domain distinto del que ya hay avisa; el mismo no", { skip: process.getuid?.() !== 0 && "requiere root" }, () => {
@@ -289,4 +296,68 @@ test("install.sh --local: valida la dirección (nombre, IPv4 o [IPv6], con :puer
     assert.match(r.stderr, /no es válida/);
     assert.doesNotMatch(r.env, /^APP_URL="http:/m, `${bad}: no se escribe`);
   }
+});
+
+// El kit de recuperación sigue los pasos de la guía (docs/web/instalar.md, «Restaurar en un servidor nuevo»): get.sh con
+// --no-start, solo las cuatro claves y `up -d --wait postgres` antes de restaurar.
+test("install.sh: el kit de recuperación lleva las cuatro claves y los pasos de la guía, sin la contraseña de PostgreSQL", () => {
+  const base = join(root, "inst-kit");
+  const dir = join(base, "deploy");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".env.example"), 'DOMAIN="pizarro.example.com"\nAPP_URL="https://pizarro.example.com"\nPOSTGRES_PASSWORD=""\nSESSION_SECRET=""\nBACKUP_KEY=""\n');
+  writeFileSync(join(dir, "compose.yml"), "name: pizarro\n");
+  writeFileSync(join(dir, "install.sh"), readFileSync(join(process.cwd(), "deploy", "install.sh"), "utf8"));
+  const kit = (...args: string[]) => {
+    rmSync(join(dir, ".env"), { force: true });
+    const r = spawnSync("sh", [join(dir, "install.sh"), "--no-start", ...args], { encoding: "utf8", env: mkEnv(`${bin}:${process.env.PATH}`), stdio: ["ignore", "pipe", "pipe"] });
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    return { kit: readFileSync(join(dir, "recovery-kit.txt"), "utf8"), env: readFileSync(join(dir, ".env"), "utf8") };
+  };
+  const { kit: k, env } = kit("--domain", "a.example.com");
+  for (const key of ["SESSION_SECRET", "TOKEN_SECRET", "ENCRYPTION_KEY", "BACKUP_KEY"]) {
+    const v = new RegExp(`^${key}="(.+)"$`, "m").exec(env)?.[1];
+    assert.ok(v, key);
+    assert.ok(k.includes(`${key}="${v}"`), `${key} en el kit`);
+  }
+  const pg = /^POSTGRES_PASSWORD="(.+)"$/m.exec(env)?.[1];
+  assert.ok(pg);
+  assert.doesNotMatch(k, /POSTGRES_PASSWORD/);
+  assert.equal(k.includes(pg), false, "la contraseña de PostgreSQL no va en el kit");
+  assert.ok(k.includes(`deploy/get.sh | sh -s -- --domain a.example.com --dir ${base} --no-start`), k);
+  assert.doesNotMatch(k, /clona el repositorio|deploy\/install\.sh/);
+  assert.match(k, /docker compose up -d --wait postgres\n.*restore\.mjs s3:latest --files/);
+  assert.ok(k.includes(`En ${dir}/.env, sustituye`));
+  // Modo red local: el servidor nuevo se prepara con --local.
+  assert.match(kit("--local").kit, / --local --dir .* --no-start/);
+});
+
+// Arranque con un docker falso que anota cada llamada: se descargan todas las imágenes (Caddy y PostgreSQL también se
+// actualizan), y con --build las de Caddy y PostgreSQL antes de construir la de Pizarro.
+test("install.sh: descarga las imágenes de todos los servicios, no solo la de la app", () => {
+  const dir = join(root, "inst-pull", "deploy");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, ".env.example"), 'DOMAIN="pizarro.example.com"\nAPP_URL="https://pizarro.example.com"\nPOSTGRES_PASSWORD=""\nSESSION_SECRET=""\nBACKUP_KEY=""\n');
+  writeFileSync(join(dir, "compose.yml"), "name: pizarro\n");
+  writeFileSync(join(dir, "install.sh"), readFileSync(join(process.cwd(), "deploy", "install.sh"), "utf8"));
+  const dbin = join(root, "docker-log-bin");
+  mkdirSync(dbin, { recursive: true });
+  const calls = join(root, "docker-calls.txt");
+  writeFileSync(
+    join(dbin, "docker"),
+    `#!/bin/sh\necho "$*" >> "${calls}"\ncase "$*" in\n  "compose ps -q app") echo cid ;;\n  inspect*) echo healthy ;;\n  "compose logs app") echo "introduce el código: ABCD-1234" ;;\nesac\nexit 0\n`,
+  );
+  chmodSync(join(dbin, "docker"), 0o755);
+  const go = (...args: string[]) => {
+    rmSync(calls, { force: true });
+    const r = spawnSync("sh", [join(dir, "install.sh"), "--domain", "a.example.com", ...args], { encoding: "utf8", env: mkEnv(`${dbin}:${process.env.PATH}`), stdio: ["ignore", "pipe", "pipe"] });
+    assert.equal(r.status, 0, r.stderr + r.stdout);
+    return readFileSync(calls, "utf8").split("\n");
+  };
+  const normal = go();
+  assert.ok(normal.includes("compose pull"), normal.join("\n"));
+  assert.equal(normal.includes("compose pull app"), false);
+  assert.ok(normal.indexOf("compose pull") < normal.indexOf("compose up -d"));
+  const build = go("--build");
+  assert.ok(build.includes("compose pull caddy postgres"), build.join("\n"));
+  assert.ok(build.includes("compose up -d --build"));
 });

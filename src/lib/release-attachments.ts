@@ -1,11 +1,11 @@
 import "server-only";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { Prisma } from "../generated/prisma/client";
 import { db } from "./db";
 import { logEvent } from "./log";
 import { attachmentFileNames } from "./release";
-import { attachmentPath, compactImage, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
+import { attachmentPath, compactImage, copyReleaseAttachmentFile, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
 
 /** Trabajo de copiar los adjuntos de las tareas de una release al histórico; se guarda en `Release.attachmentsPending`. */
 export const pendingJobSchema = z.object({
@@ -67,14 +67,17 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
       if (done.has(names[i]!)) continue;
       let rowId: string | null = null;
       try {
-        const raw = await readFile(attachmentPath(att.id, att.isImage ? "full" : "file"));
-        const data = att.isImage ? await compactImage(raw) : raw;
-        const row = await db.releaseAttachment.create({
-          data: { releaseId, fileName: names[i]!, size: data.length, isImage: att.isImage, position: position++ },
-          select: { id: true },
-        });
+        // Las imágenes se compactan (son pequeñas: 1280 px como mucho); el resto, hasta el tope de un archivo (cientos de
+        // MB), se copia tal cual sin pasar por la memoria.
+        const source = attachmentPath(att.id, att.isImage ? "full" : "file");
+        const data = att.isImage ? await compactImage(await readFile(source)) : null;
+        const size = data ? data.length : (await stat(source)).size;
+        const row = await createIfStillPending(releaseId, { fileName: names[i]!, size, isImage: att.isImage, position: position++ });
+        // «Borrar adjuntos» (quita el pendiente) o release borrada mientras se copiaba: no se copia nada más.
+        if (!row) break outer;
         rowId = row.id;
-        await saveReleaseAttachmentFile(row.id, data, att.isImage ? "webp" : "bin");
+        if (data) await saveReleaseAttachmentFile(row.id, data, "webp");
+        else await copyReleaseAttachmentFile(row.id, source);
         saved.push(row.id);
       } catch (err) {
         // Otro proceso (el contenedor anterior durante un despliegue) ya la copió: misma release y nombre.
@@ -98,6 +101,21 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
     const gone = saved.filter((id) => !alive.has(id));
     if (gone.length) await removeReleaseAttachmentFiles(gone);
   }
+}
+
+/**
+ * Crea la fila de un adjunto copiado solo si la copia sigue pendiente (`attachmentsPending`), con la release bloqueada:
+ * «Borrar adjuntos» quita el pendiente y borra las filas en una transacción que también la bloquea, así que una fila
+ * nunca se cuela después del borrado (antes, los adjuntos que se estaban copiando volvían a aparecer). null: ya no hay
+ * que copiar (pendiente quitado o release borrada).
+ */
+function createIfStillPending(releaseId: string, data: { fileName: string; size: number; isImage: boolean; position: number }) {
+  return db.$transaction(async (tx) => {
+    const live = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Release" WHERE "id" = ${releaseId} AND "attachmentsPending" IS NOT NULL FOR UPDATE`;
+    if (!live.length) return null;
+    return tx.releaseAttachment.create({ data: { releaseId, ...data }, select: { id: true } });
+  });
 }
 
 /** Lanza la copia registrando en el log cualquier fallo global (nunca lanza). */

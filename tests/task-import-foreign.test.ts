@@ -74,6 +74,18 @@ describe("Trello", () => {
     assert.equal(compactTrelloBoard("title\nA"), null);
   });
 
+  test("un tablero con un anidamiento muy profundo se lee (no se vuelve a convertir en texto) y compactarlo no lanza", () => {
+    // JSON.parse lo lee, pero JSON.stringify agota la pila (RangeError): antes rompía el diálogo con «Algo ha fallado».
+    const deep = `${"[".repeat(200_000)}${"]".repeat(200_000)}`;
+    const board = `{"name":"T","lists":[{"id":"l","name":"Lista"}],"cards":[{"id":"c","idList":"l","name":"Una"}],"x":${deep}}`;
+    assert.throws(() => JSON.stringify(JSON.parse(board)), RangeError);
+    const r = read(board);
+    assert.equal(r.source, "Trello (tablero)");
+    assert.deepEqual(r.tasks.map((x) => [x.task.title, x.task.column]), [["Una", "Lista"]]);
+    // Lo profundo en un campo que se conserva al compactar: null (el fichero se trata como demasiado grande), sin lanzar.
+    assert.equal(compactTrelloBoard(`{"lists":[],"cards":[{"id":"c","name":"Una","desc":${deep}}]}`), null);
+  });
+
   test("más de 500 tarjetas abiertas: se cuentan y no se importan", () => {
     const cards = Array.from({ length: TASKS_JSON_MAX + 20 }, (_, i) => ({ id: `c${i}`, idList: "l", name: `Tarjeta ${i}`, pos: i }));
     const r = read(JSON.stringify({ name: "Grande", lists: [{ id: "l", name: "Lista" }], cards }));

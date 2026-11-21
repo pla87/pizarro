@@ -122,7 +122,9 @@ export function ImportProjectPanel({ isPrivate, privateToggle, onBack, onClose, 
               : t("{n} tarjetas llevan un comentario con quién las tenía asignadas o las creó en el original, porque esas personas no están aquí.", { n: c.notes ?? 0 })}
           </p>
         )}
-        {summary.addedMembers > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">{foreign ? t("{n} usuario(s) se han añadido como miembros del proyecto por ser responsables de alguna tarea.", { n: summary.addedMembers }) : t("{n} usuario(s) se han añadido como miembros del proyecto por figurar en el archivo.", { n: summary.addedMembers })}</p>}
+        {summary.addedMembers > 0 && <p className="text-sm text-slate-600 dark:text-slate-300">{summary.addedMembers === 1
+          ? foreign ? t("1 usuario se ha añadido como miembro del proyecto por ser responsable de alguna tarea.") : t("1 usuario se ha añadido como miembro del proyecto por figurar en el archivo.")
+          : foreign ? t("{n} usuarios se han añadido como miembros del proyecto por ser responsables de alguna tarea.", { n: summary.addedMembers }) : t("{n} usuarios se han añadido como miembros del proyecto por figurar en el archivo.", { n: summary.addedMembers })}</p>}
         {summary.unmappedUsers.length > 0 && (
           <div className="text-sm">
             <p className="font-medium">{foreign ? t("Responsables sin emparejar ({n})", { n: summary.unmappedUsers.length }) : t("Personas sin emparejar ({n})", { n: summary.unmappedUsers.length })}</p>

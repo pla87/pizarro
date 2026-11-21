@@ -1,9 +1,10 @@
 // Tareas archivadas: subtareas que ya no se pueden tocar, acciones múltiples con ids que ya no existen, recuperar una
-// tarea que no está archivada y la lista de archivadas paginada y con búsqueda en el servidor.
+// tarea que no está archivada, la lista de archivadas paginada y con búsqueda en el servidor, y archivar, mover o
+// recuperar mientras otra persona cambia la misma tarea.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
-import { archiveTask, archiveTasks, deleteSubtask, deleteTasks, getArchivedTasks, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
+import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
+import { archiveTask, archiveTasks, deleteSubtask, deleteTasks, getArchivedTasks, moveTask, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
 
 describe("subtareas de tareas archivadas", () => {
   test("no se pueden editar, reordenar ni borrar", async () => {
@@ -61,5 +62,58 @@ describe("acciones múltiples y recuperar", () => {
     assert.equal(new Set([...p1.items, ...p2.items].map((i) => i.id)).size, 103);
     const found = expectOk(await getArchivedTasks(f.project.id, { query: "aguja" }));
     assert.deepEqual(found.items.map((i) => i.title), ["Aguja especial"]);
+  });
+});
+
+// La acción de la prueba pasa sus comprobaciones con la fila tal como estaba y espera al candado de la de la otra persona
+// (una transacción abierta con el cambio sin confirmar); al confirmarse, debe tener en cuenta ese cambio.
+describe("archivar, mover y recuperar a la vez", () => {
+  async function setup() {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    return { f, task: await makeTask(f) };
+  }
+
+  test("archivar mientras otra persona la mueve: el origen es la columna en la que queda, no la leída antes", async () => {
+    const { f, task } = await setup();
+    let pending: ReturnType<typeof archiveTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: task.id }, data: { columnId: f.columns.doing }, select: { id: true } });
+      pending = archiveTask(task.id);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectOk(await pending!);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.ok(row.archivedAt);
+    assert.deepEqual([row.columnId, row.archivedFromColumnId], [f.columns.doing, f.columns.doing]);
+  });
+
+  test("mover mientras otra persona la archiva: no se mueve y sigue archivada con su origen", async () => {
+    const { f, task } = await setup();
+    let pending: ReturnType<typeof moveTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: task.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo }, select: { id: true } });
+      pending = moveTask(task.id, f.columns.doing, null, null);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await pending!, /archivada/);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.ok(row.archivedAt);
+    assert.deepEqual([row.columnId, row.archivedFromColumnId], [f.columns.todo, f.columns.todo]);
+  });
+
+  test("recuperar mientras otra pestaña la recupera: la segunda falla y no la mueve otra vez", async () => {
+    const { f, task } = await setup();
+    await db.task.update({ where: { id: task.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo }, select: { id: true } });
+    let pending: ReturnType<typeof restoreTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: task.id }, data: { archivedAt: null, archivedFromColumnId: null, position: 777 }, select: { id: true } });
+      pending = restoreTask(task.id);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await pending!, /no está archivada/);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.deepEqual([row.archivedAt, row.columnId, row.position], [null, f.columns.todo, 777]);
   });
 });

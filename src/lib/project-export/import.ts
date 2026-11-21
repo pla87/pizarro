@@ -6,9 +6,11 @@ import type { T } from "@/i18n/core";
 import { visibleProjectsWhere } from "../access";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-size";
 import { MAX_TITLE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
-import { isoToDate } from "../dates";
+import { isoToDate, todayIso } from "../dates";
 import { db } from "../db";
 import { confirmDocumentKind, documentMime, sanitizeDocumentName } from "../document-kind";
+import { assertDiskRoom, releaseDisk, reserveDisk } from "../disk-space";
+import { cleanFileName } from "../file-name";
 import { AppError, forbidden } from "../errors";
 import { googleWorkspaceDomain } from "../google-config";
 import { appTimeZone } from "../format";
@@ -16,6 +18,7 @@ import { isDomainMode } from "../google-share";
 import { mentionToken } from "../mentions";
 import { clampTitle } from "../title-clamp";
 import { POSITION_STEP } from "../positions";
+import { normalizeRecurrence } from "../recurrence-date";
 import { PROGRAM_MAX_SESSIONS, programColumnsOverLimit } from "../program-limit";
 import { checkQuota, type QuotaExceeded } from "../quota";
 import { getQuotaLimits } from "../quota-settings";
@@ -26,6 +29,7 @@ import {
   processImportedImage, removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveDocumentFile,
   saveRawAttachmentFile, saveReleaseAttachmentFile,
 } from "../uploads";
+import { uploadDir } from "../upload-dir";
 import { openImportJournal } from "./import-journal";
 import { remapAttachmentRefs } from "../attachment-refs";
 import { releaseFloorFromImport, retireReleaseNumber } from "../release-number";
@@ -48,6 +52,11 @@ interface ImportOptions {
   onProgress?: (p: ImportProgress) => void;
   /** Nombre del registro de la importación en curso (import-journal.ts): el id del trabajo en segundo plano. */
   journalName?: string;
+  /**
+   * Id de la reserva de disco del trabajo en segundo plano (`reserveDisk`, disk-space.ts). Al conocer el tamaño real de lo
+   * que se va a escribir se sustituye por ese tamaño; sin él se usa una reserva propia. Se libera al terminar, también si falla.
+   */
+  diskReservation?: string;
 }
 export interface ImportProgress {
   phase: "validar" | "archivos" | "base de datos";
@@ -87,10 +96,13 @@ const dateOrNull = (iso: string | null) => (iso ? new Date(iso) : null);
 const GOOGLE_URL_RE = /^https:\/\/(docs|drive)\.google\.com\//;
 const MAX_FILE_NAME = 200;
 
-/** Nombre de fichero sin separadores de ruta ni NUL; con nombre de reserva si queda vacío, «.» o «..». */
+/**
+ * Nombre de un adjunto o de un fichero de release importado: el mismo saneado que al subirlo (cleanFileName: sin
+ * separadores ni caracteres que no admite un nombre, sin controles, tampoco los de dirección del texto como U+202E) y
+ * con MAX_FILE_NAME caracteres como mucho; nombre de reserva si queda vacío, «.» o «..».
+ */
 export function safeFileName(raw: string, fallback = "archivo"): string {
-  const name = raw.replace(/[\\/\0]/g, "_").trim().slice(0, MAX_FILE_NAME);
-  return name && name !== "." && name !== ".." ? name : fallback;
+  return cleanFileName(raw, fallback, MAX_FILE_NAME);
 }
 
 /** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
@@ -197,6 +209,10 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   const quotaLimits = await getQuotaLimits(null, db, storageQuotaMb);
   const preQuota = checkQuota(usageBase, importBytes, quotaLimits);
   if (preQuota) throw quotaError(t, preQuota);
+  // Disco: con lo que de verdad se va a escribir (el tamaño descomprimido de cada copia), no con lo que medía el ZIP.
+  const reservation = opts.diskReservation ?? `import:${projectId}`;
+  await assertDiskRoom(uploadDir(), importBytes, undefined, undefined, reservation);
+  reserveDisk(reservation, uploadDir(), importBytes);
   /** Bytes ya escritos en disco: se aborta en cuanto se pasa la cuota, antes de seguir llenando el disco. */
   let writtenBytes = 0;
   const assertRoom = (more: number) => {
@@ -207,7 +223,13 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   // --- Ficheros: se escriben antes (con los ids ya decididos) y, si algo falla, se borran. Cada uno se anota antes en el
   // registro de la importación: si el proceso muere antes de terminar, el arranque los borra (recoverImportJournals).
   const written = { attachments: [] as string[], releaseAttachments: [] as string[], documents: [] as string[] };
-  const journal = await openImportJournal(projectId, opts.journalName);
+  let journal: Awaited<ReturnType<typeof openImportJournal>>;
+  try {
+    journal = await openImportJournal(projectId, opts.journalName);
+  } catch (err) {
+    releaseDisk(reservation);
+    throw err;
+  }
   const loadFile = async (sha: string): Promise<Buffer> => zip.readAll(files.get(sha)!, MAX_FILE_BYTES);
   const tooBig = (what: string, sha: string) => realSize(sha) > fileMaxBytes && (warnings.push(t("«{name}» supera el tamaño máximo de archivo del proyecto y no se ha importado.", { name: what })), true);
 
@@ -218,8 +240,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
   const totalFiles = refShas.length;
   let doneFiles = 0;
   const fileStart = () => opts.onProgress?.({ phase: "archivos", done: doneFiles++, total: totalFiles });
-  opts.onProgress?.({ phase: "archivos", done: 0, total: totalFiles });
   try {
+    opts.onProgress?.({ phase: "archivos", done: 0, total: totalFiles });
     for (const task of data.tasks) {
       for (const a of task.attachments) {
         fileStart();
@@ -274,7 +296,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         let buf = await loadFile(a.file);
         if (a.isImage) {
           try {
-            buf = (await processImportedImage(buf)).full;
+            // Sin miniatura: la copia de histórico solo guarda la imagen completa.
+            buf = (await processImportedImage(buf, { thumb: false })).full;
           } catch (err) {
             if (err instanceof AppError && err.status === 503) throw err;
             warnings.push(t("«{name}» no es una imagen válida y no se ha importado.", { name: a.fileName }));
@@ -310,7 +333,8 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       let stored: Buffer = buf;
       if (kind === "IMAGE") {
         try {
-          stored = (await processImportedImage(buf)).full;
+          // Sin miniatura: la Documentación solo guarda la imagen completa.
+          stored = (await processImportedImage(buf, { thumb: false })).full;
         } catch (err) {
           if (err instanceof AppError && err.status === 503) throw err;
           kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
@@ -390,6 +414,9 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       cappedTitles++;
       return c.value;
     };
+    // La regla de repetición, coherente como al crearla en la aplicación: una mensual sin día (o con uno no válido) toma el
+    // de su fecha límite; si no, las apariciones caían el 28 de febrero y después siempre el 28 (el calendario preveía el 31).
+    const today = todayIso(appTimeZone());
     const taskRows: Prisma.TaskCreateManyInput[] = data.tasks.map((x) => ({
       id: taskIds.get(x.ref)!,
       projectId,
@@ -416,8 +443,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       actualHours: x.actualHours,
       priority: x.priority,
       client: x.client,
-      recurrence: x.recurrence,
-      recurrenceDay: x.recurrenceDay,
+      ...normalizeRecurrence(x.recurrence, x.recurrenceDay, x.dueDate, today),
       contentUpdatedAt: dateOrNull(x.contentUpdatedAt),
       contentUpdatedById: uid(x.contentUpdatedByRef ?? null),
       routineColumnId: x.routineColumnRef ? (columnIds.get(x.routineColumnRef) ?? null) : null,
@@ -444,7 +470,7 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
       warnings.push(t("El informe semanal se programó en la zona horaria {from} y aquí se usa {to}: revisa el día y la hora.", { from: tzFrom, to: appTimeZone() }));
     }
 
-    const commentRows: (Prisma.TaskCommentCreateManyInput & { parentRef: string | null; ref: string })[] = [];
+    const commentRows: ImportedComment[] = [];
     const noteRows: Prisma.TaskCommentCreateManyInput[] = [];
     const now = new Date();
     for (const x of data.tasks) {
@@ -463,6 +489,12 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
         x.createdBy && !uid(x.createdBy) ? t("Creada originalmente por {name}.", { name: nameOf.get(x.createdBy) ?? "?" }) : null,
       ].filter((s): s is string => !!s);
       if (lost.length) noteRows.push({ id: newId(), taskId, authorId: user.id, body: [t("Importada desde un archivo."), ...lost].join(" "), createdAt: now });
+    }
+    const { roots: rootComments, replies: replyComments, brokenCycles } = threadComments(commentRows);
+    if (brokenCycles) {
+      warnings.push(brokenCycles === 1
+        ? t("1 respuesta se respondía a sí misma (directa o indirectamente) y se ha importado como comentario suelto.")
+        : t("{n} respuestas se respondían a sí mismas (directa o indirectamente) y se han importado como comentarios sueltos.", { n: brokenCycles }));
     }
 
     const releaseRows: Prisma.ReleaseCreateManyInput[] = data.releases.map((r) => ({
@@ -554,21 +586,9 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
           (rows) => tx.taskLink.createMany({ data: rows }),
         );
 
-        // Comentarios: primero los raíz y luego las respuestas (la respuesta apunta a su comentario).
-        const idByRef = new Map(commentRows.map((c) => [c.ref, c.id!]));
-        let pending = commentRows;
-        const inserted = new Set<string>();
-        while (pending.length) {
-          const wave = pending.filter((c) => !c.parentRef || !idByRef.has(c.parentRef) || inserted.has(c.parentRef));
-          const batch = wave.length ? wave : pending; // sin progreso (ciclo en un archivo manipulado): se cortan los hilos
-          await insertChunks(batch, (rows) =>
-            tx.taskComment.createMany({
-              data: rows.map(({ ref, parentRef, ...c }) => ({ ...c, parentId: !wave.length || !parentRef ? null : (idByRef.get(parentRef) ?? null) })),
-            }),
-          );
-          for (const c of batch) inserted.add(c.ref);
-          pending = pending.filter((c) => !inserted.has(c.ref));
-        }
+        // Comentarios: primero los raíz y luego las respuestas, colgadas de su raíz (como en la aplicación).
+        await insertChunks(rootComments, (rows) => tx.taskComment.createMany({ data: rows }));
+        await insertChunks(replyComments, (rows) => tx.taskComment.createMany({ data: rows }));
         await insertChunks(noteRows, (rows) => tx.taskComment.createMany({ data: rows }));
         await insertChunks(attachmentRows, (rows) => tx.taskAttachment.createMany({ data: rows }));
 
@@ -616,8 +636,55 @@ async function runImport({ zip, data, files, manifest }: ProjectArchive, user: I
     await Promise.all([removeAttachmentFiles(written.attachments), removeReleaseAttachmentFiles(written.releaseAttachments), removeDocumentFiles(written.documents)]);
     throw err;
   } finally {
+    releaseDisk(reservation); // lo escrito ya cuenta en el disco (o se ha borrado)
     await journal.close();
   }
+}
+
+type ImportedComment = Prisma.TaskCommentCreateManyInput & { parentRef: string | null; ref: string };
+
+/**
+ * Hilos de comentarios del archivo, como los guarda la aplicación: cada respuesta cuelga directamente de su comentario
+ * raíz (una respuesta a una respuesta sube hasta la raíz). Una respuesta a un comentario que no está en el archivo queda
+ * como comentario suelto, igual que la que cierra un ciclo (archivo manipulado): se descarta su referencia y cuenta en
+ * `brokenCycles`. Lineal: cada comentario se recorre una vez (memo de raíces). Conserva el orden de cada grupo.
+ */
+export function threadComments(comments: ImportedComment[]): { roots: Prisma.TaskCommentCreateManyInput[]; replies: Prisma.TaskCommentCreateManyInput[]; brokenCycles: number } {
+  const byRef = new Map(comments.map((c) => [c.ref, c]));
+  /** Ref → ref de su raíz (la propia si es raíz). */
+  const rootOf = new Map<string, string>();
+  let brokenCycles = 0;
+  for (const start of comments) {
+    if (rootOf.has(start.ref)) continue;
+    const path: string[] = [];
+    const onPath = new Set<string>();
+    let cur = start;
+    let root: string;
+    for (;;) {
+      path.push(cur.ref);
+      onPath.add(cur.ref);
+      const parent = cur.parentRef ? byRef.get(cur.parentRef) : undefined;
+      if (!parent) { root = cur.ref; break; }
+      const known = rootOf.get(parent.ref);
+      if (known) { root = known; break; }
+      if (onPath.has(parent.ref)) {
+        // Ciclo: el comentario que lo cierra pasa a ser raíz.
+        brokenCycles++;
+        root = cur.ref;
+        break;
+      }
+      cur = parent;
+    }
+    for (const ref of path) rootOf.set(ref, root);
+  }
+  const roots: Prisma.TaskCommentCreateManyInput[] = [];
+  const replies: Prisma.TaskCommentCreateManyInput[] = [];
+  for (const { ref, parentRef: _parentRef, ...row } of comments) {
+    const root = rootOf.get(ref)!;
+    if (root === ref) roots.push({ ...row, parentId: null });
+    else replies.push({ ...row, parentId: byRef.get(root)!.id! });
+  }
+  return { roots, replies, brokenCycles };
 }
 
 /** La importación solo la hace un administrador; el proyecto aún no existe, así que no hay enlace a sus ajustes. */

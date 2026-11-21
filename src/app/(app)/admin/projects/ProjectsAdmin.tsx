@@ -73,7 +73,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
     <li className="card p-4">
       <div className="flex items-center justify-between gap-3">
         <Link href={`/p/${project.id}`} className="min-w-0 truncate font-semibold hover:underline">{project.name}</Link>
-        <span className="shrink-0 text-xs text-slate-500">{t("{n} asignado(s)", { n: members.length })}</span>
+        <span className="shrink-0 text-xs text-slate-500">{members.length === 1 ? t("1 asignado") : t("{n} asignados", { n: members.length })}</span>
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {members.map((u) => (

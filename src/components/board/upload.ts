@@ -4,11 +4,13 @@ import type { UploadedAttachment } from "@/lib/types";
 import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
 import { QueueStopped, runQueue, summarizeSkipped, uploadCap, uploadGate, withRetry, type SkippedFile } from "@/lib/upload-queue";
 
-const CLIENT_MAX_WIDTH = 1920;
+/** El ancho que guarda el servidor (processImage en lib/uploads.ts: 1280 px de ancho como mucho, por ancho y no por lado). */
+const CLIENT_MAX_WIDTH = 1280;
 
 /**
- * Reduce en el navegador las fotos grandes antes de subirlas (más rápido en móvil).
- * El servidor hace siempre el procesado definitivo con sharp.
+ * Reduce en el navegador las fotos grandes antes de subirlas (más rápido en móvil): al mismo ancho que guardará el
+ * servidor, que no amplía, así que no se pierde nada y no se sube de más. El servidor hace siempre el procesado definitivo
+ * con sharp.
  */
 async function shrink(file: File): Promise<Blob> {
   if (file.size < 1_500_000 || !/^image\/(png|jpeg|webp)$/.test(file.type) || typeof createImageBitmap !== "function") return file;
@@ -84,7 +86,7 @@ async function uploadFile(taskId: string, file: File, onCreate = false, t: T = e
       throw new UploadError(json.error ?? t("No se pudo subir el archivo."), json.code, res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
     }
     return json as UploadedAttachment;
-  }), { signal });
+  }, signal), { signal });
 }
 
 type Totals = { imageCount: number; fileCount: number; attachBytes: number };

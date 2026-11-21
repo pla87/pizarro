@@ -4,7 +4,7 @@ import { uploadWriteError } from "@/lib/disk-space";
 import { cleanFileName } from "@/lib/file-name";
 import { logSize } from "@/lib/format-size";
 import { logEvent } from "@/lib/log";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 import { SHARE_FIELDS, SHARE_MAX_FILES, SHARE_NO_SESSION_MAX_BYTES, shareRequestAllowed, sharedText, shareTextQuery, type ShareError } from "@/lib/share-core";
@@ -42,7 +42,7 @@ async function handlePost(req: Request): Promise<Response> {
   if (!user) {
     // Sin sesión no se guarda ningún archivo: solo los textos de un envío pequeño, en la dirección de vuelta.
     let next = "/share?sesion=1";
-    if (length !== null && length <= SHARE_NO_SESSION_MAX_BYTES && rateLimit(`share-anon:${ip ?? "?"}`, 20, 60_000)) {
+    if (length !== null && length <= SHARE_NO_SESSION_MAX_BYTES && rateLimit(`share-anon:${rateIp(ip ?? "?")}`, 20, 60_000)) {
       const form = await readBodyLimited(req, SHARE_NO_SESSION_MAX_BYTES, "formData").catch(() => null);
       if (form) {
         const files = form.getAll(SHARE_FIELDS.files).filter((f) => f instanceof File && f.size > 0).length;
@@ -58,7 +58,7 @@ async function handlePost(req: Request): Promise<Response> {
   const biggest = await db.project.aggregate({ _max: { fileMaxMb: true }, where: visibleProjectsWhere(user) });
   const maxBytes = effectiveFileMaxMb(biggest._max.fileMaxMb ?? FILE_MAX_DEFAULT_MB) * 1024 * 1024;
   if (length !== null && length > maxBytes + MULTIPART_OVERHEAD_BYTES) return failed("too_big");
-  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: length });
+  const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: length, signal: req.signal });
   if (!release) return failed("busy");
   try {
     let form: FormData;
@@ -69,9 +69,10 @@ async function handlePost(req: Request): Promise<Response> {
     }
     const text = sharedText({ title: form.get(SHARE_FIELDS.title), text: form.get(SHARE_FIELDS.text), url: form.get(SHARE_FIELDS.url) });
     const all = form.getAll(SHARE_FIELDS.files).filter((f): f is File => f instanceof File && f.size > 0);
-    const files = await Promise.all(all.slice(0, SHARE_MAX_FILES).map(async (f) => ({ name: cleanFileName(f.name, "archivo"), type: sanitizeMime(f.type), data: Buffer.from(await f.arrayBuffer()) })));
+    // Los File del multipart tal cual: stageShare los escribe en flujo (sin una segunda copia en memoria).
+    const files = all.slice(0, SHARE_MAX_FILES).map((f) => ({ name: cleanFileName(f.name, "archivo"), type: sanitizeMime(f.type), data: f }));
     if (!files.length && !text.title && !text.text && !text.url) return failed("empty");
-    const bytes = files.reduce((n, f) => n + f.data.length, 0);
+    const bytes = files.reduce((n, f) => n + f.data.size, 0);
     let shareId: string;
     try {
       shareId = await stageShare(user.id, text, files);

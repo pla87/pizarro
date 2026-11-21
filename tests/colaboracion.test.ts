@@ -74,16 +74,19 @@ test("informe semanal: solo el día elegido, desde la hora elegida y una vez", (
   assert.equal(reportDue(monday, tz, { ...s, lastSentAt: new Date("2026-10-12T06:10:00Z") }), true);
 });
 
-test("informe semanal: cambiar el día a otro posterior de la misma semana tras el envío no lo repite", () => {
+test("informe semanal: no se repite si el último salió hace menos de 3 días", () => {
   const tz = "Europe/Madrid";
   const sentMonday = new Date("2026-10-19T06:10:00Z"); // lunes 08:10
-  const thursday = new Date("2026-10-22T08:10:00Z");
-  assert.equal(reportDue(thursday, tz, { weekday: 4, hour: 8, lastSentAt: sentMonday }), false);
-  // El domingo es de la misma semana; el lunes siguiente, de otra (en hora local: el domingo 23:30 en Madrid).
-  assert.equal(reportDue(new Date("2026-10-25T22:30:00Z"), tz, { weekday: 7, hour: 8, lastSentAt: sentMonday }), false);
-  assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: sentMonday }), true);
-  // Enviado el domingo: el lunes siguiente ya es otra semana.
-  assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: new Date("2026-10-25T09:00:00Z") }), true);
+  // Cambiado al martes o al miércoles tras el envío del lunes: no se repite esa semana.
+  assert.equal(reportDue(new Date("2026-10-20T06:10:00Z"), tz, { weekday: 2, hour: 8, lastSentAt: sentMonday }), false);
+  assert.equal(reportDue(new Date("2026-10-21T06:10:00Z"), tz, { weekday: 3, hour: 8, lastSentAt: sentMonday }), false);
+  // Al jueves o al viernes: ya han pasado 3 días, sí llega.
+  assert.equal(reportDue(new Date("2026-10-22T06:10:00Z"), tz, { weekday: 4, hour: 8, lastSentAt: sentMonday }), true);
+  assert.equal(reportDue(new Date("2026-10-23T06:10:00Z"), tz, { weekday: 5, hour: 8, lastSentAt: sentMonday }), true);
+  // El lunes siguiente, aunque la pasada sea unos minutos antes que la del envío anterior.
+  assert.equal(reportDue(new Date("2026-10-26T07:05:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: sentMonday }), true);
+  // Enviado el domingo: el lunes siguiente no se repite (menos de 3 días).
+  assert.equal(reportDue(new Date("2026-10-26T07:10:00Z"), tz, { weekday: 1, hour: 8, lastSentAt: new Date("2026-10-25T09:00:00Z") }), false);
 });
 
 // --- Mis tareas ---

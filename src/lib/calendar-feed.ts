@@ -1,10 +1,11 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { visibleProjectsWhere, workingProjectsWhere } from "./access";
-import { FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_REPEATS, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf, snippet } from "./calendar-feed-core";
+import { FEED_CACHE_NAME, FEED_FUTURE_DAYS, FEED_MAX_DELIVERABLES, FEED_MAX_REPEATS, FEED_MAX_TASKS, FEED_PAST_DAYS, FEED_REFRESH_MINUTES, feedTokenHashes, isFeedTokenShape, safeEqualHex, sequenceOf, snippet } from "./calendar-feed-core";
 import { appTimeZone } from "./board";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
 import { db } from "./db";
+import { DESCRIPTION_READ, descriptionHeads } from "./description-heads";
 import { buildIcs, descriptionToPlain, type IcsEvent } from "./ics";
 import { appUrl } from "./mail";
 import { boundedMemo } from "./memo";
@@ -45,15 +46,38 @@ export async function resolveFeedToken(token: string): Promise<{ feedId: string;
   return { feedId: feed.id, tokenHash: current, scope: feed.scope, user: feed.user };
 }
 
-/** Cuánto se guarda el .ics ya hecho de cada enlace y cuántos enlaces como mucho (se olvidan los usados hace más tiempo). */
+/**
+ * Cuánto se guarda el .ics ya hecho de cada enlace, cuántos enlaces como mucho y cuántos bytes en total (se olvidan los
+ * usados hace más tiempo). Un calendario con los topes de tareas, entregables y repeticiones ronda los 2-3 MB: sin el
+ * tope de bytes, 200 enlaces grandes retenían cientos de MB.
+ */
 export const FEED_CACHE_MS = 60_000;
 export const FEED_CACHE_MAX = 200;
-const feedCache = boundedMemo("calendar-feed", FEED_CACHE_MS, FEED_CACHE_MAX);
+export const FEED_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 
-/** Solo para las pruebas: vaciar la memoria del calendario y ver cuántos enlaces guarda. */
-export const feedCacheForTests = { clear: () => feedCache.clear(), size: () => feedCache.size };
+/**
+ * Segundos que el cliente puede reutilizar un .ics hecho en `builtAt` (Cache-Control: max-age): lo que le queda en la
+ * memoria del servidor. Así, entre las dos, un cambio de tareas o permisos se ve como mucho FEED_CACHE_MS después.
+ */
+export function feedMaxAgeSec(builtAt: number, now: number = Date.now()): number {
+  const left = FEED_CACHE_MS - Math.max(0, now - builtAt);
+  return Math.max(0, Math.min(FEED_CACHE_MS / 1000, Math.floor(left / 1000)));
+}
 
-type FeedResult = Awaited<ReturnType<typeof buildFeedIcs>> & { etag: string };
+const utf8 = new TextEncoder();
+const feedCache = boundedMemo(FEED_CACHE_NAME, FEED_CACHE_MS, FEED_CACHE_MAX, {
+  maxBytes: FEED_CACHE_MAX_BYTES,
+  sizeOf: (v) => (v as FeedResult).ics.byteLength,
+});
+
+/** Solo para las pruebas: vaciar la memoria del calendario y ver cuántos enlaces y bytes guarda. */
+export const feedCacheForTests = { clear: () => feedCache.clear(), size: () => feedCache.size, bytes: () => feedCache.bytes };
+
+/**
+ * El .ics se guarda en bytes UTF-8 (TextEncoder: su propio ArrayBuffer, del tamaño justo): como texto de JS, uno con algún
+ * carácter fuera de Latin-1 (–, €, emojis) ocupa el doble.
+ */
+type FeedResult = Omit<Awaited<ReturnType<typeof buildFeedIcs>>, "ics"> & { ics: Uint8Array<ArrayBuffer>; etag: string; builtAt: number };
 
 /**
  * El .ics de un enlace ya validado (resolveFeedToken, que se comprueba en cada petición: un enlace regenerado,
@@ -65,28 +89,10 @@ export function cachedFeedIcs(feed: { tokenHash: string; scope: CalendarFeedScop
   const key = `${feed.tokenHash}|${feed.scope}|${toLocale(feed.user.locale)}|${feed.user.role}`;
   return feedCache.get(key, async () => {
     const built = await buildFeedIcs(feed.user, feed.scope);
+    const ics = utf8.encode(built.ics);
     // Cada evento lleva como DTSTAMP su último cambio, así que un calendario igual da el mismo ETag (y 304).
-    return { ...built, etag: `"${createHash("sha256").update(built.ics).digest("base64url").slice(0, 27)}"` };
+    return { ...built, ics, builtAt: now, etag: `"${createHash("sha256").update(ics).digest("base64url").slice(0, 27)}"` };
   }, now);
-}
-
-/** Lo que se usa de cada descripción: descriptionToPlain recorta a tantos caracteres antes de convertir. */
-const DESCRIPTION_READ = 1500;
-
-/**
- * Comienzo de las descripciones de unas tareas y entregables, sin leer el resto (pueden ser muy largas y aquí solo se
- * usan ~300 caracteres). `substring` deja a PostgreSQL leer solo el principio del valor guardado.
- */
-async function descriptionHeads(taskIds: string[], deliverableIds: string[]): Promise<{ tasks: Map<string, string>; deliverables: Map<string, string> }> {
-  const [t, d] = await Promise.all([
-    taskIds.length
-      ? db.$queryRaw<{ id: string; d: string }[]>`SELECT "id", substring("description" from 1 for ${DESCRIPTION_READ}::int) AS "d" FROM "Task" WHERE "id" = ANY(${taskIds}::text[]) AND "description" <> ''`
-      : [],
-    deliverableIds.length
-      ? db.$queryRaw<{ id: string; d: string }[]>`SELECT "id", substring("description" from 1 for ${DESCRIPTION_READ}::int) AS "d" FROM "Deliverable" WHERE "id" = ANY(${deliverableIds}::text[]) AND "description" <> ''`
-      : [],
-  ]);
-  return { tasks: new Map(t.map((r) => [r.id, r.d])), deliverables: new Map(d.map((r) => [r.id, r.d])) };
 }
 
 /**

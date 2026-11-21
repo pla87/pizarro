@@ -1,10 +1,11 @@
 "use client";
 
+import { useMidnightRefresh } from "@/components/useMidnightRefresh";
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
 import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { lazyDialog } from "../lazyDialog";
-import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, safeRefresh } from "@/lib/connection";
+import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, reportServerHeard, safeRefresh, saveDataOn } from "@/lib/connection";
 import { afterModalHistory } from "../ui/useBackToClose";
 import {
   closestCorners, DndContext, type CollisionDetection, DragOverlay, pointerWithin, KeyboardSensor, MeasuringStrategy, PointerSensor,
@@ -20,8 +21,6 @@ import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
-import { msUntilNextDay, todayIso } from "@/lib/dates";
-import { appTimeZone } from "@/lib/format";
 import { FilterMenu } from "./FilterMenu";
 import { PrivateIcon, ProjectsContext } from "../ProjectMenu";
 import { UndoButton } from "../UndoButton";
@@ -68,8 +67,8 @@ import { BACKUP_CHECK_MS, backupRefreshDue, channelHealthy, channelStalled, shou
 import { cardCount } from "./count-texts";
 
 // Los diálogos (con el editor de texto y el Markdown) no van en el código inicial del tablero:
-// se cargan al abrirlos y se precargan cuando el navegador está libre. Si al abrirlos no hay red, esperan a que vuelva
-// (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
+// se cargan al abrirlos y se precargan cuando el navegador está libre (salvo con «Ahorro de datos»). Si al abrirlos no
+// hay red, esperan a que vuelva (lazyDialog) en vez de fallar: el fallo llegaba a la pantalla de error, que recargaba la página sin red. Cada uno con su
 // Suspense (lazyDialog): al abrir uno en un tablero recién abierto el tablero no se cambia por el esqueleto de columnas.
 const loadTaskDialog = () => import("./TaskDialog");
 const loadNewTaskDialog = () => import("./NewTaskDialog");
@@ -89,8 +88,6 @@ const COLUMN_PREFIX = "col:";
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
 const PINGPONG_MS = 60;
-/** Margen tras la medianoche antes de refrescar «hoy» (el reloj del servidor puede ir unos segundos detrás). */
-const MIDNIGHT_MARGIN_MS = 5_000;
 /** Entradas del historial que se guardan al cambiar de columna en móvil (atrás vuelve a ellas). */
 const MAX_COLUMN_HISTORY = 5;
 
@@ -371,17 +368,21 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const dragHandle = useCoarsePointer();
 
   // Precarga de los diálogos cuando el navegador queda libre: abrirlos es instantáneo, también si luego se va la red. Si
-  // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos.
+  // la precarga falla (sin red), no pasa nada: se vuelven a pedir al abrirlos. Con «Ahorro de datos» no se precargan:
+  // cada uno llega al abrirlo. El editor con barra (TipTap, unos 170 KB gz) solo para quien lo usa: con el editor
+  // Markdown no se abre nunca.
+  const richEditor = data.editorMode === "WYSIWYG";
   useEffect(() => {
+    if (saveDataOn()) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      for (const load of [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog, () => import("@/components/ui/RichTextEditor")]) {
-        load().catch(() => {});
-      }
+      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      if (richEditor) loads.push(() => import("@/components/ui/RichTextEditor"));
+      for (const load of loads) load().catch(() => {});
     });
     return () => cancel(id);
-  }, []);
+  }, [richEditor]);
 
   // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
   useEffect(() => {
@@ -480,27 +481,9 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   // Sin conexión no se pide la página: Next, si no la consigue, la sustituye por la de error del navegador y se pierde lo
   // escrito. Se comprueba antes que el servidor responde; si no, el refresco queda pendiente hasta que vuelva (lib/connection.ts).
   const refresh = useCallback(() => void safeRefresh(doRefresh, router), [doRefresh, router]);
-  // «Hoy» (data.today, del servidor: plazos, «vence hoy», filtros por fecha) cambia a medianoche en la zona de la app aunque
-  // el tablero siga abierto: al empezar el día siguiente se refresca. Se espera como mucho una hora de cada vez y se vuelve
-  // a mirar el día (los cambios de hora alargan o acortan el día); unos segundos de margen por si el reloj del servidor va
-  // algo detrás. Si tras refrescar el servidor aún dice el día anterior, se reintenta un par de veces. Sin estado: el
-  // temporizador no vuelve a dibujar nada (ni DndContext) hasta que llegan los datos nuevos.
-  useEffect(() => {
-    const tz = appTimeZone();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let retries = 0;
-    const check = () => {
-      if (todayIso(tz) === data.today) {
-        timer = setTimeout(check, Math.min(msUntilNextDay(tz) + MIDNIGHT_MARGIN_MS, 3_600_000));
-      } else if (retries++ < 3) {
-        refresh();
-        timer = setTimeout(check, 60_000);
-      }
-    };
-    // Con el día del navegador ya distinto al abrir (reloj del equipo desajustado) no se refresca en bucle.
-    if (todayIso(tz) === data.today) check();
-    return () => clearTimeout(timer);
-  }, [data.today, refresh]);
+  // «Hoy» (data.today: plazos, «vence hoy», filtros por fecha) cambia a medianoche aunque el tablero siga abierto; sin
+  // estado, así que no vuelve a dibujar DndContext hasta que llegan los datos nuevos (useMidnightRefresh).
+  useMidnightRefresh(data.today, refresh);
   const flushStale = useCallback(() => {
     if (staleRefresh.current && pending.current === 0) {
       staleRefresh.current = false;
@@ -660,14 +643,17 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
     let timer: ReturnType<typeof setTimeout> | null = null;
     const root = rootRef.current;
     const source = new EventSource(`/api/projects/${data.project.id}/events`);
-    source.addEventListener("open", () => {
-      live.open = true;
-      live.heardAt = performance.now();
-      root?.setAttribute("data-live", "open");
-    });
+    // Cada mensaje del canal dice además que el servidor responde (reportServerHeard): el refresco que provoca un aviso no
+    // vuelve a preguntárselo a /api/health.
     const heard = () => {
       live.heardAt = performance.now();
+      reportServerHeard();
     };
+    source.addEventListener("open", () => {
+      live.open = true;
+      heard();
+      root?.setAttribute("data-live", "open");
+    });
     // Evento periódico del servidor: el canal está sano (la recarga de respaldo se espacia: ver más abajo).
     source.addEventListener("ping", heard);
     // Quién está en el tablero y quién tiene abierta cada tarea: estado completo al conectar y después cada cambio.
@@ -1617,6 +1603,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
   const mobileColumnFull = mobileTarget && columnAtSessionLimit(mobileTarget.role, cardCounts[mobileTarget.id] ?? 0)
     ? t("La columna «{name}» admite como mucho {max} sesiones.", { name: mobileTarget.name, max: PROGRAM_MAX_SESSIONS })
     : null;
+  // Con las columnas estables (stableColumns): cada refresco trae un array nuevo de columnas aunque sean iguales, y con
+  // sortedColumns se volvían a dibujar DndContext y todas las columnas.
   const dndBoard = useMemo(
     () => (
       <DndContext
@@ -1634,7 +1622,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           onTouchStart={dndHandlers.onTouchStart}
           onTouchEnd={dndHandlers.onTouchEnd}
         >
-          {sortedColumns.map((column, i) => (
+          {stableColumns.map((column, i) => (
             <ColumnView
               key={column.id}
               column={column}
@@ -1642,7 +1630,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
               evergreenIds={shownEvergreen[column.id] ?? NO_IDS}
               cardCount={cardCounts[column.id] ?? 0}
               index={i}
-              total={sortedColumns.length}
+              total={stableColumns.length}
               droppableId={COLUMN_PREFIX + column.id}
               mobileHidden={column.id !== activeMobileColumn}
             />
@@ -1672,7 +1660,7 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
         </DragOverlay>
       </DndContext>
     ),
-    [sensors, dragAccessibility, dndHandlers, sortedColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
+    [sensors, dragAccessibility, dndHandlers, stableColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
   );
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);

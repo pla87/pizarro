@@ -178,7 +178,7 @@ if (await w.page.locator("#enroll-email-code").isVisible().catch(() => false)) {
 await w.page.getByRole("button", { name: "Enable" }).click();
 await w.page.locator('[data-testid="recovery-codes"]').waitFor({ timeout: 15000 });
 await w.page.getByLabel("I have saved the codes").check();
-await w.page.getByRole("button", { name: "Log in" }).click();
+await w.page.getByRole("button", { name: "Sign in", exact: true }).click();
 await w.page.waitForURL((u) => !/\/login/.test(u.pathname), { timeout: 20000 });
 L.check("2FA: activada, entra en la app", !/\/login/.test(new URL(w.page.url()).pathname), w.page.url());
 });
@@ -271,7 +271,7 @@ L.eq("RESET: la página sale en el idioma de la persona invitada", await lang(in
 await inv.page.fill("#rs-new", "otra-clave-larga-2");
 await inv.page.fill("#rs-repeat", "otra-clave-larga-2");
 await inv.page.locator("form button[type=submit]").click();
-await inv.page.getByRole("link", { name: "Log in" }).click();
+await inv.page.getByRole("link", { name: "Sign in", exact: true }).click();
 await inv.page.locator("#password").waitFor({ timeout: 15000 });
 L.eq("RESET→LOGIN: el acceso, en el idioma de la instalación", await lang(inv.page), "es");
 L.eq("RESET→LOGIN: también los textos del formulario (antes se quedaban en inglés)", await labelOf(inv.page, "password"), "Contraseña");

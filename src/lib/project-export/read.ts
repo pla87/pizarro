@@ -10,6 +10,12 @@ import { assertSupportedVersion, upgrade } from "./upgrade";
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024;
 const MAX_PROJECT_JSON_BYTES = 64 * 1024 * 1024;
 const FILE_ENTRY = /^files\/([0-9a-f]{64})$/;
+/**
+ * Cuánto puede inflarse un fichero de files/ respecto a lo que ocupa comprimido. Pizarro los guarda sin comprimir, pero
+ * un ZIP vuelto a comprimir con otra herramienta (Finder, 7-Zip) deja un .log, .csv o .bmp en ×10–×50: con ×100 esos se
+ * aceptan y una bomba (×1000 hasta 8 GB) no. Lo demás lo frenan el tope global del lector y la reserva de disco real.
+ */
+const FILE_MAX_RATIO = 100;
 
 export interface ProjectArchive {
   zip: ZipFile;
@@ -68,7 +74,7 @@ async function readManifest(zip: ZipFile): Promise<ExportManifest> {
   const projectEntry = zip.find("project.json");
   if (!manifestEntry || !projectEntry) throw new AppError("No es un archivo de proyecto de Pizarro (falta manifest.json o project.json).");
 
-  if (projectEntry.size > MAX_PROJECT_JSON_BYTES) throw new AppError("El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».");
+  if (projectEntry.size > MAX_PROJECT_JSON_BYTES) throw new AppError("El contenido del proyecto (project.json) supera el máximo de 64 MB. Prueba con «Solo el tablero».");
 
   // Formato y versión antes que nada: así un archivo de otra aplicación o de una versión futura da un mensaje claro.
   const rawManifest = parseJson(await zip.readAll(manifestEntry, MAX_MANIFEST_BYTES), "manifest.json");
@@ -113,6 +119,7 @@ async function validateArchive(zip: ZipFile, onProgress?: (done: number, total: 
     if (e.name === "manifest.json" || e.name === "project.json") continue;
     const m = FILE_ENTRY.exec(e.name);
     if (!m) throw new ArchiveError("El archivo contiene una entrada inesperada.", e.name.slice(0, 60));
+    if (e.method !== 0 && e.size > e.compressedSize * FILE_MAX_RATIO + 1024) throw new ArchiveError("Un fichero del archivo está comprimido de forma sospechosa.", e.name.slice(0, 20));
     files.set(m[1]!, e);
   }
   if (files.size > LIMITS.files) throw new AppError("El archivo tiene demasiados ficheros.");

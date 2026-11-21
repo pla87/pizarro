@@ -8,7 +8,8 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { Modal } from "@/components/ui/Modal";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/components/ui/Toast";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
+import { installSectionUrl } from "@/lib/product";
 import { formatDate } from "@/lib/format";
 import { formatSize } from "@/lib/format-size";
 import { shrinkText, type BackupAlert } from "@/lib/backup-alert-core";
@@ -78,6 +79,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
 }) {
   const t = useT();
   const locale = useIntlLocale();
+  const lang = useLocale();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useActionTransition();
@@ -211,7 +213,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
               {t("Copia nueva: {stem} · Última copia buena: {goodStem}", { stem: alert.shrink.stem, goodStem: alert.shrink.goodStem })}
             </p>
             <p>
-              {t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla. Para recuperarla, sigue los pasos de restauración de docs/INSTALL.md con ese nombre.", { stem: alert.shrink.goodStem })}
+              {t("¿Se ha perdido la base de datos o el volumen? La retención conserva la última copia buena ({stem}) aunque ya le tocara borrarla. Para recuperarla, sigue los pasos de restauración con ese nombre.", { stem: alert.shrink.goodStem })}{" "}
+              <a href={installSectionUrl("restore", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
             <p>{t("Si has borrado datos a propósito, confírmalo: el aviso desaparece y la copia anterior se borrará cuando le toque.")}</p>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -277,7 +280,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
               <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
                 <Download size={16} /> {t("Descargar")}
               </button>
-              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en docs/INSTALL.md).")}</InfoTip>
+              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en «Restaurar» de la guía de instalación, en getpizarro.com).")}</InfoTip>
             </>
           )}
         </div>
@@ -299,7 +302,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         {destinations.external.length === 0 ? (
           destinations.errors.length === 0 && (
             <p className="text-sm text-amber-700 dark:text-amber-300">
-              {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR); ver docs/INSTALL.md.")}
+              {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
+              <a href={installSectionUrl("backups", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
           )
         ) : (

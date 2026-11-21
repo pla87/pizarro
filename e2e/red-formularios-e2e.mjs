@@ -100,9 +100,11 @@ if (only.includes("docs")) {
     while (Date.now() - t0 < 5000 && (await uploaded()) === 0) await L.sleep(250);
   }
   await L.eqEventually("DOCS: el documento se sube", async () => (await L.q(`SELECT count(*)::int n FROM "ProjectDocument" WHERE "projectId"=$1 AND name='r49-nota.txt' AND "deletedAt" IS NULL`, [p.id]))[0].n, 1, { timeout: 15000 });
-  const trash = page.getByRole("button", { name: "Enviar «r49-nota.txt» a la papelera" });
-  await trash.waitFor({ timeout: 10000 });
-  await trash.click();
+  // La papelera va en el menú «⋯» del documento.
+  const more = page.getByRole("button", { name: "Más acciones de «r49-nota.txt»" });
+  await more.waitFor({ timeout: 10000 });
+  await more.click();
+  await page.getByRole("menuitem", { name: "Enviar a la papelera" }).click();
   const undo = page.getByRole("button", { name: "Deshacer" }).last();
   await undo.waitFor({ timeout: 10000 });
   await ctx.setOffline(true);

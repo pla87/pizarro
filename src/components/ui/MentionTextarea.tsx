@@ -311,7 +311,7 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
               </button>
             </li>
           ))}
-          <li className="flex items-center gap-1 px-2 pt-1 pb-0.5 text-[11px] text-slate-400">
+          <li className="flex items-center gap-1 px-2 pt-1 pb-0.5 text-[11px] text-slate-500">
             <AtSign size={11} /> {t("↑↓ para elegir · Enter para insertar")}
           </li>
         </ul>

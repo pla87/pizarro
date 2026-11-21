@@ -21,6 +21,26 @@ export function msUntilNextDay(timeZone?: string, now: Date = new Date()): numbe
   return Math.max(0, 86_400_000 - elapsed);
 }
 
+/** Margen tras la medianoche por si el reloj del servidor va algo detrás del navegador. */
+const MIDNIGHT_MARGIN_MS = 5_000;
+/** Espera máxima de cada vez: los cambios de hora alargan o acortan el día, así que se vuelve a mirar. */
+const MAX_WAIT_MS = 3_600_000;
+/** Si tras refrescar el servidor aún dice el día anterior: cada cuánto y cuántas veces se reintenta. */
+const RETRY_MS = 60_000;
+const MAX_RETRIES = 3;
+
+type MidnightStep = { refresh: boolean; waitMs: number } | null;
+
+/**
+ * Qué hacer en cada comprobación de useMidnightRefresh: mientras el día del navegador en la zona de la app sea el del
+ * servidor (`today`), esperar hasta la medianoche siguiente (con margen, como mucho una hora); si ya es otro, refrescar y
+ * volver a mirar al minuto, como mucho MAX_RETRIES veces (después, null: se deja de mirar).
+ */
+export function midnightStep(browserDay: string, today: string, retries: number, msToMidnight: number): MidnightStep {
+  if (browserDay === today) return { refresh: false, waitMs: Math.min(msToMidnight + MIDNIGHT_MARGIN_MS, MAX_WAIT_MS) };
+  return retries < MAX_RETRIES ? { refresh: true, waitMs: RETRY_MS } : null;
+}
+
 /** Día natural (YYYY-MM-DD) de un instante en la zona horaria indicada (no el día UTC). */
 export const isoInZone = (date: Date, timeZone?: string): string => todayIso(timeZone, date);
 

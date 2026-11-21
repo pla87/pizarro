@@ -217,10 +217,12 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const deploy = async () => {
+    const n = generatedTasks.length;
+    const name = inProduction?.name ?? "";
     const message = destination === "IN_PRODUCTION"
-      ? t("Se guardará la release y {n} tarjeta(s) pasarán a «{name}». ¿Continuar?", { n: generatedTasks.length, name: inProduction?.name ?? "" })
-      : t("Se guardará la release y {n} tarjeta(s) pasarán al archivo. ¿Continuar?", { n: generatedTasks.length });
-    if (!(await confirm({ title: t("Desplegar la release"), message, confirmLabel: t("Continuar") }))) return;
+      ? n === 1 ? t("Se guardará la release y 1 tarjeta pasará a «{name}».", { name }) : t("Se guardará la release y {n} tarjetas pasarán a «{name}».", { n, name })
+      : n === 1 ? t("Se guardará la release y 1 tarjeta pasará al archivo.") : t("Se guardará la release y {n} tarjetas pasarán al archivo.", { n });
+    if (!(await confirm({ title: t("Desplegar la release"), message, confirmLabel: t("Marcar como desplegado") }))) return;
     setBusy(true);
     const res = await board.track(
       deployRelease({
@@ -266,7 +268,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails}>
-              {loadingDetails && <Loader2 size={15} className="animate-spin" />} {t("Generar con {n} tarea(s)", { n: selectedTasks.length })}
+              {loadingDetails && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
             </button>
           </>
         ) : (
