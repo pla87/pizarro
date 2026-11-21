@@ -61,7 +61,7 @@ export async function run() {
   L.eq("adjuntos subidos por la UI (imagen y texto)", atts.map((a) => [a.title, a.originalName.replace(/\.(png|webp)$/, ".IMG"), a.isImage]), [["Alpha", "captura.IMG", true], ["Beta", "notas.txt", false]]);
 
   // --- generar (paso 1 y 2) ---
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const dlg = U.dialog(p);
   await dlg.getByText("Paso 1 de 2").waitFor();
   const titleInput = dlg.locator("#rel-title");
@@ -214,7 +214,7 @@ export async function run() {
   L.eq("Alt+R: la fija sigue en su columna", await L.dbOrder(COL.next), ["Fija"]);
   // Segunda del día: el título propuesto lleva (2)
   await L.reload(p);
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const d4 = U.dialog(p);
   await d4.getByText("Paso 1 de 2").waitFor();
   await L.sleep(500);
@@ -256,7 +256,7 @@ export async function run() {
   };
   const relCount = async () => (await rels()).length;
   const before = await relCount();
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const d5 = U.dialog(p);
   await d5.getByText("Paso 1 de 2").waitFor();
   await d5.getByRole("button", { name: /Generar con \d+ tarea/ }).click();

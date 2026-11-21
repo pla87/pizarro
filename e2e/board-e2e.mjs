@@ -1418,7 +1418,7 @@ if (only.includes("r47")) {
     ["«+» de una columna", () => p.getByRole("button", { name: `Añadir tarea en ${COL.backlog}` }).click()],
     ["el atajo Alt+N", () => p.keyboard.press("Alt+n")],
     ["el detalle de una tarea", () => L.cardLoc(p, "R47 tarea").click()],
-    ["«Generar Release»", () => p.getByRole("button", { name: "Generar Release" }).first().click()],
+    ["«Generar release»", () => p.getByRole("button", { name: "Generar release" }).first().click()],
     ["«Varias tareas»", () => p.getByRole("button", { name: "Varias tareas" }).click()],
     ["«Archivadas»", () => p.getByRole("button", { name: "Archivadas", exact: true }).click()],
     ["los filtros", () => p.getByRole("button", { name: "Filtros" }).first().click()],

@@ -25,7 +25,6 @@ export const board: Record<string, string> = {
   "Seleccionar todas": "Select all",
   "Añadir tarea en {name}": "Add task in {name}",
   "No hay tarjetas en esta columna": "There are no cards in this column",
-  "Generar Release": "Generate release",
   "Arrastra tarjetas aquí": "Drag cards here",
   "Renombrar columna": "Rename column",
   "Plazo de espera": "Waiting period",

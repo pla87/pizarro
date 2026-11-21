@@ -258,7 +258,7 @@ if (only.includes("vacias")) {
   const { page } = s;
   await openBoard(page);
   const EMPTY = "No hay tarjetas en esta columna";
-  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Agenda: "Exportar a calendario (.ics)", Entrega: "Resumen para el cliente (PDF)", Presupuesto: "Resumen de presupuesto", Salto: "Generar Release", "Plan A": "Generar plan de trabajo" };
+  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Agenda: "Exportar a calendario (.ics)", Entrega: "Resumen para el cliente (PDF)", Presupuesto: "Resumen de presupuesto", Salto: "Generar release", "Plan A": "Generar plan de trabajo" };
   const state = async (col) => {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     return [await b.isDisabled(), await b.getAttribute("title")];
@@ -326,7 +326,7 @@ if (only.includes("salir")) {
     const isPlan = kind === "plan";
     const open = async () => {
       if (isPlan) return openPlan(page, "Plan A");
-      await L.colLoc(page, "Salto").getByRole("button", { name: "Generar Release" }).click();
+      await L.colLoc(page, "Salto").getByRole("button", { name: "Generar release" }).click();
       const d = page.locator("[role=dialog]").filter({ hasText: "Generar release" }).first();
       await d.getByRole("button", { name: /Generar con 1 tarea/ }).waitFor({ timeout: 10000 });
       await sleep(800);

@@ -28,7 +28,7 @@ export const curso: Record<string, string> = {
   "Vista previa sin guardar": "Preview without saving",
   // Explicación de cada rol en el menú de la columna
   "Columna normal, sin funciones especiales.": "A normal column, with no special features.",
-  "Sus tarjetas forman la siguiente release (botón «Generar Release»).": "Its cards make up the next release (“Generate release” button).",
+  "Sus tarjetas forman la siguiente release (botón «Generar release»).": "Its cards make up the next release (“Generate release” button).",
   "Las tarjetas de una release publicada pasan aquí.": "Cards from a published release move here.",
   "Avisa a la persona asignada si una tarjeta lleva demasiados días aquí.": "Reminds the assignee when a card has been here too many days.",
   "PDF de las tareas de la semana, por día o por persona.": "PDF of the week's tasks, by day or by person.",

@@ -27,7 +27,7 @@ const COLS = [
   ["r51_entrega", "Entrega", "DELIVERY"], ["r51_presu", "Presupuesto", "BUDGET"],
 ];
 const ACTION = {
-  NEXT_RELEASE: "Generar Release", AI_PLAN: "Generar plan de trabajo", PROGRAM: "Publicar programa (PDF)", WEEKLY_PLAN: "PDF de la semana",
+  NEXT_RELEASE: "Generar release", AI_PLAN: "Generar plan de trabajo", PROGRAM: "Publicar programa (PDF)", WEEKLY_PLAN: "PDF de la semana",
   CHECKLIST: "Ver lista", AGENDA: "Exportar a calendario (.ics)", DELIVERY: "Resumen para el cliente (PDF)", BUDGET: "Resumen de presupuesto",
 };
 
@@ -94,7 +94,7 @@ const docs = () => L.q(`SELECT id,name,kind,"mimeType" FROM "ProjectDocument" WH
 
 // --- Botones de acción con el mismo aspecto ------------------------------------------------------------------------------
 if (only.includes("buttons")) {
-  L.scenario("buttons: las columnas especiales tienen su botón de acción, todos con el aspecto de «Generar Release»");
+  L.scenario("buttons: las columnas especiales tienen su botón de acción, todos con el aspecto de «Generar release»");
   await seed();
   for (const scheme of ["light", "dark"]) {
     const s = await L.session({ viewport: { width: 2400, height: 950 } });
@@ -112,7 +112,7 @@ if (only.includes("buttons")) {
       styles.push([name, await btn.evaluate((el) => { const c = getComputedStyle(el); return [c.backgroundColor, c.color, c.borderTopColor, c.borderRadius, c.fontWeight, Math.round(el.getBoundingClientRect().height)].join(" "); })]);
     }
     const ref = styles.find(([n]) => n === "Salto")[1];
-    for (const [name, st] of styles) L.eq(`BTN ${scheme}: «${name}» con el mismo aspecto que «Generar Release»`, st, ref);
+    for (const [name, st] of styles) L.eq(`BTN ${scheme}: «${name}» con el mismo aspecto que «Generar release»`, st, ref);
     await page.screenshot({ path: `${SHOTS}/r51-botones-${scheme}.png` });
     L.assertNoErrors(`BTN ${scheme}`, [s]);
     await s.ctx.close();
@@ -129,7 +129,7 @@ if (only.includes("buttons")) {
     return btn.evaluate((el) => { const c = getComputedStyle(el); const r = el.getBoundingClientRect(); return [c.backgroundColor, Math.round(r.height), r.width > window.innerWidth * 0.8].join(" "); });
   };
   const rel = await mobileStyle("Salto");
-  L.eq("BTN móvil: «Publicar programa (PDF)» igual que «Generar Release», a todo el ancho", await mobileStyle("Temario"), rel);
+  L.eq("BTN móvil: «Publicar programa (PDF)» igual que «Generar release», a todo el ancho", await mobileStyle("Temario"), rel);
   L.eq("BTN móvil: «Generar plan de trabajo», igual", await mobileStyle("Plan IA"), rel);
   L.check("BTN móvil: sin scroll horizontal", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
   await page.screenshot({ path: `${SHOTS}/r51-botones-movil.png` });

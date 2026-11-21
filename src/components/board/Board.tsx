@@ -2036,7 +2036,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
           onRelease={() => {
             const selected = stores.selection.get();
             const ids = sortedColumns.flatMap((c) => (baseItems[c.id] ?? []).filter((id) => selected.has(id)));
-            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar Release»).
+            // Con selección solo van las elegidas (las fijas entran únicamente desde «Generar release»).
             setRelease({ taskIds: ids, preselected: ids });
           }}
           onClear={() => setSelected(new Set())}

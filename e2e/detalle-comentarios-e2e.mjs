@@ -219,7 +219,7 @@ if (only.includes("rel")) {
   const [alpha] = await L.seedTasks(L.COL.next, ["Rel Alpha", "Rel Beta"]);
   const s = await L.session({ viewport: U.WIDE });
   const p = s.page;
-  for (const [how, open] of [["Generar Release", () => p.getByRole("button", { name: "Generar Release" }).click()], ["Release con selección", async () => {
+  for (const [how, open] of [["Generar release", () => p.getByRole("button", { name: "Generar release" }).click()], ["Release con selección", async () => {
     for (const t of ["Rel Alpha", "Rel Beta"]) await L.cardLoc(p, t).locator("[aria-label='Seleccionar']").click();
     await p.getByRole("button", { name: "Release con selección" }).click();
   }]]) {
@@ -243,7 +243,7 @@ if (only.includes("rel")) {
   }
   // Generada de nuevo con los títulos de ahora, sí se despliega.
   await L.reload(p);
-  await p.getByRole("button", { name: "Generar Release" }).click();
+  await p.getByRole("button", { name: "Generar release" }).click();
   const dlg = U.dialog(p);
   await dlg.getByRole("button", { name: /Generar con 2 tarea/ }).click();
   await dlg.getByText("Paso 2 de 2").waitFor();

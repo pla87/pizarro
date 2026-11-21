@@ -135,7 +135,7 @@ export const settings: Record<string, string> = {
   "Columnas": "Columns",
   "Se gestionan desde el menú «⋯» de cada columna en el tablero.": "Managed from the “⋯” menu of each column on the board.",
   "Ahí se crean, renombran, reordenan, cambian de rol y borran (si están vacías).": "There they are created, renamed, reordered, given a different role and deleted (if empty).",
-  "El rol «Siguiente salto» muestra el botón «Generar Release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.": "The “Next hop” role shows the “Generate Release” button; the “In production” role is where cards go when a release is marked as deployed.",
+  "El rol «Siguiente salto» muestra el botón «Generar release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.": "The “Next hop” role shows the “Generate Release” button; the “In production” role is where cards go when a release is marked as deployed.",
   "Tarjetas archivadas": "Archived cards",
   "Borrar proyecto": "Delete project",
   "Con sus columnas, tarjetas, adjuntos y releases. No se puede deshacer.": "With its columns, cards, attachments and releases. It cannot be undone.",
