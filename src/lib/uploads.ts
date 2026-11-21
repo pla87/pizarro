@@ -123,20 +123,20 @@ const MAX_CONCURRENT = 2;
 export const MAX_WAITING = 10;
 export const IMAGE_QUEUE_FULL_MESSAGE = "El servidor está procesando muchas imágenes. Inténtalo de nuevo en unos segundos.";
 /** ¿Hay ya MAX_WAITING imágenes esperando turno? Las rutas lo miran antes de leer el cuerpo de la petición. */
-export const imageQueueFull = (): boolean => running >= MAX_CONCURRENT && queue.length >= MAX_WAITING;
-let running = 0;
-const queue: (() => void)[] = [];
+export const imageQueueFull = (): boolean => IQ.running >= MAX_CONCURRENT && IQ.queue.length >= MAX_WAITING;
+/** En globalThis: una sola cola de imágenes por proceso aunque webpack empaquete este módulo una vez por capa. */
+const IQ = ((globalThis as unknown as { __pzImageQueue?: { running: number; queue: (() => void)[] } }).__pzImageQueue ??= { running: 0, queue: [] });
 function acquire(): Promise<void> {
-  if (running < MAX_CONCURRENT) {
-    running++;
+  if (IQ.running < MAX_CONCURRENT) {
+    IQ.running++;
     return Promise.resolve();
   }
-  return new Promise((resolve) => queue.push(resolve));
+  return new Promise((resolve) => IQ.queue.push(resolve));
 }
 function release(): void {
-  const next = queue.shift();
+  const next = IQ.queue.shift();
   if (next) next();
-  else running--;
+  else IQ.running--;
 }
 
 const MAX_INPUT_PIXELS = 30_000_000;

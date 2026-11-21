@@ -37,7 +37,8 @@ interface ProjectReportPdf {
 // núcleo ni más memoria de la cuenta aunque se pidan varios a la vez; solo el render ocupa turno. Un render atascado
 // no bloquea la cola para siempre: a los 90 s se termina el worker (deja de gastar CPU), queda libre el turno y quien
 // lo pidió recibe un error claro.
-let reportQueue: Promise<unknown> = Promise.resolve();
+/** Cola de PDF en globalThis: una sola por proceso aunque webpack empaquete este módulo una vez por capa. */
+const Q = ((globalThis as unknown as { __pzPdfQueue?: { reportQueue: Promise<unknown>; waitingRenders: number } }).__pzPdfQueue ??= { reportQueue: Promise.resolve(), waitingRenders: 0 });
 
 const PDF_RENDER_TIMEOUT_MS = 90_000;
 const PDF_TIMEOUT_MESSAGE = "El PDF tardó demasiado; inténtalo de nuevo";
@@ -52,7 +53,6 @@ export class PdfTimeoutError extends AppError {
 /** Con tantos renders ya esperando turno, los nuevos se rechazan al instante (503) en vez de apilarse sin fin. */
 export const PDF_MAX_WAITING = 5;
 export const PDF_BUSY_MESSAGE = "Hay muchos PDF generándose; inténtalo en un momento.";
-let waitingRenders = 0;
 
 /**
  * Quien pidió el PDF ya no lo espera (cerró la pestaña, canceló la descarga): su render sale de la cola o, si ya se
@@ -84,8 +84,8 @@ export function queuedRender<T>(
   render: (signal: AbortSignal) => Promise<T>, timeoutMs: number = PDF_RENDER_TIMEOUT_MS, request?: AbortSignal,
 ): Promise<T> {
   if (request?.aborted) return Promise.reject(new PdfAbortedError());
-  if (waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
-  waitingRenders++;
+  if (Q.waitingRenders >= PDF_MAX_WAITING) return Promise.reject(new AppError(PDF_BUSY_MESSAGE, 503, "pdf_busy"));
+  Q.waitingRenders++;
   let waiting = true;
   let started: ((err: unknown) => void) | null = null; // para el render en curso (si lo hay) con este error
   let rejectWaiting!: (err: unknown) => void;
@@ -94,15 +94,15 @@ export function queuedRender<T>(
     const err = new PdfAbortedError();
     if (waiting) {
       waiting = false;
-      waitingRenders--;
+      Q.waitingRenders--;
       rejectWaiting(err);
     } else started?.(err);
   };
   request?.addEventListener("abort", onRequestAbort, { once: true });
-  const turn = reportQueue.then(() => {
+  const turn = Q.reportQueue.then(() => {
     if (!waiting) return cancelled; // cancelado mientras esperaba: no ocupa turno
     waiting = false;
-    waitingRenders--;
+    Q.waitingRenders--;
     return new Promise<T>((resolve, reject) => {
       const abort = new AbortController();
       const stop = (err: unknown) => {
@@ -119,7 +119,7 @@ export function queuedRender<T>(
     });
   });
   const run = Promise.race([turn, cancelled]).finally(() => request?.removeEventListener("abort", onRequestAbort));
-  reportQueue = turn.catch(() => {});
+  Q.reportQueue = turn.catch(() => {});
   return run;
 }
 

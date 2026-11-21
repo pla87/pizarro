@@ -557,6 +557,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
 
   const chip = (task: CalendarTask & { due: string }) => (
     <Link
+      // Sin precarga: cada tarea visible era una petición del tablero entero (el calendario pasaba de 23 a 97 consultas).
+      prefetch={false}
       key={task.id}
       href={`/p/${task.projectId}?task=${task.id}`}
       data-chip={task.id}
@@ -593,6 +595,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const rule = recurrenceLabel(r, t, locale) ?? "";
     return (
       <Link
+        // Sin precarga: cada tarea visible era una petición del tablero entero (el calendario pasaba de 23 a 97 consultas).
+        prefetch={false}
         key={r.key}
         href={`/p/${r.projectId}?task=${r.taskId}`}
         data-repeat={r.taskId}
@@ -760,6 +764,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                       const status = d.status;
                       return (
                         <Link
+                          // Sin precarga: cada tarea visible era una petición del tablero entero (el calendario pasaba de 23 a 97 consultas).
+                          prefetch={false}
                           key={b.id}
                           href={`/p/${d.projectId}`}
                           data-band={b.id}

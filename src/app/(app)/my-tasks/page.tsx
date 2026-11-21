@@ -124,7 +124,9 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                   <li key={task.id} data-overdue={late || undefined} className="relative flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
                     {late && <span className="absolute inset-y-1 left-0 w-1 rounded-r bg-red-600 dark:bg-red-500" aria-hidden />}
                     {/* Proyecto como chip al principio de la fila: lo primero que se lee. */}
+                    {/* Sin precarga en los enlaces de la lista: cada fila era una petición de su tablero entero. */}
                     <Link
+                      prefetch={false}
                       href={`/p/${projectId}`}
                       title={task.project.name}
                       className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-700 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:text-brand-200"
@@ -133,7 +135,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                       <span className="truncate">{task.project.name}</span>
                     </Link>
                     <TypeBadge kind={localizeGeneralKind(task.kind, uiLocale)} />
-                    <Link href={`/p/${projectId}?task=${task.id}`} className="flex min-w-0 flex-1 basis-40 items-center gap-1.5 text-sm font-medium hover:text-brand-600">
+                    <Link prefetch={false} href={`/p/${projectId}?task=${task.id}`} className="flex min-w-0 flex-1 basis-40 items-center gap-1.5 text-sm font-medium hover:text-brand-600">
                       {task.color && <span data-task-color className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} title={t("Color de la tarea")} aria-hidden />}
                       <span className="min-w-0 truncate"><MentionText text={task.title} /></span>
                     </Link>
