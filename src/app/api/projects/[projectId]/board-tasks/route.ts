@@ -1,5 +1,6 @@
 import { canAccessProject } from "@/lib/access-cache";
 import { loadProjectBoardTasks } from "@/lib/board";
+import { packBoardTask } from "@/lib/board-task-wire";
 import { liveCursor } from "@/lib/realtime";
 import { getCurrentUser } from "@/lib/session";
 import { getT } from "@/i18n/server";
@@ -13,7 +14,8 @@ export const dynamic = "force-dynamic";
  * Tarjetas sueltas del tablero (`?ids=a,b,c`, como mucho LIVE_PATCH_MAX): las que otra persona acaba de cambiar, que la
  * pestaña aplica sin recargar el tablero entero (Board.tsx, livePatch.ts). Solo las activas de ESTE proyecto, que el
  * usuario debe poder ver: las que no salen (borradas, archivadas, de otro proyecto o inexistentes) el tablero las quita.
- * `boot`: proceso del servidor (si ha cambiado, la pestaña recarga entero). No se registra en los logs.
+ * `boot`: proceso del servidor (si ha cambiado, la pestaña recarga entero). Las tarjetas van sin sus campos por defecto
+ * (packBoardTask). No se registra en los logs.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ projectId: string }> }) {
   const user = await getCurrentUser();
@@ -29,5 +31,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   }
   const projectId = parsed.data;
   const tasks = await loadProjectBoardTasks(projectId, ids);
-  return Response.json({ boot: liveCursor(projectId).boot, tasks }, { headers: { "Cache-Control": "no-store" } });
+  // Como en la página: sin los campos que valen lo de por defecto (board-task-wire.ts).
+  return Response.json({ boot: liveCursor(projectId).boot, tasks: tasks.map(packBoardTask) }, { headers: { "Cache-Control": "no-store" } });
 }

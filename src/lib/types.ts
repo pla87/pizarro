@@ -2,6 +2,7 @@
 import type { ColumnRoleValue } from "./constants";
 import type { GoogleFileKind } from "./google-files";
 import type { TaskFieldKey, TaskFieldValues } from "./task-fields";
+import type { BoardTaskWire } from "./board-task-wire";
 
 export interface BoardColumn {
   id: string;
@@ -119,6 +120,9 @@ export interface BoardData {
   /** Último aviso del canal en vivo del proyecto al pedir estos datos (ver realtime.ts `liveCursor`). */
   live?: { boot: string; seq: number };
 }
+
+/** Datos del tablero tal como llegan de la página: las tarjetas sin sus campos por defecto (board-task-wire.ts). */
+export type BoardPageData = Omit<BoardData, "tasks"> & { tasks: BoardTaskWire[] };
 
 /** Opciones de un proyecto para el diálogo «Nueva tarea» cuando se crea en un proyecto distinto del abierto. */
 export interface ProjectFormData {

@@ -19,7 +19,8 @@ import { createPortal, flushSync } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
-import type { BoardColumn, BoardData, BoardTask, LabelOption } from "@/lib/types";
+import type { BoardColumn, BoardData, BoardPageData, BoardTask, LabelOption } from "@/lib/types";
+import { unpackBoardTask, type BoardTaskWire } from "@/lib/board-task-wire";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { FilterMenu } from "./FilterMenu";
 import { PrivateIcon, ProjectsContext } from "../ProjectMenu";
@@ -251,7 +252,9 @@ function findContainer(items: Items, id: string): string | undefined {
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
-export function Board({ data, initialTaskId = null }: { data: BoardData; initialTaskId?: string | null }) {
+export function Board({ data: page, initialTaskId = null }: { data: BoardPageData; initialTaskId?: string | null }) {
+  // Las tarjetas llegan sin sus campos por defecto (board-task-wire.ts): se completan una vez por dato recibido.
+  const data: BoardData = useMemo(() => ({ ...page, tasks: page.tasks.map(unpackBoardTask) }), [page]);
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
@@ -702,7 +705,8 @@ export function Board({ data, initialTaskId = null }: { data: BoardData; initial
           }
           if (!Array.isArray(body.tasks) || (cursor && body.boot !== cursor.boot)) return refresh();
           const before = stores.tasks.get();
-          const result = applyTaskPatch(before, ids, body.tasks as BoardTask[], new Set(columnsNow.current.map((c) => c.id)));
+          const received = (body.tasks as BoardTaskWire[]).map(unpackBoardTask);
+          const result = applyTaskPatch(before, ids, received, new Set(columnsNow.current.map((c) => c.id)));
           if (!result) return refresh();
           if (result.tasks === before) return;
           // Como con la recarga completa: la tarea abierta que desaparece avisa (antes de quitarla) y sale de la selección.
