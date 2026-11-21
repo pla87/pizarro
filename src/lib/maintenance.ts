@@ -192,16 +192,24 @@ const ORPHAN_EVERY_MS = 23 * 60 * 60 * 1000;
 /** La papelera de documentos se purga una vez al día. */
 const DOCS_TRASH_EVERY_MS = 23 * 60 * 60 * 1000;
 
+/**
+ * Limpiezas con una retención de días (copias no imagen, 7 días; avisos, 90 y 365; dispositivos, un año; historial, un
+ * año) o de cosas caducadas que ya no valen (enlaces de email y retos de doble factor): una vez al día basta. Cada hora
+ * eran cuatro DELETE de más con su recorrido de índices. Deshacer sigue cada hora (su pila caduca a los 7 días, pero los
+ * cambios de plantilla que limpia, a las 24 h).
+ */
+const DAILY_PURGE_EVERY_MS = 23 * 60 * 60 * 1000;
+
 /** Tareas de cada pasada, en orden. El nombre es la clave en JobRun (y su etiqueta en Administración). */
 export const MAINTENANCE_JOBS = [
-  { name: "nonImageCopies", run: () => purgeNonImageCopies() },
+  { name: "nonImageCopies", run: () => purgeNonImageCopies(), everyMs: DAILY_PURGE_EVERY_MS },
   { name: "undo", run: () => purgeOldUndo() },
   { name: "documentsTrashPurge", run: () => purgeDocumentsTrash(), everyMs: DOCS_TRASH_EVERY_MS },
-  { name: "notifications", run: () => purgeOldNotifications() },
+  { name: "notifications", run: () => purgeOldNotifications(), everyMs: DAILY_PURGE_EVERY_MS },
   { name: "transferJobs", run: () => purgeTransfers() },
   { name: "sharedFiles", run: () => purgeSharedFiles() },
-  { name: "authData", run: () => purgeAuthData() },
-  { name: "taskHistory", run: () => purgeOldTaskHistory() },
+  { name: "authData", run: () => purgeAuthData(), everyMs: DAILY_PURGE_EVERY_MS },
+  { name: "taskHistory", run: () => purgeOldTaskHistory(), everyMs: DAILY_PURGE_EVERY_MS },
   { name: "orphanFiles", run: () => purgeOrphanFiles(), everyMs: ORPHAN_EVERY_MS },
   { name: "backup", run: () => backupJob() },
   { name: "backupExternal", run: () => backupExternalJob() },

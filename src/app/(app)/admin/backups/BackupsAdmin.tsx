@@ -360,7 +360,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       <section className="card p-4">
         <h3 className="mb-2 flex items-center gap-1 text-sm font-semibold">
           {t("Tareas de mantenimiento")}
-          <InfoTip topic={t("Tareas de mantenimiento")}>{t("Se ejecutan cada hora, en un solo proceso a la vez. Aquí sale la última ejecución de cada una.")}</InfoTip>
+          <InfoTip topic={t("Tareas de mantenimiento")}>{t("La pasada es cada hora, en un solo proceso a la vez; la limpieza de huérfanos, la papelera y las de datos de días o meses, una vez al día. Aquí sale la última ejecución de cada una.")}</InfoTip>
         </h3>
         {jobs.length === 0 ? (
           <p className="text-sm text-slate-500">{t("Aún no se ha ejecutado ninguna (la primera pasada es un minuto después de arrancar).")}</p>
