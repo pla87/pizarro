@@ -2,7 +2,7 @@ import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
-import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
+import { addDaysIso, dateToIso, isoToDate, todayIso, weekBoundsIso } from "./dates";
 import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
@@ -348,11 +348,12 @@ export function generateWeekPlanPdf(
     });
     const locale = intlLocale(opts.locale);
     const today = todayIso(appTimeZone());
+    const week = weekBoundsIso(today);
     const sections = buildWeekPlan(
       tasks.map((x) => ({ title: mentionsToPlain(x.title), kind: localizeGeneralKind(x.kind, opts.locale).name, assigneeName: x.assignee?.name ?? null, dueDate: dateToIso(x.dueDate) })),
       today, opts.groupBy, t, locale,
     );
-    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
+    const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, weekStart: week.start, weekEnd: week.end, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
