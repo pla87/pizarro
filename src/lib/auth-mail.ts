@@ -2,7 +2,7 @@ import "server-only";
 import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDateTimeZone } from "./format";
 import { getInstanceSettings } from "./instance";
-import { appUrl, escapeHtml, sendMail, type MailMessage } from "./mail";
+import { appUrl, escapeHtml, noReplyNote, sendMail, type MailMessage } from "./mail";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
@@ -80,9 +80,13 @@ export async function sendInviteMail(user: Recipient, url: string, invitedBy: st
 }
 
 /** Invitación desde los ajustes de un proyecto: la cuenta nueva ya está en el proyecto y, tras elegir la contraseña, entra en su tablero. */
-export function sendProjectInviteMail(user: Recipient, url: string, invitedBy: string, projectName: string): Promise<void> {
+export async function sendProjectInviteMail(user: Recipient, url: string, invitedBy: string, projectName: string): Promise<void> {
+  // Con el nombre de la organización, como sendInviteMail: así se sabe de quién viene.
+  const { orgName: org } = await getInstanceSettings();
   return send(user, user.locale, (t) => ({
-    subject: t("{admin} te ha invitado al proyecto «{project}» en Pizarro", { admin: invitedBy, project: projectName }),
+    subject: org
+      ? t("{admin} te ha invitado al proyecto «{project}» en el Pizarro de {org}", { admin: invitedBy, project: projectName, org })
+      : t("{admin} te ha invitado al proyecto «{project}» en Pizarro", { admin: invitedBy, project: projectName }),
     paragraphs: [
       t("Hola, {name}:", { name: user.name }),
       t("{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) }),
@@ -100,7 +104,7 @@ export function sendProjectAddedMail(user: Recipient, addedBy: string, projectNa
       t("{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.", { name: addedBy, project: projectName }),
     ],
     button: { label: t("Abrir el tablero"), url },
-    note: t("Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos»."),
+    note: `${t("Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».")} ${noReplyNote(t)}`,
   }));
 }
 

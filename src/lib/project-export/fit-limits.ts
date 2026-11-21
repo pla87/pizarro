@@ -44,13 +44,21 @@ export function fitImportLimits(data: ProjectExportData): { data: ProjectExportD
     const moved = data.tasks
       .filter((x) => extraOrder.has(x.columnRef))
       .sort((a, b) => extraOrder.get(a.columnRef)! - extraOrder.get(b.columnRef)! || a.position - b.position);
-    let pos = Math.max(0, ...data.tasks.filter((x) => x.columnRef === last.ref).map((x) => x.position));
+    // Con un bucle: Math.max(...) con más de ~125.000 posiciones desborda la pila.
+    let pos = 0;
+    for (const x of data.tasks) if (x.columnRef === last.ref && x.position > pos) pos = x.position;
     const newPos = new Map(moved.map((x) => [x.ref, (pos += POSITION_STEP)]));
     const pinnable = hasEvergreenTasks(last.role);
     const keptRefs = new Set(kept.map((c) => c.ref));
     out = {
       ...out,
-      columns: data.columns.filter((c) => keptRefs.has(c.ref)).map((c) => (c.routineTargetRef && extraOrder.has(c.routineTargetRef) ? { ...c, routineTargetRef: last.ref } : c)),
+      // Un destino de rutinas que apuntaba a una columna quitada pasa a la última, salvo que la app no lo admita ahí (columna
+      // terminada, otra de rutinas o la propia): entonces, sin destino (la siguiente aparición nace en la misma columna).
+      columns: data.columns.filter((c) => keptRefs.has(c.ref)).map((c) => {
+        if (!c.routineTargetRef || !extraOrder.has(c.routineTargetRef)) return c;
+        const allowed = !last.isDone && last.role !== "ROUTINES" && last.ref !== c.ref;
+        return { ...c, routineTargetRef: allowed ? last.ref : null };
+      }),
       tasks: data.tasks.map((x) => {
         if (!newPos.has(x.ref) && !(x.archivedFromColumnRef && extraOrder.has(x.archivedFromColumnRef)) && !(x.routineColumnRef && extraOrder.has(x.routineColumnRef))) return x;
         const merged = newPos.has(x.ref);

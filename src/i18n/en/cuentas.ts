@@ -321,6 +321,7 @@ export const cuentas: Record<string, string> = {
   "«Nadie puede entrar como administrador»": "“No administrator can sign in”",
   // Miembros de un proyecto: aviso al añadir a alguien e invitación a un proyecto (emails y errores)
   "{admin} te ha invitado al proyecto «{project}» en Pizarro": "{admin} has invited you to the “{project}” project in Pizarro",
+  "{admin} te ha invitado al proyecto «{project}» en el Pizarro de {org}": "{admin} has invited you to the “{project}” project in {org}’s Pizarro",
   "{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.":
     "{admin} has created a Pizarro account for you and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
   "{name} te ha añadido al proyecto «{project}»": "{name} has added you to the “{project}” project",

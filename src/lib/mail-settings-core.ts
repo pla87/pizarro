@@ -101,9 +101,12 @@ export function parseMailSettings(rows: { key: string; value: string }[]): MailS
   };
 }
 
-/** Remitente «Nombre <dirección>» (el nombre sin comillas, saltos de línea ni ángulos: no se puede inyectar una cabecera). */
+/**
+ * Remitente «Nombre <dirección>» (el nombre sin comillas, saltos de línea, ángulos ni barras invertidas: no se puede
+ * inyectar una cabecera, y un nombre que acaba en «\» no escapa la comilla de cierre y rompe la dirección).
+ */
 export function formatFrom(name: string, address: string): string {
-  const clean = name.replace(/[\r\n"<>]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = name.replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim();
   return clean ? `"${clean}" <${address}>` : address;
 }
 
@@ -185,7 +188,7 @@ export interface MailSettingsInput {
 export function validateMailSettings(input: MailSettingsInput): { ok: true; value: MailSettingsInput } | { ok: false; error: string } {
   const host = String(input.host ?? "").trim();
   const user = String(input.user ?? "").trim();
-  const fromName = String(input.fromName ?? "").replace(/[\r\n"<>]/g, " ").replace(/\s+/g, " ").trim();
+  const fromName = String(input.fromName ?? "").replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim();
   const fromAddress = String(input.fromAddress ?? "").trim();
   const port = Number(input.port);
   // Sin servidor se desactiva el envío: se guarda vacío y no se exige nada más.

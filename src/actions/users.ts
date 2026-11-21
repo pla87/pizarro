@@ -381,15 +381,9 @@ export async function unlinkGoogle(userId: string) {
       db.session.deleteMany({ where: { userId: user.id } }),
       // Un acceso con Google a medio completar (falta el segundo paso) tampoco debe poder terminarse.
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
-      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.
-      db.calendarFeed.deleteMany({ where: { userId: user.id } }),
-      db.userChannel.deleteMany({ where: { userId: user.id } }),
-      db.telegramLinkCode.deleteMany({ where: { userId: user.id } }),
     ]);
-    // revokeUser también vacía la caché de los calendarios suscritos: el enlace deja de dar sus tareas al momento.
+    // Solo el acceso con Google: Drive, el calendario suscrito y los canales siguen como estaban (el diálogo lo dice).
     revokeUser(user.id);
-    // Google Drive, como «Desconectar» en Mi perfil (retira el permiso en Google y borra la conexión).
-    await disconnectGoogleAccount(user.id);
     describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);
     if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
     revalidatePath("/admin/users");

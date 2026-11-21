@@ -75,7 +75,8 @@ function retire(tr: Transport): void {
  * Transporte de nodemailer con una conexión SMTP que se reutiliza (`pool`, una sola: los servidores de correo limitan
  * las conexiones a la vez y los envíos van en fila). Antes cada email abría su conexión, con su TLS y su AUTH. Si el
  * servidor la cierra (o se cae), nodemailer la quita y abre otra con el siguiente envío; un email cuya conexión se cierra
- * a medias vuelve a la cola, y la que lleva 4 min sin usarse la cierra nodemailer antes de que lo haga el servidor. Se
+ * a medias vuelve a la cola, y la que lleva `socketTimeout` (15 s) sin usarse la cierra nodemailer: se reutiliza dentro de
+ * una ráfaga de envíos (un resumen a muchas personas), que es donde ahorra. Se
  * rehace cuando cambia la configuración (al guardar los ajustes o cambiar las variables) y se cierra al apagar.
  */
 function mailer(c: MailConfig): Transport {
