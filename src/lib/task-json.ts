@@ -274,7 +274,8 @@ function pick(o: Record<string, unknown>, names: string[]): unknown {
 /**
  * «2026-12-01», «2026-12-01T10:00:00Z» o «01/12/2026» → «2026-12-01»; `undefined` si no se entiende. Con barras, el día
  * va primero salvo que el segundo número pase de 12 y el primero no («12/21/2026», como se escribe en EE. UU.): la misma
- * regla que los CSV (foreign-import/text.ts). Lo ambiguo («03/04/2026») sigue siendo día/mes.
+ * regla que los CSV (foreign-import/text.ts). Lo ambiguo («03/04/2026») sigue siendo día/mes. Con año de dos cifras
+ * («21/12/26»), del 2000 en adelante, también como en los CSV.
  */
 export function parseDayLoose(v: unknown): string | null | undefined {
   if (v === null) return null;
@@ -284,9 +285,11 @@ export function parseDayLoose(v: unknown): string | null | undefined {
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/.exec(s);
   let y: string, mo: string, d: string;
   if (m) [, y, mo, d] = m as unknown as [string, string, string, string];
-  else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(s))) {
+  else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
     [, d, mo, y] = m as unknown as [string, string, string, string];
     if (+mo > 12 && +d <= 12) [d, mo] = [mo, d];
+    // Año con dos cifras («21/12/26»): 2026, como en los CSV (parseDay).
+    if (y.length === 2) y = `20${y}`;
   } else return undefined;
   const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
   const date = new Date(`${iso}T00:00:00Z`);
