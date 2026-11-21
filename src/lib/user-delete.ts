@@ -10,7 +10,9 @@ import { purgeProject } from "./project-delete";
 import { revokeProject, revokeUser } from "./revoke";
 import { discardUserTransfers } from "./transfer-jobs";
 import { discardUndo } from "./undo";
-import { DELETION_BLOCK_MESSAGES, deletionBlockFor, type DeletionBlock } from "./user-delete-core";
+import { deletionBlockFor, deletionBlockMessage, type DeletionBlockInfo } from "./user-delete-core";
+import { HAS_ENTERED } from "./user-entered";
+import { getT } from "@/i18n/server";
 
 // Borrado de una cuenta, el mismo para «Administración → Usuarios» y para «Mi perfil → Borrar mi cuenta».
 //
@@ -54,14 +56,29 @@ export async function soloPrivateProjectIdsByUser(): Promise<Map<string, string[
   return sole;
 }
 
-/** ¿Se puede borrar esta cuenta? null si sí. */
-export async function deletionBlock(userId: string, client: Prisma.TransactionClient | typeof db = db): Promise<DeletionBlock | null> {
+/**
+ * ¿Se puede borrar esta cuenta? null si sí. Como administrador activo solo cuenta quien ya ha entrado alguna vez
+ * (HAS_ENTERED, el criterio de «Invitación pendiente»): si los demás aún no han entrado, nadie podría administrar.
+ */
+export async function deletionBlock(userId: string, client: Prisma.TransactionClient | typeof db = db): Promise<DeletionBlockInfo | null> {
   const user = await client.user.findUnique({ where: { id: userId }, select: { role: true, active: true } });
   if (!user) throw notFound();
   // En fila: dentro de una transacción interactiva no se lanzan consultas a la vez (ver HANDOFF, aviso de pg).
   const users = await client.user.count({ where: { id: { not: userId } } });
-  const activeAdmins = await client.user.count({ where: { id: { not: userId }, role: "ADMIN", active: true } });
-  return deletionBlockFor(user, { users, activeAdmins });
+  const others = { id: { not: userId }, role: "ADMIN" as const, active: true };
+  const activeAdmins = await client.user.count({ where: { ...others, ...HAS_ENTERED } });
+  // Sin ninguno que haya entrado, los que quedan (si quedan) tienen la invitación pendiente: con uno se le nombra.
+  const pendingAdmins = user.role === "ADMIN" && user.active && activeAdmins === 0
+    ? (await client.user.findMany({ where: others, orderBy: [{ name: "asc" }, { id: "asc" }], take: 2, select: { name: true } })).map((u) => u.name)
+    : [];
+  return deletionBlockFor(user, { users, activeAdmins, pendingAdmins });
+}
+
+/** El motivo, ya traducido, para un error. */
+export async function deletionBlockError(block: DeletionBlockInfo): Promise<AppError> {
+  const t = await getT();
+  const { text, vars } = deletionBlockMessage(block);
+  return new AppError(t(text, vars));
 }
 
 interface EraseResult {
@@ -92,7 +109,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
   const { solo, userName, reportsOff } = await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ADMINS_LOCK_NAME}))::text`;
     const block = await deletionBlock(userId, tx);
-    if (block) throw new AppError(opts.self ? DELETION_BLOCK_MESSAGES[block] : "Debe quedar al menos un administrador activo.");
+    if (block) throw opts.self ? await deletionBlockError(block) : new AppError("Debe quedar al menos un administrador activo.");
     // Ya es seguro que se borra (nadie más puede borrar o degradar administradores mientras dure el candado): ahora
     // sí, sus entradas de deshacer y sus exportaciones, que caerían en cascada sin liberar sus ficheros.
     await discardUndo({ userId });

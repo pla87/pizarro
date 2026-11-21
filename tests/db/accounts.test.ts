@@ -1,7 +1,7 @@
 // Miembros de proyectos privados, contraseñas y cambio forzado, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout, waitForLockWaiter } from "./helpers";
 import { addProjectMember, deleteProject, removeProjectMember, updateProject } from "../../src/actions/projects";
 import { getTaskDetail, updateTask } from "../../src/actions/tasks";
 import { login, resetPassword, setNewPassword } from "../../src/actions/auth";
@@ -124,7 +124,7 @@ describe("contraseñas y cambio forzado", () => {
     await db.user.update({ where: { id: target.id }, data: { passwordHash: hash } });
     await loginAs(admin);
     // Un campo de contraseña colado en updateUser se descarta (esquema estricto de campos conocidos).
-    expectOk(await updateUser(target.id, { name: "Otro nombre", email: target.email, role: "MEMBER", active: true, password: "hackeada-12345" } as never));
+    expectOk(await updateUser(target.id, { name: "Otro nombre", email: target.email, role: "MEMBER", active: true, expected: { name: target.name, email: target.email, role: "MEMBER", active: true }, password: "hackeada-12345" } as never));
     const row = await db.user.findUniqueOrThrow({ where: { id: target.id } });
     assert.equal(row.passwordHash, hash);
     assert.equal(row.name, "Otro nombre");
@@ -222,7 +222,7 @@ describe("contraseñas y cambio forzado", () => {
     const other = await makeUser();
     await loginAs(member);
     expectFail(await forcePasswordChange(other.id), FORBIDDEN);
-    expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true }), FORBIDDEN);
+    expectFail(await updateUser(other.id, { name: "x", email: other.email, role: "ADMIN", active: true, expected: { name: other.name, email: other.email, role: "MEMBER", active: true } }), FORBIDDEN);
     assert.equal((await db.user.findUniqueOrThrow({ where: { id: other.id } })).role, "MEMBER");
   });
 });
@@ -254,7 +254,7 @@ describe("enlaces pendientes al cambiar la contraseña", () => {
     const u = await makeUser();
     await issueAuthToken(u.id, "EMAIL_CHANGE", { email: "otra@example.com" });
     await loginAs(admin);
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: false, expected: { name: u.name, email: u.email, role: "MEMBER", active: true } }));
     assert.equal(await db.authToken.count({ where: { userId: u.id } }), 0);
   });
 });
@@ -426,7 +426,7 @@ describe("accesos a medio completar (segundo paso pendiente) al cambiar la contr
     const b = await makeUser();
     const cb = await twoPending(b.id);
     await loginAs(admin);
-    expectOk(await updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: false }));
+    expectOk(await updateUser(b.id, { name: b.name, email: b.email, role: "MEMBER", active: false, expected: { name: b.name, email: b.email, role: "MEMBER", active: true } }));
     await cannotFinish(b.id, cb);
 
     const g = await makeUser();
@@ -575,5 +575,84 @@ describe("límite de intentos de acceso por cuenta y dispositivos conocidos", ()
     restoreSession(browser);
     for (let i = LOGIN_ACCOUNT_LIMIT; i < LOGIN_ACCOUNT_LIMIT_TRUSTED; i++) assert.equal((await attempt(user.email, `otra-clave-${i}-9999`)).error, WRONG, `intento ${i + 1}`);
     assert.equal((await attempt(user.email, PASSWORD)).error, TOO_MANY);
+  });
+});
+
+describe("editar un usuario: dos administradores a la vez (Administración → Usuarios)", () => {
+  const STALE = /Los datos han cambiado mientras tanto: recarga la página/;
+  const seen = (u: { name: string; email: string; role: "ADMIN" | "MEMBER"; active: boolean }) => ({ name: u.name, email: u.email, role: u.role, active: u.active });
+  const row = (id: string) => db.user.findUniqueOrThrow({ where: { id }, select: { name: true, email: true, role: true, active: true } });
+
+  test("con la lista desfasada solo se aplica lo que se ha cambiado: corregir el nombre no reactiva a quien otro ha desactivado", async () => {
+    const [a, b, x] = [await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x); // A tiene la pantalla abierta
+    await loginAs(b);
+    expectOk(await updateUser(x.id, { ...seen(x), active: false, expected: seen(x) }));
+    await loginAs(a);
+    expectOk(await updateUser(x.id, { ...openedByA, name: "Nombre corregido", expected: openedByA }));
+    assert.deepEqual(await row(x.id), { ...openedByA, name: "Nombre corregido", active: false });
+  });
+
+  test("si otro ha cambiado el mismo campo, se rechaza sin pisarlo; sin los valores vistos, también", async () => {
+    const [a, b, x] = [await makeUser({ role: "ADMIN" }), await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x);
+    await loginAs(b);
+    expectOk(await updateUser(x.id, { ...seen(x), name: "Nombre de B", email: `b-${x.id}@example.com`, expected: seen(x) }));
+    const afterB = await row(x.id);
+    await loginAs(a);
+    expectFail(await updateUser(x.id, { ...openedByA, name: "Nombre de A", expected: openedByA }), STALE);
+    expectFail(await updateUser(x.id, { ...openedByA, email: `a-${x.id}@example.com`, expected: openedByA }), STALE);
+    assert.deepEqual(await row(x.id), afterB);
+    // Al mismo valor que ya dejó B no es un conflicto.
+    expectOk(await updateUser(x.id, { ...openedByA, name: "Nombre de B", expected: openedByA }));
+    // Una llamada sin los valores vistos (un navegador con la versión anterior) no se aplica.
+    expectFail(await updateUser(x.id, { ...seen(afterB), name: "Sin valores vistos" }), STALE);
+    assert.deepEqual(await row(x.id), afterB);
+  });
+
+  test("a la vez de verdad: el cambio de A espera al de B y compara con lo que B ha dejado", async () => {
+    const [a, x] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const openedByA = seen(x);
+    await loginAs(a);
+    let rename: ReturnType<typeof updateUser> | null = null;
+    let reEmail: ReturnType<typeof updateUser> | null = null;
+    // «B» (la prueba) desactiva a X y le cambia el email con la fila bloqueada; A corrige el nombre y, por separado,
+    // intenta cambiar el email. Las dos acciones esperan a la fila y, al seguir, leen lo que dejó B.
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      await tx.user.update({ where: { id: x.id }, data: { active: false, email: `b-${x.id}@example.com` } });
+      rename = updateUser(x.id, { ...openedByA, name: "Corregido a la vez", expected: openedByA });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectOk(await rename!);
+    assert.deepEqual(await row(x.id), { ...openedByA, name: "Corregido a la vez", email: `b-${x.id}@example.com`, active: false });
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      await tx.user.update({ where: { id: x.id }, data: { email: `b2-${x.id}@example.com` } });
+      // A había abierto la pantalla tras el primer cambio de B (con el email `b-…`).
+      const seenByA = { ...openedByA, name: "Corregido a la vez", email: `b-${x.id}@example.com`, active: false };
+      reEmail = updateUser(x.id, { ...seenByA, email: `a-${x.id}@example.com`, expected: seenByA });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await reEmail!, STALE);
+    assert.equal((await row(x.id)).email, `b2-${x.id}@example.com`);
+  });
+
+  test("las asignaciones del cambio de rol se leen dentro de la transacción: cuenta el proyecto añadido mientras tanto", async () => {
+    const [a, x] = [await makeUser({ role: "ADMIN" }), await makeUser()];
+    const before = await makeProject({ members: [x] });
+    const meanwhile = await makeProject({ members: [] });
+    await loginAs(a);
+    let promote: ReturnType<typeof updateUser> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${x.id} FOR UPDATE`;
+      promote = updateUser(x.id, { ...seen(x), role: "ADMIN", expected: seen(x) });
+      await waitForLockWaiter();
+      // Otro administrador la añade a un proyecto de equipo mientras la acción espera.
+      await tx.projectMember.create({ data: { projectId: meanwhile.project.id, userId: x.id } });
+    }, { timeout: 10_000 });
+    expectOk(await promote!);
+    const picks = await db.adminProjectPick.findMany({ where: { userId: x.id }, select: { projectId: true } });
+    assert.deepEqual(picks.map((p) => p.projectId).sort(), [before.project.id, meanwhile.project.id].sort(), "los dos quedan elegidos");
   });
 });

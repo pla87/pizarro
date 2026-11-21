@@ -328,4 +328,6 @@ export const cuentas: Record<string, string> = {
   "Abrir el tablero": "Open the board",
   "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notices you get by email in “My profile → Notifications”.",
   "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
+  // Editar un usuario: otro administrador lo ha cambiado mientras tanto
+  "Los datos han cambiado mientras tanto: recarga la página.": "The data has changed in the meantime: reload the page.",
 };

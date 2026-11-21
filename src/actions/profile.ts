@@ -20,8 +20,8 @@ import * as v from "@/lib/validation";
 import { revokeSession as cutSessionStreams } from "@/lib/revoke";
 import { describeAction } from "@/lib/action-context";
 import { accountDeleteChallenge, accountDeleteGoogleConfirmed, checkCode, sendEmailCode } from "@/lib/two-factor";
-import { deletionBlock, eraseUser } from "@/lib/user-delete";
-import { deleteAlternatives, DELETION_BLOCK_MESSAGES } from "@/lib/user-delete-core";
+import { deletionBlock, deletionBlockError, eraseUser } from "@/lib/user-delete";
+import { deleteAlternatives } from "@/lib/user-delete-core";
 import { passwordLoginAllowed } from "@/lib/auth-policy";
 import { googlePolicyEnv } from "@/lib/google-config";
 
@@ -311,7 +311,7 @@ export async function deleteMyAccount(input: z.input<typeof deleteAccountSchema>
     const user = await requireUser();
     const data = deleteAccountSchema.parse(input);
     const block = await deletionBlock(user.id);
-    if (block) throw new AppError(DELETION_BLOCK_MESSAGES[block]);
+    if (block) throw await deletionBlockError(block);
     const { me, passwordLogin, alternatives } = await deleteFactors(user.id);
     const code = (data.code ?? "").trim();
     if (data.method === "password") {

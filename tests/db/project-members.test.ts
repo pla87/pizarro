@@ -110,11 +110,11 @@ describe("administradores asignados a un proyecto de equipo", () => {
     const u = await makeUser();
     const f = await makeProject({ members: [u] });
     await loginAs(boss);
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "ADMIN", active: true }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "ADMIN", active: true, expected: { name: u.name, email: u.email, role: "MEMBER", active: true } }));
     assert.ok(await isMember(f.project.id, u.id));
     assert.ok(await isPicked(f.project.id, u.id));
     // Y al volver a miembro, sigue asignado (no pierde el acceso).
-    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: true }));
+    expectOk(await updateUser(u.id, { name: u.name, email: u.email, role: "MEMBER", active: true, expected: { name: u.name, email: u.email, role: "ADMIN", active: true } }));
     assert.ok(await isMember(f.project.id, u.id));
     assert.equal(await isPicked(f.project.id, u.id), false);
   });
