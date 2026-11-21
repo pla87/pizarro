@@ -12,7 +12,7 @@ export interface Label {
  * Variable de una plantilla: texto o número tal cual (contenido del usuario, nunca se traduce),
  * una plantilla anidada (se traduce) o una lista de plantillas (traducidas y unidas con «, »).
  */
-export type Param = string | number | Label | Label[];
+type Param = string | number | Label | Label[];
 export type Params = Record<string, Param>;
 
 export const LABEL_MAX = 300;

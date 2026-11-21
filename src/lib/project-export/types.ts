@@ -21,7 +21,7 @@ export const EXPORT_FORMAT_VERSION = 1;
 export const EXPORT_EXTENSION = ".pizarro.zip";
 
 export const EXPORT_SCOPES = ["board", "all"] as const;
-export type ExportScope = (typeof EXPORT_SCOPES)[number];
+type ExportScope = (typeof EXPORT_SCOPES)[number];
 
 export interface ExportOptions {
   attachments: boolean;
@@ -267,7 +267,7 @@ export const projectDataSchema = z.object({
 
 export type ProjectExportData = z.infer<typeof projectDataSchema>;
 
-export const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "trashedDocuments", "events", "files"] as const;
+const COUNT_KEYS = ["columns", "kinds", "labels", "deliverables", "tasks", "archivedTasks", "subtasks", "comments", "taskAttachments", "releases", "releaseAttachments", "documents", "trashedDocuments", "events", "files"] as const;
 export type ExportCounts = Record<(typeof COUNT_KEYS)[number], number>;
 
 export const manifestSchema = z.object({

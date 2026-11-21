@@ -123,7 +123,7 @@ export function closeMailTransport(): void {
 
 onShutdown("mail", closeMailTransport);
 
-export interface MailAttachment {
+interface MailAttachment {
   filename: string;
   content: Buffer;
   contentType?: string;

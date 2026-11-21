@@ -103,7 +103,7 @@ export interface ReportFieldRow {
   actualHours: string | null;
 }
 
-export interface ReportFields {
+interface ReportFields {
   enabled: TaskFieldKey[];
   rows: ReportFieldRow[];
   /** Coste de las tareas: pagado, pendiente y total (decimales «12.50»); horas sumadas. */

@@ -71,7 +71,7 @@ export function parseBackupKey(raw: string | undefined | null): Buffer | null {
 }
 
 /** Qué se ha detectado en una BACKUP_KEY no válida (nunca incluye el valor). */
-export type BackupKeyProblem =
+type BackupKeyProblem =
   | { kind: "empty" }
   | { kind: "hex"; chars: number }
   | { kind: "base64"; chars: number; bytes: number }

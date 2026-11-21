@@ -79,7 +79,7 @@ export interface ExternalRun {
   warning?: string;
 }
 
-export interface ExternalState {
+interface ExternalState {
   last?: ExternalRun;
   lastOkAt?: string;
   lastOkFile?: string;

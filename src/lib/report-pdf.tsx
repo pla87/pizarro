@@ -522,7 +522,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   return { title: `${t("Informe")} · ${r.project.name}`, build, footer: <Footer left={<>{r.project.name} · {t("Informe del {date}", { date: generated })}</>} /> };
 }
 
-export interface WeekPlanPdfInput {
+interface WeekPlanPdfInput {
   project: string;
   column: string;
   today: string;
@@ -571,7 +571,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
   return { title: `${t("Planificación semanal")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
-export interface ChecklistPdfInput {
+interface ChecklistPdfInput {
   project: string;
   column: string;
   today: string;
@@ -634,7 +634,7 @@ interface DeliveryTask {
   doneSubtasks: string[];
 }
 
-export interface DeliveryPdfInput {
+interface DeliveryPdfInput {
   project: string;
   column: string;
   today: string;
