@@ -32,4 +32,6 @@ export const releases: Record<string, string> = {
   "Pide primero el plan de descarga (?plan=1); si la página es de antes de actualizar Pizarro, recárgala.": "Request the download plan first (?plan=1); if the page was opened before Pizarro was updated, reload it.",
   // Histórico de releases: como mucho LIST_MAX en la página; las más antiguas, buscando
   "Hay releases más antiguas: búscalas por su título o su contenido.": "There are older releases: search for them by title or content.",
+  // Búsqueda con más coincidencias de las que caben en la página
+  "se muestran las más recientes; afina la búsqueda para ver otras.": "showing the most recent; refine the search to see others.",
 };

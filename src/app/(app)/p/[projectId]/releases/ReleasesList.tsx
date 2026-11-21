@@ -16,6 +16,7 @@ export function ReleasesList({
   resultCount,
   moreHref,
   olderHidden = false,
+  searchTruncated = false,
 }: {
   releases: Release[];
   query: string;
@@ -23,6 +24,8 @@ export function ReleasesList({
   moreHref: string | null;
   /** Ya se muestran todas las que caben (LIST_MAX) y hay más antiguas: se encuentran buscando. */
   olderHidden?: boolean;
+  /** La búsqueda tiene más coincidencias de las que se muestran (LIST_MAX). */
+  searchTruncated?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -56,7 +59,7 @@ export function ReleasesList({
             aria-label={t("Buscar releases")}
           />
         </div>
-        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{resultCount === 1 ? t("1 resultado") : t("{n} resultados", { n: resultCount })}</p>}
+        {resultCount !== null && <p className="mt-1 text-xs text-slate-500" aria-live="polite">{resultCount === 1 ? t("1 resultado") : t("{n} resultados", { n: resultCount })}{searchTruncated && ` · ${t("se muestran las más recientes; afina la búsqueda para ver otras.")}`}</p>}
       </div>
       {releases.length === 0 ? (
         <p className="card p-6 text-center text-sm text-slate-500">{t("Ninguna release coincide con «{query}».", { query })}</p>

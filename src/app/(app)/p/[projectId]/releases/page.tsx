@@ -45,13 +45,16 @@ export default async function ReleasesPage({
   // Con búsqueda se recorre todo el histórico del proyecto (hasta LIST_MAX coincidencias, las más recientes); sin ella, las últimas `limit`.
   // Sin distinguir mayúsculas ni tildes: se comparan ambos lados en minúsculas y sin acentos.
   let where: { id?: { in: string[] } } = {};
+  // Más coincidencias que LIST_MAX: se avisa (se pide una de más para saberlo).
+  let searchTruncated = false;
   if (q) {
     const needle = `%${unaccent(q.toLowerCase()).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const rows = await db.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Release" WHERE "projectId" = ${projectId}
         AND (translate(lower("title"), ${ACCENTS}, ${PLAIN}) LIKE ${needle} OR translate(lower("content"), ${ACCENTS}, ${PLAIN}) LIKE ${needle})
-      ORDER BY "deployedAt" DESC LIMIT ${LIST_MAX}`;
-    where = { id: { in: rows.map((r) => r.id) } };
+      ORDER BY "deployedAt" DESC LIMIT ${LIST_MAX + 1}`;
+    searchTruncated = rows.length > LIST_MAX;
+    where = { id: { in: rows.slice(0, LIST_MAX).map((r) => r.id) } };
   }
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
@@ -103,6 +106,7 @@ export default async function ReleasesPage({
           resultCount={q ? releases.length : null}
           moreHref={hasMore && limit < LIST_MAX ? `?limit=${Math.min(limit + PAGE_STEP, LIST_MAX)}` : null}
           olderHidden={hasMore && limit >= LIST_MAX}
+          searchTruncated={searchTruncated}
           releases={releases.map((r) => ({
             id: r.id,
             number: r.number,
