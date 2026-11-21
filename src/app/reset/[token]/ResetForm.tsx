@@ -7,8 +7,11 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
 
-/** `invite`: el enlace es una invitación (cuenta nueva, sin sesiones que cerrar), no un «olvidé mi contraseña». */
-export function ResetForm({ token, email, invite = false }: { token: string; email: string; invite?: boolean }) {
+/**
+ * `invite`: el enlace es una invitación (cuenta nueva, sin sesiones que cerrar), no un «olvidé mi contraseña».
+ * `next`: adónde lleva el acceso al terminar (el tablero del proyecto de una invitación).
+ */
+export function ResetForm({ token, email, invite = false, next }: { token: string; email: string; invite?: boolean; next?: string }) {
   const t = useT();
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -22,7 +25,7 @@ export function ResetForm({ token, email, invite = false }: { token: string; ema
         <p>{invite ? t("Contraseña guardada. Ya puedes iniciar sesión con tu email y la contraseña que acabas de elegir.") : t("Contraseña guardada. Por seguridad se han cerrado todas las sesiones: inicia sesión con la nueva.")}</p>
         {/* Recarga completa (no Link): el layout raíz conserva el idioma de esta página (el del enlace) en la navegación de
             cliente, y el acceso sale en el de la instalación: con Link la pantalla quedaba en dos idiomas. */}
-        <a href="/login" className="btn-primary w-full">{t("Iniciar sesión")}</a>
+        <a href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="btn-primary w-full">{t("Iniciar sesión")}</a>
       </div>
     );
   }

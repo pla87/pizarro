@@ -10,7 +10,9 @@ import { tasksN } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { MAX_USERS } from "@/lib/limits";
 import { randomBytes } from "node:crypto";
-import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { sendEmailChangedMail, sendGoogleUnlinkedMail, sendInviteMail, sendPasswordResetMail, sendProjectInviteMail, sendTwoFactorChangedMail } from "@/lib/auth-mail";
+import { findManageableProject } from "@/lib/access";
+import { inviteProjectId, nameFromEmail } from "@/lib/project-invite";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
@@ -59,21 +61,9 @@ export async function createUser(input: z.input<typeof createSchema>) {
   return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role, locale: input.locale }] }, async () => {
     const admin = await requireAdmin();
     const data = createSchema.parse(input);
-    const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
     const invite = emailEnabled();
     const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
-    await assertUserSlot(db);
-    if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
-    // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
-    const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
-    // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
-    const created = await db.$transaction(async (tx) => {
-      await assertUserSlot(tx);
-      return tx.user.create({
-        data: { name: data.name, email: data.email, role: data.role, locale, mustChangePassword: true, passwordHash },
-        select: { id: true, name: true, email: true, locale: true },
-      });
-    });
+    const created = await insertUser(data, initial);
     revalidatePath("/admin/users");
     if (!invite) return { invited: false };
     try {
@@ -84,6 +74,62 @@ export async function createUser(input: z.input<typeof createSchema>) {
       throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.");
     }
     return { invited: true };
+  });
+}
+
+/**
+ * Alta común de «Nuevo usuario» y de «Invitar por email» (un proyecto): tope de usuarios activos, email libre y
+ * contraseña inicial (sin ella, una aleatoria que nadie conoce). Con `projectId`, la cuenta entra ya en ese proyecto.
+ */
+async function insertUser(data: { name: string; email: string; role: "ADMIN" | "MEMBER"; locale?: "ES" | "EN" }, initial: string | null, projectId?: string) {
+  const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
+  await assertUserSlot(db);
+  if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
+  // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
+  const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
+  // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
+  return db.$transaction(async (tx) => {
+    await assertUserSlot(tx);
+    const user = await tx.user.create({
+      data: { name: data.name, email: data.email, role: data.role, locale, mustChangePassword: true, passwordHash },
+      select: { id: true, name: true, email: true, locale: true },
+    });
+    if (projectId) await tx.projectMember.create({ data: { projectId, userId: user.id } });
+    return user;
+  });
+}
+
+/**
+ * «Invitar por email» en los miembros de un proyecto (solo administradores, que son quienes crean cuentas): da de alta a
+ * una persona sin cuenta como invitación (enlace de un solo uso, 72 h, para elegir su contraseña), la añade al proyecto y,
+ * al elegir la contraseña, la lleva a su tablero (el enlace guarda el proyecto). Con email configurado se le envía; con o
+ * sin email, se devuelve el enlace para «Copiar enlace». El nombre sale del email; la persona lo cambia en su perfil.
+ */
+export async function inviteToProject(projectId: string, email: string) {
+  return runAction({ name: "users.inviteToProject", args: [projectId] }, async () => {
+    const admin = await requireAdmin();
+    const project = await findManageableProject(admin, projectId);
+    if (!rateLimit(`project-invite:${admin.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const address = v.email.parse(email);
+    if (await db.user.count({ where: { email: address } })) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
+    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER" }, null, project.id);
+    const token = await issueAuthToken(created.id, "INVITE", { projectId: project.id });
+    const link = `${appUrl()}/reset/${token}`;
+    let emailed = false;
+    let mailFailed = false;
+    if (emailEnabled()) {
+      try {
+        await sendProjectInviteMail(created, link, admin.name, project.name);
+        emailed = true;
+      } catch (err) {
+        logMailError("[users] invitación a un proyecto", err);
+        mailFailed = true;
+      }
+    }
+    // El enlace no se registra: solo quién, a qué proyecto y por dónde.
+    describeAction(`Invitó a «${created.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (por email)" : mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
+    revalidatePath("/", "layout");
+    return { name: created.name, link, emailed, mailFailed };
   });
 }
 
@@ -109,9 +155,13 @@ export async function resendInvite(userId: string) {
     if (!user) throw notFound();
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
+    // Una invitación a un proyecto sigue llevando a su tablero (si la persona aún está en él).
+    const pending = await db.authToken.findFirst({ where: { userId: user.id, purpose: "INVITE" }, orderBy: { createdAt: "desc" }, select: { data: true } });
+    const projectId = inviteProjectId(pending?.data);
+    const keep = projectId && (await db.projectMember.count({ where: { projectId, userId: user.id } })) ? { projectId } : undefined;
     try {
       // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
-      const token = await issueAuthToken(user.id, "INVITE");
+      const token = await issueAuthToken(user.id, "INVITE", keep);
       await sendInviteMail(user, `${appUrl()}/reset/${token}`, admin.name);
     } catch (err) {
       logMailError("[users] reenviar invitación", err);
@@ -142,17 +192,16 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     if (await db.user.count({ where: { email: data.email, id: { not: user.id } } })) {
       throw new AppError("Ya existe un usuario con ese email.");
     }
-    // Al cambiar de rol, la asignación a proyectos de equipo se traduce: un admin la lleva en AdminProjectPick
-    // y el resto en ProjectMember, así no se pierde ni se gana acceso por el cambio.
+    // Al cambiar de rol, la asignación a proyectos de equipo se traduce, así no se pierde ni se gana acceso por el cambio:
+    // un admin nuevo sigue asignado (ProjectMember) y además los tiene elegidos (AdminProjectPick); quien deja de serlo
+    // pasa a estar asignado a los que tenía elegidos.
     const roleSwitch: ((tx: Prisma.TransactionClient) => Promise<unknown>)[] = [];
     const unassigned = { count: 0, projectIds: [] as string[] };
     if (data.role !== user.role) {
-      const teamOnly = { project: { isPrivate: false } };
       if (data.role === "ADMIN") {
-        const rows = await db.projectMember.findMany({ where: { userId: user.id, ...teamOnly }, select: { projectId: true } });
+        const rows = await db.projectMember.findMany({ where: { userId: user.id, project: { isPrivate: false } }, select: { projectId: true } });
         roleSwitch.push(
           (tx) => tx.adminProjectPick.createMany({ data: rows.map((r) => ({ projectId: r.projectId, userId: user.id })), skipDuplicates: true }),
-          (tx) => tx.projectMember.deleteMany({ where: { userId: user.id, ...teamOnly } }),
         );
       } else {
         const rows = await db.adminProjectPick.findMany({ where: { userId: user.id }, select: { projectId: true } });

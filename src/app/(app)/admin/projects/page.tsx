@@ -18,7 +18,7 @@ export default async function ProjectsAdminPage() {
       select: {
         id: true,
         name: true,
-        members: { where: { user: { role: { not: "ADMIN" } } }, select: { userId: true } },
+        members: { select: { userId: true } },
         adminPicks: { select: { userId: true } },
       },
     }),

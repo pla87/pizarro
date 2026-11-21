@@ -1,5 +1,7 @@
 import { AuthCard } from "@/components/auth/AuthCard";
 import { findUsableToken } from "@/lib/auth-token";
+import { db } from "@/lib/db";
+import { inviteProjectId } from "@/lib/project-invite";
 import { emailEnabled } from "@/lib/mail";
 import { getT } from "@/i18n/server";
 import { ResetForm } from "./ResetForm";
@@ -27,9 +29,12 @@ export default async function ResetPage({ params }: { params: Promise<{ token: s
       </AuthCard>
     );
   }
+  // Invitación a un proyecto (Ajustes del proyecto → Invitar por email): al terminar, el acceso lleva a su tablero, si sigue en él.
+  const projectId = row.purpose === "INVITE" ? inviteProjectId(row.data) : null;
+  const next = projectId && (await db.projectMember.count({ where: { projectId, userId: row.userId } })) ? `/p/${projectId}` : undefined;
   return (
     <AuthCard title={row.purpose === "INVITE" ? t("Elige tu contraseña") : t("Elige una contraseña nueva")}>
-      <ResetForm token={token} email={row.user.email} invite={row.purpose === "INVITE"} />
+      <ResetForm token={token} email={row.user.email} invite={row.purpose === "INVITE"} next={next} />
     </AuthCard>
   );
 }

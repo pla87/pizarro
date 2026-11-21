@@ -319,4 +319,13 @@ export const cuentas: Record<string, string> = {
   "¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único, sigue la guía":
     "Can't get your codes? Ask an administrator to reset your two-step verification; if you are the only one, follow the guide",
   "«Nadie puede entrar como administrador»": "“No administrator can sign in”",
+  // Miembros de un proyecto: aviso al añadir a alguien e invitación a un proyecto (emails y errores)
+  "{admin} te ha invitado al proyecto «{project}» en Pizarro": "{admin} has invited you to the “{project}” project in Pizarro",
+  "{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.":
+    "{admin} has created a Pizarro account for you and added you to the “{project}” project. Use this link to choose your password; then you'll go straight to its board. It expires in {n} hours and can only be used once.",
+  "{name} te ha añadido al proyecto «{project}»": "{name} has added you to the “{project}” project",
+  "{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.": "{name} has added you to the “{project}” project in Pizarro. You can now see its board.",
+  "Abrir el tablero": "Open the board",
+  "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notices you get by email in “My profile → Notifications”.",
+  "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
 };

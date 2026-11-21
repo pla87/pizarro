@@ -74,6 +74,31 @@ export function sendInviteMail(user: Recipient, url: string, invitedBy: string):
   }));
 }
 
+/** Invitación desde los ajustes de un proyecto: la cuenta nueva ya está en el proyecto y, tras elegir la contraseña, entra en su tablero. */
+export function sendProjectInviteMail(user: Recipient, url: string, invitedBy: string, projectName: string): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("{admin} te ha invitado al proyecto «{project}» en Pizarro", { admin: invitedBy, project: projectName }),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("{admin} te ha dado de alta en Pizarro y te ha añadido al proyecto «{project}». Usa este enlace para elegir tu contraseña; después entrarás en su tablero. Caduca en {n} horas y solo sirve una vez.", { admin: invitedBy, project: projectName, n: hours(TOKEN_TTL_MS.INVITE) }),
+    ],
+    button: { label: t("Elegir mi contraseña"), url },
+  }));
+}
+
+/** Aviso a quien ya tiene cuenta: otra persona le ha añadido a un proyecto. El enlace lleva a su tablero. */
+export function sendProjectAddedMail(user: Recipient, addedBy: string, projectName: string, url: string): Promise<void> {
+  return send(user, user.locale, (t) => ({
+    subject: t("{name} te ha añadido al proyecto «{project}»", { name: addedBy, project: projectName }),
+    paragraphs: [
+      t("Hola, {name}:", { name: user.name }),
+      t("{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.", { name: addedBy, project: projectName }),
+    ],
+    button: { label: t("Abrir el tablero"), url },
+    note: t("Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos»."),
+  }));
+}
+
 export function sendPasswordChangeMail(user: Recipient, url: string): Promise<void> {
   return send(user, user.locale, (t) => ({
     subject: t("Confirma el cambio de contraseña"),
