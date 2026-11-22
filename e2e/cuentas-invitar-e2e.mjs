@@ -124,9 +124,13 @@ if (only.includes("invite")) {
   L.eq("INVITE: sin email no hay «Reenviar invitación»", await invitedRow.getByRole("button", { name: /^Reenviar invitación/ }).count(), 0);
   await note.getByRole("button", { name: "Copiar enlace" }).click();
   await L.checkEventually("INVITE: «Copiar enlace» copia el de la invitación", async () => (await page.evaluate(() => navigator.clipboard.readText())) === link);
-  // «Copiar enlace de invitación» (sin email): un enlace nuevo, que no se envía; el anterior deja de valer.
-  await invitedRow.getByRole("button", { name: "Copiar enlace de invitación de Inv59 Nueva Persona" }).click();
-  await L.checkEventually("INVITE: «Copiar enlace de invitación» muestra un enlace nuevo", async () => {
+  // «Generar enlace de invitación nuevo» (sin email): un enlace nuevo, que no se envía; el anterior deja de valer, así
+  // que pide confirmación antes.
+  await invitedRow.getByRole("button", { name: "Generar enlace de invitación nuevo para Inv59 Nueva Persona" }).click();
+  const confirmFresh = page.getByRole("dialog").filter({ hasText: "dejará de valer" });
+  await confirmFresh.waitFor({ timeout: 10000 });
+  await confirmFresh.getByRole("button", { name: "Generar enlace nuevo", exact: true }).click();
+  await L.checkEventually("INVITE: «Generar enlace de invitación nuevo» muestra un enlace nuevo", async () => {
     const v = await page.getByTestId("member-link").inputValue().catch(() => "");
     return [v.startsWith(`${L.BASE}/reset/`) && v !== link, v];
   });

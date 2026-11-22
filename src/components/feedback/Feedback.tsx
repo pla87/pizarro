@@ -18,9 +18,11 @@ interface FeedbackContextValue {
   status: FeedbackStatus | null;
   /** Abre el diálogo, o, si hay que actualizar antes, lo explica en un aviso (al administrador, con «Cómo actualizar»). */
   request: () => void;
+  /** Por qué está desactivado si hay una versión más nueva: quien no administra no puede actualizar, se lo pide a quien sí. */
+  outdatedText: string;
 }
 
-const FeedbackContext = createContext<FeedbackContextValue>({ status: null, request: () => {} });
+const FeedbackContext = createContext<FeedbackContextValue>({ status: null, request: () => {}, outdatedText: "" });
 
 export const useFeedback = () => useContext(FeedbackContext);
 
@@ -41,11 +43,14 @@ export function FeedbackProvider({ status, isAdmin, version, email, beforeOpen, 
   const toast = useToast();
   const { locale } = useContext(I18nContext);
   const [open, setOpen] = useState(false);
+  const outdatedText = isAdmin
+    ? t("Actualiza a la última versión para informar de un error o enviar una sugerencia")
+    : t("Esta instalación no tiene la última versión de Pizarro: pide a quien la administra que la actualice para poder informar de un error o enviar una sugerencia.");
   const request = useCallback(() => {
     if (!status) return;
     if (status.outdated) {
       toast(
-        t("Actualiza a la última versión para informar de un error o enviar una sugerencia"),
+        outdatedText,
         "error",
         isAdmin ? { label: t("Cómo actualizar"), onClick: () => window.open(updateDocsUrl(locale), "_blank", "noopener,noreferrer") } : undefined,
       );
@@ -53,29 +58,21 @@ export function FeedbackProvider({ status, isAdmin, version, email, beforeOpen, 
     }
     beforeOpen?.();
     setOpen(true);
-  }, [status, isAdmin, locale, beforeOpen, toast, t]);
-  const value = useMemo(() => ({ status, request }), [status, request]);
+  }, [status, isAdmin, outdatedText, locale, beforeOpen, toast, t]);
+  const value = useMemo(() => ({ status, request, outdatedText }), [status, request, outdatedText]);
   return (
     <FeedbackContext.Provider value={value}>
       {children}
-      {open && status && <FeedbackDialog delivery={status.delivery} version={version} email={email} onClose={() => setOpen(false)} />}
+      {open && status && <FeedbackDialog delivery={status.delivery} githubReason={status.githubReason} version={version} email={email} onClose={() => setOpen(false)} />}
     </FeedbackContext.Provider>
   );
 }
 
-/** Texto del botón y de su aviso cuando está desactivado. */
-function useFeedbackLabels() {
-  const t = useT();
-  return {
-    label: t("Informar de un error o enviar una sugerencia"),
-    outdated: t("Actualiza a la última versión para informar de un error o enviar una sugerencia"),
-  };
-}
-
 /** Botón de icono del pie del menú lateral (también en el móvil), al lado de «Cerrar sesión». */
 export function FeedbackButton() {
-  const { status, request } = useFeedback();
-  const { label, outdated } = useFeedbackLabels();
+  const t = useT();
+  const { status, request, outdatedText: outdated } = useFeedback();
+  const label = t("Informar de un error o enviar una sugerencia");
   const why = useId();
   if (!status) return null;
   // aria-disabled (no disabled): sigue enfocable y al pulsarlo explica por qué no se puede (en el móvil no hay tooltip).
@@ -98,8 +95,7 @@ export function FeedbackButton() {
 
 /** El mismo, con texto (Historial de versiones). */
 export function FeedbackTextButton({ children }: { children: React.ReactNode }) {
-  const { status, request } = useFeedback();
-  const { outdated } = useFeedbackLabels();
+  const { status, request, outdatedText: outdated } = useFeedback();
   const why = useId();
   if (!status) return null;
   // La explicación va fuera del botón: dentro, sin aria-label, formaría parte de su nombre.

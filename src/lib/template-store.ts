@@ -122,6 +122,11 @@ export async function seedBuiltinTemplates(db: PrismaClient): Promise<string[]> 
  * borran; las modificadas por el administrador se quedan como plantillas propias (sin `builtinKey`), para no perder su
  * trabajo. «Sin modificar» = su contenido coincide con lo último que se le aplicó (`appliedHash`) o con su última
  * definición canónica. Los proyectos ya creados no cambian (son copias). Devuelve las claves borradas y las conservadas.
+ *
+ * Sus registros `BuiltinTemplateSeeded` se quedan como lápida: si se vuelve a la versión anterior, donde esas claves aún
+ * son de serie, su siembra las da por sembradas y no las recrea (antes reaparecían las 12, y la modificada salía doble:
+ * la propia y la de serie recién creada). Aquí no estorban: la siembra y «Recuperar» solo miran `BUILTIN_TEMPLATES`.
+ * Con dos arranques a la vez, cada fila la retira solo uno (`deleteMany`/`updateMany` por id y clave, sin P2025).
  */
 export async function retireBuiltinTemplates(db: PrismaClient): Promise<{ removed: string[]; kept: string[] }> {
   const keys = Object.keys(RETIRED_BUILTINS);
@@ -132,15 +137,13 @@ export async function retireBuiltinTemplates(db: PrismaClient): Promise<{ remove
   for (const row of rows) {
     const key = row.builtinKey!;
     const stored = templateFingerprint(parseStoredTemplate(row));
+    const mine = { id: row.id, builtinKey: key };
     if (stored === RETIRED_BUILTINS[key] || stored === seeded.get(key)) {
-      await db.projectTemplate.delete({ where: { id: row.id } });
-      removed.push(key);
-    } else {
-      await db.projectTemplate.update({ where: { id: row.id }, data: { builtinKey: null } });
+      if ((await db.projectTemplate.deleteMany({ where: mine })).count) removed.push(key);
+    } else if ((await db.projectTemplate.updateMany({ where: mine, data: { builtinKey: null } })).count) {
       kept.push(key);
     }
   }
-  if (seeded.size) await db.builtinTemplateSeeded.deleteMany({ where: { key: { in: keys } } });
   return { removed, kept };
 }
 
@@ -176,7 +179,7 @@ export async function upgradeBuiltinTemplates(db: PrismaClient): Promise<string[
 }
 
 /**
- * «Recuperar plantillas por defecto»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
+ * «Recuperar plantillas de serie»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
  * saltaba el tope: con 49 propias se llegaba a 64). Debe ir en la transacción con el candado de las altas
  * (`lockTemplates`). Devuelve cuántas recuperó y cuántas se quedaron fuera por el tope.
  */

@@ -95,14 +95,24 @@ export const ISSUE_TEXT_FIELD = { bug: "actual", idea: "idea" } as const;
 /** Tope de la dirección entera: GitHub (y algunos navegadores y proxies) rechazan las muy largas. */
 export const ISSUE_URL_MAX = 6000;
 
+function issueUrlParts(f: BugReportFields, kind: "bug" | "idea", text: string) {
+  const base: [string, string][] = [["template", kind === "idea" ? SUGGESTION_TEMPLATE : BUG_REPORT_TEMPLATE], ...bugReportFields(f)];
+  const build = (body: string) => `${BUG_REPORT_URL}?${new URLSearchParams(body ? [...base, [ISSUE_TEXT_FIELD[kind], body]] : base).toString()}`;
+  return { build, full: text.replace(/\r\n?/g, "\n").trim() };
+}
+
+/** ¿Llega entero lo escrito al formulario de GitHub? Si no, bugReportUrl lo recorta y el diálogo lo avisa. */
+export function bugReportTextFits(f: BugReportFields, kind: "bug" | "idea", text: string): boolean {
+  const { build, full } = issueUrlParts(f, kind, text);
+  return build(full).length <= ISSUE_URL_MAX;
+}
+
 /**
  * Dirección del formulario de GitHub con los campos técnicos ya rellenos y, si lo hay, lo escrito en el diálogo
  * (recortado, con «…», para que la dirección no pase de ISSUE_URL_MAX).
  */
 export function bugReportUrl(f: BugReportFields, kind: "bug" | "idea" = "bug", text = ""): string {
-  const base: [string, string][] = [["template", kind === "idea" ? SUGGESTION_TEMPLATE : BUG_REPORT_TEMPLATE], ...bugReportFields(f)];
-  const build = (body: string) => `${BUG_REPORT_URL}?${new URLSearchParams(body ? [...base, [ISSUE_TEXT_FIELD[kind], body]] : base).toString()}`;
-  const full = text.replace(/\r\n?/g, "\n").trim();
+  const { build, full } = issueUrlParts(f, kind, text);
   if (build(full).length <= ISSUE_URL_MAX) return build(full);
   // Lo más largo que cabe (búsqueda binaria sobre los caracteres, sin partir un par sustituto).
   const chars = Array.from(full);

@@ -123,4 +123,6 @@ export const colaboracion: Record<string, string> = {
   "{actor} se ha dado de baja del informe semanal de {task}": "{actor} unsubscribed from the weekly report of {task}",
   "El informe ya no se envía. Solo esa persona puede volver a activarlo para sí misma; puedes elegir otro destinatario en Ajustes del proyecto → Informes.": "The report is no longer sent. Only they can turn it back on for themselves; you can choose another recipient in Project settings → Reports.",
   "Abrir los informes del proyecto": "Open the project's reports",
+  // Avisos por email: la baja del informe semanal va con las menciones (dicho a todos, no solo a administradores)
+  "Con las menciones te llegan también los avisos de que alguien se ha dado de baja de un informe semanal que configuraste.": "With mentions you also get notices that someone has unsubscribed from a weekly report you set up.",
 };

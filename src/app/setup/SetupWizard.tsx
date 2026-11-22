@@ -122,7 +122,7 @@ function Wizard({ zones, defaultZone, zoneLocked, smtp, codeSource, lang, setLan
               <p className="text-sm text-slate-500">{codeHint(codeSource, t)}</p>
               <div>
                 <label className="label" htmlFor="setup-code">{t("Código de configuración")}</label>
-                <input id="setup-code" className="input font-mono tracking-widest" autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="XXXX-XXXX" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
+                <input id="setup-code" data-pz-no-capture="" className="input font-mono tracking-widest" autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="XXXX-XXXX" required autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
               </div>
               {errorBox}
               <button type="submit" className="btn-primary w-full" disabled={pending || !code.trim()}>

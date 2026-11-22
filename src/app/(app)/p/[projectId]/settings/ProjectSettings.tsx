@@ -457,7 +457,8 @@ type MemberRow = {
  * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
  * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
  * da de alta a alguien sin cuenta y, a quien aún no ha entrado, «Reenviar invitación» con `canResend` (hay email) o, sin
- * email, «Copiar enlace de invitación» (un enlace nuevo que no se envía). Tras añadir, invitar, reenviar o generar el
+ * email, «Generar enlace de invitación nuevo» (un enlace nuevo que no se envía; el anterior deja de valer, así que pide
+ * confirmación). Tras añadir, invitar, reenviar o generar el
  * enlace queda a la vista para pasárselo («Copiar enlace»).
  */
 function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false, canResend = false }: {
@@ -512,13 +513,20 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       toast(t("Invitación enviada"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
     });
-  const freshLink = (m: MemberRow) =>
+  const freshLink = async (m: MemberRow) => {
+    // El enlace que ya se le pasó deja de valer: no se hace sin confirmarlo (antes, «Copiar…» parecía inofensivo).
+    if (!(await confirm({
+      title: t("Generar enlace de invitación nuevo"),
+      message: t("Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.", { name: m.name }),
+      confirmLabel: t("Generar enlace nuevo"),
+    }))) return;
     start(async () => {
       const res = await copyInviteLink(m.id);
       if (!res.ok) return toast(res.error, "error");
       toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
     });
+  };
   const activeCount = members.filter((m) => m.active).length;
   return (
     <div className="space-y-3">
@@ -555,9 +563,9 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   type="button"
                   className="btn-icon shrink-0"
                   disabled={pending}
-                  aria-label={t("Copiar enlace de invitación de {name}", { name: m.name })}
-                  title={t("Copiar enlace de invitación")}
-                  onClick={() => freshLink(m)}
+                  aria-label={t("Generar enlace de invitación nuevo para {name}", { name: m.name })}
+                  title={t("Genera un enlace de invitación nuevo; el anterior deja de valer")}
+                  onClick={() => void freshLink(m)}
                 >
                   <Link2 size={16} />
                 </button>
@@ -654,7 +662,7 @@ function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () =
         <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
       </div>
       <div className="flex gap-2">
-        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" />
+        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" data-pz-no-capture="" />
         <button type="button" className="btn-secondary shrink-0" onClick={async () => ((await copyText(shared.link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
       </div>
     </div>

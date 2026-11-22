@@ -253,7 +253,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
         </button>
         {missingBuiltins > 0 && (
           <button className="btn-secondary" disabled={pending} onClick={restoreDefaults}>
-            <RotateCcw size={15} /> {t("Recuperar plantillas por defecto")}
+            <RotateCcw size={15} /> {t("Recuperar plantillas de serie")}
           </button>
         )}
       </div>

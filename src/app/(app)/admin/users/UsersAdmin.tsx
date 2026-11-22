@@ -83,9 +83,15 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     }
   };
 
-  // Sin email: «Copiar enlace de invitación» emite uno nuevo (el anterior deja de valer) y lo muestra para pasárselo.
+  // Sin email: «Generar enlace de invitación nuevo» emite uno (el anterior deja de valer, por eso se confirma) y lo
+  // muestra para pasárselo.
   const [inviteLink, setInviteLink] = useState<{ user: UserRow; link: string } | null>(null);
   const freshLink = async (u: UserRow) => {
+    if (!(await confirm({
+      title: t("Generar enlace de invitación nuevo"),
+      message: t("Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.", { name: u.name }),
+      confirmLabel: t("Generar enlace nuevo"),
+    }))) return;
     setResending(u.id);
     try {
       const res = await copyInviteLink(u.id).catch((e) => actionThrowResult(e, t));
@@ -140,7 +146,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
           // iconos y las insignias en la fila, el nombre y el email se quedaban sin sitio).
           const actions: { key: string; icon: typeof Pencil; label: string; title?: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] = [
             ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
-            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Copiar enlace de invitación de {name}", { name: u.name }), title: t("Copiar enlace de invitación"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
+            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Generar enlace de invitación nuevo para {name}", { name: u.name }), title: t("Genera un enlace de invitación nuevo; el anterior deja de valer"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
             { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
             ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
             ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
@@ -320,7 +326,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
       <Modal open onClose={onClose} title={t("Enlace para {name}", { name: user.name })} size="sm">
         <div className="space-y-3 text-sm">
           <p>{t("Con este enlace elegirá una contraseña nueva.")}</p>
-          <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" />
+          <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" data-pz-no-capture="" />
           <p className="text-amber-700 dark:text-amber-300">{t("Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.")}</p>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
@@ -368,7 +374,7 @@ function InviteLinkDialog({ user, link, onClose }: { user: UserRow; link: string
     <Modal open onClose={onClose} title={t("Enlace de invitación de {name}", { name: user.name })} size="sm">
       <div className="space-y-3 text-sm">
         <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name: user.name })}</p>
-        <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" />
+        <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" data-pz-no-capture="" />
         <p className="text-amber-700 dark:text-amber-300">{t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>

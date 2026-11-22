@@ -31,18 +31,23 @@ export const FEEDBACK_LIMITS = { user: 5, install: 20, windowMs: 24 * 3600_000 }
  * - `outdated`: hay una versión publicada más nueva que la que corre (la última conocida por el aviso de versión nueva,
  *   con su caché de 12 h): el botón sale desactivado. Sin saber la última (sin red, UPDATE_CHECK=0) se deja enviar;
  * - `delivery`: «mail» si la instalación envía emails y el producto tiene dirección (FEEDBACK_EMAIL); si no, «github»
- *   (formulario público de GitHub con el texto y los datos técnicos, y la captura para adjuntarla a mano).
+ *   (formulario público de GitHub con el texto y los datos técnicos, y la captura para adjuntarla a mano);
+ * - `githubReason`: por qué va por GitHub, para que el diálogo diga la verdad: «no_address» (el producto aún no tiene
+ *   dirección: le pasa a todas las instalaciones, no es culpa de su correo) o «no_mail» (la instalación no envía emails).
  */
 export interface FeedbackStatus {
   outdated: boolean;
   latest: string | null;
   delivery: "mail" | "github";
+  githubReason: "no_address" | "no_mail" | null;
 }
 
-export function feedbackStatus(o: { official: boolean; current: string; latest: string | null; mail: boolean }): FeedbackStatus | null {
+/** `address`: el producto tiene dirección (FEEDBACK_EMAIL); `mail`: la instalación envía emails. */
+export function feedbackStatus(o: { official: boolean; current: string; latest: string | null; address: boolean; mail: boolean }): FeedbackStatus | null {
   if (!o.official) return null;
   const outdated = !!o.latest && isNewerVersion(o.latest, o.current);
-  return { outdated, latest: outdated ? o.latest : null, delivery: o.mail ? "mail" : "github" };
+  const githubReason = !o.address ? "no_address" : !o.mail ? "no_mail" : null;
+  return { outdated, latest: outdated ? o.latest : null, delivery: githubReason ? "github" : "mail", githubReason };
 }
 
 /** Escala de la captura: la de la pantalla (nítida) sin pasar de SCREENSHOT_MAX_WIDTH píxeles de ancho. */
@@ -69,6 +74,20 @@ export function sniffScreenshot(head: Uint8Array): ScreenshotType | null {
   const ascii = (from: number, to: number) => String.fromCharCode(...head.slice(from, to));
   if (head.length >= 12 && ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
   return null;
+}
+
+/**
+ * Dimensiones máximas de la captura que acepta el servidor (las lee de la cabecera, sin decodificarla): la del diálogo
+ * mide como mucho 1600 px de ancho, pero un JPEG de 1,5 MB puede declarar 30.000 × 30.000 px de un color (una bomba de
+ * descompresión para quien abra el informe).
+ */
+export const SCREENSHOT_MAX_SIDE = 4000;
+export const SCREENSHOT_MAX_PIXELS = 16_000_000;
+
+/** ¿Caben estas dimensiones (las de la cabecera de la imagen)? Sin dimensiones válidas, no. */
+export function screenshotSizeOk(width: number | undefined, height: number | undefined): boolean {
+  if (!width || !height || !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) return false;
+  return width <= SCREENSHOT_MAX_SIDE && height <= SCREENSHOT_MAX_SIDE && width * height <= SCREENSHOT_MAX_PIXELS;
 }
 
 /** ¿Se puede enviar esta captura? Tamaño (sin pasar del tope, y no vacía) y tipo por su contenido. */

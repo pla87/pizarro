@@ -1,12 +1,13 @@
 "use client";
 
-import { Download, ExternalLink, ImageOff, Loader2 } from "lucide-react";
+import { Copy, Download, ExternalLink, ImageOff, Loader2 } from "lucide-react";
 import { useContext, useEffect, useId, useState } from "react";
 import { I18nContext } from "@/i18n/context";
 import { useT } from "@/i18n/client";
-import { bugReportFields, bugReportUrl, describeBrowser, SECURITY_REPORT_URL, type BugReportFields, type InstallKind } from "@/lib/bug-report-core";
+import { bugReportFields, bugReportTextFits, bugReportUrl, describeBrowser, SECURITY_REPORT_URL, type BugReportFields, type InstallKind } from "@/lib/bug-report-core";
 import { FEEDBACK_FIELDS, FEEDBACK_LIMITS, FEEDBACK_TEXT_MAX, screenshotFileName, type FeedbackError, type FeedbackKind, type FeedbackStatus } from "@/lib/feedback-core";
 import { formatSize } from "@/lib/format-size";
+import { copyText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
@@ -22,9 +23,16 @@ type Shot = { blob: Blob; url: string };
 /**
  * Diálogo «Informar de un error o enviar una sugerencia». Con `delivery` «mail» se envía en privado por email (ruta
  * /api/feedback); con «github» (la instalación no envía emails o el producto aún no tiene dirección) abre el formulario
- * público de GitHub con el texto y los datos técnicos, y ofrece descargar la captura para adjuntarla a mano.
+ * público de GitHub con el texto y los datos técnicos, y ofrece descargar la captura para adjuntarla a mano. `githubReason`
+ * dice por qué: sin la dirección del producto no se culpa al correo de la instalación.
  */
-export function FeedbackDialog({ delivery, version, email, onClose }: { delivery: FeedbackStatus["delivery"]; version: string; email: string; onClose: () => void }) {
+export function FeedbackDialog({ delivery, githubReason, version, email, onClose }: {
+  delivery: FeedbackStatus["delivery"];
+  githubReason: FeedbackStatus["githubReason"];
+  version: string;
+  email: string;
+  onClose: () => void;
+}) {
   const t = useT();
   const toast = useToast();
   const { locale } = useContext(I18nContext);
@@ -112,6 +120,9 @@ export function FeedbackDialog({ delivery, version, email, onClose }: { delivery
 
   const textId = `${ids}-text`;
   const githubHref = bugReportUrl(fields, kind, text);
+  // Un texto largo no cabe en la dirección del formulario y GitHub recibe solo el principio: se avisa antes, con un botón
+  // para copiarlo entero, y el diálogo no se cierra al continuar.
+  const truncated = !mail && !!text.trim() && !bugReportTextFits(fields, kind, text);
   const shotName = shot ? screenshotFileName(shot.blob.type) : "";
 
   return (
@@ -129,9 +140,9 @@ export function FeedbackDialog({ delivery, version, email, onClose }: { delivery
             </button>
           ) : (
             <a href={githubHref} target="_blank" rel="noopener noreferrer" className={cn("btn-primary", !text.trim() && "pointer-events-none opacity-50")} aria-disabled={!text.trim() || undefined} onClick={(e) => {
-                // Con captura, el diálogo se queda abierto para poder descargarla después.
+                // Con captura o con el texto recortado, el diálogo se queda abierto para descargarla o copiarlo después.
                 if (!text.trim()) e.preventDefault();
-                else if (!shot) onClose();
+                else if (!shot && !truncated) onClose();
               }}>
               {t("Continuar en GitHub")} <ExternalLink size={14} />
             </a>
@@ -223,9 +234,21 @@ export function FeedbackDialog({ delivery, version, email, onClose }: { delivery
           </p>
         ) : (
           <div className="space-y-2 text-slate-600 dark:text-slate-300">
-            <p>{t("Esta instalación no puede enviarlo por email: se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.")}</p>
+            <p>
+              {githubReason === "no_mail"
+                ? t("Esta instalación no puede enviarlo por email: se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.")
+                : t("Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.")}
+            </p>
             <p>{t("Necesitas una cuenta de GitHub. La incidencia es pública: no incluyas datos personales ni capturas con información privada.")}</p>
             {shot && <p>{t("La captura no se adjunta sola: descárgala y, si no tiene información privada, añádela en GitHub.")}</p>}
+            {truncated && (
+              <div role="status" className="space-y-2 rounded-lg bg-amber-50 p-2 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                <p>{t("El texto es largo: GitHub solo recibirá el principio. Cópialo entero con este botón para pegarlo allí.")}</p>
+                <button type="button" className="btn-secondary py-1 text-xs" onClick={async () => ((await copyText(text.trim())) ? toast(t("Texto copiado")) : toast(t("No se pudo copiar"), "error"))}>
+                  <Copy size={14} /> {t("Copiar el texto")}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

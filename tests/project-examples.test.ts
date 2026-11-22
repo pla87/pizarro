@@ -107,3 +107,26 @@ test("validateExample detecta errores de datos", () => {
   const home = withLabel("casa-familia", "es");
   assert.ok(validateExample({ tasks: [{ title: "x", column: 0, generalKind: "feature" }] }, home).some((e) => /oculta los tipos generales/.test(e)));
 });
+
+test("textos: inglés americano, «Responsable/Assignee» y sin botones que no existen («Seleccionar»)", () => {
+  // «Curso o charla» lo mantiene el propietario: allí solo se comprueban «tick» y el nombre del responsable.
+  const british = /\b(tick(ed|s)?|unticked|tap|check-up|mock exam|house move|transport)\b/i;
+  const always = /\b(tick(ed|s)?|unticked|owner)\b/i;
+  for (const ex of PROJECT_EXAMPLES) {
+    const en = ex.en.tasks.flatMap((t) => [t.title, t.description ?? "", ...(t.subtasks ?? [])]);
+    for (const text of en) {
+      assert.ok(!always.test(text) && (ex.key === "curso-master" || !british.test(text)), `${ex.key}: «${text.slice(0, 60)}»`);
+      assert.ok(!/“Select”/.test(text), `${ex.key}: “Select” is not a button`);
+    }
+    for (const text of ex.es.tasks.map((t) => t.description ?? "")) {
+      assert.ok(!/«Seleccionar»/.test(text), `${ex.key}: «Seleccionar» no es un botón`);
+      assert.ok(!/quien la lleva/.test(text), `${ex.key}: «Responsable»`);
+    }
+  }
+  for (const key of BUILTIN_KEYS) {
+    if (key === "curso-master") continue;
+    const t = canonicalTemplateEn(key)!;
+    const texts = [t.name, t.description ?? "", ...t.kinds.flatMap((k) => [k.name, k.titleTemplate, k.descriptionTemplate, ...k.subtaskTemplate])];
+    for (const text of texts) assert.ok(!british.test(text), `${key}: «${text.slice(0, 60)}»`);
+  }
+});

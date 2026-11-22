@@ -6,7 +6,8 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   CAPTURE_ATTEMPTS, captureScale, FEEDBACK_BODY_MAX_BYTES, FEEDBACK_LIMITS, feedbackMail, feedbackStatus, SCREENSHOT_MAX_BYTES,
-  SCREENSHOT_MAX_WIDTH, SCREENSHOT_QUALITY, screenshotFileName, screenshotProblem, sniffScreenshot,
+  SCREENSHOT_MAX_PIXELS, SCREENSHOT_MAX_SIDE, SCREENSHOT_MAX_WIDTH, SCREENSHOT_QUALITY, screenshotFileName, screenshotProblem,
+  screenshotSizeOk, sniffScreenshot,
 } from "../src/lib/feedback-core";
 import { releaseFeedback, reserveFeedback } from "../src/lib/feedback-rate";
 import { PROXY_BODY_LIMIT_BYTES } from "../src/lib/upload-size";
@@ -18,15 +19,18 @@ const WEBP = new Uint8Array([...Buffer.from("RIFF"), 0x24, 0, 0, 0, ...Buffer.fr
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
 
 test("botón: solo en builds oficiales; desactivado si hay una versión publicada más nueva; sin saberla, se deja enviar", () => {
-  assert.equal(feedbackStatus({ official: false, current: "1.64.0", latest: null, mail: true }), null);
-  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.64.0", mail: true }), { outdated: false, latest: null, delivery: "mail" });
-  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.65.0", mail: true }), { outdated: true, latest: "1.65.0", delivery: "mail" });
+  assert.equal(feedbackStatus({ official: false, current: "1.64.0", latest: null, address: true, mail: true }), null);
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.64.0", address: true, mail: true }), { outdated: false, latest: null, delivery: "mail", githubReason: null });
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.65.0", address: true, mail: true }), { outdated: true, latest: "1.65.0", delivery: "mail", githubReason: null });
   // Recién actualizada (la caché aún dice la anterior), sin red o con UPDATE_CHECK=0: se puede enviar.
-  assert.equal(feedbackStatus({ official: true, current: "1.65.0", latest: "1.64.0", mail: true })!.outdated, false);
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, mail: true })!.outdated, false);
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: "basura", mail: true })!.outdated, false);
-  // Sin envío de emails o sin dirección del producto: el camino de GitHub.
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, mail: false })!.delivery, "github");
+  assert.equal(feedbackStatus({ official: true, current: "1.65.0", latest: "1.64.0", address: true, mail: true })!.outdated, false);
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: true })!.outdated, false);
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: "basura", address: true, mail: true })!.outdated, false);
+  // Sin envío de emails o sin dirección del producto: el camino de GitHub, con su motivo (el diálogo no culpa al correo
+  // de la instalación cuando lo que falta es la dirección del producto, que hoy es lo que pasa en todas).
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: false }), { outdated: false, latest: null, delivery: "github", githubReason: "no_mail" });
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: true }), { outdated: false, latest: null, delivery: "github", githubReason: "no_address" });
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: false })!.githubReason, "no_address");
 });
 
 test("dirección del producto: vacía hasta que el autor la cree (como BUY_URL)", () => {
@@ -70,6 +74,11 @@ test("captura: el tipo se comprueba por el contenido (JPEG o WebP) y el tamaño,
   assert.equal(screenshotProblem(SCREENSHOT_MAX_BYTES + 1, JPEG), "too_big");
   assert.equal(screenshotProblem(100_000, PNG), "bad_image");
   assert.equal(screenshotProblem(0, JPEG), "bad_image");
+  // Dimensiones (las de la cabecera): las del diálogo caben de sobra; una bomba de descompresión, no.
+  assert.ok(screenshotSizeOk(1600, 900) && screenshotSizeOk(1179, 2556));
+  assert.ok(screenshotSizeOk(SCREENSHOT_MAX_SIDE, SCREENSHOT_MAX_PIXELS / SCREENSHOT_MAX_SIDE));
+  assert.ok(!screenshotSizeOk(SCREENSHOT_MAX_SIDE + 1, 10) && !screenshotSizeOk(10, SCREENSHOT_MAX_SIDE + 1));
+  assert.ok(!screenshotSizeOk(30000, 30000) && !screenshotSizeOk(0, 10) && !screenshotSizeOk(undefined, 10) && !screenshotSizeOk(1.5, 10));
   assert.equal(screenshotFileName("image/jpeg"), "captura-pizarro.jpg");
   assert.equal(screenshotFileName("image/webp"), "captura-pizarro.webp");
 });
@@ -132,4 +141,26 @@ test("la librería de captura solo se carga al pedir la captura (import dinámic
   // Versión fijada exacta.
   const pkg = JSON.parse(readFileSync(path.join(import.meta.dirname, "../package.json"), "utf8")) as { dependencies: Record<string, string> };
   assert.match(pkg.dependencies["modern-screenshot"]!, /^\d+\.\d+\.\d+$/);
+});
+
+test("captura: los secretos a la vista llevan data-pz-no-capture (la captura los deja fuera)", () => {
+  const src = path.join(import.meta.dirname, "../src");
+  const marked = (file: string, needle: string) => {
+    const text = readFileSync(path.join(src, file), "utf8");
+    const at = text.indexOf(needle);
+    assert.ok(at >= 0, `${file}: ${needle}`);
+    // En la misma etiqueta: entre el `<` que la abre y el `>` que la cierra.
+    const open = text.lastIndexOf("<", at);
+    const close = text.indexOf(">", at);
+    assert.ok(text.slice(open, close).includes("data-pz-no-capture"), `${file}: ${needle} sin data-pz-no-capture`);
+  };
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="recovery-codes"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="totp-secret"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="totp-qr"');
+  marked("app/(app)/admin/users/UsersAdmin.tsx", 'data-testid="invite-link"');
+  marked("app/(app)/admin/users/UsersAdmin.tsx", 'data-testid="reset-link"');
+  marked("app/(app)/p/[projectId]/settings/ProjectSettings.tsx", 'data-testid="member-link"');
+  marked("app/setup/SetupWizard.tsx", 'id="setup-code"');
+  marked("components/calendar/CalendarSubscribe.tsx", "value={links.https}");
+  assert.match(readFileSync(path.join(src, "components/feedback/capture.ts"), "utf8"), /hasAttribute\("data-pz-no-capture"\)/);
 });

@@ -94,11 +94,11 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
           </p>
           {info.qr && (
             // eslint-disable-next-line @next/next/no-img-element -- data: URL generada en el servidor
-            <img src={info.qr} alt={t("Código QR para añadir la cuenta en tu app de autenticación")} width={180} height={180} className="mx-auto h-[180px] w-[180px] rounded-lg bg-white" data-testid="totp-qr" />
+            <img src={info.qr} alt={t("Código QR para añadir la cuenta en tu app de autenticación")} width={180} height={180} className="mx-auto h-[180px] w-[180px] rounded-lg bg-white" data-testid="totp-qr" data-pz-no-capture="" />
           )}
           <div className="rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
             <div className="text-xs text-slate-500">{t("Clave secreta")}</div>
-            <code className="block select-all break-all font-mono text-base tracking-wider" data-testid="totp-secret">{grouped(info.secret ?? "")}</code>
+            <code className="block select-all break-all font-mono text-base tracking-wider" data-testid="totp-secret" data-pz-no-capture="">{grouped(info.secret ?? "")}</code>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               <button type="button" className="text-brand-700 hover:underline dark:text-brand-300" onClick={() => void navigator.clipboard?.writeText(info.secret ?? "").catch(() => {})}>
                 {t("Copiar clave")}
@@ -153,7 +153,7 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
       <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
         {t("Guarda estos códigos en un sitio seguro. Cada uno sirve una sola vez si pierdes el acceso a tu app o a tu email, y no volverán a mostrarse.")}
       </p>
-      <ul className="mx-auto grid grid-cols-2 justify-items-center gap-1 rounded-lg bg-slate-100 p-3 text-center font-mono text-sm dark:bg-slate-800" data-testid="recovery-codes">
+      <ul className="mx-auto grid grid-cols-2 justify-items-center gap-1 rounded-lg bg-slate-100 p-3 text-center font-mono text-sm dark:bg-slate-800" data-testid="recovery-codes" data-pz-no-capture="">
         {codes.map((c) => <li key={c} className="select-all">{c}</li>)}
       </ul>
       <div className="flex gap-2">

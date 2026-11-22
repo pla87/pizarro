@@ -182,4 +182,6 @@ export const proyectos: Record<string, string> = {
   "Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:": "Give {name} this link to choose their password; it expires in 72 hours and can only be used once:",
   "Enlace al tablero": "Link to the board",
   "Enlace de invitación": "Invitation link",
+  // Nuevo proyecto: plantilla de serie sin descripción y con tarjetas de ejemplo
+  "La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.": "The template's structure (columns, types, labels and fields), with sample cards you can delete.",
 };

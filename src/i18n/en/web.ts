@@ -89,8 +89,8 @@ export const web: Record<string, string> = {
     "Software teams, agencies and studios of a few people. From the first note to the published version, release notes included.",
   "Plantilla «Vibecoding»: ideas, revisión y releases.": "“Vibecoding” template: ideas, review and releases.",
   "Autónomos y profesionales": "Freelancers and professionals",
-  "Encargos por cliente con su coste y sus horas, presupuestos que se suman solos y proyectos privados para lo tuyo.":
-    "Jobs per client with their cost and hours, quotes that add themselves up, and private projects for your own things.",
+  "Encargos por cliente con su coste y su prioridad, aviso si algo espera demasiado y proyectos privados para lo tuyo.":
+    "Jobs per client with their cost and priority, a reminder when something has been waiting too long, and private projects for your own things.",
   "Plantilla «Trabajo y clientes»: encargos, presupuestos y cobros.": "“Work and clients” template: jobs, quotes and invoices.",
   "Familias": "Families",
   "La lista de la compra, las citas del médico y las tareas de casa, con rutinas que se repiten cada semana. Gratis para uso personal.":

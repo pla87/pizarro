@@ -49,4 +49,10 @@ export const soporte: Record<string, string> = {
   "Escribe qué ha pasado o qué te gustaría.": "Write what happened or what you would like.",
   "No se ha podido enviar. Inténtalo de nuevo más tarde.": "It could not be sent. Try again later.",
   "Sin conexión: no se ha enviado. Inténtalo de nuevo cuando vuelva la conexión.": "Offline: it was not sent. Try again when the connection is back.",
+  // Informe de errores: el motivo de ir por GitHub, el texto largo recortado y el aviso de versión para quien no administra
+  "Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.": "Pizarro's form on GitHub will open with what you wrote and these technical details.",
+  "El texto es largo: GitHub solo recibirá el principio. Cópialo entero con este botón para pegarlo allí.": "The text is long: GitHub will only receive the beginning. Copy all of it with this button to paste it there.",
+  "Copiar el texto": "Copy the text",
+  "Texto copiado": "Text copied",
+  "Esta instalación no tiene la última versión de Pizarro: pide a quien la administra que la actualice para poder informar de un error o enviar una sugerencia.": "This installation is not running the latest version of Pizarro: ask whoever manages it to update it so you can report a bug or send a suggestion.",
 };

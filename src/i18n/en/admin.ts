@@ -106,7 +106,7 @@ export const admin: Record<string, string> = {
   "1 plantilla recuperada": "1 template restored",
   "{n} plantillas recuperadas": "{n} templates restored",
   "modificada": "modified",
-  "Recuperar plantillas por defecto": "Restore default templates",
+  "Recuperar plantillas de serie": "Restore built-in templates",
   "Subtareas predefinidas (una por línea, opcional)": "Preset subtasks (one per line, optional)",
   "Subtareas predefinidas": "Preset subtasks",
   "Crear desde un proyecto…": "Create from a project…",

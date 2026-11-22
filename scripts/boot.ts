@@ -27,17 +27,17 @@ async function main() {
   await seed(db, (m) => console.log(m.replace("[seed]", "[boot]")));
   // Sin usuarios y sin SEED_ADMIN_*: código de un solo uso para el asistente web /setup (se imprime en este log).
   await announceSetup(db);
-  // Las plantillas por defecto no deben impedir que la app arranque.
+  // Las plantillas de serie no deben impedir que la app arranque.
   try {
     const retiradas = await retireBuiltinTemplates(db);
-    if (retiradas.removed.length) console.log(`[boot] Plantillas de proyecto por defecto retiradas: ${retiradas.removed.join(", ")}.`);
-    if (retiradas.kept.length) console.log(`[boot] Plantillas por defecto retiradas que se conservan como propias (estaban modificadas): ${retiradas.kept.join(", ")}.`);
+    if (retiradas.removed.length) console.log(`[boot] Plantillas de serie retiradas: ${retiradas.removed.join(", ")}.`);
+    if (retiradas.kept.length) console.log(`[boot] Plantillas de serie retiradas que se conservan como propias (estaban modificadas): ${retiradas.kept.join(", ")}.`);
     const plantillas = await seedBuiltinTemplates(db);
-    if (plantillas.length) console.log(`[boot] Plantillas de proyecto por defecto creadas: ${plantillas.join(", ")}.`);
+    if (plantillas.length) console.log(`[boot] Plantillas de serie creadas: ${plantillas.join(", ")}.`);
     const actualizadas = await upgradeBuiltinTemplates(db);
-    if (actualizadas.length) console.log(`[boot] Plantillas de proyecto por defecto actualizadas: ${actualizadas.join(", ")}.`);
+    if (actualizadas.length) console.log(`[boot] Plantillas de serie actualizadas: ${actualizadas.join(", ")}.`);
   } catch (err) {
-    console.error("[boot] No se pudieron preparar las plantillas por defecto:", err);
+    console.error("[boot] No se pudieron preparar las plantillas de serie:", err);
   }
 }
 
