@@ -17,7 +17,7 @@ describe("sin MAX_USERS", () => {
     for (let i = (await db.user.count({ where: { active: true } })); i < 12; i++) await makeUser();
     await loginAs(admin);
     const tag = Date.now().toString(36);
-    const created = await createUser({ name: "Alta sin tope", email: `alta-${tag}@example.com`, role: "MEMBER", password: "una-clave-larga-1" });
+    const created = await createUser({ name: "Alta sin tope", email: `alta-${tag}@example.com`, role: "MEMBER" });
     assert.equal(created.ok, true, JSON.stringify(created));
     const f = await makeProject({ members: [] });
     const email = `invitada-${tag}@example.com`;

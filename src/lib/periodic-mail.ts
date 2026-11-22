@@ -75,6 +75,20 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   return out;
 }
 
+/** Códigos de nodemailer de un servidor de correo que no responde o no acepta el acceso (no de un email en concreto). */
+const SMTP_DOWN_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EAUTH", "EDNS"]);
+
+/**
+ * ¿Falló el envío porque el SMTP no responde o rechaza el acceso? Entonces los demás envíos de la pasada fallarían igual:
+ * se corta (cada uno esperaba hasta 10 s a la conexión y, el informe, generaba antes su PDF). Lo pendiente sale en la
+ * pasada siguiente, porque la reserva ya se devolvió.
+ */
+const smtpDown = (err: unknown): boolean => SMTP_DOWN_CODES.has(String((err as { code?: unknown } | null)?.code ?? ""));
+
+function logSmtpDown(what: string, err: unknown): void {
+  logEvent({ level: "warn", category: "notify", action: "mail.smtpDown", message: `SMTP sin respuesta (${what}): ${maskEmailsIn((err as Error).message)}. Lo pendiente se intentará en la siguiente pasada.` });
+}
+
 /** Envía el resumen diario a quien lo tiene activado, ya es su hora y hoy no lo ha recibido. Devuelve cuántos ha enviado. */
 export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   if (!emailEnabled()) return 0;
@@ -89,15 +103,23 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   for (const u of users) {
     if (!digestDue(now, tz, { hour: u.digestHour, lastSentAt: u.lastDigestAt })) continue;
     if (isShuttingDown()) break;
-    if (await trackInFlight(() => sendDigest(u, now, tz))) sent++;
+    const result = await trackInFlight(() => sendDigest(u, now, tz));
+    if (result === true) sent++;
+    else if (result !== false) {
+      logSmtpDown("resumen diario", result.smtpDown);
+      break;
+    }
   }
   return sent;
 }
 
 type DigestUser = { id: string; name: string; email: string; locale: string | null; role: "ADMIN" | "MEMBER"; lastDigestAt: Date | null };
 
-/** Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado. */
-async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean> {
+/**
+ * Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado; con el SMTP
+ * caído, `{ smtpDown }` con el error para cortar la pasada.
+ */
+async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean | { smtpDown: unknown }> {
   // Reserva del envío: si otro proceso se adelantó, no hace nada.
   const claim = await db.user.updateMany({ where: { id: u.id, lastDigestAt: u.lastDigestAt }, data: { lastDigestAt: now } });
   if (claim.count !== 1) return false;
@@ -113,7 +135,7 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
   } catch (err) {
     await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
     logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
-    return false;
+    return smtpDown(err) ? { smtpDown: err } : false;
   }
 }
 
@@ -202,7 +224,13 @@ export async function sendDueReports(now: Date = new Date(), opts: { generate?: 
       continue;
     }
     if (isShuttingDown()) break;
-    if (await trackInFlight(() => sendReport(s, creator, now, opts.generate ?? generateProjectReportPdf))) sent++;
+    const result = await trackInFlight(() => sendReport(s, creator, now, opts.generate ?? generateProjectReportPdf));
+    if (result === true) sent++;
+    else if (result !== false) {
+      // Los demás informes no generan su PDF para nada: salen en la pasada siguiente.
+      logSmtpDown("informe semanal", result.smtpDown);
+      break;
+    }
   }
   return sent;
 }
@@ -211,10 +239,11 @@ type Schedule = { projectId: string; recipient: string; lastSentAt: Date | null 
 type Creator = { id: string; name: string; email: string; locale: string | null };
 
 /**
- * Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado. Va en el idioma
+ * Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado; con el SMTP caído,
+ * `{ smtpDown }` con el error para cortar la pasada. Va en el idioma
  * del destinatario si es una persona de Pizarro; a una dirección externa, en el de quien lo configuró.
  */
-async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean> {
+async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean | { smtpDown: unknown }> {
   const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
   if (claim.count !== 1) return false;
   const t0 = performance.now();
@@ -248,7 +277,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     noteReportFailure(s.projectId, now);
     await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
     logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
-    return false;
+    return smtpDown(err) ? { smtpDown: err } : false;
   }
 }
 

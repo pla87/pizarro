@@ -7,13 +7,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeProject, makeUser } from "./helpers";
+import { db, expectFail, expectOk, FORBIDDEN, loginAs, logout, makeProject, makeUser, withSmtpDown } from "./helpers";
 import { findUsableToken } from "../../src/lib/auth-token";
 import { INSTANCE_LOCALE_KEY, INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
 import { getLocale } from "../../src/i18n/server";
 import { AUTH_LINK_HEADER } from "../../src/lib/auth-link-path";
 import { createSession } from "../../src/lib/session";
 import { invitePendingFrom } from "../../src/lib/user-entered";
+import { verifyPassword } from "../../src/lib/password";
+import { resetPassword } from "../../src/actions/auth";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
 process.env.MAX_USERS = "100000";
@@ -264,6 +266,75 @@ describe("Generar enlace de invitación nuevo (sin email)", () => {
     expectFail(await generateInviteLink(off.id), /desactivada/);
     expectOk(await generateInviteLink(pending.id));
     assert.equal(await db.authToken.count({ where: { userId: pending.id, purpose: "INVITE" } }), 1);
+  });
+});
+
+describe("«Nuevo usuario» siempre como invitación", () => {
+  // Antes, sin email, el administrador escribía una contraseña inicial (y la conocía); además, «Generar enlace de
+  // invitación nuevo» no la anulaba, así que la persona acababa con dos formas de entrar.
+  test("sin email: no pide contraseña, devuelve el enlace de invitación y la contraseña provisional no la conoce nadie", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const to = email("sin-email");
+    delete process.env.MAIL_OUTBOX_DIR;
+    let res: { emailed: boolean; mailFailed: boolean; link: string | null };
+    try {
+      // Una contraseña colada en la petición se descarta (el esquema ya no la tiene).
+      res = expectOk(await createUser({ name: "Sin email", email: to, role: "MEMBER", password: "una-clave-larga-1" } as never));
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = outbox;
+    }
+    assert.equal(res.emailed, false);
+    assert.equal(res.mailFailed, false);
+    const token = tokenOf(res.link ?? "");
+    assert.ok(await findUsableToken(token, ["INVITE"]), "el enlace devuelto es una invitación válida");
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    assert.equal(user.mustChangePassword, true);
+    assert.equal(await verifyPassword("una-clave-larga-1", user.passwordHash), false);
+    assert.equal((await mailsTo(to)).length, 0);
+    await flushLogs();
+    const log = await db.appLog.findFirst({ where: { action: "users.createUser", userId: admin.id }, orderBy: { createdAt: "desc" } });
+    assert.doesNotMatch(JSON.stringify(log ?? {}), new RegExp(token), "el token no queda en el registro");
+    // Con el enlace elige su contraseña.
+    logout();
+    expectOk(await resetPassword(token, "la-que-elige-ella-1"));
+    assert.equal(await verifyPassword("la-que-elige-ella-1", (await db.user.findUniqueOrThrow({ where: { email: to } })).passwordHash), true);
+  });
+
+  test("con email: se envía y no se devuelve el enlace", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const to = email("con-email");
+    const res = expectOk(await createUser({ name: "Con email", email: to, role: "MEMBER" }));
+    assert.deepEqual([res.emailed, res.mailFailed, res.link], [true, false, null]);
+    assert.equal((await mailsTo(to)).length, 1);
+  });
+
+  // Antes la acción respondía con error con la cuenta ya creada: el diálogo seguía abierto, al reintentar salía «Ya existe
+  // un usuario con ese email» y el enlace no lo veía nadie.
+  test("con el SMTP caído: la cuenta queda creada y se devuelve el enlace para pasarlo a mano", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const to = email("smtp-caido");
+    const res = expectOk(await withSmtpDown(() => createUser({ name: "SMTP caído", email: to, role: "MEMBER" })));
+    assert.equal(res.emailed, false);
+    assert.equal(res.mailFailed, true);
+    assert.ok(await findUsableToken(tokenOf(res.link ?? ""), ["INVITE"]));
+    assert.equal(await db.user.count({ where: { email: to } }), 1);
+  });
+
+  // Antes «Reenviar invitación» lanzaba con el enlace anterior ya borrado: la persona se quedaba sin ninguno válido.
+  test("«Reenviar invitación» con el SMTP caído devuelve el enlace nuevo (el anterior ya no vale)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const to = email("reenvio-caido");
+    expectOk(await createUser({ name: "Reenvío caído", email: to, role: "MEMBER" }));
+    const first = tokenOf((await mailsTo(to))[0]!.text);
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    const res = expectOk(await withSmtpDown(() => resendInvite(user.id)));
+    assert.equal(res.mailFailed, true);
+    assert.equal(await findUsableToken(first, ["INVITE"]), null);
+    assert.ok(await findUsableToken(tokenOf(res.link), ["INVITE"]), "el enlace devuelto vale");
   });
 });
 

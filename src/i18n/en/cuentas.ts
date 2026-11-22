@@ -8,7 +8,6 @@ export const cuentas: Record<string, string> = {
   "Forzar cambio de contraseña": "Force password change",
   "Usuario creado: le hemos enviado una invitación por email": "User created: we've emailed them an invitation",
   "Recibirá un enlace por email (válido 72 horas) para elegir su contraseña.": "They will get an email link (valid for 72 hours) to choose their password.",
-  "Sin email configurado: dásela por otro medio. Al entrar tendrá que cambiarla.": "Email is not set up: give it to them another way. They will have to change it when they sign in.",
   "Se avisará por email a la dirección antigua del cambio.": "The old address will be notified of the change by email.",
   "Cambio forzado: su contraseña ya no vale, se han cerrado sus sesiones y le hemos enviado un enlace por email":
     "Change forced: their password no longer works, their sessions were closed and we've emailed them a link",
@@ -117,8 +116,6 @@ export const cuentas: Record<string, string> = {
   "No se pudo enviar el email de confirmación. Inténtalo más tarde.": "The confirmation email could not be sent. Try again later.",
   "Ese ya es tu email.": "That is already your email.",
   "Esta es tu sesión actual: usa «Cerrar sesión».": "This is your current session: use “Sign out”.",
-  "Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.":
-    "User created, but the invitation could not be sent. Check email sending and click “Resend invitation” on their row.",
   "Para cambiar tu propia contraseña usa «Mi perfil».": "To change your own password use “My profile”.",
   "Se ha forzado el cambio, pero no se pudo enviar el email con el enlace.": "The change was forced, but the email with the link could not be sent.",
 
@@ -309,7 +306,6 @@ export const cuentas: Record<string, string> = {
   "El de su interfaz. Podrá cambiarlo en «Mi perfil».": "Used for their interface. They can change it in “My profile”.",
   "La cuenta está desactivada: actívala antes de reenviar la invitación.": "The account is deactivated: activate it before resending the invitation.",
   "Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».": "This person has already signed in: use “Force password change”.",
-  "No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.": "The invitation could not be sent. Check email sending in Administration → Integrations.",
   // Quitar el rol de administrador
   "Las tarjetas que tenga asignadas en proyectos de equipo en los que no trabaja quedarán sin asignar.": "Cards assigned to them in team projects they do not work on will be unassigned.",
   // Forzar cambio de contraseña: también desconecta lo que funciona sin sesión
@@ -357,4 +353,11 @@ export const cuentas: Record<string, string> = {
   // Recuperar contraseña sin email en Render y Fly.io (setupCodeSource)
   "Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:": "If you run the server, generate the link in the Shell tab of the Pizarro service on Render:",
   "Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:": "If you run the server, generate the link from your terminal with flyctl:",
+  // «Nuevo usuario» siempre como invitación; enlace a la vista si no hay email o el envío falla (ronda 62)
+  "Sin email configurado: al crearla verás un enlace (válido 72 horas) para pasárselo y que elija su contraseña.": "Email is not set up: once you create the account you'll see a link (valid for 72 hours) to give them so they can choose their password.",
+  "Este enlace no volverá a mostrarse; si lo pierdes, puedes generar otro desde su fila.": "This link won't be shown again; if you lose it, you can generate another one from their row.",
+  "No se pudo enviar el email: pásale el enlace.": "The email could not be sent: give them the link.",
+  // Final de /reset con «solo Google» (AUTH_GOOGLE_ONLY): entra con Google, no con la contraseña
+  "Contraseña guardada. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. On this server you sign in with Google: click “Sign in with Google” with {email}.",
+  "Contraseña guardada. Por seguridad se han cerrado todas las sesiones. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. For security, all sessions have been signed out. On this server you sign in with Google: click “Sign in with Google” with {email}.",
 };

@@ -1,8 +1,9 @@
 // Captura de lo que se ve detrás del diálogo «Informar de un error o enviar una sugerencia»: la página dibujada desde
 // el DOM con modern-screenshot (se carga solo al marcar la casilla), sin los diálogos abiertos (`data-pz-modal`: el
 // propio diálogo y su fondo oscuro) ni lo marcado con `data-pz-no-capture` (secretos a la vista: códigos de recuperación,
-// secreto y QR de la verificación en dos pasos, enlaces de invitación o de restablecer la contraseña, el código de
-// /setup y el enlace privado del calendario; tests/feedback.test.ts comprueba que siguen marcados). Nada sale del navegador hasta que la persona pulsa «Enviar» (o la descarga).
+// secreto, QR y códigos de la verificación en dos pasos, enlaces de invitación o de restablecer la contraseña, el código
+// de /setup, el enlace privado del calendario, el QR y el enlace de «Conectar Telegram», el código de WhatsApp y una
+// contraseña a la vista; tests/feedback.test.ts comprueba que siguen marcados). Nada sale del navegador hasta que la persona pulsa «Enviar» (o la descarga).
 // Funciona con la CSP de la app: la imagen intermedia es un SVG en `data:` (img-src lo admite) y las fuentes y las
 // imágenes de la página se leen del mismo origen (connect-src 'self'), sin workers ni scripts externos.
 import { CAPTURE_ATTEMPTS, captureScale, SCREENSHOT_MAX_BYTES } from "@/lib/feedback-core";

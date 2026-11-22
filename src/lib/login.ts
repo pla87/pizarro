@@ -29,7 +29,7 @@ export async function completeLogin(
   how: { method: "password" | "google" | "password+2fa" | "google+2fa"; rememberDevice?: boolean; path: string },
 ): Promise<void> {
   // La marca se respeta con cualquier método (también Google): quien tiene el cambio pendiente aterriza en /change-password y
-  // no puede usar la app hasta elegir contraseña. La cuenta conserva una clave inicial o impuesta que no debe seguir vigente
+  // no puede usar la app hasta elegir contraseña. La cuenta conserva una clave provisional que no debe seguir vigente
   // (sirve de respaldo y para el acceso de emergencia). Lo prueba tests/db/accounts.test.ts («Con Google… solo ve /change-password»).
   await createSession(user.id, { mustChangePassword: user.mustChangePassword });
   const ip = clientIp(await headers());

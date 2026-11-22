@@ -215,7 +215,7 @@ export async function confirmAccountChange(token: string) {
   });
 }
 
-/** Pantalla «Elige una contraseña nueva» tras un cambio forzado o un alta con clave inicial. */
+/** Pantalla «Elige una contraseña nueva» tras un cambio forzado o al entrar con Google sin haber usado aún la invitación. */
 export async function setNewPassword(password: string) {
   return runAction({ name: "auth.setNewPassword", args: [] }, async () => {
     const user = await requirePendingUser();

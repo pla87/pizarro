@@ -10,8 +10,8 @@ Lo aprendido en las pruebas de la ronda 62 (sirve para todos los prompts):
   arrastre simulado no las mueve: se mueven cambiando «Columna» en el detalle). Lo que necesite eso lo hace el propietario.
 - «Recordar este dispositivo 14 días» solo sale en el paso del código de verificación en dos pasos, no en la pantalla de
   email y contraseña (la sesión ya dura 14 días desde el último uso sin marcar nada).
-- Sin email configurado, «Nuevo usuario» pide una contraseña inicial; el enlace de invitación («Generar enlace de invitación
-  nuevo») sale después, en la fila del usuario («Invitación pendiente»).
+- Sin email configurado, «Nuevo usuario» ya no pide contraseña: al crear la cuenta muestra el enlace de invitación (72 h)
+  para pasárselo; si se pierde, «Generar enlace de invitación nuevo» en la fila del usuario («Invitación pendiente»).
 - Si se olvida la contraseña del administrador de prueba: en Railway, proyecto de prueba, servicio de Pizarro, pestaña
   *Console*, `node dist/reset-link.mjs <email>` (genera un enlace de un solo uso y queda en Logs como `auth.resetLinkCli`).
 - La instalación de prueba tiene `APP_URL` puesta y su dominio de Railway se llama parecido al de la real: comprobar

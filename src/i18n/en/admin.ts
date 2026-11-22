@@ -72,7 +72,6 @@ export const admin: Record<string, string> = {
   "Usuario actualizado": "User updated",
   "Usuario creado": "User created",
   "Editar usuario": "Edit user",
-  "Contraseña inicial (mín. 10)": "Initial password (min. 10)",
   "Rol": "Role",
   "Administrador": "Administrator",
   "Usuario activo (si lo desactivas, se cierran sus sesiones)": "Active user (if you deactivate them, their sessions are closed)",

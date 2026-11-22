@@ -1,6 +1,5 @@
 "use client";
 
-import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Link as LinkIcon, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -76,16 +75,22 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     try {
       const res = await resendInvite(u.id).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
-      toast(t("Invitación reenviada a {email}: el enlace anterior ya no vale", { email: u.email }));
       router.refresh();
+      // Si el email no sale, el enlace nuevo (el anterior ya no vale) se muestra para pasárselo a mano.
+      if (res.data.mailFailed) {
+        toast(t("No se pudo enviar el email: pásale el enlace."), "error");
+        return setInviteLink({ name: u.name, link: res.data.link });
+      }
+      toast(t("Invitación reenviada a {email}: el enlace anterior ya no vale", { email: u.email }));
     } finally {
       setResending(null);
     }
   };
 
-  // Sin email: «Generar enlace de invitación nuevo» emite uno (el anterior deja de valer, por eso se confirma) y lo
-  // muestra para pasárselo.
-  const [inviteLink, setInviteLink] = useState<{ user: UserRow; link: string } | null>(null);
+  // Enlace de invitación para pasárselo a mano: el de una cuenta recién creada sin email (o con el email caído), el de
+  // «Reenviar invitación» si el email no sale y el de «Generar enlace de invitación nuevo» (sin email; el anterior deja
+  // de valer, por eso se confirma).
+  const [inviteLink, setInviteLink] = useState<{ name: string; link: string; fresh?: boolean } | null>(null);
   const freshLink = async (u: UserRow) => {
     if (!(await confirm({
       title: t("Generar enlace de invitación nuevo"),
@@ -96,7 +101,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     try {
       const res = await generateInviteLink(u.id).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
-      setInviteLink({ user: u, link: res.data.link });
+      setInviteLink({ name: u.name, link: res.data.link });
     } finally {
       setResending(null);
     }
@@ -210,17 +215,21 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
           );
         })}
       </ul>
-      {creating && <UserForm emailAvailable={emailAvailable} defaultLocale={defaultLocale} onClose={() => setCreating(false)} />}
+      {creating && <UserForm emailAvailable={emailAvailable} defaultLocale={defaultLocale} onClose={() => setCreating(false)} onInviteLink={(name, link) => setInviteLink({ name, link, fresh: true })} />}
       {editing && <UserForm user={editing} isMe={editing.id === meId} onClose={() => setEditing(null)} />}
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
-      {inviteLink && <InviteLinkDialog user={inviteLink.user} link={inviteLink.link} onClose={() => setInviteLink(null)} />}
+      {inviteLink && <InviteLinkDialog name={inviteLink.name} link={inviteLink.link} fresh={inviteLink.fresh} onClose={() => setInviteLink(null)} />}
     </div>
   );
 }
 
-function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }: { user?: UserRow; isMe?: boolean; emailAvailable?: boolean; defaultLocale?: UserLocale; onClose: () => void }) {
+function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose, onInviteLink }: {
+  user?: UserRow; isMe?: boolean; emailAvailable?: boolean; defaultLocale?: UserLocale; onClose: () => void;
+  /** Al crear sin email (o si el email no sale): el enlace de invitación, para mostrarlo y pasárselo. */
+  onInviteLink?: (name: string, link: string) => void;
+}) {
   const t = useT();
   const router = useRouter();
   const toast = useToast();
@@ -229,7 +238,6 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<Role>(user?.role ?? "MEMBER");
   const [active, setActive] = useState(user?.active ?? true);
-  const [password, setPassword] = useState("");
   const [locale, setLocale] = useState<UserLocale>(defaultLocale);
 
   const submit = (e: React.FormEvent) => {
@@ -237,11 +245,18 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
     start(async () => {
       // Con los valores que se veían al abrir el formulario: el servidor solo aplica los cambiados y rechaza si otro
       // administrador los ha cambiado entretanto (no reactiva a quien acaban de desactivar, p. ej.).
-      const res = user
-        ? await updateUser(user.id, { name, email, role, active, expected: { name: user.name, email: user.email, role: user.role, active: user.active } })
-        : await createUser({ name, email, role, locale, password: emailAvailable ? undefined : password });
-      if (!res.ok) return toast(res.error, "error");
-      toast(user ? t("Usuario actualizado") : emailAvailable ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
+      if (user) {
+        const res = await updateUser(user.id, { name, email, role, active, expected: { name: user.name, email: user.email, role: user.role, active: user.active } });
+        if (!res.ok) return toast(res.error, "error");
+        toast(t("Usuario actualizado"));
+      } else {
+        // La cuenta se crea siempre como invitación; sin email, o si el email no sale, se muestra el enlace.
+        const res = await createUser({ name, email, role, locale });
+        if (!res.ok) return toast(res.error, "error");
+        if (res.data.mailFailed) toast(t("Invitación creada, pero no se pudo enviar el email: pásale el enlace."), "error");
+        else toast(res.data.emailed ? t("Usuario creado: le hemos enviado una invitación por email") : t("Usuario creado"));
+        if (res.data.link) onInviteLink?.(res.data.name, res.data.link);
+      }
       router.refresh();
       onClose();
     });
@@ -264,13 +279,9 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose }:
           </p>
         )}
         {!user && !emailAvailable && (
-          <div>
-            <label className="label" htmlFor="u-pass">{t("Contraseña inicial (mín. 10)")}</label>
-            <PasswordInput id="u-pass" className="input" value={password} onChange={(e) => setPassword(e.target.value)} minLength={10} required autoComplete="new-password" />
-            <p className="mt-1 text-xs text-slate-500">
-              {t("Sin email configurado: dásela por otro medio. Al entrar tendrá que cambiarla.")}
-            </p>
-          </div>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
+            {t("Sin email configurado: al crearla verás un enlace (válido 72 horas) para pasárselo y que elija su contraseña.")}
+          </p>
         )}
         {user && user.email !== email && emailAvailable && (
           <p className="text-xs text-amber-700 dark:text-amber-300">{t("Se avisará por email a la dirección antigua del cambio.")}</p>
@@ -370,16 +381,19 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
   );
 }
 
-/** El enlace de invitación recién emitido (sin email), para pasárselo por otro canal. */
-function InviteLinkDialog({ user, link, onClose }: { user: UserRow; link: string; onClose: () => void }) {
+/**
+ * El enlace de invitación recién emitido que no ha salido por email (sin email o con el envío fallido), para pasárselo
+ * por otro canal. `fresh`: el de una cuenta recién creada (no había otro antes).
+ */
+function InviteLinkDialog({ name, link, fresh, onClose }: { name: string; link: string; fresh?: boolean; onClose: () => void }) {
   const t = useT();
   const toast = useToast();
   return (
-    <Modal open onClose={onClose} title={t("Enlace de invitación de {name}", { name: user.name })} size="sm">
+    <Modal open onClose={onClose} title={t("Enlace de invitación de {name}", { name })} size="sm">
       <div className="space-y-3 text-sm">
-        <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name: user.name })}</p>
+        <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name })}</p>
         <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" data-pz-no-capture="" />
-        <p className="text-amber-700 dark:text-amber-300">{t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
+        <p className="text-amber-700 dark:text-amber-300">{fresh ? t("Este enlace no volverá a mostrarse; si lo pierdes, puedes generar otro desde su fila.") : t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
           <button type="button" className="btn-primary" onClick={async () => ((await copyText(link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>

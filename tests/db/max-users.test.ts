@@ -13,7 +13,7 @@ describe("MAX_USERS", () => {
     await loginAs(admin);
     const tag = Date.now().toString(36);
     const results = await Promise.all(
-      ["a", "b"].map((s) => createUser({ name: `Nueva ${s}`, email: `nueva-${s}-${tag}@example.com`, role: "MEMBER", password: "una-clave-larga-1" })),
+      ["a", "b"].map((s) => createUser({ name: `Nueva ${s}`, email: `nueva-${s}-${tag}@example.com`, role: "MEMBER" })),
     );
     assert.equal(results.filter((r) => r.ok).length, 1);
     const failed = results.find((r) => !r.ok) as { ok: false; error: string };
