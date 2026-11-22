@@ -98,6 +98,8 @@ Lo que ha funcionado en las rondas 58 y 59 para «Revisa el código» y «Bug hu
 
 ## 3. Brief común para los agentes
 
+- Su worktree puede nacer en un commit antiguo (el de `main`): al empezar, si `git log --oneline -1` no es el de la rama
+  de trabajo, `git reset --hard <rama de trabajo>` (todavía sin commits propios). Nunca `npm install` (ver §4).
 - Trabajan en su propio worktree. Dependencias: **solo dentro de su worktree** (comprobar `pwd`):
   `[ -e node_modules ] || cp -al <repo>/node_modules node_modules`. Nunca tocar el `node_modules` del repositorio
   principal (un agente lo sustituyó una vez por un enlace a sí mismo).
@@ -376,6 +378,18 @@ Guardas que conviene conocer:
   `AppState` y `updatedAt` en plantillas; `runAction` devuelve el `code` del `AppError`.
 - Releases: la búsqueda usa `search_fold()` (función SQL IMMUTABLE de la migración `20261127103000`, mismas letras que
   `search-accents.ts`) con índices trigram si `pg_trgm` se pudo crear; `wipeDatabase` la borra y la migración la recrea.
+- **Enums nuevos (ronda 61):** Prisma 7 falla al leer una fila con un valor de enum que no conoce (`Value 'X' not found
+  in enum`). Un valor nuevo que la app ESCRIBE (p. ej. `NotificationType.REPORT_UNSUBSCRIBED`) rompe la lectura en la
+  versión anterior si se vuelve atrás: añádelo en una versión y empieza a escribirlo en la siguiente (expandir y contraer).
+- Plantillas de serie retiradas (`RETIRED_BUILTINS`, `retireBuiltinTemplates` en `template-store.ts`, llamada desde
+  `scripts/boot.ts`): sin modificar se borran, modificadas pasan a propias; sus filas de `BuiltinTemplateSeeded` se quedan
+  como lápida (si no, una versión anterior las volvería a sembrar). Las claves retiradas no se reutilizan nunca.
+- Informar de un error (`src/lib/feedback*.ts`, `src/components/feedback/`, `POST /api/feedback`): solo en builds oficiales;
+  sus límites van en el mapa de seguridad del limitador (`SECURITY_KEY_PREFIXES`); la captura (`modern-screenshot`, cargada
+  al pulsar) excluye lo marcado con `data-pz-no-capture`: **un secreto nuevo que se muestre en pantalla (código, enlace con
+  token) debe llevar ese atributo**.
+- `npm install` en este entorno reescribe el `package-lock.json` quitando los campos `libc`: para añadir una dependencia,
+  edita a mano `package.json` y su entrada del lock (o usa `npm ci` para instalar, que no lo toca).
 - e2e: `page.accessibility` ya no existe en playwright-core 1.65: usa `L.axSnapshot(page, locator, { interestingOnly })`
   (`e2e/qa/lib.mjs`, árbol de Chromium por CDP con la misma forma).
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
@@ -535,55 +549,52 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Estado al cerrar la ronda 60:** v1.64.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida;
-la v1.63.0 la publicó el propietario al empezar la ronda). En la instalación del propietario las copias externas
-parecen haber dejado de subirse hacia el 18-11 (probablemente faltan las variables `BACKUP_S3_*`): lo comprueba el
-prompt 1 de `PRUEBAS-CHROME.md`. Antes de anunciar la v1.63/1.64 a terceros sigue pendiente validar el
-`deploy/Caddyfile` con Caddy real en un VPS (`PRUEBAS.md` §12.3).
+**Estado al cerrar la ronda 61:** v1.65.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Las copias externas de la instalación del propietario funcionan (el panel de Cloudflare solo corta la lista a 25 filas) y
+el bucket tiene la regla de bloqueo `copias-pizarro` (`pizarro/pizarro-backup-`, 31 días). `FEEDBACK_EMAIL`
+(`src/lib/product.ts`) sigue vacía: hasta que el propietario cree la dirección, «Informar de un error» va a GitHub.
+Pendiente de antes: validar el `deploy/Caddyfile` en un VPS (prompt 3 de `PRUEBAS-CHROME.md`).
 
-**Preguntas abiertas al propietario (tras la v1.64.0)**, con la numeración del informe final de la ronda 60 (entre
+**Preguntas abiertas al propietario (tras la v1.65.0)**, con la numeración del informe final de la ronda 61 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Unificar las plantillas de serie: de 15 plantillas y 5 ejemplos a 5 plantillas, cada una con la casilla «con
-   tarjetas de ejemplo»: *Vibecoding*, *Curso o máster*, *Trabajo y clientes* (Negocio, Ventas, Soporte, Marketing,
-   Producción audiovisual, Selección de personal, Mantenimiento), *Casa y familia* (Tareas familiares, Mudanza, Reformas)
-   y *Eventos y viajes* (Eventos, Viajes); *Estudios o tesis* se retira. Las de serie sin modificar desaparecen de la
-   lista al actualizar; las modificadas quedan como propias; los proyectos creados no cambian. (SÍ)
-2. *Curso o máster*: columna «Publicado» que cuente como terminada (sin ella, los informes no muestran avance). (SÍ)
-3. Que cada plantilla decida qué secciones se ven (Releases, Documentación, «Entregable») en proyectos que no son de
-   software. (Más adelante, tras el 1)
-4. Siete columnas no caben en 1568 px: columnas más estrechas o vista compacta. (NO: el desplazamiento horizontal es lo
-   normal en un Kanban)
-5. Marcar de serie, en las cuentas nuevas, «Email con los cambios de fecha límite y los recordatorios de «Esperando»»
-   (hoy desmarcada: quien no ha tocado sus avisos deja de recibir por email los recordatorios de «Esperando»). (SÍ)
-6. Baja del informe semanal: recordarla, avisar a quien lo configuró y que un miembro no lo reactive sin verlo. (SÍ)
-7. *Mi perfil → Avisos*: una sola tarjeta de email con un solo «Guardar» (hoy son dos y lo marcado en una se pierde al
-   guardar la otra). (SÍ)
-8. «Copiar enlace» de una invitación pendiente sin email configurado (acción nueva solo para administradores). (SÍ)
-9. Contador de avisos exacto al leer uno (que `markNotificationRead` devuelva el recuento real). (SÍ)
-10. Textos: un solo nombre para el responsable (hoy «Asignada a», «Responsable», «Persona»…), quitar los nueve
-    «(opcional)» de *Nueva tarea* y «(evergreen)», quitar la sección vacía «Tarjetas archivadas» de *Ajustes del
-    proyecto*, la línea repetida de la suscripción al calendario y unificar «notices/notifications» en inglés. (SÍ)
-11. Pintado diferido (50 por columna) también en la vista Lista. (SÍ)
-12. Sesión en una sola consulta (JOIN de Session y User). (SÍ)
-13. Índice para las tareas que se repiten en el calendario (~400 kB y algo más de coste al escribir). (NO por ahora)
-14. Importar: decidir día/mes por fichero (no fila a fila), con el idioma como desempate. (SÍ)
-15. Reconocer imágenes que llegan sin tipo (p. ej. `.avif` en algunos Windows) por su extensión. (SÍ)
-16. `MAX_USERS` = 10 por defecto frente a «Un servidor, tantas personas como quieras» de la web: sin tope por defecto (la
-    variable sigue para quien quiera uno). (SÍ)
-17. Copias contra borrados (decisión 20 de la ronda 59): regla de bloqueo de R2 en vez de un segundo proveedor (la app ya
-    la tolera; prompt 1 de `PRUEBAS-CHROME.md`). Un segundo destino con versionado (B2) queda para más adelante. (SÍ)
-18. Retirar: el script `db:generate`, la nota de `JWT_SECRET` del README, `docs/IDEAS.md` (estado de la v1.48: actualizarlo
-    o archivarlo), unir las tres suites de «Aplicar plantilla» y renombrar `board-e2e`/`paste-e2e` por tema, y los
-    `export` que solo usan las pruebas (`applyKindTemplate`, `mergeSubtasks`, `COMMON_TIME_ZONES`). (SÍ)
-19. «tick» → «check» también en las guías inglesas de `docs/guias/en/`. (SÍ)
+1. Crear la dirección para recibir los informes de errores (p. ej. una de getpizarro.com con reenvío gratuito de
+   Cloudflare Email Routing) y rellenar `FEEDBACK_EMAIL`. (SÍ)
+2. Segunda regla de bloqueo en R2 para `pizarro/files/` (los adjuntos que comparten las copias): 180 días; sin ella, un
+   `.pzbak` se restaura pero sin adjuntos. Coste: los adjuntos borrados siguen 180 días más en el bucket (céntimos). (SÍ)
+3. Fechas con puntos («1.12.2026») siempre como día/mes al importar. (SÍ)
+4. `MAX_USERS` mal escrito: hoy no aplica ningún tope (con aviso). (Dejarlo así)
+5. Textos en inglés de *Curso o charla* («Mark», «marking scheme», «Tutorial»): pasarlos a inglés americano («Grade»,
+   «grading rubric», «Office hours/Tutoring»). (SÍ)
+6. Que las tarjetas de ejemplo y «Aplicar plantilla» se puedan usar también con las plantillas propias para quien no es
+   administrador. (NO)
+7. Recordar todas las bajas del informe semanal, no solo la última. (Más adelante, si alguien lo pide)
+8. Interruptor en Administración para desactivar el informe de errores por email. (Solo si un cliente lo pide)
+9. Rol «Presupuesto» de una columna: hoy activa el campo Coste aunque quien lo pone no gestione el proyecto.
+   (Dejarlo así y documentarlo)
+10. Probar en un iPad real el arrastre de franjas del Calendario con pulsación larga (no se puede en la nube). (SÍ, en
+    la próxima auditoría con Claude in Chrome o a mano)
 
-Menores sin numerar (recomendación NO salvo que se note): «Guardar de todos modos» en el aviso de cambio simultáneo;
-`INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro (solo se quitan los enlaces Markdown); «Esta semana»
-y el plan semanal de domingo a sábado en inglés; búsquedas de releases de 1–2 caracteres sin índice; `/login` tras elegir
-contraseña en el idioma de la invitada. De antes: `socketTimeout` del SMTP; log de errores de Caddy; código propio de
-«disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores; coste de las imágenes que copia
-cada repetición.
+Límites conocidos (no se cambian): un administrador puede saber si existe un tipo con cierto nombre en otro proyecto (los
+nombres de tipos son únicos entre generales y de proyecto); volver a la v1.64 con avisos `REPORT_UNSUBSCRIBED` ya creados
+hace fallar la página de Avisos de quien los tenga (ver la regla de enums en §4).
+
+Menores sin numerar de antes (recomendación NO salvo que se note): «Guardar de todos modos» en el aviso de cambio
+simultáneo; `INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro; «Esta semana» de domingo a sábado en
+inglés; búsquedas de releases de 1–2 caracteres sin índice; `socketTimeout` del SMTP; log de errores de Caddy; código
+propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores.
+
+**Decisiones de la ronda 61 (ya aplicadas):** 6 plantillas de serie (*Vibecoding*, *Trabajo y clientes*, *Casa y
+familia*, *Eventos y viajes*, *Estudios y aprendizaje*, *Curso o charla* con «Publicado») con «Con tarjetas de ejemplo» en
+vez de la lista de ejemplos; no ocultar Documentación por plantilla; no estrechar columnas; fechas y «Esperando» de serie;
+baja del informe recordada y avisada; una sola tarjeta de email; «Generar enlace de invitación nuevo» sin email; contador
+de avisos exacto; «Responsable» en todas partes y sin «(opcional)»; Lista con pintado diferido; sesión en una consulta;
+fechas día/mes por fichero; imágenes sin tipo; `MAX_USERS` opcional (sin tope por defecto; recomendación: 1 GB hasta ~25
+personas activas, 2 GB hasta ~50); bloqueo de R2 en vez de segundo proveedor; retirados `db:generate`, la nota de
+`JWT_SECRET`, `docs/IDEAS.md` (en el historial) y tres `export` de pruebas; suites de «Aplicar plantilla» unidas y
+`tablero-e2e`/`pegar-e2e`; «check» en las guías inglesas; botón de informar de un error o enviar una sugerencia junto a
+«Cerrar sesión», con captura y envío privado por email (desactivado si no es la última versión); «Descartar cambios» a la
+altura del resto.
 
 **Decisiones de la ronda 60 (ya aplicadas):** las 19 primeras preguntas de la ronda 59 (tablero en vivo por tarjeta, datos
 sin campos por defecto, 50 tarjetas por columna desde el servidor, índice trigram de releases ya, plan para IA sin enlaces
