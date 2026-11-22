@@ -81,13 +81,40 @@ const SMTP_DOWN_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EAUTH",
 /**
  * ¿Falló el envío porque el SMTP no responde o rechaza el acceso? Entonces los demás envíos de la pasada fallarían igual:
  * se corta (cada uno esperaba hasta 10 s a la conexión y, el informe, generaba antes su PDF). Lo pendiente sale en la
- * pasada siguiente, porque la reserva ya se devolvió.
+ * pasada siguiente, porque la reserva ya se devolvió. Solo se mira con el error de sendMail: un ETIMEDOUT de la base al
+ * reunir los datos no es del SMTP.
  */
 const smtpDown = (err: unknown): boolean => SMTP_DOWN_CODES.has(String((err as { code?: unknown } | null)?.code ?? ""));
 
 function logSmtpDown(what: string, err: unknown): void {
   logEvent({ level: "warn", category: "notify", action: "mail.smtpDown", message: `SMTP sin respuesta (${what}): ${maskEmailsIn((err as Error).message)}. Lo pendiente se intentará en la siguiente pasada.` });
 }
+
+// Si un envío falla (SMTP caído, PDF atascado…), no se reintenta en cada pasada del mantenimiento: como mucho una vez
+// por hora y proyecto (informe) o persona (resumen). Así, si el correo de alguien falla siempre (con el SMTP caído, la
+// pasada se corta en él), la pasada siguiente lo salta y sigue con los de detrás. Se guarda en memoria; al reiniciar el
+// servidor se vuelve a intentar.
+export const REPORT_RETRY_MS = 60 * 60 * 1000;
+
+function failureMemory() {
+  const failedAt = new Map<string, number>();
+  return {
+    /** ¿Se puede (re)intentar ya? */
+    allowed(key: string, now: Date): boolean {
+      const at = failedAt.get(key);
+      return at === undefined || now.getTime() - at >= REPORT_RETRY_MS;
+    },
+    note: (key: string, now: Date) => void failedAt.set(key, now.getTime()),
+    clear: (key: string) => void failedAt.delete(key),
+  };
+}
+
+const reportFailures = failureMemory();
+const digestFailures = failureMemory();
+/** ¿Se puede (re)intentar ya el informe de este proyecto? */
+export const reportRetryAllowed = reportFailures.allowed;
+export const noteReportFailure = reportFailures.note;
+export const clearReportFailure = reportFailures.clear;
 
 /** Envía el resumen diario a quien lo tiene activado, ya es su hora y hoy no lo ha recibido. Devuelve cuántos ha enviado. */
 export async function sendDueDigests(now: Date = new Date()): Promise<number> {
@@ -102,6 +129,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   let sent = 0;
   for (const u of users) {
     if (!digestDue(now, tz, { hour: u.digestHour, lastSentAt: u.lastDigestAt })) continue;
+    if (!digestFailures.allowed(u.id, now)) continue;
     if (isShuttingDown()) break;
     const result = await trackInFlight(() => sendDigest(u, now, tz));
     if (result === true) sent++;
@@ -116,26 +144,32 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
 type DigestUser = { id: string; name: string; email: string; locale: string | null; role: "ADMIN" | "MEMBER"; lastDigestAt: Date | null };
 
 /**
- * Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado; con el SMTP
- * caído, `{ smtpDown }` con el error para cortar la pasada.
+ * Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado; si el envío
+ * falló con el SMTP caído, `{ smtpDown }` con el error para cortar la pasada (un error de la base al reunir los datos,
+ * aunque sea también un ETIMEDOUT, no corta nada).
  */
 async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean | { smtpDown: unknown }> {
   // Reserva del envío: si otro proceso se adelantó, no hace nada.
   const claim = await db.user.updateMany({ where: { id: u.id, lastDigestAt: u.lastDigestAt }, data: { lastDigestAt: now } });
   if (claim.count !== 1) return false;
   const t0 = performance.now();
+  let sending = false;
   try {
     const digest = buildDigest(await gatherDigest(u, now, todayIso(tz, now), u.lastDigestAt));
     if (digest.empty) return false; // sin novedades no se manda nada (el día queda reservado)
     const t: T = makeT(toLocale(u.locale));
     const unsub = unsubscribeLinks("digest", u.id, u.email);
+    sending = true;
     await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl(), period: digestPeriod(u.lastDigestAt, now), unsubscribeUrl: unsub.page }, t), headers: unsub.headers });
+    sending = false;
+    digestFailures.clear(u.id);
     logEvent({ category: "notify", action: "digest.sent", label: { k: "Resumen diario enviado a {name}", p: { name: u.name } }, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     return true;
   } catch (err) {
+    digestFailures.note(u.id, now);
     await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
     logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
-    return smtpDown(err) ? { smtpDown: err } : false;
+    return sending && smtpDown(err) ? { smtpDown: err } : false;
   }
 }
 
@@ -184,20 +218,6 @@ function pdfOutOfMemory(err: unknown): boolean {
   return (typeof e?.message === "string" && e.message.startsWith(PDF_OUT_OF_MEMORY_MESSAGE)) || e?.cause?.code === "ERR_WORKER_OUT_OF_MEMORY";
 }
 
-// Si el envío de un informe falla (SMTP caído, PDF atascado…), no se reintenta en cada pasada del mantenimiento:
-// como mucho una vez por hora y proyecto. Se guarda en memoria; al reiniciar el servidor se vuelve a intentar.
-export const REPORT_RETRY_MS = 60 * 60 * 1000;
-const reportFailures = new Map<string, number>();
-
-/** ¿Se puede (re)intentar ya el informe de este proyecto? */
-export function reportRetryAllowed(projectId: string, now: Date): boolean {
-  const failedAt = reportFailures.get(projectId);
-  return failedAt === undefined || now.getTime() - failedAt >= REPORT_RETRY_MS;
-}
-
-export const noteReportFailure = (projectId: string, now: Date) => void reportFailures.set(projectId, now.getTime());
-export const clearReportFailure = (projectId: string) => void reportFailures.delete(projectId);
-
 type GenerateReport = typeof generateProjectReportPdf;
 
 /**
@@ -239,8 +259,8 @@ type Schedule = { projectId: string; recipient: string; lastSentAt: Date | null 
 type Creator = { id: string; name: string; email: string; locale: string | null };
 
 /**
- * Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado; con el SMTP caído,
- * `{ smtpDown }` con el error para cortar la pasada. Va en el idioma
+ * Reserva, genera y envía un informe semanal (o devuelve la reserva si falla). true si se ha enviado; si el envío falló
+ * con el SMTP caído, `{ smtpDown }` con el error para cortar la pasada. Va en el idioma
  * del destinatario si es una persona de Pizarro; a una dirección externa, en el de quien lo configuró.
  */
 async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean | { smtpDown: unknown }> {
@@ -249,6 +269,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
   const t0 = performance.now();
   const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
   const url = `${appUrl()}/p/${s.projectId}`;
+  let sending = false;
   try {
     const person = await db.user.findFirst({ where: { email: { equals: s.recipient, mode: "insensitive" }, active: true }, select: { locale: true } });
     const locale = toLocale(person ? person.locale : creator.locale);
@@ -260,7 +281,9 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     // La baja de este email apaga este informe (el destinatario puede no tener cuenta en Pizarro).
     const unsub = unsubscribeLinks("report", s.projectId, s.recipient);
     const mail = reportMail({ projectName: report.project.name, url, orgName, setBy: creator.name, unsubscribeUrl: unsub.page }, makeT(locale));
+    sending = true;
     await sendMail({ to: s.recipient, ...mail, headers: unsub.headers, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
+    sending = false;
     clearReportFailure(s.projectId);
     logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     return true;
@@ -277,7 +300,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     noteReportFailure(s.projectId, now);
     await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
     logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
-    return smtpDown(err) ? { smtpDown: err } : false;
+    return sending && smtpDown(err) ? { smtpDown: err } : false;
   }
 }
 

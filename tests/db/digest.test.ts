@@ -194,4 +194,70 @@ describe("resumen diario con el SMTP caído", () => {
     const rows = await db.user.findMany({ where: { id: { in: [a.id, b.id] } }, select: { lastDigestAt: true } });
     assert.deepEqual(rows.map((r) => r.lastDigestAt), [null, null], "las dos siguen pendientes para la pasada siguiente");
   });
+
+  // Si el correo de una persona falla siempre (p. ej. un ETIMEDOUT tras DATA con su resumen), antes cada pasada se cortaba
+  // en ella y las de detrás no lo recibían nunca. Ahora quien falló espera una hora y la pasada siguiente sigue con las demás.
+  test("quien falló espera una hora: la pasada siguiente intenta a la de detrás", async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const other = await makeUser();
+    const f = await makeProject({ members: [a, b, other] });
+    await makeTask(f, { title: "Novedad", createdById: other.id });
+    await db.user.updateMany({ where: { id: { notIn: [a.id, b.id] } }, data: { dailyDigest: false } });
+    await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null } });
+    const now = new Date();
+    const failed = async () => {
+      await flushLogs();
+      return (await db.appLog.findMany({ where: { action: "digest.failed", userId: { in: [a.id, b.id] } }, select: { userId: true } })).map((r) => r.userId);
+    };
+    assert.equal(await withSmtpDown(() => sendDueDigests(now)), 0);
+    const [first] = await failed();
+    assert.ok(first);
+    assert.equal(await withSmtpDown(() => sendDueDigests(new Date(now.getTime() + 60_000))), 0);
+    assert.deepEqual((await failed()).sort(), [a.id, b.id].sort(), "la segunda pasada salta a quien falló e intenta a la otra");
+    // Con el SMTP de vuelta, sale la que no falló hace menos de una hora; la primera, en la pasada de después.
+    const outbox = await mkdtemp(path.join(tmpdir(), "pz-digest-retry-"));
+    const prevOutbox = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = outbox;
+    try {
+      assert.equal(await sendDueDigests(new Date(now.getTime() + 60 * 60_000)), 1, "la primera ya puede; la segunda aún espera");
+      assert.equal(await sendDueDigests(new Date(now.getTime() + 61 * 60_000 + 1)), 1);
+      const rows = await db.user.findMany({ where: { id: { in: [a.id, b.id] } }, select: { lastDigestAt: true } });
+      assert.ok(rows.every((r) => r.lastDigestAt), "las dos lo han recibido");
+    } finally {
+      if (prevOutbox === undefined) delete process.env.MAIL_OUTBOX_DIR;
+      else process.env.MAIL_OUTBOX_DIR = prevOutbox;
+      await rm(outbox, { recursive: true, force: true });
+    }
+  });
+
+  test("un ETIMEDOUT de la base al reunir el resumen no corta la pasada ni se anota como SMTP caído", async () => {
+    const outbox = await mkdtemp(path.join(tmpdir(), "pz-digest-dberr-"));
+    const prevOutbox = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = outbox;
+    const delegate = db.taskComment as unknown as { findMany: (...args: unknown[]) => Promise<unknown> };
+    const findMany = delegate.findMany;
+    try {
+      const a = await makeUser();
+      const b = await makeUser();
+      const other = await makeUser();
+      const f = await makeProject({ members: [a, b, other] });
+      await makeTask(f, { title: "Novedad", createdById: other.id });
+      await db.user.updateMany({ where: { id: { notIn: [a.id, b.id] } }, data: { dailyDigest: false } });
+      await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null } });
+      // La primera consulta de comentarios falla como un socket de PostgreSQL agotado; las demás van bien.
+      let calls = 0;
+      delegate.findMany = (...args) => (++calls === 1 ? Promise.reject(Object.assign(new Error("read ETIMEDOUT"), { code: "ETIMEDOUT" })) : findMany.apply(delegate, args));
+      const now = new Date();
+      assert.equal(await sendDueDigests(now), 1, "la otra persona sí lo recibe");
+      await flushLogs();
+      assert.equal(await db.appLog.count({ where: { action: "digest.failed", userId: { in: [a.id, b.id] } } }), 1);
+      assert.equal(await db.appLog.count({ where: { action: "mail.smtpDown", createdAt: { gte: now } } }), 0);
+    } finally {
+      delegate.findMany = findMany;
+      if (prevOutbox === undefined) delete process.env.MAIL_OUTBOX_DIR;
+      else process.env.MAIL_OUTBOX_DIR = prevOutbox;
+      await rm(outbox, { recursive: true, force: true });
+    }
+  });
 });
