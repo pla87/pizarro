@@ -1,0 +1,61 @@
+# Blueprint de Render para Pizarro: botón «Deploy to Render» (https://render.com/deploy?repo=https://github.com/pla87/pizarro)
+# o, en el panel de Render, New → Blueprint con este repositorio. Crea dos recursos de pago: el servicio web con la
+# imagen oficial y su disco para los adjuntos, y la base de datos PostgreSQL 16. Guía paso a paso, precios y cómo
+# actualizar: docs/INSTALL.md, «Render», y https://getpizarro.com/instalar/#render.
+#
+# El plan gratis de Render no sirve para usar Pizarro (solo para curiosear): el servicio se duerme a los 15 minutos sin
+# visitas (se cortan el canal en vivo y las tareas de fondo), no admite disco (los adjuntos se pierden en cada despliegue)
+# y la base gratis caduca a los 30 días.
+services:
+  - type: web
+    name: pizarro
+    # Imagen ya construida y probada de cada versión; «latest» es la última publicada. Para actualizar: en el servicio,
+    # Manual Deploy → Deploy latest reference. Para quedarte en una versión, cambia la etiqueta (p. ej. :1.65.0) en
+    # Settings → Image.
+    runtime: image
+    image:
+      url: ghcr.io/pla87/pizarro:latest
+    # Starter (512 MB) basta para un equipo pequeño; si en Events ves reinicios por falta de memoria, sube a Standard.
+    plan: starter
+    # La misma región que la base de datos (frankfurt, oregon, ohio, virginia o singapore).
+    region: frankfurt
+    # Una sola instancia: el canal en vivo, los límites de intentos y las tareas de fondo viven en la memoria del proceso.
+    numInstances: 1
+    # Render no da el despliegue por bueno hasta que esta ruta responde 200 (base de datos y disco de adjuntos listos).
+    healthCheckPath: /api/health
+    # Disco persistente para los adjuntos y las copias locales (UPLOAD_DIR). Se puede ampliar después, no reducir.
+    disk:
+      name: pizarro-uploads
+      mountPath: /app/uploads
+      sizeGB: 5
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pizarro-db
+          property: connectionString
+      # Claves generadas por Render al crear el Blueprint (256 bits en base64). Guárdalas fuera de Render (gestor de
+      # contraseñas): sin BACKUP_KEY las copias no se pueden abrir y sin ENCRYPTION_KEY se pierde la verificación en dos pasos.
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TOKEN_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: BACKUP_KEY
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /app/uploads
+      # APP_URL no hace falta: sin ella, Pizarro usa la dirección de Render (RENDER_EXTERNAL_URL). Con un dominio propio,
+      # añádela en Environment (https://pizarro.example.com).
+
+databases:
+  - name: pizarro-db
+    databaseName: pizarro
+    user: pizarro
+    # El plan de pago más pequeño; la base gratis caduca a los 30 días.
+    plan: basic-256mb
+    diskSizeGB: 5
+    region: frankfurt
+    postgresMajorVersion: "16"
+    # Solo accesible desde los servicios de Render de esta cuenta, no desde Internet.
+    ipAllowList: []

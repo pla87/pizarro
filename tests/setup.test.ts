@@ -161,4 +161,11 @@ describe("setupCodeSource (dónde ver el código del asistente)", () => {
     assert.equal(setupCodeSource({ PIZARRO_LAUNCHER: "docker" }), "docker");
     assert.equal(setupCodeSource({}), "unknown");
   });
+
+  test("Render y Fly.io (con la imagen de Docker): manda la plataforma sobre PIZARRO_LAUNCHER", () => {
+    assert.equal(setupCodeSource({ RENDER: "true", PIZARRO_LAUNCHER: "docker" }), "render");
+    assert.equal(setupCodeSource({ RENDER_SERVICE_ID: "srv-x" }), "render");
+    assert.equal(setupCodeSource({ FLY_APP_NAME: "pizarro", PIZARRO_LAUNCHER: "docker" }), "fly");
+    assert.equal(setupCodeSource({ FLY_MACHINE_ID: "x" }), "fly");
+  });
 });

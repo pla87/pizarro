@@ -63,4 +63,9 @@ export const setup: Record<string, string> = {
   "Tiempo universal coordinado": "Coordinated Universal Time",
   "Escribe para buscar: Madrid, Bogota…": "Type to search: Madrid, Bogota…",
   "Elige una zona de la lista (por ejemplo, Europe/Madrid).": "Pick a time zone from the list (for example, Europe/Madrid).",
+  // Render y Fly.io: dónde está el código de /setup y de dónde sale APP_URL (setupCodeSource, resolveAppUrl)
+  "Escribe el código de configuración que aparece en los logs de Render (servicio de Pizarro → Logs).": "Enter the setup code shown in the Render logs (Pizarro service → Logs).",
+  "Escribe el código de configuración que aparece en los logs de Fly.io (en tu terminal: fly logs).": "Enter the setup code shown in the Fly.io logs (in your terminal: fly logs).",
+  "Sin APP_URL: es la dirección pública que da Render (RENDER_EXTERNAL_URL). Si usas un dominio propio, define APP_URL en Environment y vuelve a desplegar.": "No APP_URL: this is the public address Render provides (RENDER_EXTERNAL_URL). If you use your own domain, set APP_URL under Environment and redeploy.",
+  "Sin APP_URL: es la dirección pública que da Fly.io (https://<app>.fly.dev). Si usas un dominio propio, define APP_URL con fly secrets set.": "No APP_URL: this is the public address Fly.io provides (https://<app>.fly.dev). If you use your own domain, set APP_URL with fly secrets set.",
 };

@@ -1,5 +1,5 @@
 import "server-only";
-import { clientIpFrom, PEER_IP_MARK, trustProxy } from "./client-ip";
+import { clientIpFrom, PEER_IP_MARK, platformIpHeader, trustProxy } from "./client-ip";
 
 /**
  * IP del cliente (o null si no se sabe): la única función que la calcula, para los límites de intentos, el registro de
@@ -8,7 +8,7 @@ import { clientIpFrom, PEER_IP_MARK, trustProxy } from "./client-ip";
  */
 export function clientIpOrNull(headers: Headers): string | null {
   const peerInstalled = Boolean((globalThis as Record<symbol, unknown>)[PEER_IP_MARK]);
-  return clientIpFrom((name) => headers.get(name), { trusted: trustProxy(), peerInstalled });
+  return clientIpFrom((name) => headers.get(name), { trusted: trustProxy(), peerInstalled, platformHeader: platformIpHeader() });
 }
 
 /** Como clientIpOrNull, con «unknown» si no se sabe (todas las peticiones sin IP comparten límite). */

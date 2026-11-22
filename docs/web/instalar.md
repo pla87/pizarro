@@ -1,6 +1,6 @@
 ---
 titulo: Instalar Pizarro
-descripcion: Paso a paso y sin ser experto, en tu propio servidor con un solo comando o en Railway sin servidor propio.
+descripcion: Paso a paso y sin ser experto, en tu propio servidor con un solo comando o sin servidor propio, en Railway, Render o Fly.io.
 ---
 
 <!--
@@ -30,21 +30,22 @@ necesitas, cómo instalarlo, los primeros pasos y cómo mantenerlo al día. Si a
 - **Un dominio o subdominio** (por ejemplo `pizarro.example.com`) que apunte a la IP del servidor, con los puertos 80
   y 443 abiertos. Si solo lo vas a usar en casa o en la oficina, también funciona en la red local, sin dominio.
 
-**O, sin servidor propio:** una cuenta en [Railway](https://railway.com), un servicio en la nube que cobra según lo
-que se usa, y otra en GitHub.
+**O, sin servidor propio:** una cuenta en una de estas tres plataformas en la nube, que cobran cada mes:
+[Railway](https://railway.com) (según lo que se usa; necesitas también una cuenta en GitHub),
+[Render](https://render.com) (por plan) o [Fly.io](https://fly.io) (según lo que se usa, desde la terminal).
 
 ## Elige tu camino {#elige-tu-camino}
 
-| Opción | Servidor propio | Railway |
-|---|---|---|
-| **Ideal si** | Tienes un VPS o un equipo con Linux | No quieres mantener un servidor |
-| **Cómo** | Un comando en la terminal | Unos clics en el panel de Railway |
-| **Tiempo** | Unos minutos | Unos 15 minutos |
-| **HTTPS** | Automático | Automático |
-| **Coste** | El de tu servidor | Lo que cobre Railway cada mes |
+| Opción | Servidor propio | Railway | Render | Fly.io |
+|---|---|---|---|---|
+| **Ideal si** | Tienes un VPS o un equipo con Linux | No quieres mantener un servidor | Quieres crearlo todo con un botón | Te manejas con la terminal |
+| **Cómo** | Un comando en la terminal | Unos clics en el panel de Railway | Un botón y su panel web | Unas órdenes con su programa `fly` |
+| **Tiempo** | Unos minutos | Unos 15 minutos | Unos 10 minutos | Unos 15 minutos |
+| **HTTPS** | Automático | Automático | Automático | Automático |
+| **Coste** | El de tu servidor | Según lo que uses, cada mes | Un precio fijo por plan, cada mes | Según lo que uses, cada mes |
 
-Los dos caminos acaban igual: en el asistente que crea tu cuenta de administrador. Sigue con
-[Servidor propio](#servidor-propio) o salta a [Railway](#railway).
+Todos los caminos acaban igual: en el asistente que crea tu cuenta de administrador. Sigue con
+[Servidor propio](#servidor-propio) o salta a [Railway](#railway), [Render](#render) o [Fly.io](#fly).
 
 ## Instalar en tu servidor con un comando {#servidor-propio}
 
@@ -206,7 +207,8 @@ inicio de sesión.
 > ```
 >
 > En Railway, reinicia el servicio de Pizarro (en *Deployments*, menú *⋮* del despliegue activo → *Restart*) y busca
-> en el log la línea `PIZARRO ESTÁ SIN CONFIGURAR`: el código nuevo está justo debajo.
+> en el log la línea `PIZARRO ESTÁ SIN CONFIGURAR`: el código nuevo está justo debajo. En Render, reinícialo desde
+> *Manual Deploy* y míralo en *Logs*; en Fly.io, con `fly apps restart <nombre>` y después `fly logs`.
 
 ## Instalar en Railway, sin servidor propio {#railway}
 
@@ -216,7 +218,7 @@ Se hace desde su panel web, sin terminal.
 > [!NOTE]
 > **Cómo despliega Railway.** Mientras preparas el servicio, Railway no despliega cada cambio: los va juntando en un
 > aviso arriba a la izquierda, «Apply N changes», con un botón **Deploy**. En esta guía lo pulsas **una sola vez**, al
-> final (paso 6), cuando ya está todo.
+> final (paso 7), cuando ya está todo.
 
 1. **Crea el proyecto y la base de datos.** Abre <https://railway.com/new> y elige **Database → PostgreSQL**. Railway
    crea un servicio llamado `Postgres`. Si quieres, ponle nombre al proyecto en *Settings → General*.
@@ -265,11 +267,18 @@ Se hace desde su panel web, sin terminal.
      openssl rand -base64 32
      ```
 
-6. **Despliega una sola vez.** Arriba a la izquierda verás «Apply N changes»: pulsa **Deploy**. Railway construye
+6. **Activa la comprobación de salud.** En el servicio de Pizarro, ve a *Settings → Deploy* y escribe
+   `/api/health` en **Healthcheck Path** y `600` en **Healthcheck Timeout** (si no ves ese campo, añade en *Variables*
+   `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`). Así Railway no da por bueno un despliegue hasta que Pizarro responde, y si
+   algo falla al actualizar, sigue con la versión anterior. En esa misma pantalla, deja *Restart Policy* en
+   *On Failure* y una sola réplica (es lo que viene) y *Custom Start Command* vacío.
+7. **Despliega una sola vez.** Arriba a la izquierda verás «Apply N changes»: pulsa **Deploy**. Railway construye
    Pizarro y lo arranca, y eso lleva unos minutos. Si Railway llegó a desplegar antes de que tuvieras las variables o el
    volumen, quizá te llegue un email «Build failed»: es normal y no tienes que hacer nada. El despliegue que vale es
-   este, ya con todo.
-7. **Espera a que Pizarro prepare la base de datos.** La primera vez tarda 2 o 3 minutos más, aunque Railway ya ponga
+   este, ya con todo. Para ver que la comprobación de salud está activa, abre el despliegue en *Deployments* y mira el
+   final de *Build Logs*: debe salir `Starting Healthcheck` con `Path: /api/health` y, cuando Pizarro ya responde,
+   `Healthcheck succeeded!` (antes, unas cuantas líneas `Attempt #… failed`: es normal mientras se prepara).
+8. **Espera a que Pizarro prepare la base de datos.** La primera vez tarda 2 o 3 minutos más, aunque Railway ya ponga
    *Active*. En el servicio de Pizarro, abre *Deployments → View logs*, baja al final del log y espera la línea
    `PIZARRO ESTÁ SIN CONFIGURAR`. Las líneas en rojo del principio son normales. Verás algo así:
 
@@ -281,7 +290,7 @@ Se hace desde su panel web, sin terminal.
    ================================================================
    ```
 
-8. **Abre el asistente.** Ve a tu dirección terminada en `/setup` y sigue los [primeros pasos](#primeros-pasos) desde
+9. **Abre el asistente.** Ve a tu dirección terminada en `/setup` y sigue los [primeros pasos](#primeros-pasos) desde
    el punto 2, con el código del log.
 
 > [!IMPORTANT]
@@ -294,8 +303,8 @@ Se hace desde su panel web, sin terminal.
 > «Apply 2 changes» con cambios de región o de réplicas que tú no has tocado. Ábrelo para ver qué son antes de pulsar
 > **Deploy**:
 >
-> - **Réplicas:** no apliques un cambio que ponga más de una. Pizarro funciona con una sola instancia (ya viene así en
->   su configuración); con dos o más fallarían los avisos en vivo y los límites de intentos de acceso. Descarta ese
+> - **Réplicas:** no apliques un cambio que ponga más de una. Pizarro funciona con una sola instancia (es lo que pone
+>   Railway por defecto); con dos o más fallarían los avisos en vivo y los límites de intentos de acceso. Descarta ese
 >   cambio o vuelve a poner 1.
 > - **Región:** da igual cuál sea, siempre que la base de datos (`Postgres`) esté en la misma. Si están en regiones
 >   distintas, Pizarro va más lento.
@@ -303,6 +312,111 @@ Se hace desde su panel web, sin terminal.
 > [!NOTE]
 > Crea las variables en el servicio de Pizarro, no como *Shared Variables* del proyecto: esas no llegan solas al
 > servicio. Y no añadas las variables `SEED_ADMIN_*`: sin ellas, el primer administrador se crea con el asistente.
+
+## Instalar en Render {#render}
+
+[Render](https://render.com) pone en marcha Pizarro con un botón: crea el servicio con la imagen oficial, un disco para
+tus archivos y la base de datos, y genera las claves. Se hace desde su panel web, sin terminal.
+
+> [!IMPORTANT]
+> **Render cobra cada mes por el servicio, el disco y la base de datos.** Su plan gratis solo sirve para curiosear: el
+> servicio se duerme a los 15 minutos sin visitas (y con él los avisos en vivo y las copias diarias), no tiene disco,
+> así que los archivos adjuntos se pierden en cada despliegue, y la base de datos gratis caduca a los 30 días. Por eso
+> el botón crea los planes de pago más pequeños que sirven: consulta su precio en <https://render.com/pricing>.
+
+1. **Crea tu cuenta** en <https://dashboard.render.com> y añade una tarjeta en los ajustes de pago (*Billing*): sin
+   ella, Render no crea servicios de pago.
+2. **Pulsa el botón.** Abre <https://render.com/deploy?repo=https://github.com/pla87/pizarro>. Render te enseña lo
+   que va a crear: el servicio `pizarro` (con un disco de 5 GB para tus archivos) y la base de datos `pizarro-db`, los
+   dos en Fráncfort. Ponle un nombre cualquiera y confirma con **Deploy Blueprint**.
+3. **Espera a que arranque.** Render descarga Pizarro y prepara la base de datos; la primera vez tarda unos minutos.
+   En el servicio `pizarro`, abre la pestaña **Logs** y espera la línea `PIZARRO ESTÁ SIN CONFIGURAR`: justo debajo
+   están la dirección de `/setup` y el código.
+4. **Guarda las claves.** En la pestaña **Environment** del servicio verás `SESSION_SECRET`, `TOKEN_SECRET`,
+   `ENCRYPTION_KEY` y `BACKUP_KEY`: Render las ha generado. Cópialas en un gestor de contraseñas.
+5. **Abre el asistente.** Ve a la dirección de tu servicio (aparece arriba, algo como
+   `https://pizarro-xxxx.onrender.com`) terminada en `/setup` y sigue los [primeros pasos](#primeros-pasos) desde el
+   punto 2.
+
+No hace falta `APP_URL`: Pizarro usa la dirección de Render. Solo tendrás que añadirla si pones un
+[dominio propio](#dominio). Si Render reinicia el servicio por falta de memoria (lo verás en *Events*), cambia el plan
+en *Settings → Instance Type* al siguiente.
+
+> [!NOTE]
+> **La comprobación de salud ya viene puesta.** En *Settings → Health Checks* debe salir `/api/health`. Gracias a ella,
+> Render no da por bueno un despliegue hasta que Pizarro responde.
+
+## Instalar en Fly.io {#fly}
+
+[Fly.io](https://fly.io) ejecuta Pizarro en una máquina suya, con un disco (volumen) para tus archivos y una base de
+datos. Se maneja desde la terminal, con su programa `fly`.
+
+> [!IMPORTANT]
+> **Fly.io no tiene plan gratis para cuentas nuevas:** cobra cada mes lo que se usa (la máquina encendida todo el mes,
+> el volumen y la base de datos, que suele ser lo más caro). Consulta los precios en <https://fly.io/pricing>.
+
+1. **Instala `fly` y crea tu cuenta.** En un Mac, `brew install flyctl`; en Linux, `curl -L https://fly.io/install.sh | sh`;
+   en Windows, en PowerShell, `pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"`. Después escribe
+   `fly auth signup` (o `fly auth login` si ya tienes cuenta) y añade una tarjeta en el panel de Fly.io.
+2. **Prepara una carpeta con la configuración** y elige el nombre de tu app: es único en todo Fly.io y da tu dirección,
+   `https://<nombre>.fly.dev`.
+
+   ```bash
+   mkdir pizarro-fly
+   cd pizarro-fly
+   curl -fsSLO https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/fly.toml
+   fly apps create <nombre>
+   ```
+
+   Abre `fly.toml` con un editor de texto y cambia `pizarro-example` por tu nombre. Los servidores están en Fráncfort
+   (`fra`); si prefieres otra región, cámbiala en `primary_region` y usa la misma en los pasos 3 y 4. Todo lo que
+   sigue se escribe en esta carpeta.
+3. **Crea el volumen para tus archivos.** Fly avisa de que un solo volumen no tiene copia: es lo normal, las copias de
+   Pizarro van aparte.
+
+   ```bash
+   fly volumes create pizarro_data --size 5 --region fra
+   ```
+
+4. **Crea la base de datos y conéctala.** La primera orden te pregunta un nombre, la región (la misma, o la más cercana)
+   y el plan, y al final muestra el identificador del clúster; la segunda la une a tu app.
+
+   ```bash
+   fly mpg create
+   fly mpg attach <id-del-clúster>
+   ```
+
+5. **Genera las claves.** Pulsa **Generar mis variables**: la página crea en tu navegador cuatro claves aleatorias y
+   las pone en el bloque de abajo (no se envían a ningún sitio). Pulsa **Copiar**, pégalas en un fichero nuevo llamado
+   `pizarro-claves.env` dentro de la carpeta, **guárdalas también en un gestor de contraseñas** y pásalas a Fly:
+
+   ```railway-env
+   SESSION_SECRET=pulsa-generar-mis-variables
+   TOKEN_SECRET=pulsa-generar-mis-variables
+   ENCRYPTION_KEY=pulsa-generar-mis-variables
+   BACKUP_KEY=pulsa-generar-mis-variables
+   ```
+
+   ```bash
+   fly secrets import < pizarro-claves.env
+   ```
+
+   En PowerShell, en su lugar: `Get-Content pizarro-claves.env | fly secrets import`. Después borra el fichero. No hace
+   falta `APP_URL`: Pizarro usa `https://<nombre>.fly.dev`.
+6. **Despliega.** Fly descarga Pizarro, lo arranca y espera a que responda; la primera vez tarda unos minutos.
+
+   ```bash
+   fly deploy
+   ```
+
+7. **Busca el código** con `fly logs`: espera la línea `PIZARRO ESTÁ SIN CONFIGURAR` (debajo están la dirección y el
+   código; para salir, `Ctrl+C`). Abre `https://<nombre>.fly.dev/setup` y sigue los
+   [primeros pasos](#primeros-pasos) desde el punto 2.
+
+> [!NOTE]
+> **La comprobación de salud y la máquina siempre encendida ya vienen en `fly.toml`.** `fly checks list` muestra la de
+> `/api/health` (*passing* si todo va bien). Fly no apaga la máquina por inactividad: Pizarro la necesita encendida
+> para los avisos en vivo y las tareas de fondo. No añadas más máquinas: Pizarro funciona con una sola.
 
 ## Configuración opcional {#configuracion}
 
@@ -340,7 +454,7 @@ seguridad*.
 
 Esas copias se guardan en el propio servidor, así que no te protegen si lo pierdes. Para eso:
 
-1. **Guarda el kit de recuperación fuera del servidor** (o, en Railway, las cuatro claves).
+1. **Guarda el kit de recuperación fuera del servidor** (o, en Railway, Render o Fly.io, las cuatro claves).
 2. **Añade un destino externo**, donde Pizarro sube cada copia: un almacenamiento compatible con S3 (Cloudflare R2,
    Backblaze B2, MinIO…) o una carpeta montada, como un disco USB o un NAS. Para S3, crea un *bucket* privado y una
    clave solo para él y añade sus datos al final de `/opt/pizarro/deploy/.env` ([cómo editarlo](#editar-env)):
@@ -356,7 +470,9 @@ Esas copias se guardan en el propio servidor, así que no te protegen si lo pier
    *Administración → Copias de seguridad*. Todo lo que se sube va cifrado: el proveedor no puede leerlo.
 
    **En Railway,** pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro (los mismos nombres y
-   valores, sin las comillas), añade también `BACKUP_S3_PREFIX=pizarro` y vuelve a desplegar.
+   valores, sin las comillas), añade también `BACKUP_S3_PREFIX=pizarro` y vuelve a desplegar. **En Render,** igual, en
+   *Environment* del servicio. **En Fly.io,** con `fly secrets set`, todas en la misma orden separadas por espacios
+   (`fly secrets set BACKUP_S3_ENDPOINT=… BACKUP_S3_BUCKET=… …`): la máquina se reinicia con ellas.
 
 > [!TIP]
 > **Con Cloudflare R2, protege las copias con una regla de retención.** En el panel de Cloudflare, en tu *bucket* →
@@ -393,7 +509,8 @@ Si pierdes el servidor, necesitas el kit de recuperación y tu destino externo:
    docker compose up -d
    ```
 
-Para elegir una copia concreta, volver a una copia anterior en el mismo servidor o restaurar en Railway, mira la
+Para elegir una copia concreta, volver a una copia anterior en el mismo servidor o restaurar en Railway, Render o
+Fly.io, mira la
 [documentación técnica](../INSTALL.md#6-restaurar).
 
 ## Actualizar {#actualizar}
@@ -413,6 +530,11 @@ sigue intacta.
 **En Railway** no tienes que hacer nada: si el servicio sigue la rama `stable`, se actualiza solo cada vez que se
 publica una versión.
 
+**En Render,** cuando salga una versión, en el servicio de Pizarro pulsa *Manual Deploy → Deploy latest reference*:
+descarga la última y la arranca.
+
+**En Fly.io,** en la carpeta donde guardaste `fly.toml`, vuelve a escribir `fly deploy`.
+
 **Volver a una versión anterior** (o instalar una concreta): añade `--version` con su número.
 
 ```bash
@@ -430,7 +552,7 @@ novedades están en <https://github.com/pla87/pizarro/releases>.
 **Aviso de versión nueva.** Cuando sale una, los administradores ven un aviso discreto en *Administración*. Para ello,
 el servidor pregunta a GitHub, como mucho cada 12 horas, cuál es la última versión, sin enviar nada de tu
 instalación. Si prefieres que no lo haga, añade `UPDATE_CHECK=0` a `/opt/pizarro/deploy/.env` (o a las variables de
-Railway).
+Railway o Render, o con `fly secrets set` en Fly.io).
 
 ## Dominio propio y HTTPS {#dominio}
 
@@ -460,6 +582,14 @@ Let's Encrypt y lo renueva solo. Para cambiar de dominio más adelante:
    `APP_URL=https://pizarro.example.com`, con `https://` y sin barra al final) y vuelve a desplegar. Es el único caso
    en que Railway necesita `APP_URL`.
 
+**En Render,** en el servicio de Pizarro, *Settings → Custom Domains → Add Custom Domain*: escribe tu dominio, crea en
+tu proveedor de DNS el registro que te indica Render y, cuando salga como verificado, añade en *Environment*
+`APP_URL=https://pizarro.example.com` y guarda (Render vuelve a desplegar).
+
+**En Fly.io,** escribe `fly certs add pizarro.example.com` en la carpeta de `fly.toml`, crea en tu proveedor de DNS los
+registros que te muestra y, cuando `fly certs show pizarro.example.com` diga que el certificado está listo, escribe
+`fly secrets set APP_URL=https://pizarro.example.com`.
+
 Al cambiar de dirección, todos tienen que volver a iniciar sesión, y quien instaló Pizarro como app en el móvil debe
 instalarla de nuevo. Si usas «Iniciar sesión con Google», añade también las direcciones nuevas en Google Cloud
 ([guía](../guias/google-login.md)).
@@ -471,8 +601,8 @@ proxy (el Caddy de la instalación, el de Railway o uno tuyo) la conexión llega
 cuenta el proxy en las cabeceras `X-Real-IP` o `X-Forwarded-For`. Pero esas cabeceras las puede escribir cualquiera:
 Pizarro solo se fía de ellas si hay un proxy delante que las sobrescriba. Lo decide la variable `TRUST_PROXY`:
 
-- **Sin definir** (lo normal): con Docker y en Railway se fía, porque ya llevan su proxy; arrancado con `npm start`, no.
-  No hace falta tocar nada.
+- **Sin definir** (lo normal): con Docker, en Railway, en Render y en Fly.io se fía, porque ya llevan su proxy (en
+  Render y Fly.io usa la cabecera propia de su proxy); arrancado con `npm start`, no. No hace falta tocar nada.
 - **`TRUST_PROXY=1`** si arrancas Pizarro con `npm start` detrás de tu propio proxy (nginx, Apache, otro Caddy…). Ese
   proxy debe sobrescribir `X-Real-IP` con la IP del cliente (en nginx: `proxy_set_header X-Real-IP $remote_addr;`).
 - **`TRUST_PROXY=0`** si publicas el contenedor sin el Caddy incluido, con el puerto 3000 abierto tal cual (no es lo
@@ -522,7 +652,7 @@ Si el log dice `PostgreSQL aún no responde`, la app está esperando a la base d
 durante 3 minutos y arranca en cuanto responde. Si al acabar ese tiempo dice `No se puede conectar con PostgreSQL`,
 junto con el servidor y el motivo (no responde, rechaza la conexión o no existe ese nombre), comprueba que el
 contenedor de la base de datos está en marcha (`docker compose ps` y `docker compose logs --tail 50 postgres`) o, en
-Railway, que el servicio de PostgreSQL está activo y la variable `DATABASE_URL`. Con la app ya en marcha, el mismo
+Railway, Render o Fly.io, que la base de datos está activa y la variable `DATABASE_URL`. Con la app ya en marcha, el mismo
 aviso sale si la base deja de responder durante 20 segundos.
 
 Si el log dice `una migración de la base de datos falló a medias (P3009)`, una actualización no terminó de preparar la
@@ -575,6 +705,13 @@ railway ssh
 `railway login` abre el navegador para entrar en tu cuenta; `railway link` te pregunta el proyecto y el servicio (elige
 el de Pizarro); `railway ssh` abre una terminal dentro del servicio. Allí escribe la misma orden y, al terminar, `exit`.
 
+**En Render,** abre el servicio de Pizarro, pestaña *Shell*, y escribe `node /app/dist/reset-link.mjs persona@example.com`
+(con `--reset-2fa` si hace falta). **En Fly.io,** en tu ordenador:
+
+```bash
+fly ssh console -C "node /app/dist/reset-link.mjs persona@example.com"
+```
+
 ### Si necesitas ayuda
 
 En *Administración → Ajustes → Descargar diagnóstico* obtienes un resumen técnico sin datos personales ni claves. Para
@@ -608,6 +745,12 @@ Docker sigue instalado por si lo usas para otras cosas. Si no eres `root`, pon `
 
 **En Railway,** borra el proyecto desde sus ajustes (*Settings → Danger*). Se borran también la base de datos y el
 volumen.
+
+**En Render,** borra el servicio y la base de datos (cada uno, al final de su página *Settings*) y, si quieres, el
+Blueprint. Al borrar el servicio se borra también su disco.
+
+**En Fly.io,** `fly apps destroy <nombre>` borra la app y su volumen; la base de datos se borra aparte, desde el panel
+de Fly.io (*Managed Postgres*).
 
 ## Documentación técnica {#documentacion-tecnica}
 

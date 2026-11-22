@@ -354,4 +354,7 @@ export const cuentas: Record<string, string> = {
   "Si eres quien administra el servidor, genera el enlace desde una terminal en la carpeta de Pizarro:": "If you run the server, generate the link from a terminal in the Pizarro folder:",
   "(en Railway, en la pestaña Console del servicio de Pizarro:": "(on Railway, in the Console tab of the Pizarro service:",
   "También puedes configurar el envío de emails (SMTP).": "You can also set up email sending (SMTP).",
+  // Recuperar contraseña sin email en Render y Fly.io (setupCodeSource)
+  "Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:": "If you run the server, generate the link in the Shell tab of the Pizarro service on Render:",
+  "Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:": "If you run the server, generate the link from your terminal with flyctl:",
 };

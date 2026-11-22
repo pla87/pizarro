@@ -19,13 +19,18 @@ const DOCKER_CMD = "cd /opt/pizarro/deploy && docker compose exec app node dist/
 
 /**
  * Cómo genera el enlace quien administra el servidor, solo con la orden de su instalación (la misma detección que el
- * paso 1 de /setup, setupCodeSource): Docker, `npm start` o Railway (en la pestaña Console del servicio, en la web);
+ * paso 1 de /setup, setupCodeSource): Docker, `npm start`, Railway (en la pestaña Console del servicio, en la web),
+ * Render (pestaña Shell) o Fly.io (`fly ssh console`); en esas dos, con la ruta completa, por si la consola no empieza en /app;
  * si no se sabe, la de Docker y la de Railway, como antes.
  */
 function resetLinkHint(source: SetupCodeSource, t: Awaited<ReturnType<typeof getT>>) {
   switch (source) {
     case "railway":
       return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Console del servicio de Pizarro en Railway:")} {code("node dist/reset-link.mjs <email>")}</>;
+    case "render":
+      return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:")} {code("node /app/dist/reset-link.mjs <email>")}</>;
+    case "fly":
+      return <>{t("Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:")} {code('fly ssh console -C "node /app/dist/reset-link.mjs <email>"')}</>;
     case "npm":
       return <>{t("Si eres quien administra el servidor, genera el enlace desde una terminal en la carpeta de Pizarro:")} {code("node --env-file=.env dist/reset-link.mjs <email>")}</>;
     case "docker":

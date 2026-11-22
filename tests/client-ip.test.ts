@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { test } from "node:test";
-import { clientIpFrom, PEER_IP_HEADER, PEER_IP_MARK, trustProxy, trustProxyInvalid } from "../src/lib/client-ip";
+import { clientIpFrom, PEER_IP_HEADER, PEER_IP_MARK, platformIpHeader, trustProxy, trustProxyInvalid } from "../src/lib/client-ip";
 import { installPeerIpHeader } from "../src/lib/peer-ip";
 
 test("TRUST_PROXY sin definir: se confía en el proxy en Docker y Railway, no con npm start ni a mano", () => {
@@ -45,6 +45,21 @@ test("con proxy de confianza: X-Real-IP, o el último salto de X-Forwarded-For, 
   assert.equal(clientIpFrom(headers({ "x-forwarded-for": "1.1.1.1, 10.0.0.3", [PEER_IP_HEADER]: "172.18.0.5" }), opts), "10.0.0.3");
   assert.equal(clientIpFrom(headers({ [PEER_IP_HEADER]: "172.18.0.5" }), opts), "172.18.0.5");
   assert.equal(clientIpFrom(headers({}), opts), null);
+});
+
+test("Fly.io y Render: manda la cabecera de la plataforma (Fly-Client-IP, CF-Connecting-IP); sin ella, lo de siempre", () => {
+  assert.equal(platformIpHeader({ FLY_APP_NAME: "pizarro", PIZARRO_LAUNCHER: "docker" }), "fly-client-ip");
+  assert.equal(platformIpHeader({ RENDER: "true", PIZARRO_LAUNCHER: "docker" }), "cf-connecting-ip");
+  assert.equal(platformIpHeader({ PIZARRO_LAUNCHER: "docker" }), null);
+  assert.equal(platformIpHeader({ RAILWAY_ENVIRONMENT: "production" }), null);
+  const fly = { trusted: true, peerInstalled: true, platformHeader: "fly-client-ip" };
+  // El cliente puede mandar X-Real-IP y el principio de X-Forwarded-For; el último salto es un proxy de la plataforma.
+  const h = { "fly-client-ip": "203.0.113.9", "x-real-ip": "10.0.0.1", "x-forwarded-for": "10.0.0.2, 172.16.0.1", [PEER_IP_HEADER]: "172.19.0.2" };
+  assert.equal(clientIpFrom(headers(h), fly), "203.0.113.9");
+  assert.equal(clientIpFrom(headers({ "cf-connecting-ip": " 2001:db8::7 ", "x-forwarded-for": "198.51.100.1, 104.16.0.1" }), { ...fly, platformHeader: "cf-connecting-ip" }), "2001:db8::7");
+  assert.equal(clientIpFrom(headers({ "x-real-ip": "10.0.0.1" }), fly), "10.0.0.1");
+  // Sin proxy de confianza (TRUST_PROXY=0) tampoco cuenta la cabecera de la plataforma.
+  assert.equal(clientIpFrom(headers(h), { ...fly, trusted: false }), "172.19.0.2");
 });
 
 test("el servidor sustituye la cabecera interna que mande el cliente por la dirección real de la conexión", async () => {
