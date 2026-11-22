@@ -3,15 +3,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { validTimeZone } from "../src/lib/format";
-import { COMMON_TIME_ZONES, currentTimeZoneName, matchTimeZone, timeZoneOptions } from "../src/lib/time-zones";
+import { currentTimeZoneName, matchTimeZone, timeZoneOptions } from "../src/lib/time-zones";
 
 const supported = Intl.supportedValuesOf("timeZone");
 const options = timeZoneOptions(supported);
+/** Las habituales, arriba de la lista y en este orden (COMMON_TIME_ZONES de lib/time-zones.ts). */
+const COMMON = [
+  "Europe/Madrid", "Atlantic/Canary", "Europe/Lisbon", "Europe/London", "Europe/Paris", "America/New_York", "America/Chicago", "America/Los_Angeles",
+  "America/Mexico_City", "America/Bogota", "America/Lima", "America/Santiago", "America/Argentina/Buenos_Aires", "America/Sao_Paulo", "UTC",
+];
 
 test("las habituales primero, en su orden; luego el resto por orden alfabético, sin repetir y con UTC", () => {
-  assert.deepEqual(options.slice(0, COMMON_TIME_ZONES.length), [...COMMON_TIME_ZONES]);
+  assert.deepEqual(options.slice(0, COMMON.length), COMMON);
   assert.deepEqual(options.slice(0, 3), ["Europe/Madrid", "Atlantic/Canary", "Europe/Lisbon"]);
-  const rest = options.slice(COMMON_TIME_ZONES.length);
+  const rest = options.slice(COMMON.length);
+  // Ninguna habitual se repite entre el resto.
+  for (const z of COMMON) assert.equal(rest.includes(z), false, z);
   assert.deepEqual(rest, [...rest].sort());
   assert.equal(new Set(options).size, options.length);
   assert.ok(options.includes("UTC"));
@@ -44,4 +51,6 @@ test("lo escrito: tal cual, sin distinguir mayúsculas ni «_»/espacios; lo que
 
 test("sin Intl.supportedValuesOf (solo la zona por defecto): la lista sigue teniendo esa zona y UTC", () => {
   assert.deepEqual(timeZoneOptions(["Europe/Madrid"]), ["Europe/Madrid", "UTC"]);
+  // Una habitual que este Intl no conoce no sale; las conocidas, en el orden de las habituales aunque lleguen en otro.
+  assert.deepEqual(timeZoneOptions(["America/Lima", "Asia/Tokyo", "Europe/Madrid"]), ["Europe/Madrid", "America/Lima", "UTC", "Asia/Tokyo"]);
 });
