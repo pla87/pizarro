@@ -662,7 +662,7 @@ function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () =
         <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
       </div>
       <div className="flex gap-2">
-        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" />
+        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" data-pz-no-capture="" />
         <button type="button" className="btn-secondary shrink-0" onClick={async () => ((await copyText(shared.link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
       </div>
     </div>

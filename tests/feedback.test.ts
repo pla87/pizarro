@@ -142,3 +142,25 @@ test("la librería de captura solo se carga al pedir la captura (import dinámic
   const pkg = JSON.parse(readFileSync(path.join(import.meta.dirname, "../package.json"), "utf8")) as { dependencies: Record<string, string> };
   assert.match(pkg.dependencies["modern-screenshot"]!, /^\d+\.\d+\.\d+$/);
 });
+
+test("captura: los secretos a la vista llevan data-pz-no-capture (la captura los deja fuera)", () => {
+  const src = path.join(import.meta.dirname, "../src");
+  const marked = (file: string, needle: string) => {
+    const text = readFileSync(path.join(src, file), "utf8");
+    const at = text.indexOf(needle);
+    assert.ok(at >= 0, `${file}: ${needle}`);
+    // En la misma etiqueta: entre el `<` que la abre y el `>` que la cierra.
+    const open = text.lastIndexOf("<", at);
+    const close = text.indexOf(">", at);
+    assert.ok(text.slice(open, close).includes("data-pz-no-capture"), `${file}: ${needle} sin data-pz-no-capture`);
+  };
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="recovery-codes"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="totp-secret"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'data-testid="totp-qr"');
+  marked("app/(app)/admin/users/UsersAdmin.tsx", 'data-testid="invite-link"');
+  marked("app/(app)/admin/users/UsersAdmin.tsx", 'data-testid="reset-link"');
+  marked("app/(app)/p/[projectId]/settings/ProjectSettings.tsx", 'data-testid="member-link"');
+  marked("app/setup/SetupWizard.tsx", 'id="setup-code"');
+  marked("components/calendar/CalendarSubscribe.tsx", "value={links.https}");
+  assert.match(readFileSync(path.join(src, "components/feedback/capture.ts"), "utf8"), /hasAttribute\("data-pz-no-capture"\)/);
+});
