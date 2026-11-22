@@ -3,7 +3,7 @@
 // al soltar van todas juntas y en orden (columna y posición), con un solo paso de deshacer, y la selección se mantiene.
 // Escape cancela; una tarjeta sin seleccionar se mueve sola; Ctrl al soltar copia solo la cogida; Alt+flechas sobre una
 // seleccionada mueve todas; la otra persona lo ve por el canal en vivo; la columna de revisión pide confirmación; con el
-// dedo (asa) y en modo oscuro. Misma base y servidor que board-e2e.mjs:
+// dedo (asa) y en modo oscuro. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-seleccion-e2e.mjs
 //   # PART=drag,cancel,single,copy,same,keys,live,review,touch,dark
 import os from "node:os";

@@ -14,7 +14,7 @@
 // cambio de otra pestaña no saca de la columna elegida a mano con la búsqueda activa. Y las tarjetas sueltas: mover,
 // editar o archivar una tarjeta desde otra sesión pide solo esa tarjeta (/board-tasks), sin recargar el tablero, y deja
 // la selección y la búsqueda como estaban; renombrar una columna sí recarga el tablero entero.
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs
 //   # PART=ping,presencia,filtros,vacio,lupa,parche,movil,capas,cls,altp,rueda,axe
 import fs from "node:fs";

@@ -5,7 +5,7 @@
 // pendiente al recargar llega con sendBeacon), iconos fijos de la raíz (/favicon.ico, /apple-touch-icon.png, /icon.png,
 // /icon.svg) en el color de la instalación y nombre corto bajo el icono. Para lo optimista, las acciones del servidor
 // tardan 3 s (red lenta) o se quita la red (setOffline).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-detalle-iconos-e2e.mjs      # PART=optimista,columna,flechas,iconos
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";

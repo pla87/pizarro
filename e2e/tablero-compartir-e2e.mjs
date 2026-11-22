@@ -3,7 +3,7 @@
 // proyecto usado con el título, el texto y el enlace en la descripción y los archivos adjuntos; crear la tarea sube los
 // archivos por el camino de siempre y borra lo compartido. Un formulario de otra web (cross-site) recibe 403 sin guardar
 // nada; sin sesión se va al acceso y, al volver, «Nueva tarea» trae los textos (los archivos no se guardan sin sesión).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";

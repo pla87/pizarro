@@ -2,7 +2,7 @@
 // página: en el tablero, cuatro columnas con su cabecera; solo si la carga pasa de ~200 ms, con «Cargando…» para el lector
 // de pantalla y sin brillo con movimiento reducido; más casos en interfaz-esqueletos-e2e.mjs) y la pestaña «Adjuntos y
 // límites» de Ajustes del proyecto (botones de limpieza desactivados y tarjeta atenuada cuando no harían nada; notas «i»).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-carga-e2e.mjs      # PART=load,storage
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

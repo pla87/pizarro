@@ -5,7 +5,7 @@
 // (con su marcador, sin texto alrededor ni varias): cualquier otra cosa sigue el pegado normal sin avisos; dentro de un
 // campo pega texto normal; los botones discretos «Copiar tarea» e «Importar tarea» (desde el portapapeles, tolerante con
 // lo que escribe una IA, o desde un fichero; también con el teclado, en el móvil y cuando el navegador no deja leer el
-// portapapeles); y en inglés. Misma base y servidor que board-e2e.mjs:
+// portapapeles); y en inglés. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-json-detalle-e2e.mjs      # PART=copiar,pegar,texto,invalido,menu,ingles
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";

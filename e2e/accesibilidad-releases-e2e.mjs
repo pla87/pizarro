@@ -7,7 +7,7 @@
 // releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown; (6) borrar va en un menú «⋯»: «Borrar
 // release» y «Borrar adjuntos» del histórico (este, solo con adjuntos) y la papelera de cada documento de la Documentación
 // (con «Descargar»), con teclado y a 390 px; (7) lo buscado se resalta en el histórico de releases (título, datos,
-// adjuntos y texto, sin tildes ni mayúsculas, sin romper el Markdown ni los enlaces). Misma base y servidor que board-e2e.mjs:
+// adjuntos y texto, sin tildes ni mayúsculas, sin romper el Markdown ni los enlaces). Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md,borrar,resaltar
 import fs from "node:fs";
 import os from "node:os";
@@ -159,7 +159,7 @@ if (only.includes("cal")) {
 // --- Aplicar plantilla ----------------------------------------------------------------------------------------------------
 if (only.includes("plantilla")) {
   L.scenario("plantilla: el rol de la columna de destino sin paréntesis dentro de paréntesis");
-  // Proyecto privado propio (como plantillas-aplicar-columnas-e2e), con una columna.
+  // Proyecto privado propio (como plantillas-aplicar-e2e), con una columna.
   const PID = "bh54_plantilla";
   await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Plantilla bh54',true,$2,999996,NOW())`, [PID, admin.id]);

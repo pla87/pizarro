@@ -5,7 +5,7 @@
 // Documentación» («Plan de trabajo – fecha_vN.md», N sube) con y sin mover las tareas, el editor con barra, el panel de
 // fijas, el rol en el menú, las plantillas en Mi perfil y en los ajustes del proyecto, «Curso o charla» con tarjetas de
 // ejemplo y su columna de plan, todo en inglés a 390 px en modo oscuro, y el mismo aspecto del botón de acción en todas
-// las columnas especiales (claro, oscuro y móvil). Misma base y servidor que board-e2e.mjs:
+// las columnas especiales (claro, oscuro y móvil). Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
 import fs from "node:fs";
 import os from "node:os";

@@ -4,7 +4,7 @@
 // (servidor sin email: el enlace de invitación se pasa a mano) en el idioma de quien invita, sale marcada como «Invitación
 // pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»; sí «Copiar enlace
 // de invitación», que emite uno nuevo y deja sin valor el anterior), elige su contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
-// administrador (miembro de un privado) no tiene esa opción; a 390 px el bloque cabe sin desbordar. Misma base y servidor que board-e2e.mjs (sin email):
+// administrador (miembro de un privado) no tiene esa opción; a 390 px el bloque cabe sin desbordar. Misma base y servidor que tablero-e2e.mjs (sin email):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

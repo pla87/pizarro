@@ -3,7 +3,7 @@
 # node scripts/postbuild.mjs && npm run build:boot). Uso, desde la raíz del repositorio:
 #
 #   scripts/e2e-all.sh                         # todas (QA primero, luego el resto y al final la instalación)
-#   SUITES="board-e2e importar-json-detalle-e2e" scripts/e2e-all.sh
+#   SUITES="tablero-e2e importar-json-detalle-e2e" scripts/e2e-all.sh
 #   AFFECTED=1 scripts/e2e-all.sh              # solo las afectadas por `git diff --name-only origin/main` (y la QA)
 #   AFFECTED=1 BASE_REF=HEAD~3 scripts/e2e-all.sh   # afectadas respecto a otro commit
 #   AFFECTED=1 DRY_RUN=1 scripts/e2e-all.sh    # solo dice cuáles lanzaría y por qué

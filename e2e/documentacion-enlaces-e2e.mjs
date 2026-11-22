@@ -9,7 +9,7 @@
 // subir (espacios seguidos en uno, tildes descompuestas de macOS); (binario) un binario que empieza por FF FE (el BOM de
 // UTF-16) ya no pasa por texto y un HTML con `<meta charset="unicode">` sin BOM se ve bien; (indice) el índice de un HTML
 // («#tema-2», también en SVG) se desplaza dentro del marco aislado (antes llevaba al marco la página de la app y quedaba un
-// error) y `ping` no sale de lo que se pinta. Misma base y servidor que board-e2e.mjs:
+// error) y `ping` no sale de lo que se pinta. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-enlaces-e2e.mjs      # PART=enlaces,codificacion,propio,binario,indice
 import fs from "node:fs";
 import os from "node:os";

@@ -1,7 +1,7 @@
 // Ronda 49 (infraestructura): formularios de administración y de Mi perfil sin red (aviso «Sin conexión: no se ha
 // guardado» en vez de la pantalla «Algo ha fallado», sin perder lo escrito), deshacer «Enviar a la papelera» de un
 // documento sin red, IP del cliente que no se falsea con X-Real-IP / X-Forwarded-For sin proxy delante (TRUST_PROXY) y
-// páginas legales pintadas en el servidor. Misma base y servidor que board-e2e.mjs (arrancado con `next start`, sin
+// páginas legales pintadas en el servidor. Misma base y servidor que tablero-e2e.mjs (arrancado con `next start`, sin
 // TRUST_PROXY):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node red-formularios-e2e.mjs
 import os from "node:os";

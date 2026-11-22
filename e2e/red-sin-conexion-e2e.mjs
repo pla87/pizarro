@@ -7,7 +7,7 @@
 // campo a campo (título y descripción por separado); foco tras Escape en la descripción y nombre de los campos del
 // detalle; archivar o borrar desde el detalle sin red, con la descripción a medio escribir: la tarjeta vuelve y, al
 // abrirla otra vez, lo escrito sigue ahí (caza de bugs 52; antes se perdía). Partes:
-// PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador. Misma base y servidor que board-e2e.mjs (por
+// PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador. Misma base y servidor que tablero-e2e.mjs (por
 // HTTP, sin TLS):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node red-sin-conexion-e2e.mjs
 import * as L from "./qa/lib.mjs";

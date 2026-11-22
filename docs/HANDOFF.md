@@ -153,7 +153,7 @@ puerto 3231 o `E2E_PORT`; instrucciones en su cabecera):
 - **En cada ronda, antes de fusionar:** las afectadas, `AFFECTED=1 scripts/e2e-all.sh` (la QA siempre, y las que
   cubren los ficheros cambiados respecto a `origin/main` según `e2e/suites.json`; `DRY_RUN=1` dice cuáles y por qué).
 - **Antes de publicar una versión:** todas, `scripts/e2e-all.sh` (la de instalación incluida, al final).
-- `SUITES="board-e2e importar-json-detalle-e2e" scripts/e2e-all.sh` lanza solo esas.
+- `SUITES="tablero-e2e importar-json-detalle-e2e" scripts/e2e-all.sh` lanza solo esas.
 
 Termina con `Total: N/M comprobaciones OK`. Una suite nueva va con el prefijo de su tema y con su entrada en
 `e2e/suites.json` (lo comprueba `tests/e2e-affected.test.ts`); si una pieza nueva de la app la prueba una suite, añade

@@ -4,7 +4,7 @@
 // entran como tabla Markdown sin cambiar el resto del pegado ni el pegado de Markdown en texto plano.
 //
 // Con la base pz_qa preparada por la suite y un servidor arrancado:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node paste-e2e.mjs
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node pegar-e2e.mjs
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
