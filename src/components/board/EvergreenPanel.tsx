@@ -288,7 +288,7 @@ function EvergreenCard({ id, plan }: { id: string; plan: boolean }) {
         }}
         className="-my-1.5 -ml-2 flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch rounded-md py-1.5 pl-2 outline-offset-2"
       >
-        <span className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
+        <span dir="auto" className="min-w-0 flex-1 truncate font-medium" title={mentionsToPlain(task.title)}><MentionText text={task.title} /></span>
       </div>
       {/* Cadencia: en todas / cada dos / cada tres releases. Mismo color que la barra de progreso de subtareas. Su nombre
           empieza por el texto que se ve («Cada dos: incluir cada dos releases»). */}

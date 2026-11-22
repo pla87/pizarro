@@ -358,7 +358,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
             }}
           />
         ) : (
-          <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
+          <p dir="auto" className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
         )}
         {handle}
       </div>

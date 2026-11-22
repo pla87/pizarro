@@ -96,7 +96,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
             )}
           >
             {t(f.label)}
-            <span className={cn("text-xs", filter === f.value ? "opacity-80" : "text-slate-400")}>{counts[f.value]}</span>
+            <span className={cn("text-xs", filter === f.value ? "opacity-80" : "text-slate-500")}>{counts[f.value]}</span>
           </Link>
         ))}
       </nav>
@@ -111,7 +111,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
           <section key={group.bucket}>
             <h2 className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", group.bucket === "overdue" ? "text-red-600" : "text-slate-600 dark:text-slate-300")}>
               {heading[group.bucket]}
-              <span className="text-xs font-normal text-slate-400">{group.tasks.length}</span>
+              <span className="text-xs font-normal text-slate-500">{group.tasks.length}</span>
             </h2>
             <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
               {group.tasks.map((task) => {
@@ -132,12 +132,12 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                       className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-medium text-slate-700 hover:border-brand-400 hover:text-brand-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:text-brand-200"
                     >
                       <Folder size={12} className="shrink-0 text-slate-400" aria-hidden />
-                      <span className="truncate">{task.project.name}</span>
+                      <span dir="auto" className="truncate">{task.project.name}</span>
                     </Link>
                     <TypeBadge kind={localizeGeneralKind(task.kind, uiLocale)} />
                     <Link prefetch={false} href={`/p/${projectId}?task=${task.id}`} className="flex min-w-0 flex-1 basis-40 items-center gap-1.5 text-sm font-medium hover:text-brand-600">
                       {task.color && <span data-task-color className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/25" style={{ backgroundColor: task.color }} title={t("Color de la tarea")} aria-hidden />}
-                      <span className="min-w-0 truncate"><MentionText text={task.title} /></span>
+                      <span dir="auto" className="min-w-0 truncate"><MentionText text={task.title} /></span>
                     </Link>
                     {task.due && (() => {
                       const st = dueStatus(task.due, task.column.isDone, today);

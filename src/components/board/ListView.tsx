@@ -240,7 +240,7 @@ const TableRow = memo(function TableRow({ task, lookups, today, locale, t, prior
       <td className="px-2 py-1.5 whitespace-nowrap text-slate-600 dark:text-slate-300">{column?.name}</td>
       <td className="px-2 py-1.5 whitespace-nowrap">
         {assignee ? (
-          <span className="inline-flex items-center gap-1.5"><Avatar id={assignee.id} name={assignee.name} title={assignee.name} /> <span className="max-w-32 truncate">{assignee.name}</span></span>
+          <span className="inline-flex items-center gap-1.5"><Avatar id={assignee.id} name={assignee.name} title={assignee.name} /> <span dir="auto" className="max-w-32 truncate">{assignee.name}</span></span>
         ) : (
           <span className="text-slate-400" aria-label={t("Sin responsable")}>—</span>
         )}
