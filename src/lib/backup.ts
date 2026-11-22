@@ -8,12 +8,13 @@ import { backupFileName, fileSha256, diagnoseBackupKey, parseBackupKey, verifyBa
 import { listForeignKeys, lastMigration } from "./backup-db";
 import {
   checkShrink, copySummary, DirDestination, dumpKey, externalDestinations, lastGoodCopy, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, stemDate,
-  syncBackup, type BackupDestination, type CopyShrink, type CopySummary, type DestinationId, type StemInfo,
+  syncBackup, type BackupDestination, type CopyShrink, type CopySummary, type DestinationId, type ExternalConfig, type StemInfo,
 } from "./backup-dest";
 import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
+import { isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
 import { logEvent } from "./log";
@@ -332,7 +333,8 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
       details: { file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: run.filesNew, pruned: pruned.removedBackups, objectsRemoved: pruned.removedObjects, tempRemoved: pruned.removedTemp ?? 0 },
     });
   } catch (err) {
-    run = { at: new Date().toISOString(), ok: false, error: message(err), durationMs: Date.now() - started };
+    // Disco lleno al volcar o al guardar los ficheros: el mensaje de la app, no el de Node («ENOSPC: no space left…»).
+    run = { at: new Date().toISOString(), ok: false, error: isNoSpaceError(err) ? NO_SPACE_MESSAGE : message(err), durationMs: Date.now() - started };
     // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
     const doomed = [dumpTmp, file, file && `${file}.json`, file && path.join(backupsDir(), manifestKey(path.basename(file).replace(/\.pzbak$/, "")))];
     await Promise.all(doomed.filter((f): f is string => !!f).map((f) => rm(f, { force: true }))).catch(() => {});
@@ -443,17 +445,19 @@ function shrinkMessage(p: { what: "core" | "rows" | "files"; local: number; remo
   return `No se sube la copia ${stem}: tiene ${p.local} ${what} y la última del destino (${p.stem}) tiene ${p.remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».`;
 }
 
+const externalConfigMessage = (errors: string[]) => `Destino externo de copias mal configurado: ${errors.join(" ")}`;
+
 /**
  * Sube la última copia local a cada destino externo que aún no la tenga (o a todos con `force`), reanudando lo
  * que quedara a medias, y aplica allí la misma retención. Sin `force`, no sube a un destino cuya última copia es
  * mucho mayor (ver checkShrink): es un fallo. Devuelve un resultado por destino; nunca lanza. Con el mismo bloqueo
  * entre procesos que createBackup (LOCK_BACKUP): si otro proceso está copiando o subiendo, no hace nada.
  */
-export async function syncExternal(opts: { force?: boolean } = {}): Promise<ExternalRun[]> {
+export async function syncExternal(opts: { force?: boolean; config?: ExternalConfig } = {}): Promise<ExternalRun[]> {
   const key = backupKey();
-  const { destinations, errors } = externalDestinations();
+  const { destinations, errors } = opts.config ?? externalDestinations();
   if (!key || (destinations.length === 0 && errors.length === 0)) return [];
-  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", message: `Destino externo de copias mal configurado: ${errors.join(" ")}` });
+  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", message: externalConfigMessage(errors) });
   if (destinations.length === 0) return [];
   if (lock.busy || lock.external) return [];
   lock.external = true;
@@ -680,12 +684,19 @@ export async function dailyBackupJob(now: number = Date.now()): Promise<JobSkip 
   if (!run.ok && run.error !== BUSY) throw new Error(run.error ?? "Error");
 }
 
-/** Tarea horaria: sube a los destinos externos la última copia si aún no la tienen (o reintenta si falló). Lanza si falla alguno. */
+/**
+ * Tarea horaria: sube a los destinos externos la última copia si aún no la tienen (o reintenta si falló). Lanza si
+ * falla alguno, y también si el destino está mal configurado y no queda ninguno válido: no se ha copiado nada fuera,
+ * así que en Tareas de mantenimiento sale «Con error» con el motivo, no «Correcta».
+ */
 export async function externalBackupJob(): Promise<JobSkip | void> {
+  if (!backupKey()) return { skipped: "noKey" };
   if (backupPaused()) return { skipped: "paused" };
-  const { destinations, errors } = externalDestinations();
+  const config = externalDestinations();
+  const { destinations, errors } = config;
   if (destinations.length === 0 && errors.length === 0) return { skipped: "noDestination" };
-  const runs = await syncExternal();
+  const runs = await syncExternal({ config });
+  if (destinations.length === 0) throw new Error(externalConfigMessage(errors));
   const failed = runs.filter((r) => !r.ok);
   if (failed.length) throw new Error(failed.map((r) => `${r.label}: ${r.error}`).join(" · "));
 }

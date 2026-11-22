@@ -1,6 +1,7 @@
 // Tras perder el volumen o la base de datos, la primera copia automática es de una instalación casi vacía: no debe
 // llegar al destino externo ni, con su retención, borrar la copia buena (y los ficheros que solo esa nombraba).
 // También: BACKUP_PAUSE=1 detiene las tareas automáticas y «Copiar ahora» (force) sube igualmente.
+// Y: con el destino externo mal configurado y ninguno válido, la tarea horaria falla (no queda «Correcta»).
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -174,5 +175,22 @@ describe("confirmar la reducción mientras se hace una copia", () => {
     assert.equal(after.shrink, undefined, "la copia que estaba en marcha no vuelve a poner el aviso ya confirmado");
     assert.equal(after.shrinkAccepted, shrink!.stem);
     assert.equal((await computeBackupAlert()).active, false);
+  });
+});
+
+describe("destino externo mal configurado", () => {
+  test("sin ningún destino válido, la tarea horaria falla con el motivo (no sale «Correcta»)", async () => {
+    process.env.UPLOAD_DIR = await tmp();
+    process.env.BACKUP_EXTERNAL_DIR = "copias-relativas";
+    await assert.rejects(externalBackupJob(), /Destino externo de copias mal configurado: BACKUP_EXTERNAL_DIR debe ser una ruta absoluta\./);
+    // Con un destino válido además del mal configurado, se copia en el bueno y la tarea no falla por el otro.
+    Object.assign(process.env, { BACKUP_EXTERNAL_DIR: await tmp(), BACKUP_S3_BUCKET: "copias" });
+    const good = await createBackup();
+    assert.equal(good.ok, true, good.error);
+    assert.equal(await externalBackupJob(), undefined);
+    assert.equal((await readStatus()).external?.dir?.lastOkFile, good.file!.replace(/\.pzbak$/, ""));
+    delete process.env.BACKUP_S3_BUCKET;
+    delete process.env.BACKUP_EXTERNAL_DIR;
+    assert.deepEqual(await externalBackupJob(), { skipped: "noDestination" });
   });
 });
