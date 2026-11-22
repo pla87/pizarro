@@ -29,3 +29,12 @@ export function latestOnly(): { next: () => number; isLatest: (n: number) => boo
   let last = 0;
   return { next: () => ++last, isLatest: (n) => n === last };
 }
+
+/**
+ * Deshacer «Marcar todo como leído» si no se ha guardado: vuelven a sin leer los avisos que lo estaban al pulsar
+ * (`wasUnread`), sobre la lista de AHORA (si entretanto llegó un refresco, no se vuelve a la de antes de él). Los leídos
+ * uno a uno mientras tanto (`readHere`) se quedan leídos.
+ */
+export function restoreUnread<T extends { id: string; read: boolean }>(list: T[], wasUnread: ReadonlySet<string>, readHere: ReadonlySet<string>): T[] {
+  return list.map((x) => (x.read && wasUnread.has(x.id) && !readHere.has(x.id) ? { ...x, read: false } : x));
+}
