@@ -51,6 +51,7 @@ import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanit
 import { Presence, setLivePresence, setLiveProject } from "./Presence";
 import { setLiveStream } from "./taskPresence";
 import { ListView } from "./ListView";
+import { ProjectIntroNotice } from "./ProjectIntroNotice";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
 import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
@@ -252,7 +253,7 @@ function findContainer(items: Items, id: string): string | undefined {
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
-export function Board({ data: page, initialTaskId = null }: { data: BoardPageData; initialTaskId?: string | null }) {
+export function Board({ data: page, initialTaskId = null, intro = "" }: { data: BoardPageData; initialTaskId?: string | null; /** Descripción del proyecto recién creado (ProjectIntroNotice). */ intro?: string }) {
   // Las tarjetas llegan sin sus campos por defecto (board-task-wire.ts): se completan una vez por dato recibido.
   const data: BoardData = useMemo(() => ({ ...page, tasks: page.tasks.map(unpackBoardTask) }), [page]);
   const router = useRouter();
@@ -2016,6 +2017,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
             </button>
           </div>
         )}
+        {intro && <ProjectIntroNotice description={intro} />}
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
         <FloatingCreateButtons
@@ -2123,7 +2125,8 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 }
 
 /**
- * Botones flotantes de crear (móvil y tableta). Mientras hay selección se retiran: la barra de selección ocupa el pie
+ * Botones flotantes de crear (móvil y tableta). Con cualquier diálogo abierto no se ven (`data-board-fab`, globals.css).
+ * Mientras hay selección se retiran: la barra de selección ocupa el pie
  * de la pantalla con sus acciones y así ni la tapan ni quedan tapados (vuelven al limpiar la selección).
  * `fullReason`: la columna en la que crearía el «+» (la que se ve en el móvil) no admite más tareas («Programa del curso»
  * con el tope de sesiones). El «+» se ve desactivado, como el de la cabecera de la columna, pero sigue respondiendo al
@@ -2138,6 +2141,7 @@ function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull, hidden }: { 
     <>
       <button
         onClick={onBulk}
+        data-board-fab
         className="fixed right-[1.625rem] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-30 flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-brand-600 shadow-lg hover:bg-slate-50 active:scale-95 lg:hidden dark:border-slate-700 dark:bg-slate-800 dark:text-brand-300"
         aria-label={t("Crear varias tareas")}
       >
@@ -2145,6 +2149,7 @@ function FloatingCreateButtons({ onBulk, onNew, fullReason, onFull, hidden }: { 
       </button>
       <button
         onClick={() => (fullReason ? onFull(fullReason) : onNew())}
+        data-board-fab
         className={cn(
           "fixed right-5 bottom-[calc(env(safe-area-inset-bottom)+1.25rem)] z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg lg:hidden",
           // Desactivado: gris y opaco (con transparencia se verían las tarjetas a través).

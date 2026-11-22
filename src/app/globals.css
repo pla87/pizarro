@@ -611,3 +611,13 @@ select:not([multiple], [size]) {
     }
   }
 }
+
+/*
+ * Botones flotantes de crear del tablero (móvil y tableta, `data-board-fab`): con cualquier diálogo abierto (un Modal,
+ * `data-pz-modal`) no se pintan. Con los de tarea ya se quitaban (Board.tsx); con los demás («Varias tareas», «Archivadas»,
+ * importar…) se quedaban debajo del fondo, junto al pie del diálogo, y parecían taparlo. La copia de «Nueva tarea» de la
+ * cabecera (`data-pz-layer`) es otra cosa y sigue encima a propósito.
+ */
+body:has([data-pz-modal]) [data-board-fab] {
+  display: none;
+}

@@ -111,10 +111,82 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   return join(title.trim());
 }
 
+/** Etiqueta de una línea de formulario: la parte en negrita del principio («**Plazo:** [fecha]» → «**Plazo:**») o la línea. */
+function formAnchor(line: string): string {
+  return /^\*\*[^*\n]+\*\*/.exec(line)?.[0] ?? line;
+}
+
+/** ¿Empieza `line` por la etiqueta `anchor`? También si la respuesta se escribió dentro de la negrita («**Plazo: lunes**»). */
+function lineHasAnchor(line: string, anchor: string): boolean {
+  const l = line.trimStart();
+  if (l.startsWith(anchor)) return true;
+  return anchor.startsWith("**") && anchor.endsWith("**") && anchor.length > 4 && l.startsWith(anchor.slice(0, -2));
+}
+
+/** Etiqueta comparable entre tipos: sin negritas, espacios ni mayúsculas («**Qué hay que hacer:**» = «Qué hay que hacer:»). */
+const anchorKey = (anchor: string) => anchor.replace(/\*/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+const sameText = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+
+/**
+ * La descripción leída como el formulario del tipo `tpl`: sus líneas no vacías (etiquetas), en orden y cada una al principio
+ * de una línea, con lo escrito en cada apartado. La primera línea del texto tiene que ser una de ellas; las que se hayan
+ * borrado no cuentan. En el último apartado, la respuesta es lo que va pegado a la etiqueta; lo que siga tras una línea en
+ * blanco es `rest` (lo que había antes de elegir el tipo, o lo escrito aparte). null si no tiene esa forma (p. ej. hay algo
+ * escrito antes del formulario).
+ */
+function readForm(tpl: string, description: string): { sections: { key: string; text: string; filled: boolean }[]; rest: string } | null {
+  const tplLines = tpl.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = description.replace(/\r\n?/g, "\n").trim().split("\n");
+  const found: { tl: string; at: number }[] = [];
+  let from = 0;
+  for (const tl of tplLines) {
+    const anchor = formAnchor(tl);
+    const at = lines.findIndex((l, i) => i >= from && lineHasAnchor(l, anchor));
+    if (at < 0) continue;
+    found.push({ tl, at });
+    from = at + 1;
+  }
+  if (!found.length || found[0]!.at !== 0) return null;
+  let end = lines.length;
+  const sections = found.map(({ tl, at }, i) => {
+    const last = i === found.length - 1;
+    end = last ? lines.length : found[i + 1]!.at;
+    if (last) {
+      const blank = lines.findIndex((l, j) => j > at && !l.trim());
+      if (blank >= 0) end = blank;
+    }
+    const text = lines.slice(at, end).join("\n").trimEnd();
+    return { key: anchorKey(formAnchor(tl)), text, filled: !sameText(text, tl) };
+  });
+  return { sections, rest: lines.slice(end).join("\n").trim() };
+}
+
 /** Descripción al pasar del tipo `prev` a `next`. */
 export function switchKindDescription(prev: KindAutomation | null | undefined, next: KindAutomation, description: string): string {
   const tpl = prev?.descriptionTemplate.trim() ?? "";
   if (prev && tpl === next.descriptionTemplate.trim()) return description;
+  // Formulario del anterior con algo respondido: cada apartado vacío se quita y cada respuesta se conserva una sola vez, en
+  // el apartado del nuevo con la misma etiqueta («Qué hay que hacer:» de «Casa» a «Reforma u obra») o, si el nuevo no lo
+  // tiene, debajo de su formulario. Antes el formulario nuevo se ponía delante del viejo entero (etiquetas repetidas y
+  // apartados vacíos que ya no tocaban).
+  const form = tpl ? readForm(tpl, description) : null;
+  if (form && form.sections.some((s) => s.filled)) {
+    const filled = form.sections.filter((s) => s.filled);
+    const used = new Set<number>();
+    // El formulario nuevo tal cual (con sus líneas en blanco), con cada respuesta en su apartado.
+    const fresh = next.descriptionTemplate.trim();
+    const lines = fresh ? fresh.split(/\r?\n/).map((line) => {
+      if (!line.trim()) return line;
+      const key = anchorKey(formAnchor(line.trim()));
+      const i = filled.findIndex((s, j) => !used.has(j) && s.key === key);
+      if (i < 0) return line;
+      used.add(i);
+      return filled[i]!.text;
+    }) : [];
+    const parts = [lines.join("\n"), ...filled.filter((_, j) => !used.has(j)).map((s) => s.text), form.rest].filter(Boolean);
+    return form.rest ? parts.join("\n\n") : `${parts.join("\n\n")}\n`;
+  }
   let base = description;
   const start = description.trimStart();
   // El texto del anterior sigue al principio y sin tocar: se quita, y lo que vaya debajo tras una línea en blanco (lo que

@@ -12,6 +12,8 @@ import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } f
 import { MentionTextarea, type MentionCommand } from "./MentionTextarea";
 import { applyTextareaEdit } from "./textarea-edit";
 import { tablesOnlyMarkdown } from "@/lib/paste-table";
+import type { EditAnchor } from "@/lib/edit-anchor";
+import { anchorFromTextarea, placeEditorAt, placeTextareaAt } from "./editAnchorDom";
 
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
@@ -45,6 +47,11 @@ interface Props {
   onCancel?: () => void;
   textareaRef?: React.Ref<HTMLTextAreaElement>;
   textareaClassName?: string;
+  /**
+   * Punto del doble clic en la vista de lectura: al montar, el cursor va ahí y el texto bajo el ratón se queda en su sitio
+   * (en vez del foco al final, que desplazaba el panel hasta el final de una descripción larga). Sustituye a `autoFocus`.
+   */
+  startAt?: EditAnchor | null;
 }
 
 /**
@@ -55,7 +62,7 @@ interface Props {
  * conserva su función de mover el foco, así que el teclado nunca queda atrapado. Los botones de la barra están fuera del orden
  * de Tab; se entra con Alt+F10 (flechas para moverse; Tab o Escape vuelven al texto).
  */
-export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName }: Props) {
+export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName, startAt }: Props) {
   const t = useT();
   const inner = useRef<HTMLTextAreaElement | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -94,8 +101,15 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     [run],
   );
 
+  // Modo Markdown: el cursor en el punto del doble clic, sin desplazar (con `autoFocus` iba al principio y el navegador
+  // llevaba el panel hasta él).
+  useLayoutEffect(() => {
+    if (mode !== "WYSIWYG" && startAt && inner.current) placeTextareaAt(inner.current, startAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
+  }, []);
+
   if (mode === "WYSIWYG") {
-    return <WysiwygField fieldRef={inner} id={id} value={value} onValueChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} users={users} onCommand={onCommand} />;
+    return <WysiwygField fieldRef={inner} id={id} value={value} onValueChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} startAt={startAt} users={users} onCommand={onCommand} />;
   }
   return (
     <>
@@ -118,7 +132,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
         users={users}
         onCommand={onCommand}
         placeholder={placeholder}
-        autoFocus={autoFocus}
+        autoFocus={autoFocus && !startAt}
         onPaste={(e) => {
           // Una tabla copiada de Excel, Google Sheets, Word o una web entra como tabla Markdown (no como texto con tabuladores).
           const md = tablesOnlyMarkdown(e.clipboardData.getData("text/html"));
@@ -181,7 +195,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
  * antes solo se veía un hueco gris y las primeras teclas se perdían («Hola equipo» quedaba en «equipo»). Cuando el editor
  * está listo (montado oculto con lo escrito) ocupa su sitio en la misma pasada, con el texto y el foco al final.
  */
-function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel }: Omit<Props, "mode" | "textareaRef" | "textareaClassName"> & {
+function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, autoFocus, startAt, onCommand, onSubmit, onCancel }: Omit<Props, "mode" | "textareaRef" | "textareaClassName"> & {
   fieldRef: React.MutableRefObject<HTMLTextAreaElement | null>;
 }) {
   const [Loaded, setLoaded] = useState<RichEditor | null>(() => richEditor);
@@ -207,27 +221,42 @@ function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, 
   useLayoutEffect(() => {
     const el = fieldRef.current;
     if (!provisional || !autoFocus || !el) return;
+    // Abierto con doble clic: en el punto del clic, sin desplazar (ver startAt).
+    if (startAt) return placeTextareaAt(el, startAt);
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al montar
   }, []);
+  // Punto del cursor en el campo provisional al cambiarlo por el editor (si se abrió con doble clic): el editor sigue ahí.
+  const swapAnchor = useRef<EditAnchor | null>(null);
   useLayoutEffect(() => {
     const ed = focusOnSwap.current;
     if (provisional || !ed) return;
     focusOnSwap.current = null;
+    if (swapAnchor.current) return placeEditorAt(ed, swapAnchor.current);
     // focus("end") pone el cursor al final, pero el foco lo da en el siguiente fotograma: sin view.focus() la tecla
     // pulsada en ese instante (ya sin el campo provisional) se perdía.
     ed.commands.focus("end");
     ed.view.focus();
   }, [provisional]);
   const onReady = (ed: Editor) => {
-    if (!provisional) return;
+    if (!provisional) {
+      // Abierto con doble clic: el cursor al punto del clic cuando el editor ya está en la página (siguiente fotograma).
+      if (startAt && autoFocus) requestAnimationFrame(() => !ed.isDestroyed && placeEditorAt(ed, startAt));
+      return;
+    }
     // Si se estaba escribiendo en el campo provisional, el foco pasa al editor (ver el efecto de arriba).
-    if (typeof document !== "undefined" && document.activeElement === fieldRef.current) focusOnSwap.current = ed;
+    if (typeof document !== "undefined" && document.activeElement === fieldRef.current) {
+      focusOnSwap.current = ed;
+      if (startAt && fieldRef.current) swapAnchor.current = anchorFromTextarea(fieldRef.current);
+    }
     setProvisional(false);
   };
+  // `autoFocus` del editor solo si nace visible y sin punto de doble clic: TipTap aplica su `autofocus` en un setTimeout
+  // tras crearse y lee la opción en ese momento, así que si pasaba a `true` al quitar el campo provisional llevaba el
+  // cursor (y el panel) al final, después de colocarlo. Al quitar el campo provisional el foco lo pone el efecto de arriba.
   const editor = Loaded && (
-    <Loaded id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus && !provisional} users={users} onCommand={onCommand} onReady={onReady} />
+    <Loaded id={id} value={value} onChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus && !startedProvisional && !startAt} users={users} onCommand={onCommand} onReady={onReady} />
   );
   if (!startedProvisional) return editor;
   return (

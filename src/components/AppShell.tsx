@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { createProject, listProjectStarts } from "@/actions/projects";
@@ -46,6 +46,7 @@ import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
+import { NEW_PROJECT_PARAM } from "@/components/board/ProjectIntroNotice";
 
 interface Props {
   user: CurrentUser;
@@ -94,6 +95,13 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null), { yieldToModal: true });
   const closeDrawer = useCallback(() => setDrawerPath(null), []);
+  // «Nuevo proyecto» del selector: el diálogo se pinta aquí, fuera del menú móvil, para poder cerrar el menú al abrirlo
+  // (dentro del menú, cerrarlo se llevaba el diálogo; abierto, quedaba detrás).
+  const [creatingProject, setCreatingProject] = useState(false);
+  const openNewProject = useCallback(() => {
+    closeDrawer();
+    setCreatingProject(true);
+  }, [closeDrawer]);
   // Menú móvil como diálogo: el foco entra en «Cerrar menú», Tab no sale de él y al cerrar vuelve a «Abrir menú».
   const drawerRef = useRef<HTMLElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
@@ -139,6 +147,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
     // El diálogo de informar de un error cierra antes el menú móvil: la captura es de la página, no del menú.
     <FeedbackProvider status={feedback} isAdmin={user.role === "ADMIN"} version={version} email={user.email} beforeOpen={closeDrawer}>
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
+    <NewProjectContext.Provider value={openNewProject}>
     {/* `unread` llega con tope de 100 (layout): con 100 o más la insignia pide 100 (algunos sistemas lo muestran como
         «99+»), nunca un número menor que el real. */}
     <AppBadge count={unread} />
@@ -185,6 +194,8 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
         <main id={MAIN_ID} tabIndex={-1} className="min-h-0 flex-1 overflow-auto outline-none max-lg:pb-[env(safe-area-inset-bottom)]">{children}</main>
       </div>
     </div>
+    {creatingProject && <NewProjectModal isAdmin={user.role === "ADMIN"} onClose={() => setCreatingProject(false)} />}
+    </NewProjectContext.Provider>
     </ProjectsContext.Provider>
     </FeedbackProvider>
   );
@@ -386,10 +397,13 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
   );
 }
 
+/** Abre «Nuevo proyecto» (lo pinta Shell, fuera del menú móvil). */
+const NewProjectContext = createContext<() => void>(() => {});
+
 function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProject[]; current: ShellProject | null; isAdmin: boolean }) {
   const t = useT();
   const switchHref = useProjectSwitchHref();
-  const [creating, setCreating] = useState(false);
+  const openNewProject = useContext(NewProjectContext);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // Alt+P (atajo del tablero) abre este selector en escritorio, donde la cabecera del tablero ya no lleva el suyo. Solo
@@ -453,11 +467,10 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProjec
           </Link>
         )}
         {/* Para todos: quien no es administrador crea proyectos privados (el diálogo lo indica y el servidor lo exige). */}
-        <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={() => setCreating(true)}>
+        <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={openNewProject}>
           {t("Nuevo proyecto")}
         </MenuItem>
       </DropdownMenu>
-      {creating && <NewProjectModal isAdmin={isAdmin} onClose={() => setCreating(false)} />}
       {current?.outside && <OutsideListNotice projectId={current.id} />}
     </div>
   );
@@ -542,9 +555,10 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
       if (!res.ok) return toast(res.error, "error");
       // Con una plantilla, al tablero: ya trae columnas, tipos y etiquetas, y lo siguiente es crear tareas (antes se abrían
       // siempre los ajustes). En blanco, a los ajustes, para adaptar las columnas por defecto y los tipos.
+      // Con una plantilla, `?nuevo=1`: el tablero enseña la descripción del proyecto una vez (ProjectIntroNotice).
       const dest = template ? `/p/${res.data.id}` : `/p/${res.data.id}/settings`;
       setTarget(dest);
-      router.push(dest);
+      router.push(template ? `${dest}?${NEW_PROJECT_PARAM}=1` : dest);
     });
   };
   return (
@@ -566,7 +580,9 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
-          <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
+          {/* `autoFocus` además de `data-autofocus`: el foco llega al abrir y no un fotograma después (Modal), así que lo
+              que se escribe justo tras pulsar «Nuevo proyecto» ya entra aquí (antes se perdía la primera letra). */}
+          <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus autoFocus />
         </div>
         {/* Un solo desplegable: en blanco, una plantilla de serie o una propia (solo admins). Siempre visible (las plantillas
             llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción y, con una de serie, la

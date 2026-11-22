@@ -184,4 +184,6 @@ export const proyectos: Record<string, string> = {
   "Enlace de invitación": "Invitation link",
   // Nuevo proyecto: plantilla de serie sin descripción y con tarjetas de ejemplo
   "La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.": "The template's structure (columns, types, labels and fields), with sample cards you can delete.",
+  // Proyecto recién creado desde una plantilla: su descripción, una vez, encima de las columnas
+  "Descripción del proyecto": "Project description",
 };
