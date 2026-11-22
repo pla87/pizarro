@@ -19,8 +19,6 @@ export const aplicarPlantilla: Record<string, string> = {
   "Ya no se puede deshacer: han pasado más de {h} horas.": "It can no longer be undone: more than {h} hours have passed.",
 
   // Asistente
-  "Plantillas generales": "General templates",
-  "Plantillas de la instalación": "Templates of this installation",
   "Qué hacer": "What to do",
   "Añadir lo que falte de la plantilla": "Add what is missing from the template",
   "Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga, y vuelve a mostrar los tipos generales que usa la plantilla si el proyecto los tiene ocultos. No cambia ni quita nada más.":

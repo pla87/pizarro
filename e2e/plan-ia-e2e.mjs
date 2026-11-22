@@ -3,8 +3,8 @@
 // pie de serie para Claude Code, de la persona y del proyecto), el texto generado (contexto, tareas en orden con tipo,
 // etiquetas, fechas, subtareas, enlaces y adjuntos), Copiar todo, .md, .txt, cerrar con cambios, «Guardar en
 // Documentación» («Plan de trabajo – fecha_vN.md», N sube) con y sin mover las tareas, el editor con barra, el panel de
-// fijas, el rol en el menú, las plantillas en Mi perfil y en los ajustes del proyecto, el ejemplo «Preparación de un
-// curso» con su columna de plan, todo en inglés a 390 px en modo oscuro, y el mismo aspecto del botón de acción en todas
+// fijas, el rol en el menú, las plantillas en Mi perfil y en los ajustes del proyecto, «Curso o charla» con tarjetas de
+// ejemplo y su columna de plan, todo en inglés a 390 px en modo oscuro, y el mismo aspecto del botón de acción en todas
 // las columnas especiales (claro, oscuro y móvil). Misma base y servidor que board-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-e2e.mjs   # PART=buttons,plan,move,tpl,rich,fixed,role,settings,curso,en
 import fs from "node:fs";
@@ -428,9 +428,9 @@ if (only.includes("settings")) {
   await s.ctx.close();
 }
 
-// --- El ejemplo «Preparación de un curso» -------------------------------------------------------------------------------
+// --- «Curso o charla» con tarjetas de ejemplo ---------------------------------------------------------------------------
 if (only.includes("curso")) {
-  L.scenario("curso: el ejemplo trae «Ejercicios y exámenes», «Plan de trabajo para IA» con una fija y sin «Hecho»");
+  L.scenario("curso: «Curso o charla» con ejemplos trae «Ejercicios y exámenes», «Plan de trabajo para IA» con una fija y «Publicado»");
   const COURSE = "Curso r51";
   await L.q(`DELETE FROM "Project" WHERE name=$1`, [COURSE]);
   const s = await L.session();
@@ -440,8 +440,9 @@ if (only.includes("curso")) {
     await page.getByRole("menuitem", { name: "Nuevo proyecto" }).click();
     const nd = page.locator("[role=dialog]").filter({ has: page.locator("#project-name") });
     await nd.waitFor();
-    await L.waitFor(async () => (await nd.locator("#project-start option", { hasText: "Preparación de un curso" }).count()) === 1, { timeout: 8000 });
-    await nd.locator("#project-start").selectOption({ label: "Preparación de un curso" });
+    await L.waitFor(async () => (await nd.locator("#project-start option", { hasText: "Curso o charla" }).count()) === 1, { timeout: 8000 });
+    await nd.locator("#project-start").selectOption({ label: "Curso o charla" });
+    await nd.getByRole("checkbox", { name: "Con tarjetas de ejemplo" }).check();
     await nd.locator("#project-name").fill(COURSE);
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
     await L.waitFor(async () => (await L.q(`SELECT 1 FROM "Project" WHERE name=$1`, [COURSE])).length === 1, { timeout: 15000 });
@@ -450,6 +451,7 @@ if (only.includes("curso")) {
     L.eq("CURSO: columnas", cols.map((c) => [c.name, c.role, c.isDone]), [
       ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
       ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
+      ["Publicado", "NONE", true],
     ]);
     await page.goto(`${L.BASE}/p/${id}`);
     const col = L.colLoc(page, "Plan de trabajo para IA");

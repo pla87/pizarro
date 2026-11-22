@@ -1,15 +1,15 @@
-// Proyectos de ejemplo listos para usar: se eligen al crear un proyecto («Empezar desde un ejemplo»).
-// Cada ejemplo es DATOS: una plantilla (columnas con sus roles, tipos, etiquetas, campos y plantillas de release,
-// la misma forma que las plantillas de proyecto) más unas pocas tarjetas de muestra y entregables. Se crean con
-// la misma lógica que una plantilla (`applyTemplate` en actions/projects.ts); las tarjetas, con
-// `project-example-apply.ts`. Para añadir un ejemplo basta con añadir otro elemento a PROJECT_EXAMPLES con sus
-// dos versiones (es y en); `tests/project-examples.test.ts` comprueba que sean válidas y que coincidan.
+// Tarjetas de ejemplo de las plantillas de serie: en «Nuevo proyecto», al elegir una plantilla de serie, la casilla
+// «Con tarjetas de ejemplo» crea además estas pocas tarjetas (y entregables) que enseñan a usar el tablero. Son DATOS:
+// cada tarjeta indica su columna por posición en la plantilla canónica (`builtin-templates.ts`, o la inglesa) y su tipo
+// y sus etiquetas por nombre; `project-example-apply.ts` las crea buscando esos nombres en el proyecto, así que también
+// funcionan (lo mejor posible) con una plantilla de serie que el administrador haya modificado. Cada plantilla lleva
+// sus dos versiones (es y en); `tests/project-examples.test.ts` comprueba que sean válidas y que coincidan.
 //
 // Todas las tarjetas de muestra llevan la etiqueta EXAMPLE_LABEL para poder encontrarlas y borrarlas juntas.
-import { builtinByKey, col, kind } from "./builtin-templates";
-import { BUILTIN_TEMPLATES_EN } from "./builtin-templates-en";
+import { canonicalTemplate } from "./builtin-templates";
+import { canonicalTemplateEn } from "./builtin-templates-en";
 import { MAX_DESCRIPTION, MAX_TITLE } from "./constants";
-import { templateInputSchema, type TemplateData, type TemplateInput } from "./project-templates";
+import type { TemplateData } from "./project-templates";
 import type { TaskFieldKey } from "./task-fields";
 
 export type ExampleLocale = "es" | "en";
@@ -21,7 +21,7 @@ type GeneralKindRef = keyof typeof GENERAL_KIND_IDS;
 interface ExampleTask {
   title: string;
   description?: string;
-  /** Posición (desde 0) de la columna en `template.columns`. */
+  /** Posición (desde 0) de la columna en la plantilla canónica. */
   column: number;
   /** Nombre de un tipo propio de la plantilla… */
   kind?: string;
@@ -55,32 +55,23 @@ interface ExampleDeliverable {
   dueInDays: number;
 }
 
-interface ProjectExampleContent {
-  /** Nombre sugerido para el proyecto. */
-  name: string;
-  /** Una o dos frases para el selector; también es la descripción del proyecto creado. */
-  description: string;
-  template: TemplateInput;
+interface ExampleContent {
   deliverables?: ExampleDeliverable[];
   tasks: ExampleTask[];
 }
 
-interface ProjectExample {
-  /** Identificador estable (lo recibe createProject). */
+interface BuiltinExamples {
+  /** Clave de la plantilla de serie (`builtinKey`). */
   key: string;
-  es: ProjectExampleContent;
-  en: ProjectExampleContent;
+  es: ExampleContent;
+  en: ExampleContent;
 }
 
 /** Etiqueta que llevan todas las tarjetas de muestra. */
-export const EXAMPLE_LABEL: Record<ExampleLocale, { name: string; color: string }> = {
+export const EXAMPLE_LABEL: Record<ExampleLocale, TemplateData["labels"][number]> = {
   es: { name: "Ejemplo", color: "#a855f7" },
   en: { name: "Example", color: "#a855f7" },
 };
-
-/** Nombres españoles de los tipos generales de serie (los guardados en la base de datos). */
-const HIDE_REPLY = ["Respuesta"];
-const ALL_GENERAL = ["Funcionalidad", "Corrección", "Respuesta"];
 
 const WELCOME_ES =
   "Cada columna es una fase del trabajo: **arrastra** las tarjetas de una a otra según avancen.\n\n" +
@@ -91,325 +82,157 @@ const WELCOME_EN =
   "Click a card to open it: that is where you add subtasks, comments, attachments and dates.\n\n" +
   "The sample cards carry the “Example” label. When you no longer need them, click “Select”, tick the cards and delete them; or open them and delete them one by one.";
 
-export const PROJECT_EXAMPLES: ProjectExample[] = [
-  // --- Equipo de software ---------------------------------------------------------------------------------
+export const PROJECT_EXAMPLES: BuiltinExamples[] = [
+  // --- Vibecoding -----------------------------------------------------------------------------------------------
+  // Columnas: 0 Ideas, 1 Backlog, 2 En curso con la IA, 3 Revisar y probar, 4 Siguiente release, 5 En producción.
   {
-    key: "equipo-software",
+    key: "vibecoding",
     es: {
-      name: "Equipo de software",
-      description: "Ideas, tareas, revisión y releases: del primer apunte a la versión publicada, con notas de versión.",
-      template: {
-        name: "Equipo de software",
-        description: "",
-        columns: [
-          col("Ideas"),
-          col("Por hacer"),
-          col("En curso"),
-          col("Revisión"),
-          col("Siguiente release", false, "NEXT_RELEASE"),
-          col("Hecho", true, "IN_PRODUCTION"),
-        ],
-        // Funcionalidad y Corrección son tipos generales: aquí solo se añade «Mejora».
-        kinds: [kind("Mejora", "#0ea5e9", "", "**Qué mejora:**\n\n**Cómo sabremos que está bien:**\n")],
-        hiddenGeneralKinds: HIDE_REPLY,
-        hideAllGeneralKinds: false,
-        labels: [
-          { name: "Urgente", color: "#ef4444" },
-          { name: "Bloqueado", color: "#f97316" },
-        ],
-        taskFields: ["priority"],
-        releaseTemplates: [
-          { kind: "HEADER", name: "Novedades de la versión", content: "## Novedades de esta versión\n\nResumen de lo que cambia para quien usa el producto." },
-          { kind: "FOOTER", name: "Contacto de soporte", content: "¿Algo no funciona como esperabas? Escríbenos a soporte@example.com." },
-        ],
-      },
       tasks: [
         { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES, column: 0, kind: "Mejora" },
-        { title: "Idea: modo oscuro para la aplicación", description: "Las ideas empiezan aquí. Cuando se decida hacerlas, arrástralas a «Por hacer».", column: 0, kind: "Mejora" },
-        { title: "Corregir el error al guardar el formulario", description: "Los tipos de tarjeta (Funcionalidad, Corrección, Mejora) ordenan las notas de la release.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgente"], subtasks: ["Reproducir el error", "Escribir la prueba", "Arreglarlo"] },
-        { title: "Añadir inicio de sesión con correo", description: "Las subtareas se marcan desde la tarjeta; la barra de progreso se ve en el tablero.", column: 2, generalKind: "feature", priority: "MEDIA", dueInDays: 5, subtasks: ["Diseñar la pantalla", "Conectar con el servidor", "Probar en el móvil"] },
-        { title: "Acelerar la carga de la lista de pedidos", description: "En «Revisión» se espera la aprobación de otra persona antes de entrar en la release.", column: 3, kind: "Mejora" },
-        { title: "Texto de ayuda en la página de ajustes", description: "Lo que está en «Siguiente release» sale en las notas al pulsar «Generar release», con las cabeceras y pies del proyecto. Al publicarla, estas tarjetas pasan a «Hecho».", column: 4, kind: "Mejora" },
+        { title: "Idea: modo oscuro para la aplicación", description: "Las ideas empiezan aquí. Cuando decidas hacerlas, arrástralas a «Backlog».", column: 0, kind: "Mejora" },
+        { title: "Corregir el error al guardar el formulario", description: "Los tipos de tarjeta (Funcionalidad, Corrección, Mejora) ordenan las notas de la release.", column: 1, generalKind: "bugfix", labels: ["Frontend"], subtasks: ["Reproducir el error", "Escribir la prueba", "Arreglarlo"] },
+        { title: "Añadir inicio de sesión con correo", description: "Las subtareas se marcan desde la tarjeta; la barra de progreso se ve en el tablero.", column: 2, generalKind: "feature", labels: ["Backend"], dueInDays: 5, subtasks: ["Pedir el cambio a la IA", "Revisar el diff", "Probarlo en el móvil"] },
+        { title: "Acelerar la carga de la lista de pedidos", description: "En «Revisar y probar» se comprueba lo que ha hecho la IA antes de que entre en la release.", column: 3, kind: "Mejora", labels: ["Necesita revisión"] },
+        { title: "Texto de ayuda en la página de ajustes", description: "Lo que está en «Siguiente release» sale en las notas al pulsar «Generar release». Al publicarla, estas tarjetas pasan a «En producción».", column: 4, kind: "Mejora" },
       ],
     },
     en: {
-      name: "Software team",
-      description: "Ideas, tasks, review and releases: from the first note to the published version, with release notes.",
-      template: {
-        name: "Software team",
-        description: "",
-        columns: [
-          col("Ideas"),
-          col("To do"),
-          col("In progress"),
-          col("Review"),
-          col("Next release", false, "NEXT_RELEASE"),
-          col("Done", true, "IN_PRODUCTION"),
-        ],
-        kinds: [kind("Improvement", "#0ea5e9", "", "**What it improves:**\n\n**How we will know it works:**\n")],
-        hiddenGeneralKinds: HIDE_REPLY,
-        hideAllGeneralKinds: false,
-        labels: [
-          { name: "Urgent", color: "#ef4444" },
-          { name: "Blocked", color: "#f97316" },
-        ],
-        taskFields: ["priority"],
-        releaseTemplates: [
-          { kind: "HEADER", name: "Release highlights", content: "## What is new in this version\n\nA summary of what changes for the people who use the product." },
-          { kind: "FOOTER", name: "Support contact", content: "Something does not work as you expected? Write to us at support@example.com." },
-        ],
-      },
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Improvement" },
-        { title: "Idea: dark mode for the app", description: "Ideas start here. Once you decide to build them, drag them to “To do”.", column: 0, kind: "Improvement" },
-        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organize the release notes.", column: 1, generalKind: "bugfix", priority: "ALTA", labels: ["Urgent"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
-        { title: "Add sign-in with email", description: "Subtasks are ticked from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", priority: "MEDIA", dueInDays: 5, subtasks: ["Design the screen", "Connect to the server", "Try it on a phone"] },
-        { title: "Speed up loading the order list", description: "“Review” waits for someone else's approval before the card goes into the release.", column: 3, kind: "Improvement" },
-        { title: "Help text on the settings page", description: "Whatever is in “Next release” appears in the notes when you click “Generate release”, with the project's headers and footers. Once published, these cards move to “Done”.", column: 4, kind: "Improvement" },
+        { title: "Idea: dark mode for the app", description: "Ideas start here. Once you decide to build them, drag them to “Backlog”.", column: 0, kind: "Improvement" },
+        { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organize the release notes.", column: 1, generalKind: "bugfix", labels: ["Frontend"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
+        { title: "Add sign-in with email", description: "Subtasks are ticked from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", labels: ["Backend"], dueInDays: 5, subtasks: ["Ask the AI for the change", "Review the diff", "Try it on a phone"] },
+        { title: "Speed up loading the order list", description: "“Review and test” is where you check what the AI did before it goes into the release.", column: 3, kind: "Improvement", labels: ["Needs review"] },
+        { title: "Help text on the settings page", description: "Whatever is in “Next release” appears in the notes when you click “Generate release”. Once published, these cards move to “In production”.", column: 4, kind: "Improvement" },
       ],
     },
   },
 
-  // --- Familia / casa -------------------------------------------------------------------------------------
+  // --- Trabajo y clientes ---------------------------------------------------------------------------------------
+  // Columnas: 0 Pendiente, 1 En curso, 2 Esperando, 3 Revisión, 4 Tareas periódicas, 5 Hecho.
   {
-    key: "familia-casa",
+    key: "trabajo-clientes",
     es: {
-      name: "Familia y casa",
-      description: "Compras, tareas de casa y citas en un solo sitio, con tareas que se repiten solas cada semana.",
-      template: {
-        name: "Familia y casa",
-        description: "",
-        columns: [
-          col("Por hacer"),
-          col("Compras", false, "CHECKLIST"),
-          col("Citas", false, "AGENDA"),
-          col("Rutinas de la semana", false, "ROUTINES"),
-          col("Hecho", true),
-        ],
-        kinds: [
-          kind("Casa", "#f97316", "", "**Qué hay que hacer:**\n"),
-          kind("Compras", "#22c55e", "Comprar ", ""),
-          kind("Cita", "#ec4899", "Cita: ", "**Dónde y cuándo:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [{ name: "Urgente", color: "#ef4444" }],
-        taskFields: [],
-      },
       tasks: [
-        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES, column: 0, kind: "Casa" },
-        { title: "Arreglar el grifo de la cocina", description: "Las tareas puntuales de casa van en «Por hacer» y pasan a «Hecho» al terminarlas.", column: 0, kind: "Casa", labels: ["Urgente"] },
-        { title: "Lista de la compra", description: "La columna «Compras» reúne las subtareas de todas sus tarjetas en una lista única que puedes abrir o imprimir (menú de la columna).", column: 1, kind: "Compras", subtasks: ["Leche", "Pan", "Fruta", "Detergente"] },
-        { title: "Revisión del dentista", description: "En «Citas», las tarjetas con fecha forman una agenda que se puede añadir al calendario del móvil.", column: 2, kind: "Cita", dueInDays: 7 },
-        { title: "Sacar la basura", description: "Las tarjetas de «Rutinas de la semana» se repiten solas: al pasarlas a «Hecho» aparece la siguiente.", column: 3, kind: "Casa", recurrence: "WEEKLY", recurrenceDay: 2 },
-        { title: "Limpieza a fondo", description: "Repetición semanal, los sábados.", column: 3, kind: "Casa", recurrence: "WEEKLY", recurrenceDay: 6 },
+        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nCliente, prioridad y coste son campos de la tarjeta: permiten filtrar y agrupar. En los ajustes del proyecto puedes activar otros (horas, fecha de inicio).", column: 0, kind: "Encargo" },
+        { title: "Presupuesto de rediseño de la tienda", description: "El coste queda en la tarjeta. Si el cliente acepta, arrástrala a «En curso».", column: 0, kind: "Propuesta o presupuesto", client: "Cliente A", cost: 1800 },
+        { title: "Diseño del catálogo", description: "El campo «Cliente» permite filtrar y agrupar los encargos por cliente.", column: 1, kind: "Encargo", client: "Cliente B", priority: "ALTA", dueInDays: 6, subtasks: ["Primer borrador", "Revisar con el cliente", "Versión final"] },
+        { title: "Esperando la aprobación del logotipo", description: "En «Esperando» la tarjeta avisa a quien la lleva si pasan varios días sin respuesta.", column: 2, kind: "Encargo", client: "Cliente A" },
+        { title: "Revisar la web de Cliente C antes de entregarla", description: "En «Revisión», si sacas la tarjeta con alguna subtarea sin marcar, avisa.", column: 3, kind: "Encargo", client: "Cliente C", subtasks: ["Probar en el móvil", "Revisar los textos"] },
+        { title: "Enviar las facturas del mes", description: "Las tarjetas de «Tareas periódicas» se repiten solas: al pasarlas a «Hecho» aparece la siguiente.", column: 4, kind: "Facturación", recurrence: "MONTHLY", recurrenceDay: 1 },
+        { title: "Cobrar la factura de marzo", description: "Lo terminado queda en «Hecho» y cuenta como avance en los informes.", column: 5, kind: "Facturación", client: "Cliente B", cost: 950 },
       ],
     },
     en: {
-      name: "Family and home",
-      description: "Shopping, household chores and appointments in one place, with tasks that repeat on their own every week.",
-      template: {
-        name: "Family and home",
-        description: "",
-        columns: [
-          col("To do"),
-          col("Shopping", false, "CHECKLIST"),
-          col("Appointments", false, "AGENDA"),
-          col("Weekly routines", false, "ROUTINES"),
-          col("Done", true),
-        ],
-        kinds: [
-          kind("Home", "#f97316", "", "**What needs doing:**\n"),
-          kind("Shopping", "#22c55e", "Buy ", ""),
-          kind("Appointment", "#ec4899", "Appointment: ", "**Where and when:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [{ name: "Urgent", color: "#ef4444" }],
-        taskFields: [],
-      },
       tasks: [
-        { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Home" },
-        { title: "Fix the kitchen tap", description: "One-off chores go in “To do” and move to “Done” when finished.", column: 0, kind: "Home", labels: ["Urgent"] },
-        { title: "Shopping list", description: "The “Shopping” column gathers the subtasks of all its cards into a single list you can open or print (column menu).", column: 1, kind: "Shopping", subtasks: ["Milk", "Bread", "Fruit", "Detergent"] },
-        { title: "Dentist check-up", description: "In “Appointments”, cards with a date form an agenda you can add to your phone's calendar.", column: 2, kind: "Appointment", dueInDays: 7 },
-        { title: "Take out the rubbish", description: "Cards in “Weekly routines” repeat on their own: move one to “Done” and the next one appears.", column: 3, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 2 },
-        { title: "Deep clean", description: "Repeats weekly, on Saturdays.", column: 3, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 6 },
+        { title: "Welcome: how this board works", description: WELCOME_EN + "\n\nClient, priority and cost are card fields: you can filter and group by them. Turn on others in the project settings (hours, start date).", column: 0, kind: "Job" },
+        { title: "Quote for the shop redesign", description: "The cost stays on the card. If the client accepts, drag it to “In progress”.", column: 0, kind: "Proposal or quote", client: "Client A", cost: 1800 },
+        { title: "Catalog design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
+        { title: "Waiting for logo approval", description: "In “Waiting”, the card reminds its owner if several days pass without a reply.", column: 2, kind: "Job", client: "Client A" },
+        { title: "Check Client C's website before delivery", description: "In “Review”, moving the card out with an unticked subtask shows a warning.", column: 3, kind: "Job", client: "Client C", subtasks: ["Try it on a phone", "Proofread the copy"] },
+        { title: "Send this month's invoices", description: "Cards in “Periodic tasks” repeat on their own: move one to “Done” and the next one appears.", column: 4, kind: "Invoicing", recurrence: "MONTHLY", recurrenceDay: 1 },
+        { title: "Collect the March invoice", description: "Finished work stays in “Done” and counts as progress in the reports.", column: 5, kind: "Invoicing", client: "Client B", cost: 950 },
       ],
     },
   },
 
-  // --- Eventos --------------------------------------------------------------------------------------------
+  // --- Casa y familia -------------------------------------------------------------------------------------------
+  // Columnas: 0 Por hacer, 1 Esta semana, 2 Esperando, 3 Lista de la compra, 4 Citas, 5 Rutinas, 6 Hecho.
   {
-    key: "eventos",
+    key: "casa-familia",
     es: {
-      name: "Preparación de un evento",
-      description: "Del primer boceto al día del evento: fechas límite, entregables en el calendario, proveedores y presupuesto.",
-      template: {
-        name: "Preparación de un evento",
-        description: "",
-        columns: [
-          col("Ideas"),
-          col("Esperando respuesta", false, "WAITING"),
-          col("En preparación"),
-          col("Presupuesto", false, "BUDGET"),
-          col("Hecho", true),
-        ],
-        kinds: [
-          kind("Lugar", "#0ea5e9", "Lugar: ", "**Opciones:**\n\n**Aforo y precio:**\n"),
-          kind("Proveedor", "#f97316", "Proveedor: ", "**Servicio:**\n\n**Contacto:**\n"),
-          kind("Invitados", "#ec4899", "", "**Lista y número de personas:**\n"),
-          kind("Logística", "#6366f1", "", "**Qué hay que preparar y cuándo:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [
-          { name: "Urgente", color: "#ef4444" },
-          { name: "Día del evento", color: "#22c55e" },
-        ],
-        taskFields: [],
-      },
+      tasks: [
+        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES, column: 0, kind: "Casa" },
+        { title: "Arreglar el grifo de la cocina", description: "Lo de «Esta semana» se imprime en un PDF por día o por persona (menú de la columna).", column: 1, kind: "Casa", labels: ["Urgente"] },
+        { title: "Presupuesto para pintar el salón", description: "En «Esperando», la tarjeta avisa si pasan varios días sin respuesta. El importe va en el campo «Coste».", column: 2, kind: "Reforma u obra", cost: 600 },
+        { title: "Lista de la compra", description: "La columna «Lista de la compra» reúne las subtareas de todas sus tarjetas en una lista única que puedes abrir o imprimir (menú de la columna).", column: 3, kind: "Compras", subtasks: ["Leche", "Pan", "Fruta", "Detergente"] },
+        { title: "Revisión del dentista", description: "En «Citas», las tarjetas con fecha forman una agenda que se puede añadir al calendario del móvil.", column: 4, kind: "Cita", dueInDays: 7 },
+        { title: "Sacar la basura", description: "Las tarjetas de «Rutinas» se repiten solas: al pasarlas a «Hecho» aparece la siguiente.", column: 5, kind: "Casa", recurrence: "WEEKLY", recurrenceDay: 2 },
+        { title: "Limpieza a fondo", description: "Repetición semanal, los sábados.", column: 5, kind: "Casa", recurrence: "WEEKLY", recurrenceDay: 6 },
+      ],
+    },
+    en: {
+      tasks: [
+        { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Home" },
+        { title: "Fix the kitchen tap", description: "Whatever is in “This week” prints as a PDF by day or by person (column menu).", column: 1, kind: "Home", labels: ["Urgent"] },
+        { title: "Quote for painting the living room", description: "In “Waiting”, the card reminds you if several days pass without a reply. The amount goes in the “Cost” field.", column: 2, kind: "Renovation or repair", cost: 600 },
+        { title: "Shopping list", description: "The “Shopping list” column gathers the subtasks of all its cards into a single list you can open or print (column menu).", column: 3, kind: "Shopping", subtasks: ["Milk", "Bread", "Fruit", "Detergent"] },
+        { title: "Dentist check-up", description: "In “Appointments”, cards with a date form an agenda you can add to your phone's calendar.", column: 4, kind: "Appointment", dueInDays: 7 },
+        { title: "Take out the trash", description: "Cards in “Routines” repeat on their own: move one to “Done” and the next one appears.", column: 5, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 2 },
+        { title: "Deep clean", description: "Repeats weekly, on Saturdays.", column: 5, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 6 },
+      ],
+    },
+  },
+
+  // --- Eventos y viajes -----------------------------------------------------------------------------------------
+  // Columnas: 0 Ideas, 1 Por confirmar, 2 Reservado, 3 Preparando, 4 Agenda, 5 Lista del día y maleta, 6 Hecho.
+  {
+    key: "eventos-viajes",
+    es: {
       deliverables: [
         { name: "Lugar reservado", description: "Sala elegida y señal pagada.", dueInDays: 14 },
         { name: "Invitaciones enviadas", dueInDays: 28 },
         { name: "Día del evento", dueInDays: 60 },
       ],
       tasks: [
-        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nLos **entregables** (hitos con fecha) se ven en el calendario del proyecto y se asignan a cada tarjeta.", column: 0, kind: "Logística" },
-        { title: "Elegir el lugar", description: "Está vinculada al entregable «Lugar reservado», que aparece en el calendario.", column: 2, kind: "Lugar", deliverable: 0, dueInDays: 10, subtasks: ["Visitar dos salas", "Comparar condiciones", "Reservar"] },
-        { title: "Pedir presupuesto de catering", description: "En «Esperando respuesta» una tarjeta avisa a su responsable si lleva varios días sin moverse.", column: 1, kind: "Proveedor", labels: ["Urgente"] },
-        { title: "Enviar las invitaciones", description: "Cada tarjeta puede tener fecha límite y entregable.", column: 2, kind: "Invitados", deliverable: 1, dueInDays: 28, subtasks: ["Cerrar la lista", "Enviar el correo", "Confirmar asistencia"] },
-        { title: "Alquiler de sonido", description: "En la columna «Presupuesto» se suma el coste de sus tarjetas.", column: 3, kind: "Proveedor", cost: 450 },
-        { title: "Montaje de la sala", description: "Plan del día del evento.", column: 2, kind: "Logística", deliverable: 2, dueInDays: 60, labels: ["Día del evento"] },
+        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nLos **entregables** (hitos con fecha) se ven en el calendario del proyecto y se asignan a cada tarjeta.", column: 0, kind: "Actividad o programa" },
+        { title: "Pedir presupuesto de catering", description: "En «Por confirmar» una tarjeta avisa a su responsable si lleva varios días sin moverse.", column: 1, kind: "Proveedor" },
+        { title: "Alquiler de sonido", description: "En la columna «Reservado» se suma el coste de sus tarjetas.", column: 2, kind: "Proveedor", cost: 450 },
+        { title: "Elegir el lugar", description: "Está vinculada al entregable «Lugar reservado», que aparece en el calendario.", column: 3, kind: "Lugar o alojamiento", deliverable: 0, dueInDays: 10, subtasks: ["Visitar dos salas", "Comparar condiciones", "Reservar"] },
+        { title: "Enviar las invitaciones", description: "Cada tarjeta puede tener fecha límite y entregable.", column: 3, kind: "Invitados", deliverable: 1, dueInDays: 28, subtasks: ["Cerrar la lista", "Enviar el correo", "Confirmar asistencia"] },
+        { title: "Programa del día", description: "En «Agenda», las tarjetas con fecha forman una agenda que se puede añadir al calendario del móvil.", column: 4, kind: "Actividad o programa", deliverable: 2, dueInDays: 60 },
+        { title: "Lo que hay que llevar el día del evento", description: "La columna reúne las subtareas de todas sus tarjetas en una lista única que puedes imprimir (menú de la columna).", column: 5, kind: "Maleta y material", labels: ["Imprescindible"], subtasks: ["Lista de invitados impresa", "Cargadores", "Cinta y tijeras"] },
       ],
     },
     en: {
-      name: "Event planning",
-      description: "From the first sketch to the day itself: deadlines, deliverables on the calendar, suppliers and budget.",
-      template: {
-        name: "Event planning",
-        description: "",
-        columns: [
-          col("Ideas"),
-          col("Waiting for a reply", false, "WAITING"),
-          col("In preparation"),
-          col("Budget", false, "BUDGET"),
-          col("Done", true),
-        ],
-        kinds: [
-          kind("Venue", "#0ea5e9", "Venue: ", "**Options:**\n\n**Capacity and price:**\n"),
-          kind("Supplier", "#f97316", "Supplier: ", "**Service:**\n\n**Contact:**\n"),
-          kind("Guests", "#ec4899", "", "**List and number of people:**\n"),
-          kind("Logistics", "#6366f1", "", "**What to prepare and when:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [
-          { name: "Urgent", color: "#ef4444" },
-          { name: "Event day", color: "#22c55e" },
-        ],
-        taskFields: [],
-      },
       deliverables: [
         { name: "Venue booked", description: "Room chosen and deposit paid.", dueInDays: 14 },
         { name: "Invitations sent", dueInDays: 28 },
         { name: "Event day", dueInDays: 60 },
       ],
       tasks: [
-        { title: "Welcome: how this board works", description: WELCOME_EN + "\n\n**Deliverables** (milestones with a date) show on the project calendar and are assigned to each card.", column: 0, kind: "Logistics" },
-        { title: "Choose the venue", description: "Linked to the “Venue booked” deliverable, which shows on the calendar.", column: 2, kind: "Venue", deliverable: 0, dueInDays: 10, subtasks: ["Visit two rooms", "Compare terms", "Book it"] },
-        { title: "Ask for a catering quote", description: "In “Waiting for a reply”, a card reminds its owner if it has not moved for a few days.", column: 1, kind: "Supplier", labels: ["Urgent"] },
-        { title: "Send the invitations", description: "Every card can have a due date and a deliverable.", column: 2, kind: "Guests", deliverable: 1, dueInDays: 28, subtasks: ["Close the list", "Send the email", "Confirm attendance"] },
-        { title: "Sound equipment hire", description: "The “Budget” column adds up the cost of its cards.", column: 3, kind: "Supplier", cost: 450 },
-        { title: "Set up the room", description: "Plan for the day of the event.", column: 2, kind: "Logistics", deliverable: 2, dueInDays: 60, labels: ["Event day"] },
+        { title: "Welcome: how this board works", description: WELCOME_EN + "\n\n**Deliverables** (milestones with a date) show on the project calendar and are assigned to each card.", column: 0, kind: "Activity or program" },
+        { title: "Ask for a catering quote", description: "In “To confirm”, a card reminds its owner if it has not moved for a few days.", column: 1, kind: "Supplier" },
+        { title: "Sound equipment rental", description: "The “Booked” column adds up the cost of its cards.", column: 2, kind: "Supplier", cost: 450 },
+        { title: "Choose the venue", description: "Linked to the “Venue booked” deliverable, which shows on the calendar.", column: 3, kind: "Venue or accommodation", deliverable: 0, dueInDays: 10, subtasks: ["Visit two rooms", "Compare terms", "Book it"] },
+        { title: "Send the invitations", description: "Every card can have a due date and a deliverable.", column: 3, kind: "Guests", deliverable: 1, dueInDays: 28, subtasks: ["Close the list", "Send the email", "Confirm attendance"] },
+        { title: "Program for the day", description: "In “Agenda”, cards with a date form an agenda you can add to your phone's calendar.", column: 4, kind: "Activity or program", deliverable: 2, dueInDays: 60 },
+        { title: "What to bring on the day", description: "The column gathers the subtasks of all its cards into a single list you can print (column menu).", column: 5, kind: "Packing and supplies", labels: ["Must-have"], subtasks: ["Printed guest list", "Chargers", "Tape and scissors"] },
       ],
     },
   },
 
-  // --- Empresa / clientes ---------------------------------------------------------------------------------
+  // --- Estudios y aprendizaje -----------------------------------------------------------------------------------
+  // Columnas: 0 Pendiente, 1 Estudiando, 2 Repasos, 3 Esperando corrección, 4 Corrigiendo, 5 Hecho.
   {
-    key: "empresa-clientes",
+    key: "estudios-tesis",
     es: {
-      name: "Empresa y clientes",
-      description: "Seguimiento de encargos de clientes: presupuesto, trabajo, entrega y cobro.",
-      template: {
-        name: "Empresa y clientes",
-        description: "",
-        columns: [
-          col("Presupuestos", false, "BUDGET"),
-          col("En curso"),
-          col("Esperando al cliente", false, "WAITING"),
-          col("Entrega al cliente", false, "DELIVERY"),
-          col("Cobrado", true),
-        ],
-        kinds: [
-          kind("Encargo", "#6366f1", "", "**Qué pide el cliente:**\n\n**Plazo acordado:**\n"),
-          kind("Reunión", "#a855f7", "Reunión: ", "**Temas:**\n\n**Acuerdos:**\n"),
-          kind("Cobro", "#eab308", "Cobro: ", "**Factura y vencimiento:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [
-          { name: "Urgente", color: "#ef4444" },
-          { name: "Cliente importante", color: "#22c55e" },
-        ],
-        taskFields: ["client", "priority", "hours"],
-      },
       tasks: [
-        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nActiva en los ajustes del proyecto los campos que necesites (cliente, prioridad, horas, coste).", column: 1, kind: "Encargo" },
-        { title: "Presupuesto de rediseño de la tienda", description: "En «Presupuestos» se suma el coste de las tarjetas. Si el cliente acepta, arrástrala a «En curso».", column: 0, kind: "Encargo", client: "Cliente A", cost: 1800, estimatedHours: 30 },
-        { title: "Diseño del catálogo", description: "El campo «Cliente» permite filtrar y agrupar los encargos por cliente.", column: 1, kind: "Encargo", client: "Cliente B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["Primer borrador", "Revisar con el cliente", "Versión final"] },
-        { title: "Esperando la aprobación del logotipo", description: "En «Esperando al cliente» la tarjeta avisa a quien la lleva si pasan varios días sin respuesta.", column: 2, kind: "Encargo", client: "Cliente A", labels: ["Cliente importante"] },
-        { title: "Entrega de la web de Cliente C", description: "La columna «Entrega al cliente» genera un resumen en PDF sin comentarios ni nombres de personas, listo para enviar.", column: 3, kind: "Encargo", client: "Cliente C" },
-        { title: "Cobrar la factura de marzo", description: "Cuando se cobra, la tarjeta pasa a «Cobrado».", column: 4, kind: "Cobro", client: "Cliente B", cost: 950 },
+        { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES, column: 0, kind: "Tema o lección" },
+        { title: "Tema: conceptos básicos", description: "Las subtareas marcan el avance; el campo «Horas» guarda el tiempo previsto y el dedicado.", column: 1, kind: "Tema o lección", labels: ["Bloque 1"], dueInDays: 3, estimatedHours: 2, subtasks: ["Leer o ver la lección", "Hacer un esquema o resumen", "Hacer los ejercicios"] },
+        { title: "Practicar: fichas de repaso", description: "Las tarjetas de «Repasos» se repiten solas: al pasarlas a «Hecho» aparece la siguiente.", column: 2, kind: "Práctica", recurrence: "WEEKLY", recurrenceDay: 1 },
+        { title: "Redactar: primer trabajo", description: "En «Esperando corrección» la tarjeta avisa si pasan varios días sin respuesta del profesor o del tutor.", column: 3, kind: "Redacción", labels: ["Bloque 1"] },
+        { title: "Examen del bloque 1", description: "Con fecha de inicio y fecha límite, el calendario muestra el periodo de estudio.", column: 0, kind: "Examen o entrega", labels: ["Bloque 1"], startInDays: 21, dueInDays: 30, subtasks: ["Repasar todo el temario", "Simulacro o revisión final"] },
       ],
     },
     en: {
-      name: "Business and clients",
-      description: "Tracking client work: quote, work, delivery and payment.",
-      template: {
-        name: "Business and clients",
-        description: "",
-        columns: [
-          col("Quotes", false, "BUDGET"),
-          col("In progress"),
-          col("Waiting for the client", false, "WAITING"),
-          col("Client delivery", false, "DELIVERY"),
-          col("Paid", true),
-        ],
-        kinds: [
-          kind("Job", "#6366f1", "", "**What the client asks for:**\n\n**Agreed deadline:**\n"),
-          kind("Meeting", "#a855f7", "Meeting: ", "**Topics:**\n\n**Agreements:**\n"),
-          kind("Payment", "#eab308", "Payment: ", "**Invoice and due date:**\n"),
-        ],
-        hiddenGeneralKinds: ALL_GENERAL,
-        hideAllGeneralKinds: true,
-        labels: [
-          { name: "Urgent", color: "#ef4444" },
-          { name: "Key client", color: "#22c55e" },
-        ],
-        taskFields: ["client", "priority", "hours"],
-      },
       tasks: [
-        { title: "Welcome: how this board works", description: WELCOME_EN + "\n\nTurn on the fields you need in the project settings (client, priority, hours, cost).", column: 1, kind: "Job" },
-        { title: "Quote for the shop redesign", description: "“Quotes” adds up the cost of its cards. If the client accepts, drag it to “In progress”.", column: 0, kind: "Job", client: "Client A", cost: 1800, estimatedHours: 30 },
-        { title: "Catalog design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", estimatedHours: 12, dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
-        { title: "Waiting for logo approval", description: "In “Waiting for the client”, the card reminds its owner if several days pass without a reply.", column: 2, kind: "Job", client: "Client A", labels: ["Key client"] },
-        { title: "Delivery of Client C's website", description: "The “Client delivery” column generates a PDF summary with no comments or people's names, ready to send.", column: 3, kind: "Job", client: "Client C" },
-        { title: "Collect the March invoice", description: "When it is paid, the card moves to “Paid”.", column: 4, kind: "Payment", client: "Client B", cost: 950 },
+        { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Topic or lesson" },
+        { title: "Topic: the basics", description: "Subtasks show your progress; the “Hours” field keeps the time planned and spent.", column: 1, kind: "Topic or lesson", labels: ["Block 1"], dueInDays: 3, estimatedHours: 2, subtasks: ["Read or watch the lesson", "Make an outline or summary", "Do the exercises"] },
+        { title: "Practice: review flashcards", description: "Cards in “Reviews” repeat on their own: move one to “Done” and the next one appears.", column: 2, kind: "Practice", recurrence: "WEEKLY", recurrenceDay: 1 },
+        { title: "Write: first assignment", description: "In “Waiting for feedback”, the card reminds you if several days pass without a reply from the teacher or supervisor.", column: 3, kind: "Writing", labels: ["Block 1"] },
+        { title: "Block 1 exam", description: "With a start date and a due date, the calendar shows the study period.", column: 0, kind: "Exam or submission", labels: ["Block 1"], startInDays: 21, dueInDays: 30, subtasks: ["Go over the whole syllabus", "Mock exam or final check"] },
       ],
     },
   },
 
-  // --- Preparación de un curso -----------------------------------------------------------------------------
-  // La misma estructura que la plantilla de serie «Curso o máster», con sesiones de muestra en «Programa». Con otro
-  // nombre: en «Nuevo proyecto» un ejemplo y una plantilla no deben llamarse igual.
+  // --- Curso o charla -------------------------------------------------------------------------------------------
+  // Columnas: 0 Ideas, 1 Materiales, 2 Ejercicios y exámenes, 3 Plan de trabajo para IA, 4 Programa,
+  // 5 Seguimiento de alumnos, 6 Publicado.
   {
     key: "curso-master",
     es: {
-      name: "Preparación de un curso",
-      description: "Preparar un curso con un agente de IA: los encargos para el agente en «Plan de trabajo para IA», una tarjeta por sesión en «Programa» (que se publica en PDF), materiales, ejercicios y exámenes, y seguimiento de alumnos.",
-      template: { ...builtinByKey("curso-master")!.data, description: "" },
       tasks: [
         {
           title: "Bienvenida: así se usa este tablero",
@@ -461,12 +284,14 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
           description: "Revisar el perfil de un alumno es una tarea del profesor. Usa una referencia en vez de datos personales si el proyecto lo comparte más gente.",
           column: 5, kind: "Revisar perfil de alumno",
         },
+        {
+          title: "Material: Guía del curso",
+          description: "Lo ya publicado para los alumnos pasa a «Publicado»: cuenta como terminado en los informes.",
+          column: 6, kind: "Preparar material", labels: ["Módulo 1"],
+        },
       ],
     },
     en: {
-      name: "Course preparation",
-      description: "Prepare a course with an AI agent: the briefs for the agent in “AI work plan”, one card per session in “Program” (published as a PDF), materials, exercises and exams, and student follow-up.",
-      template: { ...BUILTIN_TEMPLATES_EN["curso-master"]!, description: "" },
       tasks: [
         {
           title: "Welcome: how this board works",
@@ -518,59 +343,74 @@ export const PROJECT_EXAMPLES: ProjectExample[] = [
           description: "Reviewing a student's profile is a task for the teacher. Use a reference instead of personal data if more people share the project.",
           column: 5, kind: "Review student profile",
         },
+        {
+          title: "Material: Course guide",
+          description: "Whatever is already published for students goes to “Published”: it counts as finished in the reports.",
+          column: 6, kind: "Prepare material", labels: ["Module 1"],
+        },
       ],
     },
   },
 ];
 
-export const EXAMPLE_KEYS = PROJECT_EXAMPLES.map((e) => e.key);
-
-function exampleByKey(key: string | null | undefined): ProjectExample | undefined {
+function examplesByKey(key: string | null | undefined): BuiltinExamples | undefined {
   return key ? PROJECT_EXAMPLES.find((e) => e.key === key) : undefined;
 }
 
-export interface ResolvedExample {
-  key: string;
-  content: ProjectExampleContent;
-  /** Plantilla validada, lista para `applyTemplate`. */
-  template: TemplateData;
-  /** Etiqueta de las tarjetas de muestra, ya añadida a `template.labels`. */
+/** ¿La plantilla de serie `key` tiene tarjetas de ejemplo? */
+export function hasExamples(key: string | null | undefined): boolean {
+  return !!examplesByKey(key);
+}
+
+/** La plantilla canónica de serie en un idioma. */
+const canonicalIn = (key: string, locale: ExampleLocale) => (locale === "en" ? canonicalTemplateEn(key) : canonicalTemplate(key));
+
+export interface ResolvedExamples {
+  content: ExampleContent;
+  /** Plantilla canónica en el idioma de las tarjetas: sus columnas dan el nombre y el rol de cada `column`. */
+  canonical: TemplateData;
+  /** Nombre de la etiqueta de las tarjetas de muestra. */
   exampleLabel: string;
+  /** La plantilla que se aplicará, con la etiqueta de ejemplo añadida si no la tenía. */
+  template: TemplateData;
 }
 
-/** El ejemplo en el idioma dado, con su plantilla validada y la etiqueta «Ejemplo» añadida. Null si la clave no existe. */
-export function resolveExample(key: string, locale: ExampleLocale): ResolvedExample | null {
-  const example = exampleByKey(key);
-  if (!example) return null;
-  const content = example[locale];
+/**
+ * Las tarjetas de ejemplo de la plantilla de serie `key` para la plantilla que se va a aplicar (la guardada, quizá
+ * modificada, o su versión inglesa). El idioma de las tarjetas es el de la plantilla: el que tenga más columnas y tipos
+ * con los mismos nombres; si empatan, el de quien crea el proyecto. Null si esa plantilla no tiene ejemplos.
+ */
+export function resolveExamples(key: string, template: TemplateData, userLocale: ExampleLocale): ResolvedExamples | null {
+  const examples = examplesByKey(key);
+  if (!examples) return null;
+  const names = new Set([...template.columns, ...template.kinds].map((x) => x.name.trim().toLowerCase()));
+  const score = (locale: ExampleLocale) => {
+    const c = canonicalIn(key, locale);
+    return c ? [...c.columns, ...c.kinds].filter((x) => names.has(x.name.trim().toLowerCase())).length : -1;
+  };
+  const es = score("es");
+  const en = score("en");
+  const locale: ExampleLocale = es === en ? userLocale : en > es ? "en" : "es";
+  const canonical = canonicalIn(key, locale);
+  if (!canonical) return null;
   const label = EXAMPLE_LABEL[locale];
-  const template = templateInputSchema.parse({
-    ...content.template,
-    description: content.description,
-    labels: [...(content.template.labels ?? []), label],
-  });
-  return { key, content, template, exampleLabel: label.name };
-}
-
-/** Lista para el selector de «Nuevo proyecto». */
-export function listExamples(locale: ExampleLocale): { key: string; name: string; description: string }[] {
-  return PROJECT_EXAMPLES.map((e) => ({ key: e.key, name: e[locale].name, description: e[locale].description }));
+  const hasLabel = template.labels.some((l) => l.name.trim().toLowerCase() === label.name.toLowerCase());
+  return { content: examples[locale], canonical, exampleLabel: label.name, template: hasLabel ? template : { ...template, labels: [...template.labels, label] } };
 }
 
 const FIELD_OF_TASK: Record<string, TaskFieldKey> = { priority: "priority", cost: "cost", estimatedHours: "hours", client: "client", startInDays: "startDate" };
 
-/** Errores de coherencia de un ejemplo (vacío = válido): lo usan las pruebas y evita que una errata llegue a producción. */
-export function validateExample(content: ProjectExampleContent): string[] {
+/**
+ * Errores de coherencia de las tarjetas de ejemplo con su plantilla canónica (vacío = válido): lo usan las pruebas y
+ * evita que una errata llegue a producción.
+ */
+export function validateExample(content: ExampleContent, tpl: TemplateData): string[] {
   const errors: string[] = [];
-  const t = templateInputSchema.safeParse(content.template);
-  if (!t.success) return [`plantilla no válida: ${t.error.issues.map((i) => i.message).join("; ")}`];
-  const tpl = t.data;
   const kindNames = new Set(tpl.kinds.map((k) => k.name.toLowerCase()));
   const labelNames = new Set(tpl.labels.map((l) => l.name.toLowerCase()));
   const deliverables = content.deliverables ?? [];
   if (!content.tasks.length) errors.push("sin tarjetas de muestra");
   if (content.tasks.length > 10) errors.push("demasiadas tarjetas de muestra (máximo 10)");
-  if (content.description.length > 2000) errors.push("descripción demasiado larga");
   content.tasks.forEach((task, i) => {
     const at = `tarjeta ${i + 1} («${task.title}»)`;
     if (!task.title.trim() || task.title.length > MAX_TITLE) errors.push(`${at}: título vacío o demasiado largo`);
@@ -579,6 +419,7 @@ export function validateExample(content: ProjectExampleContent): string[] {
     if (!!task.kind === !!task.generalKind) errors.push(`${at}: indica exactamente un tipo (kind o generalKind)`);
     if (task.kind && !kindNames.has(task.kind.toLowerCase())) errors.push(`${at}: el tipo «${task.kind}» no está en la plantilla`);
     if (task.generalKind && !(task.generalKind in GENERAL_KIND_IDS)) errors.push(`${at}: tipo general desconocido`);
+    if (task.generalKind && tpl.hideAllGeneralKinds) errors.push(`${at}: la plantilla oculta los tipos generales`);
     for (const l of task.labels ?? []) if (!labelNames.has(l.toLowerCase())) errors.push(`${at}: la etiqueta «${l}» no está en la plantilla`);
     if (task.deliverable !== undefined && !deliverables[task.deliverable]) errors.push(`${at}: entregable fuera de rango`);
     for (const [prop, field] of Object.entries(FIELD_OF_TASK)) {

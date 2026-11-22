@@ -15,6 +15,7 @@ import { appTimeZone } from "../../src/lib/board";
 import { dateToIso, isoWeekday, todayIso } from "../../src/lib/dates";
 import { firstOccurrence } from "../../src/lib/recurrence-series";
 import { FEED_MAX_REPEATS } from "../../src/lib/calendar-feed-core";
+import { seedBuiltinTemplates } from "../../src/lib/template-store";
 import { makeT } from "../../src/i18n/core";
 
 let n = 0;
@@ -227,12 +228,16 @@ describe("calendario suscrito", () => {
     assert.ok(text.includes(mineTask.id) && text.includes(mateTask.id) && text.includes(del.id));
   });
 
-  test("ámbito por defecto: «Todas» si las tareas de sus proyectos no suelen tener responsable (ejemplo «Familia y casa»)", async () => {
-    // Uso familiar: proyecto privado desde el ejemplo, cuyas tareas no tienen responsable. Antes salía marcado «Solo las
-    // mías» y la suscripción quedaba vacía.
+  test("ámbito por defecto: «Todas» si las tareas de sus proyectos no suelen tener responsable («Casa y familia» con ejemplos)", async () => {
+    // Uso familiar: proyecto privado desde la plantilla con tarjetas de ejemplo, que no tienen responsable. Antes salía
+    // marcado «Solo las mías» y la suscripción quedaba vacía.
     const parent = await makeUser();
     await loginAs(parent);
-    const home = expectOk(await createProject("Casa", { exampleKey: "familia-casa", isPrivate: true }));
+    await db.builtinTemplateSeeded.deleteMany({ where: { key: "casa-familia" } });
+    await db.projectTemplate.deleteMany({ where: { builtinKey: "casa-familia" } });
+    await seedBuiltinTemplates(db);
+    const homeTemplate = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "casa-familia" } });
+    const home = expectOk(await createProject("Casa", { templateId: homeTemplate.id, withExamples: true, isPrivate: true }));
     const dentist = await db.task.findFirstOrThrow({ where: { projectId: home.id, dueDate: { not: null } } });
     assert.equal(dentist.assigneeId, null);
     assert.equal(await defaultFeedScope(parent), "ALL");

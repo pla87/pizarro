@@ -70,7 +70,7 @@ if (only.includes("paso2")) {
   const s = await L.session();
   const { page } = s;
   await settings(page);
-  const dlg = await toStep2(page, { open: "Aplicar plantilla…", template: /^Preparación de un curso/, mode: /^Cambiar a esta plantilla/, next: "Siguiente" });
+  const dlg = await toStep2(page, { open: "Aplicar plantilla…", template: /^Curso o charla/, mode: /^Cambiar a esta plantilla/, next: "Siguiente" });
   L.eq("PASO2: «Corrección» (general, sin tareas, la plantilla los oculta todos) dice que se ocultará", await selectedText(kindSelect(dlg, "Corrección")), "Ocultar (la plantilla no lo usa)");
   L.eq("PASO2: con su valor de siempre («keep»)", await kindSelect(dlg, "Corrección").inputValue(), "keep");
   L.eq("PASO2: «Respuesta» (oculta, con una tarea) dice que volverá a verse", await selectedText(kindSelect(dlg, "Respuesta")), "Conservar (volverá a verse)");
@@ -110,7 +110,7 @@ if (only.includes("en")) {
     const { page } = s;
     await page.emulateMedia({ colorScheme: "dark" });
     await settings(page);
-    const dlg = await toStep2(page, { open: "Apply template…", template: /^Course preparation/, mode: /^Switch to this template/, next: "Next" });
+    const dlg = await toStep2(page, { open: "Apply template…", template: /^Course or talk/, mode: /^Switch to this template/, next: "Next" });
     L.eq("EN: «Bug fix» dice que se ocultará", await selectedText(kindSelect(dlg, "Bug fix")), "Hide (the template doesn't use it)");
     L.eq("EN: «Reply» dice que volverá a verse", await selectedText(kindSelect(dlg, "Reply")), "Keep (it will be shown again)");
     L.eq("EN: «Feature» se conserva", await selectedText(kindSelect(dlg, "Feature")), "Keep");
@@ -133,7 +133,7 @@ if (only.includes("archivada")) {
   const s = await L.session();
   const { page } = s;
   await settings(page);
-  const dlg = await toStep2(page, { open: "Aplicar plantilla…", template: /^Preparación de un curso/, mode: /^Cambiar a esta plantilla/, next: "Siguiente" });
+  const dlg = await toStep2(page, { open: "Aplicar plantilla…", template: /^Curso o charla/, mode: /^Cambiar a esta plantilla/, next: "Siguiente" });
   // «Pendiente» y «Revisión» pasan a «Materiales» (la 2.ª de la plantilla): «Revisión», con la archivada, se une a
   // «Pendiente» y se quita; la primera columna pasa a ser «Ideas», nueva.
   await columnSelect(dlg, "Pendiente").selectOption({ label: "Materiales" });

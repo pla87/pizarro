@@ -4,22 +4,23 @@ import { hasEvergreenTasks } from "./constants";
 import { addDaysIso, isoToDate, todayIso } from "./dates";
 import { appTimeZone } from "./format";
 import { POSITION_STEP } from "./positions";
-import { GENERAL_KIND_IDS, type ResolvedExample } from "./project-examples";
+import { GENERAL_KIND_IDS, type ResolvedExamples } from "./project-examples";
 import { normalizeRecurrence } from "./recurrence-date";
 
 /**
- * Crea los entregables y las tarjetas de muestra de un ejemplo en un proyecto recién creado (dentro de su
- * transacción), cuando ya tiene las columnas, tipos y etiquetas de la plantilla del ejemplo. Los nombres de la
- * definición se buscan en lo que existe en el proyecto; un tipo general que falte se sustituye por el primero
- * disponible para que la tarjeta nunca quede sin tipo.
+ * Crea los entregables y las tarjetas de ejemplo de una plantilla de serie en un proyecto recién creado (dentro de su
+ * transacción), cuando ya tiene las columnas, tipos y etiquetas de la plantilla. Cada tarjeta va a la columna con el
+ * nombre de la columna canónica que indica; si no está (plantilla modificada), a la que tenga su mismo rol y, si no, a la
+ * primera. Tipos y etiquetas se buscan por nombre; un tipo que falte se sustituye por el primero disponible para que la
+ * tarjeta nunca quede sin tipo.
  */
-export async function createExampleContent(tx: Prisma.TransactionClient, projectId: string, example: ResolvedExample, userId: string): Promise<number> {
-  const { content } = example;
+export async function createExampleContent(tx: Prisma.TransactionClient, projectId: string, example: ResolvedExamples, userId: string): Promise<number> {
+  const { content, canonical } = example;
   const today = todayIso(appTimeZone());
   const due = (days: number) => isoToDate(addDaysIso(today, days));
 
   const [columns, ownKinds, generalKinds, labels] = await Promise.all([
-    tx.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, role: true } }),
+    tx.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, role: true } }),
     tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true } }),
     tx.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true } }),
     tx.label.findMany({ where: { projectId }, select: { id: true, name: true } }),
@@ -28,6 +29,13 @@ export async function createExampleContent(tx: Prisma.TransactionClient, project
   const labelByName = new Map(labels.map((l) => [l.name.toLowerCase(), l.id]));
   const generalIds = new Set(generalKinds.map((k) => k.id));
   const fallbackKind = ownKinds[0]?.id ?? generalKinds[0]?.id;
+  const columnFor = (index: number) => {
+    const want = canonical.columns[index];
+    if (!want) return undefined;
+    return columns.find((c) => c.name.trim().toLowerCase() === want.name.trim().toLowerCase())
+      ?? (want.role !== "NONE" ? columns.find((c) => c.role === want.role) : undefined)
+      ?? columns[0];
+  };
 
   const deliverables: string[] = [];
   for (const [i, d] of (content.deliverables ?? []).entries()) {
@@ -41,7 +49,7 @@ export async function createExampleContent(tx: Prisma.TransactionClient, project
   const nextPosition = new Map<string, number>();
   let count = 0;
   for (const t of content.tasks) {
-    const column = columns[t.column];
+    const column = columnFor(t.column);
     if (!column) continue;
     const generalId = t.generalKind ? GENERAL_KIND_IDS[t.generalKind] : undefined;
     const kindId = (t.kind ? kindByName.get(t.kind.toLowerCase()) : generalId && generalIds.has(generalId) ? generalId : undefined) ?? fallbackKind;

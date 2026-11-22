@@ -85,21 +85,21 @@ if (only.includes("add")) {
   const { page } = s;
   await settings(page);
   L.check("ADD: la sección «Aplicar plantilla» está en la pestaña Tablero", await page.getByRole("heading", { name: "Aplicar plantilla" }).isVisible());
-  const dlg = await openWizard(page, "Familia y casa", "Añadir lo que falte");
+  const dlg = await openWizard(page, "Casa y familia", "Añadir lo que falte");
   await dlg.locator("[data-step='3']").waitFor({ timeout: 10000 });
   const text = await summaryText(dlg);
-  L.check("ADD: el resumen dice qué columnas se añadirán (Hecho ya está)", /Se añadirán 4 columnas/.test(text) && /Por hacer, Compras, Citas, Rutinas de la semana/.test(text), text);
-  L.check("ADD: y los tipos y la etiqueta que faltan", /Se añadirán 3 tipos de tarea/.test(text) && /Se añadirá 1 etiqueta/.test(text), text);
+  L.check("ADD: el resumen dice qué columnas se añadirán (Hecho ya está)", /Se añadirán 6 columnas/.test(text) && /Por hacer, Esta semana, Esperando, Lista de la compra, Citas, Rutinas/.test(text), text);
+  L.check("ADD: y los tipos y las etiquetas que faltan", /Se añadirán 6 tipos de tarea/.test(text) && /Se añadirán 4 etiquetas/.test(text), text);
   L.check("ADD: avisa de que se podrá deshacer", (await dlg.innerText()).includes("Deshacer el cambio de plantilla"));
   await page.screenshot({ path: `${SHOTS}/r50-plantilla-add.png` });
   await dlg.getByRole("button", { name: "Aplicar", exact: true }).click();
   await dlg.waitFor({ state: "detached", timeout: 15000 });
   const after = await snapshot();
   L.eq("ADD: las columnas de antes siguen igual y las nuevas van al final", after.columns.slice(0, 4), before.columns);
-  L.eq("ADD: columnas nuevas", after.columns.slice(4).map((c) => c.name), ["Por hacer", "Compras", "Citas", "Rutinas de la semana"]);
+  L.eq("ADD: columnas nuevas", after.columns.slice(4).map((c) => c.name), ["Por hacer", "Esta semana", "Esperando", "Lista de la compra", "Citas", "Rutinas"]);
   L.eq("ADD: ninguna tarea cambia", after.tasks, before.tasks);
   L.eq("ADD: no se oculta ningún tipo general", after.hidden, before.hidden);
-  L.eq("ADD: etiquetas (la suelta sigue)", after.labels, ["Suelta", "Urgente", "Usada"]);
+  L.eq("ADD: etiquetas (la suelta sigue)", after.labels, ["Persona 1", "Persona 2", "Suelta", "Toda la familia", "Urgente", "Usada"]);
   await page.locator("[data-template-undo]").waitFor({ timeout: 10000 });
   L.check("ADD: aparece «Deshacer el cambio de plantilla»", await page.getByRole("button", { name: "Deshacer el cambio de plantilla" }).isVisible());
   await undoFromSettings(page);
@@ -124,18 +124,18 @@ if (only.includes("replace")) {
   const s = await L.session();
   const { page } = s;
   await settings(page);
-  const dlg = await openWizard(page, "Equipo de software", "Cambiar a esta plantilla");
+  const dlg = await openWizard(page, "Trabajo y clientes", "Cambiar a esta plantilla");
   await dlg.locator("[data-step='2']").waitFor({ timeout: 10000 });
   const sel = (attr, name) => dlg.locator(`[${attr}="${name}"] select`);
   const label = (loc) => loc.evaluate((el) => el.options[el.selectedIndex].text);
   L.eq("REPLACE: «En curso» se empareja con «En curso» por el nombre", await label(sel("data-match-column", "En curso")), "En curso");
-  L.eq("REPLACE: «Hecho» con «Hecho» (rol En producción)", (await label(sel("data-match-column", "Hecho"))).startsWith("Hecho"), true);
-  L.eq("REPLACE: «Pendiente» (con tareas, sin pareja) se conserva", await sel("data-match-column", "Pendiente").inputValue(), "keep");
+  L.eq("REPLACE: «Hecho» con «Hecho»", (await label(sel("data-match-column", "Hecho"))).startsWith("Hecho"), true);
+  L.eq("REPLACE: «Pendiente» con «Pendiente» por el nombre", await label(sel("data-match-column", "Pendiente")), "Pendiente");
   L.eq("REPLACE: «Vacía» se propone quitar", await sel("data-match-column", "Vacía").inputValue(), "drop");
   L.eq("REPLACE: «Viejo tipo» (con tareas) se conserva", await sel("data-match-kind", "Viejo tipo").inputValue(), "keep");
-  // Las tareas de «Pendiente» pasan a «En curso» y las de «Viejo tipo», a «Mejora».
+  // Las tareas de «Pendiente» pasan a «En curso» y las de «Viejo tipo», a «Encargo».
   await sel("data-match-column", "Pendiente").selectOption({ label: "En curso" });
-  await sel("data-match-kind", "Viejo tipo").selectOption({ label: "Mejora" });
+  await sel("data-match-kind", "Viejo tipo").selectOption({ label: "Encargo" });
   // Pedir que se quite una columna con tareas no se ofrece.
   L.eq("REPLACE: una columna con tareas no tiene «Quitar»", await sel("data-match-column", "Hecho").locator("option[value=drop]").count(), 0);
   await page.screenshot({ path: `${SHOTS}/r50-plantilla-match.png` });
@@ -143,30 +143,31 @@ if (only.includes("replace")) {
   await dlg.locator("[data-step='3']").waitFor();
   const text = await summaryText(dlg);
   L.check("REPLACE: el resumen cuenta las tareas que se mueven", /Se moverán 3 tareas a otra columna/.test(text), text);
-  L.check("REPLACE: las columnas que se añaden", /Se añadirán 4 columnas/.test(text) && /Ideas, Por hacer, Revisión, Siguiente release/.test(text), text);
+  L.check("REPLACE: las columnas que se añaden", /Se añadirán 4 columnas/.test(text) && /Pendiente, Esperando, Revisión, Tareas periódicas/.test(text), text);
   L.check("REPLACE: las que se quitan por quedar vacías", /Se quitarán 2 columnas que se quedan vacías/.test(text) && /Pendiente, Vacía/.test(text), text);
   L.check("REPLACE: tipos y etiquetas", /Cambiarán de tipo 2 tareas/.test(text) && /Se quitará 1 tipo propio/.test(text) && /Se quitará 1 etiqueta sin uso/.test(text), text);
   await page.screenshot({ path: `${SHOTS}/r50-plantilla-summary.png` });
   await dlg.getByRole("button", { name: "Aplicar", exact: true }).click();
   await dlg.waitFor({ state: "detached", timeout: 15000 });
 
-  L.eq("REPLACE: columnas en el orden de la plantilla", await columnNames(), ["Ideas", "Por hacer", "En curso", "Revisión", "Siguiente release", "Hecho"]);
+  L.eq("REPLACE: columnas en el orden de la plantilla", await columnNames(), ["Pendiente", "En curso", "Esperando", "Revisión", "Tareas periódicas", "Hecho"]);
   L.eq("REPLACE: no se pierde ninguna tarea", await taskCount(), total);
   const cols = await L.q(`SELECT c.name, count(t.id)::int n FROM "Column" c LEFT JOIN "Task" t ON t."columnId"=c.id WHERE c."projectId"=$1 GROUP BY c.name, c.position ORDER BY c.position`, [PID]);
   L.eq("REPLACE: «En curso» (la misma columna) tiene sus tareas, la archivada y las de «Pendiente»", cols.find((c) => c.name === "En curso").n, 6);
-  L.eq("REPLACE: «Hecho» tiene ahora el rol de la plantilla", (await L.q(`SELECT role FROM "Column" WHERE id='r50c_hecho'`))[0].role, "IN_PRODUCTION");
-  L.eq("REPLACE: tipos propios", (await snapshot()).kinds, ["Mejora"]);
-  L.eq("REPLACE: etiquetas (la usada se queda, la suelta se va)", (await snapshot()).labels, ["Bloqueado", "Urgente", "Usada"]);
+  L.eq("REPLACE: «Esperando» trae el rol de la plantilla", (await L.q(`SELECT role FROM "Column" WHERE "projectId"=$1 AND name='Esperando'`, [PID]))[0]?.role, "WAITING");
+  L.eq("REPLACE: «Hecho» es la misma columna, aún terminada", (await L.q(`SELECT "isDone" FROM "Column" WHERE id='r50c_hecho'`))[0]?.isDone, true);
+  L.eq("REPLACE: tipos propios", (await snapshot()).kinds, ["Encargo", "Propuesta o presupuesto", "Reunión", "Incidencia", "Facturación", "Contenido o campaña", "Tarea interna"]);
+  L.eq("REPLACE: etiquetas (la usada se queda, la suelta se va)", (await snapshot()).labels, ["Bloqueado", "En garantía", "Reabierto", "Usada"]);
   // La otra persona lo ve sin recargar.
-  await L.colLoc(other.page, "Siguiente release").waitFor({ timeout: 15000 }).then(() => L.check("REPLACE: la otra persona ve las columnas nuevas en vivo", true), (e) => L.check("REPLACE: la otra persona ve las columnas nuevas en vivo", false, String(e).slice(0, 200)));
-  L.check("REPLACE: y ya no ve «Pendiente»", await L.waitFor(async () => (await other.page.locator('[aria-label="Pendiente"]').count()) === 0));
+  await L.colLoc(other.page, "Esperando").waitFor({ timeout: 15000 }).then(() => L.check("REPLACE: la otra persona ve las columnas nuevas en vivo", true), (e) => L.check("REPLACE: la otra persona ve las columnas nuevas en vivo", false, String(e).slice(0, 200)));
+  L.check("REPLACE: y ya no ve «Vacía»", await L.waitFor(async () => (await other.page.locator('[aria-label="Vacía"]').count()) === 0));
   await other.page.screenshot({ path: `${SHOTS}/r50-plantilla-live.png` });
 
   // Deshacer.
   await page.locator("[data-template-undo]").waitFor({ timeout: 10000 });
   await undoFromSettings(page);
   await L.eqEventually("REPLACE: deshacer devuelve columnas, tareas, tipos y etiquetas", snapshot, before, { timeout: 10000 });
-  await L.colLoc(other.page, "Pendiente").waitFor({ timeout: 15000 }).then(() => L.check("REPLACE: la otra persona ve el deshacer en vivo", true), () => L.check("REPLACE: la otra persona ve el deshacer en vivo", false));
+  await L.colLoc(other.page, "Vacía").waitFor({ timeout: 15000 }).then(() => L.check("REPLACE: la otra persona ve el deshacer en vivo", true), () => L.check("REPLACE: la otra persona ve el deshacer en vivo", false));
   L.assertNoErrors("REPLACE", [s, other]);
   await s.ctx.close();
   await other.ctx.close();
@@ -191,7 +192,7 @@ if (only.includes("mobile")) {
   const s = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
   const { page } = s;
   await settings(page);
-  const dlg = await openWizard(page, "Empresa y clientes", "Cambiar a esta plantilla");
+  const dlg = await openWizard(page, "Eventos y viajes", "Cambiar a esta plantilla");
   await dlg.locator("[data-step='2']").waitFor({ timeout: 10000 });
   L.check("MOBILE: paso 2 sin desbordamiento horizontal", await fits(page));
   const box = await dlg.locator("[data-match-column='Pendiente'] select").boundingBox();

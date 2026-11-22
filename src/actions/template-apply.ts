@@ -11,10 +11,9 @@ import { findManageableProject } from "@/lib/access";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
-import { PROJECT_EXAMPLES } from "@/lib/project-examples";
-import { parseStoredTemplate, templateInputSchema, type TemplateData } from "@/lib/project-templates";
+import { parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser } from "@/lib/session";
-import { listTemplatesSorted } from "@/lib/template-store";
+import { listStartTemplates } from "@/lib/template-store";
 import { applyTemplateToProject, loadProjectShape, undoTemplateChange as undoChange } from "@/lib/template-apply";
 import { releaseTemplateChange, reserveTemplateChange, reserveTemplatePreview, shouldReleaseTemplateChange } from "@/lib/template-apply-rate";
 import type { ApplyTemplateShape, ProjectShape, TemplateRef } from "@/lib/template-apply-core";
@@ -26,7 +25,7 @@ export interface ApplicableTemplate {
   ref: TemplateRef;
   name: string;
   description: string;
-  /** general: de serie para cualquiera (las de los ejemplos, sin sus tarjetas); installation: Administración → Tipos y plantillas. */
+  /** general: las de serie de la instalación, para cualquiera; installation: las propias (Administración → Tipos y plantillas). */
   group: "general" | "installation";
 }
 
@@ -51,10 +50,7 @@ async function withinChangeLimit<T>(userId: string, projectId: string, fn: () =>
   }
 }
 
-const refSchema = z.discriminatedUnion("source", [
-  z.object({ source: z.literal("example"), key: z.string().min(1).max(100) }),
-  z.object({ source: z.literal("template"), id: v.id }),
-]);
+const refSchema = z.object({ source: z.literal("template"), id: v.id });
 
 /** Solo la estructura que usa el asistente. */
 function shapeOf(t: TemplateData): ApplyTemplateShape {
@@ -70,35 +66,24 @@ function shapeOf(t: TemplateData): ApplyTemplateShape {
   };
 }
 
-/**
- * La plantilla elegida, en el idioma de quien la aplica. Las de un ejemplo, sin la etiqueta «Ejemplo» ni las tarjetas;
- * las de la instalación, solo para administradores (como al crear un proyecto).
- */
+/** La plantilla elegida, en el idioma de quien la aplica. Las propias, solo para administradores (como al crear un proyecto). */
 async function resolveRef(rawRef: unknown, isAdmin: boolean, locale: "es" | "en"): Promise<TemplateData> {
   const ref = refSchema.parse(rawRef);
-  if (ref.source === "example") {
-    const example = PROJECT_EXAMPLES.find((e) => e.key === ref.key);
-    if (!example) throw new AppError("La plantilla ya no existe.");
-    const content = example[locale];
-    return templateInputSchema.parse({ ...content.template, name: content.name, description: content.description });
-  }
-  if (!isAdmin) throw new AppError("Solo los administradores pueden usar las plantillas de la instalación.");
   const row = await db.projectTemplate.findUnique({ where: { id: ref.id } });
   if (!row) throw new AppError("La plantilla ya no existe.");
+  if (!row.builtinKey && !isAdmin) throw new AppError("Solo los administradores pueden usar las plantillas de la instalación.");
   return localizeTemplate(parseStoredTemplate(row), row.builtinKey, locale);
 }
 
-/** Plantillas que se pueden aplicar al proyecto: las generales y, para los administradores, las de la instalación. */
+/** Plantillas que se pueden aplicar al proyecto: las de serie de la instalación y, para los administradores, las propias. */
 export async function listApplicableTemplates(projectId: string) {
   return runAction({ name: "templateApply.listApplicableTemplates", args: [projectId] }, async (): Promise<ApplicableTemplate[]> => {
     const user = await requireUser();
     await findManageableProject(user, projectId);
-    const locale = await getLocale();
-    const general: ApplicableTemplate[] = PROJECT_EXAMPLES.map((e) => ({ ref: { source: "example", key: e.key }, name: e[locale].name, description: e[locale].description, group: "general" }));
-    const installation: ApplicableTemplate[] = user.role === "ADMIN"
-      ? (await listTemplatesSorted(db, locale)).map((t) => ({ ref: { source: "template", id: t.id }, name: t.name, description: t.description, group: "installation" }))
-      : [];
-    return [...general, ...installation];
+    const list = await listStartTemplates(db, await getLocale(), user.role === "ADMIN");
+    const pick = (builtin: boolean, group: ApplicableTemplate["group"]) =>
+      list.filter((t) => t.builtin === builtin).map((t): ApplicableTemplate => ({ ref: { source: "template", id: t.id }, name: t.name, description: t.description, group }));
+    return [...pick(true, "general"), ...pick(false, "installation")];
   });
 }
 

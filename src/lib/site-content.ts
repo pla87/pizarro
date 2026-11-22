@@ -129,11 +129,11 @@ export function siteText(t: T, _priceEur: number) {
     whoTitle: t("Pensado para grupos pequeños"),
     whoLead: t("Para unas pocas personas que quieren ponerse de acuerdo sin montar una herramienta enorme."),
     who: [
-      { title: t("Equipos pequeños"), text: t("Equipos de software, agencias y estudios de unas pocas personas. Del primer apunte a la versión publicada, con sus notas."), example: t("Ejemplo «Equipo de software»: ideas, revisión y releases.") },
-      { title: t("Autónomos y profesionales"), text: t("Encargos por cliente con su coste y sus horas, presupuestos que se suman solos y proyectos privados para lo tuyo."), example: t("Ejemplo «Empresa y clientes»: presupuestos y encargos.") },
-      { title: t("Familias"), text: t("La lista de la compra, las citas del médico y las tareas de casa, con rutinas que se repiten cada semana. Gratis para uso personal."), example: t("Ejemplo «Familia y casa»: compras, citas y rutinas.") },
+      { title: t("Equipos pequeños"), text: t("Equipos de software, agencias y estudios de unas pocas personas. Del primer apunte a la versión publicada, con sus notas."), example: t("Plantilla «Vibecoding»: ideas, revisión y releases.") },
+      { title: t("Autónomos y profesionales"), text: t("Encargos por cliente con su coste y sus horas, presupuestos que se suman solos y proyectos privados para lo tuyo."), example: t("Plantilla «Trabajo y clientes»: encargos, presupuestos y cobros.") },
+      { title: t("Familias"), text: t("La lista de la compra, las citas del médico y las tareas de casa, con rutinas que se repiten cada semana. Gratis para uso personal."), example: t("Plantilla «Casa y familia»: compras, citas y rutinas.") },
     ],
-    whoNote: t("Al crear un proyecto puedes empezar desde un ejemplo listo para usar, con sus columnas y tarjetas de muestra."),
+    whoNote: t("Al crear un proyecto puedes empezar con una plantilla lista para usar, con sus columnas y, si quieres, tarjetas de ejemplo."),
 
     // Precio
     pricingTitle: t("Un precio, una sola vez"),

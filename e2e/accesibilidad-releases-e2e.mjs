@@ -172,7 +172,7 @@ if (only.includes("plantilla")) {
   await sleep(300);
   await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
   const dlg = page.getByRole("dialog").filter({ hasText: "Aplicar plantilla" }).first();
-  await dlg.getByRole("radio", { name: /^Equipo de software/ }).check();
+  await dlg.getByRole("radio", { name: /^Vibecoding/ }).check();
   await dlg.getByRole("radio", { name: /^Cambiar a esta plantilla/ }).check();
   await dlg.getByRole("button", { name: "Siguiente" }).click();
   await dlg.locator("[data-step='2']").waitFor({ timeout: 10000 });
