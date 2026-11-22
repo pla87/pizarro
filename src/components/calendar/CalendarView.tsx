@@ -225,7 +225,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     if (!kbMoved) return;
     const sel = `[data-band="${CSS.escape(kbMoved)}"]`;
     const onFocus = (e: FocusEvent) => !(e.target as Element | null)?.closest?.(sel) && setKbMoved(null);
-    const onDown = () => setKbMoved(null);
+    // Pulsar la propia banda no la olvida (si no, pasaría a «+N más» antes del clic y el clic se perdería).
+    const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest?.(sel) && setKbMoved(null);
     document.addEventListener("focusin", onFocus);
     document.addEventListener("pointerdown", onDown);
     return () => {
@@ -613,7 +614,16 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onEsc);
     if (!drag.held) window.addEventListener("contextmenu", onContextMenu);
+    // Los eventos táctiles van siempre al elemento donde empezó el toque. Si la vista previa saca la banda de su semana,
+    // React lo desmonta y los touchmove ya no suben al grupo (holdBandTouch): el navegador se quedaría con el gesto y
+    // cancelaría el arrastre. Un escuchador en el propio elemento tocado sigue recibiéndolos aunque esté fuera del DOM.
+    const touchTarget = pointerType === "mouse" ? null : (e.target as EventTarget | null);
+    const onTargetTouchMove = (ev: Event) => {
+      if (drag.held && ev.cancelable) ev.preventDefault();
+    };
+    touchTarget?.addEventListener("touchmove", onTargetTouchMove, { passive: false });
     drag.stop = () => {
+      touchTarget?.removeEventListener("touchmove", onTargetTouchMove);
       clearTimeout(holdTimer);
       band?.removeAttribute("data-held");
       window.removeEventListener("pointermove", onMove);

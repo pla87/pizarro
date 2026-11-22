@@ -179,6 +179,10 @@ test("Calendario: el touchmove que bloquea el desplazamiento está puesto antes 
   // Los dos grupos de bandas llevan el escuchador desde que se montan, y solo bloquea con una banda cogida.
   assert.equal(code.match(/ref=\{holdBandTouch\}/g)?.length, 2);
   assert.match(code, /dragRef\.current\?\.held && ev\.cancelable\) ev\.preventDefault\(\)/);
+  // Y el propio elemento tocado lleva otro mientras dura el arrastre: si la vista previa saca la banda de su semana, React
+  // lo desmonta y sus touchmove ya no suben al grupo (el navegador cancelaría el arrastre).
+  assert.match(code, /touchTarget\?\.addEventListener\("touchmove", onTargetTouchMove, \{ passive: false \}\)/);
+  assert.match(code, /touchTarget\?\.removeEventListener\("touchmove", onTargetTouchMove\)/);
 });
 
 test("visibleBands: con tope, la banda arrastrada o movida con el teclado se queda a la vista y no se repite en «+N más»", () => {
