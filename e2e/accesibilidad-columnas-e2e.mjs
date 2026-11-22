@@ -125,12 +125,15 @@ if (only.includes("columnas")) {
   await L.liveOpen(page);
   await sleep(800);
   const EMPTY = "No hay tarjetas en esta columna";
+  const EMPTY_RELEASE = "Añade tarjetas a esta columna para generar la release";
   for (const [col, label] of [["Plan A", "Generar plan de trabajo"], ["Salto", "Generar release"], ["Semana", "PDF de la semana"]]) {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     L.check(`COLUMNAS: «${col}»: aria-disabled y sin el atributo disabled`, (await b.getAttribute("aria-disabled")) === "true" && !(await b.evaluate((e) => e.hasAttribute("disabled"))));
     L.check(`COLUMNAS: «${col}»: sigue en el orden de tabulación (se puede enfocar)`, await b.evaluate((e) => { e.focus(); return document.activeElement === e; }));
     await b.click({ force: true }); // Playwright no pulsa lo que está aria-disabled si no se fuerza
-    await L.checkEventually(`COLUMNAS: «${col}» («${label}»): al tocarlo sale el motivo como aviso`, async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes(EMPTY), { timeout: 4000 });
+    // La release dice qué hacer («Añade tarjetas…»); las demás, que no hay tarjetas.
+    const reason = col === "Salto" ? EMPTY_RELEASE : EMPTY;
+    await L.checkEventually(`COLUMNAS: «${col}» («${label}»): al tocarlo sale el motivo como aviso`, async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes(reason), { timeout: 4000 });
     await sleep(300);
   }
   L.check("COLUMNAS: tocar el botón vacío no abre ningún diálogo", (await page.locator("[role=dialog]").count()) === 0);

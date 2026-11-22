@@ -265,7 +265,7 @@ if (only.includes("vacias")) {
   };
   for (const [col, label] of Object.entries(LABEL)) {
     L.check(`VACIAS: «${col}» tiene su botón «${label}»`, (await L.colLoc(page, col).locator("[data-column-action] button").first().innerText()).includes(label));
-    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, EMPTY]);
+    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, col === "Salto" ? "Añade tarjetas a esta columna para generar la release" : EMPTY]);
   }
   /** Estado de las opciones del menú de la columna (… → opciones): [desactivada, título]. */
   const menuItems = async (col, names) => {

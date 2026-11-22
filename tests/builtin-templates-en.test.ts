@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate } from "../src/lib/builtin-templates";
 import { BUILTIN_TEMPLATES_EN, canonicalTemplateEn, localizeTemplate } from "../src/lib/builtin-templates-en";
+import { PROJECT_EXAMPLES } from "../src/lib/project-examples";
 import { buildTemplateApplication, sortTemplates } from "../src/lib/project-templates";
 
 test("cada plantilla de serie tiene versión inglesa con la misma estructura", () => {
@@ -54,6 +55,23 @@ test("la versión inglesa no deja restos de español en los campos de texto", ()
     en.kinds.forEach((k, i) => assert.notEqual(k.descriptionTemplate, es.kinds[i]!.descriptionTemplate, `${key}/${k.name}`));
     en.columns.forEach((c, i) => assert.ok(c.name !== es.columns[i]!.name || same.has(c.name), `${key}: columna «${c.name}» sin traducir`));
   }
+});
+
+test("la versión inglesa (plantillas y tarjetas de ejemplo) está en inglés americano", () => {
+  // «Mark»/«marking scheme»/«Tutorial» (enseñanza británica) → «Grade»/«grading rubric»/«Office hours»; ortografía de EE. UU.
+  const british = /\b(marks?|marked|marking|tutorials?|mid-term|programmes?|colours?|organis\w*|licence|centres?|favourites?|cancelled|travell\w*|behaviours?|catalogue|enrolment|timetables?|fortnight)\b/i;
+  const found: string[] = [];
+  for (const key of BUILTIN_KEYS) {
+    const t = canonicalTemplateEn(key)!;
+    const texts = [t.name, t.description, ...t.columns.map((c) => c.name), ...t.kinds.flatMap((k) => [k.name, k.titleTemplate, k.descriptionTemplate, ...k.subtaskTemplate]), ...t.labels.map((l) => l.name)];
+    for (const s of texts) if (british.test(s)) found.push(`${key}: «${s}»`);
+  }
+  for (const ex of PROJECT_EXAMPLES) {
+    for (const task of ex.en.tasks) {
+      for (const s of [task.title, task.description ?? "", ...(task.subtasks ?? [])]) if (british.test(s)) found.push(`${ex.key} (ejemplo): «${s}»`);
+    }
+  }
+  assert.deepEqual(found, []);
 });
 
 test("localizeTemplate: de serie sin tocar y en inglés → datos ingleses; modificada, propia o español → lo guardado", () => {

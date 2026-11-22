@@ -324,13 +324,13 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
           column: 1, kind: "Prepare material", labels: ["Module 1", "For the agent"], dueInDays: 18, subtasks: ["Ask the agent for a draft", "Review and correct it", "Publish it to students"],
         },
         {
-          title: "Exam: Module 1 mid-term",
+          title: "Exam: Module 1 midterm",
           description: "The “Coordination review” label means another teacher or the coordinators must approve it.",
-          column: 2, kind: "Prepare exam", labels: ["Module 1", "Coordination review"], dueInDays: 35, subtasks: ["Prepare the questions", "Prepare the marking scheme"],
+          column: 2, kind: "Prepare exam", labels: ["Module 1", "Coordination review"], dueInDays: 35, subtasks: ["Prepare the questions", "Prepare the grading rubric"],
         },
         {
           title: "Exercise: Module 1 case studies",
-          description: "**Objective:** practice the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Marking criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
+          description: "**Objective:** practice the key concepts of module 1.\n\n**Task or topic:** three short cases, from easier to harder.\n\n**Delivery format:** Markdown\n\n**Estimated time:** 45 minutes\n\n**Grading criteria:** the right concept is applied and the answer is justified.\n\n**Notes for the agent:** also prepare the solution.",
           column: 3, kind: "Prepare exercise", labels: ["Module 1", "For the agent"], dueInDays: 20, subtasks: ["Write the task", "Prepare the solution", "Check the difficulty"],
         },
         {

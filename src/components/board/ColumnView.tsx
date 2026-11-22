@@ -454,7 +454,8 @@ function roleAction(
   const hint = t(COLUMN_ROLE_HINT[column.role]);
   switch (column.role) {
     case "NEXT_RELEASE":
-      return <ColumnActionButton icon={Rocket} label={t("Generar release")} onClick={() => openRelease(column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : `${t("Generar release")} (${sc("Alt+R")})`} />;
+      // Solo se desactiva sin tarjetas (las fijas cuentan): el motivo dice qué hacer, al pasar el ratón y al tocarlo.
+      return <ColumnActionButton icon={Rocket} label={t("Generar release")} onClick={() => openRelease(column.id)} disabled={empty} title={empty ? t("Añade tarjetas a esta columna para generar la release") : `${t("Generar release")} (${sc("Alt+R")})`} />;
     case "AI_PLAN":
       return <ColumnActionButton icon={Bot} label={t("Generar plan de trabajo")} onClick={() => open("plan")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "PROGRAM":

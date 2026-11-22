@@ -61,7 +61,7 @@
 
 import { esT, type Locale, type T } from "@/i18n/shared";
 import { readForeignTasks } from "./foreign-import/tasks";
-import { decideDayOrder, mixedDayOrderWarning, slashDayMonth, type DayOrder } from "./foreign-import/text";
+import { dayOrderFor, decideDayOrder, mixedDayOrderWarning, slashDayMonth, type DayOrder } from "./foreign-import/text";
 import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "./google-files";
 import { RECURRENCES, type RecurrenceRule } from "./recurrence-date";
 import { TASK_PRIORITIES, type TaskFieldKey, type TaskPriorityValue } from "./task-fields";
@@ -276,7 +276,7 @@ function pick(o: Record<string, unknown>, names: string[]): unknown {
  * «2026-12-01», «2026-12-01T10:00:00Z» o «01/12/2026» → «2026-12-01»; `undefined` si no se entiende. Con barras, en el
  * orden `order` (día/mes por defecto), que parseTasksText decide una vez para todo el texto (decideDayOrder, la misma regla
  * que los CSV); si en ese orden el mes pasa de 12, al revés («12/21/2026» con día/mes es 21 de diciembre). Con año de dos
- * cifras («21/12/26»), del 2000 en adelante, también como en los CSV.
+ * cifras («21/12/26»), del 2000 en adelante, también como en los CSV. Con puntos («1.12.2026»), siempre día/mes.
  */
 export function parseDayLoose(v: unknown, order: DayOrder = "dmy"): string | null | undefined {
   if (v === null) return null;
@@ -288,7 +288,7 @@ export function parseDayLoose(v: unknown, order: DayOrder = "dmy"): string | nul
   if (m) [, y, mo, d] = m as unknown as [string, string, string, string];
   else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
     const [, a, b, year] = m as unknown as [string, string, string, string];
-    const [month, day] = slashDayMonth(+a, +b, order);
+    const [month, day] = slashDayMonth(+a, +b, dayOrderFor(s, order));
     [mo, d, y] = [String(month), String(day), year];
     // Año con dos cifras («21/12/26»): 2026, como en los CSV (parseDay).
     if (y.length === 2) y = `20${y}`;
