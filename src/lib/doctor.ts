@@ -9,6 +9,7 @@ import { db } from "./db";
 import { INSTANCE_NOTICE_KEY, instanceLockStatus, otherInstanceNotice, parseStoredNotice } from "./instance-lock-core";
 import { configFlags, configWarnings, envPresence, groupLogCounts, messagingFlags, migrationStatus, scrubDeep, scrubText, secretEnvValues, type ScrubContext } from "./doctor-core";
 import { checkUploads, evaluateHealth, minFreeBytes } from "./health";
+import { jobRunView } from "./job-run";
 import { maxUsersConfig } from "./limits";
 import { backupsDir, uploadDir } from "./upload-dir";
 
@@ -186,14 +187,10 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   }, ctx);
 
   report.jobs = await section(async () => {
-    const rows = await db.jobRun.findMany({ orderBy: { name: "asc" } });
-    return rows.map((r) => ({
-      job: r.name,
-      lastStartedAt: r.lastStartedAt?.toISOString() ?? null,
-      lastFinishedAt: r.lastFinishedAt?.toISOString() ?? null,
-      lastOk: r.lastOk,
-      lastError: r.lastError ? scrubText(r.lastError, ctx) : null,
-    }));
+    // Como en Administración → Copias de seguridad: una tarea omitida (p. ej. la copia diaria con una copia reciente) va
+    // en `skipped`, no como error.
+    const rows = (await db.jobRun.findMany({ orderBy: { name: "asc" } })).map(jobRunView);
+    return rows.map(({ name, lastError, ...r }) => ({ job: name, ...r, lastError: lastError ? scrubText(lastError, ctx) : null }));
   }, ctx);
 
   report.backups = await section(async () => {
