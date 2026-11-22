@@ -26,15 +26,15 @@ const DOCKER_CMD = "cd /opt/pizarro/deploy && docker compose exec app node dist/
 function resetLinkHint(source: SetupCodeSource, t: Awaited<ReturnType<typeof getT>>) {
   switch (source) {
     case "railway":
-      return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Console del servicio de Pizarro en Railway:")} {code("node dist/reset-link.mjs <email>")}</>;
+      return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Console del servicio de Pizarro en Railway:")} {code("node dist/reset-link.mjs <email>")}.</>;
     case "render":
-      return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:")} {code("node /app/dist/reset-link.mjs <email>")}</>;
+      return <>{t("Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:")} {code("node /app/dist/reset-link.mjs <email>")}.</>;
     case "fly":
-      return <>{t("Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:")} {code('fly ssh console -C "node /app/dist/reset-link.mjs <email>"')}</>;
+      return <>{t("Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:")} {code('fly ssh console -C "node /app/dist/reset-link.mjs <email>"')}.</>;
     case "npm":
-      return <>{t("Si eres quien administra el servidor, genera el enlace desde una terminal en la carpeta de Pizarro:")} {code("node --env-file=.env dist/reset-link.mjs <email>")}</>;
+      return <>{t("Si eres quien administra el servidor, genera el enlace desde una terminal en la carpeta de Pizarro:")} {code("node --env-file=.env dist/reset-link.mjs <email>")}.</>;
     case "docker":
-      return <>{t("Si eres quien administra el servidor, genera el enlace desde su terminal:")} {code(DOCKER_CMD)}</>;
+      return <>{t("Si eres quien administra el servidor, genera el enlace desde su terminal:")} {code(DOCKER_CMD)}.</>;
     default:
       return (
         <>

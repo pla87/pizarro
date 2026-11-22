@@ -100,7 +100,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
           )}
           <div className="rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
             <div className="text-xs text-slate-500">{t("Clave secreta")}</div>
-            <code className="block select-all break-all font-mono text-base tracking-wider" data-testid="totp-secret" data-pz-no-capture="">{grouped(info.secret ?? "")}</code>
+            <code className="block select-all break-words font-mono text-base tracking-wider" data-testid="totp-secret" data-pz-no-capture="">{grouped(info.secret ?? "")}</code>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               <button type="button" className="text-brand-700 hover:underline dark:text-brand-300" onClick={() => void navigator.clipboard?.writeText(info.secret ?? "").catch(() => {})}>
                 {t("Copiar clave")}

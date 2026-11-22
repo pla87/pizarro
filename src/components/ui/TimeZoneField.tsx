@@ -66,7 +66,11 @@ export function TimeZoneField({ id, value, options, onChange, disabled, classNam
         aria-describedby={invalid ? `${id}-error` : undefined}
         onFocus={() => {
           atFocus.current = value;
-          if (value && text === currentTimeZoneName(value)) setText("");
+          if (value && text === currentTimeZoneName(value)) {
+            setText("");
+            // Sin esto, el error de la salida anterior saldría en cuanto se vacía el campo, sin haber escrito nada.
+            setLeft(false);
+          }
         }}
         onChange={(e) => {
           setText(e.target.value);

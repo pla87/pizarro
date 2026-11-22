@@ -130,7 +130,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     }
     const document = created.document;
     logEvent({
-      category: "api", action: "documents.upload", message: `Documento «${document.name}» subido (${logSize(storedBytes)})`,
+      category: "api", action: "documents.upload", label: { k: "Documento «{name}» subido ({size})", p: { name: document.name, size: logSize(storedBytes) } },
       userId: user.id, userName: user.name, path: `/api/projects/${projectId}/documents`, ip, durationMs: performance.now() - start,
       details: { projectId, documentId: document.id, original: fileInfo, storedBytes, kind, mime: mimeType, sizeMb: roundMb(storedBytes) },
     });
