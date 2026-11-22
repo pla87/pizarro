@@ -388,7 +388,7 @@ export const admin: Record<string, string> = {
   "Omitida: aún no hay ninguna copia": "Skipped: there is no backup yet",
   "Omitida: no toca este mes": "Skipped: not due this month",
   "Omitida: se repite mañana": "Skipped: it will be retried tomorrow",
-  "Copias automáticas activas, pero solo en el disco de este servidor.": "Automatic backups on, but only on this server's disk.",
+  "Copias automáticas activas, pero solo en el disco de este servidor.": "Automatic backups are on, but only to this server's disk.",
   // Usuarios: el máximo de usuarios activos, primero en sencillo y lo técnico (MAX_USERS) después
   "Puede haber como mucho {max} usuarios activos a la vez. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time. Deactivated people don't count.",
   "No hay un máximo de usuarios activos.": "There is no maximum number of active users.",

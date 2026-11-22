@@ -238,8 +238,9 @@ export function switchKindDescription(prev: KindAutomation | null | undefined, n
   // Formulario del anterior con algo respondido: cada apartado vacío se quita y cada respuesta se conserva una sola vez, en
   // el apartado del nuevo con la misma etiqueta («Qué hay que hacer:» de «Casa» a «Reforma u obra») o, si el nuevo no lo
   // tiene, debajo de su formulario. Antes el formulario nuevo se ponía delante del viejo entero (etiquetas repetidas y
-  // apartados vacíos que ya no tocaban).
-  const form = tpl ? readForm(tpl, fresh, description) : null;
+  // apartados vacíos que ya no tocaban). Si el anterior no tenía plantilla (un tipo general entre dos con formulario:
+  // «Mejora» → «Corrección» → «Mejora»), lo que haya se lee como el formulario del nuevo, para no ponerlo dos veces.
+  const form = tpl ? readForm(tpl, fresh, description) : prev && fresh ? readForm(fresh, fresh, description) : null;
   if (form && form.sections.some((s) => s.filled)) {
     const filled = form.sections.filter((s) => s.filled);
     const used = new Set<number>();

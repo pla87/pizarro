@@ -259,3 +259,17 @@ test("la descripción: las viñetas vacías de la plantilla son parte de su apar
   // El formulario sin tocar con lo que ya había debajo: se cambia de formulario y se conserva lo de debajo.
   assert.equal(switchKindDescription(RECADOS, CASA, switchKindDescription(null, RECADOS, "Texto compartido")), `${CASA.descriptionTemplate.trim()}\n\nTexto compartido`);
 });
+
+test("la descripción: con un tipo sin plantilla en medio, el formulario no se repite al volver", () => {
+  // «Mejora» → «Corrección» (tipo general, sin plantilla) → «Mejora»: antes se anteponía el formulario vacío a lo escrito.
+  const MEJORA = { titleTemplate: "", descriptionTemplate: "**Qué mejora:**\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n" };
+  const CORRECCION = { titleTemplate: "", descriptionTemplate: "" };
+  const typed = "**Qué mejora:** el login\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n";
+  const general = switchKindDescription(MEJORA, CORRECCION, typed);
+  assert.equal(general, "**Qué mejora:** el login\n");
+  const back = switchKindDescription(CORRECCION, MEJORA, general);
+  assert.equal(back, typed);
+  assert.equal(back.match(/Qué mejora/g)?.length, 1);
+  // Lo escrito en el tipo general (sin forma de formulario) sigue yendo debajo de la plantilla, como antes.
+  assert.equal(switchKindDescription(CORRECCION, MEJORA, "Falla al entrar"), `${MEJORA.descriptionTemplate.trim()}\n\nFalla al entrar`);
+});

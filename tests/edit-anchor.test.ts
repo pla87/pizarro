@@ -45,3 +45,23 @@ test("suggestionsPlacement: debajo si cabe, encima si no", () => {
   assert.equal(p.bottom, 844 - 200 + 4);
   assert.equal(p.maxHeight, 200 - 4 - 8);
 });
+
+test("suggestionsPlacement: lista corta, lado con más sitio, margen izquierdo y parte visible desplazada", () => {
+  const view = { top: 0, bottom: 800, width: 1200, height: 800 };
+  // Una lista corta (dos opciones) cabe debajo aunque encima haya más sitio: va debajo.
+  assert.deepEqual(suggestionsPlacement({ top: 600, bottom: 620, left: 50 }, view, 72, 288), { top: 624, left: 50, maxHeight: 800 - 620 - 4 - 8 });
+  // No cabe por ningún lado y debajo hay más sitio: debajo, con el alto recortado.
+  const small = { top: 0, bottom: 300, width: 390, height: 844 };
+  assert.deepEqual(suggestionsPlacement({ top: 80, bottom: 100, left: 10 }, small, 250, 288), { top: 104, left: 10, maxHeight: 300 - 100 - 4 - 8 });
+  // Con el mismo sitio por los dos lados, debajo.
+  assert.equal(suggestionsPlacement({ top: 140, bottom: 160, left: 10 }, { top: 0, bottom: 300, width: 390, height: 300 }, 250, 288).top, 164);
+  // Cursor pegado al borde izquierdo (o la lista más ancha que la ventana): nunca a menos de 8 px del borde.
+  assert.equal(suggestionsPlacement({ top: 100, bottom: 120, left: 2 }, view, 100, 288).left, 8);
+  assert.equal(suggestionsPlacement({ top: 100, bottom: 120, left: 50 }, { ...view, width: 280 }, 100, 288).left, 8);
+  // Parte visible desplazada (móvil con zoom o el teclado abierto y la página subida): el sitio de encima se cuenta desde
+  // su borde de arriba, no desde el de la ventana.
+  const shifted = { top: 400, bottom: 700, width: 390, height: 844 };
+  const up = suggestionsPlacement({ top: 650, bottom: 670, left: 10 }, shifted, 250, 288);
+  assert.equal(up.bottom, 844 - 650 + 4);
+  assert.equal(up.maxHeight, 650 - 400 - 4 - 8);
+});

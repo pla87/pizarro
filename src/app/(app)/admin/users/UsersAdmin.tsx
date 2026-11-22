@@ -220,7 +220,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
-      {inviteLink && <InviteLinkDialog name={inviteLink.name} link={inviteLink.link} fresh={inviteLink.fresh} onClose={() => setInviteLink(null)} />}
+      {inviteLink && <InviteLinkDialog name={inviteLink.name} link={inviteLink.link} fresh={inviteLink.fresh} emailAvailable={emailAvailable} onClose={() => setInviteLink(null)} />}
     </div>
   );
 }
@@ -383,9 +383,10 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
 
 /**
  * El enlace de invitación recién emitido que no ha salido por email (sin email o con el envío fallido), para pasárselo
- * por otro canal. `fresh`: el de una cuenta recién creada (no había otro antes).
+ * por otro canal. `fresh`: el de una cuenta recién creada (no había otro antes). `emailAvailable`: en su fila habrá
+ * «Reenviar invitación» (con email) o «Generar enlace de invitación nuevo» (sin él).
  */
-function InviteLinkDialog({ name, link, fresh, onClose }: { name: string; link: string; fresh?: boolean; onClose: () => void }) {
+function InviteLinkDialog({ name, link, fresh, emailAvailable, onClose }: { name: string; link: string; fresh?: boolean; emailAvailable?: boolean; onClose: () => void }) {
   const t = useT();
   const toast = useToast();
   return (
@@ -393,7 +394,11 @@ function InviteLinkDialog({ name, link, fresh, onClose }: { name: string; link: 
       <div className="space-y-3 text-sm">
         <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name })}</p>
         <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" data-pz-no-capture="" />
-        <p className="text-amber-700 dark:text-amber-300">{fresh ? t("Este enlace no volverá a mostrarse; si lo pierdes, puedes generar otro desde su fila.") : t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
+        <p className="text-amber-700 dark:text-amber-300">{fresh
+          ? emailAvailable
+            ? t("Este enlace no volverá a mostrarse; si lo pierdes, puedes reenviar la invitación desde su fila.")
+            : t("Este enlace no volverá a mostrarse; si lo pierdes, puedes generar otro desde su fila.")
+          : t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
           <button type="button" className="btn-primary" onClick={async () => ((await copyText(link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>

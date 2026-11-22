@@ -354,10 +354,12 @@ export const cuentas: Record<string, string> = {
   "Si eres quien administra el servidor, genera el enlace en la pestaña Shell del servicio de Pizarro en Render:": "If you run the server, generate the link in the Shell tab of the Pizarro service on Render:",
   "Si eres quien administra el servidor, genera el enlace desde tu terminal con flyctl:": "If you run the server, generate the link from your terminal with flyctl:",
   // «Nuevo usuario» siempre como invitación; enlace a la vista si no hay email o el envío falla (ronda 62)
-  "Sin email configurado: al crearla verás un enlace (válido 72 horas) para pasárselo y que elija su contraseña.": "Email is not set up: once you create the account you'll see a link (valid for 72 hours) to give them so they can choose their password.",
+  "Sin email configurado: al crearla verás un enlace (válido 72 horas) para pasárselo y que elija su contraseña.": "Email is not set up: once you create the account you'll see a link (valid for 72 hours) to share with them so they can choose their password.",
   "Este enlace no volverá a mostrarse; si lo pierdes, puedes generar otro desde su fila.": "This link won't be shown again; if you lose it, you can generate another one from their row.",
-  "No se pudo enviar el email: pásale el enlace.": "The email could not be sent: give them the link.",
+  "No se pudo enviar el email: pásale el enlace.": "The email could not be sent: share the link with them.",
   // Final de /reset con «solo Google» (AUTH_GOOGLE_ONLY): entra con Google, no con la contraseña
-  "Contraseña guardada. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. On this server you sign in with Google: click “Sign in with Google” with {email}.",
-  "Contraseña guardada. Por seguridad se han cerrado todas las sesiones. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. For security, all sessions have been signed out. On this server you sign in with Google: click “Sign in with Google” with {email}.",
+  "Contraseña guardada. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. On this server you sign in with Google: click “Sign in with Google” and use {email}.",
+  "Contraseña guardada. Por seguridad se han cerrado todas las sesiones. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. For security, all sessions have been signed out. On this server you sign in with Google: click “Sign in with Google” and use {email}.",
+  // Aviso del enlace recién creado con el email configurado (y caído): en su fila está «Reenviar invitación»
+  "Este enlace no volverá a mostrarse; si lo pierdes, puedes reenviar la invitación desde su fila.": "This link won't be shown again; if you lose it, you can resend the invitation from their row.",
 };

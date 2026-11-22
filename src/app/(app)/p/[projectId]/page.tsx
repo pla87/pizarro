@@ -24,7 +24,7 @@ type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
   const user = await getCurrentUser();
-  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, description: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } }) : null;
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } }) : null;
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -42,9 +42,10 @@ export default async function BoardPage({ params, searchParams }: Params) {
   if (!project) notFound();
   // Antes de leer el tablero: un aviso publicado mientras se lee hará que la pestaña refresque al conectar (no se pierde).
   const live = liveCursor(projectId);
+  const { task, nuevo } = await searchParams;
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, intro] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
@@ -57,6 +58,11 @@ export default async function BoardPage({ params, searchParams }: Params) {
     listKinds(projectId),
     userTemplates(user.id),
     projectReleaseTemplates(projectId),
+    // Recién creado desde una plantilla («Nuevo proyecto» llega con ?nuevo=1): su descripción, encima de las columnas.
+    // Solo entonces: en las cargas y refrescos normales del tablero no hace falta.
+    nuevo === "1"
+      ? db.project.findUnique({ where: { id: projectId }, select: { description: true } }).then((p) => p?.description.trim() ?? "")
+      : "",
   ]);
 
   const data: BoardPageData = {
@@ -78,9 +84,6 @@ export default async function BoardPage({ params, searchParams }: Params) {
     liveRefreshJitterMs: liveRefreshJitterMs(),
     live,
   };
-  const { task, nuevo } = await searchParams;
-  // Recién creado desde una plantilla («Nuevo proyecto» llega con ?nuevo=1): su descripción, encima de las columnas.
-  const intro = nuevo === "1" ? project.description.trim() : "";
   // Alt+N / Alt+Mayús+N pulsados antes de que la página hidrate se anotan y se ejecutan al montar (earlyShortcut.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
