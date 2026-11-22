@@ -340,8 +340,10 @@ for your files and the database, and generates the keys. It is all done from its
    `https://pizarro-xxxx.onrender.com`) ending in `/setup` and follow the [first steps](#first-steps) from step 2.
 
 `APP_URL` isn't needed: Pizarro uses Render's address. You only have to add it if you set up
-[your own domain](#domain). If Render restarts the service because it ran out of memory (you'll see it in *Events*),
-switch to the next plan up in *Settings → Instance Type*.
+[your own domain](#domain). The plan the button creates (*Starter*, 512 MB of memory) is enough for a small team. For a
+bigger team, or if Render restarts the service because it ran out of memory (you'll see it in *Events*), switch the
+plan to *Standard* in *Settings → Instance Type* and, in **Environment**, delete `NODE_OPTIONS` and
+`PDF_WORKER_MAX_MB`: they cap memory so Pizarro fits in *Starter*.
 
 > [!NOTE]
 > **The health check is already set up.** *Settings → Health Checks* should show `/api/health`. Thanks to it, Render

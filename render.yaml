@@ -15,7 +15,9 @@ services:
     runtime: image
     image:
       url: ghcr.io/pla87/pizarro:latest
-    # Starter (512 MB) basta para un equipo pequeño; si en Events ves reinicios por falta de memoria, sube a Standard.
+    # Starter (512 MB) basta para un equipo pequeño (NODE_OPTIONS y PDF_WORKER_MAX_MB, abajo, están ajustados a él). Para
+    # un equipo más grande, o si en Events ves reinicios por falta de memoria, sube a Standard (2 GB) y quita esas dos
+    # variables (o súbelas: el montón, en torno al 60–70 % de la memoria).
     plan: starter
     # La misma región que la base de datos (frankfurt, oregon, ohio, virginia o singapore).
     region: frankfurt
@@ -45,6 +47,12 @@ services:
         generateValue: true
       - key: UPLOAD_DIR
         value: /app/uploads
+      # Para los 512 MB de Starter: techo del montón de Node y del generador de PDF por debajo del límite, para que el
+      # recolector actúe antes de que Render mate el proceso (sharp y los PDF usan además memoria fuera del montón).
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=320
+      - key: PDF_WORKER_MAX_MB
+        value: "128"
       # APP_URL no hace falta: sin ella, Pizarro usa la dirección de Render (RENDER_EXTERNAL_URL). Con un dominio propio,
       # añádela en Environment (https://pizarro.example.com).
 

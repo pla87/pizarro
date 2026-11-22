@@ -339,8 +339,10 @@ tus archivos y la base de datos, y genera las claves. Se hace desde su panel web
    punto 2.
 
 No hace falta `APP_URL`: Pizarro usa la dirección de Render. Solo tendrás que añadirla si pones un
-[dominio propio](#dominio). Si Render reinicia el servicio por falta de memoria (lo verás en *Events*), cambia el plan
-en *Settings → Instance Type* al siguiente.
+[dominio propio](#dominio). El plan que crea el botón (*Starter*, 512 MB de memoria) basta para un equipo pequeño. Para
+un equipo más grande, o si Render reinicia el servicio por falta de memoria (lo verás en *Events*), cambia el plan en
+*Settings → Instance Type* a *Standard* y, en **Environment**, borra `NODE_OPTIONS` y `PDF_WORKER_MAX_MB`: limitan la
+memoria para que quepa en *Starter*.
 
 > [!NOTE]
 > **La comprobación de salud ya viene puesta.** En *Settings → Health Checks* debe salir `/api/health`. Gracias a ella,
