@@ -59,6 +59,6 @@ Once per person: **My profile → Account → Google Docs, Sheets and Slides →
 ## If something goes wrong
 
 - "Google denied creating the file (check that the Drive API is enabled)": step 1 is missing.
-- "Google Drive permission was not granted": the Drive box was not ticked when connecting. Connect again and accept it.
+- "Google Drive permission was not granted": the Drive box was not checked when connecting. Connect again and accept it.
 - "Document created, but not shared: only you can see it": there was nobody to share it with (no domain, or the project is set to "Do not share") or your Workspace policy prevented it. Share it from Google like any other file.
 - **redirect_uri_mismatch** when connecting: the `/api/google/callback` address is missing from the client, or it is not identical.

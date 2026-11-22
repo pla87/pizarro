@@ -162,8 +162,6 @@ steps:
 
 Las integraciones son **opcionales**: si faltan sus variables, la app funciona igual y esas opciones aparecen como «no configuradas».
 
-> `JWT_SECRET` no se usa: las sesiones son opacas y se guardan en base de datos para poder revocarlas. Su equivalente es `SESSION_SECRET`.
-
 ---
 
 ## Guía de despliegue en Railway

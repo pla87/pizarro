@@ -18,7 +18,7 @@ You need:
 
 ## Step 1. Create the bot with @BotFather
 
-1. In Telegram, search for **@BotFather** (it has the blue verified tick) and open the chat.
+1. In Telegram, search for **@BotFather** (it has the blue verified checkmark) and open the chat.
 2. Type `/newbot`.
 3. Type the **name** people will see, for example `Pizarro notices`.
 4. Type the bot's **username**. It must end in `bot`, for example `pizarro_notices_bot`. If it's taken, try another one.
