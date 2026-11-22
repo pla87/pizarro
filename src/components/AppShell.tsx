@@ -513,13 +513,16 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const own = starts.filter((tpl) => !tpl.builtin);
   const template = templateId ? starts.find((tpl) => tpl.id === templateId) : undefined;
   const examples = !!template?.examples && withExamples;
-  // La línea que describe la opción elegida.
-  const templateHelp = template?.description.trim() || t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.");
+  // La línea que describe la opción elegida. Sin descripción, la genérica, que con ejemplos no dice a la vez «sin
+  // tarjetas» y «con tarjetas».
+  const description = template?.description.trim() ?? "";
   const originHelp = !template
     ? t("Columnas por defecto, sin tarjetas.")
     : examples
-      ? t("{description} Con tarjetas de muestra que puedes borrar.", { description: templateHelp })
-      : templateHelp;
+      ? description
+        ? t("{description} Con tarjetas de muestra que puedes borrar.", { description })
+        : t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.")
+      : description || t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.");
   // Elegir una plantilla propone su nombre (si el campo está vacío o aún tiene el que puso otra); en blanco lo quita.
   const pickTemplate = (id: string) => {
     setTemplateId(id);
@@ -589,7 +592,9 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
               </optgroup>
             )}
           </select>
-          <p id="project-start-help" className="mt-1 line-clamp-4 text-xs text-slate-500">{originHelp}</p>
+          {/* Se lee entera con las de serie (en el móvil, recortada, se perdía justo «Con tarjetas de muestra…»); solo una
+              propia, con una descripción que puede ser larga, se recorta. */}
+          <p id="project-start-help" className={cn("mt-1 text-xs text-slate-500", template && !template.builtin && "line-clamp-4")}>{originHelp}</p>
           {template?.examples && (
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} />
