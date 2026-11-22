@@ -64,6 +64,8 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
           <input type="checkbox" className="mt-0.5" checked={form.notifyEmail} onChange={(e) => set("notifyEmail", e.target.checked)} />
           <span>
             {t("Email cuando me mencionan")}
+            {/* A todo el mundo (cualquiera puede configurar un informe): este aviso va con las menciones (noticeEmailKind). */}
+            <span className="block text-xs text-slate-500">{t("Con las menciones te llegan también los avisos de que alguien se ha dado de baja de un informe semanal que configuraste.")}</span>
             {adminNotices && (
               <span className="block text-xs text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</span>
             )}
