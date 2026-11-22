@@ -56,7 +56,7 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
   const download = doc.kind === "OTHER" || url.searchParams.has("download");
   if (download && !head) {
     logEvent({
-      category: "api", action: "documents.download", message: `Descarga de «${doc.name}»`,
+      category: "api", action: "documents.download", label: { k: "Descarga de «{name}»", p: { name: doc.name } },
       userId: user.id, userName: user.name, projectId: doc.projectId, path: url.pathname, ip: clientIp(req.headers), details: { documentId: doc.id, size },
     });
   }

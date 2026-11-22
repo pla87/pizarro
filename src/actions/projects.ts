@@ -109,7 +109,15 @@ export async function createProject(name: string, options?: { templateId?: strin
       if (examples) await createExampleContent(tx, created.id, examples, user.id);
       return created;
     });
-    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${template ? ` con la plantilla «${templateRow!.name}»${examples ? " y tarjetas de ejemplo" : ""}` : ""}`);
+    // Plantilla traducible (los logs en inglés): una por combinación, para que cada idioma ordene la frase a su manera.
+    const priv = !!options?.isPrivate;
+    if (!template) describeAction(priv ? "Creó el proyecto privado «{name}»" : "Creó el proyecto «{name}»", { name: projectName });
+    else {
+      const k = examples
+        ? priv ? "Creó el proyecto privado «{name}» con la plantilla «{template}» y tarjetas de ejemplo" : "Creó el proyecto «{name}» con la plantilla «{template}» y tarjetas de ejemplo"
+        : priv ? "Creó el proyecto privado «{name}» con la plantilla «{template}»" : "Creó el proyecto «{name}» con la plantilla «{template}»";
+      describeAction(k, { name: projectName, template: templateRow!.name });
+    }
     noteProject(project.id);
     revalidatePath("/", "layout");
     return project;

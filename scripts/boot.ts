@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyAppUrlFallback } from "@/lib/app-url";
 import { db } from "@/lib/db";
+import { LOG_LABEL_KEY } from "@/lib/log-message";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
 import { announceSetup } from "@/lib/setup";
@@ -17,7 +18,7 @@ async function main() {
   try {
     const { version } = (await import("../package.json")) as { version: string };
     await db.appLog.create({
-      data: { level: "info", category: "system", action: "system.boot", message: `Arranque de Pizarro v${version}`, details: { version, node: process.version } },
+      data: { level: "info", category: "system", action: "system.boot", message: `Arranque de Pizarro v${version}`, details: { version, node: process.version, [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version } } } },
     });
   } catch (err) {
     console.error("[boot] No se pudo registrar el arranque:", err);

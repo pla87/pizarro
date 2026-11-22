@@ -146,7 +146,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     }
     const attachment = created.attachment;
     logEvent({
-      category: "api", action: "attachments.upload", message: `${image ? "Imagen" : "Archivo"} «${attachment.originalName}» ${image ? "subida" : "subido"} (${logSize(storedBytes)})`,
+      category: "api", action: "attachments.upload", label: { k: image ? "Imagen «{name}» subida ({size})" : "Archivo «{name}» subido ({size})", p: { name: attachment.originalName, size: logSize(storedBytes) } },
       userId: user.id, userName: user.name, path: `/api/tasks/${taskId}/attachments`, ip, durationMs: performance.now() - start,
       details: {
         taskId, attachmentId: attachment.id, original: fileInfo, storedBytes, mime: mimeType, isImage: !!image,
