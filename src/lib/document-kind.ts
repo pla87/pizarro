@@ -24,6 +24,16 @@ function extensionOf(name: string): string {
 }
 
 /**
+ * ¿Un fichero que llega sin tipo (vacío o el genérico application/octet-stream) pero con extensión de imagen? En Windows
+ * el navegador saca el tipo del registro y una .avif (o una .webp en equipos antiguos) llega con `type` vacío. Entonces se
+ * prueba como imagen (sharp en el servidor decide: si no la lee, queda como archivo). SVG nunca (no está en IMAGE_EXT).
+ */
+export function isUntypedImage(name: string, mime: string | null | undefined): boolean {
+  const m = (mime ?? "").split(";")[0]!.trim().toLowerCase();
+  return (m === "" || m === "application/octet-stream") && IMAGE_EXT.has(extensionOf(name));
+}
+
+/**
  * Tipo que *declara* el fichero (por extensión y, sin extensión, por el MIME del navegador).
  * El servidor lo confirma después con el contenido (confirmDocumentKind): esto solo es la primera impresión.
  */
