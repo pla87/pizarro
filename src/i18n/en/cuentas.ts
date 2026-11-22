@@ -342,11 +342,12 @@ export const cuentas: Record<string, string> = {
   // «Generar enlace de invitación nuevo» (sin email configurado; el anterior deja de valer, se confirma)
   "Generar enlace de invitación nuevo": "New invitation link",
   "Generar enlace de invitación nuevo para {name}": "New invitation link for {name}",
-  "Genera un enlace de invitación nuevo; el anterior deja de valer": "Creates a new invitation link; the previous one stops working",
-  "Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.": "A new invitation link will be created for {name}. The one you already gave them will stop working.",
-  "Generar enlace nuevo": "Create new link",
   "Enlace de invitación nuevo: el anterior ya no vale": "New invitation link: the previous one no longer works",
   "Enlace de invitación de {name}": "Invitation link for {name}",
   "El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.": "The previous link no longer works. This one won't be shown again: if you lose it, generate another one.",
   "La cuenta está desactivada: actívala antes de generar otro enlace de invitación.": "The account is deactivated: activate it before generating another invitation link.",
+  // «Generar enlace de invitación nuevo»: su título y la confirmación (el anterior deja de valer)
+  "Genera un enlace de invitación nuevo; el anterior deja de valer": "Creates a new invitation link; the previous one stops working",
+  "Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.": "A new invitation link will be created for {name}. The one you already gave them will stop working.",
+  "Generar enlace nuevo": "Create new link",
 };
