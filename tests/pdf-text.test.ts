@@ -195,4 +195,24 @@ describe("informe: etiquetas de estado de los entregables legibles (blanco sobre
     assert.ok(used.has("#b45309") && used.has("#64748b"), `colores: ${[...used].join(" ")}`);
     assert.ok(!used.has("#d97706") && !used.has("#059669"), [...used].join(" "));
   });
+
+  test("el pie (proyecto, fecha y página) en gris medio, no en #94a3b8 (2,6:1); los días que faltan, con separador de miles", async () => {
+    const report = buildReport({
+      project: { name: "P", description: "" },
+      generatedBy: "Test",
+      today: "2026-10-18",
+      columns: [{ id: "todo", name: "Backlog", isDone: false }],
+      kinds: ["Funcionalidad"],
+      tasks: [],
+      deliverables: [{ id: "d1", name: "Lejano", description: "", dueDate: "2030-03-05" }],
+      releases: [],
+      archivedCount: 0,
+    });
+    const pdf = await renderInWorker({ kind: "report", locale: "en", input: report });
+    const used = fills(pdf);
+    assert.ok(!used.has("#94a3b8"), [...used].join(" "));
+    // En español, con cuatro cifras no se agrupa («1234»), como en el resto de la app; en inglés sí.
+    const text = pdfRuns(pdf).join(" ").replace(/\s+/g, " ");
+    assert.match(text, /\(in 1,234 d\)/, text);
+  });
 });
