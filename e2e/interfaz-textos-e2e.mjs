@@ -130,15 +130,15 @@ if (only.includes("profile")) {
   await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
   L.eq("AVISOS: al volver a como estaba, se desactiva", await saveMention.isEnabled(), false);
   // Lo marcado en una casilla y en otra se guarda junto (antes eran dos tarjetas y guardar una perdía lo de la otra).
-  const before = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
+  const prefsBefore = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
   await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
   await emailCard.getByRole("checkbox", { name: "Email con los comentarios y respuestas en tareas que sigo" }).click();
   await saveMention.click();
   await page.getByText("Preferencias guardadas").first().waitFor({ timeout: 10000 });
   const saved = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
-  L.eq("AVISOS: un solo «Guardar avisos» guarda las dos casillas", [saved.n, saved.c], [!before.n, !before.c]);
+  L.eq("AVISOS: un solo «Guardar avisos» guarda las dos casillas", [saved.n, saved.c], [!prefsBefore.n, !prefsBefore.c]);
   L.eq("AVISOS: tras guardar, vuelve a estar desactivado", await saveMention.isEnabled(), false);
-  await L.q(`UPDATE "User" SET "notifyEmail"=$2, "notifyCommentEmail"=$3 WHERE email=$1`, [L.ADMIN, before.n, before.c]);
+  await L.q(`UPDATE "User" SET "notifyEmail"=$2, "notifyCommentEmail"=$3 WHERE email=$1`, [L.ADMIN, prefsBefore.n, prefsBefore.c]);
   L.check("AVISOS: la descripción es de una línea", !(await bodyText(page)).includes("Cuando alguien te menciona con @"));
   L.assertNoErrors("PROFILE", [s]);
   await s.ctx.close();
