@@ -158,6 +158,22 @@ test("fechas: el año con dos cifras se lee igual que en los CSV («21/12/26» �
   for (const bad of ["1/2/2", "1/2/026", "29/2/27"]) assert.equal(parseDayLoose(bad), undefined, bad);
 });
 
+test("fechas: el JSON lee los mismos formatos que el CSV (parseDay), con puntos siempre día/mes", () => {
+  const cases: [string, string][] = [
+    ["2026/12/01", "2026-12-01"], ["2026.12.01", "2026-12-01"], ["1.12.2026 10:00", "2026-12-01"], ["1.12.2026.", "2026-12-01"],
+    ["1-dic-2026", "2026-12-01"], ["December 1, 2026", "2026-12-01"], ["1 de diciembre de 2026", "2026-12-01"],
+  ];
+  for (const [v, want] of cases) {
+    for (const order of ["dmy", "mdy"] as const) {
+      assert.equal(parseDayLoose(v, order), want, `${v} ${order}`);
+      assert.equal(parseDayLoose(v, order), parseDay(v, "UTC", order), `${v} ${order} igual que el CSV`);
+    }
+  }
+  // En un JSON de tareas entero, igual que pegado como CSV.
+  const json = parseTasksText(JSON.stringify({ tasks: [{ title: "A", dueDate: "2026/12/01", startDate: "1.12.2026 10:00" }] }));
+  assert.deepEqual([json.tasks[0]?.task.dueDate, json.tasks[0]?.task.startDate], ["2026-12-01", "2026-12-01"]);
+});
+
 // El servidor interpreta el texto que le manda cualquier persona con sesión: ningún JSON de hasta 200 000 caracteres
 // puede tenerlo ocupado varios segundos (expresiones regulares o comparaciones cuadráticas) ni hacerle lanzar.
 test("textos patológicos: se leen en poco tiempo y sin lanzar (responsable, importes, miles de etiquetas, listas anidadas)", () => {

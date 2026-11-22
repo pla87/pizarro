@@ -240,7 +240,7 @@ describe("CSV", () => {
     assert.equal(decodeText(latin, true), "Peñ\n");
     assert.equal(decodeText(new TextEncoder().encode("Peña"), true), "Peña");
     // Solo la cabecera (cortada a mitad de una «ñ» en UTF-8): se queda con lo que se puede leer.
-    assert.equal(decodeText(new Uint8Array([0x50, 0x65, 0x70, 0x61, 0xc3])), "Pe");
+    assert.equal(decodeText(new Uint8Array([0x50, 0x65, 0x70, 0x61, 0xc3])), "Pepa");
   });
 
   test("foreignPriority: las del prototipo («constructor», «toString») no son prioridades", () => {

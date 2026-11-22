@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test, describe } from "node:test";
 import { makeT } from "../src/i18n/core";
-import { detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
+import { assertCsvHeader, detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
 import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
 import { cleanMarkdown, cleanName, cleanTitle, instantDay, isDoneName, parseDay, stripHtml } from "../src/lib/foreign-import/text";
 import { parseTrello } from "../src/lib/foreign-import/trello";
@@ -124,6 +124,21 @@ describe("CSV: lectura RFC 4180", () => {
     assert.equal(decodeText(bytes("\uFEFFñ")), "ñ");
     assert.equal(decodeText(new Uint8Array([0x74, 0xed, 0x74, 0x75, 0x6c, 0x6f])), "título");
     assert.equal(decodeText(new Uint8Array([0xff, 0xfe, 0x61, 0x00, 0xf1, 0x00])), "añ");
+  });
+
+  test("cabecera cortada a mitad de un carácter: solo se deja fuera ese carácter, no pasa todo a Windows-1252", () => {
+    const enc = new TextEncoder();
+    // «é», una letra y el primer byte de «ñ» al final: quitar 3 bytes cortaba también la «é».
+    const text = "Título,Descripción\n" + "x".repeat(8000) + "éañ";
+    const full = enc.encode(text);
+    const head = full.subarray(0, full.length - 1);
+    const dec = decodeText(head);
+    assert.ok(dec.startsWith("Título,Descripción\n"), dec.slice(0, 20));
+    assert.ok(dec.endsWith("éa"));
+    assert.doesNotThrow(() => assertCsvHeader(dec));
+    // Texto chino o japonés (3 bytes por carácter), cortado en cualquier punto.
+    const cjk = enc.encode("Título,Descripción\n" + "漢字".repeat(50));
+    for (const cut of [1, 2, 3]) assert.ok(decodeText(cjk.subarray(0, cjk.length - cut)).startsWith("Título,"), `corte ${cut}`);
   });
 });
 
