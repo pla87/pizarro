@@ -699,3 +699,36 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 14.5 Copias en R2 con el bloqueo puesto
 
 - A partir del día 15 desde que creaste la regla, *Administración → Copias de seguridad* puede decir «N objetos retenidos por el bloqueo del bucket» en el destino externo: es lo esperado, no un error. La copia sigue saliendo *Correcta*.
+
+## 15. Novedades de la v1.66.0
+
+### 15.1 Antes de publicar: la dirección de los informes
+
+- `feedback@getpizarro.com` debe existir y reenviar a tu buzón (prompt 1 de `docs/PRUEBAS-CHROME.md`). Envía un email de prueba a esa dirección desde otro correo y comprueba que llega. Si no existe, los informes de las instalaciones con email rebotarán.
+
+### 15.2 Railway sin `railway.json` (tus dos proyectos)
+
+1. *Settings → Deploy*: *Healthcheck Path* `/api/health`, *Healthcheck Timeout* `600` (o la variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`), *Restart Policy* «On Failure», una réplica (prompt 3 de `docs/PRUEBAS-CHROME.md`).
+2. Al desplegar, el log termina con «Starting Healthcheck», «Path: /api/health» y «Healthcheck succeeded!».
+
+### 15.3 Informar de un error (tu Railway, instalación oficial)
+
+- Con email configurado: «Enviar» con una captura; debe llegarte a tu buzón por el reenvío de `feedback@`.
+- Con el teclado, el resaltado de «Tipo» rodea toda la opción; el texto de GitHub es un solo párrafo.
+
+### 15.4 Usuarios sin email (instalación de prueba)
+
+1. *Administración → Usuarios → Nuevo usuario*: no pide contraseña; al crear sale el enlace de invitación con «Copiar». Pulsa Atrás: solo se cierra el diálogo.
+2. Abre el enlace en una ventana de incógnito, elige contraseña y entra.
+3. *Forzar cambio de contraseña* sobre alguien con la invitación pendiente: el enlace de invitación anterior deja de valer.
+
+### 15.5 Render o Fly.io (opcional, solo si quieres probar las guías nuevas)
+
+- Sigue la guía de `getpizarro.com/instalar` (Render: botón *Deploy to Render*, plan de pago; Fly.io: `flyctl`). Al terminar, `/setup` debe abrir con la dirección pública correcta, y en *Administración → Logs* tu IP real (no la de la plataforma).
+- Borra después el servicio, el disco y la base para no pagar de más.
+
+### 15.6 En el móvil (teléfono real)
+
+- Doble clic (doble toque) en una descripción larga: el editor se abre sin mover el texto.
+- «@» en un comentario con el teclado abierto: la lista no queda tapada ni cortada.
+- Menú → «+ Nuevo proyecto»: el menú se cierra y se escribe el nombre a la primera.
