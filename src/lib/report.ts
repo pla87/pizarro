@@ -283,7 +283,7 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
 
   const peopleMap = new Map<string, { name: string; open: number; done: number; overdue: number }>();
   for (const r of counts.rows) {
-    const name = r.assigneeName ?? tr("Sin asignar");
+    const name = r.assigneeName ?? tr("Sin responsable");
     const p = peopleMap.get(name) ?? { name, open: 0, done: 0, overdue: 0 };
     if (rowDone(r)) p.done += r.count;
     else {

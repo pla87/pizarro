@@ -223,7 +223,7 @@ export const admin: Record<string, string> = {
   "Archivos de exportación de proyectos caducados": "Expired project export files",
   "Archivos compartidos con Pizarro sin usar": "Unused files shared with Pizarro",
   "Reanudar copias de adjuntos de releases": "Resume release attachment copies",
-  "1. Avisos por email": "1. Email notices",
+  "1. Avisos por email": "1. Email notifications",
   "Avisos, enlaces de acceso e informes.": "Notifications, sign-in links and reports.",
   "La contraseña se guarda cifrada y no se vuelve a mostrar.": "The password is stored encrypted and is never shown again.",
   "Cómo se envían los emails": "How emails are sent",

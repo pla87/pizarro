@@ -20,7 +20,6 @@ export const ics: Record<string, string> = {
   "Regenerar enlace": "Regenerate link",
   "Generar enlace de suscripción": "Generate subscription link",
   "Desactivar": "Turn off",
-  "Regenerar o desactivar deja sin efecto el enlace anterior en todos tus calendarios.": "Regenerating or turning off makes the previous link stop working in all your calendars.",
   "Demasiados intentos. Espera un poco.": "Too many attempts. Please wait a moment.",
 
   // Suscripción: qué incluye cada opción

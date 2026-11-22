@@ -219,14 +219,14 @@ if (only.includes("repdraft")) {
   dlg = await open();
   L.eq("REPDRAFT: el borrador se recupera con «Cada semana»", await dlg.getByLabel("Repetir", { exact: true }).inputValue(), "WEEKLY");
   const due = addDays(today, 2);
-  await dlg.getByLabel("Fecha límite (opcional)").fill(due);
+  await dlg.getByLabel("Fecha límite", { exact: true }).fill(due);
   L.eq("REPDRAFT: al poner la fecha límite, el día pasa a ser el de la fecha (no se eligió a mano)", Number(await dlg.getByLabel("Día de la semana").inputValue()), weekday(due));
   // Elegido a mano sí se conserva al recuperar el borrador.
   const picked = weekday(addDays(today, 4));
   await dlg.getByLabel("Día de la semana").selectOption(String(picked));
   await L.reload(page);
   dlg = await open();
-  await dlg.getByLabel("Fecha límite (opcional)").fill(addDays(today, 5));
+  await dlg.getByLabel("Fecha límite", { exact: true }).fill(addDays(today, 5));
   L.eq("REPDRAFT: un día elegido a mano no cambia al poner otra fecha", Number(await dlg.getByLabel("Día de la semana").inputValue()), picked);
   await page.keyboard.press("Escape");
   L.assertNoErrors("REPDRAFT", [s]);

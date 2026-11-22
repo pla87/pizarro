@@ -333,8 +333,6 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         </>}
       />
 
-      <Section title="Tarjetas archivadas" description="Se consultan y recuperan desde el botón «Archivadas» del tablero." />
-
       {canManage && applyTemplate && (
         <Section
           id="apply-template"

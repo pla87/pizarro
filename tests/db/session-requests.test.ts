@@ -12,13 +12,18 @@ import { SESSION_MAX_AGE_SECONDS } from "../../src/lib/session-config";
 // Cuenta las lecturas de la tabla Session que llegan a PostgreSQL. `failNext` hace fallar la siguiente (fallo de BD).
 let sessionReads = 0;
 let allQueries = 0;
+/** Texto de todas las consultas (sin las del registro), para contarlas en una prueba. */
+let logged: string[] | null = null;
 let failNext = false;
 const origQuery = pg.Client.prototype.query;
 pg.Client.prototype.query = function (this: pg.Client, ...args: unknown[]) {
   const q = args[0];
   const text = typeof q === "string" ? q : (q as { text?: string } | undefined)?.text ?? "";
-  if (!/"AppLog"/.test(text)) allQueries++;
-  if (/^\s*SELECT\b/i.test(text) && /FROM "public"\."Session"/.test(text)) {
+  if (!/"AppLog"/.test(text)) {
+    allQueries++;
+    logged?.push(text);
+  }
+  if (/^\s*SELECT\b/i.test(text) && /FROM ("public"\.)?"Session"/.test(text)) {
     sessionReads++;
     if (failNext) {
       failNext = false;
@@ -130,6 +135,51 @@ describe("sesión: una consulta por petición", () => {
       await assert.rejects(getCurrentUser(), /fallo de BD simulado/);
       assert.equal((await getCurrentUser())?.id, user.id, "el siguiente intento vuelve a consultar");
     });
+  });
+});
+
+describe("sesión: una sola consulta a la BD", () => {
+  async function queries(fn: () => Promise<unknown>): Promise<string[]> {
+    logged = [];
+    try {
+      await fn();
+      return logged;
+    } finally {
+      logged = null;
+    }
+  }
+
+  test("leer la sesión y su usuario es una consulta (antes, dos: Session y luego User)", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const sql = await queries(() => inRequest(() => getCurrentUser()));
+    counts.sessionQueries = sql.length;
+    assert.equal(sql.length, 1, sql.join("\n"));
+    assert.match(sql[0] ?? "", /FROM "Session" s JOIN "User" u/);
+  });
+
+  test("con la actividad por anotar: la lectura y una escritura, nada más", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    await db.session.updateMany({ where: { userId: user.id }, data: { lastSeenAt: new Date(Date.now() - 6 * 60_000) } });
+    const sql = await queries(() => inRequest(() => getCurrentUser()));
+    assert.equal(sql.filter((s) => /^\s*SELECT\b/i.test(s)).length, 1, sql.join("\n"));
+    assert.equal(sql.filter((s) => /^\s*UPDATE\b/i.test(s)).length, 1, sql.join("\n"));
+  });
+
+  test("mismas comprobaciones: cuenta desactivada, contraseña por cambiar y datos del usuario", async () => {
+    const user = await makeUser({ name: "Carla" });
+    await db.user.update({ where: { id: user.id }, data: { theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true } });
+    await loginAs(user);
+    assert.deepEqual(await inRequest(() => getCurrentUser()), {
+      id: user.id, email: user.email, name: "Carla", role: "MEMBER", theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true,
+    });
+    await db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } });
+    assert.equal(await inRequest(() => getCurrentUser()), null, "con la contraseña por cambiar, getCurrentUser no la da");
+    assert.equal((await inRequest(() => getPendingUser()))?.id, user.id, "pero getPendingUser sí");
+    await db.user.update({ where: { id: user.id }, data: { mustChangePassword: false, active: false } });
+    assert.equal(await inRequest(() => getCurrentUser()), null, "desactivada");
+    assert.equal(await inRequest(() => getPendingUser()), null);
   });
 });
 

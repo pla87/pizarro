@@ -88,7 +88,7 @@ test("columnas y personas", () => {
   assert.deepEqual(r.columns.map((c) => [c.name, c.count, c.overdue]), [["Backlog", 3, 1], ["Cerrado", 1, 0]]);
   const ana = r.people.find((p) => p.name === "Ana")!;
   assert.deepEqual([ana.open, ana.done, ana.overdue], [2, 1, 1]);
-  assert.ok(r.people.some((p) => p.name === "Sin asignar"));
+  assert.ok(r.people.some((p) => p.name === "Sin responsable"));
 });
 
 test("desglose por tipo usa los nombres configurados", () => {
@@ -159,7 +159,7 @@ test("recuentos de todas las tareas: avance, vencidas, columnas, tipos y persona
     { total: 3000, done: 500, open: 2500, pct: 17, overdue: 350, soon: 100, unassigned: 1000, noDue: 1100, fixed: 2 },
   );
   assert.deepEqual(r.columns.map((c) => [c.name, c.count, c.overdue]), [["Backlog", 2500, 350], ["Cerrado", 500, 0]]);
-  assert.deepEqual(r.people, [{ name: "Ana", open: 1500, done: 500, overdue: 300 }, { name: "Sin asignar", open: 1000, done: 0, overdue: 50 }]);
+  assert.deepEqual(r.people, [{ name: "Ana", open: 1500, done: 500, overdue: 300 }, { name: "Sin responsable", open: 1000, done: 0, overdue: 50 }]);
   assert.deepEqual(r.types, [{ label: "Funcionalidad", open: 1000, done: 500 }, { label: "Corrección", open: 1500, done: 0 }]);
   // Se listan 4 de 3.002 (con las fijas).
   assert.equal(r.omittedTasks, 2998);

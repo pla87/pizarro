@@ -237,7 +237,6 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
             </button>
           )}
         </div>
-        {active && <p className="text-xs text-slate-500">{t("Regenerar o desactivar deja sin efecto el enlace anterior en todos tus calendarios.")}</p>}
       </div>
     </Popover>
   );

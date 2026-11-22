@@ -113,8 +113,8 @@ try {
       await nt.getByRole("radio", { name: "Sesión" }).click();
       L.eq(`PDF: «Sesión» pone su título automático (${title})`, await nt.getByRole("textbox", { name: "Título", exact: true }).inputValue(), "Sesión: ");
       await nt.getByRole("textbox", { name: "Título", exact: true }).fill(title);
-      await nt.getByLabel("Fecha límite (opcional)").fill(due);
-      await nt.getByLabel("Asignada a (opcional)").selectOption(adm.id);
+      await nt.getByLabel("Fecha límite", { exact: true }).fill(due);
+      await nt.getByLabel("Responsable", { exact: true }).selectOption(adm.id);
       await nt.getByRole("button", { name: "Crear tarea" }).click();
       await nt.waitFor({ state: "detached", timeout: 10000 });
       await L.cardLoc(page, title).waitFor({ timeout: 10000 });

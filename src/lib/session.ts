@@ -86,17 +86,33 @@ interface SessionUser extends CurrentUser {
   mustChangePassword: boolean;
 }
 
+interface SessionRow extends SessionUser {
+  expiresAt: Date;
+  lastSeenAt: Date;
+  active: boolean;
+}
+
+/**
+ * La sesión y su usuario en una sola consulta (cada petición pasa por aquí). Con `findUnique` + `select` anidado,
+ * Prisma 7 hace dos (Session y luego User); el JOIN por la clave primaria cuesta lo mismo que la primera sola.
+ */
+async function readSession(id: string): Promise<{ expiresAt: Date; lastSeenAt: Date; user: SessionUser & { active: boolean } } | null> {
+  const rows = await db.$queryRaw<SessionRow[]>`
+    SELECT s."expiresAt", s."lastSeenAt", u.id, u.email, u.name, u.role::text AS role, u.theme::text AS theme,
+           u.accent::text AS accent, u.locale::text AS locale, u."clearDraftsOnLogout", u.active, u."mustChangePassword"
+    FROM "Session" s JOIN "User" u ON u.id = s."userId"
+    WHERE s.id = ${id}
+    LIMIT 1`;
+  const row = rows[0];
+  if (!row) return null;
+  const { expiresAt, lastSeenAt, ...user } = row;
+  return { expiresAt, lastSeenAt, user };
+}
+
 /** Consulta la sesión del token (y anota su actividad). Sin memoria: la pone loadSessionUser. */
 async function querySessionUser(token: string): Promise<SessionUser | null> {
   const id = sessionIdFromToken(token);
-  const session = await db.session.findUnique({
-    where: { id },
-    select: {
-      expiresAt: true,
-      lastSeenAt: true,
-      user: { select: { id: true, email: true, name: true, role: true, theme: true, accent: true, locale: true, clearDraftsOnLogout: true, active: true, mustChangePassword: true } },
-    },
-  });
+  const session = await readSession(id);
   if (!session || !session.user.active) return null;
   const now = Date.now();
   if (session.expiresAt.getTime() < now) return null;

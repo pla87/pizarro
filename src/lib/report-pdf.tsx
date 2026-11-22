@@ -495,7 +495,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
 
     // Carga por persona
     ...section(t("Carga por persona"), people, [
-      { label: t("Persona"), width: "60%", render: (p) => p.name },
+      { label: t("Responsable"), width: "60%", render: (p) => p.name },
       { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
       { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
     ], (p) => rowUnits(p.name, 60), big),

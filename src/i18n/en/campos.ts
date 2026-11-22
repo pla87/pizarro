@@ -24,8 +24,6 @@ export const campos: Record<string, string> = {
   "Urgente": "Urgent",
   "Sin prioridad": "No priority",
   "Prioridad: {p}": "Priority: {p}",
-  "Prioridad (opcional)": "Priority (optional)",
-  "Cliente (opcional)": "Client (optional)",
   // Diálogos y tarjetas
   "Campos": "Fields",
   "Pagado": "Paid",

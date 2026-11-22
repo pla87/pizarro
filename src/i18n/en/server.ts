@@ -198,7 +198,6 @@ export const server: Record<string, string> = {
   "Avance": "Progress",
   "Estado": "Status",
   "Carga por persona": "Workload by person",
-  "Persona": "Person",
   "Terminadas en los últimos {n} días": "Completed in the last {n} days",
   "Últimas releases": "Latest releases",
   "Nº": "No.",

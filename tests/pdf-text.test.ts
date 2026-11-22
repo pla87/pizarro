@@ -86,7 +86,7 @@ describe("PDF generado", () => {
       archivedCount: 0,
     };
     const runs = pdfRuns(await renderInWorker({ kind: "report", locale: "en", input: buildReport(input) }));
-    assert.ok(runs.includes("Person") && runs.includes("Pending") && runs.includes("Overdue"));
+    assert.ok(runs.includes("Assignee") && runs.includes("Pending") && runs.includes("Overdue"));
     assert.ok(!runs.includes("Pendientes") && !runs.includes("Vencidas"));
     // La columna «Tarea» de la tabla de pendientes (40 % de 523 pt, a 9 pt) admite unas 30 «A».
     const pieces = runs.filter((r) => r.startsWith("AAAA")).map((l) => l.replace(/-$/, ""));
