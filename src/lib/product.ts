@@ -5,6 +5,13 @@ import type { T } from "../i18n/core";
 /** Enlace de compra (p. ej. un Payment Link de Stripe). Vacío hasta que el autor lo publique. */
 export const BUY_URL: string = "";
 
+/**
+ * A dónde llegan los informes de «Informar de un error o enviar una sugerencia» (el botón junto a «Cerrar sesión»): cada
+ * instalación oficial los envía por email desde su propio servidor de correo. Vacío hasta que el autor cree la dirección;
+ * mientras tanto, el diálogo abre el formulario público de GitHub (y ofrece descargar la captura).
+ */
+export const FEEDBACK_EMAIL: string = "";
+
 /** Precio de la licencia comercial, en euros y sin IVA (pago único por servidor). */
 export const LICENSE_PRICE_EUR = 100;
 

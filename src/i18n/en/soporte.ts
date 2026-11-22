@@ -1,4 +1,5 @@
-// Soporte: «Informar de un error» (Historial de versiones) y «Copiar información técnica» (Administración → Ajustes).
+// Soporte: «Informar de un error o enviar una sugerencia» (junto a «Cerrar sesión» y en Historial de versiones) y
+// «Copiar información técnica» (Administración → Ajustes).
 // Clave: texto exacto en español.
 export const soporte: Record<string, string> = {
   // Informar de un error
@@ -8,8 +9,6 @@ export const soporte: Record<string, string> = {
   "Commit": "Commit",
   "Navegador y sistema": "Browser and system",
   "Continuar en GitHub": "Continue on GitHub",
-  "Se abrirá el formulario de incidencias de Pizarro en GitHub con estos datos técnicos ya rellenos:": "Pizarro's issue form on GitHub will open with these technical details already filled in:",
-  "No se envía nada de tus proyectos ni de tu cuenta, ni tu email ni la dirección de esta instalación. Lo demás lo escribes tú, y no se publica nada hasta que lo envíes en GitHub.": "Nothing from your projects or your account is sent, nor your email or this installation's address. You write the rest, and nothing is published until you submit it on GitHub.",
   "Necesitas una cuenta de GitHub. La incidencia es pública: no incluyas datos personales ni capturas con información privada.": "You need a GitHub account. The issue is public: do not include personal data or screenshots with private information.",
   "¿Es un fallo de seguridad? No lo publiques:": "Is it a security issue? Do not post it publicly:",
   "infórmalo en privado": "report it privately",
@@ -17,4 +16,37 @@ export const soporte: Record<string, string> = {
   "Copiar información técnica": "Copy technical information",
   "Información técnica copiada. Revísala antes de pegarla en una incidencia.": "Technical information copied. Review it before pasting it into an issue.",
   "Copia unas líneas (versión, commit, Node, base de datos, funciones activas y nombres de las variables, nunca sus valores) para pegarlas al informar de un error.": "Copies a few lines (version, commit, Node, database, enabled features and variable names, never their values) to paste when reporting a bug.",
+  // Informar de un error o enviar una sugerencia (botón junto a «Cerrar sesión», diálogo con captura)
+  "Informar de un error o enviar una sugerencia": "Report a bug or send a suggestion",
+  "Actualiza a la última versión para informar de un error o enviar una sugerencia": "Update to the latest version to report a bug or send a suggestion",
+  "Enviar una sugerencia": "Send a suggestion",
+  "¿Qué ha pasado?": "What happened?",
+  "¿Qué te gustaría?": "What would you like?",
+  "Qué hacías, qué esperabas que pasara y qué pasó.": "What you were doing, what you expected to happen and what happened.",
+  "Qué echas en falta o qué cambiarías, y para qué te serviría.": "What you miss or would change, and what it would help you with.",
+  "Incluir una captura de la pantalla": "Include a screenshot",
+  "Haciendo la captura…": "Taking the screenshot…",
+  "No se ha podido hacer la captura. Puedes enviarlo sin ella.": "The screenshot could not be taken. You can send it without one.",
+  "Vista previa de la captura": "Screenshot preview",
+  "Quitar la captura": "Remove the screenshot",
+  "Descargar la captura": "Download the screenshot",
+  "La captura puede contener datos de tu trabajo (nombres, tareas, comentarios). Revísala antes de enviarla y quítala si no quieres que se vean.": "The screenshot may contain data from your work (names, tasks, comments). Check it before sending it and remove it if you do not want them to be seen.",
+  "Incluir mi email para que me respondan": "Include my email so they can reply",
+  "Datos técnicos que se envían:": "Technical details that are sent:",
+  "Datos técnicos que se rellenan en GitHub:": "Technical details filled in on GitHub:",
+  "Se envía en privado por email al equipo de Pizarro, desde el servidor de correo de esta instalación. Solo va lo que escribes, la captura si la incluyes, tu email si lo marcas y estos datos técnicos; nada más de tus proyectos ni de tu cuenta.": "It is sent privately by email to the Pizarro team, from this installation's mail server. Only what you write is sent, plus the screenshot if you include it, your email if you check the box and these technical details; nothing else from your projects or your account.",
+  "Esta instalación no puede enviarlo por email: se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.": "This installation cannot send it by email: Pizarro's form on GitHub will open with what you wrote and these technical details.",
+  "La captura no se adjunta sola: descárgala y, si no tiene información privada, añádela en GitHub.": "The screenshot is not attached automatically: download it and, if it has no private information, add it on GitHub.",
+  "Enviar": "Send",
+  "Enviando…": "Sending…",
+  "Gracias. Tu informe se ha enviado.": "Thank you. Your report has been sent.",
+  "Gracias. Tu sugerencia se ha enviado.": "Thank you. Your suggestion has been sent.",
+  "Ya has enviado {n} informes hoy. Vuelve a intentarlo mañana.": "You have already sent {n} reports today. Try again tomorrow.",
+  "Desde esta instalación ya se han enviado muchos informes hoy. Vuelve a intentarlo mañana.": "Many reports have already been sent from this installation today. Try again tomorrow.",
+  "La captura es demasiado grande. Quítala o inténtalo con la ventana más pequeña.": "The screenshot is too large. Remove it or try with a smaller window.",
+  "La captura no es una imagen válida. Quítala y vuelve a hacerla.": "The screenshot is not a valid image. Remove it and take it again.",
+  "Esta instalación ya no puede enviar informes por email.": "This installation can no longer send reports by email.",
+  "Escribe qué ha pasado o qué te gustaría.": "Write what happened or what you would like.",
+  "No se ha podido enviar. Inténtalo de nuevo más tarde.": "It could not be sent. Try again later.",
+  "Sin conexión: no se ha enviado. Inténtalo de nuevo cuando vuelva la conexión.": "Offline: it was not sent. Try again when the connection is back.",
 };

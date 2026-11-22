@@ -39,7 +39,7 @@ export default async function ChangelogPage() {
           </p>
         </div>
         <div className="w-full sm:w-auto sm:max-w-xs">
-          <BugReportLink version={pkg.version} />
+          <BugReportLink />
         </div>
       </div>
       <ChangelogList

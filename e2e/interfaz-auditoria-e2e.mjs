@@ -6,16 +6,22 @@
 // este mes» y, en el móvil, «Ir a hoy» en el aviso (sin vencidas, se baja solo hasta hoy); (5) Mis tareas: singular/plural y borde rojo solo en las vencidas; (6) Usuarios
 // a 393 px con menú «⋯», indicador de desplazamiento en las pestañas y pie del menú lateral entero; (7) theme-color con el
 // tema elegido; (8) accesibilidad: «Ver como lista» con aria-pressed, «Abrir menú» con aria-expanded, fondo inert con un
-// modal abierto (también diálogo dentro de diálogo, y los avisos emergentes siguen fuera) y nombres de los controles (axe).
+// modal abierto (también diálogo dentro de diálogo, y los avisos emergentes siguen fuera) y nombres de los controles (axe);
+// (9) «Informar de un error o enviar una sugerencia» (PART=feedback, va primero): en una build no oficial, sin botón y con la
+// nota en Historial de versiones; en una oficial (compilada con OFFICIAL_BUILD=1, RELEASE_VERSION=<versión de package.json>
+// y GIT_SHA=<commit>, ver src/lib/bug-report-core.ts), el botón junto a «Cerrar sesión» (también en el móvil, donde cierra
+// el menú), el diálogo con la captura de la página sin el diálogo (con la CSP de la app), el formulario de GitHub con lo
+// escrito y, con una versión publicada más nueva en la caché del aviso, el botón desactivado. El envío por email lo prueba
+// tests/db/feedback.test.ts (aquí FEEDBACK_EMAIL está vacía y no hay SMTP: sale el camino de GitHub).
 // Misma base y servidor que board-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=hyd,tabs,informe,cal,mis,movil,tema,a11y
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y
 import fs from "node:fs";
 import os from "node:os";
 import { createRequire } from "node:module";
 import * as L from "./qa/lib.mjs";
 const { sleep, COL } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "hyd,tabs,informe,cal,mis,movil,tema,a11y").split(",");
+const only = (process.env.PART || "feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y").split(",");
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
 await L.prepareUsers();
@@ -51,6 +57,124 @@ async function sessionTz({ timezoneId = "Europe/Madrid", locale = "es-ES", mobil
   return { ctx, page, errors };
 }
 const hydrationErrors = (s) => s.errors.filter((e) => HYDRATION.test(e));
+
+// --- (9) Informar de un error o enviar una sugerencia ----------------------------------------------------------------------
+// Va antes que el resto: la última versión conocida se memoriza un minuto en el servidor, y aquí se fija antes de pedir
+// ninguna página (como recién consultada, para que el servidor no pregunte a GitHub).
+if (only.includes("feedback")) {
+  L.scenario("feedback: botón junto a «Cerrar sesión», diálogo con captura, GitHub con lo escrito y desactivado sin la última versión");
+  const NAME = "Informar de un error o enviar una sugerencia";
+  const OUTDATED = "Actualiza a la última versión para informar de un error o enviar una sugerencia";
+  const version = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  const setLatest = (latest) => L.q(`INSERT INTO "AppState"(key,value,"updatedAt") VALUES ('updateCheck',$1,NOW()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify({ checkedAt: Date.now(), latest, url: null })]);
+  await setLatest(version);
+  await asMember();
+  const s = await L.session();
+  const footerBug = s.page.locator("aside").first().getByRole("button", { name: NAME });
+  if ((await footerBug.count()) === 0) {
+    await L.goto(s.page, `${L.BASE}/changelog`);
+    await s.page.getByRole("heading", { name: "Historial de versiones" }).waitFor();
+    L.check("FEEDBACK (build no oficial): sin botón y con la nota en Historial de versiones",
+      (await s.page.locator("[data-feedback-button]").count()) === 0 && (await s.page.getByText("solo se atienden en versiones oficiales sin modificar").count()) === 1);
+    L.note("FEEDBACK: build no oficial; el resto de esta parte necesita una compilada como oficial (ver la cabecera)");
+  } else {
+    // Junto a «Cerrar sesión», en la misma fila del pie del menú.
+    const sameRow = await footerBug.evaluate((b, name) => {
+      const row = b.parentElement;
+      return !!row && [...row.querySelectorAll("button")].some((x) => x.getAttribute("aria-label") === "Cerrar sesión") && b.getAttribute("title") === name;
+    }, NAME);
+    L.check("FEEDBACK: el botón está al lado de «Cerrar sesión», con nombre y title", sameRow);
+    // Un tablero con algo que se vea detrás del diálogo.
+    await L.seedTasks(COL.backlog, ["Tarjeta para la captura r61"], {});
+    await L.reload(s.page);
+    await footerBug.click();
+    const dlg = s.page.getByRole("dialog", { name: NAME });
+    await dlg.waitFor();
+    L.check("FEEDBACK: sin email en la instalación, el diálogo ofrece GitHub y avisa de que es público",
+      (await dlg.getByText("Esta instalación no puede enviarlo por email").count()) === 1 && (await dlg.getByText("La incidencia es pública").count()) === 1);
+    L.eq("FEEDBACK: enseña los datos técnicos", (await dlg.locator("dl dt").allInnerTexts()).join("|"), "Versión|Commit|Instalación|Navegador y sistema|Idioma");
+    await dlg.getByLabel("¿Qué ha pasado?").fill("Al mover una tarjeta se queda gris");
+    const gh = dlg.getByRole("link", { name: "Continuar en GitHub" });
+    const bugUrl = new URL(await gh.getAttribute("href"));
+    L.eq("FEEDBACK: GitHub con el formulario de errores, lo escrito y los datos técnicos",
+      [bugUrl.pathname, bugUrl.searchParams.get("template"), bugUrl.searchParams.get("actual"), bugUrl.searchParams.get("version"), bugUrl.searchParams.get("install")],
+      ["/pla87/pizarro/issues/new", "bug_report.yml", "Al mover una tarjeta se queda gris", version, "Docker Compose"]);
+    await dlg.getByLabel("Enviar una sugerencia").check();
+    await dlg.getByLabel("¿Qué te gustaría?").fill("Vista por semanas");
+    const ideaUrl = new URL(await gh.getAttribute("href"));
+    L.eq("FEEDBACK: una sugerencia va a su formulario", [ideaUrl.searchParams.get("template"), ideaUrl.searchParams.get("idea")], ["suggestion.yml", "Vista por semanas"]);
+    // Captura: de la página sin el diálogo ni su fondo oscuro, reducida y en JPEG.
+    await dlg.getByLabel("Incluir una captura de la pantalla").check();
+    const preview = dlg.locator("img[data-feedback-preview]");
+    await preview.waitFor({ timeout: 30000 });
+    const shot = await preview.evaluate(async (img) => {
+      await img.decode();
+      const blob = await (await fetch(img.src)).blob();
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      const px = (x, y) => Array.from(ctx.getImageData(Math.round((x * c.width) / innerWidth), Math.round((y * c.height) / innerHeight), 1, 1).data).slice(0, 3);
+      // El menú lateral (blanco con el tema claro), que con el fondo del diálogo saldría oscurecido.
+      return { type: blob.type, size: blob.size, w: img.naturalWidth, side: px(200, innerHeight / 2) };
+    });
+    L.check("FEEDBACK: la captura es un JPEG de 1600 px de ancho como mucho y de menos de 1,5 MB", shot.type === "image/jpeg" && shot.w <= 1600 && shot.w >= 1000 && shot.size > 0 && shot.size <= 1.5 * 1024 * 1024, JSON.stringify(shot));
+    L.check("FEEDBACK: la captura no lleva el fondo oscuro del diálogo (el menú lateral sale claro)", shot.side.every((v) => v > 225), JSON.stringify(shot.side));
+    L.check("FEEDBACK: aviso de que la captura puede tener datos de su trabajo", (await dlg.getByText("La captura puede contener datos de tu trabajo").count()) === 1);
+    const dl = dlg.getByRole("link", { name: "Descargar la captura" });
+    L.eq("FEEDBACK: «Descargar la captura» es un .jpg", [await dl.getAttribute("download"), (await dl.getAttribute("href")).startsWith("blob:")], ["captura-pizarro.jpg", true]);
+    const [download] = await Promise.all([s.page.waitForEvent("download"), dl.click()]);
+    L.eq("FEEDBACK: … y se descarga con ese nombre", download.suggestedFilename(), "captura-pizarro.jpg");
+    await dlg.getByRole("button", { name: "Quitar la captura" }).click();
+    L.eq("FEEDBACK: «Quitar la captura» la quita", [await preview.count(), await dlg.getByLabel("Incluir una captura de la pantalla").isChecked()], [0, false]);
+    await dlg.getByRole("button", { name: "Cancelar" }).click();
+    await dlg.waitFor({ state: "detached" });
+    // Historial de versiones abre el mismo diálogo.
+    await L.goto(s.page, `${L.BASE}/changelog`);
+    await s.page.getByRole("main").getByRole("button", { name: "Informar de un error" }).click();
+    await dlg.waitFor();
+    L.check("FEEDBACK: Historial de versiones abre el mismo diálogo", await dlg.isVisible());
+    await s.page.keyboard.press("Escape");
+    await dlg.waitFor({ state: "detached" });
+    // Móvil: el botón está en el pie del menú; al pulsarlo se cierra el menú (la captura es de la página).
+    const m = await L.session({ viewport: { width: 393, height: 852 }, mobile: true });
+    await m.page.getByRole("button", { name: "Abrir menú" }).click();
+    const drawer = m.page.getByRole("dialog", { name: "Menú" });
+    await drawer.waitFor();
+    const mBug = drawer.getByRole("button", { name: NAME });
+    const box = await mBug.boundingBox();
+    L.check("MÓVIL feedback: el botón se ve en el pie del menú", !!box && box.y + box.height <= 852, JSON.stringify(box));
+    await mBug.click();
+    const mdlg = m.page.getByRole("dialog", { name: NAME });
+    await mdlg.waitFor();
+    L.eq("MÓVIL feedback: el menú se cierra al abrir el diálogo", await drawer.count(), 0);
+    await mdlg.getByLabel("Incluir una captura de la pantalla").check();
+    await mdlg.locator("img[data-feedback-preview]").waitFor({ timeout: 30000 });
+    const mw = await mdlg.locator("img[data-feedback-preview]").evaluate((img) => img.naturalWidth);
+    L.check("MÓVIL feedback: captura a la resolución de la pantalla (≤ 1600 px)", mw >= 393 && mw <= 1600, String(mw));
+    await m.page.keyboard.press("Escape");
+    // Con una versión publicada más nueva: desactivado, con el motivo en el title y, a un administrador, «Cómo actualizar».
+    await setLatest("999.0.0");
+    await asAdmin();
+    const disabled = await L.waitFor(async () => {
+      await L.reload(s.page);
+      return (await footerBug.getAttribute("aria-disabled")) === "true";
+    }, { timeout: 90000, step: 5000 });
+    L.check("FEEDBACK: sin la última versión, el botón sale desactivado (aria-disabled)", !!disabled);
+    L.eq("FEEDBACK: … con el motivo en el title", await footerBug.getAttribute("title"), OUTDATED);
+    await footerBug.click();
+    await s.page.getByText(OUTDATED, { exact: true }).first().waitFor();
+    L.check("FEEDBACK: al pulsarlo no se abre el diálogo y el aviso ofrece «Cómo actualizar» al administrador",
+      (await s.page.getByRole("dialog", { name: NAME }).count()) === 0 && (await s.page.getByRole("button", { name: "Cómo actualizar" }).count()) >= 1);
+    await asMember();
+    await setLatest(version);
+    L.assertNoErrors("FEEDBACK", [s, m]);
+    await m.ctx.close();
+  }
+  await s.ctx.close();
+  await L.cleanBoard();
+}
 
 // --- (1) Hidratación ----------------------------------------------------------------------------------------------------
 if (only.includes("hyd")) {

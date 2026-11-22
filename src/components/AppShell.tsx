@@ -8,17 +8,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
 import { createProject, listProjectExamples } from "@/actions/projects";
 import { projectOutsideList } from "@/actions/project-visit";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
+import type { FeedbackStatus } from "@/lib/feedback-core";
 import { applyUnreadChange, onUnreadChange } from "@/lib/unread-core";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
+import { FeedbackButton, FeedbackProvider } from "./feedback/Feedback";
 import { clearDraftsOnLogout } from "./board/drafts";
 import { OPEN_PROJECT_MENU_EVENT } from "./board/shortcuts";
 import { filesFrom, hasFiles } from "./board/upload";
@@ -64,6 +66,8 @@ interface Props {
   diskLow?: boolean;
   /** Recordatorio de licencia para este administrador: destino de «Comprar» (null: no se muestra). */
   licenseNudge?: string | null;
+  /** «Informar de un error o enviar una sugerencia» (null: no es una build oficial sin modificar y no hay botón). */
+  feedback?: FeedbackStatus | null;
   children: React.ReactNode;
 }
 
@@ -81,7 +85,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -90,6 +94,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   const drawerOpen = drawerPath === pathname;
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null), { yieldToModal: true });
+  const closeDrawer = useCallback(() => setDrawerPath(null), []);
   // Menú móvil como diálogo: el foco entra en «Cerrar menú», Tab no sale de él y al cerrar vuelve a «Abrir menú».
   const drawerRef = useRef<HTMLElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
@@ -131,6 +136,8 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   );
 
   return (
+    // El diálogo de informar de un error cierra antes el menú móvil: la captura es de la página, no del menú.
+    <FeedbackProvider status={feedback} isAdmin={user.role === "ADMIN"} version={version} email={user.email} beforeOpen={closeDrawer}>
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
     {/* `unread` llega con tope de 100 (layout): con 100 o más la insignia pide 100 (algunos sistemas lo muestran como
         «99+»), nunca un número menor que el real. */}
@@ -179,6 +186,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
       </div>
     </div>
     </ProjectsContext.Provider>
+    </FeedbackProvider>
   );
 }
 
@@ -366,6 +374,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
             <div className="truncate text-sm font-medium">{user.name}</div>
             <HoverPrefetchLink href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</HoverPrefetchLink>
           </div>
+          <FeedbackButton />
           <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />

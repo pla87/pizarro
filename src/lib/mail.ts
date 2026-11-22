@@ -137,6 +137,13 @@ export interface MailMessage {
   attachments?: MailAttachment[];
   /** Cabeceras propias de este email (List-Unsubscribe…), además de las de todo email de Pizarro. */
   headers?: Record<string, string>;
+  /** A quién se responde (p. ej. quien envía un informe y pide respuesta). */
+  replyTo?: string;
+  /**
+   * El remitente va como «Pizarro <dirección de envío>», sin el nombre de la organización ni el configurado: para los
+   * emails que salen de la instalación hacia fuera (informes al equipo de Pizarro), que no deben decir de quién es.
+   */
+  plainSender?: boolean;
 }
 
 /**
@@ -150,6 +157,12 @@ const AUTO_MAIL_HEADERS: Readonly<Record<string, string>> = { "Auto-Submitted": 
 async function senderOf(from: string): Promise<string> {
   if (!from || from.includes("<")) return from;
   return withSenderName(from, (await getInstanceSettings()).orgName);
+}
+
+/** «Pizarro <dirección>»: solo la dirección de envío, sin el nombre que lleve (ver MailMessage.plainSender). */
+function plainSenderOf(from: string): string {
+  const address = (/<([^<>]+)>\s*$/.exec(from)?.[1] ?? from).trim();
+  return address ? withSenderName(address, "Pizarro") : from;
 }
 
 /** Envía un email; lanza si falla. El apagado ordenado del servidor espera a los envíos en curso (lib/shutdown.ts). */
@@ -166,22 +179,23 @@ async function deliverMail(m: MailMessage): Promise<void> {
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const base = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     // Los adjuntos se guardan como ficheros junto al JSON (que solo anota nombre y tamaño).
-    const { attachments, headers, ...rest } = m;
+    const { attachments, headers, plainSender, ...rest } = m;
     const saved: { filename: string; bytes: number; file: string }[] = [];
     for (const [i, a] of (attachments ?? []).entries()) {
       const file = `${base}-${i}.attachment`;
       await writeFile(join(dir, file), a.content, { mode: 0o600 });
       saved.push({ filename: a.filename, bytes: a.content.length, file });
     }
-    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: config.from || null, headers: { ...AUTO_MAIL_HEADERS, ...headers }, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+    await writeFile(join(dir, `${base}.json`), JSON.stringify({ from: (plainSender && config.from ? plainSenderOf(config.from) : config.from) || null, headers: { ...AUTO_MAIL_HEADERS, ...headers }, ...rest, ...(saved.length ? { attachments: saved } : {}), createdAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
     return;
   }
   if (!config.host) throw new Error("El envío de emails no está configurado.");
-  const from = await senderOf(config.from);
+  const { plainSender, ...message } = m;
+  const from = plainSender ? plainSenderOf(config.from) : await senderOf(config.from);
   const tr = mailer(config);
   tr.sending++;
   try {
-    await tr.t.sendMail({ from, ...m, headers: { ...AUTO_MAIL_HEADERS, ...m.headers } });
+    await tr.t.sendMail({ from, ...message, headers: { ...AUTO_MAIL_HEADERS, ...m.headers } });
   } finally {
     tr.sending--;
     closeIfDone(tr);

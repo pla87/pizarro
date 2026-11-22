@@ -1,5 +1,6 @@
-# Formulario de errores. El enlace «Informar de un error» de la app (Historial de versiones) abre
-# /issues/new?template=bug_report.yml y rellena por URL los campos version, commit, install, browser y language
+# Formulario de errores. El diálogo «Informar de un error o enviar una sugerencia» de la app (botón junto a «Cerrar
+# sesión» y en Historial de versiones), cuando la instalación no puede enviarlo por email, abre
+# /issues/new?template=bug_report.yml y rellena por URL los campos version, commit, install, browser, language y actual
 # (src/lib/bug-report-core.ts): si cambias el id de un campo, cámbialo también allí.
 name: "Informar de un error / Bug report"
 description: "Un fallo en una versión publicada de Pizarro sin modificar. / A bug in an unmodified released version of Pizarro."
@@ -15,8 +16,8 @@ body:
         **¿Es un fallo de seguridad?** No lo publiques aquí: [infórmalo en privado](https://github.com/pla87/pizarro/security/advisories/new) (ver [SECURITY.md](https://github.com/pla87/pizarro/blob/main/SECURITY.md)).
         *Security issue? Do not post it here: [report it privately](https://github.com/pla87/pizarro/security/advisories/new).*
 
-        Solo se atienden errores de versiones publicadas sin modificar. La forma más fácil de rellenar los datos técnicos es el enlace **Informar de un error** de *Historial de versiones* dentro de la app.
-        *Only bugs in unmodified released versions are handled. The easiest way to fill in the technical details is the app's "Report a bug" link in "Version history".*
+        Solo se atienden errores de versiones publicadas sin modificar. La forma más fácil de rellenar los datos técnicos es el botón **Informar de un error o enviar una sugerencia** de la app (junto a «Cerrar sesión»).
+        *Only bugs in unmodified released versions are handled. The easiest way to fill in the technical details is the app's "Report a bug or send a suggestion" button (next to "Sign out").*
 
   - type: input
     id: version
