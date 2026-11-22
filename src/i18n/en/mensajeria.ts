@@ -73,7 +73,6 @@ export const mensajeria: Record<string, string> = {
   "Número para la prueba": "Number for the test",
 
   // Mi perfil → Avisos
-  "Siempre salen en la campana de avisos; además, puedes recibirlas por email:": "They always show in the notification bell; you can also get them by email:",
   "Avisos en el móvil: Telegram y WhatsApp": "Notices on your phone: Telegram and WhatsApp",
   "Recibe tus avisos en el móvil. En cada canal eliges qué avisos quieres; por defecto, solo menciones y asignaciones.": "Get your notices on your phone. For each channel you choose which notices you want; by default, only mentions and assignments.",
   "Telegram conectado.": "Telegram connected.",

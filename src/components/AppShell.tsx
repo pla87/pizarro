@@ -16,7 +16,7 @@ import { projectOutsideList } from "@/actions/project-visit";
 import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
 import type { FeedbackStatus } from "@/lib/feedback-core";
-import { applyUnreadChange, onUnreadChange } from "@/lib/unread-core";
+import { onUnreadCount } from "@/lib/unread-core";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
@@ -110,13 +110,14 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   // Deshacer y presencia son del proyecto que se está viendo, no del recordado.
   const inProject = Boolean(projectId && current?.id === projectId);
 
-  // Avisos sin leer: los da el layout y los baja la lista de Avisos al leer uno (`pz:unread`), sin volver a pedir la
-  // página (al abrir un aviso, eso pedía otra vez el tablero entero). Cada render del layout en el servidor (refresco,
-  // recarga) trae un `user` nuevo y con él el número del servidor, aunque coincida con el anterior.
+  // Avisos sin leer: los da el layout y, al leer uno en la lista de Avisos, el número que devuelve la acción
+  // (`pz:unread`), tal cual, sin volver a pedir la página (al abrir un aviso, eso pedía otra vez el tablero entero).
+  // Cada render del layout en el servidor (refresco, recarga) trae un `user` nuevo y con él el número del servidor,
+  // aunque coincida con el anterior.
   const [unreadSeen, setUnreadSeen] = useState({ from: user, count: serverUnread });
   if (unreadSeen.from !== user) setUnreadSeen({ from: user, count: serverUnread });
   const unread = unreadSeen.from === user ? unreadSeen.count : serverUnread;
-  useEffect(() => onUnreadChange((change) => setUnreadSeen((s) => ({ ...s, count: applyUnreadChange(s.count, change) }))), []);
+  useEffect(() => onUnreadCount((count) => setUnreadSeen((s) => ({ ...s, count }))), []);
 
   // Mover/copiar texto arrastrado entre campos (incluido el editor TipTap).
   useEffect(() => installDragMove(), []);

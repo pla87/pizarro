@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link as LinkIcon, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
+import { copyInviteLink, createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -82,6 +82,19 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     }
   };
 
+  // Sin email: «Copiar enlace de invitación» emite uno nuevo (el anterior deja de valer) y lo muestra para pasárselo.
+  const [inviteLink, setInviteLink] = useState<{ user: UserRow; link: string } | null>(null);
+  const freshLink = async (u: UserRow) => {
+    setResending(u.id);
+    try {
+      const res = await copyInviteLink(u.id).catch((e) => actionThrowResult(e, t));
+      if (!res.ok) return toast(res.error, "error");
+      setInviteLink({ user: u, link: res.data.link });
+    } finally {
+      setResending(null);
+    }
+  };
+
   const allow = async (u: UserRow) => {
     const res = await allowGoogleRelink(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
@@ -125,6 +138,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
           // iconos y las insignias en la fila, el nombre y el email se quedaban sin sitio).
           const actions: { key: string; icon: typeof Pencil; label: string; title?: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] = [
             ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
+            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Copiar enlace de invitación de {name}", { name: u.name }), title: t("Copiar enlace de invitación"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
             { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
             ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
             ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
@@ -189,6 +203,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
+      {inviteLink && <InviteLinkDialog user={inviteLink.user} link={inviteLink.link} onClose={() => setInviteLink(null)} />}
     </div>
   );
 }
@@ -339,6 +354,25 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
           <button className="btn-primary" disabled={pending}>{emailAvailable ? t("Forzar cambio") : t("Generar enlace")}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** El enlace de invitación recién emitido (sin email), para pasárselo por otro canal. */
+function InviteLinkDialog({ user, link, onClose }: { user: UserRow; link: string; onClose: () => void }) {
+  const t = useT();
+  const toast = useToast();
+  return (
+    <Modal open onClose={onClose} title={t("Enlace de invitación de {name}", { name: user.name })} size="sm">
+      <div className="space-y-3 text-sm">
+        <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name: user.name })}</p>
+        <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" />
+        <p className="text-amber-700 dark:text-amber-300">{t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+          <button type="button" className="btn-primary" onClick={async () => ((await copyText(link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
+        </div>
+      </div>
     </Modal>
   );
 }

@@ -6,6 +6,7 @@ import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
+import { getT } from "@/i18n/server";
 import { maskEmail } from "@/lib/mask-email";
 import { rateLimit } from "@/lib/rate-limit";
 import { reportRecipientAllowed, reportRecipientPeople } from "@/lib/report-recipient";
@@ -37,6 +38,8 @@ function logged(input: unknown): unknown {
 
 const NOT_ALLOWED = "El destinatario debe ser alguien con acceso al proyecto.";
 
+const sameEmail = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 /**
  * Informe semanal por email de un proyecto: quien tenga acceso al proyecto lo configura (destinatario, día de la semana
  * y hora). Activarlo reinicia el «ya enviado»; cambiar el día o la hora no (lo ya enviado esta semana no se repite). Nadie escribe el email de otra persona: se
@@ -49,7 +52,7 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
     const data = schema.parse(input);
     await assertProjectAccess(user, pid);
     if (!rateLimit(`report-schedule:${user.id}`, 20, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
-    const prev = await db.reportSchedule.findUnique({ where: { projectId: pid }, select: { enabled: true, recipient: true } });
+    const prev = await db.reportSchedule.findUnique({ where: { projectId: pid }, select: { enabled: true, recipient: true, unsubscribedEmail: true } });
     let recipient: string;
     if ("userId" in data.recipient) {
       const person = (await reportRecipientPeople(pid)).find((p) => p.id === (data.recipient as { userId: string }).userId);
@@ -74,15 +77,30 @@ export async function saveReportSchedule(projectId: string, input: z.input<typeo
       }
       throw new AppError(NOT_ALLOWED);
     }
+    // Su destinatario se dio de baja con el enlace del email: nadie más puede volver a activarlo hacia esa dirección, ni
+    // siquiera un administrador (no sabe si esa persona lo quiere; si lo quiere, lo activa ella con su sesión). Elegir a
+    // otra persona sí se puede. Al activarlo la propia persona, la baja se olvida.
+    const unsubscribed = prev?.unsubscribedEmail ?? null;
+    const resubscribing = data.enabled && unsubscribed !== null && sameEmail(unsubscribed, recipient);
+    if (resubscribing && !sameEmail(user.email, recipient)) {
+      const t = await getT();
+      const person = await db.user.findFirst({ where: { email: { equals: recipient, mode: "insensitive" } }, select: { name: true } });
+      throw new AppError(person
+        ? t("{name} se dio de baja de este informe: solo esa persona puede volver a activarlo para sí misma. Elige a otra.", { name: person.name })
+        : t("Esa dirección se dio de baja de este informe: no se le puede volver a enviar. Elige otra."));
+    }
     // lastSentAt no se reinicia: cambiar el día o la hora, o desactivarlo y volver a activarlo, no lo repite si el último
     // salió hace menos de 3 días (reportDue). Uno más antiguo (o ninguno) ya cuenta como pendiente.
-    const row = { enabled: data.enabled, recipient, weekday: data.weekday, hour: data.hour };
+    const row = { enabled: data.enabled, recipient, weekday: data.weekday, hour: data.hour, ...(resubscribing ? { unsubscribedEmail: null, unsubscribedAt: null } : {}) };
     await db.reportSchedule.upsert({
       where: { projectId: pid },
       create: { projectId: pid, ...row, createdById: user.id },
       // Quien guarda pasa a ser quien «firma» el informe (su acceso al proyecto es el que se comprueba al enviar).
       update: { ...row, createdById: user.id },
     });
-    describeAction(data.enabled ? "Programó el informe semanal por email" : "Desactivó el informe semanal por email", { weekday: data.weekday, hour: data.hour });
+    describeAction(
+      resubscribing ? "Volvió a activar para sí el informe semanal por email del que se había dado de baja" : data.enabled ? "Programó el informe semanal por email" : "Desactivó el informe semanal por email",
+      { weekday: data.weekday, hour: data.hour },
+    );
   });
 }

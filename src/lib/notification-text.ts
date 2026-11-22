@@ -2,21 +2,28 @@
 import type { T } from "../i18n/core";
 import { formatDay } from "./dates";
 
-export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM";
+export type NotificationKind = "MENTION" | "ASSIGNED" | "DUE_CHANGED" | "COMMENT" | "REPLY" | "WAITING" | "PROJECT_TO_TEAM" | "REPORT_UNSUBSCRIBED";
 
 /** Avisos cuyo extracto es lo que alguien ha escrito (un comentario, una respuesta o el texto con la mención). */
 export const quotesWriting = (kind: NotificationKind | undefined): boolean => kind === undefined || kind === "MENTION" || kind === "COMMENT" || kind === "REPLY";
 
 /** Avisos de un proyecto, no de una tarea: llevan al proyecto y en `task` va el nombre del proyecto. */
-export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM";
+export const isProjectNotice = (kind: NotificationKind): boolean => kind === "PROJECT_TO_TEAM" || kind === "REPORT_UNSUBSCRIBED";
+
+/** Adónde lleva un aviso de proyecto: al tablero o, la baja del informe semanal, a Ajustes del proyecto → Informes. */
+export function projectNoticePath(kind: NotificationKind, projectId: string): string {
+  return kind === "REPORT_UNSUBSCRIBED" ? `/p/${projectId}/settings?tab=informes` : `/p/${projectId}`;
+}
 
 /**
  * Frase de cabecera del aviso, con `{actor}` y `{task}` ya sustituidos por los textos recibidos. En un aviso de proyecto
- * (PROJECT_TO_TEAM) `task` es el nombre del proyecto entre comillas y `actor`, el de la cuenta borrada.
+ * `task` es el nombre del proyecto entre comillas y `actor`, lo que guarda el extracto: la cuenta borrada
+ * (PROJECT_TO_TEAM) o quien se ha dado de baja del informe semanal (REPORT_UNSUBSCRIBED).
  */
 export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string }): string {
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
+    case "REPORT_UNSUBSCRIBED": return t("{actor} se ha dado de baja del informe semanal de {task}", vars);
     case "ASSIGNED": {
       // Un lote (alta masiva o importación): un solo aviso que enlaza a la primera tarea; la cabecera dice cuántas son.
       const n = vars.excerpt === undefined ? null : assignedBatchCount(vars.excerpt);
@@ -73,6 +80,8 @@ export function notificationBody(kind: NotificationKind, excerpt: string, t: T, 
   switch (kind) {
     // El extracto guarda el nombre de la cuenta borrada (ya va en la cabecera).
     case "PROJECT_TO_TEAM": return t("Ahora lo ven los administradores. Ábrelo para darle miembros, añadirlo a tus proyectos o borrarlo.");
+    // El extracto guarda quién se dio de baja (ya va en la cabecera).
+    case "REPORT_UNSUBSCRIBED": return t("El informe ya no se envía. Solo esa persona puede volver a activarlo para sí misma; puedes elegir otro destinatario en Ajustes del proyecto → Informes.");
     case "DUE_CHANGED": return dueChangeText(excerpt, t, locale);
     case "WAITING": return waitingText(excerpt, t);
     case "ASSIGNED": {

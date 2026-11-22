@@ -47,11 +47,42 @@ export function reportRecipientView(recipient: string, people: { id: string; ema
 }
 
 /**
+ * La baja del destinatario, tal como la ve quien abre los ajustes («<nombre> se dio de baja el <fecha>»): `who` es el
+ * nombre de la persona o, si no tiene cuenta, la dirección (entera para un administrador, enmascarada para los demás,
+ * como en reportRecipientView). `choice`: la opción de la lista que apunta a esa dirección (para avisar antes de
+ * guardar); `external`, la dirección entera solo para un administrador (para compararla con «Otra dirección…»). `self`:
+ * es quien mira, que sí puede volver a activárselo.
+ */
+export type ReportUnsubscribedView = { who: string; at: string; choice: string | null; external: string | null; self: boolean };
+
+export async function reportUnsubscribedView(
+  s: { recipient: string; unsubscribedEmail: string | null; unsubscribedAt: Date | null },
+  people: { id: string; email: string }[],
+  viewer: { email: string; role: "ADMIN" | "MEMBER" },
+): Promise<ReportUnsubscribedView | null> {
+  if (!s.unsubscribedEmail || !s.unsubscribedAt) return null;
+  const email = s.unsubscribedEmail;
+  const lower = email.toLowerCase();
+  const admin = viewer.role === "ADMIN";
+  const account = await db.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { name: true } });
+  const person = people.find((p) => p.email.toLowerCase() === lower);
+  return {
+    who: account?.name ?? (admin ? email : maskEmail(email)),
+    at: s.unsubscribedAt.toISOString(),
+    choice: person ? `user:${person.id}` : s.recipient.toLowerCase() === lower ? "keep" : null,
+    external: admin && !person ? email : null,
+    self: viewer.email.toLowerCase() === lower,
+  };
+}
+
+/**
  * Una persona cambia de email (lo confirma en Mi perfil o se lo edita un administrador): los informes semanales que iban
  * a su dirección anterior pasan a la nueva, en la misma transacción. Si no, seguían saliendo hacia la vieja (que ya no es
  * de nadie y contaba como «externa») o se desactivaban sin avisar. Devuelve cuántos ha cambiado.
  */
 export async function retargetReportSchedules(tx: Prisma.TransactionClient, oldEmail: string, newEmail: string): Promise<number> {
   if (oldEmail === newEmail) return 0;
+  // La baja que dio con la dirección anterior sigue valiendo con la nueva (si no, cualquiera podía volver a activárselo).
+  await tx.reportSchedule.updateMany({ where: { unsubscribedEmail: { equals: oldEmail, mode: "insensitive" } }, data: { unsubscribedEmail: newEmail } });
   return (await tx.reportSchedule.updateMany({ where: { recipient: { equals: oldEmail, mode: "insensitive" } }, data: { recipient: newEmail } })).count;
 }

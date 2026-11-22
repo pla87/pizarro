@@ -9,7 +9,7 @@ import { ellipsize } from "./graphemes";
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { notificationHeadline, quotesWriting, type NotificationKind } from "./notification-text";
+import { notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
   CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, quoteIntro, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
@@ -19,7 +19,7 @@ import { sendWhatsappNotice, whatsappLocale } from "./whatsapp";
 import { followerIds } from "./followers";
 import { rateLimit } from "./rate-limit";
 import { EMAIL_PREF_FIELD, noticeEmailKind } from "./unsubscribe-core";
-import { unsubscribeLinks } from "./unsubscribe";
+import { unsubscribeLinks } from "./unsubscribe-links";
 
 // Avisos (menciones, asignaciones, cambios de fecha, comentarios y respuestas): en la app (tabla Notification), por
 // email (SMTP) y por los canales que cada persona conecta en Mi perfil → Avisos (Telegram y WhatsApp, si el
@@ -63,7 +63,10 @@ ${quoted ? `<p style="margin:12px 0 0;color:#475569">${escapeHtml(intro)}</p>\n`
   return { subject, text, html };
 }
 
-/** Datos de un aviso de proyecto (PROJECT_TO_TEAM) para el email y los mensajes: el proyecto ocupa el lugar de la tarea. */
+/**
+ * Datos de un aviso de proyecto (PROJECT_TO_TEAM, REPORT_UNSUBSCRIBED) para el email y los mensajes: el proyecto ocupa
+ * el lugar de la tarea y el extracto (la cuenta borrada o quien se dio de baja), el del autor.
+ */
 function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; project: { id: string; name: string } }, locale: Locale, t: T): MentionMessage {
   return {
     type: n.type,
@@ -72,7 +75,7 @@ function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; proj
     taskTitle: n.project.name,
     projectName: n.project.name,
     excerpt: n.excerpt,
-    url: `${appUrl()}/p/${n.project.id}`,
+    url: `${appUrl()}${projectNoticePath(n.type, n.project.id)}`,
   };
 }
 
@@ -400,4 +403,43 @@ export async function notifyProjectsToTeam(projects: readonly { id: string }[], 
     }
   }
   return created.map((c) => c.id);
+}
+
+/**
+ * Aviso a quien configuró el informe semanal (la última persona que lo guardó, `createdById`) de que su destinatario se
+ * ha dado de baja con el enlace del email: el informe ya no sale y solo esa persona puede volver a activarlo para sí
+ * misma. En la campana siempre; por email, Telegram y WhatsApp según sus preferencias de las menciones, como los demás
+ * avisos de administración (emailWanted, channelWants). Solo si sigue activa y viendo el proyecto. `who`: el nombre de la
+ * persona que se dio de baja o, si no tiene cuenta, su dirección enmascarada (queda en el extracto).
+ */
+export async function notifyReportUnsubscribed(projectId: string, setterId: string, who: string): Promise<string | null> {
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
+  if (!project) return null;
+  const setter = await db.user.findFirst({
+    where: mentionRecipientsWhere(project, [setterId], projectId),
+    select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } },
+  });
+  if (!setter) return null;
+  const created = await db.notification.create({
+    data: { userId: setter.id, actorId: null, projectId, type: "REPORT_UNSUBSCRIBED", excerpt: who.slice(0, 200) },
+    select: { id: true },
+  });
+  const messaging = await loadMessagingConfig();
+  const wanted = emailWanted("REPORT_UNSUBSCRIBED", setter) || channelsFor("REPORT_UNSUBSCRIBED", setter.channels, messaging).length > 0;
+  // Mismo tope por hora que los avisos del sistema, por destinatario.
+  const external = wanted && rateLimit(`notify:system:${setter.id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000);
+  logEvent({
+    category: "notify", action: "notify.report_unsubscribed", message: `Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja${external ? " (con envío externo)" : ""}`,
+    projectId, details: { recipients: [setter.id], externalRecipients: external ? [setter.id] : [] },
+  });
+  if (external) {
+    const send = () => deliver([created.id]).catch((err) => console.error("[notify] envío", err));
+    // Fuera de una petición no hay `after`: se envía aquí mismo.
+    try {
+      after(send);
+    } catch {
+      await send();
+    }
+  }
+  return created.id;
 }
