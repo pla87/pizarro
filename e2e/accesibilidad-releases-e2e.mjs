@@ -366,7 +366,7 @@ if (only.includes("resaltar")) {
   const toggle = entry.getByRole("button", { name: "R2 Menú Desplegable nuevo" });
   L.eq("RESALTAR: el botón conserva su nombre (con el número y el título enteros)", await toggle.count(), 1);
   L.eq("RESALTAR: en el título, «Desplegable» aunque se busque «despleGáble»", await hits(entry.locator("h2")), ["Desplegable"]);
-  L.eq("RESALTAR: la línea de datos sin coincidencias, sin marcas", await hits(entry.locator(":scope > div > div > p")), []);
+  L.eq("RESALTAR: la línea de datos sin coincidencias, sin marcas", await hits(entry.locator(":scope > div:first-child > div > p")), []);
   // Con búsqueda la coincidencia se abre sola (sin pulsar la cabecera).
   L.eq("RESALTAR: la release que coincide sale desplegada", await toggle.getAttribute("aria-expanded"), "true");
   const t0 = Date.now();
@@ -411,7 +411,7 @@ if (only.includes("resaltar")) {
   // La línea de datos también: «TAREAS» resalta «tareas» (0 tareas en la release) y el texto.
   await page.goto(`${L.BASE}/p/${p.id}/releases?q=TAREAS`);
   await entry.waitFor({ timeout: 15000 });
-  L.eq("RESALTAR: en la línea de datos («0 tareas · 1 adjunto»)", await hits(entry.locator(":scope > div > div > p")), ["tareas"]);
+  L.eq("RESALTAR: en la línea de datos («0 tareas · 1 adjunto»)", await hits(entry.locator(":scope > div:first-child > div > p")), ["tareas"]);
   // Sin búsqueda, ninguna marca (y plegada: se abre al pulsarla).
   await page.goto(`${L.BASE}/p/${p.id}/releases`);
   await entry.waitFor({ timeout: 15000 });
