@@ -25,7 +25,8 @@ const MAX_TASKS = 500;
 const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "overdue", label: "Vencidas" },
-  { value: "week", label: "Hasta 7 días" },
+  // Incluye las vencidas y las de hoy: el nombre lo dice, para que su cuenta cuadre con los grupos que muestra.
+  { value: "week", label: "Vencidas y próximos 7 días" },
 ];
 
 export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
