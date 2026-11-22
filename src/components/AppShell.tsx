@@ -515,6 +515,12 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [importing, setImporting] = useState(false);
   // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
   const [importBusy, setImportBusy] = useState(false);
+  // El foco va al nombre al abrir y no un fotograma después (Modal), así que lo que se escribe justo tras pulsar «Nuevo
+  // proyecto» ya entra aquí (antes se perdía la primera letra). En un efecto y no con `autoFocus`: este corre después del
+  // del Modal, que así guarda como «anterior» el botón que lo abrió y le devuelve el foco al cerrar (con `autoFocus`, que
+  // React aplica antes, guardaba el propio campo y el foco acababa en <body>).
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => nameRef.current?.focus(), []);
   // Sin red se piden al volver la conexión (antes el fallo quedaba sin atender).
   useEffect(() => loadWhenOnline(listProjectStarts, (res) => res.ok && setStarts(res.data), () => {}), []);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
@@ -580,9 +586,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
-          {/* `autoFocus` además de `data-autofocus`: el foco llega al abrir y no un fotograma después (Modal), así que lo
-              que se escribe justo tras pulsar «Nuevo proyecto» ya entra aquí (antes se perdía la primera letra). */}
-          <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus autoFocus />
+          <input ref={nameRef} id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
         </div>
         {/* Un solo desplegable: en blanco, una plantilla de serie o una propia (solo admins). Siempre visible (las plantillas
             llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción y, con una de serie, la

@@ -3,6 +3,7 @@
 import { Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
+import { replaceUrlKeepingState } from "@/lib/replace-url";
 
 /** Parámetro de la dirección con el que «Nuevo proyecto» abre el tablero de un proyecto recién creado desde una plantilla. */
 export const NEW_PROJECT_PARAM = "nuevo";
@@ -10,7 +11,8 @@ export const NEW_PROJECT_PARAM = "nuevo";
 /**
  * Descripción del proyecto encima de las columnas, en la primera visita tras crearlo desde una plantilla (antes solo se veía
  * en Ajustes del proyecto). Al montar se quita `?nuevo=1` de la dirección: al recargar (o al volver) ya no sale, y al
- * cerrarlo tampoco. Sin base de datos: es un aviso de una sola vez.
+ * cerrarlo tampoco. Sin base de datos: es un aviso de una sola vez. El tablero guarda el texto al montar (Board): tras
+ * quitar el parámetro, un refresco del tablero ya no lo trae y el aviso no debe desaparecer por eso.
  */
 export function ProjectIntroNotice({ description }: { description: string }) {
   const t = useT();
@@ -19,7 +21,7 @@ export function ProjectIntroNotice({ description }: { description: string }) {
     const url = new URL(window.location.href);
     if (!url.searchParams.has(NEW_PROJECT_PARAM)) return;
     url.searchParams.delete(NEW_PROJECT_PARAM);
-    window.history.replaceState(window.history.state, "", url);
+    replaceUrlKeepingState(url);
   }, []);
   if (!open || !description.trim()) return null;
   return (

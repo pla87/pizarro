@@ -126,9 +126,9 @@ export const colaboracion: Record<string, string> = {
   "Abrir los informes del proyecto": "Open the project's reports",
   // Avisos por email: qué más llega con «Email cuando me mencionan» y aviso destacado si el servidor no envía emails
   "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste.":
-    "Besides mentions, this box also sends you the notice that someone has unsubscribed from a weekly report you set up.",
+    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up.",
   "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste y, como administrador, el de que un proyecto privado ha pasado a ser de equipo al borrarse una cuenta.":
-    "Besides mentions, this box also sends you the notice that someone has unsubscribed from a weekly report you set up and, as an admin, the notice that a private project has become a team project because an account was deleted.",
+    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up and, as an admin, when a private project becomes a team project because an account was deleted.",
   "El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.":
     "Email sending is not configured on the server yet: no emails are sent for now. What you check here is saved and will apply once it is configured.",
   "Configurar el email": "Set up email",

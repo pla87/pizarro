@@ -16,7 +16,7 @@ import { Avatar } from "./Avatar";
 import { GOOGLE_COMMANDS as COMMANDS, GoogleFileIcon } from "./googleFiles";
 import { cn } from "./cn";
 import { textareaCaretRect } from "./editAnchorDom";
-import { suggestionsStyle } from "./suggestionsPopup";
+import { scrollActiveOption, suggestionsStyle } from "./suggestionsPopup";
 
 export type MentionCommand = GoogleFileKind;
 
@@ -176,17 +176,25 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
   // borde del diálogo (comentarios al pie del detalle, descripción larga). Se recoloca al desplazar o cambiar el tamaño.
   const listOpen = !!query && options.length > 0;
   const [listStyle, setListStyle] = useState<React.CSSProperties | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const placeList = useRef(() => {});
   useLayoutEffect(() => {
     placeList.current = () => {
       const el = inner.current;
-      if (el && query) setListStyle(suggestionsStyle(textareaCaretRect(el, query.start), options.length));
+      if (!el || !query) return;
+      const next = suggestionsStyle(textareaCaretRect(el, query.start), options);
+      // Sin cambios, el mismo objeto: no se vuelve a pintar el campo entero en cada evento de desplazamiento.
+      setListStyle((cur) => (cur && STYLE_KEYS.every((k) => cur[k] === next[k]) ? cur : next));
     };
     if (listOpen) placeList.current();
-  }, [listOpen, query, options.length, value]);
+  }, [listOpen, query, options, value]);
   useEffect(() => {
     if (!listOpen) return;
-    const again = () => placeList.current();
+    // El desplazamiento de la propia lista (rueda, o ↑↓ hasta una opción oculta) no mueve el «@»: no hace falta recolocarla.
+    const again = (e?: Event) => {
+      if (e?.type === "scroll" && e.target === listRef.current) return;
+      placeList.current();
+    };
     window.addEventListener("scroll", again, true);
     window.addEventListener("resize", again);
     window.visualViewport?.addEventListener("resize", again);
@@ -310,13 +318,14 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
       />
       {listOpen && listStyle && typeof document !== "undefined" && createPortal(
         <ul
+          ref={listRef}
           role="listbox"
           style={listStyle}
           data-dictation-keep
           className="z-[100] w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           {options.map((o, i) => (
-            <li key={`${o.kind}-${o.id}`} role="option" aria-selected={i === active}>
+            <li key={`${o.kind}-${o.id}`} ref={i === active ? scrollActiveOption : undefined} role="option" aria-selected={i === active}>
               <button
                 type="button"
                 onMouseDown={(e) => {
@@ -350,6 +359,9 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
     </div>
   );
 });
+
+/** Lo que cambia del estilo de la lista de «@» al recolocarla (suggestionsStyle). */
+const STYLE_KEYS = ["top", "bottom", "left", "maxHeight"] as const;
 
 /** Contenido de la capa de resaltado: el texto tal cual (invisible) y cada mención con su fondo. */
 function backdropParts(model: MentionModel): React.ReactNode[] {

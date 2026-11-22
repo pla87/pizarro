@@ -25,7 +25,7 @@ import { DictationButton, insertIntoEditor } from "./DictationButton";
 import { registerDragEditor } from "./dragMove";
 import { pastedFiles } from "./pasteFiles";
 import { FormatToolbar, FORMAT_BAR_CLASS, FORMAT_BOX_CLASS, type FormatItems } from "./FormatToolbar";
-import { suggestionsStyle } from "./suggestionsPopup";
+import { scrollActiveOption, suggestionsStyle } from "./suggestionsPopup";
 import type { MentionCommand } from "./MentionTextarea";
 
 type Option =
@@ -391,11 +391,11 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
           <ul
             role="listbox"
             // Debajo del cursor o, si no cabe, encima (suggestionsStyle).
-            style={suggestionsStyle({ top: popup.rect?.top ?? 0, bottom: popup.rect?.bottom ?? 0, left: popup.rect?.left ?? 0 }, popup.items.length)}
+            style={suggestionsStyle({ top: popup.rect?.top ?? 0, bottom: popup.rect?.bottom ?? 0, left: popup.rect?.left ?? 0 }, popup.items)}
             data-dictation-keep className="z-[100] w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           >
             {popup.items.map((o, i) => (
-              <li key={`${o.kind}-${o.id}`} role="option" aria-selected={i === popup.active}>
+              <li key={`${o.kind}-${o.id}`} ref={i === popup.active ? scrollActiveOption : undefined} role="option" aria-selected={i === popup.active}>
                 <button
                   type="button"
                   onMouseDown={(e) => {
