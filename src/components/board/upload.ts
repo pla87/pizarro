@@ -4,6 +4,7 @@ import type { UploadedAttachment } from "@/lib/types";
 import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
 import { QueueStopped, runQueue, summarizeSkipped, uploadCap, uploadGate, withRetry, type SkippedFile } from "@/lib/upload-queue";
 import { shrinkImage } from "@/lib/image-shrink";
+import { isUntypedImage } from "@/lib/document-kind";
 
 /** Archivos (de cualquier tipo) de un FileList o de los items de un arrastre. Para pegar, ver ui/pasteFiles. */
 export function filesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
@@ -16,8 +17,9 @@ export function filesFrom(list: FileList | DataTransferItemList | null | undefin
   return files;
 }
 
+/** ¿Imagen? Por su tipo o, si llega sin tipo (una .avif en algunos Windows), por la extensión (ver isUntypedImage). */
 export function isImageFile(file: File): boolean {
-  return file.type.startsWith("image/");
+  return file.type.startsWith("image/") || isUntypedImage(file.name, file.type);
 }
 
 /** Tamaño legible: «840 KB», «2,3 MB». */

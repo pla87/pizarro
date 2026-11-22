@@ -11,7 +11,7 @@ interface KindAutomation {
  * Título y descripción resultantes de aplicar la automatización del tipo
  * (título fijo y texto inicial en la descripción, sin duplicarlo); null si el tipo no tiene.
  */
-export function applyKindTemplate(
+function applyKindTemplate(
   kind: KindAutomation,
   current: { title: string; description: string },
 ): { title: string; description: string } | null {
@@ -45,7 +45,7 @@ export function parseSubtaskLines(text: string): string[] {
 }
 
 /** Añade al final las subtareas de la plantilla que aún no estén (sin distinguir mayúsculas), hasta el máximo. */
-export function mergeSubtasks(current: string[], template: string[]): string[] {
+function mergeSubtasks(current: string[], template: string[]): string[] {
   const out = [...current];
   for (const raw of template) {
     const title = raw.trim().slice(0, MAX_SUBTASK_LEN);

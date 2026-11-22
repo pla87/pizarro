@@ -11,7 +11,7 @@ import type { BoardTask, ProjectFormData } from "@/lib/types";
 import { clampTitle } from "@/lib/title-clamp";
 import { cn } from "../ui/cn";
 import { overTitleLimit, TITLE_INPUT_LIMIT, TITLE_INVALID_CLASSES, TitleLimitHint } from "./TitleLimit";
-import { useT, useIntlLocale } from "@/i18n/client";
+import { useLocale, useT, useIntlLocale } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
@@ -95,6 +95,7 @@ function captureTitle(t: T, locale: string): string {
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, initialTitle, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
+  const uiLocale = useLocale();
   const sc = useShortcut();
   const locale = useIntlLocale();
   const uid = useId();
@@ -486,7 +487,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const importForm = async (text: string): Promise<boolean> => {
     // Con la zona horaria de la aplicación, como el resto de importaciones: la fecha límite de Trello (un instante UTC)
     // cae en su día de aquí, no en el de UTC.
-    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(text, { t, timeZone: appTimeZone(), locale: uiLocale });
     if (read.error) {
       toast(read.error, "error");
       return false;
@@ -527,6 +528,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       const shown = notices.slice(0, 4).join("; ");
       toast(t("Tarea importada, salvo: {list}", { list: notices.length > 4 ? t("{list} y {n} más", { list: shown, n: notices.length - 4 }) : shown }), "error");
     } else toast(t("Tarea importada"));
+    // Fecha límite y de inicio en órdenes distintos (día/mes y mes/día): se avisa para que se revisen.
+    if (read.dateWarning) toast(read.dateWarning, "error");
     return true;
   };
   const importRef = useRef(importForm);

@@ -39,7 +39,9 @@ export async function importForeignFile(file: string, format: ForeignFormat, use
   const max = foreignMaxBytes();
   if ((await stat(file)).size > max) throw new AppError(opts.t("El archivo supera el tamaño máximo para JSON y CSV ({mb} MB).", { mb: Math.round(max / 1024 / 1024) }), 413);
   const text = decodeText(await readFile(file), true);
-  const board = parseForeign(text, format, { t: opts.t, timeZone: appTimeZone(), fileName: opts.fileName });
+  // El idioma de quien importa desempata el orden día/mes de las fechas de un CSV («03/04/2026»).
+  const locale = toLocale((await db.user.findUnique({ where: { id: user.id }, select: { locale: true } }))?.locale);
+  const board = parseForeign(text, format, { t: opts.t, timeZone: appTimeZone(), fileName: opts.fileName, locale });
   return createProjectFromBoard(board, format, user, opts);
 }
 

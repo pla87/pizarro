@@ -1,10 +1,11 @@
 // Ruta /api/attachments/[id] con sus cachés (acceso y metadatos del adjunto) contra PostgreSQL real: el 304 de las
 // miniaturas es barato, pero nunca se sirve (ni se confirma con 304) un adjunto a quien no tiene acceso o que ya no existe.
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
+import sharp from "sharp";
 import { db, loginAs, logout, makeProject, makeTask, makeUser } from "./helpers";
 import { deleteAttachment, deleteTask } from "../../src/actions/tasks";
 import { removeProjectMember } from "../../src/actions/projects";
@@ -222,6 +223,45 @@ describe("/api/attachments: caché y acceso", () => {
         assert.equal(decodeURIComponent(r.headers.get("content-disposition")!.replace(/^attachment; filename\*=UTF-8''/, "")), name);
         assert.equal(r.headers.get("x-content-type-options"), "nosniff", name);
         assert.equal(await r.text(), body, name);
+      }
+    }
+  });
+
+  test("imagen que llega sin tipo (una .avif en algunos Windows, lo compartido con «Compartir → Pizarro»): si sharp la lee, es imagen; si no, archivo", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    const task = await makeTask(f);
+    await loginAs(member);
+    resetRateLimit(`upload:${member.id}`);
+    const avif = new Uint8Array(await sharp({ create: { width: 64, height: 48, channels: 3, background: "#336699" } }).avif().toBuffer());
+    const webp = new Uint8Array(await sharp({ create: { width: 40, height: 30, channels: 3, background: "#993366" } }).webp().toBuffer());
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>alert(1)</script></svg>';
+    const cases: [name: string, type: string, body: Uint8Array<ArrayBuffer> | string, isImage: boolean][] = [
+      ["foto.avif", "", avif, true],
+      ["foto.webp", "application/octet-stream", webp, true],
+      // Extensión de imagen, pero no lo es: queda como archivo, como una imagen con tipo que sharp no entiende.
+      ["roto.png", "", "no soy una imagen", false],
+      // SVG nunca como imagen, aunque llegue sin tipo; y sin extensión de imagen no se prueba (aunque el contenido lo sea).
+      ["logo.svg", "", svg, false],
+      ["foto.bin", "", webp, false],
+    ];
+    for (const [name, type, body, isImage] of cases) {
+      const form = new FormData();
+      form.append("file", new File([body], name, { type }));
+      const res = await attachRoute(new Request(`http://localhost/api/tasks/${task.id}/attachments`, { method: "POST", body: form, headers: { origin: "http://localhost", host: "localhost" } }), { params: Promise.resolve({ taskId: task.id }) });
+      assert.equal(res.status, 201, `${name}: ${await res.clone().text()}`);
+      const row = await db.taskAttachment.findFirstOrThrow({ where: { taskId: task.id, originalName: name } });
+      assert.equal(row.isImage, isImage, name);
+      if (isImage) {
+        assert.equal(row.mimeType, "image/webp", name);
+        assert.ok(row.width && row.height, name);
+        assert.ok((await stat(attachmentPath(row.id, "thumb"))).size > 0, `${name}: miniatura`);
+        const r = await get(row.id);
+        assert.equal(r.headers.get("content-type"), "image/webp", name);
+      } else {
+        assert.equal(row.mimeType, "application/octet-stream", name);
+        const r = await get(row.id);
+        assert.match(r.headers.get("content-disposition")!, /^attachment;/, name);
       }
     }
   });

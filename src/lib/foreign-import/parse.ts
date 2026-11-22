@@ -1,5 +1,5 @@
 // Detección del formato de un archivo de importación y lectura de los formatos de otros Kanban. Sin dependencias de Node.
-import type { T } from "@/i18n/core";
+import type { Locale, T } from "@/i18n/core";
 import { AppError } from "../errors";
 import { importMaxBytes } from "../project-export/config";
 import { parseCsvBoard } from "./csv";
@@ -47,6 +47,8 @@ export function assertBoardLimits(board: ForeignBoard): void {
 interface ParseOptions {
   t: T;
   timeZone?: string;
+  /** Idioma de quien importa (orden día/mes de las fechas ambiguas de un CSV). */
+  locale?: Locale;
   /** Nombre del archivo sin extensión. */
   fileName?: string;
 }

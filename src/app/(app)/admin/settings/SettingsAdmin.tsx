@@ -113,7 +113,7 @@ export function SettingsAdmin({ maxComments, storage, installation, appIcon, app
         <div>
           <h2 className="flex items-center gap-1 text-sm font-semibold">
             {t("Diagnóstico para soporte")}
-            <InfoTip topic={t("Diagnóstico para soporte")}>{t("Un JSON con versión, base de datos, migraciones, disco, tareas, copias, usuarios activos y su máximo (MAX_USERS), errores de las últimas 24 h por tipo y qué variables están definidas. No lleva mensajes de los logs ni el valor de ninguna variable.")}</InfoTip>
+            <InfoTip topic={t("Diagnóstico para soporte")}>{t("Un JSON con versión, base de datos, migraciones, disco, tareas, copias, usuarios activos y su tope si lo hay (MAX_USERS), errores de las últimas 24 h por tipo y qué variables están definidas. No lleva mensajes de los logs ni el valor de ninguna variable.")}</InfoTip>
           </h2>
           <p className="mt-0.5 text-xs text-slate-500">{t("El estado técnico de la instalación, para quien te ayude. Sin datos personales ni claves.")}</p>
         </div>

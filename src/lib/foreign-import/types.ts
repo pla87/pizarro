@@ -42,6 +42,8 @@ export interface ForeignBoard {
   tasks: ForeignTask[];
   /** Cosas que no se pudieron importar, ya traducidas. */
   warnings: string[];
+  /** Fechas con barras en los dos órdenes (día/mes y mes/día, decideDayOrder): el aviso, ya traducido (va también en `warnings`). */
+  dateWarning?: string;
 }
 
 /** Topes de la aplicación que también valen para lo importado. */

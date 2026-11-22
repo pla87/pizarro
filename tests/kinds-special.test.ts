@@ -1,32 +1,38 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyKindTemplate, describeKindAutomation, mergeSubtasks, parseSubtaskLines, switchKindDescription, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
+import { describeKindAutomation, parseSubtaskLines, switchKindDescription, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
 
 const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
 const RESP = { titleTemplate: "Respuesta", descriptionTemplate: RESPUESTA_LINE };
 
+// Al elegir un tipo sin otro anterior (switchKind* con `prev` null) se aplica su automatización tal cual.
 test("un tipo sin automatización no cambia nada", () => {
-  assert.equal(applyKindTemplate({ titleTemplate: "", descriptionTemplate: "" }, { title: "x", description: "y" }), null);
-  assert.equal(applyKindTemplate({ titleTemplate: "  ", descriptionTemplate: " " }, { title: "x", description: "y" }), null);
+  for (const kind of [{ titleTemplate: "", descriptionTemplate: "" }, { titleTemplate: "  ", descriptionTemplate: " " }]) {
+    assert.equal(switchKindDescription(null, kind, "y"), "y");
+    assert.equal(switchKindDescription(null, kind, ""), "");
+    assert.equal(switchKindTitle(null, kind, "x"), "x");
+  }
 });
 
-test("fija el título y antepone el texto", () => {
-  assert.deepEqual(applyKindTemplate(RESP, { title: "Algo", description: "" }), { title: "Respuesta", description: `${RESPUESTA_LINE}\n` });
-  assert.deepEqual(applyKindTemplate(RESP, { title: "Algo", description: "Texto previo" }), {
-    title: "Respuesta",
-    description: `${RESPUESTA_LINE}\n\nTexto previo`,
-  });
+test("pone el título del tipo y antepone el texto", () => {
+  assert.equal(switchKindTitle(null, RESP, "Algo"), "Respuesta Algo");
+  assert.equal(switchKindTitle(null, RESP, ""), "Respuesta ");
+  assert.equal(switchKindDescription(null, RESP, ""), `${RESPUESTA_LINE}\n`);
+  assert.equal(switchKindDescription(null, RESP, "   "), `${RESPUESTA_LINE}\n`);
+  assert.equal(switchKindDescription(null, RESP, "Texto previo"), `${RESPUESTA_LINE}\n\nTexto previo`);
 });
 
 test("no duplica el texto si ya está al principio", () => {
   const description = `  ${RESPUESTA_LINE}\n- punto`;
-  assert.equal(applyKindTemplate(RESP, { title: "t", description })!.description, description);
+  assert.equal(switchKindDescription(null, RESP, description), description);
 });
 
 test("solo título o solo descripción", () => {
-  assert.deepEqual(applyKindTemplate({ titleTemplate: "Aviso", descriptionTemplate: "" }, { title: "t", description: "d" }), { title: "Aviso", description: "d" });
-  assert.deepEqual(applyKindTemplate({ titleTemplate: "", descriptionTemplate: "Pasos:" }, { title: "t", description: "" }), { title: "t", description: "Pasos:\n" });
+  const AVISO = { titleTemplate: "Aviso", descriptionTemplate: "" };
+  const PASOS = { titleTemplate: "", descriptionTemplate: "Pasos:" };
+  assert.deepEqual(switchKindText(null, { ...AVISO, subtaskTemplate: [] }, { title: "t", description: "d", subtasks: [] }), { title: "Aviso t", description: "d", subtasks: [] });
+  assert.deepEqual(switchKindText(null, { ...PASOS, subtaskTemplate: [] }, { title: "t", description: "", subtasks: [] }), { title: "t", description: "Pasos:\n", subtasks: [] });
 });
 
 test("describeKindAutomation resume y trunca", () => {
@@ -45,11 +51,14 @@ test("subtareas predefinidas: una por línea, sin vacías ni repetidas", () => {
 });
 
 test("al elegir el tipo se añaden las subtareas que faltan", () => {
-  assert.deepEqual(mergeSubtasks([], ["A", "B"]), ["A", "B"]);
-  assert.deepEqual(mergeSubtasks(["b", "Extra"], ["A", "B"]), ["b", "Extra", "A"]);
+  const AB = { subtaskTemplate: ["A", "B"] };
+  assert.deepEqual(switchKindSubtasks(null, AB, []), ["A", "B"]);
+  assert.deepEqual(switchKindSubtasks(null, AB, ["b", "Extra"]), ["b", "Extra", "A"]);
   // Elegir el mismo tipo dos veces no duplica.
-  assert.deepEqual(mergeSubtasks(mergeSubtasks([], ["A", "B"]), ["A", "B"]), ["A", "B"]);
-  assert.equal(mergeSubtasks(Array.from({ length: 49 }, (_, i) => `x${i}`), ["n1", "n2"]).length, 50);
+  assert.deepEqual(switchKindSubtasks(null, AB, switchKindSubtasks(null, AB, [])), ["A", "B"]);
+  // Hasta el máximo de 50 (MAX_KIND_SUBTASKS), recortadas y sin vacías.
+  assert.equal(switchKindSubtasks(null, { subtaskTemplate: ["n1", "n2"] }, Array.from({ length: 49 }, (_, i) => `x${i}`)).length, 50);
+  assert.deepEqual(switchKindSubtasks(null, { subtaskTemplate: ["  C  ", "", "   "] }, []), ["C"]);
 });
 
 // --- Cambiar de tipo con la plantilla del anterior puesta (plantilla «Reformas y obras») ---

@@ -12,7 +12,7 @@ import { undoEntry, undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
@@ -83,6 +83,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 }) {
   const t = useT();
   const locale = useIntlLocale();
+  const uiLocale = useLocale();
   const board = useBoard();
   const toast = useToast();
   const confirm = useConfirm();
@@ -881,7 +882,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
    * texto alrededor. Varias tareas no: eso es «Importar» del tablero. `true` si se pegó.
    */
   const pasteTask = async (text: string): Promise<boolean> => {
-    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(text, { t, timeZone: appTimeZone(), locale: uiLocale });
     if (read.error) {
       toast(read.error, "error");
       return false;
@@ -930,6 +931,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         const shown = skipped.slice(0, 4).join("; ");
         toast(t("Tarea pegada, salvo: {list}", { list: skipped.length > 4 ? t("{list} y {n} más", { list: shown, n: skipped.length - 4 }) : shown }), "error");
       }
+      // Fecha límite y de inicio en órdenes distintos (día/mes y mes/día): se avisa para que se revisen.
+      if (read.dateWarning) toast(read.dateWarning, "error");
       return true;
     } catch (err) {
       toast(actionThrowMessage(err, t), "error");
