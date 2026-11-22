@@ -52,6 +52,7 @@ import { Presence, setLivePresence, setLiveProject } from "./Presence";
 import { setLiveStream } from "./taskPresence";
 import { ListView } from "./ListView";
 import { ProjectIntroNotice } from "./ProjectIntroNotice";
+import { replaceUrlKeepingState } from "@/lib/replace-url";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
 import { ViewToggle } from "./ViewToggle";
 import { SelectionBar } from "./SelectionBar";
@@ -164,7 +165,7 @@ function dropTaskParam(): void {
   const url = new URL(window.location.href);
   if (!url.searchParams.has("task")) return;
   url.searchParams.delete("task");
-  window.history.replaceState(window.history.state, "", url);
+  replaceUrlKeepingState(url);
 }
 
 /** Pantalla táctil: las tarjetas se arrastran con su asa para que el resto de la tarjeta deje hacer scroll. */
@@ -262,6 +263,8 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // El de la primera carga: ProjectIntroNotice quita `?nuevo=1` y los refrescos siguientes ya llegan sin él.
+  const [introText] = useState(intro);
   useBlockStrayFileDrops();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);
@@ -367,7 +370,7 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
     const url = new URL(window.location.href);
     if (next === "list") url.searchParams.set("vista", "lista");
     else url.searchParams.delete("vista");
-    window.history.replaceState(window.history.state, "", url);
+    replaceUrlKeepingState(url);
   };
   const sc = useShortcut();
   const dragHandle = useCoarsePointer();
@@ -2017,7 +2020,7 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
             </button>
           </div>
         )}
-        {intro && <ProjectIntroNotice description={intro} />}
+        {introText && <ProjectIntroNotice description={introText} />}
         {view === "list" ? <ListView tasks={tasks} matchingIds={matchingIds} filtering={filtering} /> : dndBoard}
 
         <FloatingCreateButtons
