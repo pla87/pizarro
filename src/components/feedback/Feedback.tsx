@@ -63,7 +63,7 @@ export function FeedbackProvider({ status, isAdmin, version, email, beforeOpen, 
   return (
     <FeedbackContext.Provider value={value}>
       {children}
-      {open && status && <FeedbackDialog delivery={status.delivery} githubReason={status.githubReason} version={version} email={email} onClose={() => setOpen(false)} />}
+      {open && status && <FeedbackDialog githubReason={status.githubReason} version={version} email={email} onClose={() => setOpen(false)} />}
     </FeedbackContext.Provider>
   );
 }

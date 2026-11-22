@@ -30,15 +30,14 @@ export const FEEDBACK_LIMITS = { user: 5, install: 20, windowMs: 24 * 3600_000 }
  * - solo en builds oficiales sin modificar (`officialBuild`, bug-report-core.ts);
  * - `outdated`: hay una versión publicada más nueva que la que corre (la última conocida por el aviso de versión nueva,
  *   con su caché de 12 h): el botón sale desactivado. Sin saber la última (sin red, UPDATE_CHECK=0) se deja enviar;
- * - `delivery`: «mail» si la instalación envía emails y el producto tiene dirección (FEEDBACK_EMAIL); si no, «github»
- *   (formulario público de GitHub con el texto y los datos técnicos, y la captura para adjuntarla a mano);
- * - `githubReason`: por qué va por GitHub, para que el diálogo diga la verdad: «no_address» (el producto aún no tiene
+ * - `githubReason`: null si se envía por email (la instalación envía emails y el producto tiene dirección,
+ *   FEEDBACK_EMAIL); si no, va por el formulario público de GitHub (con el texto y los datos técnicos, y la captura para
+ *   adjuntarla a mano), y dice por qué, para que el diálogo diga la verdad: «no_address» (el producto aún no tiene
  *   dirección: le pasa a todas las instalaciones, no es culpa de su correo) o «no_mail» (la instalación no envía emails).
  */
 export interface FeedbackStatus {
   outdated: boolean;
   latest: string | null;
-  delivery: "mail" | "github";
   githubReason: "no_address" | "no_mail" | null;
 }
 
@@ -47,7 +46,7 @@ export function feedbackStatus(o: { official: boolean; current: string; latest: 
   if (!o.official) return null;
   const outdated = !!o.latest && isNewerVersion(o.latest, o.current);
   const githubReason = !o.address ? "no_address" : !o.mail ? "no_mail" : null;
-  return { outdated, latest: outdated ? o.latest : null, delivery: githubReason ? "github" : "mail", githubReason };
+  return { outdated, latest: outdated ? o.latest : null, githubReason };
 }
 
 /** Escala de la captura: la de la pantalla (nítida) sin pasar de SCREENSHOT_MAX_WIDTH píxeles de ancho. */
