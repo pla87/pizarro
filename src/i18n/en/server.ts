@@ -324,7 +324,7 @@ export const server: Record<string, string> = {
   "Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.": "The lists show the first {n} of {total} tasks; progress and counts include all of them.",
   // Informe semanal por email: listados recortados en proyectos enormes
   "Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.": "This report shows at most {n} tasks per list; progress and counts include all of them.",
-  // Textos guardados por versiones anteriores: el historial de las tareas (TaskEvent, un año) y el deshacer (7 días)
-  // guardan la clave de antes de llamarlo «Restaurar» y la traducen al leerla
+  // Historial de las tareas (TaskEvent, un año) y deshacer (7 días): guardan la clave de antes de «Restaurar».
+  // Textos guardados por versiones anteriores (se traducen al leerlos)
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
 };
