@@ -50,7 +50,7 @@ export function TaskHistory({ taskId }: { taskId: string }) {
               {items.map((e) => (
                 <li key={e.id}>
                   <span className="font-medium">{e.userName}</span> <span className="text-slate-600 dark:text-slate-300">{e.text}</span>
-                  <time className="ml-1.5 text-slate-400">{formatDate(e.createdAt, "dateTimeShort", locale)}</time>
+                  <time className="ml-1.5 text-slate-400">{formatDate(e.createdAt, "dateTime", locale)}</time>
                 </li>
               ))}
             </ul>

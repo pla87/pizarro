@@ -77,9 +77,9 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 text-xs">
           {!c.deleted && <span className="font-semibold">{c.authorName ?? t("Usuario eliminado")}</span>}
-          <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
+          <time className="text-slate-400">{formatDate(c.createdAt, "dateTime", locale)}</time>
           {c.editedAt && !c.deleted && (
-            <span className="text-slate-400" title={t("Editado el {date}", { date: formatDate(c.editedAt, "dateTimeShort", locale) })}>{t("(editado)")}</span>
+            <span className="text-slate-400" title={t("Editado el {date}", { date: formatDate(c.editedAt, "dateTime", locale) })}>{t("(editado)")}</span>
           )}
         </div>
         {c.parentId && !ids.has(c.parentId) && <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400"><Reply size={11} /> {t("En respuesta a un comentario anterior")}</p>}
@@ -115,14 +115,14 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
           <p className="text-lg leading-snug font-semibold break-words"><MentionText text={task.title} /></p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
             <TypeBadge kind={board.kindById.get(task.kindId)} />
-            <span>{t("Archivada el {date}", { date: formatDate(task.archivedAt, "dateShort", locale) })}</span>
+            <span>{t("Archivada el {date}", { date: formatDate(task.archivedAt, "date", locale) })}</span>
             <span>· {task.columnName ? t("de «{name}»", { name: task.columnName }) : t("columna borrada")}</span>
             {detail && (
               <span>
                 ·{" "}
                 {detail.createdByName
-                  ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
-                  : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
+                  ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
+                  : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
               </span>
             )}
           </div>

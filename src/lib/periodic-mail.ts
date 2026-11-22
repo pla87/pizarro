@@ -108,7 +108,7 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
     const t: T = makeT(toLocale(u.locale));
     const unsub = unsubscribeLinks("digest", u.id, u.email);
     await sendMail({ to: u.email, ...digestEmail(digest, { name: u.name, baseUrl: appUrl(), period: digestPeriod(u.lastDigestAt, now), unsubscribeUrl: unsub.page }, t), headers: unsub.headers });
-    logEvent({ category: "notify", action: "digest.sent", message: `Resumen diario enviado a ${u.name}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
+    logEvent({ category: "notify", action: "digest.sent", label: { k: "Resumen diario enviado a {name}", p: { name: u.name } }, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     return true;
   } catch (err) {
     await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });

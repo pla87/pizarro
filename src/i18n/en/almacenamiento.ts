@@ -95,4 +95,6 @@ export const almacenamiento: Record<string, string> = {
   "El servidor no tiene espacio para guardar el archivo.": "The server has no space left to save the file.",
   // Cuotas: el formulario comprueba el mismo máximo que el servidor.
   "Debe ser un número entero de MB, entre {min} y {max}.": "Must be a whole number of MB, between {min} and {max}.",
+  // Disco: el porcentaje dice que es lo usado (detrás de «libres» parecía el espacio libre)
+  "({pct} usado)": "({pct} used)",
 };

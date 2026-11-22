@@ -163,7 +163,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
         const unsub = unsubscribeLinks(noticeEmailKind(n.type), n.user.id, n.user.email);
         await sendMail({ to: n.user.email, ...mentionEmail(msg, t, { unsubscribeUrl: unsub.page }), headers: unsub.headers });
         update.emailSentAt = new Date();
-        logEvent({ ...base, action: "notify.email", message: `Email de aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
+        logEvent({ ...base, action: "notify.email", label: { k: "Email de aviso ({type}) enviado a {name}", p: { type: n.type, name: n.user.name } }, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       } catch (err) {
         errors.push(`email: ${(err as Error).message}`);
         logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });

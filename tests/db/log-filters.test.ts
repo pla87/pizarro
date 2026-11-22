@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 import { db, expectFail, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { logsAfter, logWhere, parseLogFilters } from "../../src/lib/log-query";
 import { flushLogs } from "../../src/lib/log";
+import { logDetailsShown } from "../../src/lib/log-message";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { updateTask } from "../../src/actions/tasks";
 import { GET as logsCsv } from "../../src/app/api/admin/logs/route";
@@ -152,7 +153,8 @@ describe("paginación de los logs y descarga CSV", () => {
     assert.equal(logged.length, 5);
     assert.equal(JSON.stringify(logged[0]).includes("texto-buscado"), false);
     assert.equal(JSON.stringify(logged[0]!.details).includes(admin.id), false);
-    assert.deepEqual({ ...(logged[0]!.details as Record<string, unknown>), from: "", to: "" }, { from: "", to: "", level: "warn", category: tag, search: true, reads: false });
+    // Sin la plantilla del mensaje (se pinta traducida en la página; no sale en los detalles).
+    assert.deepEqual({ ...(logDetailsShown(logged[0]!.details) as Record<string, unknown>), from: "", to: "" }, { from: "", to: "", level: "warn", category: tag, search: true, reads: false });
   });
 });
 

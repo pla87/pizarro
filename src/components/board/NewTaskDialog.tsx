@@ -90,7 +90,7 @@ let subtaskSeq = 0;
 const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, text });
 
 function captureTitle(t: T, locale: string): string {
-  return t("Captura") + " " + formatDate(new Date(), "dateTimeShort", locale);
+  return t("Captura") + " " + formatDate(new Date(), "dateTime", locale);
 }
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, initialTitle, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {

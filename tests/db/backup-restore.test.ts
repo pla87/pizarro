@@ -201,6 +201,8 @@ describe("copias completas", () => {
     assert.match(bad.error ?? "", /Faltan 1 de/);
     // La tarea programada también falla (antes terminaba bien y Tareas de mantenimiento la daba por correcta).
     await assert.rejects(monthlyRestoreTestJob(Date.now() + 2 * 24 * 3600 * 1000), /Faltan 1 de/);
+    // Tras un fallo, la pasada de una hora después no la repite (lo hará al día siguiente) y lo dice.
+    assert.deepEqual(await monthlyRestoreTestJob(Date.now() + 3600_000), { skipped: "retryTomorrow" });
   });
 
   test("aviso: destino externo configurado sin ninguna subida correcta", async () => {

@@ -271,7 +271,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                     <span className="min-w-0 flex-1 basis-48">
                       <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
                       <span className="block text-xs text-slate-500">
-                        {formatBytes(d.size, locale)} · {t("Borrado por {name} el {date}", { name: d.deletedByName ?? t("Usuario eliminado"), date: formatDate(d.deletedAt, "dateNumeric", locale) })} ·{" "}
+                        {formatBytes(d.size, locale)} · {t("Borrado por {name} el {date}", { name: d.deletedByName ?? t("Usuario eliminado"), date: formatDate(d.deletedAt, "date", locale) })} ·{" "}
                         {d.daysLeft === 0 ? t("se elimina hoy") : d.daysLeft === 1 ? t("queda 1 día") : t("quedan {n} días", { n: d.daysLeft })}
                       </span>
                     </span>
@@ -339,7 +339,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                       <span className="min-w-0 flex-1">
                         <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
                         <span className="block truncate text-xs text-slate-500">
-                          {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "dateNumeric", locale)}
+                          {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "date", locale)}
                         </span>
                       </span>
                     </button>
@@ -462,7 +462,7 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-500">
-            {formatBytes(doc.size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "dateNumeric", locale)}
+            {formatBytes(doc.size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "date", locale)}
           </span>
           <span className="flex gap-2">
             {/* Se puede deshacer (va a la papelera): como en el «⋯» de la lista, no «Borrar» en rojo. */}
@@ -570,7 +570,7 @@ function TrashViewer({ doc, busy, onClose, onRestore }: { doc: TrashedDocumentRo
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-500">
-            {formatBytes(doc.size, locale)} · {t("Borrado por {name} el {date}", { name: doc.deletedByName ?? t("Usuario eliminado"), date: formatDate(doc.deletedAt, "dateNumeric", locale) })}
+            {formatBytes(doc.size, locale)} · {t("Borrado por {name} el {date}", { name: doc.deletedByName ?? t("Usuario eliminado"), date: formatDate(doc.deletedAt, "date", locale) })}
           </span>
           <span className="flex gap-2">
             <button type="button" className="btn-secondary" onClick={onRestore} disabled={busy}>

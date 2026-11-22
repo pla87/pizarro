@@ -98,6 +98,16 @@ describe("JobRun", () => {
     assert.equal(count, 2);
   });
 
+  test("una tarea que no hace nada a propósito anota el motivo: correcta, sin error y con `skipped`", async () => {
+    assert.equal(await runJob({ name: "test-skip", run: async () => ({ skipped: "alreadyToday" }) }), "ok");
+    let run = (await listJobRuns()).find((r) => r.name === "test-skip");
+    assert.deepEqual([run?.lastOk, run?.lastError, run?.skipped], [true, null, "alreadyToday"]);
+    // La siguiente vez que sí hace su trabajo, el motivo desaparece.
+    assert.equal(await runJob({ name: "test-skip", run: async () => 3 }), "ok");
+    run = (await listJobRuns()).find((r) => r.name === "test-skip");
+    assert.deepEqual([run?.lastOk, run?.lastError, run?.skipped], [true, null, null]);
+  });
+
   test("listJobRuns devuelve fechas en ISO", async () => {
     const runs = await listJobRuns();
     const ok = runs.find((r) => r.name === "test-ok");

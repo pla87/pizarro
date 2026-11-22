@@ -130,7 +130,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
 export async function logout(): Promise<void> {
   const [user, ctx] = await Promise.all([getCurrentUser().catch(() => null), requestContext()]);
-  if (user) logEvent({ category: "auth", action: "auth.logout", message: `${user.name} ha cerrado sesión`, userId: user.id, userName: user.name, path: ctx.path, ip: ctx.ip });
+  if (user) logEvent({ category: "auth", action: "auth.logout", label: { k: "{name} ha cerrado sesión", p: { name: user.name } }, userId: user.id, userName: user.name, path: ctx.path, ip: ctx.ip });
   await destroySession();
   redirect("/login");
 }

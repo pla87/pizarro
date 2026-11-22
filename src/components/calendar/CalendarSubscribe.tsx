@@ -31,7 +31,7 @@ function LastUsed({ at }: { at: string | null }) {
   if (!at) return <p className="text-xs text-slate-500" data-testid="feed-last-used">{t("Aún no se ha usado")}</p>;
   const ago = formatAgo(at, new Date(), locale);
   return (
-    <p className="text-xs text-slate-500" data-testid="feed-last-used" title={t("{date} (se anota como mucho una vez por hora)", { date: formatDate(at, "dateTimeShort", locale) })}>
+    <p className="text-xs text-slate-500" data-testid="feed-last-used" title={t("{date} (se anota como mucho una vez por hora)", { date: formatDate(at, "dateTime", locale) })}>
       {ago ? t("Último uso: {when}", { when: ago }) : t("Último uso: hace menos de una hora")}
     </p>
   );
