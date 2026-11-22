@@ -43,8 +43,6 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const hasMore = rows.length > limit;
   return (
     <NotificationList
-      // Al cargar más cambia la lista del servidor: se reinicia el estado local.
-      key={limit}
       moreHref={hasMore ? `?limit=${limit + PAGE_STEP}` : null}
       unreadTotal={unreadTotal}
       unreadCap={UNREAD_COUNT_CAP}

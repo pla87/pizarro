@@ -235,7 +235,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
           {uploads.map((u) => (
             <li key={u.key} className={cn("card flex items-center gap-2 px-3 py-2 text-sm", u.status === "error" && "border-red-300 dark:border-red-500/50")}>
               {u.status === "uploading" ? <Loader2 size={16} className="shrink-0 animate-spin text-slate-400" /> : <AlertCircle size={16} className="shrink-0 text-red-500" />}
-              <span className="min-w-0 flex-1 truncate">{u.name}</span>
+              <span dir="auto" className="min-w-0 flex-1 truncate">{u.name}</span>
               {u.status === "uploading" ? (
                 <span className="shrink-0 text-xs text-slate-500">{t("Subiendo…")}</span>
               ) : (
@@ -269,18 +269,20 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                       <span className="sr-only">{kindLabel(d.kind)}</span>
                     </span>
                     <span className="min-w-0 flex-1 basis-48">
-                      <span className="block truncate text-sm font-medium">{d.name}</span>
+                      <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
                       <span className="block text-xs text-slate-500">
                         {formatBytes(d.size, locale)} · {t("Borrado por {name} el {date}", { name: d.deletedByName ?? t("Usuario eliminado"), date: formatDate(d.deletedAt, "dateNumeric", locale) })} ·{" "}
                         {d.daysLeft === 0 ? t("se elimina hoy") : d.daysLeft === 1 ? t("queda 1 día") : t("quedan {n} días", { n: d.daysLeft })}
                       </span>
                     </span>
-                    <span className="flex shrink-0 gap-1.5">
-                      <button type="button" className="btn-secondary" onClick={() => setOpenId(d.id)} disabled={busyId === d.id} aria-label={t("Ver {name}", { name: d.name })}>
-                        <Eye size={16} /> {t("Ver")}
+                    {/* En el móvil «Ver» y «Restaurar» van solo con su icono (el nombre accesible ya dice qué y de cuál) y el grupo
+                        pasa a otra línea si no cabe: «Borrar definitivamente» salía cortado a 390 y 360 px. */}
+                    <span className="flex min-w-0 flex-wrap gap-1.5">
+                      <button type="button" className="btn-secondary" onClick={() => setOpenId(d.id)} disabled={busyId === d.id} aria-label={t("Ver {name}", { name: d.name })} title={t("Ver")}>
+                        <Eye size={16} aria-hidden /> <span className="hidden sm:inline">{t("Ver")}</span>
                       </button>
-                      <button type="button" className="btn-secondary" onClick={() => void restore(d)} disabled={busyId === d.id} aria-label={t("Restaurar «{name}»", { name: d.name })}>
-                        <RotateCcw size={16} /> {t("Restaurar")}
+                      <button type="button" className="btn-secondary" onClick={() => void restore(d)} disabled={busyId === d.id} aria-label={t("Restaurar «{name}»", { name: d.name })} title={t("Restaurar")}>
+                        <RotateCcw size={16} aria-hidden /> <span className="hidden sm:inline">{t("Restaurar")}</span>
                       </button>
                       <button type="button" className="btn-danger" onClick={() => void removeForever(d)} disabled={busyId === d.id} aria-label={t("Borrar definitivamente «{name}»", { name: d.name })}>
                         <Trash2 size={16} /> {t("Borrar definitivamente")}
@@ -335,7 +337,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
                         <span className="sr-only">{kindLabel(d.kind)}</span>
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{d.name}</span>
+                        <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
                         <span className="block truncate text-xs text-slate-500">
                           {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "dateNumeric", locale)}
                         </span>
@@ -450,7 +452,7 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
           </form>
         ) : (
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{name}</span>
+            <span dir="auto" className="truncate">{name}</span>
             <button type="button" className="btn-icon shrink-0" aria-label={t("Renombrar")} title={t("Renombrar")} onClick={() => { setDraft(name); setEditing(true); }}>
               <Pencil size={14} />
             </button>
@@ -564,7 +566,7 @@ function TrashViewer({ doc, busy, onClose, onRestore }: { doc: TrashedDocumentRo
       open
       onClose={onClose}
       size="xl"
-      title={<span className="truncate">{doc.name}</span>}
+      title={<span dir="auto" className="truncate">{doc.name}</span>}
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-500">

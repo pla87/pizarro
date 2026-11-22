@@ -30,7 +30,7 @@ export const server: Record<string, string> = {
   "Demasiadas tareas creadas seguidas. Espera un minuto.": "Too many tasks created in a row. Please wait a minute.",
   "Demasiadas etiquetas creadas seguidas. Espera un minuto.": "Too many labels created in a row. Please wait a minute.",
   "Demasiados entregables creados seguidos. Espera un minuto.": "Too many deliverables created in a row. Please wait a minute.",
-  "La tarea está archivada. Recupérala para modificarla.": "The task is archived. Restore it to modify it.",
+  "La tarea está archivada. Restáurala para modificarla.": "The task is archived. Restore it to modify it.",
   "Una tarea no puede tener más de 100 subtareas.": "A task cannot have more than 100 subtasks.",
   "Esta tarea ya tiene el máximo de {n} comentarios.": "This task already has the maximum of {n} comments.",
   "Indica un número.": "Enter a number.",

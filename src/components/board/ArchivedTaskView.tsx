@@ -21,7 +21,7 @@ import { TaskHistory } from "./TaskHistory";
 
 /**
  * Tarea archivada en solo lectura (desde «Tareas archivadas»): título, descripción, subtareas, adjuntos, enlaces,
- * comentarios e historial, sin nada que editar. Para cambiarla hay que recuperarla («Recuperar», también aquí).
+ * comentarios e historial, sin nada que editar. Para cambiarla hay que restaurarla («Restaurar», también aquí; el mismo verbo que la papelera de Documentación).
  * Es una vista propia y no el detalle de siempre en otro modo: el detalle guarda solo y todo él está pensado para editar.
  */
 export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
@@ -104,7 +104,7 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
         <>
           <button className="btn-secondary ml-auto" onClick={onClose}>{t("Cerrar")}</button>
           <button className="btn-primary" onClick={onRestore} disabled={restoring}>
-            {restoring ? <Loader2 size={15} className="animate-spin" /> : <ArchiveRestore size={15} />} {t("Recuperar")}
+            {restoring ? <Loader2 size={15} className="animate-spin" /> : <ArchiveRestore size={15} />} {t("Restaurar")}
           </button>
         </>
       }
@@ -127,7 +127,7 @@ export function ArchivedTaskView({ task, onClose, onRestore, restoring }: {
             )}
           </div>
           <p className="rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" role="note">
-            {t("Tarea archivada: solo lectura. Recupérala para editarla o comentar.")}
+            {t("Tarea archivada: solo lectura. Restáurala para editarla o comentar.")}
           </p>
         </div>
         {error ? (

@@ -16,7 +16,7 @@ import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection"
 import { actionThrowMessage, actionThrowResult } from "@/lib/stale-action";
 import { ArchivedTaskView } from "./ArchivedTaskView";
 
-/** Tareas archivadas del proyecto: consulta (cada una se abre en solo lectura: ArchivedTaskView) y recuperación. */
+/** Tareas archivadas del proyecto: consulta (cada una se abre en solo lectura: ArchivedTaskView) y «Restaurar». */
 export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const board = useBoard();
   const toast = useToast();
@@ -95,8 +95,6 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     setNext(res.data.nextCursor);
   };
 
-  const filtered = items;
-
   const restore = async (id: string) => {
     setBusy(id);
     const res = await board.track(restoreTask(id));
@@ -111,7 +109,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
     board.upsertTask(res.data.task);
     setItems((prev) => prev?.filter((it) => it.id !== id) ?? prev);
     setViewing((v) => (v?.id === id ? null : v));
-    toast(t("Tarea recuperada en «{name}»", { name: res.data.columnName }));
+    toast(t("Tarea restaurada en «{name}»", { name: res.data.columnName }));
   };
 
   return (
@@ -122,17 +120,18 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
           data-autofocus
           className="input w-full pl-9"
           placeholder={t("Filtrar por título o release…")}
+          aria-label={t("Buscar en las archivadas")}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
-      {filtered === null ? (
+      {items === null ? (
         <div className="flex justify-center py-10 text-slate-400"><Loader2 className="animate-spin" size={20} /></div>
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <p className="py-6 text-center text-sm text-slate-500">{q ? t("Ninguna tarea coincide.") : t("No hay tareas archivadas.")}</p>
       ) : (
         <ul className="divide-y divide-slate-200 dark:divide-slate-800">
-          {filtered.map((task) => (
+          {items.map((task) => (
             <li key={task.id} className="flex items-start gap-3 py-2.5">
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-start gap-2">
@@ -140,6 +139,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
                   {/* Dos líneas de título (antes una sola, cortada); al pulsarlo se abre en solo lectura. */}
                   <button
                     type="button"
+                    dir="auto"
                     className="line-clamp-2 min-w-0 text-left text-sm font-medium break-words hover:text-brand-600 hover:underline"
                     onClick={() => setViewing(task)}
                     title={t("Ver la tarea archivada «{title}»", { title: mentionsToPlain(task.title) })}
@@ -155,8 +155,8 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
               </div>
-              <button className="btn-ghost shrink-0 py-1 text-xs" disabled={busy === task.id} onClick={() => restore(task.id)}>
-                {busy === task.id ? <Loader2 size={14} className="animate-spin" /> : <ArchiveRestore size={14} />} {t("Recuperar")}
+              <button className="btn-ghost shrink-0 py-1 text-xs" disabled={busy === task.id} onClick={() => restore(task.id)} aria-label={t("Restaurar «{name}»", { name: mentionsToPlain(task.title) })}>
+                {busy === task.id ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <ArchiveRestore size={14} aria-hidden />} {t("Restaurar")}
               </button>
             </li>
           ))}

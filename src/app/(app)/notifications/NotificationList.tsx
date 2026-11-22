@@ -3,7 +3,7 @@
 import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Mail, MailX, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { markAllNotificationsRead, markNotificationRead } from "@/actions/notifications";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
@@ -57,18 +57,31 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
   const t = useT();
   const locale = useIntlLocale();
   const toast = useToast();
-  const [items, setItems] = useState(() => initial.map((i) => (!i.read && readHere.has(i.id) ? { ...i, read: true } : i)));
+  const fromServer = (list: Item[]) => list.map((i) => (!i.read && readHere.has(i.id) ? { ...i, read: true } : i));
+  const [items, setItems] = useState(() => fromServer(initial));
   const [pending, start] = useActionTransition();
   const [allRead, setAllRead] = useState(false);
   // El recuento que devolvió el servidor al leer aquí (el real, con tope): manda sobre la cuenta hecha con lo cargado.
   const [counted, setCounted] = useState<number | null>(null);
   const [gate] = useState(latestOnly);
-  // Si el servidor vuelve a pintar la página (refresco), su número es más reciente que el guardado aquí.
+  // Si el servidor vuelve a pintar la página (refresco o «Cargar más»), su lista y su número son más recientes que los
+  // de aquí. Sin volver a montar la lista (antes con key={limit}): el foco del teclado no se pierde al cargar más.
   const [countedFor, setCountedFor] = useState(initial);
   if (countedFor !== initial) {
     setCountedFor(initial);
     setCounted(null);
+    setAllRead(false);
+    setItems(fromServer(initial));
   }
+  // Tras «Cargar más», el foco va al primer aviso nuevo (si no hubiera, se queda en el botón).
+  const focusFrom = useRef<number | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from === null || items.length <= from) return;
+    focusFrom.current = null;
+    listRef.current?.querySelectorAll<HTMLElement>("[data-notice-open]")[from]?.focus();
+  }, [items]);
   // Hasta entonces: los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
   const outside = Math.max(0, unreadTotal - initial.filter((i) => !i.read).length);
   const unread = counted ?? (allRead ? 0 : outside + items.filter((i) => !i.read).length);
@@ -167,7 +180,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
           <Bell size={32} className="text-slate-300" /> {t("Aquí aparecerán las menciones, asignaciones, cambios de fecha y comentarios que te afecten.")}
         </div>
       ) : (
-        <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
+        <ul ref={listRef} className="card divide-y divide-slate-200 dark:divide-slate-800">
           {items.map((n) => {
             const Icon = ICONS[n.type] ?? AtSign;
             // Asignación en lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).
@@ -175,7 +188,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
             const body = batch ? "" : notificationBody(n.type, n.excerpt, t, locale);
             return (
               <li key={n.id} className={cn("flex items-stretch hover:bg-slate-50 dark:hover:bg-slate-800/50", !n.read && "bg-brand-50/50 dark:bg-brand-500/5")}>
-                <button onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
+                <button data-notice-open onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
                   <span className="relative shrink-0">
                     {n.actor ? (
                       <Avatar id={n.actor.id} name={n.actor.name} size="md" />
@@ -201,8 +214,8 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
-                    {body && <p className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-l-2 border-slate-300 pl-2 dark:border-slate-600")}>{body}</p>}
-                    <p className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                    {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-l-2 border-slate-300 pl-2 dark:border-slate-600")}>{body}</p>}
+                    <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                       {formatDate(n.createdAt, "dateTimeShort", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}
                       {n.viaWhatsapp && <span className="inline-flex items-center gap-0.5" title={t("Enviado por WhatsApp")}><MessageCircle size={12} /></span>}
@@ -223,7 +236,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
       )}
       {moreHref && (
         <div className="mt-4 text-center">
-          <Link href={moreHref} scroll={false} className="btn-secondary">{t("Cargar más")}</Link>
+          <Link href={moreHref} scroll={false} onClick={() => (focusFrom.current = items.length)} className="btn-secondary">{t("Cargar más")}</Link>
         </div>
       )}
     </div>

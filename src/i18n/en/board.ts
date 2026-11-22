@@ -121,7 +121,7 @@ export const board: Record<string, string> = {
   "Campos extra": "Extra fields",
   "(opcional, para todas)": "(optional, applies to all)",
   // ArchivedDialog
-  "Tarea recuperada en «{name}»": "Task restored to “{name}”",
+  "Tarea restaurada en «{name}»": "Task restored to “{name}”",
   "Tareas archivadas": "Archived tasks",
   "Filtrar por título o release…": "Filter by title or release…",
   "Cargar más": "Load more",
@@ -131,11 +131,10 @@ export const board: Record<string, string> = {
   "columna borrada": "column deleted",
   "Desplegada el {date}": "Deployed on {date}",
   "En release: {title}": "In release: {title}",
-  "Recuperar": "Restore",
   // Tarea archivada en solo lectura (ArchivedTaskView)
   "Tarea archivada: {title}": "Archived task: {title}",
   "Detalle de la tarea archivada": "Archived task details",
-  "Tarea archivada: solo lectura. Recupérala para editarla o comentar.": "Archived task: read only. Restore it to edit it or comment.",
+  "Tarea archivada: solo lectura. Restáurala para editarla o comentar.": "Archived task: read only. Restore it to edit it or comment.",
   "Sin descripción.": "No description.",
   "Sin comentarios.": "No comments.",
   "Hecha": "Done",
@@ -373,4 +372,6 @@ export const board: Record<string, string> = {
   "Sin conexión: no se han podido descargar los adjuntos.": "Offline: the attachments could not be downloaded.",
   // Un solo nombre para el responsable de una tarea (tarjeta: descripción accesible y título del avatar)
   "Responsable: {name}": "Assignee: {name}",
+  // Buscador de «Tareas archivadas» (nombre accesible)
+  "Buscar en las archivadas": "Search archived tasks",
 };

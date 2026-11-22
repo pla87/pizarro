@@ -125,16 +125,16 @@ export function digestEmail(digest: ReturnType<typeof buildDigest>, opts: { name
 <p>${escapeHtml(intro)}</p>
 ${digest.sections
   .map(
-    (s) => `<h3 style="margin:20px 0 6px;font-size:15px">${escapeHtml(heading(s.key, t))} <span style="color:#94a3b8;font-weight:400">${s.total}</span></h3>
+    (s) => `<h3 style="margin:20px 0 6px;font-size:15px">${escapeHtml(heading(s.key, t))} <span style="color:#64748b;font-weight:400">${s.total}</span></h3>
 ${s.projects
   .map(
     (p) => `<p style="margin:8px 0 2px;color:#64748b;font-size:13px">${escapeHtml(p.projectName)}</p>
 <ul style="margin:0;padding-left:20px">${p.items.map((i) => `<li><a href="${escapeHtml(link(i))}" style="color:#4f46e5;text-decoration:none">${escapeHtml(itemText(i, t))}</a></li>`).join("")}</ul>`,
   )
-  .join("\n")}${s.hidden ? `<p style="margin:4px 0;color:#94a3b8;font-size:13px">${escapeHtml(t("… y {n} más", { n: s.hidden }))}</p>` : ""}`,
+  .join("\n")}${s.hidden ? `<p style="margin:4px 0;color:#64748b;font-size:13px">${escapeHtml(t("… y {n} más", { n: s.hidden }))}</p>` : ""}`,
   )
   .join("\n")}
 <p style="margin-top:24px"><a href="${escapeHtml(baseUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir Pizarro"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
+<p style="color:#64748b;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }

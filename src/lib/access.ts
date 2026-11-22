@@ -95,7 +95,7 @@ export async function loadTaskWithAccess<S extends Prisma.TaskSelect>(
 
 /** Mismo error que assertNotArchived, con la fecha ya cargada. */
 export function assertNotArchivedRow(task: { archivedAt: Date | null }): void {
-  if (task.archivedAt) throw new AppError("La tarea está archivada. Recupérala para modificarla.");
+  if (task.archivedAt) throw new AppError("La tarea está archivada. Restáurala para modificarla.");
 }
 
 /** Lanza error si el usuario no puede ser asignado a tareas del proyecto. */

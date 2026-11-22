@@ -567,11 +567,11 @@ if (only.includes("archivada")) {
   await arch.getByText("Archivada bh50a").waitFor({ timeout: 10000 });
   const row = arch.locator("li").filter({ hasText: "Archivada bh50a" });
   L.check("ARCH: «Archivadas» dice de qué columna es (no «columna borrada»)", (await row.innerText()).includes("de «Materiales»"), await row.innerText());
-  await row.getByRole("button", { name: "Recuperar" }).click();
+  await row.getByRole("button", { name: "Restaurar" }).click();
   await L.waitFor(async () => (await L.q(`SELECT "archivedAt" FROM "Task" WHERE id='bh50a_arch'`))[0].archivedAt === null, { timeout: 10000 });
   L.eq("ARCH: al recuperarla vuelve a «Materiales» (no a «Ideas», la primera)", (await L.q(`SELECT c.name FROM "Task" t JOIN "Column" c ON c.id=t."columnId" WHERE t.id='bh50a_arch'`))[0].name, "Materiales");
   // El aviso sale cuando llega la respuesta, que puede ser un poco después de que la base ya lo tenga: se espera.
-  L.check("ARCH: el aviso dice «Materiales»", await page.getByText("Tarea recuperada en «Materiales»").first().waitFor({ timeout: 5000 }).then(() => true, () => false));
+  L.check("ARCH: el aviso dice «Materiales»", await page.getByText("Tarea restaurada en «Materiales»").first().waitFor({ timeout: 5000 }).then(() => true, () => false));
   L.assertNoErrors("ARCH", [s]);
   await s.ctx.close();
 }

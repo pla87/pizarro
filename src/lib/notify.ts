@@ -59,7 +59,7 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es"), opts: { unsu
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
 ${quoted ? `<p style="margin:12px 0 0;color:#475569">${escapeHtml(intro)}</p>\n` : ""}${body ? quote : ""}
 <p><a href="${escapeHtml(m.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
+<p style="color:#64748b;font-size:12px">${escapeHtml(optOut)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }
 
