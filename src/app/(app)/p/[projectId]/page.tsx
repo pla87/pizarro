@@ -19,12 +19,12 @@ import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { Board } from "@/components/board/Board";
 import { EARLY_SHORTCUT_SCRIPT } from "@/components/board/earlyShortcut";
 
-type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
+type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string; nuevo?: string }> };
 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
   const user = await getCurrentUser();
-  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } }) : null;
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, description: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } }) : null;
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -78,13 +78,15 @@ export default async function BoardPage({ params, searchParams }: Params) {
     liveRefreshJitterMs: liveRefreshJitterMs(),
     live,
   };
-  const { task } = await searchParams;
+  const { task, nuevo } = await searchParams;
+  // Recién creado desde una plantilla («Nuevo proyecto» llega con ?nuevo=1): su descripción, encima de las columnas.
+  const intro = nuevo === "1" ? project.description.trim() : "";
   // Alt+N / Alt+Mayús+N pulsados antes de que la página hidrate se anotan y se ejecutan al montar (earlyShortcut.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <>
       <script nonce={nonce} dangerouslySetInnerHTML={{ __html: EARLY_SHORTCUT_SCRIPT }} />
-      <Board data={data} initialTaskId={typeof task === "string" ? task : null} />
+      <Board data={data} initialTaskId={typeof task === "string" ? task : null} intro={intro} />
     </>
   );
 }

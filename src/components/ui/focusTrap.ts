@@ -50,10 +50,14 @@ export function useFocusTrap(
     };
     document.addEventListener("keydown", onKey);
     const frame = requestAnimationFrame(() => (initialRef?.current ?? panelRef.current)?.focus());
+    const panel = panelRef.current;
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKey);
-      if (previous?.isConnected) previous.focus();
+      // Solo si el foco estaba dentro (o se perdió con el panel): si al cerrarlo se abre otro diálogo que ya lo tiene
+      // («Nuevo proyecto» desde el menú móvil), se queda allí.
+      const active = document.activeElement;
+      if (previous?.isConnected && (!active || active === document.body || panel?.contains(active))) previous.focus();
     };
   }, [open, panelRef, initialRef, returnRef]);
 }
