@@ -402,7 +402,10 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
                     e.preventDefault();
                     popupRef.current?.run(o);
                   }}
-                  onMouseEnter={() => {
+                  // onMouseMove y no onMouseEnter: al desplazar la lista con ↑↓, el navegador lanza mouseenter en la
+                  // opción que queda bajo el puntero quieto y la activa saltaría hacia atrás.
+                  onMouseMove={() => {
+                    if (i === popup.active) return;
                     if (popupRef.current) popupRef.current.popup = { ...popupRef.current.popup, active: i };
                     setPopup((p) => (p ? { ...p, active: i } : p));
                   }}

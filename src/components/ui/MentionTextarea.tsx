@@ -332,7 +332,11 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
                   e.preventDefault();
                   choose(o);
                 }}
-                onMouseEnter={() => setActive(i)}
+                // onMouseMove y no onMouseEnter: al desplazar la lista con ↑↓, el navegador lanza mouseenter en la
+                // opción que queda bajo el puntero quieto y la activa saltaría hacia atrás.
+                onMouseMove={() => {
+                  if (i !== active) setActive(i);
+                }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
                   i === active ? "bg-brand-50 dark:bg-brand-500/15" : "hover:bg-slate-50 dark:hover:bg-slate-800",
