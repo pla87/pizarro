@@ -45,6 +45,17 @@ export interface JobDef {
 
 type JobOutcome = "ok" | "error" | "skipped";
 
+/**
+ * Lo que devuelve una tarea que ha terminado bien sin hacer nada a propósito (p. ej. la copia diaria cuando ya hay copia
+ * de hoy): el motivo, una clave fija que Administración → Copias de seguridad traduce («Omitida: ya hay copia de hoy»).
+ * Se guarda en JobRun.lastError con el prefijo «skip:» y lastOk = true (sin columna nueva).
+ */
+export interface JobSkip { skipped: string }
+
+const SKIP_PREFIX = "skip:";
+
+const isSkip = (v: unknown): v is JobSkip => typeof v === "object" && v !== null && typeof (v as JobSkip).skipped === "string";
+
 const MAX_ERROR_CHARS = 500;
 
 /** Ejecuta una tarea y anota en JobRun cuándo empezó y cómo terminó; nunca lanza. */
@@ -60,14 +71,16 @@ export async function runJob(job: JobDef, now: Date = new Date()): Promise<JobOu
     return "error";
   }
   let error: string | null = null;
+  let skipped: string | null = null;
   try {
-    await job.run();
+    const value = await job.run();
+    if (isSkip(value)) skipped = value.skipped;
   } catch (err) {
     console.error(`[jobs] ${job.name}`, err);
     error = (err instanceof Error ? err.message : String(err)).slice(0, MAX_ERROR_CHARS) || "Error";
   }
   try {
-    await db.jobRun.update({ where: { name: job.name }, data: { lastFinishedAt: new Date(), lastOk: error === null, lastError: error } });
+    await db.jobRun.update({ where: { name: job.name }, data: { lastFinishedAt: new Date(), lastOk: error === null, lastError: error ?? (skipped ? SKIP_PREFIX + skipped : null) } });
   } catch (err) {
     console.error(`[jobs] ${job.name}: no se pudo anotar el final`, err);
   }
@@ -80,16 +93,22 @@ export interface JobRunInfo {
   lastFinishedAt: string | null;
   lastOk: boolean | null;
   lastError: string | null;
+  /** Terminó bien sin hacer nada: el motivo (clave de JobSkip); null si hizo su trabajo o falló. */
+  skipped: string | null;
 }
 
 /** Estado de todas las tareas (Administración → Copias de seguridad). */
 export async function listJobRuns(): Promise<JobRunInfo[]> {
   const rows = await db.jobRun.findMany({ orderBy: { name: "asc" } });
-  return rows.map((r) => ({
-    name: r.name,
-    lastStartedAt: r.lastStartedAt?.toISOString() ?? null,
-    lastFinishedAt: r.lastFinishedAt?.toISOString() ?? null,
-    lastOk: r.lastOk,
-    lastError: r.lastError,
-  }));
+  return rows.map((r) => {
+    const skipped = r.lastOk && r.lastError?.startsWith(SKIP_PREFIX) ? r.lastError.slice(SKIP_PREFIX.length) : null;
+    return {
+      name: r.name,
+      lastStartedAt: r.lastStartedAt?.toISOString() ?? null,
+      lastFinishedAt: r.lastFinishedAt?.toISOString() ?? null,
+      lastOk: r.lastOk,
+      lastError: skipped ? null : r.lastError,
+      skipped,
+    };
+  });
 }

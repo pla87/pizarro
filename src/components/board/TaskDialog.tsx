@@ -1406,8 +1406,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           {detail && (
             <p className="col-span-2 text-xs text-slate-500">
               {detail.createdByName
-                ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
-                : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
+                ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
+                : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
             </p>
           )}
           <div className="col-span-2">

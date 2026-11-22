@@ -28,7 +28,7 @@ function Row({ job }: { job: TransferJobView }) {
   const t = useT();
   const locale = useIntlLocale();
   // En la zona de la app, como el resto de fechas (no en la del equipo).
-  const when = formatDate(job.createdAt, "dateTimeShort", locale);
+  const when = formatDate(job.createdAt, "dateTime", locale);
   const exp = job.kind === "EXPORT";
   const result = job.result;
   return (
@@ -42,7 +42,7 @@ function Row({ job }: { job: TransferJobView }) {
         {job.status === "DONE" && !exp && job.projectId && <Link className="btn-secondary" href={`/p/${job.projectId}`}>{t("Abrir proyecto")}</Link>}
       </div>
       {(job.status === "QUEUED" || job.status === "RUNNING") && <TransferProgress job={job} />}
-      {job.status === "DONE" && exp && <p className="text-xs text-slate-500">{t("Disponible hasta {date}.", { date: job.expiresAt ? formatDate(job.expiresAt, "dateTimeShort", locale) : "" })}</p>}
+      {job.status === "DONE" && exp && <p className="text-xs text-slate-500">{t("Disponible hasta {date}.", { date: job.expiresAt ? formatDate(job.expiresAt, "dateTime", locale) : "" })}</p>}
       {job.status === "DONE" && !exp && result && "name" in result && "counts" in result && <p className="text-xs text-slate-500">{result.counts.tasks === 1 ? t("«{name}» importado (1 tarjeta).", { name: result.name }) : t("«{name}» importado ({tasks} tarjetas).", { name: result.name, tasks: result.counts.tasks })}</p>}
       {job.status === "FAILED" && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{job.error ?? t("No se pudo completar.")}</p>}
       {job.status === "EXPIRED" && <p className="text-xs text-slate-500">{t("El archivo ha caducado (24 h). Vuelve a exportar el proyecto.")}</p>}

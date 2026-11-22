@@ -15,7 +15,7 @@ import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
 import { AppError } from "./errors";
-import { withAdvisoryLock } from "./jobs";
+import { withAdvisoryLock, type JobSkip } from "./jobs";
 import { logEvent } from "./log";
 import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
@@ -327,7 +327,7 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     logEvent({
       category: "system",
       action: "backup.created",
-      message: `Copia de seguridad creada: ${name} (${logSize(bytes)}, ${dbManifest.totalRows} filas, ${manifest.fileCount} ficheros)`,
+      label: { k: "Copia de seguridad creada: {file} ({size}, {rows} filas, {files} ficheros)", p: { file: name, size: logSize(bytes), rows: dbManifest.totalRows, files: manifest.fileCount } },
       durationMs: run.durationMs,
       details: { file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length, files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: run.filesNew, pruned: pruned.removedBackups, objectsRemoved: pruned.removedObjects, tempRemoved: pruned.removedTemp ?? 0 },
     });
@@ -664,13 +664,16 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
 }
 
 /** Tarea diaria (se llama cada hora): crea la copia si la última correcta tiene más de 23 h o si la última falló. */
-export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
-  if (!backupKey() || backupPaused()) return;
+export async function dailyBackupJob(now: number = Date.now()): Promise<JobSkip | void> {
+  if (!backupKey()) return { skipped: "noKey" };
+  if (backupPaused()) return { skipped: "paused" };
   const status = await readStatus();
   const last = status.lastBackup?.ok ? Date.parse(status.lastBackup.at) : 0;
   const lastFile = (await latestBackupTime()) ?? 0;
   const failedSince = status.lastBackup?.ok === false && Date.parse(status.lastBackup.at) >= lastFile;
-  if (!failedSince && now - Math.max(last, lastFile) < BACKUP_EVERY_MS) return;
+  // La pasada es cada hora: casi siempre ya hay copia de las últimas 23 h y no hay nada que hacer (se dice así en
+  // Tareas de mantenimiento, en vez de un «Correcta» con una hora que no es la de la última copia).
+  if (!failedSince && now - Math.max(last, lastFile) < BACKUP_EVERY_MS) return { skipped: "alreadyToday" };
   // createBackup no lanza: el fallo se pasa a la tarea para que conste en Tareas de mantenimiento (JobRun). Que otra copia
   // esté en curso (el botón, otro proceso) no es un fallo de la tarea.
   const run = await createBackup();
@@ -678,20 +681,25 @@ export async function dailyBackupJob(now: number = Date.now()): Promise<void> {
 }
 
 /** Tarea horaria: sube a los destinos externos la última copia si aún no la tienen (o reintenta si falló). Lanza si falla alguno. */
-export async function externalBackupJob(): Promise<void> {
-  if (backupPaused()) return;
+export async function externalBackupJob(): Promise<JobSkip | void> {
+  if (backupPaused()) return { skipped: "paused" };
+  const { destinations, errors } = externalDestinations();
+  if (destinations.length === 0 && errors.length === 0) return { skipped: "noDestination" };
   const runs = await syncExternal();
   const failed = runs.filter((r) => !r.ok);
   if (failed.length) throw new Error(failed.map((r) => `${r.label}: ${r.error}`).join(" · "));
 }
 
 /** Tarea mensual (se llama cada hora): prueba de restauración si hace más de 30 días de la última (o nunca). */
-export async function monthlyRestoreTestJob(now: number = Date.now()): Promise<void> {
-  if (!backupKey() || backupPaused() || (await latestBackupTime()) === null) return;
+export async function monthlyRestoreTestJob(now: number = Date.now()): Promise<JobSkip | void> {
+  if (!backupKey()) return { skipped: "noKey" };
+  if (backupPaused()) return { skipped: "paused" };
+  if ((await latestBackupTime()) === null) return { skipped: "noBackup" };
   const status = await readStatus();
   const last = status.lastRestoreTest ? Date.parse(status.lastRestoreTest.at) : 0;
   // Si la última prueba falló se repite al día siguiente en vez de esperar un mes.
-  if (now - last < (status.lastRestoreTest?.ok === false ? DAY_MS : RESTORE_TEST_EVERY_MS)) return;
+  const failed = status.lastRestoreTest?.ok === false;
+  if (now - last < (failed ? DAY_MS : RESTORE_TEST_EVERY_MS)) return { skipped: failed ? "retryTomorrow" : "notThisMonth" };
   // runRestoreTest no lanza: el fallo se pasa a la tarea (JobRun), como en la copia diaria.
   const run = await runRestoreTest();
   if (!run.ok) throw new Error(run.error ?? "Error");

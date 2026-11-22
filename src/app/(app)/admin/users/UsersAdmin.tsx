@@ -118,16 +118,20 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
             {maxUsers !== null
               ? t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })
               : activeCount === 1 ? t("1 usuario activo") : t("{n} usuarios activos", { n: activeCount })}
-            {/* Si hay tope, de dónde sale y cómo cambiarlo; si no, cómo ponerlo (antes solo decía que no hay registro público). */}
+            {/* Primero, en una frase para cualquiera, si hay máximo y quién da de alta; lo técnico (la variable MAX_USERS y
+                dónde se cambia), después y más pequeño. */}
             <InfoTip topic={t("Usuarios")}>
               <span className="block">
                 {maxUsers !== null
-                  ? <>{t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })}{" "}{t("Para cambiarlo, pon otro número en MAX_USERS, o quítala para no tener tope (Railway → Variables; con Docker, en el .env), y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>
-                  : <>{maxUsersSource === "invalid"
-                      ? t("La variable MAX_USERS del servidor no es un número entero válido y no se aplica: no hay tope de usuarios activos.")
-                      : t("No hay tope de usuarios activos.")}{" "}{t("Si quieres uno, pon el máximo en la variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>}
+                  ? t("Puede haber como mucho {max} usuarios activos a la vez. Las personas desactivadas no cuentan.", { max: maxUsers })
+                  : t("No hay un máximo de usuarios activos.")}{" "}
+                {t("No hay registro público: solo un administrador da de alta usuarios.")}
               </span>
-              <span className="mt-1 block">{t("No hay registro público: solo un administrador da de alta usuarios.")}</span>
+              <span className="mt-1.5 block text-xs opacity-80">
+                {maxUsers !== null
+                  ? t("Para cambiar el máximo: variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env); sin ella no hay tope. Después, reinicia Pizarro.")
+                  : <>{maxUsersSource === "invalid" && <>{t("La variable MAX_USERS del servidor no es un número entero válido y no se aplica.")}{" "}</>}{t("Para poner un máximo: variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env). Después, reinicia Pizarro.")}</>}
+              </span>
             </InfoTip>
           </p>
         </div>

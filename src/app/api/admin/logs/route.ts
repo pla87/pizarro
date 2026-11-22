@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { flushLogs, logEvent, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { CSV_BOM, csvDateParam, csvRow, csvSeparator, type LogCsvError } from "@/lib/log-csv";
+import { logDetailsShown, logMessageText } from "@/lib/log-message";
 import { appTimeZone } from "@/lib/board";
 import { parseExportRange } from "@/lib/log-range";
 import { rateLimit } from "@/lib/rate-limit";
@@ -70,7 +71,7 @@ export async function GET(req: Request) {
   logEvent({
     category: "api",
     action: "admin.logsCsv",
-    message: `Descarga de los logs en CSV (del ${range.from} al ${range.to})`,
+    label: { k: "Descarga de los logs en CSV (del {from} al {to})", p: { from: range.from, to: range.to } },
     userId: user.id,
     userName: user.name,
     path: "/api/admin/logs",
@@ -124,7 +125,7 @@ export async function GET(req: Request) {
             lines.push(csvRow([fmt.format(r.createdAt), "", "", "", r.userName, r.userId, "", maskedLine, "", "", "", ""], sep));
             continue;
           }
-          lines.push(csvRow([fmt.format(r.createdAt), r.level, r.category, r.action, r.userName, r.userId, r.projectId, r.message, r.durationMs, r.path, r.ip, r.details], sep));
+          lines.push(csvRow([fmt.format(r.createdAt), r.level, r.category, r.action, r.userName, r.userId, r.projectId, logMessageText(r, t), r.durationMs, r.path, r.ip, logDetailsShown(r.details)], sep));
         }
         sent += rows.length;
         last = rows.at(-1) ?? last;

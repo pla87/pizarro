@@ -7,6 +7,8 @@ import type { Prisma } from "../../src/generated/prisma/client";
 import { db } from "./helpers";
 import { POST } from "../../src/app/api/client-errors/route";
 import { flushLogs, logEvent } from "../../src/lib/log";
+import { logDetailsShown, logMessageText } from "../../src/lib/log-message";
+import { makeT } from "../../src/i18n/core";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 
 const state = (globalThis as unknown as { __pzLog: { queue: Prisma.AppLogCreateManyInput[]; lastPurge: number } }).__pzLog;
@@ -159,5 +161,26 @@ describe("guardado del lote", () => {
     void flushLogs();
     await flushLogs();
     assert.equal((await rows("lograce.")).length, 3);
+  });
+});
+
+describe("mensajes traducibles", () => {
+  test("con plantilla: el mensaje se guarda en español y la página lo pinta en inglés; los detalles no la muestran", async () => {
+    logEvent({ category: "test", action: "tlabel.login", label: { k: "{name} ha iniciado sesión", p: { name: "Ana" } }, details: { method: "password" } });
+    logEvent({ category: "test", action: "tlabel.view", label: { k: "Visita a {path}", p: { path: "/api/calendar/secreto123.ics" } } });
+    logEvent({ category: "test", action: "tlabel.plain", message: "Error inesperado. Inténtalo de nuevo." });
+    await flushLogs();
+    const [login, plain, view] = await rows("tlabel.");
+    const en = makeT("en");
+    assert.equal(login!.message, "Ana ha iniciado sesión");
+    assert.equal(logMessageText(login!, en), "Ana signed in");
+    assert.equal(logMessageText(login!, makeT("es")), "Ana ha iniciado sesión");
+    assert.deepEqual(logDetailsShown(login!.details), { method: "password" });
+    // Las variables, sin la credencial de la ruta (como el mensaje); sin otros detalles, «Sin detalles».
+    assert.equal(logMessageText(view!, en), "Visit to /api/calendar/…");
+    assert.equal(logDetailsShown(view!.details), null);
+    // Sin plantilla, un texto fijo del diccionario se traduce; el texto libre sale tal cual.
+    assert.equal(logMessageText(plain!, en), "Unexpected error. Please try again.");
+    assert.equal(logMessageText({ message: "Visita libre", details: null }, en), "Visita libre");
   });
 });

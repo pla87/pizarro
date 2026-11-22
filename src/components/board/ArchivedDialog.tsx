@@ -22,7 +22,7 @@ export function ArchivedDialog({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const t = useT();
   const locale = useIntlLocale();
-  const dateFmt = (iso: string) => formatDate(iso, "dateShort", locale);
+  const dateFmt = (iso: string) => formatDate(iso, "date", locale);
   const [items, setItems] = useState<ArchivedTask[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);

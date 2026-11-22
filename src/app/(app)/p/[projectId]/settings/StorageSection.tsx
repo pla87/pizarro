@@ -9,7 +9,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { formatQuotaMb, formatSize } from "@/lib/format-size";
+import { formatPercent, formatQuotaMb, formatSize } from "@/lib/format-size";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB, quotaMbValid, type QuotaSource } from "@/lib/quota";
 import { actionThrowResult } from "@/lib/stale-action";
 import type { LargeAttachment, ProjectStorage } from "@/lib/storage-stats";
@@ -163,7 +163,7 @@ export function StorageSection({ projectId, isAdmin, initial, initialLargest }: 
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
           <p className="text-sm font-medium">
             {quotaBytes === null ? t("{used} usados · sin límite", { used: fmt(storage.usedBytes) }) : t("{used} de {quota} usados", { used: fmt(storage.usedBytes), quota: formatQuotaMb(storage.quotaMb!, locale) })}
-            {pct !== null && <span className={cn("ml-2 text-xs", over ? "text-red-600" : "text-slate-500")}>{pct} %</span>}
+            {pct !== null && <span className={cn("ml-2 text-xs", over ? "text-red-600" : "text-slate-500")}>{formatPercent(pct, locale)}</span>}
           </p>
           {storage.quotaMb !== null && (
             <p className="flex items-center gap-1 text-xs text-slate-500">

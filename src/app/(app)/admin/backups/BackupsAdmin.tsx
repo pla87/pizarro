@@ -87,7 +87,19 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   const [pending, start] = useActionTransition();
   const enabled = keyState === "ok";
   // Tareas de copia que terminan sin hacer nada (y JobRun las da por correctas): se dice por qué, en vez de «Correcta».
-  const jobSkipped = (name: string): string | null => {
+  // El motivo lo anota la propia tarea (JobRun, `skipped`); las filas de versiones anteriores lo deducen de la configuración.
+  const skipText: Record<string, string> = {
+    noKey: t("Omitida: sin BACKUP_KEY"),
+    paused: t("Omitida: BACKUP_PAUSE"),
+    noDestination: t("Omitida: sin destino externo"),
+    alreadyToday: t("Omitida: ya hay copia de hoy"),
+    noBackup: t("Omitida: aún no hay ninguna copia"),
+    notThisMonth: t("Omitida: no toca este mes"),
+    retryTomorrow: t("Omitida: se repite mañana"),
+  };
+  const jobSkipped = (j: JobRunInfo): string | null => {
+    if (j.skipped) return skipText[j.skipped] ?? t("Omitida");
+    const name = j.name;
     const backupJob = name === "backup" || name === "backupExternal" || name === "restoreTest" || name === "backupAlert";
     if (!backupJob) return null;
     if (keyState !== "ok") return t("Omitida: sin BACKUP_KEY");
@@ -269,8 +281,14 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           <ShieldAlert size={16} className="mt-0.5 shrink-0" />
           <span>{t("Copias automáticas en pausa (BACKUP_PAUSE=1): no se hacen la copia diaria, la subida al destino externo ni la prueba de restauración. Quita la variable cuando termines de restaurar.")}</span>
         </p>
+      ) : enabled && destinations.external.length === 0 ? (
+        // Sin destino externo, un solo estado en ámbar (no «activadas» en verde con el aviso debajo): las copias se hacen,
+        // pero en el mismo disco que protegen. Cómo añadir uno, en «Destino externo».
+        <p data-backup-state="local-only" className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+          <ShieldAlert size={16} className="shrink-0" /> {t("Copias automáticas activas, pero solo en el disco de este servidor.")}
+        </p>
       ) : enabled ? (
-        <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
+        <p data-backup-state="ok" className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
           <ShieldCheck size={16} /> {t("Copias automáticas activadas.")}
         </p>
       ) : (
@@ -384,13 +402,13 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         ) : (
           <ul className="divide-y divide-slate-200 text-sm dark:divide-slate-800">
             {jobs.map((j) => {
-              const skipped = j.lastOk ? jobSkipped(j.name) : null;
+              const skipped = j.lastOk ? jobSkipped(j) : null;
               return (
               <li key={j.name} className="py-1.5" data-job={j.name}>
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span>{jobLabel(t, j.name)}</span>
                   <span className="flex items-center gap-2 text-slate-500">
-                    {j.lastStartedAt && formatDate(j.lastStartedAt, "dateTimeShort", locale)}
+                    {j.lastStartedAt && formatDate(j.lastStartedAt, "dateTime", locale)}
                     <span className={j.lastOk === false ? "badge bg-red-50 text-red-700 ring-red-500/20" : skipped ? "badge bg-amber-50 text-amber-800 ring-amber-500/20" : j.lastOk ? "badge bg-emerald-50 text-emerald-700 ring-emerald-500/20" : "badge bg-slate-50 text-slate-600 ring-slate-500/20"}>
                       {j.lastOk === false ? t("Con error") : skipped ?? (j.lastOk ? t("Correcta") : t("En curso"))}
                     </span>

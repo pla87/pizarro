@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { appTimeZone } from "@/lib/board";
+import { logTimeFormatter } from "@/lib/format";
+import { logDetailsShown, logMessageText } from "@/lib/log-message";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
@@ -52,17 +54,6 @@ const CATEGORY_LABELS: Record<string, string> = {
 const field =
   "rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900";
 
-/**
- * Hora de un evento: día y mes en el orden del idioma («21/11»; en en-US, «11/21») y la hora en 24 horas con segundos
- * («14:05:09») en los dos idiomas: es un registro técnico, como su CSV y los registros del servidor, y así la columna
- * queda alineada y dos eventos del mismo minuto se distinguen sin AM/PM.
- */
-function logTimeFormat(tz: string, locale: string): (d: Date) => string {
-  const day = new Intl.DateTimeFormat(locale, { timeZone: tz, day: "2-digit", month: "2-digit" });
-  const time = new Intl.DateTimeFormat(locale, { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
-  return (d) => `${day.format(d)} ${time.format(d)}`;
-}
-
 export default async function LogsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const viewer = await requireAdminPage();
   const mine = await memberPrivateProjectIds(viewer.id);
@@ -72,7 +63,9 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const filters = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
-  const formatTime = logTimeFormat(tz, locale);
+  // Compacta y con segundos, en el formato del idioma («22 nov 21:49:12»; «Nov 22 9:49:12 PM»). El CSV sigue en
+  // AAAA-MM-DD HH:MM:SS (lo lee bien Excel).
+  const formatTime = logTimeFormatter(locale);
   const categoryLabel = (c: string) => (CATEGORY_LABELS[c] ? t(CATEGORY_LABELS[c]!) : c);
 
   // Escribe los eventos pendientes para que los más recientes aparezcan.
@@ -245,7 +238,10 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
               );
             }
             const level = LEVELS.find((l) => l.value === r.level) ?? LEVELS[0];
-            const hasDetails = r.details !== null && r.details !== undefined;
+            // Mensaje en el idioma de quien lee (si se guardó su plantilla) y detalles sin ella.
+            const message = logMessageText(r, t);
+            const details = logDetailsShown(r.details);
+            const hasDetails = details !== null && details !== undefined;
             return (
               <li key={r.id}>
                 <details className="group">
@@ -259,7 +255,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                       {r.durationMs != null && <span className="ml-auto font-mono text-xs text-slate-500">{r.durationMs} ms</span>}
                     </div>
                     {/* Mensajes y detalles pueden llevar emails: a salvo de un proxy que los reescriba (EmailSafe). */}
-                    {r.message && <p className="mt-1 break-words text-slate-800 dark:text-slate-100"><EmailSafe text={r.message} /></p>}
+                    {message && <p className="mt-1 break-words text-slate-800 dark:text-slate-100"><EmailSafe text={message} /></p>}
                     {r.path && <p className="mt-0.5 break-all font-mono text-xs text-slate-500">{r.path}</p>}
                   </summary>
                   <div className="space-y-1 bg-slate-50 px-3 py-2 text-xs dark:bg-slate-900/60">
@@ -268,7 +264,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
                     </p>
                     {hasDetails ? (
                       <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 font-mono dark:bg-slate-950">
-                        <EmailSafe text={JSON.stringify(r.details, null, 2)} />
+                        <EmailSafe text={JSON.stringify(details, null, 2)} />
                       </pre>
                     ) : (
                       <p className="text-slate-500">{t("Sin detalles.")}</p>

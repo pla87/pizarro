@@ -1,7 +1,7 @@
 // Tamaños legibles: los de la interfaz (Ajustes → Adjuntos, detalle de la tarea) y los de los mensajes del registro.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatSize, logSize } from "../src/lib/format-size";
+import { formatPercent, formatSize, logSize } from "../src/lib/format-size";
 
 test("formatSize: KB por debajo de 1 MB (nunca «0 KB» si hay algo), MB y GB", () => {
   assert.equal(formatSize(0), "0 KB");
@@ -17,4 +17,10 @@ test("logSize: bytes por debajo de 1 KB (antes «subido (0 KB)»), KB redondeado
   assert.equal(logSize(312), "312 B");
   assert.equal(logSize(1024), "1 KB");
   assert.equal(logSize(5 * 1024 * 1024), "5120 KB");
+});
+
+test("formatPercent: «40 %» en español y «40%» en inglés americano, sin decimales", () => {
+  assert.equal(formatPercent(40), "40 %");
+  assert.equal(formatPercent(0, "en-US"), "0%");
+  assert.equal(formatPercent(99.6, "en-US"), "100%");
 });

@@ -3,8 +3,10 @@ import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
 import { cleanText, clipText, isConnectionError } from "./log-clean";
+import { LOG_LABEL_KEY } from "./log-message";
 import { notePresence } from "./presence";
 import { maskSecretPaths } from "./secret-path";
+import { renderLabelEs, type Label, type Params } from "./undo-label";
 
 // Registro de actividad (Administración → Logs). Los eventos se acumulan en memoria y se
 // escriben en lote cada pocos segundos: registrar nunca añade una consulta a la petición.
@@ -18,6 +20,11 @@ interface LogEvent {
   /** Nombre del evento, p. ej. «tasks.createTask». */
   action: string;
   message?: string;
+  /**
+   * Plantilla traducible del mensaje ({ k: texto en español con {variables}, p: variables }): la página de Logs la pinta
+   * en el idioma de quien la lee. Sin `message`, el mensaje guardado es la plantilla en español.
+   */
+  label?: Label;
   userId?: string | null;
   userName?: string | null;
   projectId?: string | null;
@@ -74,6 +81,24 @@ function sanitize(value: unknown, depth = 0): unknown {
   return cleanText(String(value));
 }
 
+/**
+ * Detalles ya saneados con la plantilla del mensaje (ver log-message.ts). Se sanea aparte, desde su propio nivel: dentro
+ * de los detalles, las variables anidadas pasaban del tope de profundidad y se perdían. Unos detalles que no son un
+ * objeto se quedan sin plantilla (el mensaje sale en español).
+ */
+function withLabel(details: unknown, label: Label | undefined): Prisma.InputJsonValue | undefined {
+  if (!label || (details !== undefined && (details === null || typeof details !== "object" || Array.isArray(details)))) return details as Prisma.InputJsonValue | undefined;
+  return { ...(details as Record<string, unknown> | undefined), [LOG_LABEL_KEY]: sanitize(maskLabel(label)) } as Prisma.InputJsonValue;
+}
+
+/** Las variables de la plantilla, sin rutas con credencial (como el mensaje). */
+function maskLabel(label: Label): Label {
+  if (!label.p) return label;
+  const param = (v: Params[string]): Params[string] =>
+    typeof v === "string" ? maskSecretPaths(v) : typeof v === "number" ? v : Array.isArray(v) ? v.map(maskLabel) : maskLabel(v);
+  return { k: label.k, p: Object.fromEntries(Object.entries(label.p).map(([n, v]) => [n, param(v)])) };
+}
+
 /** Texto opcional limpio y recortado (null si no hay). */
 const optText = (s: string | null | undefined, max: number) => (s ? clipText(s, max) : null);
 
@@ -83,7 +108,7 @@ export function logEvent(e: LogEvent): void {
     // Última red de seguridad: ninguna ruta con credencial en la URL (calendario, /reset/, /confirm/) llega al registro.
     // Todo texto se limpia (NUL, medio emoji) y se recorta sin partir emojis: PostgreSQL rechazaría la fila (y su lote).
     // El projectId puede venir de los argumentos del cliente (ver lib/action.ts), así que también.
-    const message = clipText(maskSecretPaths(e.message ?? ""), 1000);
+    const message = clipText(maskSecretPaths(e.message ?? (e.label ? renderLabelEs(e.label) : "")), 1000);
     const projectId = optText(e.projectId ?? store?.projectId, 100);
     state.queue.push({
       createdAt: new Date(),
@@ -99,7 +124,7 @@ export function logEvent(e: LogEvent): void {
       path: e.path ? clipText(maskSecretPaths(e.path), 500) : null,
       durationMs: e.durationMs == null ? null : Math.round(e.durationMs),
       ip: optText(e.ip, 100),
-      details: e.details === undefined ? undefined : (sanitize(e.details) as Prisma.InputJsonValue),
+      details: withLabel(e.details === undefined ? undefined : sanitize(e.details), e.label),
     });
     // Presencia en el tablero: cualquier acción. Las visitas de página no (el tablero se refresca solo): abrir el tablero o
     // una tarea lo anotan sus propios sondeos (rutas de presence y viewers).

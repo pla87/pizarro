@@ -47,7 +47,13 @@ export async function completeLogin(
   }
   logEvent({
     category: "auth", action: "auth.login",
-    message: `${user.name} ha iniciado sesión${how.method === "google" ? " con Google" : how.method === "google+2fa" ? " con Google y verificación en dos pasos" : how.method === "password+2fa" ? " (con verificación en dos pasos)" : ""}`,
+    label: {
+      k: how.method === "google" ? "{name} ha iniciado sesión con Google"
+        : how.method === "google+2fa" ? "{name} ha iniciado sesión con Google y verificación en dos pasos"
+        : how.method === "password+2fa" ? "{name} ha iniciado sesión (con verificación en dos pasos)"
+        : "{name} ha iniciado sesión",
+      p: { name: user.name },
+    },
     userId: user.id, userName: user.name, path: how.path, ip, details: { email: user.email, method: how.method },
   });
 }

@@ -218,7 +218,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
                     {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-s-2 border-slate-300 ps-2 dark:border-slate-600")}>{body}</p>}
                     <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      {formatDate(n.createdAt, "dateTimeShort", locale)}
+                      {formatDate(n.createdAt, "dateTime", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}
                       {n.viaWhatsapp && <span className="inline-flex items-center gap-0.5" title={t("Enviado por WhatsApp")}><MessageCircle size={12} /></span>}
                       {n.viaTelegram && <span className="inline-flex items-center gap-0.5" title={t("Enviado por Telegram")}><Send size={12} /></span>}
