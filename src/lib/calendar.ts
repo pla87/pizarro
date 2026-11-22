@@ -139,6 +139,21 @@ export function dragRange(origin: { start: string; due: string }, mode: RangeDra
   return { start: origin.start, due: hover < origin.start ? origin.start : hover };
 }
 
+/** Con el dedo o un lápiz, una banda solo se arrastra tras mantenerla pulsada este tiempo sin moverla. */
+export const TOUCH_DRAG_DELAY_MS = 350;
+/** Distancia (px) que hay que mover el puntero para que cuente como movimiento y no como pulsación. */
+const DRAG_SLOP_PX = 5;
+
+/**
+ * Qué hacer con un movimiento del puntero sobre una banda antes de que empiece el arrastre: con el ratón, arrastrar en
+ * cuanto se mueve; con el dedo, solo si ya se ha mantenido pulsada (`held`); si se mueve antes, se suelta la banda para
+ * que el navegador desplace la página (deslizar para bajar por el mes no debe cambiar ninguna fecha).
+ */
+export function pendingBandDrag(pointerType: string, held: boolean, distance: number): "wait" | "drag" | "abort" {
+  if (distance < DRAG_SLOP_PX) return "wait";
+  return pointerType === "mouse" || held ? "drag" : "abort";
+}
+
 /** Columna (0..cols-1) que corresponde a la coordenada x dentro de una fila de `width` px que empieza en `left`; se ajusta a los extremos. */
 export function columnAt(x: number, left: number, width: number, cols: number = 7): number {
   if (!(width > 0)) return 0;

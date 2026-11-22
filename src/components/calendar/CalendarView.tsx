@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { undoLast } from "@/actions/undo";
 import { moveDeliverable } from "@/actions/projects";
 import { updateTask } from "@/actions/tasks";
-import { PERSON_UNASSIGNED, bandsForWeek, columnAt, dragRange, groupByDay, groupWeeks, isRange, rangeBandsForWeek, shiftMonth, weekRangeEnds, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
+import { PERSON_UNASSIGNED, TOUCH_DRAG_DELAY_MS, bandsForWeek, columnAt, dragRange, groupByDay, groupWeeks, isRange, pendingBandDrag, rangeBandsForWeek, shiftMonth, weekRangeEnds, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
 import { kindBadgeStyle } from "@/lib/constants";
 import { addDaysIso, daysBetween, formatDay } from "@/lib/dates";
 import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
@@ -90,6 +90,9 @@ interface BandDrag {
   x: number;
   y: number;
   moved: boolean;
+  /** Ratón: siempre. Dedo o lápiz: tras la pulsación larga (TOUCH_DRAG_DELAY_MS sin moverse). */
+  held: boolean;
+  pointerType: string;
   last: string | null;
   result: Preview | null;
   stop: () => void;
@@ -216,12 +219,6 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   const [undoing, setUndoing] = useState(false);
   const focusAfter = useRef<string | null>(null);
 
-  useEffect(() => {
-    // Tras mover con teclado el chip se vuelve a pintar en otro día: recupera el foco.
-    if (!focusAfter.current) return;
-    document.querySelector<HTMLElement>(`[data-chip="${focusAfter.current}"], [data-band="${focusAfter.current}"]`)?.focus();
-    focusAfter.current = null;
-  });
 
   // Móvil, mes actual: al abrirlo se baja hasta hoy (o hasta el primer día con algo a partir de hoy). Solo al cambiar de
   // mes, no en cada refresco de los datos, y no si ya se ha desplazado la página. Con vencidas de meses anteriores no se
@@ -277,6 +274,23 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     [deliverables, today, filters.hideDone, delOverrides, preview],
   );
   const delById = useMemo(() => new Map(dels.map((d) => [d.id, d])), [dels]);
+
+  useEffect(() => {
+    // Tras mover con teclado el chip se vuelve a pintar en otro día: recupera el foco.
+    const id = focusAfter.current;
+    if (!id) return;
+    focusAfter.current = null;
+    const el = document.querySelector<HTMLElement>(`[data-chip="${CSS.escape(id)}"], [data-band="${CSS.escape(id)}"]`);
+    if (el) return el.focus();
+    // En un día lleno la tarea puede quedar dentro de «+N más»: se abre ese panel y el foco va a la tarea (en el siguiente
+    // dibujo, ya con el panel). Si el panel ya está abierto y no aparece, al menos al botón del día.
+    const due = items.find((x) => x.id === id)?.due;
+    const toggle = due && document.querySelector<HTMLElement>(`[data-day-toggle="${CSS.escape(due)}"]`);
+    if (!toggle) return;
+    if (openDay === due) return toggle.focus();
+    focusAfter.current = id;
+    setOpenDay(due);
+  }, [items, dels, openDay]);
   const repeatsByDay = useMemo(() => groupByDay(repeats, (r) => r.due), [repeats]);
   const delByDay = useMemo(() => groupByDay(dels, (d) => d.due), [dels]);
 
@@ -501,9 +515,23 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const grabbed = dayAtPoint(e.clientX, e.clientY);
     if (!grabbed) return;
     if (mode !== "move") e.stopPropagation();
-    const drag: BandDrag = { kind, id, mode, grabbed, origin, x: e.clientX, y: e.clientY, moved: false, last: null, result: null, stop: () => {} };
+    const pointerType = e.pointerType || "mouse";
+    const band = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-band]");
+    const drag: BandDrag = { kind, id, mode, grabbed, origin, x: e.clientX, y: e.clientY, moved: false, held: pointerType === "mouse", pointerType, last: null, result: null, stop: () => {} };
+    // Con el dedo, la banda se coge tras una pulsación larga (la marca data-held); antes, deslizar desplaza la página
+    // (touch-pan-y) y el navegador cancela este puntero con pointercancel.
+    const holdTimer = drag.held
+      ? undefined
+      : setTimeout(() => {
+          drag.held = true;
+          band?.setAttribute("data-held", "");
+        }, TOUCH_DRAG_DELAY_MS);
     const onMove = (ev: PointerEvent) => {
-      if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 5) return;
+      if (!drag.moved) {
+        const step = pendingBandDrag(drag.pointerType, drag.held, Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y));
+        if (step === "wait") return;
+        if (step === "abort") return finish(true);
+      }
       drag.moved = true;
       if (labelRef.current) labelRef.current.style.transform = `translate(${ev.clientX + 14}px, ${ev.clientY + 14}px)`;
       const day = dayAtPoint(ev.clientX, ev.clientY);
@@ -518,7 +546,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const finish = (cancel: boolean) => {
       drag.stop();
       dragRef.current = null;
-      if (drag.moved) {
+      // Soltar tras una pulsación larga sin mover tampoco abre la tarea: se había cogido para arrastrarla.
+      if (drag.moved || (drag.held && drag.pointerType !== "mouse")) {
         suppressClick.current = true;
         setTimeout(() => (suppressClick.current = false), 150);
       }
@@ -528,15 +557,27 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const onUp = () => finish(false);
     const onCancel = () => finish(true);
     const onEsc = (ev: KeyboardEvent) => ev.key === "Escape" && finish(true);
+    // Ya cogida con el dedo, el navegador no debe desplazar la página (perderíamos el puntero al pasar de semana) ni
+    // abrir el menú de la pulsación larga sobre el enlace.
+    const onTouchMove = (ev: TouchEvent) => drag.held && ev.cancelable && ev.preventDefault();
+    const onContextMenu = (ev: Event) => ev.preventDefault();
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onEsc);
+    if (!drag.held) {
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      window.addEventListener("contextmenu", onContextMenu);
+    }
     drag.stop = () => {
+      clearTimeout(holdTimer);
+      band?.removeAttribute("data-held");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("keydown", onEsc);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("contextmenu", onContextMenu);
     };
     dragRef.current = drag;
   };
@@ -585,7 +626,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       data-overdue={isOverdue(task, today) || undefined}
     >
       {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
-      <span className="truncate">{task.title}</span>
+      <span dir="auto" className="truncate">{task.title}</span>
       {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
     </Link>
   );
@@ -611,7 +652,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       >
         <Repeat size={size === "sm" ? 11 : 13} className="shrink-0" aria-hidden />
         {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={r.projectName}>{initials(r.projectName)}</span>}
-        <span className="min-w-0 flex-1 truncate">{r.title}</span>
+        <span dir="auto" className="min-w-0 flex-1 truncate">{r.title}</span>
         <span className="sr-only">{` (${t("Repetición prevista")}: ${rule})`}</span>
       </Link>
     );
@@ -687,7 +728,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
               <li key={p.id}>
                 <button type="button" role="checkbox" aria-checked={draft.includes(p.id)} onClick={() => toggleProject(p.id)} className={optionCls}>
                   <CheckBox on={draft.includes(p.id)} />
-                  <span className="min-w-0 truncate">{p.name}</span>
+                  <span dir="auto" className="min-w-0 truncate">{p.name}</span>
                 </button>
               </li>
             ))}
@@ -717,7 +758,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
               <li key={o.id}>
                 <button type="button" role="checkbox" aria-checked={draftPeople.includes(o.id)} onClick={() => togglePerson(o.id)} className={optionCls}>
                   <CheckBox on={draftPeople.includes(o.id)} />
-                  <span className="min-w-0 truncate">{o.label}</span>
+                  <span dir="auto" className="min-w-0 truncate">{o.label}</span>
                 </button>
               </li>
             ))}
@@ -755,7 +796,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
             return (
               <div key={week[0]!.iso} data-week={week[0]!.iso} className="border-b border-slate-200 last:border-b-0 dark:border-slate-800">
                 {bands.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" aria-label={t("Entregables")}>
+                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Entregables")}>
                     {visibleBands(bands, MAX_BANDS).map((b) => {
                       const d = delById.get(b.id)!;
                       const status = d.status;
@@ -774,7 +815,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           style={{ gridColumn: `${b.colStart} / ${b.colEnd + 1}` }}
                           title={`${d.name} · ${showProject ? `${d.projectName} · ` : ""}${t("{done} de {total} tareas", { done: d.done, total: d.total })} · ${t(status)}`}
                           className={cn(
-                            "relative flex h-5 min-w-0 cursor-grab touch-none items-center gap-1 overflow-hidden border px-1.5 text-[11px] leading-5 outline-offset-1 hover:brightness-95 focus-visible:outline-3 focus-visible:outline-focus",
+                            "relative flex h-5 min-w-0 cursor-grab touch-pan-y select-none items-center [-webkit-touch-callout:none] data-held:z-10 data-held:ring-2 data-held:ring-brand-500 gap-1 overflow-hidden border px-1.5 text-[11px] leading-5 outline-offset-1 hover:brightness-95 focus-visible:outline-3 focus-visible:outline-focus",
                             preview?.id === b.id && "z-10 opacity-80 ring-2 ring-brand-500",
                             STATUS_STYLE[status],
                             b.continuesLeft ? "rounded-l-none border-l-0" : "rounded-l",
@@ -783,7 +824,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                         >
                           <span className={cn("pointer-events-none absolute inset-y-0 left-0", STATUS_BAR[status])} style={{ width: `${d.pct}%` }} aria-hidden />
                           {b.endsHere && <Flag size={11} className="relative shrink-0" aria-hidden />}
-                          <span className="relative truncate font-medium">{d.name}</span>
+                          <span dir="auto" className="relative truncate font-medium">{d.name}</span>
                           <span className="relative ml-auto shrink-0 tabular-nums">{d.total ? `${d.done}/${d.total}` : t(status)}</span>
                         </Link>
                       );
@@ -800,7 +841,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                               return (
                                 <Link key={b.id} href={`/p/${d.projectId}`} className={cn("flex min-w-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-5", STATUS_STYLE[d.status])}>
                                   <Flag size={11} className="shrink-0" aria-hidden />
-                                  <span className="truncate font-medium">{d.name}</span>
+                                  <span dir="auto" className="truncate font-medium">{d.name}</span>
                                   <span className="ml-auto shrink-0 tabular-nums">{shortDay(d.due)}</span>
                                 </Link>
                               );
@@ -812,7 +853,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                   </div>
                 )}
                 {rangeBands.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" aria-label={t("Tareas con rango de fechas")}>
+                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Tareas con rango de fechas")}>
                     {visibleBands(rangeBands, MAX_RANGES).map((b) => {
                       const task = rangedById.get(b.id)!;
                       return (
@@ -828,7 +869,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           style={{ gridColumn: `${b.colStart} / ${b.colEnd + 1}`, ...kindBadgeStyle(task.kind.color) }}
                           title={`${task.title} · ${task.kind.name}${showProject ? ` · ${task.projectName}` : ""} · ${shortDay(task.start!)} → ${shortDay(task.due)}`}
                           className={cn(
-                            "kind-badge relative flex h-5 min-w-0 cursor-grab touch-none items-center gap-1 overflow-hidden px-1.5 text-xs leading-5 outline-offset-1 hover:brightness-95 focus-visible:outline-3 focus-visible:outline-focus",
+                            "kind-badge relative flex h-5 min-w-0 cursor-grab touch-pan-y select-none items-center [-webkit-touch-callout:none] data-held:z-10 data-held:ring-2 data-held:ring-brand-500 gap-1 overflow-hidden px-1.5 text-xs leading-5 outline-offset-1 hover:brightness-95 focus-visible:outline-3 focus-visible:outline-focus",
                             preview?.id === b.id && "z-10 opacity-80 ring-2 ring-brand-500",
                             b.continuesLeft ? "rounded-l-none" : "rounded-l",
                             b.endsHere ? "rounded-r" : "rounded-r-none",
@@ -836,7 +877,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           )}
                         >
                           {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
-                          <span className="truncate">{task.title}</span>
+                          <span dir="auto" className="truncate">{task.title}</span>
                           {!b.continuesLeft && <span onPointerDown={(e) => startBandDrag(e, "task", b.id, "start", { start: task.start!, due: task.due })} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" aria-hidden />}
                           {b.endsHere && <span onPointerDown={(e) => startBandDrag(e, "task", b.id, "end", { start: task.start!, due: task.due })} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" aria-hidden />}
                         </Link>
@@ -853,7 +894,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                               const task = rangedById.get(b.id)!;
                               return (
                                 <Link key={b.id} href={`/p/${task.projectId}?task=${task.id}`} style={kindBadgeStyle(task.kind.color)} className={cn("kind-badge flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs leading-5", task.done && "opacity-55 line-through")}>
-                                  <span className="truncate">{task.title}</span>
+                                  <span dir="auto" className="truncate">{task.title}</span>
                                   <span className="ml-auto shrink-0 tabular-nums opacity-80">{shortDay(task.start!)} → {shortDay(task.due)}</span>
                                 </Link>
                               );
@@ -979,7 +1020,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                         <Link href={`/p/${d.projectId}`} className={cn("relative flex min-w-0 items-center gap-1.5 overflow-hidden rounded border px-2 py-1 text-xs", STATUS_STYLE[d.status])}>
                           <span className={cn("pointer-events-none absolute inset-y-0 left-0", STATUS_BAR[d.status])} style={{ width: `${d.pct}%` }} aria-hidden />
                           <Flag size={12} className="relative shrink-0" aria-hidden />
-                          <span className="relative min-w-0 flex-1 truncate font-medium">{d.name}</span>
+                          <span dir="auto" className="relative min-w-0 flex-1 truncate font-medium">{d.name}</span>
                           <span className="relative shrink-0 tabular-nums">{d.total ? `${d.done}/${d.total} · ` : ""}{t(d.status)}</span>
                         </Link>
                       </li>
@@ -992,7 +1033,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", task.done && "opacity-55 line-through", isOverdue(task, today) && OVERDUE_MARK)}
                           data-overdue={isOverdue(task, today) || undefined}
                         >
-                          <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                          <span dir="auto" className="min-w-0 flex-1 truncate">{task.title}</span>
                           {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
                           {isRange(task.start, task.due) && <span className="shrink-0 text-xs tabular-nums opacity-80">{shortDay(task.start!)} → {shortDay(task.due)}</span>}
                           {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
@@ -1037,7 +1078,7 @@ function OverdueList({ overdue, today, showProject, jumpToToday }: { overdue: { 
                 style={kindBadgeStyle(task.kind.color)}
                 className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", OVERDUE_MARK)}
               >
-                <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                <span dir="auto" className="min-w-0 flex-1 truncate">{task.title}</span>
                 {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
                 <span className="shrink-0 text-xs font-semibold tabular-nums">
                   <span className="sr-only">{`${t("Plazo vencido")}: `}</span>

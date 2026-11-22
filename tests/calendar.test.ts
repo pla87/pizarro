@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
+import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, pendingBandDrag, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 import { midnightStep, msUntilNextDay } from "../src/lib/dates";
 import { readFileSync } from "node:fs";
@@ -148,6 +148,26 @@ test("parsePersonParam: enlaces antiguos (me, none, un id)", () => {
   assert.deepEqual(parsePersonParam("abc123", "me1"), ["abc123"]);
   // «me» y el id propio se funden en una sola entrada.
   assert.deepEqual(parsePersonParam("me,me1,none,unassigned", "me1"), ["me1", "unassigned"]);
+});
+
+test("pendingBandDrag: con el ratón arrastra al moverse; con el dedo, solo tras la pulsación larga (si no, deja desplazar)", () => {
+  assert.equal(pendingBandDrag("mouse", true, 2), "wait");
+  assert.equal(pendingBandDrag("mouse", true, 6), "drag");
+  // Deslizar el dedo para bajar por el mes, empezando sobre una banda: no la coge.
+  assert.equal(pendingBandDrag("touch", false, 2), "wait");
+  assert.equal(pendingBandDrag("touch", false, 30), "abort");
+  assert.equal(pendingBandDrag("pen", false, 30), "abort");
+  // Mantenida pulsada sin moverse: ya se arrastra.
+  assert.equal(pendingBandDrag("touch", true, 30), "drag");
+  assert.equal(pendingBandDrag("pen", true, 6), "drag");
+});
+
+test("Calendario: las bandas dejan desplazar la página con el dedo y sus grupos tienen rol (si no, se descarta su nombre)", () => {
+  const src = readFileSync("src/components/calendar/CalendarView.tsx", "utf8");
+  assert.ok(!src.includes("touch-none"), "touch-pan-y en las bandas, no touch-none");
+  assert.equal(src.match(/touch-pan-y/g)?.length, 3, "las dos clases de banda (y el comentario de startBandDrag)");
+  assert.match(src, /role="group" aria-label=\{t\("Entregables"\)\}/);
+  assert.match(src, /role="group" aria-label=\{t\("Tareas con rango de fechas"\)\}/);
 });
 
 test("dragRange: mover conserva la duración y desplaza ambas fechas", () => {
