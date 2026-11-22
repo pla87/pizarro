@@ -76,11 +76,11 @@ export const EXAMPLE_LABEL: Record<ExampleLocale, TemplateData["labels"][number]
 const WELCOME_ES =
   "Cada columna es una fase del trabajo: **arrastra** las tarjetas de una a otra según avancen.\n\n" +
   "Pulsa una tarjeta para abrirla: allí añades subtareas, comentarios, adjuntos y fechas.\n\n" +
-  "Las tarjetas de ejemplo llevan la etiqueta «Ejemplo». Cuando no las necesites, pulsa «Seleccionar», marca las tarjetas y bórralas; o ábrelas y bórralas una a una.";
+  "Las tarjetas de ejemplo llevan la etiqueta «Ejemplo». Cuando no las necesites, marca la casilla de cada una (arriba a la izquierda de la tarjeta) o la de la cabecera de la columna y pulsa «Borrar» en la barra que aparece abajo; o ábrelas y bórralas una a una.";
 const WELCOME_EN =
   "Each column is a stage of the work: **drag** cards from one to the next as they progress.\n\n" +
   "Click a card to open it: that is where you add subtasks, comments, attachments and dates.\n\n" +
-  "The sample cards carry the “Example” label. When you no longer need them, click “Select”, tick the cards and delete them; or open them and delete them one by one.";
+  "The sample cards carry the “Example” label. When you no longer need them, check the box on each card (top left) or the one in the column header and click “Delete” in the bar that appears at the bottom; or open them and delete them one by one.";
 
 export const PROJECT_EXAMPLES: BuiltinExamples[] = [
   // --- Vibecoding -----------------------------------------------------------------------------------------------
@@ -102,7 +102,7 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
         { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Improvement" },
         { title: "Idea: dark mode for the app", description: "Ideas start here. Once you decide to build them, drag them to “Backlog”.", column: 0, kind: "Improvement" },
         { title: "Fix the error when saving the form", description: "Card types (Feature, Bug fix, Improvement) organize the release notes.", column: 1, generalKind: "bugfix", labels: ["Frontend"], subtasks: ["Reproduce the error", "Write the test", "Fix it"] },
-        { title: "Add sign-in with email", description: "Subtasks are ticked from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", labels: ["Backend"], dueInDays: 5, subtasks: ["Ask the AI for the change", "Review the diff", "Try it on a phone"] },
+        { title: "Add sign-in with email", description: "Subtasks are checked off from the card; the progress bar shows on the board.", column: 2, generalKind: "feature", labels: ["Backend"], dueInDays: 5, subtasks: ["Ask the AI for the change", "Review the diff", "Try it on a phone"] },
         { title: "Speed up loading the order list", description: "“Review and test” is where you check what the AI did before it goes into the release.", column: 3, kind: "Improvement", labels: ["Needs review"] },
         { title: "Help text on the settings page", description: "Whatever is in “Next release” appears in the notes when you click “Generate release”. Once published, these cards move to “In production”.", column: 4, kind: "Improvement" },
       ],
@@ -118,7 +118,7 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
         { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nCliente, prioridad y coste son campos de la tarjeta: permiten filtrar y agrupar. En los ajustes del proyecto puedes activar otros (horas, fecha de inicio).", column: 0, kind: "Encargo" },
         { title: "Presupuesto de rediseño de la tienda", description: "El coste queda en la tarjeta. Si el cliente acepta, arrástrala a «En curso».", column: 0, kind: "Propuesta o presupuesto", client: "Cliente A", cost: 1800 },
         { title: "Diseño del catálogo", description: "El campo «Cliente» permite filtrar y agrupar los encargos por cliente.", column: 1, kind: "Encargo", client: "Cliente B", priority: "ALTA", dueInDays: 6, subtasks: ["Primer borrador", "Revisar con el cliente", "Versión final"] },
-        { title: "Esperando la aprobación del logotipo", description: "En «Esperando» la tarjeta avisa a quien la lleva si pasan varios días sin respuesta.", column: 2, kind: "Encargo", client: "Cliente A" },
+        { title: "Esperando la aprobación del logotipo", description: "En «Esperando» la tarjeta avisa a su responsable (o, sin él, a quien la creó) si pasan varios días sin respuesta.", column: 2, kind: "Encargo", client: "Cliente A" },
         { title: "Revisar la web de Cliente C antes de entregarla", description: "En «Revisión», si sacas la tarjeta con alguna subtarea sin marcar, avisa.", column: 3, kind: "Encargo", client: "Cliente C", subtasks: ["Probar en el móvil", "Revisar los textos"] },
         { title: "Enviar las facturas del mes", description: "Las tarjetas de «Tareas periódicas» se repiten solas: al pasarlas a «Hecho» aparece la siguiente.", column: 4, kind: "Facturación", recurrence: "MONTHLY", recurrenceDay: 1 },
         { title: "Cobrar la factura de marzo", description: "Lo terminado queda en «Hecho» y cuenta como avance en los informes.", column: 5, kind: "Facturación", client: "Cliente B", cost: 950 },
@@ -129,8 +129,8 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
         { title: "Welcome: how this board works", description: WELCOME_EN + "\n\nClient, priority and cost are card fields: you can filter and group by them. Turn on others in the project settings (hours, start date).", column: 0, kind: "Job" },
         { title: "Quote for the shop redesign", description: "The cost stays on the card. If the client accepts, drag it to “In progress”.", column: 0, kind: "Proposal or quote", client: "Client A", cost: 1800 },
         { title: "Catalog design", description: "The “Client” field lets you filter and group jobs by client.", column: 1, kind: "Job", client: "Client B", priority: "ALTA", dueInDays: 6, subtasks: ["First draft", "Review with the client", "Final version"] },
-        { title: "Waiting for logo approval", description: "In “Waiting”, the card reminds its owner if several days pass without a reply.", column: 2, kind: "Job", client: "Client A" },
-        { title: "Check Client C's website before delivery", description: "In “Review”, moving the card out with an unticked subtask shows a warning.", column: 3, kind: "Job", client: "Client C", subtasks: ["Try it on a phone", "Proofread the copy"] },
+        { title: "Waiting for logo approval", description: "In “Waiting”, the card reminds its assignee (or, without one, whoever created it) if several days pass without a reply.", column: 2, kind: "Job", client: "Client A" },
+        { title: "Check Client C's website before delivery", description: "In “Review”, moving the card out with an unchecked subtask shows a warning.", column: 3, kind: "Job", client: "Client C", subtasks: ["Try it on a phone", "Proofread the copy"] },
         { title: "Send this month's invoices", description: "Cards in “Periodic tasks” repeat on their own: move one to “Done” and the next one appears.", column: 4, kind: "Invoicing", recurrence: "MONTHLY", recurrenceDay: 1 },
         { title: "Collect the March invoice", description: "Finished work stays in “Done” and counts as progress in the reports.", column: 5, kind: "Invoicing", client: "Client B", cost: 950 },
       ],
@@ -155,10 +155,10 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
     en: {
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN, column: 0, kind: "Home" },
-        { title: "Fix the kitchen tap", description: "Whatever is in “This week” prints as a PDF by day or by person (column menu).", column: 1, kind: "Home", labels: ["Urgent"] },
+        { title: "Fix the kitchen faucet", description: "Whatever is in “This week” prints as a PDF by day or by person (column menu).", column: 1, kind: "Home", labels: ["Urgent"] },
         { title: "Quote for painting the living room", description: "In “Waiting”, the card reminds you if several days pass without a reply. The amount goes in the “Cost” field.", column: 2, kind: "Renovation or repair", cost: 600 },
         { title: "Shopping list", description: "The “Shopping list” column gathers the subtasks of all its cards into a single list you can open or print (column menu).", column: 3, kind: "Shopping", subtasks: ["Milk", "Bread", "Fruit", "Detergent"] },
-        { title: "Dentist check-up", description: "In “Appointments”, cards with a date form an agenda you can add to your phone's calendar.", column: 4, kind: "Appointment", dueInDays: 7 },
+        { title: "Dentist checkup", description: "In “Appointments”, cards with a date form an agenda you can add to your phone's calendar.", column: 4, kind: "Appointment", dueInDays: 7 },
         { title: "Take out the trash", description: "Cards in “Routines” repeat on their own: move one to “Done” and the next one appears.", column: 5, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 2 },
         { title: "Deep clean", description: "Repeats weekly, on Saturdays.", column: 5, kind: "Home", recurrence: "WEEKLY", recurrenceDay: 6 },
       ],
@@ -177,7 +177,7 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
       ],
       tasks: [
         { title: "Bienvenida: así se usa este tablero", description: WELCOME_ES + "\n\nLos **entregables** (hitos con fecha) se ven en el calendario del proyecto y se asignan a cada tarjeta.", column: 0, kind: "Actividad o programa" },
-        { title: "Pedir presupuesto de catering", description: "En «Por confirmar» una tarjeta avisa a su responsable si lleva varios días sin moverse.", column: 1, kind: "Proveedor" },
+        { title: "Pedir presupuesto de catering", description: "En «Por confirmar» una tarjeta avisa a su responsable (o, sin él, a quien la creó) si lleva varios días sin moverse.", column: 1, kind: "Proveedor" },
         { title: "Alquiler de sonido", description: "En la columna «Reservado» se suma el coste de sus tarjetas.", column: 2, kind: "Proveedor", cost: 450 },
         { title: "Elegir el lugar", description: "Está vinculada al entregable «Lugar reservado», que aparece en el calendario.", column: 3, kind: "Lugar o alojamiento", deliverable: 0, dueInDays: 10, subtasks: ["Visitar dos salas", "Comparar condiciones", "Reservar"] },
         { title: "Enviar las invitaciones", description: "Cada tarjeta puede tener fecha límite y entregable.", column: 3, kind: "Invitados", deliverable: 1, dueInDays: 28, subtasks: ["Cerrar la lista", "Enviar el correo", "Confirmar asistencia"] },
@@ -193,7 +193,7 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
       ],
       tasks: [
         { title: "Welcome: how this board works", description: WELCOME_EN + "\n\n**Deliverables** (milestones with a date) show on the project calendar and are assigned to each card.", column: 0, kind: "Activity or program" },
-        { title: "Ask for a catering quote", description: "In “To confirm”, a card reminds its owner if it has not moved for a few days.", column: 1, kind: "Supplier" },
+        { title: "Ask for a catering quote", description: "In “To confirm”, a card reminds its assignee (or, without one, whoever created it) if it has not moved for a few days.", column: 1, kind: "Supplier" },
         { title: "Sound equipment rental", description: "The “Booked” column adds up the cost of its cards.", column: 2, kind: "Supplier", cost: 450 },
         { title: "Choose the venue", description: "Linked to the “Venue booked” deliverable, which shows on the calendar.", column: 3, kind: "Venue or accommodation", deliverable: 0, dueInDays: 10, subtasks: ["Visit two rooms", "Compare terms", "Book it"] },
         { title: "Send the invitations", description: "Every card can have a due date and a deliverable.", column: 3, kind: "Guests", deliverable: 1, dueInDays: 28, subtasks: ["Close the list", "Send the email", "Confirm attendance"] },
@@ -222,7 +222,7 @@ export const PROJECT_EXAMPLES: BuiltinExamples[] = [
         { title: "Topic: the basics", description: "Subtasks show your progress; the “Hours” field keeps the time planned and spent.", column: 1, kind: "Topic or lesson", labels: ["Block 1"], dueInDays: 3, estimatedHours: 2, subtasks: ["Read or watch the lesson", "Make an outline or summary", "Do the exercises"] },
         { title: "Practice: review flashcards", description: "Cards in “Reviews” repeat on their own: move one to “Done” and the next one appears.", column: 2, kind: "Practice", recurrence: "WEEKLY", recurrenceDay: 1 },
         { title: "Write: first assignment", description: "In “Waiting for feedback”, the card reminds you if several days pass without a reply from the teacher or supervisor.", column: 3, kind: "Writing", labels: ["Block 1"] },
-        { title: "Block 1 exam", description: "With a start date and a due date, the calendar shows the study period.", column: 0, kind: "Exam or submission", labels: ["Block 1"], startInDays: 21, dueInDays: 30, subtasks: ["Go over the whole syllabus", "Mock exam or final check"] },
+        { title: "Block 1 exam", description: "With a start date and a due date, the calendar shows the study period.", column: 0, kind: "Exam or submission", labels: ["Block 1"], startInDays: 21, dueInDays: 30, subtasks: ["Go over the whole syllabus", "Practice exam or final check"] },
       ],
     },
   },

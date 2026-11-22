@@ -95,7 +95,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       kind("Paperwork", "#64748b", "Sort out ", "**Procedure:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather documents", "Book an appointment or do it online", "File the receipt"]),
       kind("Appointment", "#ef4444", "Appointment: ", "**Who:**\n\n**Where and when:**\n\n**What to ask or bring:**\n", ["Book the appointment", "Prepare documents", "Note the instructions"]),
       kind("Renovation or repair", "#8b5a2b", "Work: ", "**Room or area:**\n\n**What needs doing:**\n\n**Who does it and quote:**\n\n**Planned dates:**\n", ["Request quotes", "Agree on a date", "Keep track while the work is done", "Check the result and pay"]),
-      kind("House move", "#0ea5e9", "Move: ", "**What needs doing (paperwork, packing, transport, utilities):**\n\n**Date:**\n", ["Request quotes for the movers", "Pack and label", "Change the address and the utilities", "Hand over the keys"]),
+      kind("Move", "#0ea5e9", "Move: ", "**What needs doing (paperwork, packing, transportation, utilities):**\n\n**Date:**\n", ["Request quotes for the movers", "Pack and label", "Change the address and the utilities", "Hand over the keys"]),
     ],
     hiddenGeneralKinds: [],
     hideAllGeneralKinds: true,
@@ -109,7 +109,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
   },
   "eventos-viajes": {
     name: "Events and travel",
-    description: "Organize an event or a trip: venue or accommodation, transport, suppliers, guests and program, with the budget of what is booked, the agenda and a single list for the day or for packing.",
+    description: "Organize an event or a trip: venue or accommodation, transportation, suppliers, guests and program, with the budget of what is booked, the agenda and a single list for the day or for packing.",
     columns: [
       col("Ideas"),
       col("To confirm", false, "WAITING"),
@@ -121,7 +121,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
     ],
     kinds: [
       kind("Venue or accommodation", "#6366f1", "", "**Options:**\n\n**Dates, capacity and price:**\n\n**Cancellation policy:**\n", ["Compare options", "Book", "Save the confirmation"]),
-      kind("Transport", "#0ea5e9", "Transport: ", "**Route and dates:**\n\n**Carrier and booking reference:**\n\n**Times:**\n", ["Compare prices", "Book", "Save the tickets"]),
+      kind("Transportation", "#0ea5e9", "Transportation: ", "**Route and dates:**\n\n**Carrier and booking reference:**\n\n**Times:**\n", ["Compare prices", "Book", "Save the tickets"]),
       kind("Supplier", "#f97316", "Supplier: ", "**Service (catering, music, photography…):**\n\n**Contact:**\n\n**Quote and deposit:**\n", ["Request a quote", "Compare options", "Confirm and pay the deposit"]),
       kind("Guests", "#ec4899", "", "**List and headcount:**\n\n**Special needs:**\n", ["Finalize the list", "Send invitations", "Confirm attendance"]),
       kind("Activity or program", "#a855f7", "", "**What and where:**\n\n**Day, time and length:**\n\n**Who takes part or what is needed:**\n", ["Fix the schedule", "Book or confirm", "Let the others know"]),
@@ -155,7 +155,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       kind("Writing", "#6366f1", "Write: ", "**Assignment, chapter or section:**\n\n**Outline:**\n\n- \n\n**Expected length:**\n", ["Outline", "First draft", "Check the style", "Check the citations"]),
       kind("Tutorial or class", "#a855f7", "Tutorial: ", "**Date:**\n\n**What to bring:**\n\n**Questions:**\n\n**Agreements:**\n", ["Prepare the questions", "Note the agreements"]),
       kind("Corrections", "#f97316", "Revise: ", "**Assignment or section:**\n\n**Next submission date:**\n\n**Comments received (one per subtask):**\n"),
-      kind("Exam or submission", "#ef4444", "", "**What it is (exam, submission or defense):**\n\n**Date and place:**\n\n**What it covers or requires:**\n", ["Go over the whole syllabus", "Mock exam or final check", "Prepare what to bring or submit"]),
+      kind("Exam or submission", "#ef4444", "", "**What it is (exam, submission or defense):**\n\n**Date and place:**\n\n**What it covers or requires:**\n", ["Go over the whole syllabus", "Practice exam or final check", "Prepare what to bring or submit"]),
     ],
     hiddenGeneralKinds: [],
     hideAllGeneralKinds: true,
