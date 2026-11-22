@@ -16,6 +16,8 @@ import { cn } from "../ui/cn";
 import { useBoard, useTask } from "./context";
 import { ariaSortOf, DEFAULT_LIST_SORT, nextSort, sortTasks, type ListSort, type ListSortKey } from "./listSort";
 import { cardCount } from "./count-texts";
+import { FIRST_PAINT_ROWS, rowsReserve } from "./deferredCards";
+import { useCardLimit } from "./useCardLimit";
 
 type Translate = ReturnType<typeof useT>;
 
@@ -62,6 +64,12 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
   );
   // Ordenar es lo único caro: solo se rehace al cambiar las tareas, el filtro, el orden o el idioma.
   const rows = useMemo(() => sortTasks(matchingIds ? tasks.filter((x) => matchingIds.has(x.id)) : tasks, sort, sortContext), [tasks, matchingIds, sort, sortContext]);
+  // Listas largas: el servidor (y la hidratación) pintan las primeras FIRST_PAINT_ROWS filas y el resto llega por tandas
+  // justo después, con un hueco del mismo alto mientras tanto (deferredCards.ts). Ordenar, filtrar, el recuento y el aviso
+  // trabajan con `rows` entero; solo se recorta lo que se pinta.
+  const shown = useCardLimit(rows.length, FIRST_PAINT_ROWS);
+  const painted = rows.length > shown ? rows.slice(0, shown) : rows;
+  const reserve = rowsReserve(rows.length - painted.length, !desktop);
 
   const headers: { key: ListSortKey; label: string }[] = [
     { key: "title", label: t("Título") },
@@ -110,7 +118,8 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
           {/* Hueco al final (pb-36) en móvil y tableta: si no, los botones flotantes de crear tapan las últimas filas. */}
           {!desktop ? (
           <ul className="min-h-0 flex-1 divide-y divide-slate-200 overflow-y-auto bg-white pb-36 sm:hidden dark:divide-slate-800 dark:bg-slate-900" aria-label={t("Lista de tareas")}>
-            {rows.map((task) => <CompactRow key={task.id} task={task} lookups={lookups} today={today} locale={locale} t={t} />)}
+            {painted.map((task) => <CompactRow key={task.id} task={task} lookups={lookups} today={today} locale={locale} t={t} />)}
+            {reserve && <li aria-hidden data-rows-pending style={{ height: reserve }} />}
           </ul>
           ) : (
           <div className="min-h-0 flex-1 overflow-auto px-4 pb-36 max-sm:hidden lg:pb-4">
@@ -141,9 +150,14 @@ export function ListView({ tasks, matchingIds, filtering }: { tasks: BoardTask[]
                 </tr>
               </thead>
               <tbody>
-                {rows.map((task) => (
+                {painted.map((task) => (
                   <TableRow key={task.id} task={task} lookups={lookups} today={today} locale={locale} t={t} priorityEnabled={priorityEnabled} kind={kindById.get(task.kindId)} />
                 ))}
+                {reserve && (
+                  <tr aria-hidden data-rows-pending>
+                    <td colSpan={headers.length} className="p-0" style={{ height: reserve }} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
