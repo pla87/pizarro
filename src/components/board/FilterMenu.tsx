@@ -108,7 +108,7 @@ export function FilterMenu({ filters, onChange, labels, kinds, users, currentUse
         <label className="mb-1 block text-xs font-medium text-slate-500" htmlFor="board-filter-assignee">{t("Responsable")}</label>
         <select id="board-filter-assignee" className="input py-1" value={filters.assigneeId} onChange={(e) => set({ assigneeId: e.target.value })}>
           <option value="">{t("Cualquiera")}</option>
-          <option value={NO_ASSIGNEE}>{t("Sin asignar")}</option>
+          <option value={NO_ASSIGNEE}>{t("Sin responsable")}</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.id === currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
         </select>
       </div>

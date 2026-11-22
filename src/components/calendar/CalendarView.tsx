@@ -318,7 +318,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   const personOptions = useMemo(() => {
     const me = people.find((p) => p.id === meId);
     return [
-      { id: PERSON_UNASSIGNED, label: t("Sin asignar") },
+      { id: PERSON_UNASSIGNED, label: t("Sin responsable") },
       ...(me ? [{ id: me.id, label: t("{name} (yo)", { name: me.name }) }] : []),
       ...people.filter((p) => p.id !== meId).map((p) => ({ id: p.id, label: p.name })),
     ];
@@ -695,12 +695,12 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
         </Popover>
         <Popover
           kind="dialog"
-          label={t("Persona")}
+          label={t("Responsable")}
           onOpenChange={(open) => (open ? setDraftPeople(filters.person) : applyPeople())}
           panelClassName="w-64 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
           trigger={({ open, props }) => (
             <button type="button" {...props} className={cn(selectCls, "flex w-44 items-center justify-between gap-1.5 text-left md:w-52")}>
-              <span className="min-w-0 truncate"><span className="sr-only">{`${t("Persona")}: `}</span>{personLabel}</span>
+              <span className="min-w-0 truncate"><span className="sr-only">{`${t("Responsable")}: `}</span>{personLabel}</span>
               {filters.person.length > 1 && <span aria-hidden className="shrink-0 rounded-full bg-brand-600 px-1.5 text-[11px] font-semibold leading-4 text-on-brand tabular-nums">{filters.person.length}</span>}
               <ChevronDown size={14} className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-180")} aria-hidden />
             </button>

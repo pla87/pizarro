@@ -35,7 +35,6 @@ export const task: Record<string, string> = {
   "Descargar {name}": "Download {name}",
   "Sin adjuntos.": "No attachments.",
   "Se queda en la columna de la release al desplegar y se incluye siempre en el texto": "Stays in the release column on deploy and is always included in the text",
-  "Fija en la release (evergreen)": "Pinned to the release (evergreen)",
   "Quitar fecha límite": "Remove due date",
   "Entregable": "Deliverable",
   "Etiquetas": "Labels",
@@ -74,4 +73,6 @@ export const task: Record<string, string> = {
   "Copiar tu texto": "Copy your text",
   // Títulos recortados por el tope de unidades (emojis muy compuestos): sin el máximo de 210, que no es el real.
   "{n} títulos recortados: eran demasiado largos": "{n} titles shortened: they were too long",
+  // Casilla de la tarea fija, sin la palabra interna «evergreen»
+  "Fija en la release": "Pinned to the release",
 };

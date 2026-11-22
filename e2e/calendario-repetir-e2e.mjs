@@ -53,7 +53,7 @@ if (only.includes("new")) {
   const repeat = dlg.getByLabel("Repetir", { exact: true });
   L.eq("NEW: «Repetir» empieza en «No se repite»", await repeat.inputValue(), "NONE");
   L.eq("NEW: sin día mientras no se repite", await dlg.getByLabel("Día de la semana").count(), 0);
-  const dueInput = dlg.getByLabel("Fecha límite (opcional)");
+  const dueInput = dlg.getByLabel("Fecha límite", { exact: true });
   // Justo debajo de la fecha límite y de la persona asignada (la fila siguiente de la misma cuadrícula).
   const [dueBox, repBox] = [await dueInput.boundingBox(), await repeat.boundingBox()];
   L.check("NEW: «Repetir» va en la fila de debajo de la fecha límite", repBox.y > dueBox.y && repBox.y - (dueBox.y + dueBox.height) < 60, JSON.stringify({ dueBox, repBox }));

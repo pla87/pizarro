@@ -547,7 +547,7 @@ if (only.includes("a11y")) try {
   await U.openTask(page, "Con descripción");
   const snap = await U.dialog(page).ariaSnapshot();
   const comboLines = snap.split("\n").filter((l) => l.includes("combobox")).join(" | ");
-  for (const name of ["Columna", "Asignada a", "Repetir", "Entregable"]) {
+  for (const name of ["Columna", "Responsable", "Repetir", "Entregable"]) {
     L.eq(`A11Y: el desplegable «${name}» tiene nombre`, await U.dialog(page).getByRole("combobox", { name, exact: true }).count(), 1);
   }
   L.eq("A11Y: la fecha límite tiene nombre", await U.dialog(page).getByLabel("Fecha límite", { exact: true }).count(), 1);

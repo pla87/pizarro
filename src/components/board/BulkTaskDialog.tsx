@@ -267,18 +267,18 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
           </summary>
           <div className="grid grid-cols-2 gap-3 border-t border-slate-200 p-3 dark:border-slate-700">
             <div className="min-w-0">
-              <label className="label truncate" htmlFor="bt-assignee">{t("Asignada a (opcional)")}</label>
+              <label className="label truncate" htmlFor="bt-assignee">{t("Responsable")}</label>
               <select id="bt-assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-                <option value="">{t("Sin asignar")}</option>
+                <option value="">{t("Sin responsable")}</option>
                 {form.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
               </select>
             </div>
             <div className="min-w-0">
-              <label className="label truncate" htmlFor="bt-due">{t("Fecha límite (opcional)")}</label>
+              <label className="label truncate" htmlFor="bt-due">{t("Fecha límite")}</label>
               <input id="bt-due" type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="col-span-2">
-              <label className="label" htmlFor="bt-deliverable">{t("Entregable (opcional)")}</label>
+              <label className="label" htmlFor="bt-deliverable">{t("Entregable")}</label>
               <select id="bt-deliverable" className="input" value={deliverableId} onChange={(e) => setDeliverableId(e.target.value)}>
                 <option value="">{t("Sin entregable")}</option>
                 {form.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -286,7 +286,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
             </div>
             {priorityOn && (
               <div className="min-w-0">
-                <label className="label truncate" htmlFor="bt-priority">{t("Prioridad (opcional)")}</label>
+                <label className="label truncate" htmlFor="bt-priority">{t("Prioridad")}</label>
                 <select id="bt-priority" className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
                   <option value="">{t("Sin prioridad")}</option>
                   {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{t(PRIORITY_LABEL[p])}</option>)}
@@ -295,14 +295,14 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
             )}
             {clientOn && (
               <div className="min-w-0">
-                <label className="label truncate" htmlFor="bt-client">{t("Cliente (opcional)")}</label>
+                <label className="label truncate" htmlFor="bt-client">{t("Cliente")}</label>
                 <input id="bt-client" className="input" value={client} maxLength={MAX_CLIENT} list="bt-clients" autoComplete="off" onChange={(e) => setClient(e.target.value)} />
                 <datalist id="bt-clients">{form.clients.map((c) => <option key={c} value={c} />)}</datalist>
               </div>
             )}
             {form.labels.length > 0 && (
               <div className="col-span-2">
-                <div className="label">{t("Etiquetas (opcional)")}</div>
+                <div className="label">{t("Etiquetas")}</div>
                 <LabelToggles labels={form.labels} selected={labelIds} onToggle={(id, on) => setLabelIds((ids) => (on ? [...ids, id] : ids.filter((x) => x !== id)))} max={MAX_TASK_LABELS} />
               </div>
             )}

@@ -1,7 +1,7 @@
 // Caza de bugs 54: (1) en el histórico de releases la descripción de cada tarea va debajo de su punto (antes, en la
 // misma línea que el título) y una release guardada con el texto antiguo se sigue viendo; el título es un <h2> con el
 // botón dentro (antes, un <h2> dentro de un <button>) y «No se pudo copiar» sale como error; (2) en el móvil, «Archivadas»
-// del menú lateral cierra el menú; (3) en el calendario, el nombre accesible de «Proyectos» y «Persona» incluye lo elegido
+// del menú lateral cierra el menú; (3) en el calendario, el nombre accesible de «Proyectos» y «Responsable» incluye lo elegido
 // (axe: label-content-name-mismatch) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió;
 // (4) «Aplicar plantilla» ya no pone un paréntesis dentro de otro («Siguiente release (Siguiente salto (genera
 // releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown; (6) borrar va en un menú «⋯»: «Borrar
@@ -118,7 +118,7 @@ if (only.includes("cal")) {
 
   const filters = page.getByRole("group", { name: "Filtros del calendario" });
   L.eq("CAL: «Proyectos» dice el valor elegido", await filters.getByRole("button", { name: "Proyectos: Todos los proyectos" }).count(), 1);
-  L.eq("CAL: «Persona» dice el valor elegido", await filters.getByRole("button", { name: "Persona: Cualquier persona" }).count(), 1);
+  L.eq("CAL: «Responsable» dice el valor elegido", await filters.getByRole("button", { name: "Responsable: Cualquier persona" }).count(), 1);
   await page.evaluate(AXE);
   const axe = await page.evaluate(async () => {
     const r = await window.axe.run(document.querySelector("[role=group]"), { runOnly: { type: "rule", values: ["label-content-name-mismatch", "button-name"] } });

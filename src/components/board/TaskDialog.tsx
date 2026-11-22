@@ -1238,7 +1238,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          <Field label={t("Asignada a")}>
+          <Field label={t("Responsable")}>
             {(id) => (
               <select
                 id={id}
@@ -1247,7 +1247,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 value={task.assigneeId ?? ""}
                 onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
               >
-                <option value="">{t("Sin asignar")}</option>
+                <option value="">{t("Sin responsable")}</option>
                 {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             )}
@@ -1263,7 +1263,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 checked={task.evergreen}
                 onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
               />
-              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
+              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release")}
             </label>
           )}
           <Field label={t("Tipo")} wide>

@@ -1551,7 +1551,7 @@ if (only.includes("acc")) {
   L.eq("ACC: la tarjeta es un botón cuyo nombre es solo el título", [a?.role, a?.name], ["button", "Tarjeta accesible"]);
   L.check("ACC: sin «Seleccionar» ni «Arrastrar» en su árbol accesible", !/Seleccionar|Arrastrar|Quitar de la selección/.test(JSON.stringify(a)), JSON.stringify(a));
   const desc = a?.description ?? "";
-  L.check("ACC: la descripción lleva tipo, fecha, descripción y responsable", /Funcionalidad/.test(desc) && /Fecha límite: /.test(desc) && /Con descripción/.test(desc) && desc.includes(`Asignada a ${me.name}`), desc);
+  L.check("ACC: la descripción lleva tipo, fecha, descripción y responsable", /Funcionalidad/.test(desc) && /Fecha límite: /.test(desc) && /Con descripción/.test(desc) && desc.includes(`Responsable: ${me.name}`), desc);
   L.eq("ACC: no seleccionada → aria-pressed=false", a?.pressed, false);
   L.check("ACC: anuncia sus atajos (aria-keyshortcuts)", /^Enter Space F2 Alt\+ArrowLeft/.test((await card.getAttribute("aria-keyshortcuts")) ?? ""));
   await card.focus();

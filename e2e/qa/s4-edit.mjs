@@ -45,7 +45,7 @@ export async function run() {
   await d.getByRole("radio", { name: "Corrección" }).click();
   await L.eqEventually("tipo: Corrección", async () => (await row(T)).kindId, "kind_correccion");
   // Responsable
-  await d.locator("select").filter({ has: p.locator("option", { hasText: "Sin asignar" }) }).selectOption({ label: "Segunda Persona" });
+  await d.locator("select").filter({ has: p.locator("option", { hasText: "Sin responsable" }) }).selectOption({ label: "Segunda Persona" });
   await L.eqEventually("responsable guardado", async () => (await row(T)).assigneeId, u2.id);
   // Fecha límite
   const due = d.locator("input[type=date]");
