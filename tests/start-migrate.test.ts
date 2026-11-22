@@ -226,6 +226,8 @@ test("migrate.mjs: las líneas informativas de Prisma van a stdout (Railway pint
 test("start.sh usa migrate.mjs y el Dockerfile lo copia a la imagen", () => {
   const sh = readFileSync("scripts/start.sh", "utf8");
   assert.match(sh, /if ! node scripts\/migrate\.mjs; then/);
+  // Si fallan las tareas de arranque, la misma pausa antes de salir (no reiniciar en bucle rápido).
+  assert.match(sh, /if ! node dist\/boot\.mjs; then\n\s+sleep 20\n\s+exit 1\n\s*fi/);
   assert.doesNotMatch(sh, /prisma migrate deploy\)/);
   assert.match(readFileSync("Dockerfile", "utf8"), /^COPY scripts\/start\.sh scripts\/migrate\.mjs \.\/scripts\/$/m);
 });

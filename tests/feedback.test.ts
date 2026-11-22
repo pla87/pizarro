@@ -199,5 +199,10 @@ test("captura: los secretos a la vista llevan data-pz-no-capture (la captura los
   marked("app/(app)/p/[projectId]/settings/ProjectSettings.tsx", 'data-testid="member-link"');
   marked("app/setup/SetupWizard.tsx", 'id="setup-code"');
   marked("components/calendar/CalendarSubscribe.tsx", "value={links.https}");
+  marked("app/(app)/settings/MessagingSection.tsx", 'data-testid="telegram-link"');
+  marked("app/(app)/settings/MessagingSection.tsx", 'id="wa-code"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'id="enroll-code"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'id="enroll-email-code"');
+  marked("components/ui/PasswordInput.tsx", "{...props}");
   assert.match(readFileSync(path.join(src, "components/feedback/capture.ts"), "utf8"), /hasAttribute\("data-pz-no-capture"\)/);
 });

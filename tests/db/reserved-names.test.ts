@@ -17,10 +17,10 @@ describe("nombres reservados", () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     for (const name of ["Pizarro", "soporte  TÉCNICO", "System", "Administración"]) {
-      expectFail(await createUser({ name, email: email("r"), role: "MEMBER", password: "una-clave-larga-1" }), RESERVED);
+      expectFail(await createUser({ name, email: email("r"), role: "MEMBER" }), RESERVED);
     }
-    expectOk(await createUser({ name: "Administrador", email: email("admin"), role: "ADMIN", password: "una-clave-larga-1" }));
-    expectOk(await createUser({ name: "Ana Pizarro", email: email("ana"), role: "MEMBER", password: "una-clave-larga-1" }));
+    expectOk(await createUser({ name: "Administrador", email: email("admin"), role: "ADMIN" }));
+    expectOk(await createUser({ name: "Ana Pizarro", email: email("ana"), role: "MEMBER" }));
   });
 
   test("editar a alguien: solo al cambiarle el nombre; el que ya tenía se conserva al cambiar otra cosa", async () => {

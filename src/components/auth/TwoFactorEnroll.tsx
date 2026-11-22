@@ -117,12 +117,12 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
       )}
       <div>
         <label className="label" htmlFor="enroll-code">{t("Código de verificación")}</label>
-        <input id="enroll-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={code} onChange={(e) => setCode(e.target.value)} />
+        <input id="enroll-code" data-pz-no-capture="" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={code} onChange={(e) => setCode(e.target.value)} />
       </div>
       {info.emailCodeSent && (
         <div>
           <label className="label" htmlFor="enroll-email-code">{t("Código enviado a tu email")}</label>
-          <input id="enroll-email-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={emailCode} onChange={(e) => setEmailCode(e.target.value)} />
+          <input id="enroll-email-code" data-pz-no-capture="" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={emailCode} onChange={(e) => setEmailCode(e.target.value)} />
           <p className="mt-1 text-xs text-slate-500">{t("Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.")}</p>
         </div>
       )}

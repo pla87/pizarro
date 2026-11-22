@@ -46,8 +46,13 @@ if ! node scripts/migrate.mjs; then
   exit 1
 fi
 
-# Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios.
-node dist/boot.mjs
+# Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios. Si falla (p. ej. SEED_ADMIN_PASSWORD
+# demasiado corta), la misma espera que las migraciones: sin ella, Railway agotaba sus reintentos en segundos y Docker
+# reiniciaba en bucle rápido.
+if ! node dist/boot.mjs; then
+  sleep 20
+  exit 1
+fi
 
 echo "[start] Arrancando servidor en el puerto ${PORT:-3000}"
 # Apagado ordenado: Next.js no gestiona SIGTERM/SIGINT; lo hace src/instrumentation.ts (guarda los registros y espera a los emails).

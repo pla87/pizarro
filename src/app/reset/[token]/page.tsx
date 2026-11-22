@@ -3,6 +3,8 @@ import { findUsableToken } from "@/lib/auth-token";
 import { db } from "@/lib/db";
 import { inviteProjectId } from "@/lib/project-invite";
 import { emailEnabled } from "@/lib/mail";
+import { passwordLoginAllowed } from "@/lib/auth-policy";
+import { googlePolicyEnv } from "@/lib/google-config";
 import { getT } from "@/i18n/server";
 import { ResetForm } from "./ResetForm";
 
@@ -34,7 +36,7 @@ export default async function ResetPage({ params }: { params: Promise<{ token: s
   const next = projectId && (await db.projectMember.count({ where: { projectId, userId: row.userId } })) ? `/p/${projectId}` : undefined;
   return (
     <AuthCard title={row.purpose === "INVITE" ? t("Elige tu contraseña") : t("Elige una contraseña nueva")}>
-      <ResetForm token={token} email={row.user.email} invite={row.purpose === "INVITE"} next={next} />
+      <ResetForm token={token} email={row.user.email} invite={row.purpose === "INVITE"} next={next} googleOnly={!passwordLoginAllowed(row.user.role, googlePolicyEnv())} />
     </AuthCard>
   );
 }

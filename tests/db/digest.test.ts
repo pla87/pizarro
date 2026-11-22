@@ -4,7 +4,8 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
+import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter, withSmtpDown } from "./helpers";
+import { flushLogs } from "../../src/lib/log";
 import { updateEmailPrefs } from "../../src/actions/collab-prefs";
 import { gatherDigest, sendDueDigests } from "../../src/lib/periodic-mail";
 import { resetShutdownForTests, runShutdown } from "../../src/lib/shutdown";
@@ -171,5 +172,26 @@ describe("email del resumen diario", () => {
       else process.env.MAIL_OUTBOX_DIR = prevOutbox;
       await rm(outbox, { recursive: true, force: true });
     }
+  });
+});
+
+describe("resumen diario con el SMTP caído", () => {
+  // Antes cada pasada horaria recorría a todas las personas: reunía su resumen, esperaba a la conexión y anotaba un fallo
+  // por persona, todo el día. Ahora se corta al primer error de conexión y lo pendiente sale en la pasada siguiente.
+  test("corta la pasada al primer error de conexión y devuelve la reserva", async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const other = await makeUser();
+    const f = await makeProject({ members: [a, b, other] });
+    await makeTask(f, { title: "Novedad", createdById: other.id });
+    await db.user.updateMany({ where: { id: { notIn: [a.id, b.id] } }, data: { dailyDigest: false } });
+    await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { dailyDigest: true, digestHour: 0, lastDigestAt: null } });
+    const now = new Date();
+    assert.equal(await withSmtpDown(() => sendDueDigests(now)), 0);
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "digest.failed", userId: { in: [a.id, b.id] } } }), 1, "solo se intenta la primera persona");
+    assert.equal(await db.appLog.count({ where: { action: "mail.smtpDown", createdAt: { gte: now } } }), 1, "un solo aviso de que el SMTP no responde");
+    const rows = await db.user.findMany({ where: { id: { in: [a.id, b.id] } }, select: { lastDigestAt: true } });
+    assert.deepEqual(rows.map((r) => r.lastDigestAt), [null, null], "las dos siguen pendientes para la pasada siguiente");
   });
 });

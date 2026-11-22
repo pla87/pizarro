@@ -36,8 +36,6 @@ if (only.includes("admin")) {
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Nombre").fill("Persona sin red");
     await dialog.getByLabel("Email").fill(NEW_EMAIL);
-    const pass = dialog.locator("#u-pass");
-    if (await pass.count()) await pass.fill("una-clave-larga-123");
     await ctx.setOffline(true);
     await dialog.getByRole("button", { name: "Crear usuario" }).click();
     await L.eqEventually("ADMIN: sale el aviso «Sin conexión: no se ha guardado»", async () => (await bodyText(page)).includes(OFFLINE), true, { timeout: 10000 });

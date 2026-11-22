@@ -11,7 +11,8 @@ export function PasswordInput({ className, ...props }: Omit<React.InputHTMLAttri
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
-      <input {...props} type={visible ? "text" : "password"} className={cn(className, "pr-10")} />
+      {/* A la vista, la contraseña queda fuera de la captura de «Informar de un error» (components/feedback/capture.ts). */}
+      <input {...props} type={visible ? "text" : "password"} className={cn(className, "pr-10")} data-pz-no-capture={visible ? "" : undefined} />
       <button
         type="button"
         className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
