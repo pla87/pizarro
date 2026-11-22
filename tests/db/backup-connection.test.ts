@@ -208,7 +208,7 @@ describe("copias: una sola a la vez y copias cortadas", () => {
       await copyFile(path.join(backups, good.file!), path.join(backups, cut));
       assert.deepEqual((await listBackups()).map((b) => b.name), [good.file]);
       assert.equal((await latestBackupPath())?.name, good.file, "ni se descarga ni se prueba como «la última»");
-      // Con la copia de hoy, la tarea no hace nada y lo dice («Omitida: ya hay copia de hoy» en Tareas de mantenimiento).
+      // Con una copia reciente, la tarea no hace nada y lo dice («Omitida: ya hay una copia de las últimas 23 h» en Tareas de mantenimiento).
       assert.deepEqual(await dailyBackupJob(), { skipped: "alreadyToday" });
       // Pasado un día desde la buena, la tarea diaria hace copia aunque el volcado cortado sea de hace 4 h.
       const before = (await readStatus()).lastBackup?.at;

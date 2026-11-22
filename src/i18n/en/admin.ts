@@ -53,7 +53,8 @@ export const admin: Record<string, string> = {
   "Usuario": "User",
   "Páginas vistas, tareas abiertas, informes y descargas": "Page views, opened tasks, reports and downloads",
   "Incluir consultas": "Include reads",
-  "Buscar (acción, mensaje, ruta)": "Search (action, message, path)",
+  // El mensaje se guarda en español (en inglés se ve traducido): la búsqueda lo encuentra por el texto en español.
+  "Buscar (acción, mensaje, ruta)": "Search (action, message in Spanish, path)",
   "Filtrar": "Filter",
   "Limpiar": "Clear",
   "← Volver a los más recientes": "← Back to the most recent",
@@ -384,7 +385,7 @@ export const admin: Record<string, string> = {
   "{n} usuarios activos": "{n} active users",
   // Copias de seguridad: motivo de las tareas que no hacen nada y estado único sin destino externo
   "Omitida": "Skipped",
-  "Omitida: ya hay copia de hoy": "Skipped: there is already a backup from today",
+  "Omitida: ya hay una copia de las últimas 23 h": "Skipped: there is already a backup from the last 23 hours",
   "Omitida: aún no hay ninguna copia": "Skipped: there is no backup yet",
   "Omitida: no toca este mes": "Skipped: not due this month",
   "Omitida: se repite mañana": "Skipped: it will be retried tomorrow",

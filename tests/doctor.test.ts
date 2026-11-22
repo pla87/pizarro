@@ -203,3 +203,26 @@ describe("avisos de configuración", () => {
     assert.ok(!text.includes("example.com") && !text.includes("2525") && !text.includes("clave-del-correo"));
   });
 });
+
+describe("tareas de fondo en el diagnóstico (jobRunView, lib/job-run.ts)", async () => {
+  const { jobRunView } = await import("../src/lib/job-run");
+  const at = new Date("2026-11-22T10:00:00Z");
+  const row = (lastOk: boolean | null, lastError: string | null) => ({ name: "backup", lastStartedAt: at, lastFinishedAt: at, lastOk, lastError });
+
+  test("una tarea omitida no sale como error", () => {
+    const v = jobRunView(row(true, "skip:alreadyToday"));
+    assert.equal(v.lastError, null);
+    assert.equal(v.skipped, "alreadyToday");
+    assert.equal(v.lastFinishedAt, at.toISOString());
+  });
+
+  test("un error real se queda como error, aunque empiece por «skip:»", () => {
+    const v = jobRunView(row(false, "skip: disco lleno"));
+    assert.deepEqual([v.lastError, v.skipped], ["skip: disco lleno", null]);
+    assert.deepEqual([jobRunView(row(false, "ENOSPC")).lastError, jobRunView(row(true, null)).skipped], ["ENOSPC", null]);
+  });
+
+  test("doctor.ts lee las tareas con jobRunView", () => {
+    assert.match(readFileSync("src/lib/doctor.ts", "utf8"), /jobRun\.findMany\([^)]*\)\)\.map\(jobRunView\)/);
+  });
+});

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { jobRunView, SKIP_PREFIX, type JobRunInfo } from "./job-run";
 import { connectPgClient } from "./pg-connect";
 
 // Tareas de fondo: un solo proceso a la vez (bloqueo consultivo de Postgres) y la última ejecución de cada
@@ -46,13 +47,12 @@ export interface JobDef {
 type JobOutcome = "ok" | "error" | "skipped";
 
 /**
- * Lo que devuelve una tarea que ha terminado bien sin hacer nada a propósito (p. ej. la copia diaria cuando ya hay copia
- * de hoy): el motivo, una clave fija que Administración → Copias de seguridad traduce («Omitida: ya hay copia de hoy»).
- * Se guarda en JobRun.lastError con el prefijo «skip:» y lastOk = true (sin columna nueva).
+ * Lo que devuelve una tarea que ha terminado bien sin hacer nada a propósito (p. ej. la copia diaria cuando ya hay una
+ * copia reciente): el motivo, una clave fija que Administración → Copias de seguridad traduce («Omitida: ya hay una copia
+ * de las últimas 23 h»).
+ * Se guarda en JobRun.lastError con el prefijo «skip:» y lastOk = true (sin columna nueva; ver job-run.ts).
  */
 export interface JobSkip { skipped: string }
-
-const SKIP_PREFIX = "skip:";
 
 const isSkip = (v: unknown): v is JobSkip => typeof v === "object" && v !== null && typeof (v as JobSkip).skipped === "string";
 
@@ -87,28 +87,9 @@ export async function runJob(job: JobDef, now: Date = new Date()): Promise<JobOu
   return error === null ? "ok" : "error";
 }
 
-export interface JobRunInfo {
-  name: string;
-  lastStartedAt: string | null;
-  lastFinishedAt: string | null;
-  lastOk: boolean | null;
-  lastError: string | null;
-  /** Terminó bien sin hacer nada: el motivo (clave de JobSkip); null si hizo su trabajo o falló. */
-  skipped: string | null;
-}
+export type { JobRunInfo };
 
 /** Estado de todas las tareas (Administración → Copias de seguridad). */
 export async function listJobRuns(): Promise<JobRunInfo[]> {
-  const rows = await db.jobRun.findMany({ orderBy: { name: "asc" } });
-  return rows.map((r) => {
-    const skipped = r.lastOk && r.lastError?.startsWith(SKIP_PREFIX) ? r.lastError.slice(SKIP_PREFIX.length) : null;
-    return {
-      name: r.name,
-      lastStartedAt: r.lastStartedAt?.toISOString() ?? null,
-      lastFinishedAt: r.lastFinishedAt?.toISOString() ?? null,
-      lastOk: r.lastOk,
-      lastError: skipped ? null : r.lastError,
-      skipped,
-    };
-  });
+  return (await db.jobRun.findMany({ orderBy: { name: "asc" } })).map(jobRunView);
 }

@@ -92,7 +92,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
     noKey: t("Omitida: sin BACKUP_KEY"),
     paused: t("Omitida: BACKUP_PAUSE"),
     noDestination: t("Omitida: sin destino externo"),
-    alreadyToday: t("Omitida: ya hay copia de hoy"),
+    alreadyToday: t("Omitida: ya hay una copia de las últimas 23 h"),
     noBackup: t("Omitida: aún no hay ninguna copia"),
     notThisMonth: t("Omitida: no toca este mes"),
     retryTomorrow: t("Omitida: se repite mañana"),
