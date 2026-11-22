@@ -4,7 +4,7 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { KeyRound, Link as LinkIcon, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { copyInviteLink, createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
+import { generateInviteLink, createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -94,7 +94,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     }))) return;
     setResending(u.id);
     try {
-      const res = await copyInviteLink(u.id).catch((e) => actionThrowResult(e, t));
+      const res = await generateInviteLink(u.id).catch((e) => actionThrowResult(e, t));
       if (!res.ok) return toast(res.error, "error");
       setInviteLink({ user: u, link: res.data.link });
     } finally {

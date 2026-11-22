@@ -203,8 +203,8 @@ export async function resendInvite(userId: string) {
  * lo devuelve para que el administrador se lo pase por otro canal. Solo para quien aún no ha entrado. El enlace no se
  * registra: solo quién lo generó y para quién.
  */
-export async function copyInviteLink(userId: string) {
-  return runAction({ name: "users.copyInviteLink", args: [userId] }, async () => {
+export async function generateInviteLink(userId: string) {
+  return runAction({ name: "users.generateInviteLink", args: [userId] }, async () => {
     const admin = await requireAdmin();
     // El mismo tope que «Reenviar invitación» (las dos emiten enlaces de invitación).
     if (!rateLimit(`resend-invite:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
