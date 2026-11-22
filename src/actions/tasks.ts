@@ -710,7 +710,7 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
 
 /** Una escritura no ha encontrado la tarea activa: se ha archivado o borrado después de comprobarlo. */
 async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string): Promise<Error> {
-  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Recupérala para modificarla.") : notFound();
+  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Restáurala para modificarla.") : notFound();
 }
 
 /**
