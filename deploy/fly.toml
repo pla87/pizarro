@@ -1,0 +1,49 @@
+# Configuración de ejemplo para instalar Pizarro en Fly.io con la imagen oficial. Pasos completos (crear la app, el
+# volumen y la base de datos, las claves, el dominio, actualizar y copias): docs/INSTALL.md, «Fly.io», y
+# https://getpizarro.com/instalar/#fly.
+#
+# Antes de usarla, cambia «app» por el nombre de tu app (el de `fly apps create`; la dirección será
+# https://<nombre>.fly.dev) y, si quieres, la región. Se despliega con `fly deploy` desde la carpeta de este fichero.
+
+app = "pizarro-example"
+# Región de la máquina: la misma que la base de datos (o la más cercana). fra = Fráncfort; `fly platform regions` las lista.
+primary_region = "fra"
+
+[build]
+  # Imagen ya construida y probada de cada versión; «latest» es la última publicada. Para quedarte en una versión, pon su
+  # número (p. ej. ghcr.io/pla87/pizarro:1.65.0).
+  image = "ghcr.io/pla87/pizarro:latest"
+
+[deploy]
+  # El primer arranque aplica las migraciones de la base de datos y tarda unos minutos: margen para que `fly deploy`
+  # espere a que /api/health responda.
+  wait_timeout = "10m"
+
+[env]
+  UPLOAD_DIR = "/app/uploads"
+
+# Volumen persistente para los adjuntos y las copias locales (UPLOAD_DIR). Se crea antes con
+# `fly volumes create pizarro_data --size 5`. Sin él, se perderían en cada despliegue.
+[mounts]
+  source = "pizarro_data"
+  destination = "/app/uploads"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Siempre encendida: el canal en vivo y las tareas de fondo (avisos, copias diarias) necesitan el proceso en marcha.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+# 1 GB de memoria: lo recomendado para Pizarro (docs/INSTALL.md, «Requisitos»).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
