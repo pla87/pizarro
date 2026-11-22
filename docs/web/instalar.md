@@ -560,10 +560,11 @@ docker compose exec app node dist/reset-link.mjs persona@example.com
 Abre el enlace que imprime y elige una contraseña nueva; sirve una vez y caduca a los 30 minutos. Si además se perdió
 el móvil, añade `--reset-2fa` al final para que vuelva a configurar la verificación en dos pasos.
 
-**En Railway** hay que ejecutar esa orden dentro del servicio de Pizarro, y el panel web de Railway no tiene una
-terminal: se hace desde tu ordenador con el programa de Railway para la terminal (su *CLI*). Instálalo con una línea:
-`brew install railway` en un Mac, o `npm install -g @railway/cli` en Windows y Linux (necesita
-[Node.js](https://nodejs.org)). Después, en la terminal de tu ordenador:
+**En Railway** no hay carpeta `/opt/pizarro/deploy` ni Docker: abre el servicio de Pizarro en el panel de Railway, ve
+a la pestaña *Console* y escribe solo `node dist/reset-link.mjs persona@example.com` (con `--reset-2fa` si hace falta).
+Si tu panel no tiene esa pestaña, abre la misma terminal desde tu ordenador con el programa de Railway para la terminal
+(su *CLI*): instálalo con `brew install railway` en un Mac, o `npm install -g @railway/cli` en Windows y Linux (necesita
+[Node.js](https://nodejs.org)), y después:
 
 ```bash
 railway login
@@ -572,8 +573,7 @@ railway ssh
 ```
 
 `railway login` abre el navegador para entrar en tu cuenta; `railway link` te pregunta el proyecto y el servicio (elige
-el de Pizarro); `railway ssh` abre una terminal dentro del servicio. Allí escribe
-`node dist/reset-link.mjs persona@example.com` (con `--reset-2fa` si hace falta) y, al terminar, `exit`.
+el de Pizarro); `railway ssh` abre una terminal dentro del servicio. Allí escribe la misma orden y, al terminar, `exit`.
 
 ### Si necesitas ayuda
 

@@ -292,7 +292,6 @@ export const cuentas: Record<string, string> = {
   "Entra con tu cuenta de Google, si tu email está dado de alta.": "Sign in with your Google account, if your email is registered.",
   "Pide a un administrador que te genere un enlace para elegir una contraseña nueva (Administración → Usuarios → Forzar cambio de contraseña). Te lo pasará por otro canal; sirve una sola vez y caduca en 30 minutos.": "Ask an administrator to generate a link for you to choose a new password (Administration → Users → Force password change). They will pass it to you through another channel; it works only once and expires in 30 minutes.",
   "Si eres quien administra el servidor, genera el enlace desde su terminal:": "If you run the server, generate the link from its terminal:",
-  "(en Railway, en la terminal del servicio). También puedes configurar el envío de emails (SMTP).": "(on Railway, in the service's terminal). You can also set up email sending (SMTP).",
   "Sin email ni acceso con Google: quien olvide su contraseña tendrá que pedirte que le fuerces el cambio.": "No email or Google sign-in: anyone who forgets their password will have to ask you to force a change.",
 
   // Códigos de recuperación: contador con 1
@@ -350,4 +349,9 @@ export const cuentas: Record<string, string> = {
   "Genera un enlace de invitación nuevo; el anterior deja de valer": "Generates a new invitation link; the previous one stops working",
   "Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.": "A new invitation link will be generated for {name}. The one you already gave them will stop working.",
   "Generar enlace nuevo": "Generate new link",
+  // Recuperar contraseña sin email (ronda 62): solo la orden de la instalación que corre (setupCodeSource)
+  "Si eres quien administra el servidor, genera el enlace en la pestaña Console del servicio de Pizarro en Railway:": "If you run the server, generate the link in the Console tab of the Pizarro service on Railway:",
+  "Si eres quien administra el servidor, genera el enlace desde una terminal en la carpeta de Pizarro:": "If you run the server, generate the link from a terminal in the Pizarro folder:",
+  "(en Railway, en la pestaña Console del servicio de Pizarro:": "(on Railway, in the Console tab of the Pizarro service:",
+  "También puedes configurar el envío de emails (SMTP).": "You can also set up email sending (SMTP).",
 };

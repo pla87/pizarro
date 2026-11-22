@@ -3,7 +3,7 @@
 //
 // Privacidad: el informe solo lleva lo que la persona escribe, la captura que elige enviar, su email si marca la casilla y
 // los datos técnicos de siempre (versión, commit, instalación, navegador y sistema, idioma; ver bug-report-core.ts).
-import { bugReportFields, type BugReportFields } from "./bug-report-core";
+import { bugReportFields, fitTextInUrl, type BugReportFields } from "./bug-report-core";
 import { isNewerVersion } from "./update-check-core";
 
 export const FEEDBACK_KINDS = ["bug", "idea"] as const;
@@ -30,10 +30,12 @@ export const FEEDBACK_LIMITS = { user: 5, install: 20, windowMs: 24 * 3600_000 }
  * - solo en builds oficiales sin modificar (`officialBuild`, bug-report-core.ts);
  * - `outdated`: hay una versión publicada más nueva que la que corre (la última conocida por el aviso de versión nueva,
  *   con su caché de 12 h): el botón sale desactivado. Sin saber la última (sin red, UPDATE_CHECK=0) se deja enviar;
- * - `githubReason`: null si se envía por email (la instalación envía emails y el producto tiene dirección,
- *   FEEDBACK_EMAIL); si no, va por el formulario público de GitHub (con el texto y los datos técnicos, y la captura para
- *   adjuntarla a mano), y dice por qué, para que el diálogo diga la verdad: «no_address» (el producto aún no tiene
- *   dirección: le pasa a todas las instalaciones, no es culpa de su correo) o «no_mail» (la instalación no envía emails).
+ * - `githubReason`: null si se envía en privado desde el servidor (/api/feedback: la instalación envía emails y el
+ *   producto tiene dirección, FEEDBACK_EMAIL). Si no, dice por qué, para que el diálogo diga la verdad y ofrezca lo que
+ *   se puede: «no_mail» (la instalación no envía emails): «Enviar por email» abre el programa de correo de la persona
+ *   (mailto: a FEEDBACK_EMAIL, feedbackMailtoUrl) y GitHub queda como alternativa pública; «no_address» (el producto no
+ *   tiene dirección; con FEEDBACK_EMAIL puesta no pasa, pero el código lo sigue cubriendo si algún día se vacía): solo
+ *   el formulario público de GitHub. En los dos casos, la captura se descarga para adjuntarla a mano.
  */
 export interface FeedbackStatus {
   outdated: boolean;
@@ -114,16 +116,22 @@ const TECH_LABELS: Record<string, string> = {
 /**
  * Email que llega al equipo de Pizarro (en español, el idioma de quien lo lee): asunto con el tipo y el comienzo del
  * texto, los datos técnicos, si pide respuesta (solo entonces su email) y el texto tal cual. Nada más de la instalación.
+ * Con `mailto` (lo escribe la persona desde su programa de correo) no van las líneas de respuesta ni de captura: el
+ * remitente ya es su email y la captura la adjunta ella si quiere.
  */
-export function feedbackMail(o: { kind: FeedbackKind; text: string; fields: BugReportFields; replyTo: string | null; screenshotBytes: number | null }): { subject: string; text: string } {
+export function feedbackMail(o: { kind: FeedbackKind; text: string; fields: BugReportFields; replyTo: string | null; screenshotBytes: number | null; mailto?: boolean }): { subject: string; text: string } {
   const label = o.kind === "bug" ? "Error" : "Sugerencia";
-  const first = o.text.replace(/\s+/g, " ").trim();
-  const subject = `[Pizarro] ${label}: ${first.length > 70 ? `${first.slice(0, 69)}…` : first}`;
+  // Por caracteres, no por unidades UTF-16: cortar un emoji por la mitad deja un carácter suelto (y encodeURIComponent,
+  // en el enlace mailto:, lanza con él).
+  const first = Array.from(o.text.replace(/\s+/g, " ").trim());
+  const subject = `[Pizarro] ${label}: ${first.length > 70 ? `${first.slice(0, 69).join("")}…` : first.join("")}`;
   const lines = [
     `Tipo: ${label}`,
     ...bugReportFields(o.fields).map(([k, v]) => `${TECH_LABELS[k] ?? k}: ${v}`),
-    o.replyTo ? `Responder a: ${o.replyTo}` : "Responder a: no ha pedido respuesta (su email no se incluye).",
-    o.screenshotBytes ? `Captura: adjunta (${Math.max(1, Math.round(o.screenshotBytes / 1024))} KB)` : "Captura: no",
+    ...(o.mailto ? [] : [
+      o.replyTo ? `Responder a: ${o.replyTo}` : "Responder a: no ha pedido respuesta (su email no se incluye).",
+      o.screenshotBytes ? `Captura: adjunta (${Math.max(1, Math.round(o.screenshotBytes / 1024))} KB)` : "Captura: no",
+    ]),
     "",
     "---",
     "",
@@ -131,4 +139,36 @@ export function feedbackMail(o: { kind: FeedbackKind; text: string; fields: BugR
     "",
   ];
   return { subject, text: lines.join("\n") };
+}
+
+/**
+ * Tope del enlace mailto: entero. Algunos programas de correo (y Windows al pasárselo) cortan o rechazan los de más de
+ * unos 2000 caracteres; cada letra con tilde ocupa 6 al codificarla.
+ */
+export const MAILTO_URL_MAX = 2000;
+
+function mailtoParts(to: string, kind: FeedbackKind, text: string, fields: BugReportFields) {
+  // RFC 6068: los saltos de línea del cuerpo, como CRLF; espacios como %20 (no «+», que sí sería un «+»).
+  const enc = (v: string) => encodeURIComponent(v.replace(/\r?\n/g, "\r\n"));
+  const build = (body: string) => {
+    const m = feedbackMail({ kind, text: body, fields, replyTo: null, screenshotBytes: null, mailto: true });
+    return `mailto:${to}?subject=${enc(m.subject)}&body=${enc(m.text)}`;
+  };
+  return { build, full: text.replace(/\r\n?/g, "\n").trim() };
+}
+
+/**
+ * «Enviar por email» cuando la instalación no envía emails: abre el programa de correo de la persona con el mensaje
+ * escrito para `to` (FEEDBACK_EMAIL), el mismo asunto y cuerpo que el email del servidor y, si no cabe, el texto
+ * recortado con «…» para no pasar de MAILTO_URL_MAX.
+ */
+export function feedbackMailtoUrl(to: string, kind: FeedbackKind, text: string, fields: BugReportFields): string {
+  const { build, full } = mailtoParts(to, kind, text, fields);
+  return fitTextInUrl(full, build, MAILTO_URL_MAX);
+}
+
+/** ¿Llega entero lo escrito al email? Si no, el diálogo avisa y ofrece copiarlo. */
+export function feedbackMailtoFits(to: string, kind: FeedbackKind, text: string, fields: BugReportFields): boolean {
+  const { build, full } = mailtoParts(to, kind, text, fields);
+  return build(full).length <= MAILTO_URL_MAX;
 }

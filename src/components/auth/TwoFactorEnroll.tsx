@@ -56,9 +56,11 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
 
   if (!info) {
     return (
-      <div className="space-y-3">
+      <div className="@container space-y-3">
         <p className="text-sm text-slate-600 dark:text-slate-300">{t("Elige cómo quieres recibir el segundo código al entrar con contraseña.")}</p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        {/* Una opción por fila salvo que quepan las dos enteras (por el ancho de su recuadro, no de la pantalla): en el
+            acceso (/login/verify) una sola ocupaba media fila y el texto se partía, y el recuadro parecía descentrado. */}
+        <div className={emailAvailable ? "grid gap-2 @md:grid-cols-2" : "grid gap-2"}>
           <button type="button" className="btn-secondary justify-start gap-2" disabled={pending || disabled} onClick={() => choose("TOTP")}>
             <Smartphone size={16} /> {t("App de autenticación")}
           </button>

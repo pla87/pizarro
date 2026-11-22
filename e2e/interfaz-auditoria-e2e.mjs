@@ -12,7 +12,7 @@
 // y GIT_SHA=<commit>, ver src/lib/bug-report-core.ts), el botón junto a «Cerrar sesión» (también en el móvil, donde cierra
 // el menú), el diálogo con la captura de la página sin el diálogo (con la CSP de la app), el formulario de GitHub con lo
 // escrito y, con una versión publicada más nueva en la caché del aviso, el botón desactivado. El envío por email lo prueba
-// tests/db/feedback.test.ts (aquí FEEDBACK_EMAIL está vacía y no hay SMTP: sale el camino de GitHub).
+// tests/db/feedback.test.ts (aquí no hay SMTP: sale «Enviar por email» desde el programa de correo, con GitHub de alternativa).
 // Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y
 import fs from "node:fs";
@@ -91,13 +91,19 @@ if (only.includes("feedback")) {
     await footerBug.click();
     const dlg = s.page.getByRole("dialog", { name: NAME });
     await dlg.waitFor();
-    // FEEDBACK_EMAIL vacía (el producto aún no tiene dirección): GitHub, sin culpar al correo de la instalación.
-    L.check("FEEDBACK: sin la dirección del producto, el diálogo ofrece GitHub, avisa de que es público y no culpa al email de la instalación",
-      (await dlg.getByText("Se abrirá el formulario de Pizarro en GitHub").count()) === 1 && (await dlg.getByText("La incidencia es pública").count()) === 1 &&
-      (await dlg.getByText("Esta instalación no puede enviarlo por email").count()) === 0);
+    // Sin SMTP (la instalación no envía emails): «Enviar por email» desde el programa de correo, en privado, y GitHub de
+    // alternativa pública, todo en un párrafo.
+    L.check("FEEDBACK: sin envío de emails, el diálogo ofrece enviarlo por email en privado y avisa de que GitHub es público",
+      (await dlg.getByText("Esta instalación no envía emails: «Enviar por email» abre tu programa de correo").count()) === 1 && (await dlg.getByText("la incidencia es pública").count()) === 1);
     L.eq("FEEDBACK: enseña los datos técnicos", (await dlg.locator("dl dt").allInnerTexts()).join("|"), "Versión|Commit|Instalación|Navegador y sistema|Idioma");
     await dlg.getByLabel("¿Qué ha pasado?").fill("Al mover una tarjeta se queda gris");
-    const gh = dlg.getByRole("link", { name: "Continuar en GitHub" });
+    const mailLink = dlg.getByRole("link", { name: "Enviar por email" });
+    const mailHref = await mailLink.getAttribute("href");
+    const mailParams = new URLSearchParams(mailHref.slice(mailHref.indexOf("?") + 1));
+    L.eq("FEEDBACK: «Enviar por email» abre un email a la dirección del producto con lo escrito y los datos técnicos",
+      [mailHref.slice(0, mailHref.indexOf("?")), mailParams.get("subject"), mailParams.get("body").includes(`Versión: ${version}\r\n`), mailParams.get("body").trimEnd().endsWith("Al mover una tarjeta se queda gris")],
+      ["mailto:feedback@getpizarro.com", "[Pizarro] Error: Al mover una tarjeta se queda gris", true, true]);
+    const gh = dlg.getByRole("link", { name: "o publicarlo en GitHub" });
     const bugUrl = new URL(await gh.getAttribute("href"));
     L.eq("FEEDBACK: GitHub con el formulario de errores, lo escrito y los datos técnicos",
       [bugUrl.pathname, bugUrl.searchParams.get("template"), bugUrl.searchParams.get("actual"), bugUrl.searchParams.get("version"), bugUrl.searchParams.get("install")],
@@ -110,7 +116,8 @@ if (only.includes("feedback")) {
     L.eq("FEEDBACK: con un texto corto no hay aviso de recorte", await dlg.getByRole("button", { name: "Copiar el texto" }).count(), 0);
     const longText = "Una sugerencia muy larga, con tildes y eñes. ".repeat(100).trim();
     await dlg.getByLabel("¿Qué te gustaría?").fill(longText);
-    L.check("FEEDBACK: con un texto largo avisa de que GitHub solo recibe el principio", (await dlg.getByText("GitHub solo recibirá el principio").count()) === 1);
+    L.check("FEEDBACK: con un texto largo avisa de que el email solo lleva el principio", (await dlg.getByText("el email solo llevará el principio").count()) === 1);
+    L.check("FEEDBACK: … y el enlace del email no pasa de 2000 caracteres", (await mailLink.getAttribute("href")).length <= 2000);
     await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
     await dlg.getByRole("button", { name: "Copiar el texto" }).click();
     await L.checkEventually("FEEDBACK: «Copiar el texto» copia el texto entero", async () => (await s.page.evaluate(() => navigator.clipboard.readText()).catch(() => "")) === longText);
@@ -138,6 +145,7 @@ if (only.includes("feedback")) {
     L.check("FEEDBACK: la captura mide 1600 px de ancho como mucho y menos de 1,5 MB", shot.w <= 1600 && shot.w >= 1000 && shot.size > 0 && shot.size <= 1.5 * 1024 * 1024, JSON.stringify(shot));
     L.check("FEEDBACK: la captura no lleva el fondo oscuro del diálogo (el menú lateral sale claro)", shot.side.every((v) => v > 225), JSON.stringify(shot.side));
     L.check("FEEDBACK: aviso de que la captura puede tener datos de su trabajo", (await dlg.getByText("La captura puede contener datos de tu trabajo").count()) === 1);
+    L.check("FEEDBACK: con captura, dice que se descarga para añadirla al email", (await dlg.getByText("descárgala y añádela al email").count()) === 1);
     const dl = dlg.getByRole("link", { name: "Descargar la captura" });
     L.eq("FEEDBACK: «Descargar la captura» es un .jpg", [await dl.getAttribute("download"), (await dl.getAttribute("href")).startsWith("blob:")], ["captura-pizarro.jpg", true]);
     const [download] = await Promise.all([s.page.waitForEvent("download"), dl.click()]);

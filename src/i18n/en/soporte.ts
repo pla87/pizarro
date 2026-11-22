@@ -9,7 +9,6 @@ export const soporte: Record<string, string> = {
   "Commit": "Commit",
   "Navegador y sistema": "Browser and system",
   "Continuar en GitHub": "Continue on GitHub",
-  "Necesitas una cuenta de GitHub. La incidencia es pública: no incluyas datos personales ni capturas con información privada.": "You need a GitHub account. The issue is public: do not include personal data or screenshots with private information.",
   "¿Es un fallo de seguridad? No lo publiques:": "Is it a security issue? Do not post it publicly:",
   "infórmalo en privado": "report it privately",
   // Copiar información técnica
@@ -35,7 +34,6 @@ export const soporte: Record<string, string> = {
   "Datos técnicos que se envían:": "Technical details that are sent:",
   "Datos técnicos que se rellenan en GitHub:": "Technical details filled in on GitHub:",
   "Se envía en privado por email al equipo de Pizarro, desde el servidor de correo de esta instalación (así que su dirección de envío se verá). Solo va lo que escribes, la captura si la incluyes, tu email si lo marcas y estos datos técnicos; nada más de tus proyectos ni de tu cuenta.": "It is sent privately by email to the Pizarro team, from this installation's mail server (so its sending address will be visible). Only what you write is sent, plus the screenshot if you include it, your email if you check the box and these technical details; nothing else from your projects or your account.",
-  "Esta instalación no puede enviarlo por email: se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.": "This installation cannot send it by email: Pizarro's form on GitHub will open with what you wrote and these technical details.",
   "La captura no se adjunta sola: descárgala y, si no tiene información privada, añádela en GitHub.": "The screenshot is not attached automatically: download it and, if it has no private information, add it on GitHub.",
   "Enviar": "Send",
   "Enviando…": "Sending…",
@@ -50,9 +48,15 @@ export const soporte: Record<string, string> = {
   "No se ha podido enviar. Inténtalo de nuevo más tarde.": "It could not be sent. Try again later.",
   "Sin conexión: no se ha enviado. Inténtalo de nuevo cuando vuelva la conexión.": "Offline: it was not sent. Try again when the connection is back.",
   // Informe de errores: el motivo de ir por GitHub, el texto largo recortado y el aviso de versión para quien no administra
-  "Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.": "Pizarro's form on GitHub will open with what you wrote and these technical details.",
   "El texto es largo: GitHub solo recibirá el principio. Cópialo entero con este botón para pegarlo allí.": "The text is long: GitHub will only receive the beginning. Copy all of it with this button to paste it there.",
   "Copiar el texto": "Copy the text",
   "Texto copiado": "Text copied",
   "Esta instalación no tiene la última versión de Pizarro: pide a quien la administra que la actualice para poder informar de un error o enviar una sugerencia.": "This installation is not running the latest version of Pizarro: ask whoever manages it to update it so you can report a bug or send a suggestion.",
+  // Informar de un error (ronda 62): vía por email desde el programa de correo y texto de GitHub en un solo párrafo
+  "Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos. La incidencia es pública y necesitas una cuenta de GitHub: no incluyas datos personales ni capturas con información privada.": "Pizarro's form on GitHub will open with what you wrote and these technical details. The issue is public and you need a GitHub account: do not include personal data or screenshots with private information.",
+  "Esta instalación no envía emails: «Enviar por email» abre tu programa de correo con lo que has escrito y estos datos técnicos, para que lo envíes en privado a {email}. En GitHub, en cambio, la incidencia es pública y necesitas una cuenta: no incluyas datos personales ni capturas con información privada.": "This installation does not send emails: “Send by email” opens your email app with what you wrote and these technical details, so you can send it privately to {email}. On GitHub, by contrast, the issue is public and you need an account: do not include personal data or screenshots with private information.",
+  "Enviar por email": "Send by email",
+  "o publicarlo en GitHub": "or post it on GitHub",
+  "La captura no se adjunta sola: descárgala y añádela al email.": "The screenshot is not attached automatically: download it and add it to the email.",
+  "El texto es largo: el email solo llevará el principio. Cópialo entero con este botón para pegarlo en él.": "The text is long: the email will only include the beginning. Copy all of it with this button to paste it into the email.",
 };

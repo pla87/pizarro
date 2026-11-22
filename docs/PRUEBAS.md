@@ -682,8 +682,8 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 14.2 Informar de un error (instalación oficial: tu Railway)
 
 1. Junto a *Cerrar sesión* aparece el bicho. Con la última versión, se abre el diálogo; marca la captura: se ve la página sin el diálogo.
-2. Mientras `FEEDBACK_EMAIL` esté vacía, «Continuar en GitHub» abre el formulario con el texto y los datos técnicos (sin enviar nada todavía si no quieres).
-3. Cuando crees la dirección de feedback y se rellene `FEEDBACK_EMAIL`, envía uno de prueba y comprueba que llega con la captura adjunta.
+2. Con el envío de emails configurado, «Enviar» lo manda en privado a `feedback@getpizarro.com` (`FEEDBACK_EMAIL`): envía uno de prueba y comprueba que llega con la captura adjunta (la dirección tiene que existir y reenviar a tu buzón).
+3. En una instalación sin envío de emails: «Enviar por email» abre tu programa de correo con el asunto, los datos técnicos y el texto para `feedback@getpizarro.com`; con captura, «Descargar la captura» para adjuntarla a mano. «o publicarlo en GitHub» abre el formulario público con lo escrito.
 
 ### 14.3 Avisos y usuarios
 
