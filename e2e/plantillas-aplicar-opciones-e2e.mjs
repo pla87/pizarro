@@ -1,5 +1,5 @@
 // «Aplicar plantilla», segunda vuelta: la plantilla elegida en el paso 1 se lee en claro y en oscuro (contraste del
-// nombre sobre su fondo, también en las de la instalación y en las demás tarjetas de opción de la app); el resumen de
+// nombre sobre su fondo, también en las de serie y en las demás tarjetas de opción de la app); el resumen de
 // «Cambiar a esta plantilla» dice qué tareas fijas pasan a normales; «Añadir lo que falte» vuelve a mostrar los tipos
 // generales ocultos que usa la plantilla (y el deshacer los oculta); y el límite de cambios por proyecto avisa con un
 // mensaje claro. Misma base y servidor que board-e2e.mjs:
@@ -98,11 +98,11 @@ async function measureChoices(dlg) {
 
 // --- Estilo de la opción elegida --------------------------------------------------------------------------------------
 if (only.includes("estilo")) {
-  L.scenario("estilo: la plantilla elegida se lee en claro y en oscuro (también las de la instalación)");
+  L.scenario("estilo: la plantilla elegida se lee en claro y en oscuro (también las de serie)");
   await seed();
   const s = await L.session();
   const { page } = s;
-  // Las plantillas de la instalación solo las ven los administradores: se sube el rol tras entrar (sin el 2FA de admin).
+  // Las plantillas propias solo las ven los administradores: se sube el rol tras entrar (sin el 2FA de admin).
   await L.q(`UPDATE "User" SET role='ADMIN' WHERE id=$1`, [adm.id]);
   try {
     for (const scheme of ["dark", "light"]) {
@@ -112,13 +112,13 @@ if (only.includes("estilo")) {
       await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
       const dlg = wizard(page);
       await dlg.locator("[data-template-choice]").first().waitFor({ timeout: 10000 });
-      const installation = await dlg.locator("fieldset").filter({ hasText: "Plantillas de la instalación" }).locator("[data-template-choice]").count();
-      L.check(`ESTILO ${scheme}: hay plantillas de la instalación (administrador)`, installation > 0, String(installation));
+      const builtins = await dlg.locator("fieldset").filter({ hasText: "Plantillas de serie" }).locator("[data-template-choice]").count();
+      L.check(`ESTILO ${scheme}: hay plantillas de serie de la instalación`, builtins > 0, String(builtins));
       const all = await measureChoices(dlg);
       const bad = all.filter((x) => !x.name || x.ratio < 4.5);
       L.check(`ESTILO ${scheme}: el nombre de cada plantilla elegida tiene contraste suficiente (≥ 4,5)`, bad.length === 0, JSON.stringify(bad.length ? bad : all.slice(0, 3)));
-      const course = all.find((x) => /^Curso o máster/.test(x.name));
-      L.check(`ESTILO ${scheme}: la plantilla de serie «Curso o máster» tiene nombre visible`, !!course && course.ratio >= 4.5, JSON.stringify(course ?? all.map((x) => x.name)));
+      const course = all.find((x) => /^Curso o charla/.test(x.name));
+      L.check(`ESTILO ${scheme}: la plantilla de serie «Curso o charla» tiene nombre visible`, !!course && course.ratio >= 4.5, JSON.stringify(course ?? all.map((x) => x.name)));
       if (scheme === "dark") {
         // Control: con las clases de antes (fondo claro sin variante oscura), la medida sí detecta el nombre ilegible.
         const card = dlg.locator("[data-template-choice]").first();
@@ -127,8 +127,8 @@ if (only.includes("estilo")) {
         await card.evaluate((el, c) => { el.className = c; }, old);
         L.check("ESTILO dark: (control) con el estilo antiguo el nombre no se leía", ratio < 2, String(ratio));
       }
-      // La captura, con una de la instalación elegida (la de la captura del fallo).
-      if (course) await dlg.locator("[data-template-choice]").filter({ hasText: /^Curso o máster/ }).locator("input").check();
+      // La captura, con una de serie elegida (la de la captura del fallo).
+      if (course) await dlg.locator("[data-template-choice]").filter({ hasText: /^Curso o charla/ }).locator("input").check();
       await page.screenshot({ path: `${SHOTS}/r51-plantilla-${scheme}.png` });
       await page.keyboard.press("Escape");
       await dlg.waitFor({ state: "detached", timeout: 5000 });
@@ -158,7 +158,7 @@ if (only.includes("fijas")) {
   const s = await L.session();
   const { page } = s;
   await settings(page);
-  const dlg = await openWizard(page, "Familia y casa", "Cambiar a esta plantilla");
+  const dlg = await openWizard(page, "Casa y familia", "Cambiar a esta plantilla");
   await dlg.locator("[data-step='2']").waitFor({ timeout: 10000 });
   const relSelect = dlg.locator(`[data-match-column="Para publicar"] select`);
   // Sin pareja se conserva con su rol (la plantilla no tiene release): siguen fijas y el resumen no dice nada.
@@ -189,15 +189,15 @@ if (only.includes("generales")) {
   await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
   L.check("GENERALES: la opción lo dice antes de elegirla", (await wizard(page).innerText()).includes("vuelve a mostrar los tipos generales que usa la plantilla"));
   await page.keyboard.press("Escape");
-  const dlg = await openWizard(page, "Equipo de software", "Añadir lo que falte");
+  const dlg = await openWizard(page, "Vibecoding", "Añadir lo que falte");
   await dlg.locator("[data-step='3']").waitFor({ timeout: 10000 });
   const text = await summaryText(dlg);
-  // «Equipo de software» usa «Corrección» y oculta «Respuesta»: solo vuelve la primera.
-  L.check("GENERALES: el resumen dice que vuelve a verse «Corrección»", /Volverá a verse 1 tipo general/.test(text) && /Corrección/.test(text) && !/Respuesta/.test(text), text);
+  // «Vibecoding» usa todos los tipos generales: vuelven los dos ocultos.
+  L.check("GENERALES: el resumen dice que vuelven a verse «Corrección» y «Respuesta»", /Volverán a verse 2 tipos generales/.test(text) && /Corrección/.test(text) && /Respuesta/.test(text), text);
   await page.screenshot({ path: `${SHOTS}/r51-plantilla-generales.png` });
   await dlg.getByRole("button", { name: "Aplicar", exact: true }).click();
   await dlg.waitFor({ state: "detached", timeout: 15000 });
-  L.eq("GENERALES: «Corrección» ya no está oculto; «Respuesta», sí", await hiddenKinds(), ["kind_respuesta"]);
+  L.eq("GENERALES: ya no queda ninguno oculto", await hiddenKinds(), []);
   await page.locator("[data-template-undo]").waitFor({ timeout: 10000 });
   await undoFromSettings(page);
   await L.eqEventually("GENERALES: el deshacer los vuelve a ocultar", () => hiddenKinds(), ["kind_correccion", "kind_respuesta"], { timeout: 10000 });
@@ -215,7 +215,7 @@ if (only.includes("limite")) {
   await settings(page, RATE_PID);
   for (let i = 0; i < 5; i++) {
     if (i % 2 === 0) {
-      const dlg = await openWizard(page, "Equipo de software", "Añadir lo que falte");
+      const dlg = await openWizard(page, "Vibecoding", "Añadir lo que falte");
       await dlg.locator("[data-step='3']").waitFor({ timeout: 10000 });
       await dlg.getByRole("button", { name: "Aplicar", exact: true }).click();
       await dlg.waitFor({ state: "detached", timeout: 15000 });

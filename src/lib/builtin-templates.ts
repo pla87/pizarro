@@ -14,9 +14,6 @@ export const kind = (name: string, color: string, titleTemplate: string, descrip
   subtaskTemplate,
 });
 
-/** Tipos generales de software que las plantillas ajenas al software no usan. */
-export const GENERALES_SOFTWARE = ["Funcionalidad", "Corrección"];
-
 interface BuiltinTemplate {
   /** Identificador estable: no cambia aunque se renombre la plantilla. */
   key: string;
@@ -62,16 +59,52 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
     },
   },
   {
-    // Casa y familia: lo de esta semana se imprime por persona (Planificación semanal), la compra es una lista única
-    // (Lista consolidada: cada producto es una subtarea), las citas van al calendario (Agenda) y lo que se repite,
-    // a Rutinas.
-    key: "tareas-familiares",
+    // Trabajo con clientes (negocio pequeño, autónomos, agencias, soporte, mantenimiento…): lo que depende de otros
+    // avisa si tarda (Esperando), la revisión avisa si faltan pasos (Revisión con requisitos) y lo periódico (facturas,
+    // impuestos, revisiones) se repite solo. Prioridad, cliente y coste son campos, no etiquetas.
+    key: "trabajo-clientes",
     data: {
-      name: "Tareas familiares",
-      description: "Organización del hogar: compras, casa, papeleo, citas y tareas que se repiten. Una etiqueta por persona para repartir el trabajo.",
+      name: "Trabajo y clientes",
+      description: "Encargos, propuestas, incidencias y tareas internas de un negocio o un profesional, con cliente, prioridad y coste, aviso cuando algo espera demasiado y tareas periódicas que se repiten solas.",
+      columns: [
+        col("Pendiente"),
+        col("En curso"),
+        col("Esperando", false, "WAITING"),
+        col("Revisión", false, "REVIEW"),
+        col("Tareas periódicas", false, "ROUTINES"),
+        col("Hecho", true),
+      ],
+      kinds: [
+        kind("Encargo", "#6366f1", "", "**Qué pide el cliente:**\n\n**Plazo acordado:**\n\n**Qué se entrega:**\n", ["Aclarar lo que necesita", "Hacer el trabajo", "Entregar y confirmar con el cliente"]),
+        kind("Propuesta o presupuesto", "#eab308", "Propuesta: ", "**Qué incluye:**\n\n**Importe y condiciones:**\n\n**Válida hasta:**\n", ["Preparar la propuesta", "Revisarla", "Enviarla", "Llamar para comentarla"]),
+        kind("Reunión", "#a855f7", "Reunión: ", "**Con quién:**\n\n**Fecha y formato:**\n\n**Objetivo:**\n\n**Acuerdos y siguiente paso:**\n", ["Preparar la reunión", "Enviar el resumen y los acuerdos"]),
+        kind("Incidencia", "#ef4444", "Incidencia: ", "**Qué ocurre:**\n\n**Dónde y a quién afecta:**\n\n**Solución aplicada:**\n", ["Confirmar el problema", "Buscar la causa", "Resolverlo", "Avisar al cliente"]),
+        kind("Facturación", "#22c55e", "", "**Concepto e importe:**\n\n**Vencimiento:**\n", ["Emitir o registrar la factura", "Comprobar el cobro o el pago", "Archivar el justificante"]),
+        kind("Contenido o campaña", "#ec4899", "", "**Objetivo y público:**\n\n**Canal:**\n\n**Fecha de publicación:**\n", ["Redactar el texto", "Preparar la imagen o el vídeo", "Revisar y programar"]),
+        kind("Tarea interna", "#64748b", "", "**Qué hay que hacer:**\n\n**Proveedor u organismo:**\n\n**Plazo:**\n"),
+      ],
+      hiddenGeneralKinds: [],
+      hideAllGeneralKinds: true,
+      labels: [
+        { name: "Bloqueado", color: "#f97316" },
+        { name: "Reabierto", color: "#eab308" },
+        { name: "En garantía", color: "#0ea5e9" },
+      ],
+      taskFields: ["priority", "client", "cost"],
+    },
+  },
+  {
+    // Casa y familia (también mudanzas y reformas): lo de esta semana se imprime por persona (Planificación semanal), lo
+    // que depende de otros avisa si tarda (Esperando), la compra es una lista única (Lista consolidada: cada producto es
+    // una subtarea), las citas van al calendario (Agenda) y lo que se repite, a Rutinas.
+    key: "casa-familia",
+    data: {
+      name: "Casa y familia",
+      description: "Compras, tareas de casa, papeleo, citas, reformas y mudanzas, con la semana por persona, la lista de la compra y tareas que se repiten solas.",
       columns: [
         col("Por hacer"),
         col("Esta semana", false, "WEEKLY_PLAN"),
+        col("Esperando", false, "WAITING"),
         col("Lista de la compra", false, "CHECKLIST"),
         col("Citas", false, "AGENDA"),
         col("Rutinas", false, "ROUTINES"),
@@ -82,468 +115,108 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         kind("Compras", "#22c55e", "Comprar ", "**Dónde:**\n\n**Para cuándo:**\n"),
         kind("Casa", "#f97316", "", "**Qué hay que hacer:**\n\n**Material necesario:**\n"),
         kind("Papeleo", "#64748b", "Gestionar ", "**Trámite:**\n\n**Documentos necesarios:**\n\n**Plazo:**\n", ["Reunir documentos", "Pedir cita o hacerlo online", "Archivar el justificante"]),
-        kind("Salud", "#ef4444", "Cita: ", "**Quién:**\n\n**Dónde y cuándo:**\n\n**Preguntas para la consulta:**\n", ["Pedir la cita", "Preparar documentación", "Apuntar indicaciones"]),
-        kind("Colegio y niños", "#eab308", "", "**Qué hay que hacer:**\n\n**Fecha límite:**\n\n**Qué hay que llevar:**\n"),
-        kind("Ocio", "#ec4899", "", "**Plan:**\n\n**Cuándo y dónde:**\n\n**Quién viene:**\n", ["Elegir fecha", "Reservar", "Avisar a los demás"]),
+        kind("Cita", "#ef4444", "Cita: ", "**Quién:**\n\n**Dónde y cuándo:**\n\n**Qué preguntar o llevar:**\n", ["Pedir la cita", "Preparar documentación", "Apuntar indicaciones"]),
+        kind("Reforma u obra", "#8b5a2b", "Obra: ", "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n", ["Pedir presupuestos", "Acordar la fecha", "Seguimiento durante la obra", "Revisar el resultado y pagar"]),
+        kind("Mudanza", "#0ea5e9", "Mudanza: ", "**Qué hay que hacer (trámites, embalaje, transporte, suministros):**\n\n**Fecha:**\n", ["Pedir presupuestos de transporte", "Embalar y etiquetar", "Cambiar la dirección y los suministros", "Entregar las llaves"]),
       ],
-      hiddenGeneralKinds: GENERALES_SOFTWARE,
+      hiddenGeneralKinds: [],
       hideAllGeneralKinds: true,
       labels: [
         { name: "Persona 1", color: "#0ea5e9" },
         { name: "Persona 2", color: "#ec4899" },
-        { name: "Persona 3", color: "#22c55e" },
         { name: "Toda la familia", color: "#a855f7" },
         { name: "Urgente", color: "#ef4444" },
       ],
+      // Coste para presupuestos y compras grandes; fecha de inicio para las obras de varios días.
+      taskFields: ["cost", "startDate"],
     },
   },
   {
-    // Productora o videógrafo: los presupuestos suman (Presupuesto), los días de rodaje van al calendario (Agenda), las
-    // rondas de cambios del cliente avisan si tarda (Esperando) y la entrega sale en un PDF para el cliente.
-    key: "produccion-audiovisual",
+    // Evento o viaje: lo pedido a proveedores avisa si no responden (Esperando), lo reservado suma su coste con pagado y
+    // pendiente (Presupuesto), el programa o el itinerario va al calendario (Agenda) y lo del día, maleta incluida, se ve
+    // como una sola lista (Lista consolidada).
+    key: "eventos-viajes",
     data: {
-      name: "Producción audiovisual",
-      description: "Del presupuesto a la entrega: propuesta, guion, preproducción, rodaje, edición y revisiones con el cliente.",
-      columns: [
-        col("Propuesta y presupuesto", false, "BUDGET"),
-        col("Guion"),
-        col("Preproducción"),
-        col("Rodaje", false, "AGENDA"),
-        col("Edición"),
-        col("Revisión del cliente", false, "WAITING"),
-        col("Entrega", false, "DELIVERY"),
-        col("Entregado", true),
-      ],
-      kinds: [
-        kind("Propuesta", "#6366f1", "Propuesta: ", "**Qué se quiere contar y para quién:**\n\n**Formato y duración:**\n\n**Fecha de entrega deseada:**\n\n**Qué incluye el presupuesto:**\n", ["Reunión de briefing", "Preparar propuesta y presupuesto", "Enviar al cliente", "Recibir la aprobación"]),
-        kind("Guion", "#a855f7", "Guion: ", "**Sinopsis:**\n\n**Duración estimada:**\n\n**Notas del cliente:**\n", ["Primer borrador", "Revisar con el cliente", "Versión final del guion"]),
-        kind("Rodaje", "#ef4444", "Rodaje: ", "**Localización:**\n\n**Fecha y horas:**\n\n**Equipo y material:**\n\n**Plano a plano:**\n", ["Confirmar localización y permisos", "Preparar material y baterías", "Enviar el plan de rodaje al equipo", "Copia de seguridad de las tarjetas"]),
-        kind("Edición", "#0ea5e9", "Edición: ", "**Versión:** v1\n\n**Referencias:**\n\n**Cambios pedidos por el cliente:**\n", ["Montaje previo", "Corte fino", "Corrección de color", "Exportar la versión de revisión"]),
-        kind("Sonido", "#14b8a6", "Sonido: ", "**Qué se necesita:** música, voz en off, efectos o mezcla.\n\n**Licencias:**\n", ["Elegir música y comprobar la licencia", "Limpiar y mezclar el audio", "Nivelar volúmenes"]),
-        kind("Gráficos", "#f97316", "Gráficos: ", "**Qué se necesita:** títulos, rótulos, logotipos o animaciones.\n\n**Formato y resolución:**\n"),
-        kind("Entrega", "#22c55e", "Entrega: ", "**Formatos pedidos:**\n\n**Destino:**\n", ["Exportar en los formatos acordados", "Revisar la exportación completa", "Enviar al cliente", "Archivar proyecto y material"]),
-      ],
-      hiddenGeneralKinds: GENERALES_SOFTWARE,
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Urgente", color: "#ef4444" },
-        { name: "Falta material", color: "#eab308" },
-        { name: "Licencias pendientes", color: "#f97316" },
-        { name: "Aprobado", color: "#22c55e" },
-      ],
-      // Cliente para filtrar por encargo y fecha de inicio para los rodajes de varios días (el coste lo trae la columna
-      // de presupuesto).
-      taskFields: ["client", "startDate"],
-    },
-  },
-  {
-    // Negocio pequeño: lo de la semana en un PDF por persona, lo que depende de otros avisa si tarda y lo periódico
-    // (impuestos, nóminas, cierres) se repite solo. Prioridad y cliente sustituyen a las etiquetas «Urgente» e
-    // «Importante».
-    key: "negocio",
-    data: {
-      name: "Negocio",
-      description: "Gestión diaria de un negocio pequeño: ventas, clientes, finanzas, administración y marketing, con las tareas periódicas que se repiten solas.",
-      columns: [
-        col("Por hacer"),
-        col("Esta semana", false, "WEEKLY_PLAN"),
-        col("En curso"),
-        col("Esperando a terceros", false, "WAITING"),
-        col("Tareas periódicas", false, "ROUTINES"),
-        col("Hecho", true),
-      ],
-      kinds: [
-        kind("Ventas", "#22c55e", "", "**Cliente o contacto:**\n\n**Oportunidad:**\n\n**Siguiente paso:**\n", ["Contactar", "Enviar propuesta", "Hacer seguimiento"]),
-        kind("Clientes", "#0ea5e9", "", "**Cliente:**\n\n**Qué necesita:**\n\n**Compromiso y fecha:**\n"),
-        kind("Finanzas", "#eab308", "", "**Concepto e importe:**\n\n**Fecha de vencimiento:**\n", ["Reunir facturas o justificantes", "Registrar en la contabilidad"]),
-        kind("Legal y administración", "#64748b", "", "**Trámite u obligación:**\n\n**Organismo o proveedor:**\n\n**Plazo:**\n", ["Reunir documentación", "Presentar o enviar", "Archivar el justificante"]),
-        kind("Operaciones", "#f97316", "", "**Qué hay que hacer:**\n\n**Responsable:**\n\n**Proveedores implicados:**\n"),
-        kind("Marketing", "#ec4899", "", "**Objetivo:**\n\n**Canal:**\n\n**Fecha de publicación:**\n"),
-      ],
-      hiddenGeneralKinds: GENERALES_SOFTWARE,
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Cobro pendiente", color: "#eab308" },
-        { name: "Pago pendiente", color: "#f97316" },
-        { name: "Impuestos", color: "#64748b" },
-        { name: "Cliente importante", color: "#a855f7" },
-      ],
-      taskFields: ["priority", "client"],
-    },
-  },
-  {
-    // Calendario editorial: las piezas periódicas (newsletter, informe mensual) se repiten solas desde Rutinas, la
-    // revisión avisa si faltan pasos de la pieza (Revisión con requisitos) y lo programado va al calendario (Agenda).
-    // Las subtareas de cada tipo terminan antes de la revisión: programar y publicar son las columnas siguientes.
-    key: "marketing-contenidos",
-    data: {
-      name: "Marketing y contenidos",
-      description: "Calendario editorial: de la idea a la publicación en redes, blog y newsletter, con revisión antes de programar y piezas periódicas que se repiten solas.",
-      columns: [
-        col("Ideas"),
-        col("Contenido periódico", false, "ROUTINES"),
-        col("Redacción"),
-        col("Diseño"),
-        col("Revisión", false, "REVIEW"),
-        col("Programado", false, "AGENDA"),
-        col("Publicado", true),
-      ],
-      kinds: [
-        kind("Post en redes", "#ec4899", "Post: ", "**Red social:**\n\n**Mensaje principal:**\n\n**Texto:**\n\n**Imagen o vídeo:**\n\n**Hashtags:**\n", ["Escribir el texto", "Preparar la imagen o el vídeo", "Añadir enlace y hashtags"]),
-        kind("Artículo de blog", "#0ea5e9", "Artículo: ", "**Palabra clave:**\n\n**Público:**\n\n**Esquema:**\n\n- \n\n**Llamada a la acción:**\n", ["Esquema", "Primer borrador", "Revisión SEO", "Imágenes y enlaces"]),
-        kind("Newsletter", "#a855f7", "Newsletter: ", "**Asunto:**\n\n**Contenido destacado:**\n\n- \n\n**Llamada a la acción:**\n", ["Redactar", "Enviar una prueba", "Comprobar los enlaces"]),
-        kind("Campaña", "#f97316", "Campaña: ", "**Objetivo:**\n\n**Público:**\n\n**Canales:**\n\n**Presupuesto:**\n\n**Fechas:**\n", ["Definir objetivo y público", "Preparar las piezas", "Configurar la segmentación", "Decidir cómo se medirá"]),
-        kind("Vídeo", "#ef4444", "Vídeo: ", "**Idea y duración:**\n\n**Guion:**\n\n**Plataforma:**\n", ["Guion", "Grabar", "Editar", "Miniatura y título"]),
-        kind("Informe de resultados", "#6366f1", "Informe: ", "**Periodo:**\n\n**Canales:**\n\n**Datos clave:**\n\n**Conclusiones y próximos pasos:**\n", ["Recoger los datos", "Comparar con el periodo anterior", "Compartir las conclusiones"]),
-      ],
-      hiddenGeneralKinds: GENERALES_SOFTWARE,
-      hideAllGeneralKinds: true,
-      // Etiquetas por canal; el formato (blog, newsletter, vídeo) ya lo dice el tipo.
-      labels: [
-        { name: "Instagram", color: "#ec4899" },
-        { name: "LinkedIn", color: "#1e3a8a" },
-        { name: "TikTok", color: "#14b8a6" },
-        { name: "YouTube", color: "#f97316" },
-        { name: "Evergreen", color: "#22c55e" },
-        { name: "Urgente", color: "#ef4444" },
-      ],
-      // Fecha de inicio: las campañas duran varios días (la agenda las exporta como rango).
-      taskFields: ["startDate"],
-    },
-  },
-  {
-    // Evento: lo pedido a proveedores avisa si no responden (Esperando), lo contratado suma su coste con pagado y
-    // pendiente (Presupuesto) y lo del día del evento se imprime como una sola lista (Lista consolidada).
-    key: "eventos",
-    data: {
-      name: "Organización de eventos",
-      description: "Del primer boceto al día del evento: lugar, proveedores, invitados, programa y logística, con el presupuesto de lo contratado y la lista del día.",
+      name: "Eventos y viajes",
+      description: "Organizar un evento o un viaje: lugar o alojamiento, transporte, proveedores, invitados y programa, con el presupuesto de lo reservado, la agenda y una lista única para el día o la maleta.",
       columns: [
         col("Ideas"),
         col("Por confirmar", false, "WAITING"),
-        col("Contratado", false, "BUDGET"),
+        col("Reservado", false, "BUDGET"),
         col("Preparando"),
-        col("Día del evento", false, "CHECKLIST"),
+        col("Agenda", false, "AGENDA"),
+        col("Lista del día y maleta", false, "CHECKLIST"),
         col("Hecho", true),
       ],
       kinds: [
-        kind("Lugar", "#0ea5e9", "Lugar: ", "**Opciones:**\n\n**Aforo y precio:**\n\n**Condiciones (horario, montaje, cancelación):**\n", ["Pedir presupuestos", "Visitar el lugar", "Reservar y firmar"]),
+        kind("Lugar o alojamiento", "#6366f1", "", "**Opciones:**\n\n**Fechas, aforo y precio:**\n\n**Condiciones de cancelación:**\n", ["Comparar opciones", "Reservar", "Guardar la confirmación"]),
+        kind("Transporte", "#0ea5e9", "Transporte: ", "**Trayecto y fechas:**\n\n**Compañía y referencia de reserva:**\n\n**Horarios:**\n", ["Comparar precios", "Reservar", "Guardar los billetes"]),
         kind("Proveedor", "#f97316", "Proveedor: ", "**Servicio (catering, música, fotografía…):**\n\n**Contacto:**\n\n**Presupuesto y señal:**\n", ["Pedir presupuesto", "Comparar opciones", "Confirmar y pagar la señal"]),
         kind("Invitados", "#ec4899", "", "**Lista y número de personas:**\n\n**Necesidades especiales:**\n", ["Cerrar la lista", "Enviar invitaciones", "Confirmar asistencia"]),
-        kind("Programa", "#a855f7", "Programa: ", "**Hora y duración:**\n\n**Quién interviene:**\n\n**Qué se necesita (micrófono, pantalla, música):**\n", ["Cerrar el horario", "Confirmar con quien interviene", "Enviar el programa"]),
-        kind("Logística", "#6366f1", "", "**Qué hay que mover o preparar:**\n\n**Cuándo y quién:**\n", ["Plan del día", "Transporte y montaje", "Recoger y desmontar"]),
-        kind("Comunicación", "#14b8a6", "", "**Qué se comunica y a quién:**\n\n**Canal (email, redes, cartel):**\n\n**Fecha de envío:**\n", ["Preparar el texto y la imagen", "Enviar o publicar", "Recordatorio unos días antes"]),
-      ],
-      hiddenGeneralKinds: GENERALES_SOFTWARE,
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Urgente", color: "#ef4444" },
-        { name: "Imprescindible", color: "#a855f7" },
-        { name: "Contrato firmado", color: "#22c55e" },
-        { name: "Señal pagada", color: "#eab308" },
-      ],
-    },
-  },
-  {
-    // Soporte: lo que espera al cliente o a otro equipo avisa si tarda (dos columnas Esperando); la prioridad y el
-    // cliente son campos, no etiquetas.
-    key: "soporte-clientes",
-    data: {
-      name: "Soporte y atención al cliente",
-      description: "Incidencias, consultas y reclamaciones de clientes: del primer aviso a la resolución, con prioridad, cliente y aviso cuando una respuesta se retrasa.",
-      columns: [
-        col("Nuevo"),
-        col("En curso"),
-        col("Esperando al cliente", false, "WAITING"),
-        col("Escalado", false, "WAITING"),
-        col("Resuelto", true),
-      ],
-      kinds: [
-        kind("Incidencia", "#ef4444", "Incidencia: ", "**Qué ocurre:**\n\n**Pasos para reproducirlo:**\n\n**Impacto (cuántos afectados):**\n\n**Solución aplicada:**\n", ["Confirmar el problema", "Buscar la causa", "Aplicar la solución", "Avisar al cliente", "Comprobar que se mantiene resuelto"]),
-        kind("Consulta", "#0ea5e9", "Consulta: ", "**Qué pregunta:**\n\n**Respuesta dada:**\n", ["Responder al cliente", "Confirmar que le sirve"]),
-        kind("Solicitud", "#6366f1", "Solicitud: ", "**Qué pide:**\n\n**Plazo acordado:**\n", ["Valorar si es posible", "Hacerlo", "Confirmar con el cliente"]),
-        kind("Reclamación", "#f97316", "Reclamación: ", "**Motivo:**\n\n**Qué pide el cliente:**\n\n**Propuesta de solución:**\n", ["Acusar recibo", "Revisar el historial", "Proponer solución", "Cerrar con el cliente"]),
-        kind("Seguimiento", "#14b8a6", "Seguimiento: ", "**Qué hay que comprobar:**\n\n**Fecha de contacto:**\n"),
-        kind("Artículo de ayuda", "#a855f7", "Ayuda: ", "**Pregunta frecuente:**\n\n**Respuesta:**\n\n**Casos en que aplica:**\n", ["Redactar el artículo", "Revisarlo", "Publicarlo"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Cliente importante", color: "#a855f7" },
-        { name: "Afecta a varios clientes", color: "#ef4444" },
-        { name: "Reabierto", color: "#f97316" },
-        { name: "Resuelto sin respuesta", color: "#eab308" },
-      ],
-      taskFields: ["priority", "client"],
-    },
-  },
-  {
-    // Selección: las entrevistas van al calendario (Agenda), la oferta avisa si el candidato no contesta (Esperando) y
-    // la incorporación avisa si se sale con pasos pendientes (Revisión con requisitos).
-    key: "seleccion-personal",
-    data: {
-      name: "Selección de personal",
-      description: "Procesos de contratación: de la vacante a la incorporación, con una tarjeta por candidato, entrevistas en el calendario y la acogida paso a paso.",
-      columns: [
-        col("Vacante abierta"),
-        col("Preseleccionados"),
-        col("Entrevista", false, "AGENDA"),
-        col("Prueba"),
-        col("Oferta", false, "WAITING"),
-        col("Incorporación", false, "REVIEW"),
-        col("Contratado", true),
-        col("Descartado", true),
-      ],
-      kinds: [
-        kind("Vacante", "#6366f1", "Vacante: ", "**Puesto:**\n\n**Funciones principales:**\n\n**Requisitos imprescindibles:**\n\n**Condiciones (horario, rango salarial):**\n", ["Definir el perfil", "Redactar y publicar la oferta", "Revisar las candidaturas recibidas"]),
-        kind("Candidato", "#0ea5e9", "Candidato: ", "**Nombre:** [nombre o referencia del candidato]\n\n**Puesto:**\n\n**Procedencia de la candidatura:**\n\n**Primera impresión:**\n", ["Revisar el currículum", "Primer contacto", "Decidir si pasa a entrevista"]),
-        kind("Entrevista", "#a855f7", "Entrevista: ", "**Candidato:**\n\n**Fecha y formato:**\n\n**Entrevistadores:**\n\n**Preguntas clave:**\n\n**Valoración:**\n", ["Acordar fecha con el candidato", "Preparar las preguntas", "Entrevistar", "Anotar la valoración"]),
-        kind("Prueba", "#14b8a6", "Prueba: ", "**Candidato:**\n\n**Qué se evalúa:**\n\n**Plazo de entrega:**\n\n**Criterios de corrección:**\n", ["Enviar el enunciado", "Corregir la prueba", "Dar la devolución"]),
-        kind("Oferta", "#22c55e", "Oferta: ", "**Candidato:**\n\n**Condiciones ofrecidas:**\n\n**Fecha límite de respuesta:**\n", ["Aprobar las condiciones", "Enviar la oferta", "Negociar o confirmar"]),
-        kind("Incorporación", "#eab308", "Incorporación: ", "**Persona:**\n\n**Fecha de inicio:**\n\n**Material y accesos:**\n", ["Preparar contrato y alta", "Preparar equipo y accesos", "Plan de acogida del primer día", "Seguimiento tras la primera semana"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Urgente", color: "#ef4444" },
-        { name: "Muy buen perfil", color: "#22c55e" },
-        { name: "En duda", color: "#eab308" },
-        { name: "Referido", color: "#6366f1" },
-        { name: "Candidatura interna", color: "#0ea5e9" },
-      ],
-    },
-  },
-  {
-    // Reforma: presupuestos y permisos dependen de otros (Esperando), lo planificado va al calendario con su fecha de
-    // inicio (Agenda), los repasos de la revisión final son subtareas que avisan si quedan pendientes (Revisión con
-    // requisitos) y los pagos suman pagado y pendiente (Presupuesto).
-    key: "reformas-obras",
-    data: {
-      name: "Reformas y obras",
-      description: "Reformar una vivienda o local: presupuestos, permisos, materiales, oficios, repasos y pagos, hasta la entrega final.",
-      columns: [
-        col("Ideas"),
-        col("Presupuestos", false, "WAITING"),
-        col("Permisos", false, "WAITING"),
-        col("Planificado", false, "AGENDA"),
-        col("En obra"),
-        col("Revisión final", false, "REVIEW"),
-        col("Pagos", false, "BUDGET"),
-        col("Terminado", true),
-      ],
-      kinds: [
-        kind("Presupuesto", "#eab308", "Presupuesto: ", "**Empresa o profesional:** [nombre]\n\n**Alcance incluido:**\n\n**Importe y forma de pago:**\n\n**Plazo de ejecución:**\n", ["Pedir presupuesto", "Comparar con otros", "Aceptar o rechazar"]),
-        kind("Permisos y licencias", "#64748b", "Permiso: ", "**Trámite:**\n\n**Organismo:**\n\n**Documentos necesarios:**\n\n**Plazo:**\n", ["Reunir la documentación", "Presentar la solicitud", "Guardar la resolución"]),
-        kind("Materiales", "#8b5a2b", "Material: ", "**Qué se necesita:**\n\n**Medidas o cantidad:**\n\n**Proveedor y plazo de entrega:**\n", ["Elegir modelo", "Pedir y pagar", "Recibir y comprobar"]),
-        kind("Trabajo de obra", "#f97316", "Obra: ", "**Estancia o zona:**\n\n**Trabajo a realizar:**\n\n**Oficio responsable:**\n\n**Fechas previstas:**\n", ["Acordar fecha de inicio", "Seguimiento durante la ejecución", "Revisar el resultado"]),
-        // En «Revisión final» cada defecto es una subtarea: al sacar la tarjeta con alguno sin marcar, avisa.
-        kind("Repasos", "#a855f7", "Repasos: ", "**Estancia o zona:**\n\n**Quién los corrige:**\n\n**Defectos a corregir (uno por subtarea):**\n"),
-        kind("Pago", "#22c55e", "Pago: ", "**Concepto y empresa:**\n\n**Importe:**\n\n**Vencimiento:**\n", ["Comprobar el trabajo hecho", "Realizar el pago y marcarlo como pagado", "Guardar la factura"]),
-        kind("Incidencia en obra", "#ef4444", "Incidencia: ", "**Qué ha pasado:**\n\n**Quién lo resuelve:**\n\n**Coste o retraso:**\n", ["Documentar con fotos", "Avisar al responsable", "Acordar la solución"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Urgente", color: "#ef4444" },
-        { name: "Esperando material", color: "#8b5a2b" },
-        { name: "Esperando al oficio", color: "#64748b" },
-        { name: "Aprobado", color: "#22c55e" },
-        { name: "Cocina", color: "#f97316" },
-        { name: "Baño", color: "#14b8a6" },
-      ],
-      // Fecha de inicio: un trabajo de obra ocupa varios días (la agenda lo exporta como rango).
-      taskFields: ["startDate"],
-    },
-  },
-  {
-    // Viaje: lo reservado suma su coste con pagado y pendiente (Presupuesto) y lo de antes de salir se ve como una sola
-    // lista, la maleta incluida (Lista consolidada: cada subtarea es una cosa que llevar o hacer).
-    key: "viajes",
-    data: {
-      name: "Viajes",
-      description: "Preparar un viaje de principio a fin: transporte, alojamiento, actividades y documentación, con el coste de lo reservado y una lista única de la maleta y los preparativos.",
-      columns: [
-        col("Ideas"),
-        col("Por reservar"),
-        col("Reservado", false, "BUDGET"),
-        col("Antes de salir", false, "CHECKLIST"),
-        col("Durante el viaje"),
-        col("Hecho", true),
-      ],
-      kinds: [
-        kind("Transporte", "#0ea5e9", "Transporte: ", "**Trayecto y fechas:**\n\n**Compañía y referencia de reserva:**\n\n**Horarios:**\n", ["Comparar precios", "Reservar", "Guardar los billetes"]),
-        kind("Alojamiento", "#6366f1", "Alojamiento: ", "**Lugar y fechas:**\n\n**Dirección y contacto:**\n\n**Condiciones de cancelación:**\n", ["Comparar opciones", "Reservar", "Confirmar la hora de llegada"]),
-        kind("Actividad", "#ec4899", "Actividad: ", "**Qué y dónde:**\n\n**Día y hora:**\n\n**Precio y reserva:**\n", ["Comprobar horarios y precios", "Reservar entradas"]),
+        kind("Actividad o programa", "#a855f7", "", "**Qué y dónde:**\n\n**Día, hora y duración:**\n\n**Quién interviene o qué se necesita:**\n", ["Cerrar el horario", "Reservar o confirmar", "Avisar a los demás"]),
         kind("Documentación", "#64748b", "Documentación: ", "**Qué documento:**\n\n**Quién lo necesita:**\n\n**Caducidad o plazo:**\n", ["Comprobar la vigencia", "Tramitarlo si hace falta", "Guardar copia digital"]),
-        kind("Maleta", "#14b8a6", "Maleta: ", "**Para quién:**\n\n**Clima previsto:**\n\n**No olvidar:**\n\n- \n", ["Documentación y tarjetas", "Cargadores y adaptador", "Medicinas", "Ropa según el clima", "Neceser"]),
-        kind("Preparativos", "#eab308", "", "**Qué hay que dejar hecho:**\n\n- \n\n**Antes de cuándo:**\n", ["Hacer el check-in online", "Descargar billetes y mapas", "Avisar al banco si se paga fuera"]),
+        // Para «Lista del día y maleta»: sus subtareas entran en la lista única.
+        kind("Maleta y material", "#14b8a6", "", "**Para quién o para qué:**\n\n**No olvidar:**\n\n- \n", ["Documentación y billetes", "Cargadores y adaptador", "Medicinas", "Ropa según el clima"]),
       ],
       hiddenGeneralKinds: [],
       hideAllGeneralKinds: true,
       labels: [
-        { name: "Imprescindible", color: "#ef4444" },
+        { name: "Imprescindible", color: "#a855f7" },
         { name: "Opcional", color: "#64748b" },
         { name: "Cancelación gratuita", color: "#22c55e" },
-        { name: "Sin cancelación", color: "#f97316" },
       ],
-      // Fecha de inicio: el alojamiento y los trayectos van de una fecha a otra.
-      taskFields: ["startDate"],
+      // Fecha de inicio: el alojamiento, los trayectos y las actividades van de una fecha a otra.
+      taskFields: ["cost", "startDate"],
     },
   },
   {
-    // Tesis o trabajo largo: la revisión del tutor avisa si tarda en responder (Esperando) y las correcciones son
-    // subtareas que avisan si se entrega con alguna pendiente (Revisión con requisitos).
+    // Aprender cualquier cosa (cursos, oposiciones, idiomas, una tesis): los repasos se repiten solos (Rutinas), lo que
+    // espera la corrección del profesor o del tutor avisa si tarda (Esperando) y las correcciones son subtareas que avisan
+    // si se entrega con alguna pendiente (Revisión con requisitos). Conserva la clave de «Estudios o tesis».
     key: "estudios-tesis",
     data: {
-      name: "Estudios o tesis",
-      description: "Trabajos largos de estudio o investigación: lecturas, redacción por capítulos, revisiones con el tutor, correcciones y entrega.",
+      name: "Estudios y aprendizaje",
+      description: "Aprender cualquier cosa: un curso, unas oposiciones, un idioma o una tesis. Temas, lecturas, práctica, repasos que se repiten solos, correcciones, entregas y exámenes.",
       columns: [
         col("Pendiente"),
-        col("Investigando"),
-        col("Redactando"),
-        col("Revisión del tutor", false, "WAITING"),
+        col("Estudiando"),
+        col("Repasos", false, "ROUTINES"),
+        col("Esperando corrección", false, "WAITING"),
         col("Corrigiendo", false, "REVIEW"),
-        col("Entregado", true),
-      ],
-      kinds: [
-        kind("Lectura", "#0ea5e9", "Leer: ", "**Fuente:**\n\n**Para qué capítulo:**\n\n**Ideas principales:**\n\n**Citas útiles:**\n", ["Leer", "Resumir", "Añadir a la bibliografía"]),
-        kind("Redacción", "#6366f1", "Redactar: ", "**Capítulo o apartado:**\n\n**Esquema:**\n\n- \n\n**Extensión prevista:**\n", ["Esquema", "Primer borrador", "Revisar el estilo", "Comprobar las citas"]),
-        kind("Trabajo de campo", "#22c55e", "Campo: ", "**Objetivo:**\n\n**Método:**\n\n**Datos a recoger:**\n\n**Fechas:**\n", ["Preparar el material", "Recoger los datos", "Ordenar y guardar copia"]),
-        kind("Reunión con el tutor", "#a855f7", "Tutoría: ", "**Fecha:**\n\n**Qué hay que presentar:**\n\n**Dudas:**\n\n**Acuerdos:**\n", ["Enviar el material antes", "Preparar las dudas", "Anotar los acuerdos"]),
-        // En «Corrigiendo» cada comentario del tutor es una subtarea: al sacar la tarjeta con alguno sin hacer, avisa.
-        kind("Correcciones", "#f97316", "Corregir: ", "**Capítulo o apartado:**\n\n**Fecha de la próxima entrega:**\n\n**Comentarios del tutor (uno por subtarea):**\n"),
-        kind("Bibliografía", "#8b5a2b", "", "**Referencias a añadir o comprobar:**\n\n- \n\n**Formato de cita:**\n"),
-        kind("Entrega o defensa", "#ef4444", "Entrega: ", "**Qué se entrega y dónde:**\n\n**Fecha límite:**\n\n**Requisitos de formato:**\n", ["Revisión final del texto", "Comprobar el formato", "Entregar y guardar el justificante", "Preparar la presentación"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Capítulo 1", color: "#0ea5e9" },
-        { name: "Capítulo 2", color: "#6366f1" },
-        { name: "Capítulo 3", color: "#a855f7" },
-        { name: "Duda para el tutor", color: "#f97316" },
-        { name: "Urgente", color: "#ef4444" },
-      ],
-    },
-  },
-  {
-    // Mudanza: lo de la semana en un PDF por persona, lo que depende de otros avisa si tarda (Esperando) y lo del día de
-    // la mudanza se imprime como una sola lista (Lista consolidada).
-    key: "mudanza",
-    data: {
-      name: "Mudanza",
-      description: "Cambio de casa sin olvidos: trámites, embalaje, transporte, limpieza y puesta a punto de la vivienda nueva, con la lista del día de la mudanza.",
-      columns: [
-        col("Por hacer"),
-        col("Esta semana", false, "WEEKLY_PLAN"),
-        col("Esperando", false, "WAITING"),
-        col("Día de la mudanza", false, "CHECKLIST"),
         col("Hecho", true),
       ],
       kinds: [
-        kind("Trámites y cambios de dirección", "#64748b", "Cambiar dirección: ", "**Organismo o empresa:**\n\n**Documentos necesarios:**\n\n**Fecha límite:**\n", ["Reunir documentos", "Hacer el cambio", "Guardar el justificante"]),
-        kind("Embalaje", "#8b5a2b", "Embalar: ", "**Estancia:**\n\n**Qué se embala:**\n\n**Frágil o valioso:**\n", ["Conseguir cajas y material", "Embalar y etiquetar", "Anotar el contenido de las cajas"]),
-        kind("Transporte", "#0ea5e9", "Transporte: ", "**Empresa o ayudantes:** [nombre]\n\n**Fecha y hora:**\n\n**Volumen aproximado:**\n\n**Accesos en origen y destino:**\n", ["Pedir presupuestos", "Reservar la fecha", "Reservar plaza de aparcamiento o permiso", "Confirmar el día anterior"]),
-        kind("Limpieza y entrega de llaves", "#14b8a6", "", "**Vivienda:**\n\n**Qué hay que dejar hecho:**\n\n**Fecha de entrega de llaves:**\n", ["Limpiar a fondo", "Hacer fotos del estado", "Leer contadores", "Entregar las llaves"]),
-        kind("Suministros", "#eab308", "Suministros: ", "**Servicio (luz, agua, internet…):**\n\n**Baja o alta:**\n\n**Fecha de cambio:**\n", ["Dar de baja en la casa anterior", "Dar de alta en la nueva", "Comprobar que funciona"]),
-        kind("Casa nueva", "#ec4899", "", "**Qué hay que comprar o montar:**\n\n**Estancia:**\n\n**Medidas:**\n"),
-        // Para la columna «Día de la mudanza»: sus subtareas entran en la lista única del día.
-        kind("Día de la mudanza", "#ef4444", "", "**Qué hay que tener a mano o hacer ese día:**\n\n- \n", ["Bolsa con lo básico para la primera noche", "Herramientas para desmontar y montar", "Documentos y llaves", "Cargadores"]),
+        kind("Tema o lección", "#0ea5e9", "Tema: ", "**Tema o unidad:**\n\n**Qué tengo que saber:**\n\n- \n\n**Materiales:**\n", ["Leer o ver la lección", "Hacer un esquema o resumen", "Hacer los ejercicios"]),
+        kind("Lectura", "#8b5a2b", "Leer: ", "**Fuente:**\n\n**Para qué:**\n\n**Ideas principales:**\n", ["Leer", "Resumir", "Guardar la referencia"]),
+        kind("Práctica", "#22c55e", "Practicar: ", "**Qué se practica (ejercicios, conversación, problemas):**\n\n**Tiempo:**\n\n**Dudas:**\n", ["Hacer los ejercicios", "Corregirlos", "Apuntar los errores"]),
+        kind("Redacción", "#6366f1", "Redactar: ", "**Trabajo, capítulo o apartado:**\n\n**Esquema:**\n\n- \n\n**Extensión prevista:**\n", ["Esquema", "Primer borrador", "Revisar el estilo", "Comprobar las citas"]),
+        kind("Tutoría o clase", "#a855f7", "Tutoría: ", "**Fecha:**\n\n**Qué hay que llevar:**\n\n**Dudas:**\n\n**Acuerdos:**\n", ["Preparar las dudas", "Anotar los acuerdos"]),
+        // En «Corrigiendo» cada comentario recibido es una subtarea: al sacar la tarjeta con alguno sin hacer, avisa.
+        kind("Correcciones", "#f97316", "Corregir: ", "**Trabajo o apartado:**\n\n**Fecha de la próxima entrega:**\n\n**Comentarios recibidos (uno por subtarea):**\n"),
+        kind("Examen o entrega", "#ef4444", "", "**Qué es (examen, entrega o defensa):**\n\n**Fecha y lugar:**\n\n**Qué entra o qué requisitos tiene:**\n", ["Repasar todo el temario", "Simulacro o revisión final", "Preparar lo que hay que llevar o entregar"]),
       ],
       hiddenGeneralKinds: [],
       hideAllGeneralKinds: true,
       labels: [
-        { name: "Cocina", color: "#f97316" },
-        { name: "Salón", color: "#0ea5e9" },
-        { name: "Dormitorios", color: "#a855f7" },
-        { name: "Baño", color: "#14b8a6" },
-        { name: "Urgente", color: "#ef4444" },
-        { name: "Frágil", color: "#eab308" },
+        { name: "Bloque 1", color: "#0ea5e9" },
+        { name: "Bloque 2", color: "#6366f1" },
+        { name: "Duda", color: "#f97316" },
+        { name: "Me cuesta", color: "#ef4444" },
       ],
-    },
-  },
-  {
-    // Mantenimiento de un edificio, local, oficina o comunidad. Lo preventivo se repite solo (Rutinas),
-    // las intervenciones con fecha van al calendario (Agenda) y lo que espera una pieza o al técnico avisa si tarda.
-    key: "mantenimiento",
-    data: {
-      name: "Mantenimiento e instalaciones",
-      description: "Mantenimiento de un edificio, local, oficina o comunidad: averías, revisiones obligatorias, mantenimiento preventivo que se repite solo, pedidos y contratos con proveedores.",
-      columns: [
-        col("Avisos"),
-        col("Mantenimiento periódico", false, "ROUTINES"),
-        col("Programado", false, "AGENDA"),
-        col("En curso"),
-        col("Esperando pieza o técnico", false, "WAITING"),
-        col("Hecho", true),
-      ],
-      kinds: [
-        kind("Avería", "#ef4444", "Avería: ", "**Dónde:**\n\n**Qué ocurre:**\n\n**Desde cuándo y a quién afecta:**\n\n**Equipo o referencia:**\n", ["Comprobar la avería", "Avisar al técnico o al proveedor", "Reparar", "Comprobar que funciona"]),
-        kind("Mantenimiento preventivo", "#14b8a6", "Mantenimiento: ", "**Equipo o instalación:**\n\n**Qué se revisa:**\n\n- \n\n**Frecuencia:**\n", ["Revisar", "Anotar lecturas o incidencias", "Firmar el parte"]),
-        kind("Inspección obligatoria", "#6366f1", "Inspección: ", "**Instalación (ascensor, extintores, caldera, electricidad…):**\n\n**Empresa autorizada:**\n\n**Vencimiento:**\n", ["Pedir cita a la empresa autorizada", "Acompañar la inspección", "Guardar el certificado", "Corregir los defectos"]),
-        kind("Pedido de material", "#8b5a2b", "Pedido: ", "**Material o repuesto:**\n\n**Cantidad y referencia:**\n\n**Proveedor y plazo:**\n", ["Pedir presupuesto", "Hacer el pedido", "Recibir y comprobar"]),
-        kind("Contrato con proveedor", "#64748b", "Contrato: ", "**Proveedor y servicio:**\n\n**Vencimiento y renovación:**\n\n**Contacto de urgencias:**\n", ["Revisar las condiciones", "Renovar o cambiar de proveedor", "Archivar el contrato"]),
-        kind("Mejora", "#22c55e", "", "**Qué se mejora:**\n\n**Por qué:**\n\n**Coste estimado:**\n", ["Pedir presupuestos", "Aprobar el gasto", "Hacerlo"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Electricidad", color: "#eab308" },
-        { name: "Fontanería", color: "#0ea5e9" },
-        { name: "Climatización", color: "#14b8a6" },
-        { name: "Seguridad e incendios", color: "#ef4444" },
-        { name: "Exterior y zonas comunes", color: "#166534" },
-        { name: "En garantía", color: "#a855f7" },
-      ],
-      taskFields: ["priority", "cost"],
-    },
-  },
-  {
-    // Embudo comercial ligero. Las reuniones van al calendario (Agenda) y una propuesta sin respuesta
-    // avisa a quien la lleva (Esperando). Dos columnas terminadas: ganado y perdido.
-    key: "ventas",
-    data: {
-      name: "Ventas",
-      description: "Embudo comercial sencillo: del contacto nuevo al cliente ganado, con las reuniones en el calendario y aviso cuando una propuesta se queda sin respuesta.",
-      columns: [
-        col("Contactos nuevos"),
-        col("Contactado"),
-        col("Reunión o demo", false, "AGENDA"),
-        col("Propuesta enviada", false, "WAITING"),
-        col("Negociación"),
-        col("Ganado", true),
-        col("Perdido", true),
-      ],
-      kinds: [
-        kind("Oportunidad", "#22c55e", "", "**Qué necesita:**\n\n**Importe estimado:**\n\n**Cómo nos conoció:**\n\n**Siguiente paso y fecha:**\n", ["Primer contacto", "Entender la necesidad", "Enviar la propuesta", "Cerrar"]),
-        kind("Reunión", "#a855f7", "Reunión: ", "**Con quién:**\n\n**Fecha y formato:**\n\n**Objetivo:**\n\n**Acuerdos y siguiente paso:**\n", ["Preparar la reunión", "Enviar el resumen y los acuerdos"]),
-        kind("Propuesta", "#6366f1", "Propuesta: ", "**Qué incluye:**\n\n**Importe y condiciones:**\n\n**Válida hasta:**\n", ["Preparar la propuesta", "Revisarla", "Enviarla", "Llamar para comentarla"]),
-        kind("Seguimiento", "#14b8a6", "Seguimiento: ", "**Último contacto:**\n\n**Qué hay que preguntar o enviar:**\n"),
-        kind("Alta de cliente", "#0ea5e9", "Alta: ", "**Qué ha contratado:**\n\n**Datos de facturación:**\n\n**Quién lo atenderá:**\n", ["Firmar el contrato o el pedido", "Dar de alta en facturación", "Presentar al equipo que lo atenderá"]),
-      ],
-      hiddenGeneralKinds: [],
-      hideAllGeneralKinds: true,
-      labels: [
-        { name: "Interés alto", color: "#22c55e" },
-        { name: "Interés bajo", color: "#64748b" },
-        { name: "Recomendación", color: "#a855f7" },
-        { name: "Cliente actual", color: "#0ea5e9" },
-        { name: "Volver a contactar", color: "#eab308" },
-      ],
-      // El cliente es un campo (filtrar y agrupar por cliente) y la prioridad ordena el embudo.
-      taskFields: ["priority", "client"],
+      // Fecha de inicio para lo que dura varios días y horas para planificar el tiempo de estudio.
+      taskFields: ["hours", "startDate"],
     },
   },
   {
     // Preparar un curso con ayuda de un agente (p. ej. Claude Code en la web): la descripción de cada tipo deja escrito
     // el encargo (objetivo, contenido, formato de entrega, duración, criterios y notas para el agente). La columna
     // «Plan de trabajo para IA» (rol AI_PLAN) reúne los encargos y genera el plan en Markdown para el agente, y
-    // «Programa» (rol PROGRAM) tiene una tarjeta por sesión y publica el programa en PDF. Sin columna de terminadas: lo
-    // hecho se archiva o se queda en su columna. Sin datos de alumnos.
+    // «Programa» (rol PROGRAM) tiene una tarjeta por sesión y publica el programa en PDF. Lo ya publicado para los alumnos
+    // pasa a «Publicado» (terminada: cuenta como avance en los informes). Sin datos de alumnos.
     key: "curso-master",
     data: {
-      name: "Curso o máster",
-      description: "Preparar un curso o máster con ayuda de un agente de IA: plan de trabajo para el agente, programa por sesiones publicable en PDF, materiales, ejercicios y exámenes, y seguimiento de alumnos.",
+      name: "Curso o charla",
+      description: "Preparar un curso, un máster o una charla con ayuda de un agente de IA: plan de trabajo para el agente, programa por sesiones publicable en PDF, materiales, ejercicios y exámenes, y seguimiento de alumnos.",
       columns: [
         col("Ideas"),
         col("Materiales"),
@@ -551,6 +224,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Plan de trabajo para IA", false, "AI_PLAN"),
         col("Programa", false, "PROGRAM"),
         col("Seguimiento de alumnos"),
+        col("Publicado", true),
       ],
       kinds: [
         // La descripción de una sesión sale en el PDF del programa: solo lo que deben leer los alumnos.
@@ -603,6 +277,26 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
 ];
 
 export const BUILTIN_KEYS = BUILTIN_TEMPLATES.map((b) => b.key);
+
+/**
+ * Plantillas de serie retiradas al pasar de 15 a 6 (se unieron en «Trabajo y clientes», «Casa y familia» y «Eventos y viajes»),
+ * con la huella de su última definición canónica (`templateFingerprint`). Al arrancar, la que siga sin modificar se borra
+ * y la modificada se queda como plantilla propia (`retireBuiltinTemplates`, template-store.ts). No reutilices estas claves.
+ */
+export const RETIRED_BUILTINS: Record<string, string> = {
+  "tareas-familiares": "1f5ca7cbcd9051aaf4f3c6a896c92ecb3df502fd2bc746c8271ae24112a19a9d",
+  "produccion-audiovisual": "e0dc87f01373e8efb181b040dc5e2ebbccc8da66c5c477fc24a982bc1a10e687",
+  negocio: "022451911f55cc8468e0914f728c0eb5b3e0833a17a759d185c5bdd9fb406724",
+  "marketing-contenidos": "75353bd4eca29834b2985d03f1750b2493b9126f21e038ea0740ddef824deaa3",
+  eventos: "97837a9b1eadd43dc8f738a56d3ea17646ff6cd9cc4dd7fe8b95dcd595f2d8e4",
+  "soporte-clientes": "d0b852450e82a8d3ff9e27395bee04e0948ba53ea8a6ac36475ed9d28e58d997",
+  "seleccion-personal": "cbac07df7f78d5f6e7d6f75bacbb2b41bff660e93ab87ba1f56bfe61e342643e",
+  "reformas-obras": "efc7bb44a70e701d5c3021233c2f2b80b4fce3e1ef46389ae5fdf5245491756f",
+  viajes: "6af866684225e661d675cd7532b511d30f517ccc4f448a0814dcb9262a206878",
+  mudanza: "0ced211fc262eb9adb7566fd74f9f11321f2b383b6b1879032738e23be5e1ef6",
+  mantenimiento: "45eecbecc67a535540ba786588c01984fd56899a7cc7a58909250ff3c082a7d6",
+  ventas: "d1fe3e45d723a19041d5eb57f9b37b5835da3bf40f023778b45422694f23efec",
+};
 
 export function builtinByKey(key: string | null | undefined): BuiltinTemplate | undefined {
   return key ? BUILTIN_TEMPLATES.find((b) => b.key === key) : undefined;

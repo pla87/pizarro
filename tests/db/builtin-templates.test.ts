@@ -8,7 +8,8 @@ import { applyTemplateChange } from "../../src/actions/template-apply";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { resetRateLimit } from "../../src/lib/rate-limit";
-import { listTemplatesSorted, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
+import { listTemplatesSorted, retireBuiltinTemplates, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
+import type { TemplateData } from "../../src/lib/project-templates";
 
 describe("plantillas de proyecto de serie", () => {
   test("se siembran una sola vez, se pueden recuperar y restablecer", async () => {
@@ -29,10 +30,10 @@ describe("plantillas de proyecto de serie", () => {
     assert.ok(list.every((t) => t.builtinKey && !t.builtinModified));
 
     // Borrada: no vuelve al arrancar de nuevo, pero sí con «Recuperar».
-    const negocio = list.find((t) => t.builtinKey === "negocio")!;
-    expectOk(await deleteTemplate(negocio.id));
+    const work = list.find((t) => t.builtinKey === "trabajo-clientes")!;
+    expectOk(await deleteTemplate(work.id));
     assert.equal((await seedBuiltinTemplates(db)).length, 0);
-    assert.equal(await db.projectTemplate.count({ where: { builtinKey: "negocio" } }), 0);
+    assert.equal(await db.projectTemplate.count({ where: { builtinKey: "trabajo-clientes" } }), 0);
     assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 1, left: 0 });
     assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: 0, left: 0 });
 
@@ -67,14 +68,14 @@ describe("plantillas de proyecto de serie", () => {
     await db.projectTemplate.updateMany({ where: { builtinKey: { not: null } }, data: { hideAllGeneralKinds: false } });
     await db.builtinTemplateSeeded.updateMany({ data: { appliedHash: null } });
     // El administrador cambió el nombre de una.
-    await db.projectTemplate.update({ where: { builtinKey: "eventos" }, data: { name: "Mis eventos" } });
+    await db.projectTemplate.update({ where: { builtinKey: "eventos-viajes" }, data: { name: "Mis eventos" } });
 
     const upgraded = await upgradeBuiltinTemplates(db);
-    assert.equal(upgraded.includes("eventos"), false);
-    assert.equal(upgraded.includes("negocio"), true);
+    assert.equal(upgraded.includes("eventos-viajes"), false);
+    assert.equal(upgraded.includes("trabajo-clientes"), true);
     assert.equal(upgraded.includes("vibecoding"), false); // ya coincidía con la canónica
-    assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "negocio" } })).hideAllGeneralKinds, true);
-    const eventos = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "eventos" } });
+    assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "trabajo-clientes" } })).hideAllGeneralKinds, true);
+    const eventos = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "eventos-viajes" } });
     assert.equal(eventos.name, "Mis eventos");
     assert.equal(eventos.hideAllGeneralKinds, false);
 
@@ -83,28 +84,29 @@ describe("plantillas de proyecto de serie", () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     const list = await listTemplatesSorted(db);
-    assert.equal(list.find((t) => t.builtinKey === "eventos")!.builtinModified, true);
-    assert.equal(list.find((t) => t.builtinKey === "negocio")!.builtinModified, false);
+    assert.equal(list.find((t) => t.builtinKey === "eventos-viajes")!.builtinModified, true);
+    assert.equal(list.find((t) => t.builtinKey === "trabajo-clientes")!.builtinModified, false);
 
     // Cambio canónico futuro: con huella guardada también se actualiza solo lo no tocado.
-    const neg = await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "negocio" } });
-    assert.equal(neg.appliedHash, templateFingerprint(canonicalTemplate("negocio")!));
-    await db.builtinTemplateSeeded.update({ where: { key: "negocio" }, data: { appliedHash: "huella-de-la-version-anterior" } });
-    await db.projectTemplate.update({ where: { builtinKey: "negocio" }, data: { description: "otra" } });
+    const neg = await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "trabajo-clientes" } });
+    assert.equal(neg.appliedHash, templateFingerprint(canonicalTemplate("trabajo-clientes")!));
+    await db.builtinTemplateSeeded.update({ where: { key: "trabajo-clientes" }, data: { appliedHash: "huella-de-la-version-anterior" } });
+    await db.projectTemplate.update({ where: { builtinKey: "trabajo-clientes" }, data: { description: "otra" } });
     assert.deepEqual(await upgradeBuiltinTemplates(db), []);
 
     // «Restablecer» deja la huella al día.
     expectOk(await resetTemplate(eventos.id));
-    assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "eventos" } })).appliedHash, templateFingerprint(canonicalTemplate("eventos")!));
+    assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key: "eventos-viajes" } })).appliedHash, templateFingerprint(canonicalTemplate("eventos-viajes")!));
   });
-  test("«Curso o máster» de la v1.53 sin tocar pasa sola a la nueva (Ejercicios y exámenes, Plan de trabajo para IA, sin Hecho)", async () => {
+  test("«Curso o máster» y «Estudios o tesis» sin tocar pasan solas a «Curso o charla» y «Estudios y aprendizaje»; modificadas, se respetan", async () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();
     await seedBuiltinTemplates(db);
     const canon = canonicalTemplate("curso-master")!;
-    // Lo que sembró la v1.53.0: otras columnas y otra descripción; el resto, igual.
+    // Lo que sembró la v1.53.0: otras columnas, otro nombre y otra descripción; el resto, igual.
     const v153 = {
       ...canon,
+      name: "Curso o máster",
       description: "Preparar un curso o máster con ayuda de un agente de IA: programa por sesiones publicable en PDF, materiales, ejercicios, exámenes y seguimiento de alumnos.",
       columns: [
         { name: "Ideas", role: "NONE" as const, isDone: false }, { name: "Materiales", role: "NONE" as const, isDone: false },
@@ -113,14 +115,25 @@ describe("plantillas de proyecto de serie", () => {
         { name: "Hecho", role: "NONE" as const, isDone: true },
       ],
     };
-    await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { description: v153.description, columns: v153.columns } });
-    await db.builtinTemplateSeeded.update({ where: { key: "curso-master" }, data: { appliedHash: templateFingerprint(v153) } });
-    assert.deepEqual(await upgradeBuiltinTemplates(db), ["curso-master"]);
+    // «Estudios o tesis» como la dejó la versión anterior (aquí basta con otro nombre y otras columnas).
+    const thesis: TemplateData = {
+      ...canonicalTemplate("estudios-tesis")!,
+      name: "Estudios o tesis",
+      columns: [{ name: "Pendiente", role: "NONE", isDone: false }, { name: "Entregado", role: "NONE", isDone: true }],
+    };
+    for (const [key, old] of [["curso-master", v153], ["estudios-tesis", thesis]] as const) {
+      await db.projectTemplate.update({ where: { builtinKey: key }, data: { name: old.name, description: old.description, columns: old.columns } });
+      await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+    }
+    assert.deepEqual((await upgradeBuiltinTemplates(db)).sort(), ["curso-master", "estudios-tesis"]);
     const row = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "curso-master" } });
+    assert.equal(row.name, "Curso o charla");
     assert.deepEqual((row.columns as { name: string; role: string; isDone: boolean }[]).map((c) => [c.name, c.role, c.isDone]), [
       ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
       ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
+      ["Publicado", "NONE", true],
     ]);
+    assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "estudios-tesis" } })).name, "Estudios y aprendizaje");
     // Modificada por el administrador (otro nombre): se respeta.
     await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { name: "Mi máster", columns: v153.columns } });
     await db.builtinTemplateSeeded.update({ where: { key: "curso-master" }, data: { appliedHash: templateFingerprint(v153) } });
@@ -137,26 +150,26 @@ describe("plantillas de proyecto de serie", () => {
     await loginAs(admin);
 
     const list = expectOk(await listTemplates());
-    assert.ok(list.some((t) => t.name === "House move"));
-    assert.ok(!list.some((t) => t.name === "Mudanza"));
+    assert.ok(list.some((t) => t.name === "Home and family"));
+    assert.ok(!list.some((t) => t.name === "Casa y familia"));
 
-    const mudanza = list.find((t) => t.name === "House move")!;
-    const created = expectOk(await createProject("Move", { templateId: mudanza.id }));
+    const home = list.find((t) => t.name === "Home and family")!;
+    const created = expectOk(await createProject("Home", { templateId: home.id }));
     const cols = await db.column.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
-    assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Moving day", "Done"]);
+    assert.deepEqual(cols.map((c) => c.name), ["To do", "This week", "Waiting", "Shopping list", "Appointments", "Routines", "Done"]);
     const kinds = await db.taskKind.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
-    assert.equal(kinds[0]!.name, "Admin and change of address");
-    assert.match(kinds[1]!.descriptionTemplate, /What is being packed/);
-    assert.ok((await db.label.findMany({ where: { projectId: created.id } })).some((l) => l.name === "Kitchen"));
+    assert.equal(kinds[0]!.name, "Shopping");
+    assert.match(kinds[1]!.descriptionTemplate, /What needs doing/);
+    assert.ok((await db.label.findMany({ where: { projectId: created.id } })).some((l) => l.name === "Person 1"));
 
     // Modificada por el administrador: se ofrece y se aplica tal como está guardada.
-    await db.projectTemplate.update({ where: { builtinKey: "viajes" }, data: { name: "Mis viajes" } });
-    const viajes = (await listTemplatesSorted(db, "en")).find((t) => t.builtinKey === "viajes")!;
+    await db.projectTemplate.update({ where: { builtinKey: "eventos-viajes" }, data: { name: "Mis viajes" } });
+    const viajes = (await listTemplatesSorted(db, "en")).find((t) => t.builtinKey === "eventos-viajes")!;
     assert.equal(viajes.name, "Mis viajes");
     assert.equal(viajes.columns[0]!.name, "Ideas");
-    assert.equal(viajes.kinds[0]!.name, "Transporte");
+    assert.equal(viajes.kinds[0]!.name, "Lugar o alojamiento");
     const trip = expectOk(await createProject("Trip", { templateId: viajes.id }));
-    assert.equal((await db.taskKind.findMany({ where: { projectId: trip.id }, orderBy: { position: "asc" } }))[0]!.name, "Transporte");
+    assert.equal((await db.taskKind.findMany({ where: { projectId: trip.id }, orderBy: { position: "asc" } }))[0]!.name, "Lugar o alojamiento");
   });
   test("cada plantilla de serie crea su proyecto sin errores en los dos idiomas, y se puede aplicar a uno con tareas", async () => {
     await db.projectTemplate.deleteMany();
@@ -200,29 +213,47 @@ describe("plantillas de proyecto de serie", () => {
     }
   });
 
-  test("las de serie de la v1.60 sin tocar pasan solas a la revisión con roles; una editada se respeta", async () => {
+  test("al actualizar: las de serie retiradas sin modificar desaparecen, las modificadas quedan como propias y llegan las nuevas", async () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();
-    await seedBuiltinTemplates(db);
-    // Lo que sembró la v1.60.0 para «Mudanza» y «Viajes» (columnas sin roles, otras etiquetas, sin campos).
-    const plain = (names: string[], done: string) => names.map((name) => ({ name, role: "NONE" as const, isDone: name === done }));
-    const old = {
-      mudanza: { ...canonicalTemplate("mudanza")!, columns: plain(["Por hacer", "Esta semana", "Esperando", "Hecho"], "Hecho"), kinds: canonicalTemplate("mudanza")!.kinds.slice(0, 6) },
-      viajes: { ...canonicalTemplate("viajes")!, columns: plain(["Ideas", "Por reservar", "Reservado", "Antes de salir", "Durante el viaje", "Hecho"], "Hecho"), taskFields: [] },
-    };
-    for (const [key, data] of Object.entries(old)) {
-      await db.projectTemplate.update({ where: { builtinKey: key }, data: { columns: data.columns, kinds: data.kinds, taskFields: data.taskFields } });
-      await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(data) } });
+    // Una instalación de antes: «Vibecoding» al día y tres de las retiradas (con su huella guardada, como las sembró).
+    const vibe = canonicalTemplate("vibecoding")!;
+    const old = (name: string): TemplateData => ({ ...vibe, name, columns: [{ name: "Por hacer", role: "NONE", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }], kinds: [] });
+    const rows: [string, TemplateData, string | null][] = [
+      ["vibecoding", vibe, templateFingerprint(vibe)],
+      ["negocio", old("Negocio"), templateFingerprint(old("Negocio"))], // sin tocar: se borra
+      ["viajes", old("Nuestros viajes"), templateFingerprint(old("Viajes"))], // renombrada por el administrador: se queda
+      ["mudanza", old("Mudanza"), null], // sin huella y distinta de su última definición: se queda (no se pierde nada)
+    ];
+    for (const [i, [key, data, appliedHash]] of rows.entries()) {
+      await db.projectTemplate.create({
+        data: {
+          builtinKey: key, name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds,
+          hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields, releaseTemplates: data.releaseTemplates, position: i + 1,
+        },
+      });
+      await db.builtinTemplateSeeded.create({ data: { key, appliedHash } });
     }
-    // El administrador había cambiado «Viajes»: se queda como estaba.
-    await db.projectTemplate.update({ where: { builtinKey: "viajes" }, data: { name: "Nuestros viajes" } });
-    assert.deepEqual(await upgradeBuiltinTemplates(db), ["mudanza"]);
-    const mudanza = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "mudanza" } });
-    assert.deepEqual((mudanza.columns as { role: string }[]).map((c) => c.role), ["NONE", "WEEKLY_PLAN", "WAITING", "CHECKLIST", "NONE"]);
-    const viajes = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "viajes" } });
-    assert.equal(viajes.name, "Nuestros viajes");
-    assert.ok((viajes.columns as { role: string }[]).every((c) => c.role === "NONE"));
-    assert.deepEqual(viajes.taskFields, []);
-    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    // Un proyecto creado antes con «Negocio» no cambia.
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const negocioId = (await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "negocio" } })).id;
+    const before = expectOk(await createProject("De antes", { templateId: negocioId }));
+
+    // Lo que hace el arranque: retirar, sembrar y poner al día.
+    assert.deepEqual(await retireBuiltinTemplates(db), { removed: ["negocio"], kept: ["viajes", "mudanza"] });
+    assert.deepEqual((await seedBuiltinTemplates(db)).sort(), BUILTIN_KEYS.filter((k) => k !== "vibecoding").sort());
+    await upgradeBuiltinTemplates(db);
+    const list = await listTemplatesSorted(db);
+    assert.deepEqual(list.filter((t) => t.builtinKey).map((t) => t.builtinKey).sort(), [...BUILTIN_KEYS].sort());
+    assert.deepEqual(list.filter((t) => !t.builtinKey).map((t) => t.name).sort(), ["Mudanza", "Nuestros viajes"]);
+    assert.equal(await db.builtinTemplateSeeded.count({ where: { key: { in: ["negocio", "viajes", "mudanza"] } } }), 0);
+    assert.deepEqual((await db.column.findMany({ where: { projectId: before.id }, orderBy: { position: "asc" } })).map((c) => c.name), ["Por hacer", "Hecho"]);
+    // Idempotente: el siguiente arranque no toca nada.
+    assert.deepEqual(await retireBuiltinTemplates(db), { removed: [], kept: [] });
+    assert.deepEqual(await seedBuiltinTemplates(db), []);
+    // «Recuperar plantillas por defecto» recrea las seis si se borran.
+    await db.projectTemplate.deleteMany({ where: { builtinKey: { not: null } } });
+    assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: BUILTIN_KEYS.length, left: 0 });
   });
 });

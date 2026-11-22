@@ -16,7 +16,8 @@ import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
 import { createExampleContent } from "@/lib/project-example-apply";
-import { listExamples, resolveExample } from "@/lib/project-examples";
+import { resolveExamples } from "@/lib/project-examples";
+import { listStartTemplates } from "@/lib/template-store";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser } from "@/lib/session";
 import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
@@ -42,24 +43,27 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });
 }
 
-/** Proyectos de ejemplo que se pueden elegir al crear un proyecto (cualquier persona con sesión), en su idioma. */
-export async function listProjectExamples() {
-  return runAction({ name: "projects.listProjectExamples" }, async () => {
-    await requireUser();
-    return listExamples(await getLocale());
+/**
+ * Plantillas para «Nuevo proyecto» → «Empezar con» (cualquier persona con sesión), en su idioma: las de serie de la
+ * instalación (con o sin tarjetas de ejemplo) y, para los administradores, también las propias.
+ */
+export async function listProjectStarts() {
+  return runAction({ name: "projects.listProjectStarts" }, async () => {
+    const user = await requireUser();
+    return listStartTemplates(db, await getLocale(), user.role === "ADMIN");
   });
 }
 
 /**
- * Crea un proyecto. Con `templateId` (solo administradores) parte de una plantilla; con `exampleKey` (cualquiera),
- * de un ejemplo de serie: la misma plantilla (columnas, tipos, etiquetas, campos y plantillas de release) más
- * unas pocas tarjetas de muestra con la etiqueta «Ejemplo». Sin ninguna de las dos, las columnas por defecto.
+ * Crea un proyecto. Con `templateId` parte de una plantilla: cualquiera puede usar las de serie (en un proyecto privado,
+ * si no es administrador) y solo los administradores las propias. Con `withExamples` y una plantilla de serie, añade
+ * unas pocas tarjetas de muestra con la etiqueta «Ejemplo». Sin plantilla, las columnas por defecto.
  */
-export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean; exampleKey?: string | null }) {
+export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean; withExamples?: boolean }) {
   return runAction({ name: "projects.createProject", args: [name, options] }, async () => {
     const user = await requireUser();
-    // Quien no es administrador solo puede crear proyectos privados (y sin plantillas, que gestionan los admins).
-    if (user.role !== "ADMIN" && (!options?.isPrivate || options.templateId)) throw forbidden();
+    // Quien no es administrador solo puede crear proyectos privados (las plantillas propias las gestionan los admins).
+    if (user.role !== "ADMIN" && !options?.isPrivate) throw forbidden();
     if (!rateLimit(`project-create:${user.id}`, 10, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const capped = user.role !== "ADMIN";
     const assertPrivateSlot = async (client: Prisma.TransactionClient | typeof db) => {
@@ -67,17 +71,18 @@ export async function createProject(name: string, options?: { templateId?: strin
     };
     await assertPrivateSlot(db);
     const projectName = v.name.parse(name);
-    if (options?.exampleKey && options.templateId) throw new AppError("Elige una plantilla o un ejemplo, no los dos.");
-    // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto; con ejemplo, todo el ejemplo.
+    // Sin plantilla, las columnas por defecto salen en el idioma de quien crea el proyecto.
     const locale = await getLocale();
-    const example = options?.exampleKey ? resolveExample(options.exampleKey, locale) : null;
-    if (options?.exampleKey && !example) throw new AppError("El ejemplo ya no existe.");
     const templateRow = options?.templateId
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
       : null;
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
+    if (templateRow && !templateRow.builtinKey && user.role !== "ADMIN") throw forbidden();
     // Una plantilla de serie sin modificar se aplica en inglés a quien usa la interfaz en inglés.
-    const template = example ? example.template : templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
+    const stored = templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
+    // Las tarjetas de ejemplo (de una plantilla de serie) añaden su etiqueta «Ejemplo» a la plantilla.
+    const examples = options?.withExamples && stored && templateRow?.builtinKey ? resolveExamples(templateRow.builtinKey, stored, locale) : null;
+    const template = examples ? examples.template : stored;
     const last = await db.project.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
     const project = await db.$transaction(async (tx) => {
       // El recuento se repite con un candado por persona: dos altas a la vez no pasan del máximo de privados.
@@ -88,8 +93,8 @@ export async function createProject(name: string, options?: { templateId?: strin
       const created = await tx.project.create({
         data: {
           name: projectName,
-          // La descripción del ejemplo o de la plantilla (en su idioma): sin ella, el proyecto nuevo quedaba sin ninguna.
-          ...(example ? { description: example.content.description } : template?.description.trim() ? { description: template.description.trim() } : {}),
+          // La descripción de la plantilla (en su idioma): sin ella, el proyecto nuevo quedaba sin ninguna.
+          ...(template?.description.trim() ? { description: template.description.trim() } : {}),
           position: (last?.position ?? 0) + POSITION_STEP,
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,
@@ -101,10 +106,10 @@ export async function createProject(name: string, options?: { templateId?: strin
         select: { id: true },
       });
       if (template) await applyTemplate(tx, created.id, template, locale);
-      if (example) await createExampleContent(tx, created.id, example, user.id);
+      if (examples) await createExampleContent(tx, created.id, examples, user.id);
       return created;
     });
-    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${example ? ` con el ejemplo «${example.content.name}»` : template ? ` con la plantilla «${templateRow!.name}»` : ""}`);
+    describeAction(`Creó el proyecto «${projectName}»${options?.isPrivate ? " (privado)" : ""}${template ? ` con la plantilla «${templateRow!.name}»${examples ? " y tarjetas de ejemplo" : ""}` : ""}`);
     noteProject(project.id);
     revalidatePath("/", "layout");
     return project;

@@ -1149,10 +1149,10 @@ if (only.includes("r46")) {
   try {
     await L.reload(p);
     let nd = await openNewProject(p);
-    await L.eqEventually("R46M1: «Empezar con» es un solo desplegable: en blanco, «Ejemplos» (5) y «Plantillas»", async () => {
+    await L.eqEventually("R46M1: «Empezar con» es un solo desplegable: en blanco y las seis «Plantillas de serie» (sin lista aparte de ejemplos)", async () => {
       const st = await structure(nd);
-      return [st[0], st[1], st[2]?.group, (st[2]?.n ?? 0) > 0];
-    }, ["Proyecto en blanco", { group: "Ejemplos", n: 5 }, "Plantillas", true]);
+      return [st[0], st[1], st.some((x) => x?.group === "Ejemplos")];
+    }, ["Proyecto en blanco", { group: "Plantillas de serie", n: 6 }, false]);
     L.eq("R46M1: sin tarjetas-radio, sin cabeceras en mayúsculas y una sola línea de ayuda", await nd.evaluate((el) => ({
       radios: el.querySelectorAll("input[type=radio]").length,
       upper: [...el.querySelectorAll("*")].filter((x) => getComputedStyle(x).textTransform === "uppercase" && x.textContent.trim()).length,
@@ -1162,32 +1162,37 @@ if (only.includes("r46")) {
     L.eq("R46M1: casilla de privado e «Importar desde un archivo…» en el pie", [await nd.getByLabel("Crear como proyecto privado inicialmente").count(), await nd.getByRole("button", { name: "Importar desde un archivo…" }).count()], [1, 1]);
     const sel = nd.locator("#project-start");
     const nameBox = nd.locator("#project-name");
-    await sel.selectOption({ label: "Familia y casa" });
-    L.eq("R46M1: elegir un ejemplo propone su nombre", await nameBox.inputValue(), "Familia y casa");
-    L.check("R46M1: la ayuda describe el ejemplo y avisa de las tarjetas de muestra", /^Compras.*Con tarjetas de muestra que puedes borrar\.$/.test(await help(nd)), await help(nd));
+    const examples = nd.getByRole("checkbox", { name: "Con tarjetas de ejemplo" });
+    L.eq("R46M1: en blanco no hay casilla de tarjetas de ejemplo", await examples.count(), 0);
+    await sel.selectOption({ label: "Casa y familia" });
+    L.eq("R46M1: elegir una plantilla propone su nombre", await nameBox.inputValue(), "Casa y familia");
+    L.check("R46M1: con una de serie, «Con tarjetas de ejemplo» desmarcada y la ayuda sin tarjetas", (await examples.isVisible()) && !(await examples.isChecked()) && /^Compras/.test(await help(nd)) && !/tarjetas de muestra/.test(await help(nd)), await help(nd));
+    await examples.check();
+    L.check("R46M1: marcada, la ayuda avisa de las tarjetas de muestra", /^Compras.*Con tarjetas de muestra que puedes borrar\.$/.test(await help(nd)), await help(nd));
     await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-ejemplo.png` });
-    await sel.selectOption({ label: "Equipo de software" });
-    L.eq("R46M1: otro ejemplo cambia el nombre propuesto", await nameBox.inputValue(), "Equipo de software");
+    await sel.selectOption({ label: "Vibecoding" });
+    L.eq("R46M1: otra plantilla cambia el nombre propuesto", await nameBox.inputValue(), "Vibecoding");
     await sel.selectOption("blank");
     L.eq("R46M1: volver a «en blanco» quita el nombre propuesto", await nameBox.inputValue(), "");
     await nameBox.fill("Mi casa R46");
-    await sel.selectOption({ label: "Familia y casa" });
+    await sel.selectOption({ label: "Casa y familia" });
     L.eq("R46M1: un nombre escrito a mano no se pisa", await nameBox.inputValue(), "Mi casa R46");
     await sel.selectOption({ label: firstTemplate });
     L.check("R46M1: la plantilla tiene su línea de ayuda", (await help(nd)) !== "Columnas por defecto, sin tarjetas." && (await help(nd)).length > 0, await help(nd));
     await p.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-plantilla.png` });
-    await sel.selectOption({ label: "Familia y casa" });
+    await sel.selectOption({ label: "Casa y familia" });
+    await examples.check();
     await nd.getByLabel("Crear como proyecto privado inicialmente").check();
     const from = new URL(p.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
-    // Con un ejemplo o una plantilla se abre el tablero del proyecto nuevo (en blanco, los ajustes: BH1, más abajo).
+    // Con una plantilla se abre el tablero del proyecto nuevo (en blanco, los ajustes: BH1, más abajo).
     await p.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
-    L.check("R46M1: con un ejemplo, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
+    L.check("R46M1: con tarjetas de ejemplo, al crear se abre su tablero", !p.url().includes("/settings"), p.url());
     const [made] = await L.q(`SELECT p.id, p."isPrivate", (SELECT count(*)::int FROM "Task" t WHERE t."projectId"=p.id) AS tasks FROM "Project" p WHERE name='Mi casa R46'`);
-    L.check("R46M1: crea el proyecto del ejemplo, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
-    // Plantilla: la estructura de la plantilla, sin tarjetas.
+    L.check("R46M1: crea el proyecto de la plantilla, privado y con tarjetas de muestra", !!made && made.isPrivate && made.tasks > 0, JSON.stringify(made));
+    // Plantilla sin la casilla: la estructura de la plantilla, sin tarjetas.
     nd = await openNewProject(p);
-    await L.eqEventually("R46M1: las plantillas llegan al desplegable", async () => (await structure(nd))[2]?.group, "Plantillas");
+    await L.eqEventually("R46M1: las plantillas llegan al desplegable", async () => (await structure(nd))[1]?.group, "Plantillas de serie");
     await nd.locator("#project-start").selectOption({ label: firstTemplate });
     await nd.locator("#project-name").fill("Plantilla R46");
     const fromTplPage = new URL(p.url()).pathname;
@@ -1219,15 +1224,16 @@ if (only.includes("r46")) {
     await asAdmin(true);
     await L.reload(m.page);
     nd = await openNewProject(m.page, true);
-    await L.eqEventually("R46M1 móvil: los ejemplos llegan al desplegable", async () => (await structure(nd))[1]?.group, "Ejemplos");
-    await nd.locator("#project-start").selectOption({ label: "Preparación de un evento" });
+    await L.eqEventually("R46M1 móvil: las plantillas llegan al desplegable", async () => (await structure(nd))[1]?.group, "Plantillas de serie");
+    await nd.locator("#project-start").selectOption({ label: "Eventos y viajes" });
+    await nd.getByRole("checkbox", { name: "Con tarjetas de ejemplo" }).check();
     await sleep(200);
     const fit = await nd.evaluate((el) => ({
       overflow: document.documentElement.scrollWidth > innerWidth || el.scrollWidth > el.clientWidth + 1,
       inside: [...el.querySelectorAll("button, select, input")].every((x) => { const r = x.getBoundingClientRect(); return r.width === 0 || (r.left >= 0 && r.right <= innerWidth); }),
     }));
     L.eq("R46M1 móvil: sin scroll horizontal y todo dentro de la pantalla", fit, { overflow: false, inside: true });
-    L.eq("R46M1 móvil: el ejemplo propone su nombre", await nd.locator("#project-name").inputValue(), "Preparación de un evento");
+    L.eq("R46M1 móvil: la plantilla propone su nombre", await nd.locator("#project-name").inputValue(), "Eventos y viajes");
     await m.page.screenshot({ path: `${SHOTS}/r46-nuevo-proyecto-movil.png` });
     await nd.getByRole("button", { name: "Cancelar" }).tap();
     L.assertNoErrors("R46M1 móvil", [m]);

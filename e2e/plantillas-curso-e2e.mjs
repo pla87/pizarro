@@ -1,4 +1,4 @@
-// Plantilla «Curso o máster» y columna «Programa» (rol PROGRAM): crear un proyecto con la plantilla desde «Nuevo
+// Plantilla «Curso o charla» y columna «Programa» (rol PROGRAM): crear un proyecto con la plantilla desde «Nuevo
 // proyecto», crear sesiones con el tipo «Sesión» (título y descripción automáticos), «Publicar programa (PDF)» con el
 // responsable, descargarlo y comprobar su contenido con pdftotext, la copia «Programa – fecha_v1.pdf» en Documentación,
 // el PDF en inglés, el aviso cuando no cabe en Documentación y el rol con su icono y explicación en el menú de la
@@ -21,7 +21,7 @@ const appToday = (page) => page.evaluate(() => new Intl.DateTimeFormat("en-CA", 
 
 await L.prepareUsers();
 const [adm] = await L.q(`SELECT id, name FROM "User" WHERE email=$1`, [L.ADMIN]);
-// «Plantillas» en «Nuevo proyecto» es de administradores: la sesión se abre como miembro (sin el segundo paso) y pasa a admin.
+// La sesión se abre como miembro (sin el segundo paso) y pasa a admin (las de serie las ven todos; las propias, los admins).
 const asAdmin = (on) => L.q(`UPDATE "User" SET role=$1 WHERE email=$2`, [on ? "ADMIN" : "MEMBER", L.ADMIN]);
 await L.q(`DELETE FROM "Project" WHERE name=$1`, [PROJECT]);
 
@@ -58,18 +58,21 @@ await asAdmin(true);
 try {
   // --- Crear el proyecto con la plantilla ----------------------------------------------------------------------------
   if (only.includes("tpl")) {
-    L.scenario("tpl: «Nuevo proyecto» con la plantilla «Curso o máster»");
+    L.scenario("tpl: «Nuevo proyecto» con la plantilla «Curso o charla»");
     await L.reload(page);
     await page.locator("aside").first().locator("button[aria-haspopup]").first().click();
     await page.getByRole("menuitem", { name: "Nuevo proyecto" }).click();
     const nd = page.locator("[role=dialog]").filter({ has: page.locator("#project-name") });
     await nd.waitFor();
-    await L.waitFor(async () => (await nd.locator("#project-start optgroup[label=Plantillas] option", { hasText: "Curso o máster" }).count()) === 1, { timeout: 8000 });
+    await L.waitFor(async () => (await nd.locator("#project-start optgroup[label='Plantillas de serie'] option", { hasText: "Curso o charla" }).count()) === 1, { timeout: 8000 });
     const options = await nd.locator("#project-start option").allTextContents();
-    L.check("TPL: la plantilla «Curso o máster» y el ejemplo «Preparación de un curso», con nombres distintos", options.filter((o) => o === "Curso o máster").length === 1 && options.includes("Preparación de un curso"), JSON.stringify(options));
-    await nd.locator("#project-start").selectOption({ label: "Curso o máster" });
+    L.check("TPL: «Curso o charla» una sola vez, sin la lista aparte de ejemplos", options.filter((o) => o === "Curso o charla").length === 1 && !options.includes("Preparación de un curso") && (await nd.locator("#project-start optgroup[label=Ejemplos]").count()) === 0, JSON.stringify(options));
+    const examples = nd.getByRole("checkbox", { name: "Con tarjetas de ejemplo" });
+    L.eq("TPL: en blanco no hay casilla de tarjetas de ejemplo", await examples.count(), 0);
+    await nd.locator("#project-start").selectOption({ label: "Curso o charla" });
     const help = await nd.locator("#project-start-help").innerText();
-    L.check("TPL: la línea de ayuda describe la plantilla", /Preparar un curso o máster/.test(help), help);
+    L.check("TPL: la línea de ayuda describe la plantilla", /Preparar un curso, un máster o una charla/.test(help), help);
+    L.check("TPL: con una de serie aparece «Con tarjetas de ejemplo», desmarcada", (await examples.isVisible()) && !(await examples.isChecked()));
     await nd.locator("#project-name").fill(PROJECT);
     const from = new URL(page.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
@@ -77,9 +80,10 @@ try {
     await page.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+$/.test(u.pathname), { timeout: 15000 });
     [{ id: projectId }] = await L.q(`SELECT id FROM "Project" WHERE name=$1`, [PROJECT]);
     const cols = await L.q(`SELECT name, role, "isDone", id FROM "Column" WHERE "projectId"=$1 ORDER BY position`, [projectId]);
-    L.eq("TPL: columnas de la plantilla, con «Plan de trabajo para IA» (AI_PLAN) y «Programa» (PROGRAM), sin «Hecho»", cols.map((c) => [c.name, c.role, c.isDone]), [
+    L.eq("TPL: columnas de la plantilla, con «Plan de trabajo para IA» (AI_PLAN), «Programa» (PROGRAM) y «Publicado» (terminada)", cols.map((c) => [c.name, c.role, c.isDone]), [
       ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
       ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
+      ["Publicado", "NONE", true],
     ]);
     programId = cols.find((c) => c.role === "PROGRAM").id;
     const kinds = await L.q(`SELECT name FROM "TaskKind" WHERE "projectId"=$1 ORDER BY position`, [projectId]);

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified } from "../src/lib/builtin-templates";
+import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified, RETIRED_BUILTINS } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
 import { buildTemplateApplication, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
 
 test("cada plantilla de serie pasa la misma validación que las de los usuarios", () => {
-  assert.equal(BUILTIN_TEMPLATES.length, 15);
+  assert.equal(BUILTIN_TEMPLATES.length, 6);
   for (const b of BUILTIN_TEMPLATES) {
     const r = templateInputSchema.safeParse(b.data);
     assert.equal(r.success, true, `${b.key}: ${r.success ? "" : r.error.message}`);
@@ -19,13 +19,13 @@ test("claves y nombres únicos; textos dentro de los límites de los tipos", () 
   for (const b of BUILTIN_TEMPLATES) {
     const t = canonicalTemplate(b.key)!;
     for (const k of t.kinds) assert.ok(k.descriptionTemplate.length <= 2000, `${b.key}/${k.name}`);
-    // Todas tienen columna de terminadas salvo «Curso o máster» (lo hecho se archiva o se queda en su columna).
-    assert.equal(t.columns.some((c) => c.isDone), b.key !== "curso-master", `${b.key}: columna de terminadas`);
+    // Todas tienen columna de terminadas (también «Curso o charla», con «Publicado»): los informes muestran el avance.
+    assert.ok(t.columns.some((c) => c.isDone), `${b.key}: columna de terminadas`);
   }
 });
 
 test("aplicar una plantilla de serie no pierde tipos ni subtareas", () => {
-  const t = canonicalTemplate("produccion-audiovisual")!;
+  const t = canonicalTemplate("trabajo-clientes")!;
   const app = buildTemplateApplication(t, [{ id: "1", name: "Funcionalidad" }, { id: "2", name: "Corrección" }, { id: "3", name: "Respuesta" }]);
   assert.equal(app.kinds.length, t.kinds.length);
   assert.deepEqual(app.kinds[1]!.subtaskTemplate, t.kinds[1]!.subtaskTemplate);
@@ -39,14 +39,14 @@ test("vibecoding tiene los roles de release", () => {
 });
 
 test("isBuiltinModified: igual, editada, sin clave y clave desconocida", () => {
-  const canon = canonicalTemplate("negocio")!;
-  assert.equal(isBuiltinModified(canon, "negocio"), false);
+  const canon = canonicalTemplate("trabajo-clientes")!;
+  assert.equal(isBuiltinModified(canon, "trabajo-clientes"), false);
   // Lo que llega de la base de datos pasa por el mismo esquema: sigue sin estar modificada.
-  assert.equal(isBuiltinModified(templateInputSchema.parse(JSON.parse(JSON.stringify(canon))), "negocio"), false);
-  assert.equal(isBuiltinModified({ ...canon, name: "Mi negocio" }, "negocio"), true);
-  assert.equal(isBuiltinModified({ ...canon, columns: [...canon.columns].reverse() }, "negocio"), true);
-  assert.equal(isBuiltinModified({ ...canon, labels: canon.labels.slice(1) }, "negocio"), true);
-  assert.equal(isBuiltinModified({ ...canon, kinds: canon.kinds.map((k, i) => (i === 0 ? { ...k, subtaskTemplate: [] } : k)) }, "negocio"), true);
+  assert.equal(isBuiltinModified(templateInputSchema.parse(JSON.parse(JSON.stringify(canon))), "trabajo-clientes"), false);
+  assert.equal(isBuiltinModified({ ...canon, name: "Mi negocio" }, "trabajo-clientes"), true);
+  assert.equal(isBuiltinModified({ ...canon, columns: [...canon.columns].reverse() }, "trabajo-clientes"), true);
+  assert.equal(isBuiltinModified({ ...canon, labels: canon.labels.slice(1) }, "trabajo-clientes"), true);
+  assert.equal(isBuiltinModified({ ...canon, kinds: canon.kinds.map((k, i) => (i === 0 ? { ...k, subtaskTemplate: [] } : k)) }, "trabajo-clientes"), true);
   assert.equal(isBuiltinModified({ ...canon, name: "otro" }, null), false);
   assert.equal(isBuiltinModified({ ...canon, name: "otro" }, "desconocida"), false);
 });
@@ -64,20 +64,49 @@ test("solo Vibecoding conserva los tipos generales; el resto los oculta todos y 
   }
 });
 
-test("las plantillas añadidas después de las primeras existen, con subtareas y etiquetas válidas", () => {
-  for (const key of ["soporte-clientes", "seleccion-personal", "reformas-obras", "viajes", "estudios-tesis", "mudanza", "mantenimiento", "ventas"]) {
-    const t = canonicalTemplate(key);
-    assert.ok(t, key);
-    assert.ok(t.kinds.some((k) => k.subtaskTemplate.length > 0), `${key} sin subtareas`);
+test("las seis de serie: claves y nombres; las unidas traen tipos con subtareas y descripción, y pocas etiquetas", () => {
+  assert.deepEqual(BUILTIN_TEMPLATES.map((b) => [b.key, b.data.name]), [
+    ["vibecoding", "Vibecoding"],
+    ["trabajo-clientes", "Trabajo y clientes"],
+    ["casa-familia", "Casa y familia"],
+    ["eventos-viajes", "Eventos y viajes"],
+    ["estudios-tesis", "Estudios y aprendizaje"],
+    ["curso-master", "Curso o charla"],
+  ]);
+  for (const key of ["trabajo-clientes", "casa-familia", "eventos-viajes", "estudios-tesis"]) {
+    const t = canonicalTemplate(key)!;
+    assert.ok(t.kinds.filter((k) => k.subtaskTemplate.length > 0).length >= 4, `${key} con pocas subtareas`);
     assert.ok(t.kinds.every((k) => k.descriptionTemplate.length > 0), `${key} con tipo sin descripción`);
-    assert.ok(t.labels.length >= 4, key);
+    assert.ok(t.labels.length >= 3 && t.labels.length <= 5, key);
+    assert.ok(t.columns.length <= 7, `${key}: demasiadas columnas`);
     assert.equal(t.hideAllGeneralKinds, true);
+  }
+  // «Curso o charla»: la de antes con «Publicado» (terminada) al final.
+  const course = canonicalTemplate("curso-master")!;
+  assert.deepEqual(course.columns.at(-1), { name: "Publicado", role: "NONE", isDone: true });
+});
+
+test("ninguna etiqueta repite un campo de la tarea (prioridad, coste, cliente)", () => {
+  const dup: Record<string, RegExp> = { priority: /urgent|prioridad|priority/i, cost: /pago|cobro|coste|pagad|payment|paid|cost|bill/i, client: /cliente|client|customer/i };
+  for (const b of BUILTIN_TEMPLATES) {
+    for (const t of [canonicalTemplate(b.key)!, canonicalTemplateEn(b.key)!]) {
+      for (const field of t.taskFields) for (const l of t.labels) assert.ok(!dup[field]?.test(l.name), `${b.key}: la etiqueta «${l.name}» repite el campo ${field}`);
+    }
+  }
+  assert.deepEqual(canonicalTemplate("trabajo-clientes")!.taskFields, ["cost", "priority", "client"]);
+});
+
+test("las retiradas: huellas válidas y claves que no vuelven a usarse", () => {
+  assert.equal(Object.keys(RETIRED_BUILTINS).length, 12);
+  for (const [key, hash] of Object.entries(RETIRED_BUILTINS)) {
+    assert.match(hash, /^[0-9a-f]{64}$/, key);
+    assert.ok(!BUILTIN_KEYS.includes(key), `${key} sigue de serie`);
   }
 });
 
 test("hideAllGeneralKinds oculta todos los generales aunque no estén en la lista", () => {
   const general = [{ id: "1", name: "Funcionalidad" }, { id: "2", name: "Mejora" }, { id: "3", name: "Respuesta" }];
-  const base = canonicalTemplate("negocio")!;
+  const base = canonicalTemplate("trabajo-clientes")!;
   const all = buildTemplateApplication({ ...base, hiddenGeneralKinds: [] }, general);
   assert.deepEqual(all.hiddenKindIds, ["1", "2", "3"]);
   // Sin la opción solo se ocultan los listados.
@@ -88,7 +117,7 @@ test("hideAllGeneralKinds oculta todos los generales aunque no estén en la list
 });
 
 test("el esquema acepta plantillas antiguas sin la opción (falso) y rechaza valores no booleanos", () => {
-  const { hideAllGeneralKinds: _omit, ...old } = canonicalTemplate("negocio")!;
+  const { hideAllGeneralKinds: _omit, ...old } = canonicalTemplate("trabajo-clientes")!;
   assert.equal(templateInputSchema.parse(old).hideAllGeneralKinds, false);
   assert.equal(templateInputSchema.safeParse({ ...old, hideAllGeneralKinds: "si" }).success, false);
 });
@@ -111,7 +140,7 @@ test("cada plantilla de serie, en los dos idiomas: roles válidos y únicos dond
       // Una etiqueta que repite una columna o un tipo sobra: la tarjeta ya lo dice por su columna o su tipo.
       const taken = new Set([...t.columns, ...t.kinds].map((x) => key(x.name)));
       for (const l of t.labels) assert.ok(!taken.has(key(l.name)), `${at}: la etiqueta «${l.name}» repite una columna o un tipo`);
-      assert.ok(t.columns.some((c) => c.isDone) || b.key === "curso-master", `${at}: sin columna terminada`);
+      assert.ok(t.columns.some((c) => c.isDone), `${at}: sin columna terminada`);
     }
     const es = canonicalTemplate(b.key)!;
     const en = canonicalTemplateEn(b.key)!;
@@ -123,19 +152,10 @@ test("cada plantilla de serie, en los dos idiomas: roles válidos y únicos dond
 
 test("las plantillas de trabajo real usan los roles de columna (espera, rutinas, agenda, presupuesto, listas…)", () => {
   const expected: Record<string, string[]> = {
-    "tareas-familiares": ["WEEKLY_PLAN", "CHECKLIST", "AGENDA", "ROUTINES"],
-    "produccion-audiovisual": ["BUDGET", "AGENDA", "WAITING", "DELIVERY"],
-    negocio: ["WEEKLY_PLAN", "WAITING", "ROUTINES"],
-    "marketing-contenidos": ["ROUTINES", "REVIEW", "AGENDA"],
-    eventos: ["WAITING", "BUDGET", "CHECKLIST"],
-    "soporte-clientes": ["WAITING"],
-    "seleccion-personal": ["AGENDA", "WAITING", "REVIEW"],
-    "reformas-obras": ["WAITING", "AGENDA", "REVIEW", "BUDGET"],
-    viajes: ["BUDGET", "CHECKLIST"],
-    "estudios-tesis": ["WAITING", "REVIEW"],
-    mudanza: ["WEEKLY_PLAN", "WAITING", "CHECKLIST"],
-    mantenimiento: ["ROUTINES", "AGENDA", "WAITING"],
-    ventas: ["AGENDA", "WAITING"],
+    "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES"],
+    "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "AGENDA", "ROUTINES"],
+    "eventos-viajes": ["WAITING", "BUDGET", "AGENDA", "CHECKLIST"],
+    "estudios-tesis": ["ROUTINES", "WAITING", "REVIEW"],
   };
   for (const [k, roles] of Object.entries(expected)) {
     const t = canonicalTemplate(k)!;
