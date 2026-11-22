@@ -315,6 +315,10 @@ describe("fechas, saneado y detección de formato", () => {
     assert.equal(parseDay("13/13/2026", "UTC", "mdy"), null);
     // Sin orden, día/mes (lo de siempre).
     assert.equal(parseDay("03/04/2026"), parseDay("03/04/2026", "UTC", "dmy"));
+    // Con puntos, siempre día/mes, también con el orden mes/día del fichero.
+    assert.equal(parseDay("1.12.2026", "UTC", "mdy"), "2026-12-01");
+    assert.equal(parseDay("01.12.26", "UTC", "mdy"), "2026-12-01");
+    assert.equal(parseDay("12.31.2026", "UTC", "mdy"), "2026-12-31"); // día/mes imposible: la única lectura posible
   });
 
   test("CSV: un solo orden día/mes para toda la columna de fechas; con todas ambiguas, el idioma de quien importa", () => {
