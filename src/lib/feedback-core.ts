@@ -76,6 +76,20 @@ export function sniffScreenshot(head: Uint8Array): ScreenshotType | null {
   return null;
 }
 
+/**
+ * Dimensiones máximas de la captura que acepta el servidor (las lee de la cabecera, sin decodificarla): la del diálogo
+ * mide como mucho 1600 px de ancho, pero un JPEG de 1,5 MB puede declarar 30.000 × 30.000 px de un color (una bomba de
+ * descompresión para quien abra el informe).
+ */
+export const SCREENSHOT_MAX_SIDE = 4000;
+export const SCREENSHOT_MAX_PIXELS = 16_000_000;
+
+/** ¿Caben estas dimensiones (las de la cabecera de la imagen)? Sin dimensiones válidas, no. */
+export function screenshotSizeOk(width: number | undefined, height: number | undefined): boolean {
+  if (!width || !height || !Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) return false;
+  return width <= SCREENSHOT_MAX_SIDE && height <= SCREENSHOT_MAX_SIDE && width * height <= SCREENSHOT_MAX_PIXELS;
+}
+
 /** ¿Se puede enviar esta captura? Tamaño (sin pasar del tope, y no vacía) y tipo por su contenido. */
 export function screenshotProblem(size: number, head: Uint8Array): "too_big" | "bad_image" | null {
   if (size > SCREENSHOT_MAX_BYTES) return "too_big";

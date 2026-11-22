@@ -1,8 +1,9 @@
 import "server-only";
+import sharp from "sharp";
 import { describeBrowser, type InstallKind } from "./bug-report-core";
 import {
   FEEDBACK_BODY_MAX_BYTES, FEEDBACK_FIELDS, FEEDBACK_KINDS, FEEDBACK_TEXT_MAX, feedbackMail, feedbackStatus, screenshotFileName,
-  screenshotProblem, sniffScreenshot, type FeedbackError, type FeedbackKind, type FeedbackStatus,
+  screenshotProblem, screenshotSizeOk, sniffScreenshot, type FeedbackError, type FeedbackKind, type FeedbackStatus,
 } from "./feedback-core";
 import { releaseFeedback, reserveFeedback } from "./feedback-rate";
 import { logEvent } from "./log";
@@ -86,6 +87,10 @@ export async function handleFeedbackPost(req: Request, { to }: { to: string }): 
       const problem = screenshotProblem(content.length, content.subarray(0, 16));
       if (problem) return json(problem === "too_big" ? 413 : 415, { error: problem });
       const type = sniffScreenshot(content.subarray(0, 16))!;
+      // Dimensiones de la cabecera (sharp no la decodifica entera): nada de bombas de descompresión, ni algo que no
+      // sea de verdad la imagen que dice su firma.
+      const meta = await sharp(content).metadata().catch(() => null);
+      if (!meta || meta.format !== (type === "image/webp" ? "webp" : "jpeg") || !screenshotSizeOk(meta.width, meta.height)) return json(415, { error: "bad_image" });
       attachment = { filename: screenshotFileName(type), content, contentType: type };
     } else if (shot !== null && !(shot instanceof File)) return json(400, { error: "invalid" });
     const mail = feedbackMail({

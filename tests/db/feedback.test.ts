@@ -5,6 +5,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, beforeEach, describe, test } from "node:test";
+import sharp from "sharp";
 import { db, loginAs, logout, makeUser } from "./helpers";
 import { POST as feedbackRoute } from "../../src/app/api/feedback/route";
 import { getFeedbackStatus, handleFeedbackPost } from "../../src/lib/feedback";
@@ -16,7 +17,21 @@ import pkg from "../../package.json";
 const TO = "feedback@example.com";
 const ORIGIN = new URL(process.env.APP_URL ?? "http://localhost:3000").origin;
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
-const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 2, 3, 4]);
+// Una captura de verdad (el servidor lee sus dimensiones de la cabecera) y la misma declarando otras dimensiones.
+let JPEG = new Uint8Array(new ArrayBuffer(0));
+
+/** El mismo JPEG con otras dimensiones en su cabecera (SOF0): lo que declara una bomba de descompresión. */
+function withDims(jpeg: Uint8Array, width: number, height: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(jpeg);
+  for (let i = 2; i < out.length - 9; i++) {
+    if (out[i] === 0xff && out[i + 1] === 0xc0) {
+      out[i + 5] = height >> 8; out[i + 6] = height & 0xff;
+      out[i + 7] = width >> 8; out[i + 8] = width & 0xff;
+      return out;
+    }
+  }
+  throw new Error("JPEG sin SOF0");
+}
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
 const ENV_KEYS = ["NEXT_PUBLIC_OFFICIAL_BUILD", "NEXT_PUBLIC_GIT_COMMIT", "MAIL_OUTBOX_DIR", "SMTP_HOST", "SMTP_FROM", "UPDATE_CHECK"] as const;
 const saved: Record<string, string | undefined> = {};
@@ -60,6 +75,7 @@ function resetLimits(...userIds: string[]) {
 }
 
 before(async () => {
+  JPEG = new Uint8Array(await sharp({ create: { width: 64, height: 48, channels: 3, background: "#ffffff" } }).jpeg().toBuffer());
   for (const k of ENV_KEYS) saved[k] = process.env[k];
   outbox = await mkdtemp(path.join(tmpdir(), "pz-feedback-"));
   Object.assign(process.env, {
@@ -199,6 +215,15 @@ describe("/api/feedback", () => {
     assert.equal(png.status, 415);
     assert.equal(await errorOf(png), "bad_image");
     assert.equal(await errorOf(await post({ kind: "bug", text: "x", screenshot: "no es un archivo" })), "invalid");
+    // Dimensiones (de la cabecera, sin decodificarla): una bomba de descompresión, o algo con la firma de JPEG que no lo
+    // es, no pasa; la misma imagen con sus dimensiones de verdad, sí (primera prueba).
+    for (const [w, h] of [[30000, 30000], [4001, 10], [10, 4001]] as const) {
+      const bomb = await post({ kind: "bug", text: "x", screenshot: new Blob([withDims(JPEG, w, h)], { type: "image/jpeg" }) });
+      assert.equal(bomb.status, 415, `${w}×${h}`);
+      assert.equal(await errorOf(bomb), "bad_image");
+    }
+    const fake = await post({ kind: "bug", text: "x", screenshot: new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 2, 3, 4])], { type: "image/jpeg" }) });
+    assert.equal(await errorOf(fake), "bad_image");
     const big = new Uint8Array(SCREENSHOT_MAX_BYTES + 1);
     big.set(JPEG);
     const tooBig = await post({ kind: "bug", text: "x", screenshot: new Blob([big], { type: "image/jpeg" }) });

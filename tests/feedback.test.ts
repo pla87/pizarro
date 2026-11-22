@@ -6,7 +6,8 @@ import path from "node:path";
 import { test } from "node:test";
 import {
   CAPTURE_ATTEMPTS, captureScale, FEEDBACK_BODY_MAX_BYTES, FEEDBACK_LIMITS, feedbackMail, feedbackStatus, SCREENSHOT_MAX_BYTES,
-  SCREENSHOT_MAX_WIDTH, SCREENSHOT_QUALITY, screenshotFileName, screenshotProblem, sniffScreenshot,
+  SCREENSHOT_MAX_PIXELS, SCREENSHOT_MAX_SIDE, SCREENSHOT_MAX_WIDTH, SCREENSHOT_QUALITY, screenshotFileName, screenshotProblem,
+  screenshotSizeOk, sniffScreenshot,
 } from "../src/lib/feedback-core";
 import { releaseFeedback, reserveFeedback } from "../src/lib/feedback-rate";
 import { PROXY_BODY_LIMIT_BYTES } from "../src/lib/upload-size";
@@ -73,6 +74,11 @@ test("captura: el tipo se comprueba por el contenido (JPEG o WebP) y el tamaño,
   assert.equal(screenshotProblem(SCREENSHOT_MAX_BYTES + 1, JPEG), "too_big");
   assert.equal(screenshotProblem(100_000, PNG), "bad_image");
   assert.equal(screenshotProblem(0, JPEG), "bad_image");
+  // Dimensiones (las de la cabecera): las del diálogo caben de sobra; una bomba de descompresión, no.
+  assert.ok(screenshotSizeOk(1600, 900) && screenshotSizeOk(1179, 2556));
+  assert.ok(screenshotSizeOk(SCREENSHOT_MAX_SIDE, SCREENSHOT_MAX_PIXELS / SCREENSHOT_MAX_SIDE));
+  assert.ok(!screenshotSizeOk(SCREENSHOT_MAX_SIDE + 1, 10) && !screenshotSizeOk(10, SCREENSHOT_MAX_SIDE + 1));
+  assert.ok(!screenshotSizeOk(30000, 30000) && !screenshotSizeOk(0, 10) && !screenshotSizeOk(undefined, 10) && !screenshotSizeOk(1.5, 10));
   assert.equal(screenshotFileName("image/jpeg"), "captura-pizarro.jpg");
   assert.equal(screenshotFileName("image/webp"), "captura-pizarro.webp");
 });
