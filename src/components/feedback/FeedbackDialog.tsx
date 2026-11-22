@@ -219,7 +219,7 @@ export function FeedbackDialog({ delivery, version, email, onClose }: { delivery
 
         {mail ? (
           <p className="text-slate-600 dark:text-slate-300">
-            {t("Se envía en privado por email al equipo de Pizarro, desde el servidor de correo de esta instalación. Solo va lo que escribes, la captura si la incluyes, tu email si lo marcas y estos datos técnicos; nada más de tus proyectos ni de tu cuenta.")}
+            {t("Se envía en privado por email al equipo de Pizarro, desde el servidor de correo de esta instalación (así que su dirección de envío se verá). Solo va lo que escribes, la captura si la incluyes, tu email si lo marcas y estos datos técnicos; nada más de tus proyectos ni de tu cuenta.")}
           </p>
         ) : (
           <div className="space-y-2 text-slate-600 dark:text-slate-300">
