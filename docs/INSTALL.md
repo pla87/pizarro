@@ -206,7 +206,7 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
 ### Primeros pasos tras instalar
 
 1. **Asistente `/setup`:** abre `<tu dirección>/setup`, escribe el código (en el resumen del instalador o en los logs del despliegue), elige organización, idioma y zona horaria y crea el primer administrador. Después activa la verificación en dos pasos (obligatoria para administradores). Detalle en 2.3.
-2. **Email:** *Administración → Integraciones → Avisos por email*. Sin él no hay invitaciones ni «¿Olvidaste tu contraseña?». Detalle y proveedores en 3.6.
+2. **Email:** *Administración → Integraciones → Avisos por email*. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?»: al dar de alta a alguien, Pizarro muestra el enlace de invitación para que se lo pases por otro canal. Detalle y proveedores en 3.6.
 3. **Entrar con Google (opcional):** *Administración → Integraciones → Acceso con Google*; la guía desplegable te lleva paso a paso por Google Cloud con las direcciones listas para copiar. Resumen en 3.6, punto 2.
 4. **Copias de seguridad:** con `BACKUP_KEY` definida se hacen copias diarias cifradas dentro del servidor; añade un destino **externo** (S3 compatible o carpeta montada, sección 4.1 y 4.2) y guarda el kit de recuperación fuera del servidor.
 5. **Invita al equipo** desde *Administración → Usuarios*.
@@ -667,7 +667,7 @@ Si una migración falla mientras se aplica (disco lleno, un corte, un error de l
      ```bash
      cd /app/migrator && ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
      ```
-     Después, vuelve a desplegar (Render: *Manual Deploy*; Fly.io: `fly deploy`). En Render, si la consola no llega a abrirse, usa la orden de `docker run` de arriba con la *External Database URL* de la base.
+     Después, vuelve a desplegar (Render: *Manual Deploy*; Fly.io: `fly deploy`). En Render, si la consola no llega a abrirse, usa la orden de `docker run` de arriba con la *External Database URL* de la base. Antes, permite tu IP: el Blueprint deja la base sin acceso desde Internet (`ipAllowList: []`), así que en `pizarro-db` → *Networking* → *Access Control* añade tu IP pública (la que da, por ejemplo, <https://ifconfig.me>, con `/32`). Al terminar, quítala para que la base vuelva a quedar cerrada.
 3. **Si no sabes qué dejó hecho**, no la marques: restaura la copia que hiciste antes de actualizar (sección 6) y vuelve a actualizar.
 
 Si la terminaste a mano (aplicaste tú el resto de `migration.sql`), usa `--applied <nombre>` en lugar de `--rolled-back <nombre>`: Prisma la da por aplicada y sigue con las siguientes.
