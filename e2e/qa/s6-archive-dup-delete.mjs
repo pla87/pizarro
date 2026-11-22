@@ -68,7 +68,7 @@ export async function run() {
   L.check("recuperar: va al final de la columna", Number(rec.position) > Number((await full("T4"))[0].position), String(rec.position));
   L.check("recuperar: archivedFromColumnId limpiado", rec.from === null);
   await L.checkEventually("recuperar: evento «restore»", async () => { const ev = await L.events("T2"); return [ev.some((e) => e.code === "restore"), ev]; });
-  await U.logHas("recuperar: AppLog", t0, "tasks.restoreTask", /^Recuperó «T2» en «En progreso»$/);
+  await U.logHas("recuperar: AppLog", t0, "tasks.restoreTask", /^Restauró «T2» en «En progreso»$/);
   await U.closeDialog(p);
   await L.eqEventually("recuperar: UI (al final)", () => U.uiOrder(p, COL.doing), ["T1", "T3", "T4", "T2"]);
   await U.undoKey(p, "Control+z");

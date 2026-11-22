@@ -269,7 +269,7 @@ export const server: Record<string, string> = {
   "Borró la subtarea «{subtask}»": "Deleted the subtask “{subtask}”",
   "Canceló los cambios en «{title}»": "Discarded the changes to “{title}”",
   "Borró el adjunto «{name}» de «{task}»": "Deleted the attachment “{name}” from “{task}”",
-  "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
+  "Restauró «{title}» en «{col}»": "Restored “{title}” in “{col}”",
   "Comentó en «{title}»": "Commented on “{title}”",
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
@@ -324,4 +324,7 @@ export const server: Record<string, string> = {
   "Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.": "The lists show the first {n} of {total} tasks; progress and counts include all of them.",
   // Informe semanal por email: listados recortados en proyectos enormes
   "Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.": "This report shows at most {n} tasks per list; progress and counts include all of them.",
+  // Textos guardados por versiones anteriores: el historial de las tareas (TaskEvent, un año) y el deshacer (7 días)
+  // guardan la clave de antes de llamarlo «Restaurar» y la traducen al leerla
+  "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
 };

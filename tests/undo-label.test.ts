@@ -38,3 +38,11 @@ test("etiqueta: las entradas antiguas (texto plano) se muestran tal cual", () =>
   assert.equal(renderStoredLabel("{no es json", en), "{no es json");
   assert.equal(renderStoredLabel('{"otra":1}', en), '{"otra":1}');
 });
+
+test("etiqueta: restaurar una archivada dice «Restauró», y las guardadas con «Recuperó» se siguen traduciendo", () => {
+  const now = encodeLabel({ k: "Restauró «{title}» en «{col}»", p: { title: "T", col: "Hecho" } });
+  assert.equal(renderStoredLabel(now, es), "Restauró «T» en «Hecho»");
+  assert.equal(renderStoredLabel(now, en), "Restored “T” in “Hecho”");
+  const old = encodeLabel({ k: "Recuperó «{title}» en «{col}»", p: { title: "T", col: "Hecho" } });
+  assert.equal(renderStoredLabel(old, en), "Restored “T” in “Hecho”");
+});
