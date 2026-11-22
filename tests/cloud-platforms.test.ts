@@ -40,6 +40,14 @@ test("render.yaml: imagen oficial, disco en UPLOAD_DIR, /api/health, una instanc
   const db = /^ {2}- name: (\S+)$/m.exec(databases)?.[1];
   assert.match(services, new RegExp(`- key: DATABASE_URL\\n {8}fromDatabase:\\n {10}name: ${db}\\n {10}property: connectionString$`, "m"));
   for (const k of Object.keys(RAILWAY_KEY_BYTES)) assert.match(services, new RegExp(`- key: ${k}\\n {8}generateValue: true$`, "m"), k);
+  // Starter tiene 512 MB: el montón de Node y el generador de PDF con techo por debajo (la imagen no fija NODE_OPTIONS).
+  assert.match(services, /^ {4}plan: starter$/m);
+  assert.doesNotMatch(dockerfile, /NODE_OPTIONS/);
+  assert.doesNotMatch(readFileSync("scripts/start.sh", "utf8"), /NODE_OPTIONS/);
+  const heap = Number(/- key: NODE_OPTIONS\n {8}value: --max-old-space-size=(\d+)$/m.exec(services)?.[1]);
+  const pdf = Number(/- key: PDF_WORKER_MAX_MB\n {8}value: "(\d+)"$/m.exec(services)?.[1]);
+  assert.ok(pdf >= 64 && pdf <= 4096, "PDF_WORKER_MAX_MB dentro de lo que admite report-render.ts");
+  assert.ok(heap > 0 && heap + pdf <= 512 * 0.9, `montón ${heap} MB + PDF ${pdf} MB con margen dentro de 512 MB`);
   // Sin APP_URL (se usa RENDER_EXTERNAL_URL) ni administrador por variables (lo crea /setup).
   assert.doesNotMatch(services, /- key: (APP_URL|SEED_ADMIN_\w+)$/m);
 });
