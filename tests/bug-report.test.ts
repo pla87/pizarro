@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  BUG_REPORT_TEMPLATE, buildCommit, bugReportFields, bugReportUrl, describeBrowser, formatTechInfo, officialBuild,
+  BUG_REPORT_TEMPLATE, buildCommit, bugReportFields, bugReportUrl, describeBrowser, formatTechInfo, ISSUE_TEXT_FIELD, ISSUE_URL_MAX,
+  officialBuild, SUGGESTION_TEMPLATE,
 } from "../src/lib/bug-report-core";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -61,11 +62,42 @@ test("dirección del formulario: plantilla de GitHub y solo los campos técnicos
   assert.ok(!f[1]![1].includes("\n") && f[1]![1].length === 120);
 });
 
+test("dirección del formulario: con lo escrito en el diálogo, en el campo de su formulario y recortado si no cabe", () => {
+  const f = { version: "1.49.0", commit: SHA, install: "railway" as const, browser: "Firefox 133 · macOS", language: "es" };
+  const bug = new URL(bugReportUrl(f, "bug", "  Al mover una tarjeta\r\nse queda gris.  "));
+  assert.equal(bug.searchParams.get("template"), BUG_REPORT_TEMPLATE);
+  assert.equal(bug.searchParams.get(ISSUE_TEXT_FIELD.bug), "Al mover una tarjeta\nse queda gris.");
+  const idea = new URL(bugReportUrl(f, "idea", "Vista de calendario por semanas"));
+  assert.equal(idea.searchParams.get("template"), SUGGESTION_TEMPLATE);
+  assert.equal(idea.searchParams.get(ISSUE_TEXT_FIELD.idea), "Vista de calendario por semanas");
+  assert.equal(idea.searchParams.get("install"), "Railway");
+  // Sin texto, el campo no va.
+  assert.ok(!new URL(bugReportUrl(f, "idea", "   ")).searchParams.has(ISSUE_TEXT_FIELD.idea));
+  // Un texto muy largo (y con caracteres que ocupan mucho codificados) se recorta con «…» para no pasar del tope.
+  for (const long of ["ñ".repeat(5000), "a".repeat(7000), "😀".repeat(3000)]) {
+    const url = bugReportUrl(f, "bug", long);
+    assert.ok(url.length <= ISSUE_URL_MAX, `${url.length}`);
+    const got = new URL(url).searchParams.get(ISSUE_TEXT_FIELD.bug)!;
+    assert.ok(got.endsWith("…") && got.length > 500, `${got.length}`);
+    assert.ok(long.startsWith(got.slice(0, -1)), "sin partir caracteres");
+  }
+});
+
+test("plantilla de sugerencias: los ids que rellena la app existen", () => {
+  const form = readFileSync(`.github/ISSUE_TEMPLATE/${SUGGESTION_TEMPLATE}`, "utf8");
+  const ids = [...form.matchAll(/^\s+id: (\S+)$/gm)].map((m) => m[1]);
+  for (const [k] of bugReportFields({ version: "1", commit: "a".repeat(7), install: "docker", browser: "b", language: "es" })) assert.ok(ids.includes(k), k);
+  assert.ok(ids.includes(ISSUE_TEXT_FIELD.idea));
+  assert.match(form, /- "Docker Compose"\n\s+- "Railway"/);
+  assert.match(form, /datos personales/);
+});
+
 test("plantilla de incidencias: los ids que rellena la app existen y hay casilla obligatoria", () => {
   // Sin parser de YAML entre las dependencias: se comprueba el texto (la estructura la valida GitHub al usarla).
   const form = readFileSync(".github/ISSUE_TEMPLATE/bug_report.yml", "utf8");
   const ids = [...form.matchAll(/^\s+id: (\S+)$/gm)].map((m) => m[1]);
   for (const [k] of bugReportFields({ version: "1", commit: "a".repeat(7), install: "railway", browser: "b", language: "es" })) assert.ok(ids.includes(k), k);
+  assert.ok(ids.includes(ISSUE_TEXT_FIELD.bug));
   // Los valores que la app pone en «install» son opciones del desplegable.
   assert.match(form, /- "Docker Compose"\n\s+- "Railway"/);
   assert.match(form, /- label: "Uso una versión publicada sin modificar\.[^"]*"\n\s+required: true/);

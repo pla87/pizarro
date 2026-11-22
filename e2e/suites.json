@@ -452,7 +452,12 @@
       "src/components/board/ViewToggle.tsx",
       "src/components/AppShell.tsx",
       "src/lib/format.ts",
-      "src/i18n/shared.ts"
+      "src/i18n/shared.ts",
+      "src/components/feedback/**",
+      "src/components/BugReportLink.tsx",
+      "src/lib/feedback*.ts",
+      "src/lib/bug-report-core.ts",
+      "src/app/api/feedback/route.ts"
     ],
     "interfaz-textos-e2e": [
       "src/i18n/**",

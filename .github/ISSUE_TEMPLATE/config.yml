@@ -1,4 +1,4 @@
-# Solo se abren incidencias con el formulario (bug_report.yml); el resto, a la documentación o en privado.
+# Solo se abren incidencias con los formularios (bug_report.yml y suggestion.yml); el resto, a la documentación o en privado.
 blank_issues_enabled: false
 contact_links:
   - name: "Fallo de seguridad / Security vulnerability"

@@ -88,10 +88,32 @@ export function bugReportFields(f: BugReportFields): [string, string][] {
   return out.map(([k, v]): [string, string] => [k, v.replace(/[\r\n]+/g, " ").trim().slice(0, 120)]).filter(([, v]) => v !== "");
 }
 
-/** Dirección del formulario de GitHub con los campos técnicos ya rellenos. */
-export function bugReportUrl(f: BugReportFields): string {
-  const q = new URLSearchParams([["template", BUG_REPORT_TEMPLATE], ...bugReportFields(f)]);
-  return `${BUG_REPORT_URL}?${q.toString()}`;
+/** Formulario de sugerencias (.github/ISSUE_TEMPLATE/suggestion.yml), con los mismos campos técnicos. */
+export const SUGGESTION_TEMPLATE = "suggestion.yml";
+/** Campo del formulario donde va lo que escribe la persona en el diálogo: «Qué pasó» o «Tu sugerencia». */
+export const ISSUE_TEXT_FIELD = { bug: "actual", idea: "idea" } as const;
+/** Tope de la dirección entera: GitHub (y algunos navegadores y proxies) rechazan las muy largas. */
+export const ISSUE_URL_MAX = 6000;
+
+/**
+ * Dirección del formulario de GitHub con los campos técnicos ya rellenos y, si lo hay, lo escrito en el diálogo
+ * (recortado, con «…», para que la dirección no pase de ISSUE_URL_MAX).
+ */
+export function bugReportUrl(f: BugReportFields, kind: "bug" | "idea" = "bug", text = ""): string {
+  const base: [string, string][] = [["template", kind === "idea" ? SUGGESTION_TEMPLATE : BUG_REPORT_TEMPLATE], ...bugReportFields(f)];
+  const build = (body: string) => `${BUG_REPORT_URL}?${new URLSearchParams(body ? [...base, [ISSUE_TEXT_FIELD[kind], body]] : base).toString()}`;
+  const full = text.replace(/\r\n?/g, "\n").trim();
+  if (build(full).length <= ISSUE_URL_MAX) return build(full);
+  // Lo más largo que cabe (búsqueda binaria sobre los caracteres, sin partir un par sustituto).
+  const chars = Array.from(full);
+  let lo = 0;
+  let hi = chars.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (build(`${chars.slice(0, mid).join("").trimEnd()}…`).length <= ISSUE_URL_MAX) lo = mid;
+    else hi = mid - 1;
+  }
+  return build(lo ? `${chars.slice(0, lo).join("").trimEnd()}…` : "");
 }
 
 interface TechInfo {
