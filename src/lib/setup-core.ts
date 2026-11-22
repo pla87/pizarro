@@ -83,11 +83,14 @@ export function parseSetupEmail(raw: unknown): string | null {
 }
 
 /** Dónde ve quien instala el código del asistente: el log del contenedor, la terminal de `npm start` o los logs de Railway. */
-export type SetupCodeSource = "docker" | "npm" | "railway" | "unknown";
+export type SetupCodeSource = "docker" | "npm" | "railway" | "render" | "fly" | "unknown";
 
 /** Según cómo se arrancó el servidor (scripts/start.sh y scripts/start-local.mjs fijan PIZARRO_LAUNCHER). */
 export function setupCodeSource(env: Record<string, string | undefined> = process.env): SetupCodeSource {
   if (env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID) return "railway";
+  // Render pone RENDER=true en sus servicios y Fly.io, FLY_APP_NAME en sus máquinas (las dos con la imagen de Docker).
+  if (env.RENDER || env.RENDER_SERVICE_ID) return "render";
+  if (env.FLY_APP_NAME || env.FLY_MACHINE_ID) return "fly";
   if (env.PIZARRO_LAUNCHER === "npm") return "npm";
   if (env.PIZARRO_LAUNCHER === "docker") return "docker";
   return "unknown";

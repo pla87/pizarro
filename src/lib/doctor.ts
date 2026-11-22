@@ -103,7 +103,8 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
     },
     env: envPresence(),
     features: configFlags(),
-    // De dónde sale APP_URL: la variable («env»), el dominio público de Railway («railway», lib/app-url.ts) o ninguno.
+    // De dónde sale APP_URL: la variable («env»), la dirección que da la plataforma («railway», «render» o «fly»,
+    // lib/app-url.ts) o ninguno.
     appUrl: { source: resolveAppUrl().source },
     warnings: configWarnings(),
   };
