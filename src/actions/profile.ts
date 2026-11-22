@@ -249,15 +249,6 @@ export async function revokeOtherSessions() {
   });
 }
 
-/** Email de las menciones (Telegram y WhatsApp se conectan aparte: actions/messaging.ts). */
-export async function updateNotificationPrefs(input: { notifyEmail: boolean }) {
-  return runAction({ name: "profile.updateNotificationPrefs", args: [input] }, async () => {
-    const user = await requireUser();
-    const data = z.object({ notifyEmail: z.boolean() }).parse(input);
-    await db.user.update({ where: { id: user.id }, data });
-  });
-}
-
 export async function disconnectGoogle() {
   return runAction({ name: "profile.disconnectGoogle", args: [] }, async () => {
     const user = await requireUser();

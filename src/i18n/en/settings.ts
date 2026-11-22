@@ -92,7 +92,6 @@ export const settings: Record<string, string> = {
   "Cuenta de Google desconectada": "Google account disconnected",
   "Desconectar": "Disconnect",
   "Conectar con Google": "Connect with Google",
-  "Avisos de menciones": "Mention notifications",
   "Preferencias guardadas": "Preferences saved",
   "El envío de emails aún no está configurado en el servidor.": "Email sending is not configured on the server yet.",
   "Número de WhatsApp (formato internacional)": "WhatsApp number (international format)",

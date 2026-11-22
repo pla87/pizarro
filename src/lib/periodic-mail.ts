@@ -9,7 +9,7 @@ import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestIn
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
-import { unsubscribeLinks } from "./unsubscribe";
+import { unsubscribeLinks } from "./unsubscribe-links";
 import { getInstanceSettings } from "./instance";
 import { generateProjectReportPdf } from "./report-build";
 import { WEEKLY_REPORT_LIST_LIMIT } from "./report";

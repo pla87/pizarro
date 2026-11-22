@@ -3,7 +3,7 @@ import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDateTimeZone } from "./format";
 import { getInstanceSettings } from "./instance";
 import { appUrl, escapeHtml, noReplyNote, sendMail, unsubscribeFooter, type MailMessage } from "./mail";
-import { unsubscribeLinks } from "./unsubscribe";
+import { unsubscribeLinks } from "./unsubscribe-links";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";

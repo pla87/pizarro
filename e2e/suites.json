@@ -456,6 +456,8 @@
     ],
     "interfaz-textos-e2e": [
       "src/i18n/**",
+      "src/app/(app)/settings/EmailNoticesSection.tsx",
+      "src/actions/collab-prefs.ts",
       "src/components/ui/InfoTip.tsx",
       "src/components/board/ReleaseDialog.tsx",
       "src/components/board/NewTaskDialog.tsx"

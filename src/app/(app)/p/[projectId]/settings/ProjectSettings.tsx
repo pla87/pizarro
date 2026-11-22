@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, EyeOff, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Link2, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,7 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
-import { inviteToProject, resendInvite } from "@/actions/users";
+import { copyInviteLink, inviteToProject, resendInvite } from "@/actions/users";
 import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -458,8 +458,9 @@ type MemberRow = {
 /**
  * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
  * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
- * da de alta a alguien sin cuenta y, con `canResend` (hay email), «Reenviar invitación» a quien aún no ha entrado. Tras
- * añadir, invitar o reenviar queda a la vista el enlace para pasárselo («Copiar enlace»).
+ * da de alta a alguien sin cuenta y, a quien aún no ha entrado, «Reenviar invitación» con `canResend` (hay email) o, sin
+ * email, «Copiar enlace de invitación» (un enlace nuevo que no se envía). Tras añadir, invitar, reenviar o generar el
+ * enlace queda a la vista para pasárselo («Copiar enlace»).
  */
 function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false, canResend = false }: {
   projectId: string;
@@ -513,6 +514,13 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       toast(t("Invitación enviada"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
     });
+  const freshLink = (m: MemberRow) =>
+    start(async () => {
+      const res = await copyInviteLink(m.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
+    });
   const activeCount = members.filter((m) => m.active).length;
   return (
     <div className="space-y-3">
@@ -542,6 +550,18 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   onClick={() => resend(m)}
                 >
                   <MailPlus size={16} />
+                </button>
+              )}
+              {canInvite && !canResend && m.invitePending && m.active && (
+                <button
+                  type="button"
+                  className="btn-icon shrink-0"
+                  disabled={pending}
+                  aria-label={t("Copiar enlace de invitación de {name}", { name: m.name })}
+                  title={t("Copiar enlace de invitación")}
+                  onClick={() => freshLink(m)}
+                >
+                  <Link2 size={16} />
                 </button>
               )}
               <button

@@ -63,9 +63,10 @@ model User {
   editorMode     EditorMode @default(WYSIWYG)
   /// Aviso de menciones por email (Telegram y WhatsApp: UserChannel).
   notifyEmail    Boolean   @default(true)
-  /// Avisos por email de los demás tipos (los avisos en la app se crean siempre).
+  /// Avisos por email de los demás tipos (los avisos en la app se crean siempre). Fechas y «Esperando», marcado de
+  /// serie en las cuentas nuevas desde la v1.65 (las anteriores conservan lo que tenían).
   notifyAssignedEmail Boolean @default(false)
-  notifyDueEmail      Boolean @default(false)
+  notifyDueEmail      Boolean @default(true)
   notifyCommentEmail  Boolean @default(false)
   /// Resumen diario por email: activado, hora local de la app (0-23) y cuándo se envió el último.
   dailyDigest    Boolean   @default(false)
@@ -674,6 +675,9 @@ enum NotificationType {
   /// A los administradores: un proyecto privado pasa a ser de equipo al borrarse la cuenta de su único miembro
   /// (projectId; excerpt = nombre de esa cuenta).
   PROJECT_TO_TEAM
+  /// A quien configuró el informe semanal: su destinatario se ha dado de baja desde el enlace del email (projectId;
+  /// excerpt = nombre de esa persona o, si no tiene cuenta, su dirección enmascarada).
+  REPORT_UNSUBSCRIBED
 }
 
 /// Seguimiento de una tarea. Se sigue implícitamente al crearla, tener asignada, comentar o ser mencionado
@@ -721,6 +725,10 @@ model ReportSchedule {
   lastSentAt  DateTime?
   createdById String?
   updatedAt   DateTime  @updatedAt
+  /// Última dirección que se dio de baja con el enlace del email, y cuándo. Mientras coincida con el destinatario, solo
+  /// esa misma persona (con su sesión) puede volver a activarlo; al hacerlo se borra.
+  unsubscribedEmail String?
+  unsubscribedAt    DateTime?
   project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 

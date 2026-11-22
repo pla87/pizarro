@@ -195,6 +195,29 @@ export async function resendInvite(userId: string) {
   });
 }
 
+/**
+ * «Copiar enlace de invitación» (miembros del proyecto y Administración → Usuarios, sin email configurado): como
+ * «Reenviar invitación», emite un enlace nuevo (72 h, al mismo proyecto) y el anterior deja de valer, pero no lo envía:
+ * lo devuelve para que el administrador se lo pase por otro canal. Solo para quien aún no ha entrado. El enlace no se
+ * registra: solo quién lo generó y para quién.
+ */
+export async function copyInviteLink(userId: string) {
+  return runAction({ name: "users.copyInviteLink", args: [userId] }, async () => {
+    const admin = await requireAdmin();
+    // El mismo tope que «Reenviar invitación» (las dos emiten enlaces de invitación).
+    if (!rateLimit(`resend-invite:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
+    const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, active: true } });
+    if (!user) throw notFound();
+    if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de generar otro enlace de invitación.");
+    if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
+    const project = await inviteProject(user.id);
+    // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
+    const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
+    describeAction(`Generó un enlace de invitación nuevo para «${user.name}» (sin enviarlo; el anterior deja de valer)`);
+    return { link: `${appUrl()}/reset/${token}` };
+  });
+}
+
 const userFields = {
   name: v.name,
   email: v.email,
