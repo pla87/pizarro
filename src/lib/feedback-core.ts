@@ -148,8 +148,9 @@ export function feedbackMail(o: { kind: FeedbackKind; text: string; fields: BugR
 export const MAILTO_URL_MAX = 2000;
 
 function mailtoParts(to: string, kind: FeedbackKind, text: string, fields: BugReportFields) {
-  // RFC 6068: los saltos de línea del cuerpo, como CRLF; espacios como %20 (no «+», que sí sería un «+»).
-  const enc = (v: string) => encodeURIComponent(v.replace(/\r?\n/g, "\r\n"));
+  // RFC 6068: los saltos de línea del cuerpo, como CRLF; espacios como %20 (no «+», que sí sería un «+»). Medio emoji suelto
+  // (pegado de una app que lo cortó) como «�»: encodeURIComponent lanza con él y el diálogo no se podría pintar.
+  const enc = (v: string) => encodeURIComponent(v.replace(/\r?\n/g, "\r\n").replace(/\p{Cs}/gu, "�"));
   const build = (body: string) => {
     const m = feedbackMail({ kind, text: body, fields, replyTo: null, screenshotBytes: null, mailto: true });
     return `mailto:${to}?subject=${enc(m.subject)}&body=${enc(m.text)}`;

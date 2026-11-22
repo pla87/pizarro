@@ -66,6 +66,11 @@ test("«Enviar por email» (la instalación no envía emails): mailto con el asu
     assert.ok(!/[\uD800-\uDBFF]…/.test(text), "sin partir un emoji");
     assert.equal(feedbackMailtoFits("feedback@example.com", "idea", long, fields), false);
   }
+  // Medio emoji suelto (copiado de una app que lo cortó): no rompe el enlace (antes, «URI malformed» al pintar el diálogo).
+  const broken = feedbackMailtoUrl("feedback@example.com", "bug", "hola \uD83D x \uDE00 y 😀", fields);
+  const brokenBody = new URLSearchParams(broken.split("?")[1]).get("body")!;
+  assert.ok(brokenBody.endsWith("hola � x � y 😀\r\n"), brokenBody.slice(-30));
+  assert.equal(feedbackMailtoFits("feedback@example.com", "bug", "\uD83D", fields), true);
 });
 
 test("captura: nítida, pero sin pasar de 1600 px de ancho", () => {

@@ -111,9 +111,13 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   return join(title.trim());
 }
 
+const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
+/** Una viñeta o casilla sin texto («- », «* [ ]», «1.»): el hueco de una lista en la plantilla, no una etiqueta. */
+const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
+
 /** Etiqueta de una línea de formulario: la parte en negrita del principio («**Plazo:** [fecha]» → «**Plazo:**») o la línea. */
 function formAnchor(line: string): string {
-  return /^\*\*[^*\n]+\*\*/.exec(line)?.[0] ?? line;
+  return BOLD_LABEL.exec(line)?.[0] ?? line;
 }
 
 /** ¿Empieza `line` por la etiqueta `anchor`? También si la respuesta se escribió dentro de la negrita («**Plazo: lunes**»). */
@@ -126,65 +130,133 @@ function lineHasAnchor(line: string, anchor: string): boolean {
 /** Etiqueta comparable entre tipos: sin negritas, espacios ni mayúsculas («**Qué hay que hacer:**» = «Qué hay que hacer:»). */
 const anchorKey = (anchor: string) => anchor.replace(/\*/g, "").replace(/\s+/g, " ").trim().toLowerCase();
 
-const sameText = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+/** Mismo texto de formulario: sin contar espacios ni las viñetas vacías (el editor con barra las guarda como «-» o «- »). */
+const sameForm = (a: string, b: string) => {
+  const norm = (s: string) => s.split("\n").filter((l) => !BARE_MARKER.test(l.trim())).join(" ").replace(/\s+/g, " ").trim();
+  return norm(a) === norm(b);
+};
+
+/** ¿Empieza en `i` un párrafo de `lines` (una línea con texto tras una en blanco, o la primera)? */
+const startsParagraph = (lines: readonly string[], i: number) => !!lines[i]!.trim() && (i === 0 || !lines[i - 1]!.trim());
+
+/** Línea donde empieza el párrafo número `k + 1` de `lines` (lines.length si no hay tantos). */
+function afterParagraphs(lines: readonly string[], k: number): number {
+  let seen = 0;
+  for (let i = 0; i < lines.length; i++) if (startsParagraph(lines, i) && ++seen > k) return i;
+  return lines.length;
+}
+
+interface FormBlock {
+  /** Líneas de la plantilla que ocupa: de la etiqueta a la última con texto antes de la siguiente etiqueta. */
+  start: number;
+  end: number;
+  anchor: string;
+  key: string;
+  /** El apartado tal como viene en la plantilla (la etiqueta y, p. ej., la viñeta vacía de debajo). */
+  text: string;
+  paragraphs: number;
+}
 
 /**
- * La descripción leída como el formulario del tipo `tpl`: sus líneas no vacías (etiquetas), en orden y cada una al principio
- * de una línea, con lo escrito en cada apartado. La primera línea del texto tiene que ser una de ellas; las que se hayan
- * borrado no cuentan. En el último apartado, la respuesta es lo que va pegado a la etiqueta; lo que siga tras una línea en
- * blanco es `rest` (lo que había antes de elegir el tipo, o lo escrito aparte). null si no tiene esa forma (p. ej. hay algo
- * escrito antes del formulario).
+ * Los apartados de una plantilla. Las etiquetas son las líneas que empiezan en negrita («**Plazo:**»); lo que vaya debajo
+ * sin negrita («- », «[nombre]») es parte del apartado de encima. En una plantilla sin negritas (o antes de la primera),
+ * cada línea con texto es una etiqueta, salvo las viñetas vacías.
  */
-function readForm(tpl: string, description: string): { sections: { key: string; text: string; filled: boolean }[]; rest: string } | null {
-  const tplLines = tpl.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+function formBlocks(tpl: string): { lines: string[]; blocks: FormBlock[] } {
+  const lines = tpl.replace(/\r\n?/g, "\n").split("\n");
+  const blocks: FormBlock[] = [];
+  let bold = false;
+  lines.forEach((raw, i) => {
+    const l = raw.trim();
+    if (!l) return;
+    const isBold = BOLD_LABEL.test(l);
+    bold ||= isBold;
+    if (isBold || (!bold && !BARE_MARKER.test(l))) {
+      const anchor = formAnchor(l);
+      blocks.push({ start: i, end: i + 1, anchor, key: anchorKey(anchor), text: "", paragraphs: 0 });
+    } else if (blocks.length) blocks[blocks.length - 1]!.end = i + 1;
+  });
+  for (const b of blocks) {
+    const own = lines.slice(b.start, b.end);
+    b.text = own.map((l) => l.trim()).join("\n");
+    b.paragraphs = own.filter((_, i) => startsParagraph(own, i)).length;
+  }
+  return { lines, blocks };
+}
+
+/**
+ * La descripción leída como el formulario del tipo `tpl`: sus apartados, en orden y cada uno al principio de una línea,
+ * con lo escrito en cada uno. La primera línea del texto tiene que ser una etiqueta; los apartados borrados no cuentan.
+ * Detrás pueden venir respuestas traídas de otro tipo (un párrafo que empieza por una etiqueta en negrita de `tpl` o de
+ * `nextTpl`): también son apartados, para que al ir y volver de tipo cada una vuelva a su sitio y no se repita.
+ * El último apartado ocupa lo que ocupa en la plantilla (su etiqueta y, si la tiene, la lista de debajo); lo que siga tras
+ * una línea en blanco es `rest` (lo que había antes de elegir el tipo, o lo escrito aparte). Pero si el último sigue vacío
+ * y hay respuestas en otros, lo de debajo es su respuesta escrita en el párrafo siguiente (el editor con barra separa así
+ * los párrafos) y se queda con su etiqueta: como mucho, una etiqueta de más delante de lo escrito aparte, nunca una
+ * respuesta bajo la etiqueta de otro apartado. null si no tiene esa forma (p. ej. hay algo escrito antes del formulario).
+ */
+function readForm(tpl: string, nextTpl: string, description: string): { sections: { key: string; text: string; filled: boolean }[]; rest: string } | null {
+  const own = formBlocks(tpl).blocks;
   const lines = description.replace(/\r\n?/g, "\n").trim().split("\n");
-  const found: { tl: string; at: number }[] = [];
+  const found: { at: number; block: FormBlock }[] = [];
   let from = 0;
-  for (const tl of tplLines) {
-    const anchor = formAnchor(tl);
-    const at = lines.findIndex((l, i) => i >= from && lineHasAnchor(l, anchor));
+  for (const block of own) {
+    const at = lines.findIndex((l, i) => i >= from && lineHasAnchor(l, block.anchor));
     if (at < 0) continue;
-    found.push({ tl, at });
+    found.push({ at, block });
     from = at + 1;
   }
   if (!found.length || found[0]!.at !== 0) return null;
-  let end = lines.length;
-  const sections = found.map(({ tl, at }, i) => {
-    const last = i === found.length - 1;
-    end = last ? lines.length : found[i + 1]!.at;
-    if (last) {
-      const blank = lines.findIndex((l, j) => j > at && !l.trim());
-      if (blank >= 0) end = blank;
-    }
-    const text = lines.slice(at, end).join("\n").trimEnd();
-    return { key: anchorKey(formAnchor(tl)), text, filled: !sameText(text, tl) };
+  const ownCount = found.length;
+  const known = [...formBlocks(nextTpl).blocks, ...own].filter((b) => BOLD_LABEL.test(b.anchor));
+  for (let i = from; i < lines.length && known.length; i++) {
+    if (!startsParagraph(lines, i)) continue;
+    const block = known.find((b) => lineHasAnchor(lines[i]!, b.anchor));
+    if (block) found.push({ at: i, block });
+  }
+  const sections = found.map(({ at, block }, i) => {
+    const text = lines.slice(at, i + 1 < found.length ? found[i + 1]!.at : lines.length).join("\n").trimEnd();
+    return { key: block.key, text, filled: !sameForm(text, block.text) };
   });
-  return { sections, rest: lines.slice(end).join("\n").trim() };
+  const last = found[found.length - 1]!;
+  const tail = lines.slice(last.at);
+  const headEnd = afterParagraphs(tail, last.block.paragraphs);
+  const head = tail.slice(0, headEnd).join("\n").trimEnd();
+  const rest = tail.slice(headEnd).join("\n").trim();
+  const headFilled = !sameForm(head, last.block.text);
+  const answered = found.length > ownCount || sections.slice(0, -1).some((s) => s.filled);
+  if (rest && !headFilled && answered) return { sections, rest: "" };
+  sections[sections.length - 1] = { key: last.block.key, text: head, filled: headFilled };
+  return { sections, rest };
 }
 
 /** Descripción al pasar del tipo `prev` a `next`. */
 export function switchKindDescription(prev: KindAutomation | null | undefined, next: KindAutomation, description: string): string {
   const tpl = prev?.descriptionTemplate.trim() ?? "";
-  if (prev && tpl === next.descriptionTemplate.trim()) return description;
+  const fresh = next.descriptionTemplate.trim();
+  if (prev && tpl === fresh) return description;
   // Formulario del anterior con algo respondido: cada apartado vacío se quita y cada respuesta se conserva una sola vez, en
   // el apartado del nuevo con la misma etiqueta («Qué hay que hacer:» de «Casa» a «Reforma u obra») o, si el nuevo no lo
   // tiene, debajo de su formulario. Antes el formulario nuevo se ponía delante del viejo entero (etiquetas repetidas y
   // apartados vacíos que ya no tocaban).
-  const form = tpl ? readForm(tpl, description) : null;
+  const form = tpl ? readForm(tpl, fresh, description) : null;
   if (form && form.sections.some((s) => s.filled)) {
     const filled = form.sections.filter((s) => s.filled);
     const used = new Set<number>();
-    // El formulario nuevo tal cual (con sus líneas en blanco), con cada respuesta en su apartado.
-    const fresh = next.descriptionTemplate.trim();
-    const lines = fresh ? fresh.split(/\r?\n/).map((line) => {
-      if (!line.trim()) return line;
-      const key = anchorKey(formAnchor(line.trim()));
-      const i = filled.findIndex((s, j) => !used.has(j) && s.key === key);
-      if (i < 0) return line;
-      used.add(i);
-      return filled[i]!.text;
-    }) : [];
-    const parts = [lines.join("\n"), ...filled.filter((_, j) => !used.has(j)).map((s) => s.text), form.rest].filter(Boolean);
+    // El formulario nuevo tal cual (con sus líneas en blanco), con cada respuesta en lugar de su apartado (la etiqueta y lo
+    // que la plantilla pone debajo, como la viñeta vacía de una lista).
+    const { lines: tplLines, blocks } = formBlocks(fresh);
+    const out: string[] = [];
+    let at = 0;
+    for (const b of blocks) {
+      out.push(...tplLines.slice(at, b.start));
+      const i = filled.findIndex((s, j) => !used.has(j) && s.key === b.key);
+      if (i >= 0) used.add(i);
+      out.push(...(i >= 0 ? [filled[i]!.text] : tplLines.slice(b.start, b.end)));
+      at = b.end;
+    }
+    out.push(...tplLines.slice(at));
+    const parts = [fresh ? out.join("\n") : "", ...filled.filter((_, j) => !used.has(j)).map((s) => s.text), form.rest].filter(Boolean);
     return form.rest ? parts.join("\n\n") : `${parts.join("\n\n")}\n`;
   }
   let base = description;
