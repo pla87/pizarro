@@ -71,7 +71,7 @@ async function resolveRef(rawRef: unknown, isAdmin: boolean, locale: "es" | "en"
   const ref = refSchema.parse(rawRef);
   const row = await db.projectTemplate.findUnique({ where: { id: ref.id } });
   if (!row) throw new AppError("La plantilla ya no existe.");
-  if (!row.builtinKey && !isAdmin) throw new AppError("Solo los administradores pueden usar las plantillas de la instalación.");
+  if (!row.builtinKey && !isAdmin) throw new AppError("Solo los administradores pueden usar las plantillas propias.");
   return localizeTemplate(parseStoredTemplate(row), row.builtinKey, locale);
 }
 

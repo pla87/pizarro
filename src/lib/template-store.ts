@@ -176,7 +176,7 @@ export async function upgradeBuiltinTemplates(db: PrismaClient): Promise<string[
 }
 
 /**
- * «Recuperar plantillas por defecto»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
+ * «Recuperar plantillas de serie»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
  * saltaba el tope: con 49 propias se llegaba a 64). Debe ir en la transacción con el candado de las altas
  * (`lockTemplates`). Devuelve cuántas recuperó y cuántas se quedaron fuera por el tope.
  */

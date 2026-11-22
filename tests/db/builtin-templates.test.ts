@@ -252,7 +252,7 @@ describe("plantillas de proyecto de serie", () => {
     // Idempotente: el siguiente arranque no toca nada.
     assert.deepEqual(await retireBuiltinTemplates(db), { removed: [], kept: [] });
     assert.deepEqual(await seedBuiltinTemplates(db), []);
-    // «Recuperar plantillas por defecto» recrea las seis si se borran.
+    // «Recuperar plantillas de serie» recrea las seis si se borran.
     await db.projectTemplate.deleteMany({ where: { builtinKey: { not: null } } });
     assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: BUILTIN_KEYS.length, left: 0 });
   });

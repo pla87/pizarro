@@ -116,9 +116,9 @@ test("cambiar de plantilla: empareja, mueve las tareas (archivadas incluidas), c
   const ownKind = await db.taskKind.findUniqueOrThrow({ where: { id: f.kindId } });
   const before = await state(f.project.id);
   const tpl = await makeTemplate();
-  // Un proyecto privado lo gestiona su miembro; las plantillas de la instalación son solo de administradores.
+  // Un proyecto privado lo gestiona su miembro; las plantillas propias son solo de administradores.
   await loginAs(owner);
-  expectFail(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id }), /Solo los administradores/);
+  expectFail(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id }), /Solo los administradores pueden usar las plantillas propias/);
   const admin = await makeUser({ role: "ADMIN" });
   await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
   await loginAs(admin);
