@@ -64,6 +64,9 @@ const nextConfig: NextConfig = {
   // las contraseñas lo cargan desde ahí (src/lib/bcrypt-pool.ts). @react-pdf/renderer no está aquí: el servidor de Next no
   // lo carga (solo importa sus tipos); el PDF se genera en un worker con su propio paquete, dist/pdf-worker.mjs (postbuild).
   serverExternalPackages: ["sharp", "bcryptjs"],
+  // La app no usa next/image (los iconos son ficheros estáticos y las imágenes de los adjuntos las recodifica su ruta):
+  // así /_next/image responde 404 en vez de ser una entrada pública, sin límite de ritmo, a sharp y a la caché de Next.
+  images: { unoptimized: true },
   experimental: {
     // Las imágenes van por /api/tasks/[id]/attachments y la importación de tareas en JSON por
     // /api/projects/[id]/import-tasks (hasta 5 MB); las acciones solo mueven JSON pequeño.
