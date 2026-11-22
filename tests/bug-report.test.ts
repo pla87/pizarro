@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  BUG_REPORT_TEMPLATE, buildCommit, bugReportFields, bugReportUrl, describeBrowser, formatTechInfo, ISSUE_TEXT_FIELD, ISSUE_URL_MAX,
+  BUG_REPORT_TEMPLATE, buildCommit, bugReportFields, bugReportTextFits, bugReportUrl, describeBrowser, formatTechInfo, ISSUE_TEXT_FIELD, ISSUE_URL_MAX,
   officialBuild, SUGGESTION_TEMPLATE,
 } from "../src/lib/bug-report-core";
 
@@ -80,7 +80,11 @@ test("dirección del formulario: con lo escrito en el diálogo, en el campo de s
     const got = new URL(url).searchParams.get(ISSUE_TEXT_FIELD.bug)!;
     assert.ok(got.endsWith("…") && got.length > 500, `${got.length}`);
     assert.ok(long.startsWith(got.slice(0, -1)), "sin partir caracteres");
+    // …y el diálogo lo sabe, para avisar y ofrecer copiarlo entero.
+    assert.equal(bugReportTextFits(f, "bug", long), false);
   }
+  assert.equal(bugReportTextFits(f, "bug", "a".repeat(3000)), true);
+  assert.equal(bugReportTextFits(f, "idea", ""), true);
 });
 
 test("plantilla de sugerencias: los ids que rellena la app existen", () => {

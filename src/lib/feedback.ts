@@ -35,7 +35,7 @@ function canMail(to: string): boolean {
 export async function getFeedbackStatus(to: string = FEEDBACK_EMAIL): Promise<FeedbackStatus | null> {
   if (!officialInstall()) return null;
   const latest = await getLatestKnownVersion().catch(() => null);
-  return feedbackStatus({ official: true, current: pkg.version, latest, mail: canMail(to) });
+  return feedbackStatus({ official: true, current: pkg.version, latest, address: to.trim() !== "", mail: emailEnabled() });
 }
 
 const json = (status: number, body: { ok: true } | { error: FeedbackError }) =>

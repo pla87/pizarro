@@ -18,15 +18,18 @@ const WEBP = new Uint8Array([...Buffer.from("RIFF"), 0x24, 0, 0, 0, ...Buffer.fr
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
 
 test("botón: solo en builds oficiales; desactivado si hay una versión publicada más nueva; sin saberla, se deja enviar", () => {
-  assert.equal(feedbackStatus({ official: false, current: "1.64.0", latest: null, mail: true }), null);
-  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.64.0", mail: true }), { outdated: false, latest: null, delivery: "mail" });
-  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.65.0", mail: true }), { outdated: true, latest: "1.65.0", delivery: "mail" });
+  assert.equal(feedbackStatus({ official: false, current: "1.64.0", latest: null, address: true, mail: true }), null);
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.64.0", address: true, mail: true }), { outdated: false, latest: null, delivery: "mail", githubReason: null });
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: "1.65.0", address: true, mail: true }), { outdated: true, latest: "1.65.0", delivery: "mail", githubReason: null });
   // Recién actualizada (la caché aún dice la anterior), sin red o con UPDATE_CHECK=0: se puede enviar.
-  assert.equal(feedbackStatus({ official: true, current: "1.65.0", latest: "1.64.0", mail: true })!.outdated, false);
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, mail: true })!.outdated, false);
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: "basura", mail: true })!.outdated, false);
-  // Sin envío de emails o sin dirección del producto: el camino de GitHub.
-  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, mail: false })!.delivery, "github");
+  assert.equal(feedbackStatus({ official: true, current: "1.65.0", latest: "1.64.0", address: true, mail: true })!.outdated, false);
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: true })!.outdated, false);
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: "basura", address: true, mail: true })!.outdated, false);
+  // Sin envío de emails o sin dirección del producto: el camino de GitHub, con su motivo (el diálogo no culpa al correo
+  // de la instalación cuando lo que falta es la dirección del producto, que hoy es lo que pasa en todas).
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: false }), { outdated: false, latest: null, delivery: "github", githubReason: "no_mail" });
+  assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: true }), { outdated: false, latest: null, delivery: "github", githubReason: "no_address" });
+  assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: false })!.githubReason, "no_address");
 });
 
 test("dirección del producto: vacía hasta que el autor la cree (como BUY_URL)", () => {

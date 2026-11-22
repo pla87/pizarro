@@ -65,6 +65,7 @@ if (only.includes("feedback")) {
   L.scenario("feedback: botón junto a «Cerrar sesión», diálogo con captura, GitHub con lo escrito y desactivado sin la última versión");
   const NAME = "Informar de un error o enviar una sugerencia";
   const OUTDATED = "Actualiza a la última versión para informar de un error o enviar una sugerencia";
+  const OUTDATED_MEMBER = "Esta instalación no tiene la última versión de Pizarro: pide a quien la administra que la actualice para poder informar de un error o enviar una sugerencia.";
   const version = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
   const setLatest = (latest) => L.q(`INSERT INTO "AppState"(key,value,"updatedAt") VALUES ('updateCheck',$1,NOW()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify({ checkedAt: Date.now(), latest, url: null })]);
   await setLatest(version);
@@ -90,8 +91,10 @@ if (only.includes("feedback")) {
     await footerBug.click();
     const dlg = s.page.getByRole("dialog", { name: NAME });
     await dlg.waitFor();
-    L.check("FEEDBACK: sin email en la instalación, el diálogo ofrece GitHub y avisa de que es público",
-      (await dlg.getByText("Esta instalación no puede enviarlo por email").count()) === 1 && (await dlg.getByText("La incidencia es pública").count()) === 1);
+    // FEEDBACK_EMAIL vacía (el producto aún no tiene dirección): GitHub, sin culpar al correo de la instalación.
+    L.check("FEEDBACK: sin la dirección del producto, el diálogo ofrece GitHub, avisa de que es público y no culpa al email de la instalación",
+      (await dlg.getByText("Se abrirá el formulario de Pizarro en GitHub").count()) === 1 && (await dlg.getByText("La incidencia es pública").count()) === 1 &&
+      (await dlg.getByText("Esta instalación no puede enviarlo por email").count()) === 0);
     L.eq("FEEDBACK: enseña los datos técnicos", (await dlg.locator("dl dt").allInnerTexts()).join("|"), "Versión|Commit|Instalación|Navegador y sistema|Idioma");
     await dlg.getByLabel("¿Qué ha pasado?").fill("Al mover una tarjeta se queda gris");
     const gh = dlg.getByRole("link", { name: "Continuar en GitHub" });
@@ -103,6 +106,15 @@ if (only.includes("feedback")) {
     await dlg.getByLabel("¿Qué te gustaría?").fill("Vista por semanas");
     const ideaUrl = new URL(await gh.getAttribute("href"));
     L.eq("FEEDBACK: una sugerencia va a su formulario", [ideaUrl.searchParams.get("template"), ideaUrl.searchParams.get("idea")], ["suggestion.yml", "Vista por semanas"]);
+    // Un texto que no cabe en la dirección: aviso antes de abrir GitHub y «Copiar el texto» con todo.
+    L.eq("FEEDBACK: con un texto corto no hay aviso de recorte", await dlg.getByRole("button", { name: "Copiar el texto" }).count(), 0);
+    const longText = "Una sugerencia muy larga, con tildes y eñes. ".repeat(100).trim();
+    await dlg.getByLabel("¿Qué te gustaría?").fill(longText);
+    L.check("FEEDBACK: con un texto largo avisa de que GitHub solo recibe el principio", (await dlg.getByText("GitHub solo recibirá el principio").count()) === 1);
+    await s.ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: L.BASE });
+    await dlg.getByRole("button", { name: "Copiar el texto" }).click();
+    await L.checkEventually("FEEDBACK: «Copiar el texto» copia el texto entero", async () => (await s.page.evaluate(() => navigator.clipboard.readText()).catch(() => "")) === longText);
+    await dlg.getByLabel("¿Qué te gustaría?").fill("Vista por semanas");
     // Captura: de la página sin el diálogo ni su fondo oscuro, reducida y en JPEG.
     await dlg.getByLabel("Incluir una captura de la pantalla").check();
     const preview = dlg.locator("img[data-feedback-preview]");
@@ -173,7 +185,10 @@ if (only.includes("feedback")) {
     await s.page.getByText(OUTDATED, { exact: true }).first().waitFor();
     L.check("FEEDBACK: al pulsarlo no se abre el diálogo y el aviso ofrece «Cómo actualizar» al administrador",
       (await s.page.getByRole("dialog", { name: NAME }).count()) === 0 && (await s.page.getByRole("button", { name: "Cómo actualizar" }).count()) >= 1);
+    // A quien no administra: que lo pida a quien administra la instalación (él no puede actualizar).
     await asMember();
+    await L.reload(s.page);
+    L.eq("FEEDBACK: a un miembro, el motivo le dice que lo pida a quien administra", await footerBug.getAttribute("title"), OUTDATED_MEMBER);
     await setLatest(version);
     L.assertNoErrors("FEEDBACK", [s, m]);
     await m.ctx.close();
