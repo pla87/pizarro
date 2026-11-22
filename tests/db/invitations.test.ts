@@ -17,7 +17,7 @@ import { invitePendingFrom } from "../../src/lib/user-entered";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
 process.env.MAX_USERS = "100000";
-const { copyInviteLink, createUser, inviteToProject, resendInvite } = await import("../../src/actions/users");
+const { generateInviteLink, createUser, inviteToProject, resendInvite } = await import("../../src/actions/users");
 
 let outbox = "";
 const prevOutbox = process.env.MAIL_OUTBOX_DIR;
@@ -216,7 +216,7 @@ describe("Reenviar invitación", () => {
   });
 });
 
-describe("Copiar enlace de invitación (sin email)", () => {
+describe("Generar enlace de invitación nuevo (sin email)", () => {
   test("emite un enlace nuevo al mismo proyecto, el anterior deja de valer, no se envía y no queda en el registro", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [] });
@@ -230,7 +230,7 @@ describe("Copiar enlace de invitación (sin email)", () => {
       assert.equal(invited.emailed, false);
       first = tokenOf(invited.link);
       const user = await db.user.findUniqueOrThrow({ where: { email: to } });
-      const res = expectOk(await copyInviteLink(user.id));
+      const res = expectOk(await generateInviteLink(user.id));
       second = tokenOf(res.link);
     } finally {
       process.env.MAIL_OUTBOX_DIR = outbox;
@@ -242,7 +242,7 @@ describe("Copiar enlace de invitación (sin email)", () => {
     assert.match(JSON.stringify(fresh.data ?? {}), new RegExp(f.project.id), "lleva al mismo proyecto");
     assert.equal((await mailsTo(to)).length, 0, "no se envía nada");
     await flushLogs();
-    const log = await db.appLog.findFirst({ where: { action: "users.copyInviteLink", userId: admin.id }, orderBy: { createdAt: "desc" } });
+    const log = await db.appLog.findFirst({ where: { action: "users.generateInviteLink", userId: admin.id }, orderBy: { createdAt: "desc" } });
     assert.match(log?.message ?? "", /Generó un enlace de invitación nuevo para «.+» \(sin enviarlo/);
     assert.doesNotMatch(JSON.stringify(log ?? {}), new RegExp(second), "el token no queda en el registro");
   });
@@ -252,17 +252,17 @@ describe("Copiar enlace de invitación (sin email)", () => {
     const pending = await makeUser();
     await db.user.update({ where: { id: pending.id }, data: { mustChangePassword: true } });
     await loginAs(member);
-    expectFail(await copyInviteLink(pending.id), FORBIDDEN);
+    expectFail(await generateInviteLink(pending.id), FORBIDDEN);
     assert.equal(await db.authToken.count({ where: { userId: pending.id, purpose: "INVITE" } }), 0);
 
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     const chosen = await makeUser();
-    expectFail(await copyInviteLink(chosen.id), /ya ha entrado alguna vez/);
+    expectFail(await generateInviteLink(chosen.id), /ya ha entrado alguna vez/);
     const off = await makeUser({ active: false });
     await db.user.update({ where: { id: off.id }, data: { mustChangePassword: true } });
-    expectFail(await copyInviteLink(off.id), /desactivada/);
-    expectOk(await copyInviteLink(pending.id));
+    expectFail(await generateInviteLink(off.id), /desactivada/);
+    expectOk(await generateInviteLink(pending.id));
     assert.equal(await db.authToken.count({ where: { userId: pending.id, purpose: "INVITE" } }), 1);
   });
 });

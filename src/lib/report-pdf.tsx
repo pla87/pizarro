@@ -21,7 +21,6 @@ Font.registerHyphenationCallback(pdfWordParts);
 const C = {
   text: "#0f172a",
   muted: "#64748b",
-  faint: "#94a3b8",
   line: "#e2e8f0",
   soft: "#f8fafc",
   brand: "#4f46e5",
@@ -67,7 +66,7 @@ const s = StyleSheet.create({
   td: { paddingVertical: 3, paddingHorizontal: 5 },
   small: { fontSize: 7.5, color: C.muted },
   pill: { fontSize: 7, fontFamily: "Helvetica-Bold", paddingVertical: 1.5, paddingHorizontal: 4, borderRadius: 3, color: "#fff" },
-  footer: { position: "absolute", bottom: 20, left: 36, right: 36, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.faint },
+  footer: { position: "absolute", bottom: 20, left: 36, right: 36, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.muted },
 });
 
 function Bar({ value, color = C.brand }: { value: number; color?: string }) {
@@ -87,9 +86,9 @@ function dueLabel(t: { dueDate: string | null; daysLeft: number | null; done?: b
   if (!t.dueDate) return "—";
   const date = formatDay(t.dueDate, today, x.locale);
   if (t.done || t.daysLeft === null) return date;
-  if (t.daysLeft < 0) return `${date} ${x.t("(hace {n} d)", { n: -t.daysLeft })}`;
+  if (t.daysLeft < 0) return `${date} ${x.t("(hace {n} d)", { n: (-t.daysLeft).toLocaleString(x.locale) })}`;
   if (t.daysLeft === 0) return `${date} ${x.t("(hoy)")}`;
-  return `${date} ${x.t("(en {n} d)", { n: t.daysLeft })}`;
+  return `${date} ${x.t("(en {n} d)", { n: t.daysLeft.toLocaleString(x.locale) })}`;
 }
 
 function dueColor(t: ReportTask): string {
@@ -566,7 +565,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
     },
     ...r.sections.flatMap((sec) => tableBlocks(sec.tasks, cols, (x) => rowUnits(x.title, titleWidth), big, (table, first) => (first ? (
       <View>
-        <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length})</Text></Text>
+        <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length.toLocaleString(locale)})</Text></Text>
         {table}
       </View>
     ) : table), 2)),
@@ -850,7 +849,7 @@ const SESSION_ROW = { flexDirection: "row", gap: 10 } as const;
 const SESSION_END = { paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line };
 
 function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
-  const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length });
+  const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length.toLocaleString(locale) });
   const circle = (x: ProgramSessionPdf) => (
     <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.brandSoft, alignItems: "center", justifyContent: "center" }}>
       <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5, color: C.brand }}>{x.n}</Text>
@@ -859,7 +858,7 @@ function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
   const head = (x: ProgramSessionPdf) => (
     <View wrap={false} minPresenceAhead={30}>
       <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11.5, lineHeight: 1.25 }}>{t("Sesión {n}", { n: x.n })}: {x.title}</Text>
-      <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.faint, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
+      <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.muted, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
       {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
     </View>
   );

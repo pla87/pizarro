@@ -10,7 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { assignedBatchCount, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
-import { announceUnreadCount, latestOnly } from "@/lib/unread-core";
+import { announceUnreadCount, latestOnly, restoreUnread } from "@/lib/unread-core";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -73,15 +73,17 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
     setAllRead(false);
     setItems(fromServer(initial));
   }
-  // Tras «Cargar más», el foco va al primer aviso nuevo (si no hubiera, se queda en el botón).
+  // Tras «Cargar más», el foco va al primer aviso nuevo (si no hubiera, se queda en el botón). Se olvida con la primera
+  // lista que llegue del servidor aunque no haya crecido (avisos borrados entretanto): si no, el foco saltaba al aviso
+  // `from` la próxima vez que creciera.
   const focusFrom = useRef<number | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
   useEffect(() => {
     const from = focusFrom.current;
-    if (from === null || items.length <= from) return;
+    if (from === null) return;
     focusFrom.current = null;
     listRef.current?.querySelectorAll<HTMLElement>("[data-notice-open]")[from]?.focus();
-  }, [items]);
+  }, [initial]);
   // Hasta entonces: los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
   const outside = Math.max(0, unreadTotal - initial.filter((i) => !i.read).length);
   const unread = counted ?? (allRead ? 0 : outside + items.filter((i) => !i.read).length);
@@ -126,12 +128,12 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
 
   const markAll = () =>
     start(async () => {
-      const before = items;
+      const wasUnread = new Set(items.filter((x) => !x.read).map((x) => x.id));
       setItems((list) => list.map((x) => ({ ...x, read: true })));
       setAllRead(true);
       const seq = gate.next();
       const undo = () => {
-        setItems(before);
+        setItems((list) => restoreUnread(list, wasUnread, readHere));
         setAllRead(false);
       };
       let res: Awaited<ReturnType<typeof markAllNotificationsRead>>;
@@ -214,7 +216,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
-                    {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-l-2 border-slate-300 pl-2 dark:border-slate-600")}>{body}</p>}
+                    {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-s-2 border-slate-300 ps-2 dark:border-slate-600")}>{body}</p>}
                     <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                       {formatDate(n.createdAt, "dateTimeShort", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}

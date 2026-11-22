@@ -21,13 +21,12 @@ const INSTALL = (process.env.NEXT_PUBLIC_OFFICIAL_BUILD || null) as InstallKind 
 type Shot = { blob: Blob; url: string };
 
 /**
- * Diálogo «Informar de un error o enviar una sugerencia». Con `delivery` «mail» se envía en privado por email (ruta
- * /api/feedback); con «github» (la instalación no envía emails o el producto aún no tiene dirección) abre el formulario
- * público de GitHub con el texto y los datos técnicos, y ofrece descargar la captura para adjuntarla a mano. `githubReason`
- * dice por qué: sin la dirección del producto no se culpa al correo de la instalación.
+ * Diálogo «Informar de un error o enviar una sugerencia». Sin `githubReason` se envía en privado por email (ruta
+ * /api/feedback); con él (la instalación no envía emails o el producto aún no tiene dirección) abre el formulario
+ * público de GitHub con el texto y los datos técnicos, y ofrece descargar la captura para adjuntarla a mano. El motivo
+ * importa: sin la dirección del producto no se culpa al correo de la instalación.
  */
-export function FeedbackDialog({ delivery, githubReason, version, email, onClose }: {
-  delivery: FeedbackStatus["delivery"];
+export function FeedbackDialog({ githubReason, version, email, onClose }: {
   githubReason: FeedbackStatus["githubReason"];
   version: string;
   email: string;
@@ -46,7 +45,7 @@ export function FeedbackDialog({ delivery, githubReason, version, email, onClose
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields] = useState<BugReportFields>(() => ({ version, commit: COMMIT, install: INSTALL, browser: describeBrowser(navigator.userAgent), language: locale }));
-  const mail = delivery === "mail";
+  const mail = githubReason === null;
 
   // La URL de la vista previa se libera al quitarla o al cerrar.
   useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url); }, [shot]);

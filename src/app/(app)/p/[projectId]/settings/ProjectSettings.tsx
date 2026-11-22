@@ -35,7 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
-import { copyInviteLink, inviteToProject, resendInvite } from "@/actions/users";
+import { generateInviteLink, inviteToProject, resendInvite } from "@/actions/users";
 import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -521,7 +521,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       confirmLabel: t("Generar enlace nuevo"),
     }))) return;
     start(async () => {
-      const res = await copyInviteLink(m.id);
+      const res = await generateInviteLink(m.id);
       if (!res.ok) return toast(res.error, "error");
       toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });

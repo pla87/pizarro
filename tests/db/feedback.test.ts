@@ -174,14 +174,12 @@ describe("/api/feedback", () => {
     process.env.SMTP_HOST = "";
     try {
       assert.equal(await errorOf(await post({ kind: "bug", text: "x" })), "unavailable");
-      assert.equal((await getFeedbackStatus(TO))!.delivery, "github");
       assert.equal((await getFeedbackStatus(TO))!.githubReason, "no_mail");
     } finally {
       process.env.MAIL_OUTBOX_DIR = outbox;
       process.env.SMTP_HOST = "smtp.example.com";
     }
-    assert.equal((await getFeedbackStatus(TO))!.delivery, "mail");
-    assert.equal((await getFeedbackStatus(""))!.delivery, "github");
+    assert.equal((await getFeedbackStatus(TO))!.githubReason, null);
     assert.equal((await getFeedbackStatus(""))!.githubReason, "no_address");
     assert.equal((await mails()).length, 0);
   });
@@ -192,7 +190,7 @@ describe("/api/feedback", () => {
     await loginAs(u);
     try {
       await setLatest("999.0.0");
-      assert.deepEqual(await getFeedbackStatus(TO), { outdated: true, latest: "999.0.0", delivery: "mail", githubReason: null });
+      assert.deepEqual(await getFeedbackStatus(TO), { outdated: true, latest: "999.0.0", githubReason: null });
       const res = await post({ kind: "bug", text: "x" });
       assert.equal(res.status, 409);
       assert.equal(await errorOf(res), "outdated");

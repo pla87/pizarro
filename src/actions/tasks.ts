@@ -1582,7 +1582,7 @@ export async function restoreTask(taskId: string) {
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
     });
-    describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
+    describeAction("Restauró «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }

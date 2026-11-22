@@ -2,7 +2,8 @@
 // tal cual el recuento que devuelve el servidor (no lo baja ella): con otra pestaña o con más de 100 no se desincroniza.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { announceUnreadCount, latestOnly, onUnreadCount, UNREAD_COUNT_CAP } from "../src/lib/unread-core";
+import { announceUnreadCount, latestOnly, onUnreadCount, restoreUnread, UNREAD_COUNT_CAP } from "../src/lib/unread-core";
+import { readFileSync } from "node:fs";
 import { isProjectNotice, notificationBody, notificationHeadline, projectNoticePath } from "../src/lib/notification-text";
 import { channelWants, DEFAULT_CHANNEL_PREFS, noticeLinkLabel } from "../src/lib/messaging-core";
 import { makeT } from "../src/i18n/core";
@@ -62,4 +63,21 @@ test("aviso de baja del informe semanal: de proyecto, lleva a Ajustes → Inform
   assert.equal(noticeLinkLabel({ type: "REPORT_UNSUBSCRIBED" }, es), "Abrir los informes del proyecto");
   assert.equal(channelWants("REPORT_UNSUBSCRIBED", DEFAULT_CHANNEL_PREFS), true);
   assert.equal(channelWants("REPORT_UNSUBSCRIBED", { ...DEFAULT_CHANNEL_PREFS, notifyMention: false }), false);
+});
+
+test("deshacer «Marcar todo como leído»: sobre la lista de ahora (tras un refresco) y sin tocar los leídos uno a uno", () => {
+  const was = new Set(["a", "b", "c"]);
+  // Tras un refresco la lista es otra: «d» es nuevo y ya leído, «c» ya no está; «b» se ha leído aparte mientras tanto.
+  const now = [{ id: "a", read: true }, { id: "b", read: true }, { id: "d", read: true }];
+  assert.deepEqual(restoreUnread(now, was, new Set(["b"])), [{ id: "a", read: false }, { id: "b", read: true }, { id: "d", read: true }]);
+  // Los que siguen sin leer no se copian.
+  const same = { id: "a", read: false };
+  assert.equal(restoreUnread([same], was, new Set())[0], same);
+});
+
+test("Avisos: la raya de la cita va al inicio del texto (también en RTL) y el foco de «Cargar más» se olvida con la lista nueva", () => {
+  const src = readFileSync("src/app/(app)/notifications/NotificationList.tsx", "utf8");
+  assert.match(src, /quotesWriting\(n\.type\) && "border-s-2 [^"]*ps-2/);
+  assert.doesNotMatch(src, /border-l-2|\bpl-2\b/);
+  assert.match(src, /focusFrom\.current = null;\n\s*listRef\.current\?\.querySelectorAll[^\n]*\n\s*\}, \[initial\]\)/);
 });

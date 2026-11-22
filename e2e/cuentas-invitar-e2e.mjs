@@ -138,7 +138,7 @@ if (only.includes("invite")) {
   L.check("INVITE: …y dice que se lo pases tú", (await page.getByTestId("member-link-note").innerText()).includes("Pásale este enlace a Inv59 Nueva Persona"));
   L.eq("INVITE: solo vale una invitación (la nueva)", (await L.q(`SELECT count(*)::int n FROM "AuthToken" WHERE "userId"=$1 AND purpose='INVITE'`, [invited.id]))[0].n, 1);
   await L.checkEventually("INVITE: queda en el registro, sin el enlace", async () => {
-    const [row] = await L.q(`SELECT message, coalesce(details::text,'') d FROM "AppLog" WHERE action='users.copyInviteLink' ORDER BY "createdAt" DESC LIMIT 1`);
+    const [row] = await L.q(`SELECT message, coalesce(details::text,'') d FROM "AppLog" WHERE action='users.generateInviteLink' ORDER BY "createdAt" DESC LIMIT 1`);
     return [!!row && /Generó un enlace de invitación nuevo para «Inv59 Nueva Persona»/.test(row.message) && !row.d.includes(fresh.split("/reset/")[1]), JSON.stringify(row)];
   });
   link = fresh;

@@ -27,16 +27,22 @@ function officialInstall(): InstallKind | null {
   return v === "docker" || v === "railway" ? v : null;
 }
 
-/** ¿Se puede enviar por email? Hace falta la dirección del producto (FEEDBACK_EMAIL) y que la instalación envíe emails. */
+/** Lo que hace falta para enviar por email: la dirección del producto (FEEDBACK_EMAIL) y que la instalación envíe emails. */
+function mailSetup(to: string): { address: boolean; mail: boolean } {
+  return { address: to.trim() !== "", mail: emailEnabled() };
+}
+
+/** ¿Se puede enviar por email? */
 function canMail(to: string): boolean {
-  return to.trim() !== "" && emailEnabled();
+  const { address, mail } = mailSetup(to);
+  return address && mail;
 }
 
 /** Estado del botón para el layout (null: no se muestra). Nunca lanza ni espera a GitHub. */
 export async function getFeedbackStatus(to: string = FEEDBACK_EMAIL): Promise<FeedbackStatus | null> {
   if (!officialInstall()) return null;
   const latest = await getLatestKnownVersion().catch(() => null);
-  return feedbackStatus({ official: true, current: pkg.version, latest, address: to.trim() !== "", mail: emailEnabled() });
+  return feedbackStatus({ official: true, current: pkg.version, latest, ...mailSetup(to) });
 }
 
 const json = (status: number, body: { ok: true } | { error: FeedbackError }) =>

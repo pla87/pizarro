@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { undoLast } from "@/actions/undo";
 import { moveDeliverable } from "@/actions/projects";
 import { updateTask } from "@/actions/tasks";
-import { PERSON_UNASSIGNED, TOUCH_DRAG_DELAY_MS, bandsForWeek, columnAt, dragRange, groupByDay, groupWeeks, isRange, pendingBandDrag, rangeBandsForWeek, shiftMonth, weekRangeEnds, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
+import { BAND_DAYS, PERSON_UNASSIGNED, TOUCH_DRAG_DELAY_MS, bandsForWeek, outsideGrid, visibleBands, columnAt, dragRange, groupByDay, groupWeeks, isRange, pendingBandDrag, rangeBandsForWeek, shiftMonth, weekRangeEnds, type Band, type CalendarDay, type RangeDragMode } from "@/lib/calendar";
 import { kindBadgeStyle } from "@/lib/constants";
 import { addDaysIso, daysBetween, formatDay } from "@/lib/dates";
 import { deliverableStatus, type DeliverableStatus } from "@/lib/report";
@@ -218,6 +218,23 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   const [last, setLast] = useState<Last | null>(null);
   const [undoing, setUndoing] = useState(false);
   const focusAfter = useRef<string | null>(null);
+  // Banda movida con el teclado: se sigue dibujando aunque en su nueva semana quede detrás de «+N más», para no perder el
+  // foco. Se olvida en cuanto el foco va a otra cosa o se pulsa en otro sitio.
+  const [kbMoved, setKbMoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (!kbMoved) return;
+    const sel = `[data-band="${CSS.escape(kbMoved)}"]`;
+    const onFocus = (e: FocusEvent) => !(e.target as Element | null)?.closest?.(sel) && setKbMoved(null);
+    const onDown = () => setKbMoved(null);
+    document.addEventListener("focusin", onFocus);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("focusin", onFocus);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [kbMoved]);
+  const prevMonthRef = useRef<HTMLAnchorElement>(null);
+  const nextMonthRef = useRef<HTMLAnchorElement>(null);
 
 
   // Móvil, mes actual: al abrirlo se baja hasta hoy (o hasta el primer día con algo a partir de hoy). Solo al cambiar de
@@ -282,15 +299,23 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     focusAfter.current = null;
     const el = document.querySelector<HTMLElement>(`[data-chip="${CSS.escape(id)}"], [data-band="${CSS.escape(id)}"]`);
     if (el) return el.focus();
+    const task = items.find((x) => x.id === id);
+    const del = task ? undefined : dels.find((d) => d.id === id);
+    const span = task ? { start: isRange(task.start, task.due) ? task.start! : task.due, due: task.due } : del ? { start: addDaysIso(del.due, -(BAND_DAYS - 1)), due: del.due } : null;
+    if (!span) return;
+    // Ha salido de la cuadrícula (Alt+↑ en la primera semana, Alt+↓ en la última): al botón del mes al que ha ido.
+    const side = outsideGrid(span, weeks[0]![0]!.iso, weeks.at(-1)!.at(-1)!.iso);
+    if (side) return (side === "prev" ? prevMonthRef : nextMonthRef).current?.focus();
     // En un día lleno la tarea puede quedar dentro de «+N más»: se abre ese panel y el foco va a la tarea (en el siguiente
-    // dibujo, ya con el panel). Si el panel ya está abierto y no aparece, al menos al botón del día.
-    const due = items.find((x) => x.id === id)?.due;
-    const toggle = due && document.querySelector<HTMLElement>(`[data-day-toggle="${CSS.escape(due)}"]`);
+    // dibujo, ya con el panel). Si el panel ya está abierto y no aparece, al menos al botón del día. Las bandas no van en
+    // ese panel (siguen a la vista gracias a kbMoved).
+    if (!task || isRange(task.start, task.due)) return;
+    const toggle = document.querySelector<HTMLElement>(`[data-day-toggle="${CSS.escape(task.due)}"]`);
     if (!toggle) return;
-    if (openDay === due) return toggle.focus();
+    if (openDay === task.due) return toggle.focus();
     focusAfter.current = id;
-    setOpenDay(due);
-  }, [items, dels, openDay]);
+    setOpenDay(task.due);
+  }, [items, dels, openDay, weeks]);
   const repeatsByDay = useMemo(() => groupByDay(repeats, (r) => r.due), [repeats]);
   const delByDay = useMemo(() => groupByDay(dels, (d) => d.due), [dels]);
 
@@ -472,21 +497,32 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const step = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" ? -7 : e.key === "ArrowDown" ? 7 : 0;
     if (!step) return;
     e.preventDefault();
-    focusAfter.current = id;
+    // El foco sigue a la banda solo si de verdad se mueve: si no, focusAfter se quedaba puesto y lo robaba más tarde (al
+    // abrir un «+N más» o con el siguiente cambio de las tareas).
+    const moved = () => {
+      focusAfter.current = id;
+      setKbMoved(id);
+    };
     if (kind === "del") {
       const d = delById.get(id);
       const del = deliverables.find((x) => x.id === id);
-      if (d && del) void saveDeliverable(del, addDaysIso(d.due, step));
+      if (!d || !del) return;
+      moved();
+      void saveDeliverable(del, addDaysIso(d.due, step));
       return;
     }
     const task = tasks.find((x) => x.id === id);
     const cur = rangedById.get(id);
     if (!task || !cur?.start) return;
+    let next: TaskDates;
     if (e.shiftKey) {
       if (Math.abs(step) !== 1) return;
       const due = addDaysIso(cur.due, step);
-      void saveTask(task, { start: cur.start, due: due < cur.start ? cur.start : due });
-    } else void saveTask(task, { start: addDaysIso(cur.start, step), due: addDaysIso(cur.due, step) });
+      next = { start: cur.start, due: due < cur.start ? cur.start : due };
+    } else next = { start: addDaysIso(cur.start, step), due: addDaysIso(cur.due, step) };
+    if (next.start === cur.start && next.due === cur.due) return;
+    moved();
+    void saveTask(task, next);
   };
 
   // Arrastre con el puntero (ratón o dedo) de bandas: mover entera o redimensionar por un borde. Se usan eventos de
@@ -508,6 +544,19 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
   });
   useEffect(() => {
     return () => dragRef.current?.stop();
+  }, []);
+
+  // Una banda cogida con el dedo no debe desplazar la página al arrastrarla a otra semana. iOS Safari decide al empezar
+  // el toque si hay escuchadores de touchmove que bloquean; uno añadido a mitad del gesto (en pointerdown) llega tarde y
+  // su preventDefault() no hace nada. Por eso los grupos de bandas llevan desde que se montan un touchmove no pasivo que
+  // solo bloquea mientras hay una banda cogida; el resto de la página se sigue desplazando sin pasar por aquí.
+  const holdBandTouch = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const onTouchMove = (ev: TouchEvent) => {
+      if (dragRef.current?.held && ev.cancelable) ev.preventDefault();
+    };
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onTouchMove);
   }, []);
 
   const startBandDrag = (e: React.PointerEvent, kind: "task" | "del", id: string, mode: RangeDragMode, origin: { start: string; due: string }) => {
@@ -557,18 +606,13 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
     const onUp = () => finish(false);
     const onCancel = () => finish(true);
     const onEsc = (ev: KeyboardEvent) => ev.key === "Escape" && finish(true);
-    // Ya cogida con el dedo, el navegador no debe desplazar la página (perderíamos el puntero al pasar de semana) ni
-    // abrir el menú de la pulsación larga sobre el enlace.
-    const onTouchMove = (ev: TouchEvent) => drag.held && ev.cancelable && ev.preventDefault();
+    // Con el dedo, la pulsación larga no debe abrir el menú del enlace (el desplazamiento lo bloquea holdBandTouch).
     const onContextMenu = (ev: Event) => ev.preventDefault();
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onEsc);
-    if (!drag.held) {
-      window.addEventListener("touchmove", onTouchMove, { passive: false });
-      window.addEventListener("contextmenu", onContextMenu);
-    }
+    if (!drag.held) window.addEventListener("contextmenu", onContextMenu);
     drag.stop = () => {
       clearTimeout(holdTimer);
       band?.removeAttribute("data-held");
@@ -576,7 +620,6 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("keydown", onEsc);
-      window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("contextmenu", onContextMenu);
     };
     dragRef.current = drag;
@@ -588,13 +631,9 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       suppressClick.current = false;
     }
   };
-  // Entre las bandas visibles siempre va la que se arrastra, aunque por su nueva posición quedara fuera del tope.
-  const visibleBands = (bands: Band[], max: number) => {
-    const shown = bands.slice(0, max);
-    const keep = bands.find((b) => b.id === preview?.id);
-    if (keep && !shown.includes(keep)) shown[max - 1] = keep;
-    return shown;
-  };
+  // Entre las bandas visibles siempre van la que se arrastra y la recién movida con el teclado, aunque por su nueva
+  // posición quedaran fuera del tope.
+  const bandView = (bands: Band[], max: number) => visibleBands(bands, max, [preview?.id, kbMoved]);
 
   const chip = (task: CalendarTask & { due: string }) => (
     <Link
@@ -680,7 +719,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
           {t("Calendario")}
         </h1>
         <nav className="flex items-center gap-1.5" aria-label={t("Navegar por meses")}>
-          <Link href={href({ month: shiftMonth(month, -1) })} className={navBtn} aria-label={t("Mes anterior")}>
+          <Link ref={prevMonthRef} href={href({ month: shiftMonth(month, -1) })} className={navBtn} aria-label={t("Mes anterior")}>
             <ChevronLeft size={16} aria-hidden />
             <LinkSpinner />
           </Link>
@@ -688,7 +727,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
             {t("Hoy")}
             <LinkSpinner />
           </Link>
-          <Link href={href({ month: shiftMonth(month, 1) })} className={navBtn} aria-label={t("Mes siguiente")}>
+          <Link ref={nextMonthRef} href={href({ month: shiftMonth(month, 1) })} className={navBtn} aria-label={t("Mes siguiente")}>
             <LinkSpinner />
             <ChevronRight size={16} aria-hidden />
           </Link>
@@ -793,11 +832,13 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
           {weeks.map((week) => {
             const bands = bandsForWeek(week.map((d) => d.iso), dels.map((d) => ({ id: d.id, dueDate: d.due })));
             const rangeBands = ranged.length ? rangeBandsForWeek(week.map((d) => d.iso), ranged.map((x) => ({ id: x.id, start: x.start!, due: x.due }))) : [];
+            const delView = bandView(bands, MAX_BANDS);
+            const rangeView = bandView(rangeBands, MAX_RANGES);
             return (
               <div key={week[0]!.iso} data-week={week[0]!.iso} className="border-b border-slate-200 last:border-b-0 dark:border-slate-800">
                 {bands.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Entregables")}>
-                    {visibleBands(bands, MAX_BANDS).map((b) => {
+                  <div ref={holdBandTouch} className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Entregables")}>
+                    {delView.shown.map((b) => {
                       const d = delById.get(b.id)!;
                       const status = d.status;
                       return (
@@ -829,14 +870,14 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                         </Link>
                       );
                     })}
-                    {bands.length > MAX_BANDS && (
+                    {delView.hidden.length > 0 && (
                       <div className="relative col-span-7">
                         <button type="button" data-day-toggle={`d:${week[0]!.iso}`} onClick={() => setOpenDay(openDay === `d:${week[0]!.iso}` ? null : `d:${week[0]!.iso}`)} aria-expanded={openDay === `d:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
-                          {bands.length - MAX_BANDS === 1 ? t("+1 entregable más") : t("+{n} entregables más", { n: bands.length - MAX_BANDS })}
+                          {delView.hidden.length === 1 ? t("+1 entregable más") : t("+{n} entregables más", { n: delView.hidden.length })}
                         </button>
                         {openDay === `d:${week[0]!.iso}` && (
                           <div data-day-popover role="dialog" aria-label={t("Entregables")} className="absolute left-0 top-5 z-30 w-72 max-w-[80vw] space-y-0.5 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                            {bands.slice(MAX_BANDS).map((b) => {
+                            {delView.hidden.map((b) => {
                               const d = delById.get(b.id)!;
                               return (
                                 <Link key={b.id} href={`/p/${d.projectId}`} className={cn("flex min-w-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-5", STATUS_STYLE[d.status])}>
@@ -853,8 +894,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                   </div>
                 )}
                 {rangeBands.length > 0 && (
-                  <div className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Tareas con rango de fechas")}>
-                    {visibleBands(rangeBands, MAX_RANGES).map((b) => {
+                  <div ref={holdBandTouch} className="grid grid-cols-7 gap-y-0.5 px-0.5 pt-1" role="group" aria-label={t("Tareas con rango de fechas")}>
+                    {rangeView.shown.map((b) => {
                       const task = rangedById.get(b.id)!;
                       return (
                         <Link
@@ -883,14 +924,14 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                         </Link>
                       );
                     })}
-                    {rangeBands.length > MAX_RANGES && (
+                    {rangeView.hidden.length > 0 && (
                       <div className="relative col-span-7">
                         <button type="button" data-day-toggle={`r:${week[0]!.iso}`} onClick={() => setOpenDay(openDay === `r:${week[0]!.iso}` ? null : `r:${week[0]!.iso}`)} aria-expanded={openDay === `r:${week[0]!.iso}`} className="rounded px-1 text-[11px] font-medium text-brand-700 hover:bg-slate-100 dark:text-brand-300 dark:hover:bg-slate-800">
-                          {rangeBands.length - MAX_RANGES === 1 ? t("+1 tarea con rango más") : t("+{n} tareas con rango más", { n: rangeBands.length - MAX_RANGES })}
+                          {rangeView.hidden.length === 1 ? t("+1 tarea con rango más") : t("+{n} tareas con rango más", { n: rangeView.hidden.length })}
                         </button>
                         {openDay === `r:${week[0]!.iso}` && (
                           <div data-day-popover role="dialog" aria-label={t("Tareas con rango de fechas")} className="absolute left-0 top-5 z-30 w-72 max-w-[80vw] space-y-0.5 rounded-lg border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                            {rangeBands.slice(MAX_RANGES).map((b) => {
+                            {rangeView.hidden.map((b) => {
                               const task = rangedById.get(b.id)!;
                               return (
                                 <Link key={b.id} href={`/p/${task.projectId}?task=${task.id}`} style={kindBadgeStyle(task.kind.color)} className={cn("kind-badge flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs leading-5", task.done && "opacity-55 line-through")}>

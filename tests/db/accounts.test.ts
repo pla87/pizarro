@@ -114,10 +114,10 @@ describe("miembros de proyectos privados", () => {
 describe("contraseñas y cambio forzado", () => {
   test("ninguna acción de administración permite fijar la contraseña de otra persona", async () => {
     // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado,
-    // reenviar la invitación (el enlace va al email de la persona), copiar un enlace de invitación nuevo (sin email: el
+    // reenviar la invitación (el enlace va al email de la persona), generar un enlace de invitación nuevo (sin email: el
     // admin se lo pasa, pero la contraseña la elige la persona) e invitar a un proyecto (cuenta con una contraseña
     // aleatoria que nadie conoce; el enlace de un solo uso es para que la persona elija la suya).
-    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "copyInviteLink", "createUser", "deleteUser", "forcePasswordChange", "inviteToProject", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
+    assert.deepEqual(Object.keys(usersActions).sort(), ["allowGoogleRelink", "createUser", "deleteUser", "forcePasswordChange", "generateInviteLink", "inviteToProject", "resendInvite", "resetUserTwoFactor", "unlinkGoogle", "updateUser"]);
 
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser();
