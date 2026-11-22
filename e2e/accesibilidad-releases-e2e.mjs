@@ -367,10 +367,11 @@ if (only.includes("resaltar")) {
   L.eq("RESALTAR: el botón conserva su nombre (con el número y el título enteros)", await toggle.count(), 1);
   L.eq("RESALTAR: en el título, «Desplegable» aunque se busque «despleGáble»", await hits(entry.locator("h2")), ["Desplegable"]);
   L.eq("RESALTAR: la línea de datos sin coincidencias, sin marcas", await hits(entry.locator(":scope > div > div > p")), []);
+  // Con búsqueda la coincidencia se abre sola (sin pulsar la cabecera).
+  L.eq("RESALTAR: la release que coincide sale desplegada", await toggle.getAttribute("aria-expanded"), "true");
   const t0 = Date.now();
-  await toggle.click();
   const prose = entry.locator(".prose-md");
-  await L.checkEventually("RESALTAR: al desplegar, el texto que llega se resalta (303 coincidencias)", async () => (await prose.locator("mark.search-hit").count()) === 303, { timeout: 15000 });
+  await L.checkEventually("RESALTAR: desplegada, el texto que llega se resalta (303 coincidencias)", async () => (await prose.locator("mark.search-hit").count()) === 303, { timeout: 15000 });
   const ms = Date.now() - t0;
   L.check("RESALTAR: 300 tareas con 303 coincidencias se pintan enseguida (< 3 s)", ms < 3000, `${ms} ms`);
   const marks = await hits(prose);
@@ -411,9 +412,10 @@ if (only.includes("resaltar")) {
   await page.goto(`${L.BASE}/p/${p.id}/releases?q=TAREAS`);
   await entry.waitFor({ timeout: 15000 });
   L.eq("RESALTAR: en la línea de datos («0 tareas · 1 adjunto»)", await hits(entry.locator(":scope > div > div > p")), ["tareas"]);
-  // Sin búsqueda, ninguna marca.
+  // Sin búsqueda, ninguna marca (y plegada: se abre al pulsarla).
   await page.goto(`${L.BASE}/p/${p.id}/releases`);
   await entry.waitFor({ timeout: 15000 });
+  L.eq("RESALTAR: sin búsqueda sale plegada", await entry.getByRole("button", { name: "R2 Menú Desplegable nuevo" }).getAttribute("aria-expanded"), "false");
   await entry.getByRole("button", { name: "R2 Menú Desplegable nuevo" }).click();
   await prose.locator("li").first().waitFor({ timeout: 8000 });
   L.eq("RESALTAR: sin búsqueda no hay marcas", await page.locator("mark.search-hit").count(), 0);

@@ -9,6 +9,12 @@ import { ReleaseEntry } from "./ReleaseEntry";
 
 type Release = React.ComponentProps<typeof ReleaseEntry>["release"];
 
+/**
+ * Con búsqueda, las primeras coincidencias se abren solas (se ve dónde está lo buscado sin pulsar cada una). Solo las
+ * primeras: cada una abierta pide su texto, y una búsqueda puede dar hasta 200.
+ */
+const AUTO_OPEN_MAX = 5;
+
 /** Releases con buscador en el servidor (título y contenido, sobre todo el histórico) vía ?q=. */
 export function ReleasesList({
   releases,
@@ -65,7 +71,7 @@ export function ReleasesList({
         <p className="card p-6 text-center text-sm text-slate-500">{t("Ninguna release coincide con «{query}».", { query })}</p>
       ) : (
         <div className="space-y-3">
-          {releases.map((r) => <ReleaseEntry key={r.id} release={r} query={query} />)}
+          {releases.map((r, i) => <ReleaseEntry key={r.id} release={r} query={query} autoOpen={!!query && i < AUTO_OPEN_MAX} />)}
         </div>
       )}
       {moreHref && (

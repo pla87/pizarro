@@ -25,13 +25,20 @@ interface Props {
   release: { id: string; number: number; title: string; deployedAt: string; author: string | null; taskCount: number; attachments: string[] };
   /** Lo buscado en la página (?q=): se resalta en el título, la línea de datos, los adjuntos y el texto. */
   query?: string;
+  /** Con búsqueda, se abre sola (es una coincidencia; ReleasesList la pide para las primeras). */
+  autoOpen?: boolean;
 }
 
-export function ReleaseEntry({ release, query = "" }: Props) {
+export function ReleaseEntry({ release, query = "", autoOpen = false }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const locale = useIntlLocale();
-  const [open, setOpen] = useState(false);
+  // Abierta o cerrada sin búsqueda (lo que eligió quien la mira) y, aparte, con cada búsqueda: con una, las coincidencias
+  // salen abiertas (`autoOpen`) salvo que se cierren a mano; al vaciarla vuelve a como estaba antes de buscar.
+  const [manualOpen, setManualOpen] = useState(false);
+  const [searchToggle, setSearchToggle] = useState<{ query: string; open: boolean } | null>(null);
+  const open = query ? (searchToggle?.query === query ? searchToggle.open : autoOpen) : manualOpen;
+  const toggle = () => (query ? setSearchToggle({ query, open: !open }) : setManualOpen(!open));
   const toast = useToast();
   const confirm = useConfirm();
   const safeRefresh = useSafeRefresh();
@@ -162,7 +169,7 @@ export function ReleaseEntry({ release, query = "" }: Props) {
       <div className="relative flex w-full items-center gap-3 px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="font-medium">
-            <button type="button" className="block w-full truncate text-left after:absolute after:inset-0" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+            <button type="button" className="block w-full truncate text-left after:absolute after:inset-0" onClick={toggle} aria-expanded={open}>
               {/* El espacio va delante del título, en el mismo texto: separa el número en el nombre accesible del botón
                   («R3 Release…», no «R3Release…»). Con lo buscado al principio del título queda solo, seguido de la
                   <mark>, y Chrome lo cuenta (accesibilidad-releases-e2e.mjs, PART=resaltar, lo comprueba). */}

@@ -36,4 +36,6 @@ export const releases: Record<string, string> = {
   "se muestran las más recientes; afina la búsqueda para ver otras.": "showing the most recent; refine the search to see others.",
   // ZIP de adjuntos: un paquete sin ?part= o sin ?v= (enlaces de antes de la v1.60) ya no se sirve
   "Falta el paquete del ZIP o su versión (?part=N&v=…): descárgalo desde la página; si es de antes de actualizar Pizarro, recárgala.": "The ZIP package or its version is missing (?part=N&v=…): download it from the page; if the page was opened before Pizarro was updated, reload it.",
+  // Botón «Generar release» de la columna sin tarjetas: el motivo dice qué hacer (ronda de releases desplegadas al buscar)
+  "Añade tarjetas a esta columna para generar la release": "Add cards to this column to generate the release",
 };
