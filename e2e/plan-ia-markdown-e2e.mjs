@@ -3,7 +3,7 @@
 // bloque de ```` no se toca; títulos setext rebajados; saltos de línea forzados conservados), el título de «Generar plan
 // de trabajo» y «Generar release» a 390 px con el icono visible y el paso recortado con «…», y con más de 500 tareas
 // «Generar» se desactiva con su motivo (antes salía el error de zod en inglés). El arrastre de una fija entre los paneles
-// de dos planes está en tablero-fijas-e2e.mjs (PART=planes). Misma base y servidor que board-e2e.mjs:
+// de dos planes está en tablero-fijas-e2e.mjs (PART=planes). Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e2e.mjs      # PART=markdown,titulo,limite
 import { marked } from "marked";
 import os from "node:os";

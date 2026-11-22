@@ -19,7 +19,7 @@
     "prisma/schema.prisma"
   ],
   "common": {
-    "suites": ["board-e2e"],
+    "suites": ["tablero-e2e"],
     "files": [
       "src/app/globals.css",
       "src/app/layout.tsx",
@@ -41,7 +41,7 @@
     ]
   },
   "suites": {
-    "board-e2e": [
+    "tablero-e2e": [
       "src/components/board/**",
       "src/app/(app)/p/[projectId]/*",
       "src/actions/tasks.ts",
@@ -63,7 +63,7 @@
       "src/lib/task-fields.ts",
       "src/lib/task-events.ts"
     ],
-    "paste-e2e": [
+    "pegar-e2e": [
       "src/components/ui/pasteFiles.ts",
       "src/components/ui/RichTextEditor.tsx",
       "src/components/ui/DescriptionField.tsx",
@@ -287,21 +287,9 @@
       "src/lib/template-*.ts",
       "src/lib/project-templates*.ts",
       "src/lib/builtin-templates*.ts",
-      "src/app/(app)/p/[projectId]/settings/**"
-    ],
-    "plantillas-aplicar-opciones-e2e": [
-      "src/actions/template-apply.ts",
-      "src/lib/template-*.ts",
-      "src/lib/project-templates*.ts",
-      "src/lib/builtin-templates*.ts",
+      "src/components/board/ArchivedDialog.tsx",
       "src/app/(app)/p/[projectId]/settings/**",
       "src/app/(app)/settings/**"
-    ],
-    "plantillas-aplicar-columnas-e2e": [
-      "src/actions/template-apply.ts",
-      "src/lib/template-*.ts",
-      "src/components/board/ArchivedDialog.tsx",
-      "src/app/(app)/p/[projectId]/settings/**"
     ],
     "plantillas-curso-e2e": [
       "src/components/board/ProgramDialog.tsx",

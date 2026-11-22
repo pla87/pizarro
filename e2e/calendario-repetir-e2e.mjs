@@ -1,7 +1,7 @@
 // Tareas que se repiten: «Repetir» en «Nueva tarea» (se guarda al crear, junto a la fecha límite, compacto también a 390 px),
 // sus apariciones futuras en el calendario (tenues, con el icono de repetir, abren la tarea original; nada antes de hoy ni de
 // una tarea repetida sin fecha límite) y en el .ics (una serie con RRULE en la suscripción y en el de la columna Agenda).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node calendario-repetir-e2e.mjs
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

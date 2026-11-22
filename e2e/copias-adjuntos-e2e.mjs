@@ -1,5 +1,5 @@
 // Copias de tareas con sus adjuntos (R48C1) y release con el editor con barra (R48C2). Misma base y servidor que
-// board-e2e.mjs:
+// tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node copias-adjuntos-e2e.mjs
 // PART=dup,drag,keys,quota,mdup,rel,big,mrel para lanzar solo una parte.
 import fs from "node:fs";

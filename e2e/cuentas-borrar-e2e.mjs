@@ -5,7 +5,7 @@
 // En móvil (390 px), con verificación en dos pasos activada desde el propio perfil, el diálogo cabe en la pantalla y pide
 // el código de la app. Quien entra con Google (sin contraseña conocida) confirma con el código de su app y borra también
 // su proyecto privado. Administración → Usuarios → Borrar: la misma regla y la misma casilla. Misma base y servidor que
-// board-e2e.mjs:
+// tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-e2e.mjs   # PART=block,desk,mobile,google,admin
 import { createHmac } from "node:crypto";
 import os from "node:os";

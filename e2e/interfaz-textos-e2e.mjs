@@ -1,7 +1,7 @@
 // Ronda 49 (textos breves): descripciones de una línea con el resto en notas «i» fuera de «Ajustes del proyecto»
 // (Administración, Mi perfil) y botones desactivados cuando no harían nada (guardar sin cambios, «Limpiar» los logs sin
 // filtros, «Todas»/«Ninguna» al generar una release, «Partir del texto por defecto» con ese texto ya puesto).
-// Una nota «i» dentro de un diálogo se cierra con Escape sin cerrar el diálogo. Misma base y servidor que board-e2e.mjs:
+// Una nota «i» dentro de un diálogo se cierra con Escape sin cerrar el diálogo. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-textos-e2e.mjs      # PART=admin,profile,release
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

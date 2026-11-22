@@ -3,7 +3,7 @@
 // con «Sin conexión: no se ha guardado» (antes el chip se quedaba en el día nuevo sin guardarse); y, sin red, el
 // interruptor de borradores de «Mi perfil» y «Borrar release» avisan y no se quedan a medias; y en «Nueva tarea» recuperada
 // de un borrador, el día de «Repetir» sigue a la fecha límite si no se eligió a mano. Misma base y servidor que
-// board-e2e.mjs:
+// tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node copias-imagen-sin-red-e2e.mjs      # PART=dupimg,cal,drafts,reldel,repdraft
 import fs from "node:fs";
 import os from "node:os";

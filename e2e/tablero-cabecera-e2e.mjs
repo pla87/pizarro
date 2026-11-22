@@ -7,7 +7,7 @@
 // con un proyecto creado desde la plantilla «Casa y familia» (se abre su tablero, no los ajustes), el «+» de una columna
 // abre «Nueva tarea» con la plantilla del tipo marcado ya puesta; cambiar de tipo sustituye lo que puso el anterior sin
 // acumular y conserva lo editado; en el detalle, cambiar de tipo cambia el prefijo del título y el formulario sin
-// rellenar; el editor de plantillas muestra los tipos generales en positivo. Misma base y servidor que board-e2e.mjs:
+// rellenar; el editor de plantillas muestra los tipos generales en positivo. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs   # PART=hdr,keys,early,pres,title,badge,help,del,kind,tipos
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

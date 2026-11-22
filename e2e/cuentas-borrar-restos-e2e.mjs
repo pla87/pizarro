@@ -9,7 +9,7 @@
 // «Borrar mi cuenta» de quien entra con Google, en un servidor sin envío de emails, solo ofrece volver a entrar con Google,
 // sin hablar de un código por email que no existe, en español y en inglés (390 px, oscuro); la vuelta de Google se simula
 // en la base (como test:db), se borra la cuenta, su proyecto privado pasa a ser de equipo y un administrador lo ve y lo abre.
-// Misma base que board-e2e.mjs; servidor con Google configurado y SIN email (valores de prueba, no llama a Google):
+// Misma base que tablero-e2e.mjs; servidor con Google configurado y SIN email (valores de prueba, no llama a Google):
 // GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50, sin MAIL_OUTBOX_DIR ni SMTP.
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-borrar-restos-e2e.mjs      # PART=google,notice,outside,member,googleonly
 import os from "node:os";

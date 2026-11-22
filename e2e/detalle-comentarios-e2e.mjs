@@ -2,7 +2,7 @@
 // anteriores»), editar el propio comentario en el móvil (mención nueva, en vivo, historial, deshacer; un admin no edita
 // los ajenos), el editor de la descripción con red lenta (no se pierden las primeras teclas), dos pestañas de la misma
 // persona que guardan la descripción (la segunda, que la escribía a la vez, recibe el aviso y no pisa la primera) y una
-// release cuyo texto se generó antes de que otra persona renombrara una tarea. Misma base y servidor que board-e2e.mjs:
+// release cuyo texto se generó antes de que otra persona renombrara una tarea. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";

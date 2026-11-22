@@ -13,7 +13,7 @@
 // el menú), el diálogo con la captura de la página sin el diálogo (con la CSP de la app), el formulario de GitHub con lo
 // escrito y, con una versión publicada más nueva en la caché del aviso, el botón desactivado. El envío por email lo prueba
 // tests/db/feedback.test.ts (aquí FEEDBACK_EMAIL está vacía y no hay SMTP: sale el camino de GitHub).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y
 import fs from "node:fs";
 import os from "node:os";

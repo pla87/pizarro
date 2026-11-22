@@ -5,7 +5,7 @@
 // exacto abre el diálogo con el texto. «Nueva tarea» copia lo escrito como JSON e importa una tarea en el formulario
 // (portapapeles, fichero y Ctrl+V fuera de un campo). Móvil (390 px: «Varias tareas» lleva a «Importar» y la barra de
 // selección tiene «Exportar»), inglés y modo oscuro. De otros Kanban (R54F1): un tablero de Trello y un CSV de Jira por
-// «Desde un fichero», y una tarjeta de Trello en «Nueva tarea». Misma base y servidor que board-e2e.mjs:
+// «Desde un fichero», y una tarjeta de Trello en «Nueva tarea». Misma base y servidor que tablero-e2e.mjs:
 // «pegar» (R54C1): Ctrl+V de una tarea copiada en «Nueva tarea» con el foco en el título vacío y en cualquier otro sitio, y
 // desde el «+» de una columna. «extras»: etiquetas existentes, color y enlace en «Nueva tarea» (también a 390 px y en oscuro).
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-e2e.mjs      # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro,otros

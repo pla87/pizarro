@@ -2,7 +2,7 @@
 // proyecto», crear sesiones con el tipo «Sesión» (título y descripción automáticos), «Publicar programa (PDF)» con el
 // responsable, descargarlo y comprobar su contenido con pdftotext, la copia «Programa – fecha_v1.pdf» en Documentación,
 // el PDF en inglés, el aviso cuando no cabe en Documentación y el rol con su icono y explicación en el menú de la
-// columna. Misma base y servidor que board-e2e.mjs (necesita `pdftotext`, de poppler-utils):
+// columna. Misma base y servidor que tablero-e2e.mjs (necesita `pdftotext`, de poppler-utils):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-curso-e2e.mjs      # PART=tpl,pdf,en,full,role
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

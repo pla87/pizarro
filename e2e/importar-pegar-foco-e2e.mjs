@@ -5,7 +5,7 @@
 // guarda en una línea; (4) borrar dos tareas en las que una bloquea a la otra, deshacer, rehacer y deshacer otra vez
 // conserva el bloqueo (la segunda vez se perdía); (5) un HTML de Documentación abierto con «?doc=…#apartado» baja al
 // apartado también mientras algo lee el marco al cargarse (antes, a veces se quedaba arriba o muy por debajo). Misma base
-// y servidor que board-e2e.mjs:
+// y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-pegar-foco-e2e.mjs      # PART=casilla,imagen,titulo,bloqueo,apartado
 import fs from "node:fs";
 import os from "node:os";

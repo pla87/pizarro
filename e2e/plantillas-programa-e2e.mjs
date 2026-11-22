@@ -3,7 +3,7 @@
 // sesiones en la columna: contador «n/100», «+» desactivado con su motivo al llegar a 100, crear desde «+», arrastrar una
 // tarjeta y «Mover a…» a la columna llena se rechazan con el mensaje y la tarjeta vuelve, el rol no se da a una columna
 // con más de 100, y con datos antiguos por encima el PDF incluye solo las 100 primeras y lo avisa (antes y después de
-// publicar). En inglés, los textos. Misma base y servidor que board-e2e.mjs:
+// publicar). En inglés, los textos. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-programa-e2e.mjs      # PART=version,limite,pdf,rol,en
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

@@ -2,7 +2,7 @@
 // oscuro y móvil; Releases, Documentación y Ajustes, cada uno con su forma; sin parpadeo en cargas rápidas), icono de la
 // app en el color de la instalación (Administración → Ajustes → «Icono de la app»: manifiesto, favicon, apple-touch-icon
 // y nombre bajo el icono), los <link> fuera del HTML de Documentación y la hora con segundos del aviso de reducción de
-// las copias. Misma base y servidor que board-e2e.mjs:
+// las copias. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-esqueletos-e2e.mjs      # PART=skeleton,icon,html,backups
 // La parte «backups» necesita el servidor con BACKUP_KEY (y mejor BACKUP_PAUSE=1, para que ninguna copia automática
 // escriba a la vez el estado): si no la tiene, se salta con una nota. Escribe un status.json de prueba en la carpeta de

@@ -2,7 +2,7 @@
 // que ha pintado otro posterior de la misma tarjeta. Antes, con Alt+→ y Alt+← seguidos, la respuesta del primero llegaba
 // después de pintar el segundo y dejaba la tarjeta con la posición de la otra columna: el Alt+↑ siguiente la subía dos
 // puestos o no hacía nada. Para que siempre llegue tarde, las acciones del servidor tardan medio segundo (red lenta).
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-teclado-e2e.mjs      # PART=atajos
 // QA_CPU_THROTTLE=4 frena la CPU de las páginas (como con la máquina cargada; ver e2e/qa/lib.mjs).
 import * as L from "./qa/lib.mjs";

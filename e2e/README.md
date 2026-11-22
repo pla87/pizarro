@@ -22,7 +22,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
 | **Tablero** | | **820** | |
-| Tablero | `e2e/board-e2e.mjs` | 366 | ~4 min |
+| Tablero | `e2e/tablero-e2e.mjs` | 366 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 130 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
@@ -35,7 +35,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Copias con adjuntos y release con barra de formato | `e2e/copias-adjuntos-e2e.mjs` | 93 | ~2 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/copias-imagen-sin-red-e2e.mjs` | 27 | ~1 min |
 | **Pegar, importar y exportar** | | **352** | |
-| Pegar | `e2e/paste-e2e.mjs` | 72 | ~1 min |
+| Pegar | `e2e/pegar-e2e.mjs` | 72 | ~1 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/importar-json-detalle-e2e.mjs` | 100 | ~1,5 min |
 | Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/importar-exportar-e2e.mjs` | 155 | ~3 min |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/importar-pegar-foco-e2e.mjs` | 25 | ~1 min |
@@ -47,10 +47,8 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 154 | ~1 min |
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 102 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 18 | ~30 s |
-| **Plantillas y programa del curso** | | **182** | |
-| Aplicar plantilla a un proyecto existente (ronda 50) | `e2e/plantillas-aplicar-e2e.mjs` | 39 | ~1 min |
-| Aplicar plantilla: opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51) | `e2e/plantillas-aplicar-opciones-e2e.mjs` | 26 | ~40 s |
-| Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/plantillas-aplicar-columnas-e2e.mjs` | 22 | ~20 s |
+| **Plantillas y programa del curso** | | **183** | |
+| Aplicar plantilla a un proyecto existente (ronda 50); opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51); paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/plantillas-aplicar-e2e.mjs` | 88 | ~1 min |
 | Plantilla «Curso o máster» y «Publicar programa (PDF)» | `e2e/plantillas-curso-e2e.mjs` | 57 | ~40 s |
 | «Programa del curso»: versiones del PDF y tope de 100 sesiones (ronda 51) | `e2e/plantillas-programa-e2e.mjs` | 38 | ~1 min |
 | **Documentación y formatos del material** | | **197** | |
@@ -72,7 +70,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3318** | |
+| **Total** | | **3319** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -97,7 +95,7 @@ scripts/e2e-all.sh                                      # todas: antes de public
 AFFECTED=1 scripts/e2e-all.sh                           # en cada ronda: la QA y las afectadas por los cambios
 AFFECTED=1 DRY_RUN=1 scripts/e2e-all.sh                 # solo dice cuáles lanzaría y por qué
 AFFECTED=1 BASE_REF=HEAD~3 scripts/e2e-all.sh           # afectadas respecto a otro commit (por defecto origin/main)
-SUITES="board-e2e tablero-fijas-e2e" scripts/e2e-all.sh # unas concretas
+SUITES="tablero-e2e tablero-fijas-e2e" scripts/e2e-all.sh # unas concretas
 E2E_DB=pz_mio E2E_PORT=3305 scripts/e2e-all.sh          # otra base y otro puerto (varias sesiones a la vez)
 ```
 
@@ -163,7 +161,7 @@ cd e2e && BASE=http://localhost:3232 DATABASE_URL=postgresql://postgres:postgres
 Con la base `pz_qa` preparada por la suite y un servidor arrancado (`DATABASE_URL=$DBURL PORT=3231 npm start`):
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node board-e2e.mjs
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-e2e.mjs
 ```
 
 ### Cabecera y atajos (caza de bugs 48a)
@@ -336,7 +334,7 @@ Imágenes pegadas en *Nueva tarea*, en el detalle y en el tablero (una sola vez,
 sitio), y tablas pegadas desde Word, Google Docs, una web o una hoja de cálculo. Misma base y servidor que el tablero:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node paste-e2e.mjs
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node pegar-e2e.mjs
 ```
 
 ### Copiar y pegar una tarea como JSON (rondas 53 y 54)
@@ -473,7 +471,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plan-ia-markdown-e
 
 ## Plantillas y programa del curso
 
-### Aplicar plantilla a un proyecto existente (ronda 50)
+### Aplicar plantilla a un proyecto existente (rondas 50 y 51, caza de bugs 50a)
 
 En un proyecto privado propio (lo crea y lo borra la suite), *Ajustes del proyecto → Tablero → Aplicar plantilla*:
 «Añadir lo que falte» enseña antes qué columnas, tipos y etiquetas se añadirán, no toca lo que hay y «Deshacer el cambio
@@ -481,41 +479,33 @@ de plantilla» lo quita; «Cambiar a esta plantilla» propone el emparejamiento 
 sin pareja se conserva, una vacía se propone quitar; una con tareas no tiene «Quitar»), el resumen cuenta las tareas que
 se mueven y lo que se añade o se quita, al aplicar no se pierde ninguna tarea y otra persona con el tablero abierto ve
 las columnas nuevas sin recargar (y el deshacer, igual); en un proyecto de equipo un miembro sin rol de admin no ve la
-sección; a 390 px el asistente cabe. Misma base y servidor:
+sección; a 390 px el asistente cabe (partes `add`, `replace`, `perm`, `mobile`).
+
+Segunda vuelta (partes `estilo`, `fijas`, `generales`, `limite`): en el paso 1, el nombre de cada plantilla elegida
+(generales y de la instalación, con «Curso o máster») tiene contraste suficiente (≥ 4,5) sobre su fondo en modo oscuro y
+en claro, con un control que comprueba que el estilo antiguo sí fallaba; las tarjetas de opción elegidas de *Mi perfil →
+Preferencias* también se leen en oscuro; el resumen de «Cambiar a esta plantilla» dice «3 tareas fijas pasarán a ser
+normales» (con sus títulos) solo si su columna deja de ser la de release; «Añadir lo que falte» dice antes y en el
+resumen que vuelve a mostrar el tipo general oculto que usa la plantilla, lo muestra y el deshacer lo vuelve a ocultar;
+y tras 5 cambios de plantilla en un proyecto en 10 minutos, el sexto avisa («Este proyecto ya ha cambiado de plantilla 5
+veces…») y no cambia nada. La sesión de administrador se abre como miembro y pasa a admin (como en el tablero).
+
+Caza de bugs 50a (partes `paso2`, `en`, `archivada`): en el paso 2 de «Cambiar a esta plantilla», un tipo general sin
+tareas que la plantilla oculta dice «Ocultar (la plantilla no lo usa)» y uno oculto con tareas, «Conservar (volverá a
+verse)», igual que el resumen del paso 3 (en español y en inglés, a 390 px y en modo oscuro); y una tarea archivada de
+una columna que el cambio une a otra sale en «Archivadas» como de esa columna y vuelve a ella al recuperarla. Misma base
+y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-aplicar-e2e.mjs   # PART=add,replace,perm,mobile
-```
-
-Segunda vuelta: en el paso 1, el nombre de cada plantilla elegida (generales y de la instalación, con «Curso o máster»)
-tiene contraste suficiente (≥ 4,5) sobre su fondo en modo oscuro y en claro, con un control que comprueba que el estilo
-antiguo sí fallaba; las tarjetas de opción elegidas de *Mi perfil → Preferencias* también se leen en oscuro; el resumen
-de «Cambiar a esta plantilla» dice «3 tareas fijas pasarán a ser normales» (con sus títulos) solo si su columna deja de
-ser la de release; «Añadir lo que falte» dice antes y en el resumen que vuelve a mostrar el tipo general oculto que usa la
-plantilla, lo muestra y el deshacer lo vuelve a ocultar; y tras 5 cambios de plantilla en un proyecto en 10 minutos, el
-sexto avisa («Este proyecto ya ha cambiado de plantilla 5 veces…») y no cambia nada. La sesión de administrador se abre
-como miembro y pasa a admin (como en el tablero). Misma base y servidor:
-
-```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-aplicar-opciones-e2e.mjs   # PART=estilo,fijas,generales,limite
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-aplicar-e2e.mjs
+# PART=add,replace,perm,mobile,estilo,fijas,generales,limite,paso2,en,archivada
 ```
 
 Límite de «Aplicar plantilla» (en la memoria del servidor): 5 cambios (aplicar o deshacer) por proyecto cada 10 minutos
-y 20 por persona y hora. Las tres suites de plantillas crean un proyecto con id nuevo en cada escenario, así que se
-pueden repetir seguidas; el administrador gasta unos 8 cambios por pasada de las tres (`plantillas-aplicar`: 4,
-`plantillas-aplicar-columnas`: 2, `plantillas-aplicar-opciones`: 2; el límite de esta última lo gasta la segunda persona). Si tras más de dos pasadas en una hora una falla con «Ya has aplicado o
-deshecho 20 plantillas…», reinicia el servidor.
-
-### Aplicar plantilla: paso 2 y archivadas de columnas unidas (caza de bugs 50a)
-
-En el paso 2 de «Cambiar a esta plantilla», un tipo general sin tareas que la plantilla oculta dice «Ocultar (la
-plantilla no lo usa)» y uno oculto con tareas, «Conservar (volverá a verse)», igual que el resumen del paso 3 (en español
-y en inglés, a 390 px y en modo oscuro); y una tarea archivada de una columna que el cambio une a otra sale en
-«Archivadas» como de esa columna y vuelve a ella al recuperarla. Misma base y servidor:
-
-```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node plantillas-aplicar-columnas-e2e.mjs   # PART=paso2,en,archivada
-```
+y 20 por persona y hora. La suite crea un proyecto con id nuevo en cada escenario, así que se puede repetir seguida con
+el mismo servidor; el administrador gasta 8 cambios por pasada (`add` 2, `replace` 2, `generales` 2, `paso2` 1,
+`archivada` 1) y la segunda persona, 5 (`limite`). Si tras más de dos pasadas en una hora una falla con «Ya has aplicado
+o deshecho 20 plantillas…», reinicia el servidor.
 
 ### Plantilla «Curso o máster» y «Publicar programa (PDF)»
 
@@ -642,7 +632,7 @@ elegido». «Invitar por email» (servidor sin email): crea la cuenta como invit
 sacado del email, y el recuadro da el enlace de invitación para pasarlo a mano; la persona lo abre en otro navegador,
 elige su contraseña, «Iniciar sesión» lleva `?next=/p/<id>` y entra directamente en el tablero. Un miembro (no admin) de
 un privado añade miembros pero no ve «Invitar por email». A 390 px el recuadro del enlace cabe sin desbordar. Crea sus
-propios proyectos y la persona invitada (`inv59_*`). Misma base y servidor que `board-e2e` (sin email):
+propios proyectos y la persona invitada (`inv59_*`). Misma base y servidor que `tablero-e2e` (sin email):
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile

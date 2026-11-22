@@ -3,7 +3,7 @@
 // documento está en la papelera» / «ya no está en la Documentación») y no revela documentos de otros proyectos; (3) los
 // botones de columnas especiales sin tarjetas usan aria-disabled (no `disabled`) y, al tocarlos, muestran su motivo como
 // aviso, también las opciones de su menú; (4) en «Cómo se envían los emails» el nombre accesible de cada opción es su título y
-// la descripción va en aria-describedby. Misma base y servidor que board-e2e.mjs:
+// la descripción va en aria-describedby. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3276 DATABASE_URL=$DBURL node accesibilidad-columnas-e2e.mjs      # PART=zip,doc,columnas,mail
 import fs from "node:fs";
 import path from "node:path";

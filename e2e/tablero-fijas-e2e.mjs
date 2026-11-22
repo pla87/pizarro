@@ -8,7 +8,7 @@
 // servidor (ni por atajos, ni por la selección, ni como vecina al soltar otra junto a ella); y (caza de bugs 51a) una fija
 // arrastrada del panel «Siempre en el plan» de una columna al de otra pasa allí como fija (antes no hacía nada aunque el
 // lector de pantalla anunciaba el cambio) y se deshace, la de la release también, y en su propio panel no cambia.
-// Misma base y servidor que board-e2e.mjs:
+// Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fijas-e2e.mjs      # PART=scroll,copia,vaiven,foco,provisional,planes
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
