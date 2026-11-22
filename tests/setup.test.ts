@@ -107,7 +107,7 @@ describe("ajustes de la instalación", () => {
     const origWarn = console.warn;
     console.warn = () => {};
     try {
-      assert.equal(formatDate(new Date("2026-03-01T12:00:00Z"), "dateNumeric"), "01/03/2026");
+      assert.equal(formatDate(new Date("2026-03-01T12:00:00Z"), "date"), "1 mar 2026");
     } finally {
       console.warn = origWarn;
       if (prev === undefined) delete process.env.APP_TIMEZONE;

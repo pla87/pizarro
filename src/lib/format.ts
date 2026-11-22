@@ -63,12 +63,10 @@ export function resolveTimeZone(envTz: string | undefined, stored: string | unde
 // Un solo formato legible por idioma para fecha y hora en la interfaz: «22 nov 2026, 21:41» / «Nov 22, 2026, 9:41 PM»
 // (`dateTime`), y «22 nov 2026» / «Nov 22, 2026» para la fecha sola (`date`). Los cortos de Intl («22/11/26, 21:41»;
 // «11/22/26, 9:41 PM») se quitaron: mezclaban dos formatos en la misma pantalla y en inglés el día y el mes se confunden.
-type Style = "date" | "dateLong" | "dateTime" | "dateTimeSeconds" | "time" | "timeHm" | "dateNumeric";
+type Style = "date" | "dateLong" | "dateTime" | "dateTimeSeconds" | "time" | "timeHm";
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   date: { dateStyle: "medium" },
-  /** 24/10/2026 (10/24/2026 en en-US): día, mes y año completo, numéricos, en el orden del idioma. */
-  dateNumeric: { day: "2-digit", month: "2-digit", year: "numeric" },
   dateLong: { dateStyle: "long" },
   dateTime: { dateStyle: "medium", timeStyle: "short" },
   /** Con segundos (13 nov 2026, 14:05:09; Nov 13, 2026, 2:05:09 PM): para distinguir copias hechas en el mismo minuto. */

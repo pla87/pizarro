@@ -93,7 +93,7 @@ export const BUILTIN_TEMPLATES_EN: Record<string, TemplateInput> = {
       kind("Shopping", "#22c55e", "Buy ", "**Where:**\n\n**Needed by:**\n"),
       kind("Home", "#f97316", "", "**What needs doing:**\n\n**Materials needed:**\n"),
       kind("Paperwork", "#64748b", "Sort out ", "**Procedure:**\n\n**Documents needed:**\n\n**Deadline:**\n", ["Gather documents", "Book an appointment or do it online", "File the receipt"]),
-      kind("Appointment", "#ef4444", "Appointment: ", "**Who:**\n\n**Where and when:**\n\n**What to ask or bring:**\n", ["Book the appointment", "Prepare documents", "Note the instructions"]),
+      kind("Appointment", "#6366f1", "Appointment: ", "**Who:**\n\n**Where and when:**\n\n**What to ask or bring:**\n", ["Book the appointment", "Prepare documents", "Note the instructions"]),
       kind("Renovation or repair", "#8b5a2b", "Work: ", "**Room or area:**\n\n**What needs doing:**\n\n**Who does it and quote:**\n\n**Planned dates:**\n", ["Request quotes", "Agree on a date", "Keep track while the work is done", "Check the result and pay"]),
       kind("Move", "#0ea5e9", "Move: ", "**What needs doing (paperwork, packing, transportation, utilities):**\n\n**Date:**\n", ["Request quotes for the movers", "Pack and label", "Change the address and the utilities", "Hand over the keys"]),
     ],

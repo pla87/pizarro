@@ -141,6 +141,30 @@ describe("plantillas de proyecto de serie", () => {
     assert.equal((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "curso-master" } })).name, "Mi máster");
   });
 
+  test("«Cita» de «Casa y familia» deja el rojo (queda para lo vencido): sin tocar se actualiza sola; modificada, se respeta", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    const key = "casa-familia";
+    const canon = canonicalTemplate(key)!;
+    const cita = canon.kinds.find((k) => k.name === "Cita")!;
+    assert.notEqual(cita.color, "#ef4444");
+    assert.equal(canonicalTemplateEn(key)!.kinds.find((k) => k.name === "Appointment")!.color, cita.color, "la misma en inglés");
+    // Lo que sembraron las versiones anteriores: «Cita» en rojo.
+    const old: TemplateData = { ...canon, kinds: canon.kinds.map((k) => (k.name === "Cita" ? { ...k, color: "#ef4444" } : k)) };
+    await db.projectTemplate.update({ where: { builtinKey: key }, data: { kinds: old.kinds } });
+    await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), [key]);
+    const kinds = (await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } })).kinds as { name: string; color: string }[];
+    assert.equal(kinds.find((k) => k.name === "Cita")!.color, cita.color);
+    // Modificada por el administrador (la «Cita» roja y otro nombre): no se toca.
+    await db.projectTemplate.update({ where: { builtinKey: key }, data: { name: "Mi casa", kinds: old.kinds } });
+    await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    const kept = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } });
+    assert.equal(kept.name, "Mi casa");
+    assert.equal((kept.kinds as { name: string; color: string }[]).find((k) => k.name === "Cita")!.color, "#ef4444");
+  });
   test("usuario en inglés: plantillas de serie sin tocar en inglés, en el listado y al crear el proyecto; modificadas, tal cual", async () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();

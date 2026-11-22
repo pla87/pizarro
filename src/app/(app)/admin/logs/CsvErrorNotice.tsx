@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { withoutCsvParams } from "@/lib/log-csv";
+import { replaceUrlKeepingState } from "@/lib/replace-url";
 
 /**
  * Aviso «No se ha descargado el CSV» tras volver de una descarga fallida (`?csv=`). Al mostrarse quita los parámetros de
@@ -13,7 +14,8 @@ export function CsvErrorNotice({ formId, children }: { formId: string; children:
   useEffect(() => {
     const { pathname, search, hash } = window.location;
     const clean = withoutCsvParams(pathname, search, hash);
-    if (clean !== `${pathname}${search}${hash}`) window.history.replaceState(window.history.state, "", clean);
+    // Sin el estado de Next: con él, el siguiente refresco del enrutador volvía a poner `?csv=` en la dirección.
+    if (clean !== `${pathname}${search}${hash}`) replaceUrlKeepingState(clean);
     const onSubmit = (e: SubmitEvent) => {
       if (e.target instanceof HTMLFormElement && e.target.id === formId) setHidden(true);
     };

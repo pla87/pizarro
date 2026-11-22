@@ -30,7 +30,6 @@ test("fechas en inglés: formato de EE. UU. (mes primero, AM/PM); en español, d
     const es = intlLocale("es");
     const morning = "2026-11-21T07:05:09Z"; // 08:05:09 en Madrid
     const evening = "2026-11-21T19:05:09Z"; // 20:05:09 en Madrid
-    assert.equal(formatDate(morning, "dateNumeric", en), "11/21/2026");
     assert.equal(formatDate(morning, "date", en), "Nov 21, 2026");
     assert.equal(formatDate(morning, "dateLong", en), "November 21, 2026");
     assert.equal(formatDate(morning, "dateTime", en), "Nov 21, 2026, 8:05 AM");
@@ -44,7 +43,6 @@ test("fechas en inglés: formato de EE. UU. (mes primero, AM/PM); en español, d
     // Logs: compacto, con segundos y en 12 horas en inglés.
     assert.equal(logTimeFormatter(en)(new Date(evening)), "Nov 21 8:05:09 PM");
     // En español no cambia nada.
-    assert.equal(formatDate(morning, "dateNumeric", es), "21/11/2026");
     assert.equal(formatDate(morning, "date", es), "21 nov 2026");
     assert.equal(formatDate(morning, "timeHm", es), "08:05");
     assert.equal(formatDate(evening, "timeHm", es), "20:05");
@@ -60,7 +58,7 @@ test("fechas en inglés: formato de EE. UU. (mes primero, AM/PM); en español, d
 
 // Según la versión de ICU, «8:05 AM» lleva un espacio normal o uno fino (U+202F): servidor y navegador deben coincidir.
 test("fechas: solo espacios normales (el HTML del servidor y el del navegador coinciden)", () => {
-  const styles = ["date", "dateLong", "dateTime", "dateTimeSeconds", "time", "timeHm", "dateNumeric"] as const;
+  const styles = ["date", "dateLong", "dateTime", "dateTimeSeconds", "time", "timeHm"] as const;
   for (const locale of [intlLocale("en"), intlLocale("es")]) {
     for (const style of styles) assert.doesNotMatch(formatDate("2026-11-21T19:05:09Z", style, locale), /[\u00a0\u2009\u202f]/, `${locale} ${style}`);
     assert.doesNotMatch(formatDateTimeZone("2026-11-21T19:05:09Z", locale), /[\u00a0\u2009\u202f]/, locale);
