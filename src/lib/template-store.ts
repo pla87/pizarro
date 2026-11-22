@@ -1,8 +1,9 @@
 // Plantillas de proyecto en la base de datos: lectura ordenada y plantillas de serie (sembrado, restablecer, recuperar).
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, comparable, isBuiltinModified } from "./builtin-templates";
+import { BUILTIN_TEMPLATES, builtinByKey, canonicalTemplate, comparable, isBuiltinModified, RETIRED_BUILTINS } from "./builtin-templates";
 import { localizeTemplate } from "./builtin-templates-en";
+import { hasExamples } from "./project-examples";
 import { POSITION_STEP } from "./positions";
 import { MAX_TEMPLATES } from "./project-templates-core";
 import { parseStoredTemplate, sortTemplates, type TemplateData, type TemplateDto } from "./project-templates";
@@ -23,6 +24,27 @@ export async function listTemplatesSorted(db: PrismaClient, locale: "es" | "en" 
   const rows = await db.projectTemplate.findMany();
   // En inglés, las de serie sin tocar salen con su versión inglesa (el nombre decide el orden, así que se ordena después).
   return sortTemplates(rows.map((r) => localizeTemplate(toTemplateDto(r), r.builtinKey, locale)), locale);
+}
+
+/** Plantilla que se ofrece para empezar un proyecto («Nuevo proyecto») o para aplicarla a uno («Aplicar plantilla»). */
+interface StartTemplate {
+  id: string;
+  name: string;
+  description: string;
+  /** De serie (con `builtinKey`), aunque el administrador la haya modificado. */
+  builtin: boolean;
+  /** Tiene tarjetas de ejemplo (casilla «Con tarjetas de ejemplo»). */
+  examples: boolean;
+}
+
+/**
+ * Plantillas con las que se puede empezar: los administradores, todas; los demás, solo las de serie que tenga la
+ * instalación (las propias las gestionan los administradores). Por orden alfabético, en el idioma pedido.
+ */
+export async function listStartTemplates(db: PrismaClient, locale: "es" | "en", isAdmin: boolean): Promise<StartTemplate[]> {
+  return (await listTemplatesSorted(db, locale))
+    .filter((t) => isAdmin || t.builtinKey)
+    .map((t) => ({ id: t.id, name: t.name, description: t.description, builtin: !!t.builtinKey, examples: hasExamples(t.builtinKey) }));
 }
 
 /** Claves de serie que no tienen plantilla ahora mismo (borradas por el administrador). */
@@ -96,6 +118,36 @@ export async function seedBuiltinTemplates(db: PrismaClient): Promise<string[]> 
 }
 
 /**
+ * Al arrancar, antes de sembrar: las plantillas de serie retiradas (`RETIRED_BUILTINS`) que siguen sin modificar se
+ * borran; las modificadas por el administrador se quedan como plantillas propias (sin `builtinKey`), para no perder su
+ * trabajo. «Sin modificar» = su contenido coincide con lo último que se le aplicó (`appliedHash`) o con su última
+ * definición canónica. Los proyectos ya creados no cambian (son copias). Devuelve las claves borradas y las conservadas.
+ *
+ * Sus registros `BuiltinTemplateSeeded` se quedan como lápida: si se vuelve a la versión anterior, donde esas claves aún
+ * son de serie, su siembra las da por sembradas y no las recrea (antes reaparecían las 12, y la modificada salía doble:
+ * la propia y la de serie recién creada). Aquí no estorban: la siembra y «Recuperar» solo miran `BUILTIN_TEMPLATES`.
+ * Con dos arranques a la vez, cada fila la retira solo uno (`deleteMany`/`updateMany` por id y clave, sin P2025).
+ */
+export async function retireBuiltinTemplates(db: PrismaClient): Promise<{ removed: string[]; kept: string[] }> {
+  const keys = Object.keys(RETIRED_BUILTINS);
+  const rows = await db.projectTemplate.findMany({ where: { builtinKey: { in: keys } }, orderBy: { position: "asc" } });
+  const seeded = new Map((await db.builtinTemplateSeeded.findMany({ where: { key: { in: keys } } })).map((r) => [r.key, r.appliedHash]));
+  const removed: string[] = [];
+  const kept: string[] = [];
+  for (const row of rows) {
+    const key = row.builtinKey!;
+    const stored = templateFingerprint(parseStoredTemplate(row));
+    const mine = { id: row.id, builtinKey: key };
+    if (stored === RETIRED_BUILTINS[key] || stored === seeded.get(key)) {
+      if ((await db.projectTemplate.deleteMany({ where: mine })).count) removed.push(key);
+    } else if ((await db.projectTemplate.updateMany({ where: mine, data: { builtinKey: null } })).count) {
+      kept.push(key);
+    }
+  }
+  return { removed, kept };
+}
+
+/**
  * Pone al día las plantillas de serie cuando cambia su definición canónica. Se guarda la huella del contenido
  * canónico aplicado la última vez (`appliedHash`): si lo almacenado sigue siendo exactamente eso, el administrador no la
  * tocó y se sustituye por la nueva; si difiere, se respeta (figurará como modificada, con «Restablecer»).
@@ -127,7 +179,7 @@ export async function upgradeBuiltinTemplates(db: PrismaClient): Promise<string[
 }
 
 /**
- * «Recuperar plantillas por defecto»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
+ * «Recuperar plantillas de serie»: recrea las de serie que falten, sin pasar de `MAX_TEMPLATES` en total (antes se
  * saltaba el tope: con 49 propias se llegaba a 64). Debe ir en la transacción con el candado de las altas
  * (`lockTemplates`). Devuelve cuántas recuperó y cuántas se quedaron fuera por el tope.
  */

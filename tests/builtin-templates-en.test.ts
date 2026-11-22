@@ -45,7 +45,7 @@ test("la versión inglesa no deja restos de español en los campos de texto", ()
     for (const s of texts(key)) assert.ok(!spanish.test(s), `${key}: «${s}» parece español`);
   }
   // Y ningún texto coincide con el español salvo nombres propios idénticos (Backlog, Blog…).
-  const same = new Set(["Backlog", "Ideas", "Vibecoding", "Frontend", "Backend", "Blog", "Instagram", "LinkedIn", "Newsletter", "Evergreen", "Idea", "Marketing"]);
+  const same = new Set(["Backlog", "Ideas", "Vibecoding", "Frontend", "Backend", "Blog", "Instagram", "LinkedIn", "Newsletter", "Evergreen", "Idea", "Marketing", "Agenda"]);
   for (const key of BUILTIN_KEYS) {
     const es = canonicalTemplate(key)!;
     const en = canonicalTemplateEn(key)!;
@@ -57,19 +57,19 @@ test("la versión inglesa no deja restos de español en los campos de texto", ()
 });
 
 test("localizeTemplate: de serie sin tocar y en inglés → datos ingleses; modificada, propia o español → lo guardado", () => {
-  const key = "mudanza";
+  const key = "casa-familia";
   const stored = { id: "x", ...canonicalTemplate(key)! };
   const en = localizeTemplate(stored, key, "en");
   assert.equal(en.id, "x");
-  assert.equal(en.name, "House move");
+  assert.equal(en.name, "Home and family");
   assert.equal(en.columns[0]!.name, "To do");
-  assert.equal(en.kinds[0]!.name, "Admin and change of address");
+  assert.equal(en.kinds[0]!.name, "Shopping");
 
   assert.equal(localizeTemplate(stored, key, "es"), stored);
   assert.equal(localizeTemplate(stored, null, "en"), stored);
   assert.equal(localizeTemplate(stored, "no-existe", "en").name, stored.name);
 
-  const edited = { ...stored, name: "Mi mudanza" };
+  const edited = { ...stored, name: "Mi casa" };
   assert.equal(localizeTemplate(edited, key, "en"), edited);
   const editedCol = { ...stored, columns: [...stored.columns, { name: "Extra", role: "NONE" as const, isDone: false }] };
   assert.equal(localizeTemplate(editedCol, key, "en"), editedCol);

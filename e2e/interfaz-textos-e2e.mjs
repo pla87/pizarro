@@ -1,7 +1,7 @@
 // Ronda 49 (textos breves): descripciones de una línea con el resto en notas «i» fuera de «Ajustes del proyecto»
 // (Administración, Mi perfil) y botones desactivados cuando no harían nada (guardar sin cambios, «Limpiar» los logs sin
 // filtros, «Todas»/«Ninguna» al generar una release, «Partir del texto por defecto» con ese texto ya puesto).
-// Una nota «i» dentro de un diálogo se cierra con Escape sin cerrar el diálogo. Misma base y servidor que board-e2e.mjs:
+// Una nota «i» dentro de un diálogo se cierra con Escape sin cerrar el diálogo. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-textos-e2e.mjs      # PART=admin,profile,release
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
@@ -25,7 +25,7 @@ if (only.includes("admin")) {
     await page.goto(`${L.BASE}/admin/users`);
     await page.getByRole("heading", { name: "Usuarios" }).waitFor({ timeout: 20000 });
     const text = await bodyText(page);
-    L.check("USERS: el recuento va solo, sin la explicación larga", /\d+ de \d+ usuarios activos/.test(text) && !text.includes("No hay registro público"));
+    L.check("USERS: el recuento va solo, sin la explicación larga", /\d+ (?:de \d+ )?usuarios? activos?/.test(text) && !text.includes("No hay registro público"));
     await page.getByRole("button", { name: "Más información: Usuarios" }).click();
     await L.eqEventually("USERS: la nota «i» se abre con la explicación", async () => (await tip(page).count()) && (await tip(page).innerText()).includes("No hay registro público"), true);
     await page.keyboard.press("Escape");
@@ -120,12 +120,25 @@ if (only.includes("profile")) {
   L.eq("PERFIL: «Cambiar contraseña» sin rellenar está desactivado", await changePw.isEnabled(), false);
 
   await page.goto(`${L.BASE}/settings?tab=avisos`);
-  const mention = page.locator("section").filter({ hasText: "Avisos de menciones" });
-  await mention.waitFor({ timeout: 20000 });
-  const saveMention = mention.getByRole("button", { name: "Guardar avisos" });
+  const emailCard = page.locator("section").filter({ hasText: "Avisos por email" });
+  await emailCard.waitFor({ timeout: 20000 });
+  L.eq("AVISOS: una sola tarjeta de email con un solo «Guardar avisos»", await page.getByRole("button", { name: "Guardar avisos" }).count(), 1);
+  const saveMention = emailCard.getByRole("button", { name: "Guardar avisos" });
   L.eq("AVISOS: sin cambios, «Guardar avisos» está desactivado", await saveMention.isEnabled(), false);
-  await mention.getByRole("checkbox").first().click();
+  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
   L.eq("AVISOS: al marcar una casilla, se activa", await saveMention.isEnabled(), true);
+  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
+  L.eq("AVISOS: al volver a como estaba, se desactiva", await saveMention.isEnabled(), false);
+  // Lo marcado en una casilla y en otra se guarda junto (antes eran dos tarjetas y guardar una perdía lo de la otra).
+  const prefsBefore = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
+  await emailCard.getByRole("checkbox", { name: "Email cuando me mencionan" }).click();
+  await emailCard.getByRole("checkbox", { name: "Email con los comentarios y respuestas en tareas que sigo" }).click();
+  await saveMention.click();
+  await page.getByText("Preferencias guardadas").first().waitFor({ timeout: 10000 });
+  const saved = (await L.q(`SELECT "notifyEmail" n, "notifyCommentEmail" c FROM "User" WHERE email=$1`, [L.ADMIN]))[0];
+  L.eq("AVISOS: un solo «Guardar avisos» guarda las dos casillas", [saved.n, saved.c], [!prefsBefore.n, !prefsBefore.c]);
+  L.eq("AVISOS: tras guardar, vuelve a estar desactivado", await saveMention.isEnabled(), false);
+  await L.q(`UPDATE "User" SET "notifyEmail"=$2, "notifyCommentEmail"=$3 WHERE email=$1`, [L.ADMIN, prefsBefore.n, prefsBefore.c]);
   L.check("AVISOS: la descripción es de una línea", !(await bodyText(page)).includes("Cuando alguien te menciona con @"));
   L.assertNoErrors("PROFILE", [s]);
   await s.ctx.close();

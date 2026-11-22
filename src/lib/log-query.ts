@@ -42,6 +42,7 @@ export const READ_ACTIONS = [
   "aiPlan.getAiPlanSetup",
   "aiPlan.getAiPlanTaskDetails",
   "templates.listTemplates",
+  "projects.listProjectStarts",
   "report.pdf",
   "release.zipDownload",
   "aiPlan.zipDownload",

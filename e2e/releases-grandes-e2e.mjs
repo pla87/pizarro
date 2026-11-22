@@ -3,7 +3,7 @@
 // 200 tareas con adjuntos lo hacen «Marcar como desplegado» y la descarga de adjuntos; el «+» flotante del móvil con la
 // columna «Programa del curso» a 100 sesiones ya no abre «Nueva tarea» (el servidor la rechazaba al crear): se ve
 // desactivado y dice por qué; y el «+» flotante ya no tapa la barra «Siempre en la release» / «Siempre en el plan» al pie
-// de la columna (ni la lista del panel abierto), que desde la ronda 59 llega hasta abajo como las demás. Misma base y servidor que board-e2e.mjs:
+// de la columna (ni la lista del panel abierto), que desde la ronda 59 llega hasta abajo como las demás. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node releases-grandes-e2e.mjs      # PART=release,adjuntos,flotante,panel
 import os from "node:os";
 import * as L from "./qa/lib.mjs";

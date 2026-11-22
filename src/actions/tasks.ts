@@ -710,7 +710,7 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
 
 /** Una escritura no ha encontrado la tarea activa: se ha archivado o borrado después de comprobarlo. */
 async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string): Promise<Error> {
-  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Recupérala para modificarla.") : notFound();
+  return (await client.task.count({ where: { id: taskId } })) ? new AppError("La tarea está archivada. Restáurala para modificarla.") : notFound();
 }
 
 /**
@@ -1582,7 +1582,7 @@ export async function restoreTask(taskId: string) {
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
     });
-    describeAction("Recuperó «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
+    describeAction("Restauró «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }
@@ -1916,7 +1916,7 @@ export async function pasteTaskJson(taskId: string, text: string, since?: string
     const { projectId } = task;
     if (!rateLimit(`paste-task:${user.id}`, 30, 60_000)) throw new AppError("Demasiados pegados seguidos. Espera un momento.");
     const [t, locale] = await Promise.all([getT(), getLocale()]);
-    const read = parseTasksText(raw, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(raw, { t, timeZone: appTimeZone(), locale });
     if (read.error) throw new AppError(read.error);
     if (read.tasks.length > 1 || read.tooMany) throw new AppError(t("Hay {n} tareas. Para importar varias, usa «Importar» en el tablero.", { n: read.total }));
     const one = read.tasks[0];

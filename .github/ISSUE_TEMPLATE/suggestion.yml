@@ -1,0 +1,74 @@
+# Formulario de sugerencias. El diálogo «Informar de un error o enviar una sugerencia» de la app, cuando la instalación no
+# puede enviarlo por email, abre /issues/new?template=suggestion.yml y rellena por URL los campos version, commit,
+# install, browser, language e idea (src/lib/bug-report-core.ts): si cambias el id de un campo, cámbialo también allí.
+name: "Sugerencia / Suggestion"
+description: "Una idea para mejorar Pizarro. / An idea to improve Pizarro."
+title: "[Sugerencia] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Este repositorio es público.** No incluyas datos personales (nombres, emails, teléfonos), la dirección de tu instalación, contenido de tus proyectos ni capturas con información privada.
+        *This repository is public. Do not include personal data (names, emails, phone numbers), your installation's address, project content or screenshots with private information.*
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: "Tu sugerencia"
+      description: "Qué echas en falta o qué cambiarías, y para qué te serviría. / What you miss or would change, and what it would help you with."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: "Versión de Pizarro"
+      description: "La de «Historial de versiones», p. ej. 1.49.0. / The one shown in \"Version history\", e.g. 1.49.0."
+      placeholder: "1.49.0"
+    validations:
+      required: false
+
+  - type: input
+    id: commit
+    attributes:
+      label: "Commit"
+      description: "Lo rellena la app; si no, déjalo en blanco. / Filled in by the app; otherwise leave it blank."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: "Cómo se instaló"
+      description: "Cómo está instalado Pizarro. / How Pizarro is installed."
+      options:
+        - "Docker Compose"
+        - "Railway"
+        - "Otro / Other"
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: "Navegador y sistema"
+      description: "P. ej. Chrome 140 · Windows. / Browser and operating system, e.g. Chrome 140 · Windows."
+    validations:
+      required: false
+
+  - type: input
+    id: language
+    attributes:
+      label: "Idioma de la app"
+      description: "es o en. / App language: es or en."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: "Confirmación / Confirmation"
+      options:
+        - label: "He quitado los datos personales y la información privada del texto y de las capturas. / I removed personal data and private information from the text and screenshots."
+          required: true

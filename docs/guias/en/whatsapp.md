@@ -69,7 +69,7 @@ The temporary token shown in “API Setup” expires after 24 hours. Pizarro nee
 1. Go to [business.facebook.com/settings](https://business.facebook.com/settings) → **Users → System users** → **Add**.
    Give it a name (for example `pizarro`) and the **Admin** role.
 2. With the user selected, press **Assign assets**: add your **app** and your **WhatsApp account** with full control.
-3. Press **Generate new token**, choose your app, expiry **Never** and tick the `whatsapp_business_messaging` and
+3. Press **Generate new token**, choose your app, expiry **Never** and check the `whatsapp_business_messaging` and
    `whatsapp_business_management` permissions.
 4. Copy the token (it starts with `EAA…`). It isn't shown again.
 
@@ -165,7 +165,7 @@ The token is stored encrypted and never shown again (only its last 4 characters)
 ## Step 9. Each person connects their WhatsApp
 
 1. **My profile → Notices → Notices on your phone → WhatsApp**: type your number in international format (`+34…`).
-2. Tick the **consent** box (you agree to receive Pizarro notices on WhatsApp at that number).
+2. Check the **consent** box (you agree to receive Pizarro notices on WhatsApp at that number).
 3. Press **Save and send code**. A WhatsApp arrives with “123456 is your verification code.” and a **Copy code**
    button.
 4. Type those **6 digits** in My profile and press **Confirm**. From then on you get notices on WhatsApp.
@@ -178,7 +178,7 @@ one stops working). Without the code nobody gets notices: that way nobody can en
 paid notices. People can disconnect at any time.
 
 If the number was already saved from an earlier version with WhatsApp turned off, it shows up in the form: to turn
-notices on, tick the consent box and confirm it with the code (or press **Delete the number**).
+notices on, check the consent box and confirm it with the code (or press **Delete the number**).
 
 ## Environment variables (earlier installations)
 
@@ -212,4 +212,4 @@ your template with another name already has the three variables of `aviso_pizarr
 - **The code doesn't arrive**: check the number (international format) and, with Meta's test number, that it is one of
   the 5 verified numbers. After 3 sends to the same number (or 5 from one person) you have to wait until the next day.
 - **Nothing arrives**: check that the person confirmed their number with the code in My profile and that the notice is
-  ticked for WhatsApp. Failures are recorded in **Administration → Logs** (with the phone masked and without the token).
+  checked for WhatsApp. Failures are recorded in **Administration → Logs** (with the phone masked and without the token).

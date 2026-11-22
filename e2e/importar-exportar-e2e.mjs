@@ -5,7 +5,7 @@
 // exacto abre el diálogo con el texto. «Nueva tarea» copia lo escrito como JSON e importa una tarea en el formulario
 // (portapapeles, fichero y Ctrl+V fuera de un campo). Móvil (390 px: «Varias tareas» lleva a «Importar» y la barra de
 // selección tiene «Exportar»), inglés y modo oscuro. De otros Kanban (R54F1): un tablero de Trello y un CSV de Jira por
-// «Desde un fichero», y una tarjeta de Trello en «Nueva tarea». Misma base y servidor que board-e2e.mjs:
+// «Desde un fichero», y una tarjeta de Trello en «Nueva tarea». Misma base y servidor que tablero-e2e.mjs:
 // «pegar» (R54C1): Ctrl+V de una tarea copiada en «Nueva tarea» con el foco en el título vacío y en cualquier otro sitio, y
 // desde el «+» de una columna. «extras»: etiquetas existentes, color y enlace en «Nueva tarea» (también a 390 px y en oscuro).
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-e2e.mjs      # PART=importar,exportar,nueva,pegar,extras,movil,ingles,oscuro,otros
@@ -240,7 +240,7 @@ if (only.includes("nueva")) {
   await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Escrita en el formulario");
   await dlg.getByPlaceholder("Añadir subtarea…").fill("Primer paso");
   await dlg.getByPlaceholder("Añadir subtarea…").press("Enter");
-  await dlg.getByLabel("Fecha límite (opcional)").fill("2027-02-03");
+  await dlg.getByLabel("Fecha límite", { exact: true }).fill("2027-02-03");
   await setClip(page, "antes");
   await dlg.getByRole("button", { name: "Copiar tarea", exact: true }).click();
   await L.checkEventually("COPIAR: «Tarea copiada»", async () => (await alerts(page)).includes("Tarea copiada"));
@@ -253,7 +253,7 @@ if (only.includes("nueva")) {
   const confirm = page.getByRole("button", { name: "Sustituir" });
   L.check("IMPORTAR: con algo escrito, pregunta antes de sustituirlo", await confirm.waitFor({ timeout: 4000 }).then(() => true, () => false));
   await confirm.click();
-  await L.eqEventually("IMPORTAR: rellena título, columna y responsable", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Columna").locator("option:checked").innerText(), await dlg.getByLabel("Asignada a (opcional)").locator("option:checked").innerText()], ["Importada", COL.doing, `${me.name} (yo)`]);
+  await L.eqEventually("IMPORTAR: rellena título, columna y responsable", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Columna").locator("option:checked").innerText(), await dlg.getByLabel("Responsable", { exact: true }).locator("option:checked").innerText()], ["Importada", COL.doing, `${me.name} (yo)`]);
   L.check("IMPORTAR: y las subtareas", (await dlg.innerText()).includes("Hecha") && (await dlg.innerText()).includes("Otra") && !(await dlg.innerText()).includes("Primer paso"));
   await L.checkEventually("IMPORTAR: avisa de lo que no se ha podido poner (la etiqueta que no existe, las subtareas hechas)", async () => { const a = await alerts(page); return [a.includes("Tarea importada, salvo:") && a.includes("etiqueta «x» (no existe en el proyecto)") && a.includes("subtareas hechas") && !a.includes("color"), a]; });
   // Desde un fichero.
@@ -280,7 +280,7 @@ if (only.includes("nueva")) {
   const again = page.getByRole("button", { name: "Sustituir" });
   L.check("CTRL+V: con un color ya elegido, pregunta antes de sustituir", await again.waitFor({ timeout: 4000 }).then(() => true, () => false));
   await again.click();
-  await L.eqEventually("CTRL+V: una tarea exacta rellena el formulario", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Fecha límite (opcional)").inputValue()], ["Por Ctrl+V", "2027-09-10"]);
+  await L.eqEventually("CTRL+V: una tarea exacta rellena el formulario", async () => [await dlg.getByRole("textbox", { name: "Título", exact: true }).inputValue(), await dlg.getByLabel("Fecha límite", { exact: true }).inputValue()], ["Por Ctrl+V", "2027-09-10"]);
   await dlg.getByRole("button", { name: "Crear tarea" }).click();
   await L.eqEventually("CREAR: la tarea importada se crea", async () => (await taskOf("Por Ctrl+V"))?.due, "2027-09-10");
   L.assertNoErrors("nueva", [s]);
@@ -337,12 +337,12 @@ if (only.includes("pegar")) {
   // Con el foco en cualquier otro sitio del formulario.
   const places = {
     "un selector (columna)": (d) => d.getByLabel("Columna").focus(),
-    "un selector (responsable)": (d) => d.getByLabel("Asignada a (opcional)").focus(),
-    "un selector (entregable)": (d) => d.getByLabel("Entregable (opcional)").focus(),
+    "un selector (responsable)": (d) => d.getByLabel("Responsable", { exact: true }).focus(),
+    "un selector (entregable)": (d) => d.getByLabel("Entregable", { exact: true }).focus(),
     "un selector (repetir)": (d) => d.getByLabel("Repetir", { exact: true }).focus(),
     "un tipo": (d) => d.locator("[role=radiogroup][aria-label=Tipo] [role=radio]").first().focus(),
     "un botón": (d) => d.getByRole("button", { name: "Copiar tarea", exact: true }).focus(),
-    "la fecha límite": (d) => d.getByLabel("Fecha límite (opcional)").focus(),
+    "la fecha límite": (d) => d.getByLabel("Fecha límite", { exact: true }).focus(),
     "una zona vacía (tras hacer clic en ella)": async (d) => { await d.getByText("Capturas y adjuntos").click(); },
     "la columna, tras cambiarla con el teclado": async (d) => { await d.getByLabel("Columna").focus(); await page.keyboard.press("ArrowDown"); },
     "la descripción (formulario sin tocar)": (d) => d.locator("[contenteditable=true], textarea[id$='-desc']").first().click(),
@@ -429,14 +429,14 @@ if (only.includes("extras")) {
   const dlg = page.getByRole("dialog", { name: "Nueva tarea" });
   await dlg.waitFor();
   await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Con extras");
-  const labels = dlg.getByRole("group", { name: "Etiquetas (opcional)" });
+  const labels = dlg.getByRole("group", { name: "Etiquetas", exact: true });
   L.eq("ETIQUETAS: las del proyecto, para elegir (sin crear nuevas)", await labels.getByRole("button").allInnerTexts(), ["Cliente", "Urgente"]);
   await labels.getByRole("button", { name: "Urgente" }).click();
   L.eq("ETIQUETAS: marcada", await labels.getByRole("button", { name: "Urgente" }).getAttribute("aria-pressed"), "true");
   await dlg.getByRole("button", { name: /^Color: / }).click();
   await page.getByRole("radio", { name: "Color Verde", exact: true }).click();
   L.check("COLOR: el botón muestra el elegido", (await dlg.getByRole("button", { name: /^Color: / }).getAttribute("aria-label")) === "Color: Verde");
-  const link = dlg.getByLabel("Enlace externo (opcional)");
+  const link = dlg.getByLabel("Enlace externo", { exact: true });
   await link.fill("example.com/ficha");
   await link.blur();
   L.eq("ENLACE: se completa con https:// al salir del campo, como en el detalle", await link.inputValue(), "https://example.com/ficha");
@@ -454,7 +454,7 @@ if (only.includes("extras")) {
   await page.getByRole("button", { name: "Nueva tarea" }).first().click();
   await dlg.waitFor();
   await dlg.getByRole("textbox", { name: "Título", exact: true }).fill("Enlace malo");
-  await dlg.getByLabel("Enlace externo (opcional)").fill("javascript:alert(1)");
+  await dlg.getByLabel("Enlace externo", { exact: true }).fill("javascript:alert(1)");
   await dlg.getByRole("button", { name: "Crear tarea" }).click();
   await L.checkEventually("ENLACE: uno que no es http(s) se rechaza con aviso", async () => (await alerts(page)).includes("El enlace debe empezar por http:// o https://"));
   L.check("ENLACE: y no se crea la tarea", !(await L.dbTask("Enlace malo")));
@@ -465,7 +465,7 @@ if (only.includes("extras")) {
   await page.getByRole("button", { name: "Sustituir" }).click();
   await L.eqEventually("IMPORTAR: etiqueta existente marcada, color y enlace", async () => [
     await labels.getByRole("button", { name: "Cliente" }).getAttribute("aria-pressed"), await labels.getByRole("button", { name: "Urgente" }).getAttribute("aria-pressed"),
-    await dlg.getByRole("button", { name: /^Color: / }).getAttribute("aria-label"), await dlg.getByLabel("Enlace externo (opcional)").inputValue(),
+    await dlg.getByRole("button", { name: /^Color: / }).getAttribute("aria-label"), await dlg.getByLabel("Enlace externo", { exact: true }).inputValue(),
   ], ["true", "false", "Color: Rojo", "https://example.com/importado"]);
   await L.checkEventually("IMPORTAR: avisa de la etiqueta que no existe y de la dependencia (no de color ni enlace)", async () => {
     const a = await alerts(page);
@@ -483,7 +483,7 @@ if (only.includes("extras")) {
   await dlg.getByRole("button", { name: "Abrir otra tarea nueva al lado" }).click();
   const second = page.getByRole("dialog", { name: /Nueva tarea/ }).filter({ has: page.getByLabel("Proyecto", { exact: true }) });
   await second.waitFor();
-  const secondLabels = second.getByRole("group", { name: "Etiquetas (opcional)" });
+  const secondLabels = second.getByRole("group", { name: "Etiquetas", exact: true });
   await secondLabels.getByRole("button", { name: "Cliente" }).click();
   await secondLabels.getByRole("button", { name: "Urgente" }).click();
   await second.getByLabel("Proyecto", { exact: true }).selectOption(OTHER);
@@ -516,7 +516,7 @@ if (only.includes("extras")) {
   await nt.getByRole("textbox", { name: "Título", exact: true }).fill("Desde el móvil");
   const wide = await page.evaluate(() => document.documentElement.scrollWidth);
   L.check("390: sin scroll lateral", wide <= 390, String(wide));
-  for (const [name, loc] of [["color", nt.getByRole("button", { name: /^Color: / })], ["enlace", nt.getByLabel("Enlace externo (opcional)")], ["etiqueta larga", nt.getByRole("button", { name: "Etiqueta con un nombre bastante largo" })]]) {
+  for (const [name, loc] of [["color", nt.getByRole("button", { name: /^Color: / })], ["enlace", nt.getByLabel("Enlace externo", { exact: true })], ["etiqueta larga", nt.getByRole("button", { name: "Etiqueta con un nombre bastante largo" })]]) {
     await loc.scrollIntoViewIfNeeded();
     const b = await loc.boundingBox();
     L.check(`390: «${name}» cabe`, !!b && b.x >= 0 && b.x + b.width <= 390, JSON.stringify(b));
@@ -530,7 +530,7 @@ if (only.includes("extras")) {
   // Desplegables: flecha propia a 6 px del borde y relleno derecho para que el texto no la pise.
   const sel = await nt.getByLabel("Columna").evaluate((el) => { const c = getComputedStyle(el); return [c.appearance, c.backgroundPositionX, parseFloat(c.paddingRight)]; });
   L.check("SELECT: flecha propia a 6 px del borde y texto con sitio", sel[0] === "none" && sel[1] === "calc(100% - 6px)" && sel[2] >= 20, JSON.stringify(sel));
-  const bg = await nt.getByLabel("Enlace externo (opcional)").evaluate((el) => getComputedStyle(el).backgroundColor);
+  const bg = await nt.getByLabel("Enlace externo", { exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor);
   L.check("OSCURO: el enlace no es una caja blanca", bg !== "rgb(255, 255, 255)", bg);
   const off = await nt.getByRole("button", { name: "Otra" }).evaluate((el) => getComputedStyle(el).backgroundColor);
   L.check("OSCURO: una etiqueta sin marcar no es clara", off !== "rgb(241, 245, 249)", off);
@@ -539,7 +539,7 @@ if (only.includes("extras")) {
   const swatch = await touch(page.getByRole("radio", { name: "Color Celeste" }));
   L.check("TÁCTIL: muestra de color de 28 px con zona de toque de 40", swatch[0] === 28 && swatch[1] >= 40, JSON.stringify(swatch));
   await page.getByRole("radio", { name: "Color Celeste" }).tap();
-  await nt.getByLabel("Enlace externo (opcional)").fill("https://example.com/movil");
+  await nt.getByLabel("Enlace externo", { exact: true }).fill("https://example.com/movil");
   await nt.getByRole("button", { name: "Crear tarea" }).tap();
   await L.eqEventually("390: se crea con etiqueta, color y enlace", async () => {
     const [t] = await L.q(`SELECT t.color, t."linkUrl", array(SELECT l.name FROM "TaskLabel" tl JOIN "Label" l ON l.id=tl."labelId" WHERE tl."taskId"=t.id) AS labels FROM "Task" t WHERE t.title='Desde el móvil'`);

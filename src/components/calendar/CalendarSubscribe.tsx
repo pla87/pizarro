@@ -202,7 +202,7 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
           <div className="space-y-2">
             <label className="block">
               <span className="mb-1 block font-medium">{t("Enlace privado")}</span>
-              <input readOnly value={links.https} onFocus={(e) => e.currentTarget.select()} className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950" />
+              <input readOnly value={links.https} data-pz-no-capture="" onFocus={(e) => e.currentTarget.select()} className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950" />
             </label>
             <p className="text-xs text-amber-700 dark:text-amber-300">{t("Cualquiera con este enlace ve tus fechas: no lo compartas. Solo se muestra ahora; si lo pierdes, genera uno nuevo.")}</p>
             <div className="flex flex-wrap gap-2">
@@ -237,7 +237,6 @@ export function CalendarSubscribe({ initialActive, initialScope, className }: { 
             </button>
           )}
         </div>
-        {active && <p className="text-xs text-slate-500">{t("Regenerar o desactivar deja sin efecto el enlace anterior en todos tus calendarios.")}</p>}
       </div>
     </Popover>
   );

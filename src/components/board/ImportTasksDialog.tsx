@@ -7,7 +7,7 @@
 // en lib/task-json.ts) y lo exportado de otros Kanban: Trello, Jira, GitHub, Asana o un CSV (lib/foreign-import/tasks.ts).
 import { ClipboardPaste, FileUp, Loader2, TriangleAlert } from "lucide-react";
 import { useDeferredValue, useId, useMemo, useRef, useState } from "react";
-import { useT } from "@/i18n/client";
+import { useLocale, useT } from "@/i18n/client";
 import { appTimeZone } from "@/lib/format";
 import { actionThrowResult } from "@/lib/stale-action";
 import { isOfflineMessage } from "@/lib/connection";
@@ -53,6 +53,7 @@ const PREVIEW_ROWS = 200;
 export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   const board = useBoard();
   const t = useT();
+  const locale = useLocale();
   const toast = useToast();
   const uid = useId();
   const [text, setText] = useState(initialText);
@@ -62,7 +63,7 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
   const columns = useMemo(() => [...board.columns].sort((a, b) => a.position - b.position), [board.columns]);
   // Con textos grandes, la vista previa va un paso por detrás de lo que se escribe.
   const shown = useDeferredValue(text);
-  const read = useMemo(() => parseTasksText(shown, { t, timeZone: appTimeZone() }), [shown, t]);
+  const read = useMemo(() => parseTasksText(shown, { t, timeZone: appTimeZone(), locale }), [shown, t, locale]);
   const rows = useMemo(() => read.tasks.map((x) => ({ n: x.n, title: x.task.title ?? null, ...importPreview(x.task, { columns, kinds: board.kinds }, forced || null, t) })), [read, columns, board.kinds, forced, t]);
   const ready = rows.filter((r) => r.title);
   const unreadable = read.failed.length + rows.length - ready.length;

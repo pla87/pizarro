@@ -19,8 +19,6 @@ export const aplicarPlantilla: Record<string, string> = {
   "Ya no se puede deshacer: han pasado más de {h} horas.": "It can no longer be undone: more than {h} hours have passed.",
 
   // Asistente
-  "Plantillas generales": "General templates",
-  "Plantillas de la instalación": "Templates of this installation",
   "Qué hacer": "What to do",
   "Añadir lo que falte de la plantilla": "Add what is missing from the template",
   "Añade las columnas, tipos, etiquetas, campos y plantillas de release que el proyecto no tenga, y vuelve a mostrar los tipos generales que usa la plantilla si el proyecto los tiene ocultos. No cambia ni quita nada más.":
@@ -32,7 +30,7 @@ export const aplicarPlantilla: Record<string, string> = {
   "Aplicar": "Apply",
   "Plantilla aplicada": "Template applied",
   "Añadido lo que faltaba de la plantilla": "Added what was missing from the template",
-  "Solo los administradores pueden usar las plantillas de la instalación.": "Only administrators can use this installation's templates.",
+  "Solo los administradores pueden usar las plantillas propias.": "Only administrators can use custom templates.",
   "Las tareas de cada columna pasan a la que elijas. Una sin pareja se conserva al final; si está vacía, se puede quitar.":
     "The tasks of each column go to the one you choose. A column without a match is kept at the end; if it's empty, it can be removed.",
   "Destino de «{name}»": "Destination of “{name}”",

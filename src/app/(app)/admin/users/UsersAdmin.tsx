@@ -1,10 +1,10 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { KeyRound, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
+import { KeyRound, Link as LinkIcon, Link2, Link2Off, MailPlus, MoreHorizontal, Pencil, ShieldOff, Trash2, TriangleAlert, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
+import { generateInviteLink, createUser, deleteUser, forcePasswordChange, resendInvite, resetUserTwoFactor, unlinkGoogle, updateUser, allowGoogleRelink } from "@/actions/users";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -38,10 +38,11 @@ interface UserRow {
   invitePending: boolean;
 }
 
-export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", defaultMaxUsers = 10, emailAvailable, noRecovery, defaultLocale = "ES" }: {
-  users: UserRow[]; meId: string; maxUsers: number;
+export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", emailAvailable, noRecovery, defaultLocale = "ES" }: {
+  /** Tope de usuarios activos (MAX_USERS), o null si no hay. */
+  users: UserRow[]; meId: string; maxUsers: number | null;
   /** De dónde sale el máximo (la variable MAX_USERS del servidor, su valor por defecto o el defecto porque no vale). */
-  maxUsersSource?: MaxUsersSource; defaultMaxUsers?: number;
+  maxUsersSource?: MaxUsersSource;
   emailAvailable: boolean; noRecovery?: boolean; defaultLocale?: UserLocale;
 }) {
   const t = useT();
@@ -82,6 +83,25 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     }
   };
 
+  // Sin email: «Generar enlace de invitación nuevo» emite uno (el anterior deja de valer, por eso se confirma) y lo
+  // muestra para pasárselo.
+  const [inviteLink, setInviteLink] = useState<{ user: UserRow; link: string } | null>(null);
+  const freshLink = async (u: UserRow) => {
+    if (!(await confirm({
+      title: t("Generar enlace de invitación nuevo"),
+      message: t("Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.", { name: u.name }),
+      confirmLabel: t("Generar enlace nuevo"),
+    }))) return;
+    setResending(u.id);
+    try {
+      const res = await generateInviteLink(u.id).catch((e) => actionThrowResult(e, t));
+      if (!res.ok) return toast(res.error, "error");
+      setInviteLink({ user: u, link: res.data.link });
+    } finally {
+      setResending(null);
+    }
+  };
+
   const allow = async (u: UserRow) => {
     const res = await allowGoogleRelink(u.id).catch((e) => actionThrowResult(e, t));
     if (!res.ok) return toast(res.error, "error");
@@ -95,22 +115,23 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
         <div>
           <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
           <p className="flex items-center gap-1 text-sm text-slate-500">
-            {t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })}
-            {/* De dónde sale el máximo y cómo ampliarlo (antes solo decía que no hay registro público). */}
+            {maxUsers !== null
+              ? t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })
+              : activeCount === 1 ? t("1 usuario activo") : t("{n} usuarios activos", { n: activeCount })}
+            {/* Si hay tope, de dónde sale y cómo cambiarlo; si no, cómo ponerlo (antes solo decía que no hay registro público). */}
             <InfoTip topic={t("Usuarios")}>
               <span className="block">
-                {maxUsersSource === "env"
-                  ? t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })
-                  : maxUsersSource === "invalid"
-                    ? t("La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.", { max: maxUsers })
-                    : t("El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.", { max: defaultMaxUsers })}{" "}
-                {t("Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}
+                {maxUsers !== null
+                  ? <>{t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })}{" "}{t("Para cambiarlo, pon otro número en MAX_USERS, o quítala para no tener tope (Railway → Variables; con Docker, en el .env), y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>
+                  : <>{maxUsersSource === "invalid"
+                      ? t("La variable MAX_USERS del servidor no es un número entero válido y no se aplica: no hay tope de usuarios activos.")
+                      : t("No hay tope de usuarios activos.")}{" "}{t("Si quieres uno, pon el máximo en la variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>}
               </span>
               <span className="mt-1 block">{t("No hay registro público: solo un administrador da de alta usuarios.")}</span>
             </InfoTip>
           </p>
         </div>
-        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers} title={activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
+        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={maxUsers !== null && activeCount >= maxUsers} title={maxUsers !== null && activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
           <UserPlus size={16} /> {t("Nuevo usuario")}
         </button>
       </div>
@@ -125,6 +146,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
           // iconos y las insignias en la fila, el nombre y el email se quedaban sin sitio).
           const actions: { key: string; icon: typeof Pencil; label: string; title?: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] = [
             ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
+            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Generar enlace de invitación nuevo para {name}", { name: u.name }), title: t("Genera un enlace de invitación nuevo; el anterior deja de valer"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
             { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
             ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
             ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
@@ -189,6 +211,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
       {resetting && <ForcePasswordChange user={resetting} emailAvailable={emailAvailable} onClose={() => setResetting(null)} />}
       {resetting2fa && <ResetTwoFactor user={resetting2fa} onClose={() => setResetting2fa(null)} />}
       {deleting && <DeleteUser user={deleting} onClose={() => setDeleting(null)} />}
+      {inviteLink && <InviteLinkDialog user={inviteLink.user} link={inviteLink.link} onClose={() => setInviteLink(null)} />}
     </div>
   );
 }
@@ -303,7 +326,7 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
       <Modal open onClose={onClose} title={t("Enlace para {name}", { name: user.name })} size="sm">
         <div className="space-y-3 text-sm">
           <p>{t("Con este enlace elegirá una contraseña nueva.")}</p>
-          <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" />
+          <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de restablecimiento")} data-testid="reset-link" data-pz-no-capture="" />
           <p className="text-amber-700 dark:text-amber-300">{t("Envíaselo por un canal de confianza; caduca en 30 minutos y sirve una sola vez. No volverá a mostrarse.")}</p>
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
@@ -339,6 +362,25 @@ function ForcePasswordChange({ user, emailAvailable, onClose }: { user: UserRow;
           <button className="btn-primary" disabled={pending}>{emailAvailable ? t("Forzar cambio") : t("Generar enlace")}</button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** El enlace de invitación recién emitido (sin email), para pasárselo por otro canal. */
+function InviteLinkDialog({ user, link, onClose }: { user: UserRow; link: string; onClose: () => void }) {
+  const t = useT();
+  const toast = useToast();
+  return (
+    <Modal open onClose={onClose} title={t("Enlace de invitación de {name}", { name: user.name })} size="sm">
+      <div className="space-y-3 text-sm">
+        <p>{t("Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:", { name: user.name })}</p>
+        <input className="input font-mono text-xs" value={link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={t("Enlace de invitación")} data-testid="invite-link" data-pz-no-capture="" />
+        <p className="text-amber-700 dark:text-amber-300">{t("El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.")}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>
+          <button type="button" className="btn-primary" onClick={async () => ((await copyText(link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
+        </div>
+      </div>
     </Modal>
   );
 }

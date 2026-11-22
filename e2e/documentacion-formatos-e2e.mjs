@@ -3,7 +3,7 @@
 // con barra salen como una línea en blanco (sin «&nbsp;») en Copiar todo, .md, .txt, lo guardado, el historial de
 // releases y la descripción copiada; Google Slides desde la tarjeta como Docs y Sheets; y adjuntos y documentos en .md,
 // .pdf, .html, .docx y .pptx, con el HTML visto en un marco aislado (sus scripts nunca se ejecutan en el origen de la app).
-// Misma base y servidor que board-e2e.mjs; la parte «slides» necesita el servidor con Google configurado (valores de
+// Misma base y servidor que tablero-e2e.mjs; la parte «slides» necesita el servidor con Google configurado (valores de
 // prueba: GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50; no llama a Google):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node documentacion-formatos-e2e.mjs   # PART=relclose,nbsp,slides,html
 import fs from "node:fs";

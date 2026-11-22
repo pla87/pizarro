@@ -22,8 +22,8 @@ const MAX_PROJECT_KINDS = 30;
 /** Horas durante las que se puede deshacer el último cambio de plantilla. */
 export const TEMPLATE_UNDO_HOURS = 24;
 
-/** Plantilla elegida: un ejemplo de serie (para cualquiera) o una plantilla de la instalación (administradores). */
-export type TemplateRef = { source: "example"; key: string } | { source: "template"; id: string };
+/** Plantilla elegida: una de serie de la instalación (para cualquiera) o una propia (administradores). */
+export type TemplateRef = { source: "template"; id: string };
 
 /** Plantilla tal como la necesita el asistente (la forma de TemplateData, sin zod). */
 export interface ApplyTemplateShape {

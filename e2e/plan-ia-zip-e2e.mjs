@@ -12,7 +12,7 @@
 //    columna»; el .ics sin fechas y la lista sin subtareas, también, con su motivo.
 //  - salir: con el texto del paso 2 cambiado, un enlace del pie («tus plantillas») pide confirmar como cerrar; sin cambios
 //    navega directo. En el plan y en la release.
-// Misma base y servidor que board-e2e.mjs (el servidor y este script comparten UPLOAD_DIR; por defecto ../uploads):
+// Misma base y servidor que tablero-e2e.mjs (el servidor y este script comparten UPLOAD_DIR; por defecto ../uploads):
 //   cd e2e && BASE=http://localhost:3272 DATABASE_URL=$DBURL node plan-ia-zip-e2e.mjs   # PART=zip,en,ritmo,vacias,salir
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

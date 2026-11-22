@@ -60,7 +60,7 @@ export async function run() {
   L.eq("archivada en lectura: nada que editar", await view.locator("input, textarea, select, [contenteditable=true]").count(), 0);
   await view.getByRole("button", { name: "Historial" }).click();
   await L.checkEventually("archivada en lectura: con su historial", async () => [/Archivó/.test(await view.innerText()), await view.innerText()]);
-  await view.getByRole("button", { name: "Recuperar" }).click();
+  await view.getByRole("button", { name: "Restaurar" }).click();
   await view.waitFor({ state: "detached", timeout: 8000 });
   await L.eqEventually("recuperar: activa de nuevo", async () => (await full("T2"))[0].archived, false);
   const rec = (await full("T2"))[0];
@@ -68,7 +68,7 @@ export async function run() {
   L.check("recuperar: va al final de la columna", Number(rec.position) > Number((await full("T4"))[0].position), String(rec.position));
   L.check("recuperar: archivedFromColumnId limpiado", rec.from === null);
   await L.checkEventually("recuperar: evento «restore»", async () => { const ev = await L.events("T2"); return [ev.some((e) => e.code === "restore"), ev]; });
-  await U.logHas("recuperar: AppLog", t0, "tasks.restoreTask", /^Recuperó «T2» en «En progreso»$/);
+  await U.logHas("recuperar: AppLog", t0, "tasks.restoreTask", /^Restauró «T2» en «En progreso»$/);
   await U.closeDialog(p);
   await L.eqEventually("recuperar: UI (al final)", () => U.uiOrder(p, COL.doing), ["T1", "T3", "T4", "T2"]);
   await U.undoKey(p, "Control+z");

@@ -34,9 +34,9 @@ test("patrones: ** cruza carpetas, * no, y los corchetes y paréntesis de Next s
 
 test("selección: la QA siempre; comunes → tablero; cada fichero, sus suites; de fuera de la app, solo la QA", () => {
   assert.deepEqual(pick("docs/HANDOFF.md"), ["qa"]);
-  assert.deepEqual(pick("src/app/globals.css"), ["qa", "board-e2e"]);
-  assert.deepEqual(pick("src/lib/action.ts"), ["qa", "board-e2e"]);
-  assert.deepEqual(pick("src/lib/un-modulo-nuevo.ts"), ["qa", "board-e2e"], "sin mapa cuenta como común");
+  assert.deepEqual(pick("src/app/globals.css"), ["qa", "tablero-e2e"]);
+  assert.deepEqual(pick("src/lib/action.ts"), ["qa", "tablero-e2e"]);
+  assert.deepEqual(pick("src/lib/un-modulo-nuevo.ts"), ["qa", "tablero-e2e"], "sin mapa cuenta como común");
   assert.deepEqual(pick("e2e/tablero-fijas-e2e.mjs"), ["qa", "tablero-fijas-e2e"]);
   assert.ok(pick("src/components/board/EvergreenPanel.tsx").includes("tablero-fijas-e2e"));
   assert.ok(pick("src/lib/foreign-import/tasks.ts").includes("importar-exportar-e2e"));

@@ -226,10 +226,10 @@ export async function run() {
   await p.getByText("Siempre en la release").first().click(); await L.sleep(500);
   const openFija = async () => { await p.locator("[id^=evergreen-] [role=button]").filter({ hasText: "Fija" }).first().locator("span[title]").first().click(); await U.dialog(p).waitFor(); await L.sleep(400); };
   await openFija();
-  L.check("diálogo de una fija: la casilla está marcada", await U.dialog(p).getByLabel("Fija en la release (evergreen)").isChecked());
-  await U.dialog(p).getByLabel("Fija en la release (evergreen)").uncheck();
+  L.check("diálogo de una fija: la casilla está marcada", await U.dialog(p).getByLabel("Fija en la release", { exact: true }).isChecked());
+  await U.dialog(p).getByLabel("Fija en la release", { exact: true }).uncheck();
   await L.eqEventually("desmarcar «fija» en el diálogo", async () => (await L.dbTask("Fija")).evergreen, false);
-  await U.dialog(p).getByLabel("Fija en la release (evergreen)").check();
+  await U.dialog(p).getByLabel("Fija en la release", { exact: true }).check();
   await L.eqEventually("volver a marcarla", async () => (await L.dbTask("Fija")).evergreen, true);
   await U.dialog(p).locator("select").first().selectOption({ label: COL.doing });
   await L.eqEventually("mover una fija a otra columna: deja de ser fija", async () => (await L.dbTask("Fija")).evergreen, false);

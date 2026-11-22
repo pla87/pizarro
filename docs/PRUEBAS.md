@@ -48,6 +48,11 @@ Cómo usar esta lista:
 | ☐ | 13.4 Dos cuentas en el mismo navegador e invitación en otro idioma | Dos cuentas |
 | ☐ | 13.5 Cloudflare sin reescribir emails | Dominio con Cloudflare |
 | ☐ | 13.6 Tablero en vivo con dos navegadores | Dos navegadores |
+| ☐ | 14.1 Plantillas de serie tras actualizar | Tu instalación |
+| ☐ | 14.2 Informar de un error con captura | Instalación oficial |
+| ☐ | 14.3 Avisos por email, invitación sin email y usuarios sin tope | Tu instalación |
+| ☐ | 14.4 Calendario con el dedo en una tableta | Un iPad o tableta |
+| ☐ | 14.5 Copias en R2 con bloqueo | Bucket con la regla |
 
 ## 1. Baja de cuenta con Google
 
@@ -664,3 +669,33 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 13.7 Publicar la versión
 
 - En la GitHub Release de la v1.64.0 deben aparecer `MANUAL.pdf` y `PRUEBAS.pdf`, y la rama `stable` debe quedar en el commit de la versión (Railway despliega solo).
+
+## 14. Novedades de la v1.65.0
+
+### 14.1 Plantillas tras actualizar (tu instalación)
+
+1. *Administración → Tipos y plantillas → Plantillas*: deben quedar las 6 de serie (*Vibecoding*, *Trabajo y clientes*, *Casa y familia*, *Eventos y viajes*, *Estudios y aprendizaje*, *Curso o charla*) y, como **propias**, solo las antiguas que hubieras modificado.
+2. *Nuevo proyecto* → *Casa y familia* con **Con tarjetas de ejemplo**: se abre el tablero con unas pocas tarjetas «Ejemplo» en columnas que existen.
+3. Tus proyectos ya creados no cambian.
+4. Si falla: *Logs*, busca `boot` (la línea de plantillas retiradas).
+
+### 14.2 Informar de un error (instalación oficial: tu Railway)
+
+1. Junto a *Cerrar sesión* aparece el bicho. Con la última versión, se abre el diálogo; marca la captura: se ve la página sin el diálogo.
+2. Mientras `FEEDBACK_EMAIL` esté vacía, «Continuar en GitHub» abre el formulario con el texto y los datos técnicos (sin enviar nada todavía si no quieres).
+3. Cuando crees la dirección de feedback y se rellene `FEEDBACK_EMAIL`, envía uno de prueba y comprueba que llega con la captura adjunta.
+
+### 14.3 Avisos y usuarios
+
+- *Mi perfil → Avisos*: una sola tarjeta de email con un solo «Guardar avisos».
+- Sin email configurado: en los miembros del proyecto, una invitación pendiente muestra «Generar enlace de invitación nuevo» con confirmación.
+- *Administración → Usuarios*: «N usuarios activos» sin «de 10» (salvo que tengas `MAX_USERS`).
+
+### 14.4 Calendario en una tableta (iPad con Safari)
+
+- Desliza el dedo sobre una franja de entregable: la página se desplaza y la fecha no cambia.
+- Mantén el dedo hasta que la franja se marque y arrástrala: cambia de fecha.
+
+### 14.5 Copias en R2 con el bloqueo puesto
+
+- A partir del día 15 desde que creaste la regla, *Administración → Copias de seguridad* puede decir «N objetos retenidos por el bloqueo del bucket» en el destino externo: es lo esperado, no un error. La copia sigue saliendo *Correcta*.

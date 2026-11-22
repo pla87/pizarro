@@ -87,17 +87,17 @@ export const web: Record<string, string> = {
   "Equipos pequeños": "Small teams",
   "Equipos de software, agencias y estudios de unas pocas personas. Del primer apunte a la versión publicada, con sus notas.":
     "Software teams, agencies and studios of a few people. From the first note to the published version, release notes included.",
-  "Ejemplo «Equipo de software»: ideas, revisión y releases.": "“Software team” example: ideas, review and releases.",
+  "Plantilla «Vibecoding»: ideas, revisión y releases.": "“Vibecoding” template: ideas, review and releases.",
   "Autónomos y profesionales": "Freelancers and professionals",
-  "Encargos por cliente con su coste y sus horas, presupuestos que se suman solos y proyectos privados para lo tuyo.":
-    "Jobs per client with their cost and hours, quotes that add themselves up, and private projects for your own things.",
-  "Ejemplo «Empresa y clientes»: presupuestos y encargos.": "“Business and clients” example: quotes and jobs.",
+  "Encargos por cliente con su coste y su prioridad, aviso si algo espera demasiado y proyectos privados para lo tuyo.":
+    "Jobs per client with their cost and priority, a reminder when something has been waiting too long, and private projects for your own things.",
+  "Plantilla «Trabajo y clientes»: encargos, presupuestos y cobros.": "“Work and clients” template: jobs, quotes and invoices.",
   "Familias": "Families",
   "La lista de la compra, las citas del médico y las tareas de casa, con rutinas que se repiten cada semana. Gratis para uso personal.":
     "The shopping list, doctor's appointments and household chores, with routines that repeat every week. Free for personal use.",
-  "Ejemplo «Familia y casa»: compras, citas y rutinas.": "“Family and home” example: shopping, appointments and routines.",
-  "Al crear un proyecto puedes empezar desde un ejemplo listo para usar, con sus columnas y tarjetas de muestra.":
-    "When you create a project you can start from a ready-made example, with its columns and sample cards.",
+  "Plantilla «Casa y familia»: compras, citas y rutinas.": "“Home and family” template: shopping, appointments and routines.",
+  "Al crear un proyecto puedes empezar con una plantilla lista para usar, con sus columnas y, si quieres, tarjetas de ejemplo.":
+    "When you create a project you can start from a ready-made template, with its columns and, if you like, sample cards.",
 
   // Precio
   "Un precio, una sola vez": "One price, paid once",

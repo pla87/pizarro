@@ -23,6 +23,7 @@ import { acquireUploadSlot, BodyTooLargeError, withUploadCapHeader, declaredLeng
 import { effectiveFileMaxMb, MULTIPART_OVERHEAD_BYTES } from "@/lib/upload-size";
 import type { UploadedAttachment } from "@/lib/types";
 import { cleanFileName } from "@/lib/file-name";
+import { isUntypedImage } from "@/lib/document-kind";
 import { logSize } from "@/lib/format-size";
 
 export const runtime = "nodejs";
@@ -102,9 +103,11 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
 
     // Imágenes (salvo SVG, que puede llevar scripts): WebP + miniatura. Si sharp no puede
     // procesarla (p. ej. HEIC sin soporte), se guarda como un archivo cualquiera. Solo sharp necesita el contenido en un
-    // Buffer; el resto se escribe en flujo desde el File, sin una segunda copia en memoria.
+    // Buffer; el resto se escribe en flujo desde el File, sin una segunda copia en memoria. Sin tipo (o con el genérico)
+    // y con extensión de imagen (una .avif en algunos Windows, o lo compartido con «Compartir → Pizarro»), también se
+    // prueba con sharp.
     let image: Awaited<ReturnType<typeof processImage>> | null = null;
-    if (/^image\//i.test(file.type) && !/svg/i.test(file.type)) {
+    if ((/^image\//i.test(file.type) && !/svg/i.test(file.type)) || isUntypedImage(file.name, file.type)) {
       image = await processImage(Buffer.from(await file.arrayBuffer())).catch((err) => {
         if (err instanceof AppError && err.status === 503) throw err; // cola llena: no se guarda como archivo normal
         return null;

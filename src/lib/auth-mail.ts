@@ -3,7 +3,7 @@ import { intlLocale, makeT, toLocale, type T } from "../i18n/core";
 import { formatDateTimeZone } from "./format";
 import { getInstanceSettings } from "./instance";
 import { appUrl, escapeHtml, noReplyNote, sendMail, unsubscribeFooter, type MailMessage } from "./mail";
-import { unsubscribeLinks } from "./unsubscribe";
+import { unsubscribeLinks } from "./unsubscribe-links";
 import { TOKEN_TTL_MS } from "./auth-token-core";
 import { shrinkText, type BackupShrinkInfo } from "./backup-alert-core";
 import { EMAIL_CODE_TTL_MS } from "./two-factor-core";
@@ -40,7 +40,7 @@ function render(layout: Layout, t: T): { text: string; html: string } {
 ${layout.paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 ${layout.details ? `<table style="margin:12px 0;border-collapse:collapse">${layout.details.map(([l, v]) => `<tr><td style="padding:2px 12px 2px 0;color:#64748b">${escapeHtml(l)}</td><td style="padding:2px 0">${escapeHtml(v)}</td></tr>`).join("")}</table>` : ""}
 ${layout.button ? `<p><a href="${escapeHtml(layout.button.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(layout.button.label)}</a></p><p style="color:#64748b;font-size:12px;word-break:break-all">${escapeHtml(layout.button.url)}</p>` : ""}
-${layout.note || unsub.html ? `<p style="color:#94a3b8;font-size:12px">${layout.note ? escapeHtml(layout.note) : ""}${unsub.html}</p>` : ""}</div>`;
+${layout.note || unsub.html ? `<p style="color:#64748b;font-size:12px">${layout.note ? escapeHtml(layout.note) : ""}${unsub.html}</p>` : ""}</div>`;
   return { text, html };
 }
 

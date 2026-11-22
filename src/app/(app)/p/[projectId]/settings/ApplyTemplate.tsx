@@ -29,7 +29,7 @@ interface LastTemplateChange {
   userName: string | null;
 }
 
-const refKey = (ref: TemplateRef) => (ref.source === "example" ? `example:${ref.key}` : `template:${ref.id}`);
+const refKey = (ref: TemplateRef) => `template:${ref.id}`;
 const roleLabel = (role: string) => (COLUMN_ROLE_LABEL as Record<string, string>)[role] ?? role;
 
 export function ApplyTemplate({ projectId, lastChange }: { projectId: string; lastChange: LastTemplateChange | null }) {
@@ -176,7 +176,7 @@ function ApplyWizard({ projectId, onClose, onApplied }: { projectId: string; onC
             if (!list.length) return null;
             return (
               <fieldset key={group}>
-                <legend className="mb-1.5 text-xs font-medium text-slate-500">{group === "general" ? t("Plantillas generales") : t("Plantillas de la instalación")}</legend>
+                <legend className="mb-1.5 text-xs font-medium text-slate-500">{group === "general" ? t("Plantillas de serie") : t("Plantillas propias")}</legend>
                 <div className="space-y-1.5">
                   {list.map((x) => (
                     <label key={refKey(x.ref)} className="choice-card flex cursor-pointer items-start gap-2 rounded-md p-2 text-sm" data-template-choice={x.name}>

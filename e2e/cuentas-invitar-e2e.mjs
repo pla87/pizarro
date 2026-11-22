@@ -2,9 +2,9 @@
 // (sale con la marca «admin», queda elegido y el enlace al tablero se copia con «Copiar enlace») y en *Administración →
 // Proyectos* («Asignar usuario…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
 // (servidor sin email: el enlace de invitación se pasa a mano) en el idioma de quien invita, sale marcada como «Invitación
-// pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»), elige su
-// contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
-// administrador (miembro de un privado) no tiene esa opción; a 390 px el bloque cabe sin desbordar. Misma base y servidor que board-e2e.mjs (sin email):
+// pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»; sí «Copiar enlace
+// de invitación», que emite uno nuevo y deja sin valor el anterior), elige su contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
+// administrador (miembro de un privado) no tiene esa opción; a 390 px el bloque cabe sin desbordar. Misma base y servidor que tablero-e2e.mjs (sin email):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node cuentas-invitar-e2e.mjs   # PART=assign,admin,invite,member,mobile
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
@@ -110,7 +110,7 @@ if (only.includes("invite")) {
   await page.getByRole("button", { name: "Invitar", exact: true }).click();
   const note = page.getByTestId("member-link-note");
   await note.waitFor({ timeout: 15000 });
-  const link = await note.getByTestId("member-link").inputValue();
+  let link = await note.getByTestId("member-link").inputValue();
   L.check("INVITE: el enlace es el de la invitación", link.startsWith(`${L.BASE}/reset/`), link);
   L.check("INVITE: sin email, dice que se lo pases tú", (await note.innerText()).includes("Pásale este enlace a Inv59 Nueva Persona"), await note.innerText());
   const [invited] = await L.q(`SELECT id,name,role,"mustChangePassword",locale FROM "User" WHERE email=$1`, [INVITED]);
@@ -124,6 +124,24 @@ if (only.includes("invite")) {
   L.eq("INVITE: sin email no hay «Reenviar invitación»", await invitedRow.getByRole("button", { name: /^Reenviar invitación/ }).count(), 0);
   await note.getByRole("button", { name: "Copiar enlace" }).click();
   await L.checkEventually("INVITE: «Copiar enlace» copia el de la invitación", async () => (await page.evaluate(() => navigator.clipboard.readText())) === link);
+  // «Generar enlace de invitación nuevo» (sin email): un enlace nuevo, que no se envía; el anterior deja de valer, así
+  // que pide confirmación antes.
+  await invitedRow.getByRole("button", { name: "Generar enlace de invitación nuevo para Inv59 Nueva Persona" }).click();
+  const confirmFresh = page.getByRole("dialog").filter({ hasText: "dejará de valer" });
+  await confirmFresh.waitFor({ timeout: 10000 });
+  await confirmFresh.getByRole("button", { name: "Generar enlace nuevo", exact: true }).click();
+  await L.checkEventually("INVITE: «Generar enlace de invitación nuevo» muestra un enlace nuevo", async () => {
+    const v = await page.getByTestId("member-link").inputValue().catch(() => "");
+    return [v.startsWith(`${L.BASE}/reset/`) && v !== link, v];
+  });
+  const fresh = await page.getByTestId("member-link").inputValue();
+  L.check("INVITE: …y dice que se lo pases tú", (await page.getByTestId("member-link-note").innerText()).includes("Pásale este enlace a Inv59 Nueva Persona"));
+  L.eq("INVITE: solo vale una invitación (la nueva)", (await L.q(`SELECT count(*)::int n FROM "AuthToken" WHERE "userId"=$1 AND purpose='INVITE'`, [invited.id]))[0].n, 1);
+  await L.checkEventually("INVITE: queda en el registro, sin el enlace", async () => {
+    const [row] = await L.q(`SELECT message, coalesce(details::text,'') d FROM "AppLog" WHERE action='users.generateInviteLink' ORDER BY "createdAt" DESC LIMIT 1`);
+    return [!!row && /Generó un enlace de invitación nuevo para «Inv59 Nueva Persona»/.test(row.message) && !row.d.includes(fresh.split("/reset/")[1]), JSON.stringify(row)];
+  });
+  link = fresh;
   await page.screenshot({ path: `${SHOTS}/r59-invitar.png` });
   // En Administración → Proyectos, también marcada.
   await L.goto(page, `${L.BASE}/admin/projects`);

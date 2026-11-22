@@ -55,7 +55,7 @@ test("rateLimit: inundar claves normales no borra los bloqueos de seguridad (log
   Date.now = () => now;
   try {
     // También borrar la cuenta y la confirmación para descargar la copia de seguridad (intentos de contraseña o código).
-    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com", "2fa:user:u1", "setup:fail:all", "account-delete:u1", "backup-dl:u1"];
+    const locked = ["login:acct:victima@example.com", "reset:email:victima@example.com", "2fa:user:u1", "setup:fail:all", "account-delete:u1", "backup-dl:u1", "feedback:install", "feedback:user:u1", "feedback-try:u1"];
     for (const k of locked) {
       resetRateLimit(k);
       for (let i = 0; i < 6; i++) rateLimit(k, 6, 15 * 60_000);

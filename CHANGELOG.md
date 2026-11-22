@@ -2,6 +2,39 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.65.0 — 2026-11-22 13:35
+
+Seis plantillas de serie con tarjetas de ejemplo, botón para informar de un error o enviar una sugerencia con captura, avisos por email en una sola tarjeta, «Responsable» en todas partes, usuarios sin tope por defecto, fechas al importar decididas por fichero, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Botón para informar de un error o enviar una sugerencia junto a «Cerrar sesión», con captura de la pantalla (sin el diálogo ni los códigos secretos) y envío privado por email; mientras Pizarro no tenga dirección para recibirlos, abre el formulario de GitHub. Atenuado si la instalación no tiene la última versión.
+- Seis plantillas de serie (Vibecoding, Trabajo y clientes, Casa y familia, Eventos y viajes, Estudios y aprendizaje, Curso o charla) con la casilla «Con tarjetas de ejemplo» en «Nuevo proyecto»; Curso o charla tiene la columna «Publicado».
+- Sin email configurado, «Generar enlace de invitación nuevo» para quien aún no ha entrado (pide confirmación).
+
+### Mejoras
+
+- Mi perfil → Avisos: todos los avisos por email en una sola tarjeta con un solo «Guardar»; en las cuentas nuevas, los cambios de fecha y «Esperando» vienen marcados.
+- La baja del informe semanal se recuerda: quien lo configuró recibe un aviso y nadie salvo la propia persona puede volver a activárselo.
+- «Responsable» en todas partes, sin «(opcional)» en Nueva tarea, sin la sección vacía de archivadas en los ajustes y «Restaurar» en vez de «Recuperar».
+- Usuarios sin tope por defecto (MAX_USERS es opcional, con una recomendación de memoria en la documentación).
+- Al importar, día/mes o mes/día se decide para todo el fichero; las imágenes que llegan sin tipo se reconocen por su extensión.
+- El contador de avisos muestra siempre la cifra real; la vista Lista y la sesión cuestan menos al servidor.
+- Calendario en tableta: deslizar ya no mueve fechas sin querer (para mover, mantener pulsada la franja); mejor teclado y textos en hebreo o árabe.
+
+### Correcciones
+
+- «Descartar cambios» tiene la misma altura que el resto de botones del pie.
+- Papelera de Documentación en el móvil, contraste de la prioridad «Alta» y de los PDF, separador de miles en el informe PDF y foco tras «Cargar más» en Avisos.
+- Inglés americano en plantillas, ejemplos y guías («check» en vez de «tick»), y nombres coherentes de plantillas «de serie» y «propias».
+- Al volver a una versión anterior ya no reaparecen las plantillas retiradas; dos arranques a la vez ya no dejan un error en el log.
+
+### Cambios técnicos / DB
+
+- Al actualizar, las plantillas de serie antiguas sin modificar se retiran y las modificadas quedan como propias; los proyectos no cambian.
+- Ruta /api/feedback con límites en el mapa de seguridad y captura con tope de tamaño y dimensiones (modern-screenshot cargado al pulsar).
+- Retirados el script db:generate, la nota de JWT_SECRET y docs/IDEAS.md; suites de «Aplicar plantilla» unidas y tablero-e2e/pegar-e2e por tema.
+
 ## v1.64.0 — 2026-11-21 23:08
 
 Tablero en vivo que trae solo las tarjetas cambiadas, guía de Railway sin terminal ni APP_URL, baja de emails en un clic, búsqueda de releases resaltada, cambiar de tipo sin perder lo escrito, fechas en inglés de EE. UU., copias que aguantan el bloqueo de R2, y revisión y caza de bugs

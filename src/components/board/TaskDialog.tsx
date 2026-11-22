@@ -12,7 +12,7 @@ import { undoEntry, undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useIntlLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
@@ -83,6 +83,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 }) {
   const t = useT();
   const locale = useIntlLocale();
+  const uiLocale = useLocale();
   const board = useBoard();
   const toast = useToast();
   const confirm = useConfirm();
@@ -881,7 +882,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
    * texto alrededor. Varias tareas no: eso es «Importar» del tablero. `true` si se pegó.
    */
   const pasteTask = async (text: string): Promise<boolean> => {
-    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(text, { t, timeZone: appTimeZone(), locale: uiLocale });
     if (read.error) {
       toast(read.error, "error");
       return false;
@@ -930,6 +931,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         const shown = skipped.slice(0, 4).join("; ");
         toast(t("Tarea pegada, salvo: {list}", { list: skipped.length > 4 ? t("{list} y {n} más", { list: shown, n: skipped.length - 4 }) : shown }), "error");
       }
+      // Fecha límite y de inicio en órdenes distintos (día/mes y mes/día): se avisa para que se revisen.
+      if (read.dateWarning) toast(read.dateWarning, "error");
       return true;
     } catch (err) {
       toast(actionThrowMessage(err, t), "error");
@@ -1046,15 +1049,21 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
 
 
   // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Descartar cambios» y Guardar, quepan en una línea
-  // tanto en la columna lateral (~300 px) como en el pie móvil (360 px).
+  // tanto en la columna lateral (~300 px) como en el pie móvil (360 px). Todos del mismo alto (h-8) y sin saltos de línea:
+  // si el pie no da para «Descartar cambios» (consulta de contenedor), se lee «Descartar» y el nombre accesible sigue entero.
   const actionButtons = (
-    <>
-      <button className="btn-secondary touch-target px-2 py-1.5" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-      <button className="btn-secondary touch-target px-2 py-1.5" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-      <button className="btn-ghost touch-target px-2 py-1.5 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-      <button className="btn-secondary ml-auto px-2 py-1.5 text-center leading-tight whitespace-normal max-sm:max-w-[6.5rem] max-sm:text-xs" onClick={discardEdits} disabled={cancelling} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>{t("Descartar cambios")}</button>
-      <button className="btn-primary px-3 py-1.5" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} /> {t("Guardar")}</button>
-    </>
+    <div className="@container w-full min-w-0">
+      <div className="flex flex-nowrap items-center gap-2 @max-[24rem]:gap-1 md:gap-1 [&>button]:h-8 [&>button]:py-0">
+        <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+        <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+        <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+        <button className="btn-secondary ml-auto min-w-0 px-2 whitespace-nowrap" onClick={discardEdits} disabled={cancelling} aria-label={t("Descartar cambios")} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>
+          <span className="@max-[24rem]:hidden">{t("Descartar cambios")}</span>
+          <span className="@min-[24rem]:hidden">{t("Descartar")}</span>
+        </button>
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden" /> {t("Guardar")}</button>
+      </div>
+    </div>
   );
 
   return (
@@ -1238,7 +1247,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               </select>
             )}
           </Field>
-          <Field label={t("Asignada a")}>
+          <Field label={t("Responsable")}>
             {(id) => (
               <select
                 id={id}
@@ -1247,7 +1256,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 value={task.assigneeId ?? ""}
                 onChange={(e) => save({ assigneeId: e.target.value || null }, { assigneeId: e.target.value || null })}
               >
-                <option value="">{t("Sin asignar")}</option>
+                <option value="">{t("Sin responsable")}</option>
                 {board.users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             )}
@@ -1263,7 +1272,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                 checked={task.evergreen}
                 onChange={(e) => save({ evergreen: e.target.checked }, e.target.checked ? { evergreen: true } : { evergreen: false, evergreenEvery: 1 })}
               />
-              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
+              {board.columns.find((c) => c.id === task.columnId)?.role === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release")}
             </label>
           )}
           <Field label={t("Tipo")} wide>

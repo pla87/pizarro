@@ -81,16 +81,11 @@ export const board: Record<string, string> = {
   "Tipo": "Type",
   "Descripción (opcional)": "Description (optional)",
   "Markdown · @persona para avisar": "Markdown · @person to notify",
-  "Subtareas (opcional)": "Subtasks (optional)",
   "Hay cambios sin guardar. ¿Descartar la nueva tarea?": "You have unsaved changes. Discard the new task?",
   "Añadir subtarea": "Add subtask",
   "Columna": "Column",
-  "Entregable (opcional)": "Deliverable (optional)",
   "Sin entregable": "No deliverable",
-  "Asignada a (opcional)": "Assigned to (optional)",
-  "Sin asignar": "Unassigned",
   "{name} (yo)": "{name} (me)",
-  "Fecha límite (opcional)": "Due date (optional)",
   "Capturas y adjuntos": "Screenshots and attachments",
   "Adjuntar «{name}»": "Attach “{name}”",
   "«{name}» ya está adjunto": "“{name}” is already attached",
@@ -125,9 +120,8 @@ export const board: Record<string, string> = {
   "Tipo…": "Type…",
   "Campos extra": "Extra fields",
   "(opcional, para todas)": "(optional, applies to all)",
-  "Etiquetas (opcional)": "Labels (optional)",
   // ArchivedDialog
-  "Tarea recuperada en «{name}»": "Task restored to “{name}”",
+  "Tarea restaurada en «{name}»": "Task restored to “{name}”",
   "Tareas archivadas": "Archived tasks",
   "Filtrar por título o release…": "Filter by title or release…",
   "Cargar más": "Load more",
@@ -137,11 +131,10 @@ export const board: Record<string, string> = {
   "columna borrada": "column deleted",
   "Desplegada el {date}": "Deployed on {date}",
   "En release: {title}": "In release: {title}",
-  "Recuperar": "Restore",
   // Tarea archivada en solo lectura (ArchivedTaskView)
   "Tarea archivada: {title}": "Archived task: {title}",
   "Detalle de la tarea archivada": "Archived task details",
-  "Tarea archivada: solo lectura. Recupérala para editarla o comentar.": "Archived task: read only. Restore it to edit it or comment.",
+  "Tarea archivada: solo lectura. Restáurala para editarla o comentar.": "Archived task: read only. Restore it to edit it or comment.",
   "Sin descripción.": "No description.",
   "Sin comentarios.": "No comments.",
   "Hecha": "Done",
@@ -201,7 +194,6 @@ export const board: Record<string, string> = {
   "captura": "screenshot",
   "archivo": "file",
   "No se pudo subir el archivo.": "Could not upload the file.",
-  "Asignada a {name}": "Assigned to {name}",
   // Atajos de teclado y filtro
   "{shown} de {total}": "{shown} of {total}",
   "Filtrar ({keys})": "Filter ({keys})",
@@ -367,13 +359,6 @@ export const board: Record<string, string> = {
   // «Nueva tarea» con una columna que otra persona borró
   "La columna elegida ya no existe. La tarea se creará en «{name}».": "The chosen column no longer exists. The task will be created in “{name}”.",
 
-  // «Nueva tarea»: color, enlace y etiquetas
-  "Color (opcional)": "Color (optional)",
-  "Enlace externo (opcional)": "External link (optional)",
-
-  // Detalle de tarea: columna derecha sin «(opcional)»
-  "Asignada a": "Assigned to",
-
   // Duplicar una tarea que se repite: la copia no conserva la repetición
   "Copia creada sin repetición: la repetición no se copia": "Copy created without repeat: repeat settings are not copied",
 
@@ -385,4 +370,8 @@ export const board: Record<string, string> = {
   // Sin red al adjuntar el documento del visor o al descargar los adjuntos en ZIP (en vez del texto del navegador)
   "Sin conexión: no se ha podido descargar el documento.": "Offline: the document could not be downloaded.",
   "Sin conexión: no se han podido descargar los adjuntos.": "Offline: the attachments could not be downloaded.",
+  // Un solo nombre para el responsable de una tarea (tarjeta: descripción accesible y título del avatar)
+  "Responsable: {name}": "Assignee: {name}",
+  // Buscador de «Tareas archivadas» (nombre accesible)
+  "Buscar en las archivadas": "Search archived tasks",
 };

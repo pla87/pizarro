@@ -142,9 +142,11 @@ export const proyectos: Record<string, string> = {
   "Proyecto en blanco": "Blank project",
   "Columnas por defecto, sin tarjetas.": "Default columns, no cards.",
 
-  // Nuevo proyecto: «Empezar con» (plantillas y ejemplos)
+  // Nuevo proyecto: «Empezar con» (plantillas de serie, con o sin tarjetas de ejemplo, y propias). También en «Aplicar plantilla».
   "Empezar con": "Start with",
-  "Ejemplos": "Examples",
+  "Plantillas de serie": "Built-in templates",
+  "Plantillas propias": "Custom templates",
+  "Con tarjetas de ejemplo": "With sample cards",
   "{description} Con tarjetas de muestra que puedes borrar.": "{description} With sample cards you can delete.",
   "La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.": "The template's structure (columns, types, labels and fields), no cards.",
   // Exportar: el tamaño estimado cuenta también los datos, no solo los adjuntos.
@@ -180,4 +182,6 @@ export const proyectos: Record<string, string> = {
   "Pásale este enlace a {name} para que elija su contraseña; caduca en 72 horas y sirve una sola vez:": "Give {name} this link to choose their password; it expires in 72 hours and can only be used once:",
   "Enlace al tablero": "Link to the board",
   "Enlace de invitación": "Invitation link",
+  // Nuevo proyecto: plantilla de serie sin descripción y con tarjetas de ejemplo
+  "La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.": "The template's structure (columns, types, labels and fields), with sample cards you can delete.",
 };

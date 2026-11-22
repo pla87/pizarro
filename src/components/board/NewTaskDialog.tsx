@@ -11,7 +11,7 @@ import type { BoardTask, ProjectFormData } from "@/lib/types";
 import { clampTitle } from "@/lib/title-clamp";
 import { cn } from "../ui/cn";
 import { overTitleLimit, TITLE_INPUT_LIMIT, TITLE_INVALID_CLASSES, TitleLimitHint } from "./TitleLimit";
-import { useT, useIntlLocale } from "@/i18n/client";
+import { useLocale, useT, useIntlLocale } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
@@ -95,6 +95,7 @@ function captureTitle(t: T, locale: string): string {
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, initialTitle, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
   const t = useT();
+  const uiLocale = useLocale();
   const sc = useShortcut();
   const locale = useIntlLocale();
   const uid = useId();
@@ -486,7 +487,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const importForm = async (text: string): Promise<boolean> => {
     // Con la zona horaria de la aplicación, como el resto de importaciones: la fecha límite de Trello (un instante UTC)
     // cae en su día de aquí, no en el de UTC.
-    const read = parseTasksText(text, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(text, { t, timeZone: appTimeZone(), locale: uiLocale });
     if (read.error) {
       toast(read.error, "error");
       return false;
@@ -527,6 +528,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       const shown = notices.slice(0, 4).join("; ");
       toast(t("Tarea importada, salvo: {list}", { list: notices.length > 4 ? t("{list} y {n} más", { list: shown, n: notices.length - 4 }) : shown }), "error");
     } else toast(t("Tarea importada"));
+    // Fecha límite y de inicio en órdenes distintos (día/mes y mes/día): se avisa para que se revisen.
+    if (read.dateWarning) toast(read.dateWarning, "error");
     return true;
   };
   const importRef = useRef(importForm);
@@ -629,13 +632,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         </div>
         <div>
           <div className="flex items-center justify-between gap-2">
-            <label className="label" htmlFor={`${uid}-desc`}>{t("Descripción (opcional)")}</label>
+            <label className="label" htmlFor={`${uid}-desc`}>{t("Descripción")}</label>
             <DescriptionTools value={description} onClear={() => setDescription("")} className="mb-1" max={MAX_DESCRIPTION} />
           </div>
           <DescriptionField id={`${uid}-desc`} mode={board.editorMode} textareaClassName="input field-sizing-content min-h-14" value={description} onValueChange={setDescription} users={form.users} placeholder={t("Markdown · @persona para avisar")} />
         </div>
         <div>
-          <label className="label" htmlFor={`${uid}-subtask`}>{t("Subtareas (opcional)")}</label>
+          <label className="label" htmlFor={`${uid}-subtask`}>{t("Subtareas")}</label>
           {subtasks.length > 0 && (
             <ul className="mb-1.5 space-y-0.5">
               {subtaskItems.map((s) => (
@@ -678,21 +681,21 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor={`${uid}-deliverable`}>{t("Entregable (opcional)")}</label>
+            <label className="label truncate" htmlFor={`${uid}-deliverable`}>{t("Entregable")}</label>
             <select id={`${uid}-deliverable`} className="input" value={deliverableId} disabled={loading} onChange={(e) => setDeliverableId(e.target.value)}>
               <option value="">{t("Sin entregable")}</option>
               {form.deliverables.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor={`${uid}-assignee`}>{t("Asignada a (opcional)")}</label>
+            <label className="label truncate" htmlFor={`${uid}-assignee`}>{t("Responsable")}</label>
             <select id={`${uid}-assignee`} className="input" value={assigneeId} disabled={loading} onChange={(e) => setAssigneeId(e.target.value)}>
-              <option value="">{t("Sin asignar")}</option>
+              <option value="">{t("Sin responsable")}</option>
               {form.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
             </select>
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite (opcional)")}</label>
+            <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite")}</label>
             <input id={`${uid}-due`} type="date" className="input" value={dueDate} onChange={(e) => changeDue(e.target.value)} />
           </div>
           <div className="col-span-2 min-w-0">
@@ -715,11 +718,11 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
             />
           </div>
           <div className="min-w-0">
-            <div className="label truncate">{t("Color (opcional)")}</div>
+            <div className="label truncate">{t("Color")}</div>
             <ColorPopover value={color} onChange={setColor} />
           </div>
           <div className="min-w-0">
-            <label className="label truncate" htmlFor={`${uid}-link`}>{t("Enlace externo (opcional)")}</label>
+            <label className="label truncate" htmlFor={`${uid}-link`}>{t("Enlace externo")}</label>
             <input
               id={`${uid}-link`}
               className="input"
@@ -736,7 +739,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           </div>
           {form.labels.length > 0 && (
             <div className="col-span-2 min-w-0" role="group" aria-labelledby={`${uid}-labels`}>
-              <div className="label" id={`${uid}-labels`}>{t("Etiquetas (opcional)")}</div>
+              <div className="label" id={`${uid}-labels`}>{t("Etiquetas")}</div>
               <LabelToggles
                 labels={form.labels}
                 selected={labelIds}
@@ -757,7 +760,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         {isReleaseColumn && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={evergreen} onChange={(e) => setEvergreen(e.target.checked)} />
-            {columnRole === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release (evergreen)")}
+            {columnRole === "AI_PLAN" ? t("Siempre en el plan (fija)") : t("Fija en la release")}
           </label>
         )}
         <div>

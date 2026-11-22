@@ -9,6 +9,7 @@ import { getPublicContactEmail } from "@/lib/google-config";
 import { licenseNudgeFor } from "@/lib/license-registry";
 import { buyHref } from "@/lib/product";
 import { getUpdateNotice } from "@/lib/update-check";
+import { getFeedbackStatus } from "@/lib/feedback";
 import { requireUserPage } from "@/lib/session";
 import { AppShell } from "@/components/AppShell";
 import pkg from "../../../package.json";
@@ -17,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireUserPage();
   const isAdmin = user.role === "ADMIN";
   // En paralelo: estas consultas van en cada página.
-  const [projects, unread, backupAlert, updateAvailable, diskLow, licenseNudge] = await Promise.all([
+  const [projects, unread, backupAlert, updateAvailable, diskLow, licenseNudge, feedback] = await Promise.all([
     listVisibleProjects(user),
     // Con tope: la interfaz muestra «99+» a partir de 100, así que no hace falta contar más allá (AppShell).
     unreadCount(user.id, user.role),
@@ -32,6 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     isAdmin
       ? licenseNudgeFor(user).then(async (show) => (show ? buyHref(await getPublicContactEmail().catch(() => ""), user.locale === "EN" ? "en" : "es") : null))
       : null,
+    // «Informar de un error o enviar una sugerencia» (para todos, solo en builds oficiales; nunca falla ni espera a GitHub).
+    getFeedbackStatus().catch(() => null),
   ]);
   const last = (await cookies()).get("tablon_last_project")?.value;
   const lastProjectId = projects.find((p) => p.id === last)?.id ?? null;
@@ -40,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pathProject = isAdmin ? /^\/p\/([^/?#]+)/.exec((await headers()).get("x-pz-path") ?? "")?.[1] : undefined;
   const outside = pathProject && !projects.some((p) => p.id === pathProject) ? await outsideListProject(user, pathProject).catch(() => null) : null;
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} licenseNudge={licenseNudge}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} licenseNudge={licenseNudge} feedback={feedback}>
       {children}
     </AppShell>
   );

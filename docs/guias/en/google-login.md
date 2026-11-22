@@ -43,7 +43,7 @@ In Pizarro, **Administration → Integrations → Sign in with Google** shows "P
 
 ## 5. Data Access: the scopes
 
-Click **Add or remove scopes**, tick `openid`, `email` and `profile` (the basic ones) and save. If you are also going to create Docs, Sheets and Slides, add the Drive scope explained in [its guide](google-docs.md).
+Click **Add or remove scopes**, check `openid`, `email` and `profile` (the basic ones) and save. If you are also going to create Docs, Sheets and Slides, add the Drive scope explained in [its guide](google-docs.md).
 
 ## 6. Create the OAuth client
 

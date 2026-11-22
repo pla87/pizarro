@@ -15,7 +15,7 @@
 //     importación de proyectos (lib/foreign-import/csv.ts), con unos retoques para lo que exporta cada herramienta
 //     (normalizeCsv). La primera línea debe tener una columna de título reconocible; si no, no es un CSV.
 // Lo que no tiene sitio en una tarea (comentarios, colores de las etiquetas, más de un responsable) se avisa sin importarlo.
-import type { T } from "@/i18n/core";
+import type { Locale, T } from "@/i18n/core";
 import { AppError } from "../errors";
 import type { TaskJsonInput } from "../task-json";
 import { foreignPriority, mapHeaders, parseCsv, parseCsvRows } from "./csv";
@@ -37,12 +37,16 @@ interface ForeignTasksRead {
   warnings: string[];
   /** El formato se ha reconocido pero no se puede leer (CSV sin filas, con demasiadas…): ya traducido. */
   error?: string;
+  /** Fechas con barras en los dos órdenes (día/mes y mes/día): el aviso, ya traducido (va también en `warnings`). */
+  dateWarning?: string;
 }
 
 interface ReadOptions {
   t: T;
   /** Zona con la que una fecha con hora (Trello, Asana) pasa a día. */
   timeZone?: string;
+  /** Idioma de quien importa: desempata el orden día/mes de las fechas con barras de un CSV (decideDayOrder). */
+  locale?: Locale;
 }
 
 /** Etiquetas de una lista de nombres u objetos con `name`: limpias y sin repetir (las de más, las corta el importador). */
@@ -507,9 +511,9 @@ function readForeignCsv(raw: string, opts: ReadOptions): ForeignTasksRead | null
   try {
     const rows = parseCsv(s, undefined, FOREIGN_LIMITS.csvRows + 1);
     const norm = normalizeCsv(rows, t);
-    const board = parseCsvRows(norm.rows, { t, timeZone: opts.timeZone });
+    const board = parseCsvRows(norm.rows, { t, timeZone: opts.timeZone, locale: opts.locale });
     const { tasks, warnings } = fromBoard(board, t, { skipArchived: true });
-    return { source, tasks, warnings: [...norm.warnings, ...warnings] };
+    return { source, tasks, warnings: [...norm.warnings, ...warnings], ...(board.dateWarning ? { dateWarning: board.dateWarning } : {}) };
   } catch (e) {
     if (e instanceof AppError) return { source, tasks: [], warnings: [], error: t(e.message) };
     throw e;

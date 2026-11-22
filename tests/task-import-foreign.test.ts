@@ -161,6 +161,21 @@ describe("CSV", () => {
     }
   });
 
+  test("CSV de Jira y de Asana: un solo orden día/mes para las fechas del archivo, con el idioma de quien importa como desempate", () => {
+    const jira = "Summary,Issue key,Status,Due date\nUno,WEB-1,To Do,03/04/2026\nDos,WEB-2,To Do,03/21/2026\n";
+    for (const locale of ["es", "en"] as const) {
+      const r = parseTasksText(jira, { t, locale });
+      assert.equal(r.source, "CSV de Jira");
+      assert.deepEqual(r.tasks.map((x) => x.task.dueDate), ["2026-03-04", "2026-03-21"], locale);
+    }
+    const asana = "Task ID,Name,Section/Column,Assignee Email,Due Date\n1,Uno,Backlog,,03/04/2026\n2,Dos,Backlog,,05/06/2026\n";
+    assert.deepEqual(parseTasksText(asana, { t, locale: "en" }).tasks.map((x) => x.task.dueDate), ["2026-03-04", "2026-05-06"]);
+    assert.deepEqual(parseTasksText(asana, { t, locale: "es" }).tasks.map((x) => x.task.dueDate), ["2026-04-03", "2026-06-05"]);
+    const mixed = parseTasksText(asana.replace("05/06/2026", "25/06/2026").replace("03/04/2026", "06/25/2026"), { t: en, locale: "en" });
+    assert.equal(mixed.source, "Asana CSV");
+    assert.ok(mixed.dateWarning && mixed.warnings.includes(mixed.dateWarning));
+  });
+
   test("Asana, ClickUp, Trello, Linear, GitHub Projects y Planner: cada uno con su nombre y sus columnas", () => {
     const asana = read("Task ID,Created At,Completed At,Name,Section/Column,Assignee,Assignee Email,Due Date,Tags,Notes,Parent task\n1,2026-11-01,,Diseñar,Por hacer,Ana,ana@example.com,2027-01-20,web,Notas,\n");
     assert.equal(asana.source, "CSV de Asana");

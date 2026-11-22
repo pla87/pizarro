@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Check, EyeOff, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
+import { CalendarClock, Check, EyeOff, Link2, Loader2, MailPlus, Pencil, Plus, Trash2, Users as UsersIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,7 +35,7 @@ import type { ProjectSettingsTab } from "./project-settings-tabs";
 import { KindsManager, type KindRow } from "@/components/kinds/KindsManager";
 import { setGeneralKindEnabled } from "@/actions/project-kinds";
 import { useActionTransition } from "@/components/useActionTransition";
-import { inviteToProject, resendInvite } from "@/actions/users";
+import { generateInviteLink, inviteToProject, resendInvite } from "@/actions/users";
 import { copyText } from "@/components/ui/clipboard";
 import { actionThrowResult } from "@/lib/stale-action";
 
@@ -333,8 +333,6 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         </>}
       />
 
-      <Section title="Tarjetas archivadas" description="Se consultan y recuperan desde el botón «Archivadas» del tablero." />
-
       {canManage && applyTemplate && (
         <Section
           id="apply-template"
@@ -458,8 +456,10 @@ type MemberRow = {
 /**
  * Usuarios del proyecto. Privado: cualquier miembro añade, quita o sale (el último no puede salir). Equipo: lo gestionan
  * los administradores, que también pueden asignarse entre ellos. Con `canInvite` (administradores), «Invitar por email»
- * da de alta a alguien sin cuenta y, con `canResend` (hay email), «Reenviar invitación» a quien aún no ha entrado. Tras
- * añadir, invitar o reenviar queda a la vista el enlace para pasárselo («Copiar enlace»).
+ * da de alta a alguien sin cuenta y, a quien aún no ha entrado, «Reenviar invitación» con `canResend` (hay email) o, sin
+ * email, «Generar enlace de invitación nuevo» (un enlace nuevo que no se envía; el anterior deja de valer, así que pide
+ * confirmación). Tras añadir, invitar, reenviar o generar el
+ * enlace queda a la vista para pasárselo («Copiar enlace»).
  */
 function MemberManager({ projectId, currentUserId, members, users, isPrivate, canInvite = false, canResend = false }: {
   projectId: string;
@@ -513,6 +513,20 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       toast(t("Invitación enviada"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
     });
+  const freshLink = async (m: MemberRow) => {
+    // El enlace que ya se le pasó deja de valer: no se hace sin confirmarlo (antes, «Copiar…» parecía inofensivo).
+    if (!(await confirm({
+      title: t("Generar enlace de invitación nuevo"),
+      message: t("Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.", { name: m.name }),
+      confirmLabel: t("Generar enlace nuevo"),
+    }))) return;
+    start(async () => {
+      const res = await generateInviteLink(m.id);
+      if (!res.ok) return toast(res.error, "error");
+      toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
+    });
+  };
   const activeCount = members.filter((m) => m.active).length;
   return (
     <div className="space-y-3">
@@ -542,6 +556,18 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   onClick={() => resend(m)}
                 >
                   <MailPlus size={16} />
+                </button>
+              )}
+              {canInvite && !canResend && m.invitePending && m.active && (
+                <button
+                  type="button"
+                  className="btn-icon shrink-0"
+                  disabled={pending}
+                  aria-label={t("Generar enlace de invitación nuevo para {name}", { name: m.name })}
+                  title={t("Genera un enlace de invitación nuevo; el anterior deja de valer")}
+                  onClick={() => void freshLink(m)}
+                >
+                  <Link2 size={16} />
                 </button>
               )}
               <button
@@ -636,7 +662,7 @@ function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () =
         <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
       </div>
       <div className="flex gap-2">
-        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" />
+        <input className="input min-w-0 flex-1 font-mono text-xs" value={shared.link} readOnly onFocus={(e) => e.currentTarget.select()} aria-label={shared.kind === "board" ? t("Enlace al tablero") : t("Enlace de invitación")} data-testid="member-link" data-pz-no-capture="" />
         <button type="button" className="btn-secondary shrink-0" onClick={async () => ((await copyText(shared.link)) ? toast(t("Enlace copiado")) : toast(t("No se pudo copiar"), "error"))}>{t("Copiar enlace")}</button>
       </div>
     </div>

@@ -45,7 +45,7 @@ export default async function UnsubscribePage({ params }: { params: Promise<{ to
   }
   const report = target.kind === "report";
   const again = report
-    ? t("Quien configuró el informe puede volver a activarlo en los ajustes del proyecto.")
+    ? t("Nadie más podrá volver a enviártelo: solo tú puedes reactivarlo, en los ajustes del proyecto (si tienes cuenta en Pizarro).")
     : target.kind === "digest"
       ? t("Puedes volver a activarlo en «Mi perfil → Avisos».")
       : t("Los avisos seguirán apareciendo en la campana de Pizarro, y puedes volver a activarlos en «Mi perfil → Avisos».");

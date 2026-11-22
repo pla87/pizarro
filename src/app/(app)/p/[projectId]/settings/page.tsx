@@ -19,7 +19,7 @@ import { ProjectSettings } from "./ProjectSettings";
 import { StorageSection } from "./StorageSection";
 import { resolveProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
-import { reportRecipientPeople, reportRecipientView } from "@/lib/report-recipient";
+import { reportRecipientPeople, reportRecipientView, reportUnsubscribedView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
@@ -91,13 +91,14 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       ? db.task.groupBy({ by: ["deliverableId"], where: { deliverableId: { in: deliverableIds }, archivedAt: null }, _count: { _all: true } })
       : Promise.resolve([]),
     canManage ? db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true, role: true } }) : Promise.resolve([]),
-    db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true } }),
+    db.reportSchedule.findUnique({ where: { projectId: project.id }, select: { enabled: true, recipient: true, weekday: true, hour: true, unsubscribedEmail: true, unsubscribedAt: true } }),
     db.user.findUnique({ where: { id: user.id }, select: { editorMode: true } }),
     showStorage ? projectStorage(project.id) : Promise.resolve(null),
     showStorage ? largestAttachments(project.id, 20) : Promise.resolve(null),
     tab === "tablero" && canManage ? undoableTemplateChange(project.id) : Promise.resolve(null),
     tab === "informes" ? reportRecipientPeople(project.id) : Promise.resolve([]),
   ]);
+  const unsubscribed = tab === "informes" && schedule ? await reportUnsubscribedView(schedule, reportPeople, user) : null;
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
   const kindTasks = new Map(kindUsage.map((g) => [g.kindId, g._count._all]));
@@ -163,6 +164,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
             initial={schedule
               ? { enabled: schedule.enabled, weekday: schedule.weekday, hour: schedule.hour, recipient: reportRecipientView(schedule.recipient, reportPeople, isAdmin) }
               : { enabled: false, recipient: null, weekday: 1, hour: 8 }}
+            unsubscribed={unsubscribed}
             people={reportPeople.map((p) => ({ id: p.id, name: p.name }))}
             currentUserId={user.id}
             emailAvailable={emailEnabled()}

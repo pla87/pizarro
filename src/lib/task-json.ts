@@ -59,8 +59,9 @@
 // Ctrl+V sobre una tarea abierta (o en el tablero) es más estricto (strictJsonFormat): solo si el portapapeles es
 // exactamente un objeto JSON con su marcador `format`, sin nada alrededor.
 
-import { esT, type T } from "@/i18n/shared";
+import { esT, type Locale, type T } from "@/i18n/shared";
 import { readForeignTasks } from "./foreign-import/tasks";
+import { decideDayOrder, mixedDayOrderWarning, slashDayMonth, type DayOrder } from "./foreign-import/text";
 import { GOOGLE_FILE_KINDS, type GoogleFileKind } from "./google-files";
 import { RECURRENCES, type RecurrenceRule } from "./recurrence-date";
 import { TASK_PRIORITIES, type TaskFieldKey, type TaskPriorityValue } from "./task-fields";
@@ -272,12 +273,12 @@ function pick(o: Record<string, unknown>, names: string[]): unknown {
 }
 
 /**
- * «2026-12-01», «2026-12-01T10:00:00Z» o «01/12/2026» → «2026-12-01»; `undefined` si no se entiende. Con barras, el día
- * va primero salvo que el segundo número pase de 12 y el primero no («12/21/2026», como se escribe en EE. UU.): la misma
- * regla que los CSV (foreign-import/text.ts). Lo ambiguo («03/04/2026») sigue siendo día/mes. Con año de dos cifras
- * («21/12/26»), del 2000 en adelante, también como en los CSV.
+ * «2026-12-01», «2026-12-01T10:00:00Z» o «01/12/2026» → «2026-12-01»; `undefined` si no se entiende. Con barras, en el
+ * orden `order` (día/mes por defecto), que parseTasksText decide una vez para todo el texto (decideDayOrder, la misma regla
+ * que los CSV); si en ese orden el mes pasa de 12, al revés («12/21/2026» con día/mes es 21 de diciembre). Con año de dos
+ * cifras («21/12/26»), del 2000 en adelante, también como en los CSV.
  */
-export function parseDayLoose(v: unknown): string | null | undefined {
+export function parseDayLoose(v: unknown, order: DayOrder = "dmy"): string | null | undefined {
   if (v === null) return null;
   if (typeof v !== "string") return undefined;
   const s = v.trim();
@@ -286,8 +287,9 @@ export function parseDayLoose(v: unknown): string | null | undefined {
   let y: string, mo: string, d: string;
   if (m) [, y, mo, d] = m as unknown as [string, string, string, string];
   else if ((m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
-    [, d, mo, y] = m as unknown as [string, string, string, string];
-    if (+mo > 12 && +d <= 12) [d, mo] = [mo, d];
+    const [, a, b, year] = m as unknown as [string, string, string, string];
+    const [month, day] = slashDayMonth(+a, +b, order);
+    [mo, d, y] = [String(month), String(day), year];
     // Año con dos cifras («21/12/26»): 2026, como en los CSV (parseDay).
     if (y.length === 2) y = `20${y}`;
   } else return undefined;
@@ -514,7 +516,7 @@ export function parseTaskJson(raw: string): TaskJsonParse {
     if (data.length !== 1) return marked ? { kind: "invalid" } : { kind: "none" };
     data = data[0];
   }
-  return parseTaskValue(data);
+  return parseTaskValue(data, undefined, decideDayOrder(rawDates(data)).order);
 }
 
 /** Proyecto de un enlace de Pizarro («https://…/p/ID?task=…»), para saber de qué proyecto viene una tarea. */
@@ -537,12 +539,30 @@ function infoOf(v: unknown): TaskJsonInput["info"] | undefined {
  * Lee un valor ya interpretado como JSON (un objeto) como tarea; misma tolerancia y mismos resultados que parseTaskJson.
  * `fallbackProjectId`: el proyecto del envoltorio «pizarro.tasks», para las tareas que no traen el suyo en `info`.
  */
-function parseTaskValue(data: unknown, fallbackProjectId?: string): TaskJsonParse {
-  if (!isObject(data)) return { kind: "none" };
-  // { "task": { … } } sin nada más reconocible fuera: se lee lo de dentro.
+/** { "task": { … } } sin nada más reconocible fuera: lo de dentro; si no, el propio objeto. */
+function taskObject(data: Record<string, unknown>): Record<string, unknown> {
   const inner = pick(data, ["task", "tarea"]);
-  if (isObject(inner) && pick(data, KEY_ALIASES.title) === undefined) data = inner;
-  const obj = data as Record<string, unknown>;
+  return isObject(inner) && pick(data, KEY_ALIASES.title) === undefined ? inner : data;
+}
+
+/** Fechas (límite y de inicio) de una tarea sin leer, tal como vienen: para decidir el orden día/mes de todo el texto. */
+function rawDates(data: unknown): unknown[] {
+  if (!isObject(data)) return [];
+  const out: unknown[] = [];
+  const seen = new Set<TaskJsonField>();
+  for (const [key, value] of Object.entries(taskObject(data))) {
+    const field = FIELD_OF_KEY.get(foldKey(key));
+    if ((field === "dueDate" || field === "startDate") && !seen.has(field)) {
+      seen.add(field);
+      out.push(value);
+    }
+  }
+  return out;
+}
+
+function parseTaskValue(data: unknown, fallbackProjectId?: string, order: DayOrder = "dmy"): TaskJsonParse {
+  if (!isObject(data)) return { kind: "none" };
+  const obj = taskObject(data);
   const format = pick(obj, ["format", "formato"]);
   const hasFormat = typeof format === "string" && format.trim().toLowerCase() === TASK_JSON_FORMAT;
   // Otro formato declarado: no es nuestro.
@@ -570,8 +590,8 @@ function parseTaskValue(data: unknown, fallbackProjectId?: string): TaskJsonPars
       case "column": if (value !== null) put("column", named(value)); break;
       case "labels": put("labels", labels(value)); break;
       case "assignee": put("assignee", assignee(value)); break;
-      case "dueDate": put("dueDate", parseDayLoose(value)); break;
-      case "startDate": put("startDate", parseDayLoose(value)); break;
+      case "dueDate": put("dueDate", parseDayLoose(value, order)); break;
+      case "startDate": put("startDate", parseDayLoose(value, order)); break;
       case "priority": put("priority", priority(value)); break;
       case "client": put("client", clearable(value)); break;
       case "cost": put("cost", decimal(value)); break;
@@ -621,10 +641,12 @@ interface TasksTextParse {
   project?: { name?: string; id?: string };
   /** Si viene de otro Kanban (lib/foreign-import/tasks.ts): de dónde («Trello (tablero)», «CSV de Jira»…), ya traducido. */
   source?: string;
-  /** Lo que no se importa de otro Kanban (comentarios, archivadas…), ya traducido. */
+  /** Lo que no se importa de otro Kanban (comentarios, archivadas…) y las fechas en dos formatos, ya traducido. */
   warnings: string[];
   /** El formato de otro Kanban se ha reconocido pero no se puede leer (CSV sin filas…), ya traducido. */
   error?: string;
+  /** Hay fechas con barras en los dos órdenes (día/mes y mes/día): el aviso, ya traducido (va también en `warnings`). */
+  dateWarning?: string;
 }
 
 /** Intentos de buscar el cierre de un `{` o `[` que no se cierra: cada uno recorre el resto del texto. */
@@ -730,16 +752,20 @@ function wrappedTasks(v: Record<string, unknown>): unknown[] | null {
  * tarea, varios objetos seguidos (uno por línea, separados por líneas en blanco o por texto) o bloques ```json … ```.
  * Cada tarea se lee con la misma tolerancia que parseTaskJson. Antes, lo exportado de otros Kanban (Trello, Jira, GitHub,
  * Asana o un CSV con cabecera: lib/foreign-import/tasks.ts), con `source` y sus avisos traducidos con `opts.t` (la zona,
- * para pasar a día una fecha con hora). No lanza.
+ * para pasar a día una fecha con hora). Las fechas con barras se leen todas en el mismo orden, decidido para todo el texto
+ * (decideDayOrder; con todas ambiguas, el de `opts.locale`, el idioma de quien importa); si las hay incompatibles entre sí,
+ * `dateWarning` (también en `warnings`). No lanza.
  */
-export function parseTasksText(raw: string, opts: { t?: T; timeZone?: string } = {}): TasksTextParse {
+export function parseTasksText(raw: string, opts: { t?: T; timeZone?: string; locale?: Locale } = {}): TasksTextParse {
   const out: TasksTextParse = { tasks: [], failed: [], total: 0, tooMany: false, tooLong: false, warnings: [] };
   if (typeof raw !== "string") return out;
   if (raw.length > TASKS_TEXT_MAX_CHARS) return { ...out, tooLong: true };
-  const foreign = readForeignTasks(raw, { t: opts.t ?? esT, timeZone: opts.timeZone });
+  const t = opts.t ?? esT;
+  const foreign = readForeignTasks(raw, { t, timeZone: opts.timeZone, locale: opts.locale });
   if (foreign) {
     out.source = foreign.source;
     out.warnings = foreign.warnings;
+    if (foreign.dateWarning) out.dateWarning = foreign.dateWarning;
     if (foreign.error) out.error = foreign.error;
     out.total = foreign.tasks.length;
     out.tooMany = out.total > TASKS_JSON_MAX;
@@ -765,9 +791,13 @@ export function parseTasksText(raw: string, opts: { t?: T; timeZone?: string } =
   }
   out.total = items.length;
   out.tooMany = out.total > TASKS_JSON_MAX;
-  items.slice(0, TASKS_JSON_MAX).forEach(({ value: item, projectId }, i) => {
+  const read = items.slice(0, TASKS_JSON_MAX);
+  // Un solo orden día/mes para todas las fechas del texto (ver decideDayOrder).
+  const { order, mixed } = decideDayOrder(read.flatMap(({ value }) => rawDates(value)), opts.locale);
+  if (mixed) out.warnings.push((out.dateWarning = mixedDayOrderWarning(t, order)));
+  read.forEach(({ value: item, projectId }, i) => {
     if (item === UNREADABLE) return void out.failed.push({ n: i + 1, reason: "json" });
-    const r = parseTaskValue(item, projectId);
+    const r = parseTaskValue(item, projectId, order);
     if (r.kind === "task") out.tasks.push({ n: i + 1, task: r.task, problems: r.problems });
     else out.failed.push({ n: i + 1, reason: r.kind === "invalid" ? "empty" : "notTask" });
   });

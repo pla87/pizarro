@@ -1,6 +1,69 @@
 {
   "versions": [
     {
+      "version": "1.65.0",
+      "date": "2026-11-22",
+      "releasedAt": "2026-11-22T13:35:41+01:00",
+      "summary": "Seis plantillas de serie con tarjetas de ejemplo, botón para informar de un error o enviar una sugerencia con captura, avisos por email en una sola tarjeta, «Responsable» en todas partes, usuarios sin tope por defecto, fechas al importar decididas por fichero, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Botón para informar de un error o enviar una sugerencia junto a «Cerrar sesión», con captura de la pantalla (sin el diálogo ni los códigos secretos) y envío privado por email; mientras Pizarro no tenga dirección para recibirlos, abre el formulario de GitHub. Atenuado si la instalación no tiene la última versión.",
+          "Seis plantillas de serie (Vibecoding, Trabajo y clientes, Casa y familia, Eventos y viajes, Estudios y aprendizaje, Curso o charla) con la casilla «Con tarjetas de ejemplo» en «Nuevo proyecto»; Curso o charla tiene la columna «Publicado».",
+          "Sin email configurado, «Generar enlace de invitación nuevo» para quien aún no ha entrado (pide confirmación)."
+        ],
+        "mejoras": [
+          "Mi perfil → Avisos: todos los avisos por email en una sola tarjeta con un solo «Guardar»; en las cuentas nuevas, los cambios de fecha y «Esperando» vienen marcados.",
+          "La baja del informe semanal se recuerda: quien lo configuró recibe un aviso y nadie salvo la propia persona puede volver a activárselo.",
+          "«Responsable» en todas partes, sin «(opcional)» en Nueva tarea, sin la sección vacía de archivadas en los ajustes y «Restaurar» en vez de «Recuperar».",
+          "Usuarios sin tope por defecto (MAX_USERS es opcional, con una recomendación de memoria en la documentación).",
+          "Al importar, día/mes o mes/día se decide para todo el fichero; las imágenes que llegan sin tipo se reconocen por su extensión.",
+          "El contador de avisos muestra siempre la cifra real; la vista Lista y la sesión cuestan menos al servidor.",
+          "Calendario en tableta: deslizar ya no mueve fechas sin querer (para mover, mantener pulsada la franja); mejor teclado y textos en hebreo o árabe."
+        ],
+        "correcciones": [
+          "«Descartar cambios» tiene la misma altura que el resto de botones del pie.",
+          "Papelera de Documentación en el móvil, contraste de la prioridad «Alta» y de los PDF, separador de miles en el informe PDF y foco tras «Cargar más» en Avisos.",
+          "Inglés americano en plantillas, ejemplos y guías («check» en vez de «tick»), y nombres coherentes de plantillas «de serie» y «propias».",
+          "Al volver a una versión anterior ya no reaparecen las plantillas retiradas; dos arranques a la vez ya no dejan un error en el log."
+        ],
+        "tecnicos": [
+          "Al actualizar, las plantillas de serie antiguas sin modificar se retiran y las modificadas quedan como propias; los proyectos no cambian.",
+          "Ruta /api/feedback con límites en el mapa de seguridad y captura con tope de tamaño y dimensiones (modern-screenshot cargado al pulsar).",
+          "Retirados el script db:generate, la nota de JWT_SECRET y docs/IDEAS.md; suites de «Aplicar plantilla» unidas y tablero-e2e/pegar-e2e por tema."
+        ]
+      },
+      "en": {
+        "summary": "Six built-in templates with example cards, a button to report a bug or send a suggestion with a screenshot, email notifications in a single card, “Assignee” everywhere, no user limit by default, import dates decided per file, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Button to report a bug or send a suggestion next to “Sign out”, with a screenshot of the page (without the dialog or secret codes) sent privately by email; until Pizarro has an address to receive them, it opens the GitHub form. Grayed out if the installation isn’t on the latest version.",
+            "Six built-in templates (Vibecoding, Work and clients, Home and family, Events and travel, Study and learning, Course or talk) with an “Include example cards” checkbox in “New project”; Course or talk has a “Published” column.",
+            "Without email set up, “Generate new invitation link” for people who haven’t signed in yet (asks for confirmation)."
+          ],
+          "mejoras": [
+            "My profile → Notifications: all email notifications in one card with a single “Save”; new accounts get due-date and “Waiting” emails turned on.",
+            "Weekly report unsubscribes are remembered: whoever set it up is notified and only the person themselves can turn it back on.",
+            "“Assignee” everywhere, no “(optional)” in New task, no empty archived section in settings, and “Restore” instead of “Recover”.",
+            "No user limit by default (MAX_USERS is optional, with a memory recommendation in the docs).",
+            "When importing, day/month or month/day is decided for the whole file; images that arrive without a type are recognized by their extension.",
+            "The notification counter always shows the real number; the List view and the session cost the server less.",
+            "Calendar on tablets: swiping no longer moves dates by accident (to move one, press and hold the band); better keyboard support and Hebrew or Arabic text."
+          ],
+          "correcciones": [
+            "“Discard changes” is the same height as the other footer buttons.",
+            "Documentation trash on mobile, contrast of “High” priority and in PDFs, thousands separators in the PDF report and focus after “Load more” in Notifications.",
+            "American English in templates, examples and guides, and consistent names for “built-in” and “custom” templates.",
+            "Going back to an older version no longer brings back retired templates; two startups at once no longer log an error."
+          ],
+          "tecnicos": [
+            "On update, unmodified old built-in templates are retired and modified ones become custom; projects don’t change.",
+            "Route /api/feedback with limits in the security map and a screenshot capped in size and dimensions (modern-screenshot loaded on demand).",
+            "Removed the db:generate script, the JWT_SECRET note and docs/IDEAS.md; “Apply template” suites merged and tablero-e2e/pegar-e2e named by topic."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.64.0",
       "date": "2026-11-21",
       "releasedAt": "2026-11-21T23:08:42+01:00",

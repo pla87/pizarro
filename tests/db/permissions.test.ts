@@ -243,12 +243,16 @@ describe("usuario desactivado y sin sesión", () => {
 });
 
 describe("crear y cambiar la visibilidad de proyectos", () => {
-  test("un miembro no admin solo crea proyectos privados (y sin plantilla)", async () => {
+  test("un miembro no admin solo crea proyectos privados (y sin plantillas propias; las de serie, sí)", async () => {
     const u = await makeUser();
     await loginAs(u);
     expectFail(await createProject("Equipo"), FORBIDDEN);
     expectFail(await createProject("Equipo 2", { isPrivate: false }), FORBIDDEN);
-    expectFail(await createProject("Con plantilla", { isPrivate: true, templateId: "x" }), FORBIDDEN);
+    const own = await db.projectTemplate.create({ data: { name: "Propia permisos", columns: [{ name: "Por hacer", role: "NONE", isDone: false }], position: 98_000 } });
+    expectFail(await createProject("Con plantilla", { isPrivate: true, templateId: own.id }), FORBIDDEN);
+    const builtin = await db.projectTemplate.create({ data: { name: "De serie permisos", builtinKey: "permisos-prueba", columns: [{ name: "Por hacer", role: "NONE", isDone: false }], position: 98_001 } });
+    expectOk(await createProject("Con la de serie", { isPrivate: true, templateId: builtin.id }));
+    await db.projectTemplate.deleteMany({ where: { id: { in: [own.id, builtin.id] } } });
     const created = expectOk(await createProject("Mi privado", { isPrivate: true }));
     const row = await db.project.findUniqueOrThrow({ where: { id: created.id }, include: { members: true } });
     assert.equal(row.isPrivate, true);

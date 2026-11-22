@@ -1,16 +1,17 @@
 "use client";
 
-import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Mail, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
+import { AtSign, Bell, CalendarClock, Check, CheckCheck, FolderInput, Mail, MailX, MessageCircle, MessageSquare, Reply, Send, UserPlus, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { markAllNotificationsRead, markNotificationRead } from "@/actions/notifications";
 import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
-import { assignedBatchCount, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "@/lib/notification-text";
-import { announceUnreadChange } from "@/lib/unread-core";
+import { assignedBatchCount, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
+import { announceUnreadCount, latestOnly, restoreUnread } from "@/lib/unread-core";
+import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -25,7 +26,7 @@ interface Item {
   viaTelegram?: boolean;
   actor: { id: string; name: string } | null;
   task: { id: string; title: string; projectId: string; projectName: string } | null;
-  /** Aviso de un proyecto (PROJECT_TO_TEAM): lleva al proyecto. */
+  /** Aviso de un proyecto (PROJECT_TO_TEAM, REPORT_UNSUBSCRIBED): lleva al proyecto o a sus ajustes (projectNoticePath). */
   project?: { id: string; name: string } | null;
 }
 
@@ -37,6 +38,7 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
   REPLY: Reply,
   WAITING: Hourglass,
   PROJECT_TO_TEAM: FolderInput,
+  REPORT_UNSUBSCRIBED: MailX,
 };
 
 /**
@@ -54,35 +56,108 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
   const safeRefresh = useSafeRefresh();
   const t = useT();
   const locale = useIntlLocale();
-  const [items, setItems] = useState(() => initial.map((i) => (!i.read && readHere.has(i.id) ? { ...i, read: true } : i)));
+  const toast = useToast();
+  const fromServer = (list: Item[]) => list.map((i) => (!i.read && readHere.has(i.id) ? { ...i, read: true } : i));
+  const [items, setItems] = useState(() => fromServer(initial));
   const [pending, start] = useActionTransition();
   const [allRead, setAllRead] = useState(false);
-  // Los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
+  // El recuento que devolvió el servidor al leer aquí (el real, con tope): manda sobre la cuenta hecha con lo cargado.
+  const [counted, setCounted] = useState<number | null>(null);
+  const [gate] = useState(latestOnly);
+  // Si el servidor vuelve a pintar la página (refresco o «Cargar más»), su lista y su número son más recientes que los
+  // de aquí. Sin volver a montar la lista (antes con key={limit}): el foco del teclado no se pierde al cargar más.
+  const [countedFor, setCountedFor] = useState(initial);
+  if (countedFor !== initial) {
+    setCountedFor(initial);
+    setCounted(null);
+    setAllRead(false);
+    setItems(fromServer(initial));
+  }
+  // Tras «Cargar más», el foco va al primer aviso nuevo (si no hubiera, se queda en el botón). Se olvida con la primera
+  // lista que llegue del servidor aunque no haya crecido (avisos borrados entretanto): si no, el foco saltaba al aviso
+  // `from` la próxima vez que creciera.
+  const focusFrom = useRef<number | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from === null) return;
+    focusFrom.current = null;
+    listRef.current?.querySelectorAll<HTMLElement>("[data-notice-open]")[from]?.focus();
+  }, [initial]);
+  // Hasta entonces: los sin leer que no están cargados (según las props del servidor) más los cargados que siguen sin leer aquí.
   const outside = Math.max(0, unreadTotal - initial.filter((i) => !i.read).length);
-  const unread = allRead ? 0 : outside + items.filter((i) => !i.read).length;
-  const many = !allRead && unreadTotal >= unreadCap;
+  const unread = counted ?? (allRead ? 0 : outside + items.filter((i) => !i.read).length);
+  const many = counted !== null ? counted >= unreadCap : !allRead && unreadTotal >= unreadCap;
 
-  // Sin router.refresh(): el contador de la cabecera y la insignia de la app los baja `pz:unread` (AppShell). Al abrir
-  // un aviso, el refresco llegaba ya en la página de destino y pedía otra vez el tablero entero.
+  /** Pone en la lista y en la cabecera (`pz:unread`, AppShell) el número del servidor, si es la respuesta más reciente. */
+  const applyCount = (seq: number, count: number) => {
+    if (!gate.isLatest(seq)) return;
+    setCounted(count);
+    announceUnreadCount(count);
+  };
+
+  // Sin router.refresh(): el contador de la cabecera y la insignia de la app los pone `pz:unread` (AppShell) con el
+  // recuento que devuelve la acción. Al abrir un aviso, el refresco llegaba ya en la página de destino y pedía otra vez el
+  // tablero entero.
   const markRead = (item: Item) => {
     readHere.add(item.id);
     setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: true } : x)));
-    announceUnreadChange({ read: 1 });
+    const seq = gate.next();
+    // Si no se ha guardado (o no ha llegado al servidor), el aviso vuelve a estar sin leer.
+    const revert = () => {
+      readHere.delete(item.id);
+      setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: false } : x)));
+    };
     start(async () => {
-      const res = await markNotificationRead(item.id);
-      // Si no se ha guardado, el aviso vuelve a estar sin leer y el contador, a lo que diga el servidor.
-      if (!res.ok) {
-        readHere.delete(item.id);
-        setItems((list) => list.map((x) => (x.id === item.id ? { ...x, read: false } : x)));
-        safeRefresh();
+      let res: Awaited<ReturnType<typeof markNotificationRead>>;
+      try {
+        res = await markNotificationRead(item.id);
+      } catch (err) {
+        revert();
+        throw err;
       }
+      if (!res.ok) {
+        revert();
+        // Y el contador, a lo que diga el servidor.
+        safeRefresh();
+        return;
+      }
+      applyCount(seq, res.data.unreadCount);
     });
   };
+
+  const markAll = () =>
+    start(async () => {
+      const wasUnread = new Set(items.filter((x) => !x.read).map((x) => x.id));
+      setItems((list) => list.map((x) => ({ ...x, read: true })));
+      setAllRead(true);
+      const seq = gate.next();
+      const undo = () => {
+        setItems((list) => restoreUnread(list, wasUnread, readHere));
+        setAllRead(false);
+      };
+      let res: Awaited<ReturnType<typeof markAllNotificationsRead>>;
+      try {
+        res = await markAllNotificationsRead();
+      } catch (err) {
+        undo();
+        throw err;
+      }
+      if (!res.ok) {
+        undo();
+        toast(res.error, "error");
+        return;
+      }
+      applyCount(seq, res.data.unreadCount);
+      // Aquí sí se refresca (es esta misma página, no el tablero): los que no están cargados también pasan a
+      // leídos, y al volver atrás no sale la lista de antes.
+      safeRefresh();
+    });
 
   const open = (item: Item) => {
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
-    else if (item.project) router.push(`/p/${item.project.id}`);
+    else if (item.project) router.push(projectNoticePath(item.type, item.project.id));
   };
 
   return (
@@ -96,17 +171,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
           <button
             className="btn-secondary ml-auto"
             disabled={pending}
-            onClick={() =>
-              start(async () => {
-                setItems((list) => list.map((x) => ({ ...x, read: true })));
-                setAllRead(true);
-                announceUnreadChange({ all: true });
-                await markAllNotificationsRead();
-                // Aquí sí se refresca (es esta misma página, no el tablero): los que no están cargados también pasan a
-                // leídos, y al volver atrás no sale la lista de antes.
-                safeRefresh();
-              })
-            }
+            onClick={markAll}
           >
             <CheckCheck size={16} /> {t("Marcar todo como leído")}
           </button>
@@ -117,7 +182,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
           <Bell size={32} className="text-slate-300" /> {t("Aquí aparecerán las menciones, asignaciones, cambios de fecha y comentarios que te afecten.")}
         </div>
       ) : (
-        <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
+        <ul ref={listRef} className="card divide-y divide-slate-200 dark:divide-slate-800">
           {items.map((n) => {
             const Icon = ICONS[n.type] ?? AtSign;
             // Asignación en lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).
@@ -125,7 +190,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
             const body = batch ? "" : notificationBody(n.type, n.excerpt, t, locale);
             return (
               <li key={n.id} className={cn("flex items-stretch hover:bg-slate-50 dark:hover:bg-slate-800/50", !n.read && "bg-brand-50/50 dark:bg-brand-500/5")}>
-                <button onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
+                <button data-notice-open onClick={() => open(n)} className="flex min-w-0 flex-1 gap-3 px-4 py-3 text-left">
                   <span className="relative shrink-0">
                     {n.actor ? (
                       <Avatar id={n.actor.id} name={n.actor.name} size="md" />
@@ -144,14 +209,15 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                   <div className="min-w-0 flex-1">
                     <p className="text-sm">
                       {n.project
-                        // Aviso de proyecto: la cuenta borrada va en el extracto y el proyecto en lugar de la tarea.
+                        // Aviso de proyecto: la cuenta borrada (o quien se dio de baja del informe) va en el extracto y el
+                        // proyecto en lugar de la tarea.
                         ? notificationHeadline(n.type, t, { actor: n.excerpt || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }) })
                         : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
-                    {body && <p className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-l-2 border-slate-300 pl-2 dark:border-slate-600")}>{body}</p>}
-                    <p className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                    {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-s-2 border-slate-300 ps-2 dark:border-slate-600")}>{body}</p>}
+                    <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
                       {formatDate(n.createdAt, "dateTimeShort", locale)}
                       {n.viaEmail && <span className="inline-flex items-center gap-0.5" title={t("Enviado por email")}><Mail size={12} /></span>}
                       {n.viaWhatsapp && <span className="inline-flex items-center gap-0.5" title={t("Enviado por WhatsApp")}><MessageCircle size={12} /></span>}
@@ -172,7 +238,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
       )}
       {moreHref && (
         <div className="mt-4 text-center">
-          <Link href={moreHref} scroll={false} className="btn-secondary">{t("Cargar más")}</Link>
+          <Link href={moreHref} scroll={false} onClick={() => (focusFrom.current = items.length)} className="btn-secondary">{t("Cargar más")}</Link>
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@
 // campo a campo (título y descripción por separado); foco tras Escape en la descripción y nombre de los campos del
 // detalle; archivar o borrar desde el detalle sin red, con la descripción a medio escribir: la tarjeta vuelve y, al
 // abrirla otra vez, lo escrito sigue ahí (caza de bugs 52; antes se perdía). Partes:
-// PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador. Misma base y servidor que board-e2e.mjs (por
+// PART=off,down,tabs,gone,title,col,url,lazy,detail,field,a11y,borrador. Misma base y servidor que tablero-e2e.mjs (por
 // HTTP, sin TLS):
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node red-sin-conexion-e2e.mjs
 import * as L from "./qa/lib.mjs";
@@ -547,7 +547,7 @@ if (only.includes("a11y")) try {
   await U.openTask(page, "Con descripción");
   const snap = await U.dialog(page).ariaSnapshot();
   const comboLines = snap.split("\n").filter((l) => l.includes("combobox")).join(" | ");
-  for (const name of ["Columna", "Asignada a", "Repetir", "Entregable"]) {
+  for (const name of ["Columna", "Responsable", "Repetir", "Entregable"]) {
     L.eq(`A11Y: el desplegable «${name}» tiene nombre`, await U.dialog(page).getByRole("combobox", { name, exact: true }).count(), 1);
   }
   L.eq("A11Y: la fecha límite tiene nombre", await U.dialog(page).getByLabel("Fecha límite", { exact: true }).count(), 1);

@@ -17,7 +17,7 @@ import { invitePendingFrom } from "../../src/lib/user-entered";
 
 // El tope de usuarios se lee al cargar el módulo: los demás ficheros ya han creado muchos.
 process.env.MAX_USERS = "100000";
-const { createUser, inviteToProject, resendInvite } = await import("../../src/actions/users");
+const { generateInviteLink, createUser, inviteToProject, resendInvite } = await import("../../src/actions/users");
 
 let outbox = "";
 const prevOutbox = process.env.MAIL_OUTBOX_DIR;
@@ -213,5 +213,75 @@ describe("Reenviar invitación", () => {
     await db.user.update({ where: { id: pending.id }, data: { mustChangePassword: true } });
     await loginAs(member);
     expectFail(await resendInvite(pending.id), FORBIDDEN);
+  });
+});
+
+describe("Generar enlace de invitación nuevo (sin email)", () => {
+  test("emite un enlace nuevo al mismo proyecto, el anterior deja de valer, no se envía y no queda en el registro", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = email("enlace-a-mano");
+    delete process.env.MAIL_OUTBOX_DIR;
+    let first: string;
+    let second: string;
+    try {
+      const invited = expectOk(await inviteToProject(f.project.id, to));
+      assert.equal(invited.emailed, false);
+      first = tokenOf(invited.link);
+      const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+      const res = expectOk(await generateInviteLink(user.id));
+      second = tokenOf(res.link);
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = outbox;
+    }
+    assert.notEqual(second, first);
+    assert.equal(await findUsableToken(first, ["INVITE"]), null, "el enlace anterior ya no vale");
+    const fresh = await findUsableToken(second, ["INVITE"]);
+    assert.ok(fresh, "el nuevo sí");
+    assert.match(JSON.stringify(fresh.data ?? {}), new RegExp(f.project.id), "lleva al mismo proyecto");
+    assert.equal((await mailsTo(to)).length, 0, "no se envía nada");
+    await flushLogs();
+    const log = await db.appLog.findFirst({ where: { action: "users.generateInviteLink", userId: admin.id }, orderBy: { createdAt: "desc" } });
+    assert.match(log?.message ?? "", /Generó un enlace de invitación nuevo para «.+» \(sin enviarlo/);
+    assert.doesNotMatch(JSON.stringify(log ?? {}), new RegExp(second), "el token no queda en el registro");
+  });
+
+  test("solo administradores y solo para quien aún no ha entrado (y está activo)", async () => {
+    const member = await makeUser();
+    const pending = await makeUser();
+    await db.user.update({ where: { id: pending.id }, data: { mustChangePassword: true } });
+    await loginAs(member);
+    expectFail(await generateInviteLink(pending.id), FORBIDDEN);
+    assert.equal(await db.authToken.count({ where: { userId: pending.id, purpose: "INVITE" } }), 0);
+
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const chosen = await makeUser();
+    expectFail(await generateInviteLink(chosen.id), /ya ha entrado alguna vez/);
+    const off = await makeUser({ active: false });
+    await db.user.update({ where: { id: off.id }, data: { mustChangePassword: true } });
+    expectFail(await generateInviteLink(off.id), /desactivada/);
+    expectOk(await generateInviteLink(pending.id));
+    assert.equal(await db.authToken.count({ where: { userId: pending.id, purpose: "INVITE" } }), 1);
+  });
+});
+
+describe("avisos por email de las cuentas nuevas", () => {
+  test("traen marcada de serie la casilla de fechas límite y «Esperando»; las demás, como antes", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const to = email("serie");
+    expectOk(await createUser({ name: "De serie", email: to, role: "MEMBER" }));
+    const f = await makeProject({ members: [] });
+    const invited = email("serie-proyecto");
+    expectOk(await inviteToProject(f.project.id, invited));
+    const prefs = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true };
+    const select = Object.fromEntries(Object.keys(prefs).map((k) => [k, true])) as Record<keyof typeof prefs, true>;
+    for (const address of [to, invited]) {
+      assert.deepEqual(await db.user.findUniqueOrThrow({ where: { email: address }, select }), {
+        notifyEmail: true, notifyAssignedEmail: false, notifyDueEmail: true, notifyCommentEmail: false, dailyDigest: false,
+      }, address);
+    }
   });
 });

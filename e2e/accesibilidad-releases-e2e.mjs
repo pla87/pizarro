@@ -1,13 +1,13 @@
 // Caza de bugs 54: (1) en el histórico de releases la descripción de cada tarea va debajo de su punto (antes, en la
 // misma línea que el título) y una release guardada con el texto antiguo se sigue viendo; el título es un <h2> con el
 // botón dentro (antes, un <h2> dentro de un <button>) y «No se pudo copiar» sale como error; (2) en el móvil, «Archivadas»
-// del menú lateral cierra el menú; (3) en el calendario, el nombre accesible de «Proyectos» y «Persona» incluye lo elegido
+// del menú lateral cierra el menú; (3) en el calendario, el nombre accesible de «Proyectos» y «Responsable» incluye lo elegido
 // (axe: label-content-name-mismatch) y al cerrar «+N más» con Escape o «Cerrar» el foco vuelve al botón que lo abrió;
 // (4) «Aplicar plantilla» ya no pone un paréntesis dentro de otro («Siguiente release (Siguiente salto (genera
 // releases))»); (5) un enlace «otro.md#apartado» llega al apartado del Markdown; (6) borrar va en un menú «⋯»: «Borrar
 // release» y «Borrar adjuntos» del histórico (este, solo con adjuntos) y la papelera de cada documento de la Documentación
 // (con «Descargar»), con teclado y a 390 px; (7) lo buscado se resalta en el histórico de releases (título, datos,
-// adjuntos y texto, sin tildes ni mayúsculas, sin romper el Markdown ni los enlaces). Misma base y servidor que board-e2e.mjs:
+// adjuntos y texto, sin tildes ni mayúsculas, sin romper el Markdown ni los enlaces). Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node accesibilidad-releases-e2e.mjs      # PART=release,menu,cal,plantilla,md,borrar,resaltar
 import fs from "node:fs";
 import os from "node:os";
@@ -118,7 +118,7 @@ if (only.includes("cal")) {
 
   const filters = page.getByRole("group", { name: "Filtros del calendario" });
   L.eq("CAL: «Proyectos» dice el valor elegido", await filters.getByRole("button", { name: "Proyectos: Todos los proyectos" }).count(), 1);
-  L.eq("CAL: «Persona» dice el valor elegido", await filters.getByRole("button", { name: "Persona: Cualquier persona" }).count(), 1);
+  L.eq("CAL: «Responsable» dice el valor elegido", await filters.getByRole("button", { name: "Responsable: Cualquier persona" }).count(), 1);
   await page.evaluate(AXE);
   const axe = await page.evaluate(async () => {
     const r = await window.axe.run(document.querySelector("[role=group]"), { runOnly: { type: "rule", values: ["label-content-name-mismatch", "button-name"] } });
@@ -159,7 +159,7 @@ if (only.includes("cal")) {
 // --- Aplicar plantilla ----------------------------------------------------------------------------------------------------
 if (only.includes("plantilla")) {
   L.scenario("plantilla: el rol de la columna de destino sin paréntesis dentro de paréntesis");
-  // Proyecto privado propio (como plantillas-aplicar-columnas-e2e), con una columna.
+  // Proyecto privado propio (como plantillas-aplicar-e2e), con una columna.
   const PID = "bh54_plantilla";
   await L.q(`DELETE FROM "Project" WHERE id=$1`, [PID]);
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Plantilla bh54',true,$2,999996,NOW())`, [PID, admin.id]);
@@ -172,7 +172,7 @@ if (only.includes("plantilla")) {
   await sleep(300);
   await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
   const dlg = page.getByRole("dialog").filter({ hasText: "Aplicar plantilla" }).first();
-  await dlg.getByRole("radio", { name: /^Equipo de software/ }).check();
+  await dlg.getByRole("radio", { name: /^Vibecoding/ }).check();
   await dlg.getByRole("radio", { name: /^Cambiar a esta plantilla/ }).check();
   await dlg.getByRole("button", { name: "Siguiente" }).click();
   await dlg.locator("[data-step='2']").waitFor({ timeout: 10000 });

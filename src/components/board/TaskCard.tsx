@@ -216,7 +216,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
     task.imageCount > 0 ? (task.imageCount === 1 ? t("1 imagen") : t("{n} imágenes", { n: task.imageCount })) : null,
     task.fileCount > 0 ? (task.fileCount === 1 ? t("1 archivo") : t("{n} archivos", { n: task.fileCount })) : null,
     task.linkUrl ? t("Enlace externo") : null,
-    assignee ? t("Asignada a {name}", { name: assignee.name }) : null,
+    assignee ? t("Responsable: {name}", { name: assignee.name }) : null,
   ].filter(Boolean).join(". ");
 
   // F2: renombrar en la propia tarjeta. Alt+D: fecha límite en un pequeño selector (junto a la tarjeta).
@@ -358,7 +358,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
             }}
           />
         ) : (
-          <p className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
+          <p dir="auto" className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
         )}
         {handle}
       </div>
@@ -481,7 +481,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
             <ExternalLink size={13} />
           </span>
         )}
-        <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Asignada a {name}", { name: assignee.name })} />}</span>
+        <span className="ml-auto">{assignee && <Avatar id={assignee.id} name={assignee.name} title={t("Responsable: {name}", { name: assignee.name })} />}</span>
       </div>
       {dueAnchor && (
         <DueDatePopover

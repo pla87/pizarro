@@ -104,7 +104,7 @@ export async function importTasks(projectId: string, text: string, opts: z.input
     const o = importOptions.parse(opts ?? {});
     await assertProjectAccess(user, pid);
     if (!rateLimit(`import-tasks:${user.id}`, 10, 60_000)) throw new AppError("Demasiadas importaciones seguidas. Espera un momento.");
-    const read = parseTasksText(raw, { t, timeZone: appTimeZone() });
+    const read = parseTasksText(raw, { t, timeZone: appTimeZone(), locale });
     if (read.error) throw new AppError(read.error);
     if (read.tooMany) throw new AppError(t("Hay {n} tareas y se importan como mucho {max} de una vez.", { n: read.total, max: TASKS_JSON_MAX }));
     const r = new TaskJsonResolver(user, pid, t, locale);

@@ -12,7 +12,7 @@ export const herencia: Record<string, string> = {
   "Ahora lo ven los administradores. Ábrelo para darle miembros, añadirlo a tus proyectos o borrarlo.":
     "Admins can see it now. Open it to give it members, add it to your projects or delete it.",
   "Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).":
-    "As an admin, along with mentions you also get notices about private projects that become team projects when an account is deleted (by email and by Telegram or WhatsApp).",
+    "As an admin, along with mentions you also get notifications about private projects that become team projects when an account is deleted (by email and by Telegram or WhatsApp).",
   // Un proyecto de equipo abierto que no está en «Proyectos en los que trabajo».
   "No está en tus proyectos": "Not in your projects",
 };

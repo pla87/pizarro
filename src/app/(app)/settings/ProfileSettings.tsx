@@ -1,11 +1,11 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Bell, Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
+import { Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, moveReleaseTemplate, updateCardStyle, updateNotificationPrefs,
+  changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, moveReleaseTemplate, updateCardStyle,
   updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
@@ -53,13 +53,10 @@ interface Props {
   accent: AccentValue;
   locale: "ES" | "EN";
   notifications: {
-    notifyEmail: boolean;
     emailAvailable: boolean;
-    /** Administrador: con las menciones salen también los avisos de administración. */
-    adminNotices?: boolean;
   };
   google: { enabled: boolean; email: string | null; message: { ok: boolean; text: string } | null };
-  /** Bloque extra bajo «Avisos» (Telegram y WhatsApp, avisos por email de más tipos y resumen diario). */
+  /** Pestaña «Avisos»: la tarjeta «Avisos por email» y la de Telegram y WhatsApp (secciones del servidor). */
   notificationExtras?: React.ReactNode;
   tab: ProfileTab;
   /** `?tab=` pedido que no es ninguna pestaña (se abre «Cuenta» y se avisa). */
@@ -124,12 +121,7 @@ export function ProfileSettings(props: Props) {
         </section>
       )}
 
-      {props.tab === "avisos" && (
-        <>
-        <NotificationSection prefs={props.notifications} />
-        {props.notificationExtras}
-        </>
-      )}
+      {props.tab === "avisos" && props.notificationExtras}
 
       {props.tab === "cuenta" && (
         <>
@@ -331,43 +323,6 @@ function GoogleSection({ google }: { google: Props["google"] }) {
           <a href="/api/google/connect" className="btn-primary">{t("Conectar con Google")}</a>
         )}
       </div>
-    </section>
-  );
-}
-
-function NotificationSection({ prefs }: { prefs: Props["notifications"] }) {
-  const t = useT();
-  const toast = useToast();
-  const [pending, start] = useActionTransition();
-  const [notifyEmail, setNotifyEmail] = useState(prefs.notifyEmail);
-  const [saved, setSaved] = useState(prefs.notifyEmail);
-  return (
-    <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Avisos de menciones")}</h2>
-      <p className="mt-0.5 text-sm text-slate-500">{t("Siempre salen en la campana de avisos; además, puedes recibirlas por email:")}</p>
-      {prefs.adminNotices && (
-        <p className="mt-1 text-sm text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</p>
-      )}
-      <form
-        className="mt-4 space-y-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          start(async () => {
-            const res = await updateNotificationPrefs({ notifyEmail });
-            toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
-            if (res.ok) setSaved(notifyEmail);
-          });
-        }}
-      >
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />
-          <span>
-            Email
-            {!prefs.emailAvailable && <span className="block text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</span>}
-          </span>
-        </label>
-        <button className="btn-primary" disabled={pending || notifyEmail === saved}>{t("Guardar avisos")}</button>
-      </form>
     </section>
   );
 }

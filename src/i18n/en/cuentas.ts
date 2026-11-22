@@ -328,7 +328,7 @@ export const cuentas: Record<string, string> = {
   "{name} te ha añadido al proyecto «{project}»": "{name} has added you to the “{project}” project",
   "{name} te ha añadido al proyecto «{project}» de Pizarro. Ya puedes ver su tablero.": "{name} has added you to the “{project}” project in Pizarro. You can now see its board.",
   "Abrir el tablero": "Open the board",
-  "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notices you get by email in “My profile → Notifications”.",
+  "Puedes elegir qué avisos te llegan por email en «Mi perfil → Avisos».": "You can choose which notifications you get by email in “My profile → Notifications”.",
   "Ya hay una cuenta con ese email: añádela con «Añadir miembro…».": "There is already an account with that email: add it with “Add member…”.",
   // Editar un usuario: otro administrador lo ha cambiado mientras tanto
   "Los datos han cambiado mientras tanto: recarga la página.": "The data has changed in the meantime: reload the page.",
@@ -339,4 +339,15 @@ export const cuentas: Record<string, string> = {
   "Hay una cuenta desactivada con ese email: actívala en Administración → Usuarios.": "There is a deactivated account with that email: activate it in Administration → Users.",
   // Nombres reservados (imitan a Pizarro o a su administración)
   "Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.": "That name is reserved because it could be mistaken for a message from Pizarro. Choose another one.",
+  // «Generar enlace de invitación nuevo» (sin email configurado; el anterior deja de valer, se confirma)
+  "Generar enlace de invitación nuevo": "Generate new invitation link",
+  "Generar enlace de invitación nuevo para {name}": "Generate a new invitation link for {name}",
+  "Enlace de invitación nuevo: el anterior ya no vale": "New invitation link: the previous one no longer works",
+  "Enlace de invitación de {name}": "Invitation link for {name}",
+  "El enlace anterior ya no vale. Este no volverá a mostrarse: si lo pierdes, genera otro.": "The previous link no longer works. This one won't be shown again: if you lose it, generate another one.",
+  "La cuenta está desactivada: actívala antes de generar otro enlace de invitación.": "The account is deactivated: activate it before generating another invitation link.",
+  // «Generar enlace de invitación nuevo»: su título y la confirmación (el anterior deja de valer)
+  "Genera un enlace de invitación nuevo; el anterior deja de valer": "Generates a new invitation link; the previous one stops working",
+  "Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.": "A new invitation link will be generated for {name}. The one you already gave them will stop working.",
+  "Generar enlace nuevo": "Generate new link",
 };

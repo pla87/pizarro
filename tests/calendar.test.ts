@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
+import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, outsideGrid, pendingBandDrag, visibleBands, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 import { midnightStep, msUntilNextDay } from "../src/lib/dates";
 import { readFileSync } from "node:fs";
@@ -148,6 +148,71 @@ test("parsePersonParam: enlaces antiguos (me, none, un id)", () => {
   assert.deepEqual(parsePersonParam("abc123", "me1"), ["abc123"]);
   // «me» y el id propio se funden en una sola entrada.
   assert.deepEqual(parsePersonParam("me,me1,none,unassigned", "me1"), ["me1", "unassigned"]);
+});
+
+test("pendingBandDrag: con el ratón arrastra al moverse; con el dedo, solo tras la pulsación larga (si no, deja desplazar)", () => {
+  assert.equal(pendingBandDrag("mouse", true, 2), "wait");
+  assert.equal(pendingBandDrag("mouse", true, 6), "drag");
+  // Deslizar el dedo para bajar por el mes, empezando sobre una banda: no la coge.
+  assert.equal(pendingBandDrag("touch", false, 2), "wait");
+  assert.equal(pendingBandDrag("touch", false, 30), "abort");
+  assert.equal(pendingBandDrag("pen", false, 30), "abort");
+  // Mantenida pulsada sin moverse: ya se arrastra.
+  assert.equal(pendingBandDrag("touch", true, 30), "drag");
+  assert.equal(pendingBandDrag("pen", true, 6), "drag");
+});
+
+test("Calendario: las bandas dejan desplazar la página con el dedo y sus grupos tienen rol (si no, se descarta su nombre)", () => {
+  const src = readFileSync("src/components/calendar/CalendarView.tsx", "utf8");
+  // Sin comentarios: reescribir uno no debe romper la prueba.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!code.includes("touch-none"), "touch-pan-y en las bandas, no touch-none");
+  assert.equal(code.match(/cursor-grab touch-pan-y/g)?.length, 2, "las dos clases de banda (entregables y rangos)");
+  assert.match(src, /role="group" aria-label=\{t\("Entregables"\)\}/);
+  assert.match(src, /role="group" aria-label=\{t\("Tareas con rango de fechas"\)\}/);
+});
+
+test("Calendario: el touchmove que bloquea el desplazamiento está puesto antes del toque (iOS Safari), no a mitad del gesto", () => {
+  const code = readFileSync("src/components/calendar/CalendarView.tsx", "utf8").replace(/^\s*\/\/.*$/gm, "");
+  assert.match(code, /addEventListener\("touchmove", \w+, \{ passive: false \}\)/);
+  assert.doesNotMatch(code, /window\.addEventListener\("touchmove"/, "uno en window añadido en pointerdown no sirve en iOS");
+  // Los dos grupos de bandas llevan el escuchador desde que se montan, y solo bloquea con una banda cogida.
+  assert.equal(code.match(/ref=\{holdBandTouch\}/g)?.length, 2);
+  assert.match(code, /dragRef\.current\?\.held && ev\.cancelable\) ev\.preventDefault\(\)/);
+  // Y el propio elemento tocado lleva otro mientras dura el arrastre: si la vista previa saca la banda de su semana, React
+  // lo desmonta y sus touchmove ya no suben al grupo (el navegador cancelaría el arrastre).
+  assert.match(code, /touchTarget\?\.addEventListener\("touchmove", onTargetTouchMove, \{ passive: false \}\)/);
+  assert.match(code, /touchTarget\?\.removeEventListener\("touchmove", onTargetTouchMove\)/);
+});
+
+test("visibleBands: con tope, la banda arrastrada o movida con el teclado se queda a la vista y no se repite en «+N más»", () => {
+  const b = (id: string) => ({ id, colStart: 1, colEnd: 7, continuesLeft: false, endsHere: true });
+  const bands = ["a", "b", "c", "d", "e", "f"].map(b);
+  const ids = (x: { id: string }[]) => x.map((y) => y.id);
+  let v = visibleBands(bands, 4, [null, undefined]);
+  assert.deepEqual(ids(v.shown), ["a", "b", "c", "d"]);
+  assert.deepEqual(ids(v.hidden), ["e", "f"]);
+  // La movida con el teclado ocupa el último sitio; la que sale va a «+N más» (sin perder ninguna).
+  v = visibleBands(bands, 4, [null, "f"]);
+  assert.deepEqual(ids(v.shown), ["a", "b", "c", "f"]);
+  assert.deepEqual(ids(v.hidden), ["d", "e"]);
+  // Las dos a la vez (arrastre y teclado) y una que ya se veía.
+  v = visibleBands(bands, 4, ["e", "f"]);
+  assert.deepEqual(ids(v.shown), ["a", "b", "f", "e"]);
+  v = visibleBands(bands, 4, ["b", "f"]);
+  assert.deepEqual(ids(v.shown), ["a", "b", "c", "f"]);
+  // Sin tope que superar, o con un id que no está en la semana, no cambia nada.
+  assert.deepEqual(ids(visibleBands(bands.slice(0, 2), 4, ["x"]).shown), ["a", "b"]);
+  assert.deepEqual(visibleBands(bands.slice(0, 2), 4, ["x"]).hidden, []);
+});
+
+test("outsideGrid: un día o un rango antes, dentro o después de la cuadrícula del mes", () => {
+  const first = "2026-09-28";
+  const last = "2026-11-01";
+  assert.equal(outsideGrid({ start: "2026-09-27", due: "2026-09-27" }, first, last), "prev");
+  assert.equal(outsideGrid({ start: "2026-09-20", due: "2026-09-28" }, first, last), null);
+  assert.equal(outsideGrid({ start: "2026-11-01", due: "2026-11-05" }, first, last), null);
+  assert.equal(outsideGrid({ start: "2026-11-02", due: "2026-11-02" }, first, last), "next");
 });
 
 test("dragRange: mover conserva la duración y desplaza ambas fechas", () => {

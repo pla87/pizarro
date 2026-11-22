@@ -9,7 +9,7 @@ import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestIn
 import { logEvent } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
-import { unsubscribeLinks } from "./unsubscribe";
+import { unsubscribeLinks } from "./unsubscribe-links";
 import { getInstanceSettings } from "./instance";
 import { generateProjectReportPdf } from "./report-build";
 import { WEEKLY_REPORT_LIST_LIMIT } from "./report";
@@ -130,7 +130,7 @@ function reportMail(opts: { projectName: string; url: string; orgName: string; s
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${escapeHtml(intro)}</p>
 <p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(t("Abrir el proyecto"))}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(note)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
+<p style="color:#64748b;font-size:12px">${escapeHtml(note)}<br>${escapeHtml(noReply)}${unsub.html}</p></div>`;
   return { subject, text, html };
 }
 
@@ -152,7 +152,7 @@ function reportTooLargeMail(opts: { name: string; projectName: string; url: stri
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
 <p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
-<p style="color:#94a3b8;font-size:12px">${escapeHtml(noReply)}</p></div>`;
+<p style="color:#64748b;font-size:12px">${escapeHtml(noReply)}</p></div>`;
   return { subject, text, html };
 }
 

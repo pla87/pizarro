@@ -1,47 +1,76 @@
 "use client";
 
-import { Bell, CalendarDays } from "lucide-react";
+import { CalendarDays, Mail } from "lucide-react";
 import { useState } from "react";
-import { updateCollabPrefs } from "@/actions/collab-prefs";
+import { updateEmailPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
 
+type EmailPrefs = {
+  notifyEmail: boolean;
+  notifyAssignedEmail: boolean;
+  notifyDueEmail: boolean;
+  notifyCommentEmail: boolean;
+  dailyDigest: boolean;
+  digestHour: number;
+};
+
 interface Props {
-  prefs: { notifyAssignedEmail: boolean; notifyDueEmail: boolean; notifyCommentEmail: boolean; dailyDigest: boolean; digestHour: number };
+  prefs: EmailPrefs;
   emailAvailable: boolean;
+  /** Administrador: con las menciones salen también los avisos de administración. */
+  adminNotices: boolean;
   /** Zona horaria de la app (la hora del resumen es de esa zona). */
   timeZone: string;
 }
 
-/** Avisos por email de asignaciones, fechas y comentarios, y resumen diario. En la app los avisos se crean siempre. */
-export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
+/**
+ * «Avisos por email» de Mi perfil → Avisos: todas las casillas de email (menciones, asignaciones, fechas y «Esperando»,
+ * comentarios, resumen diario y su hora) en una sola tarjeta con un solo botón, que lo guarda todo a la vez. Antes iban
+ * en dos tarjetas con su propio «Guardar avisos» cada una, y lo marcado en una se perdía al guardar la otra. En la app
+ * (la campana) los avisos se crean siempre. Telegram y WhatsApp van en su propia tarjeta (MessagingSection).
+ */
+export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZone }: Props) {
   const t = useT();
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [form, setForm] = useState(prefs);
   // Lo guardado: sin cambios, «Guardar avisos» no haría nada y queda desactivado.
   const [saved, setSaved] = useState(prefs);
-  const dirty = (Object.keys(form) as (keyof typeof form)[]).some((k) => form[k] !== saved[k]);
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const dirty = (Object.keys(form) as (keyof EmailPrefs)[]).some((k) => form[k] !== saved[k]);
+  const set = <K extends keyof EmailPrefs>(key: K, value: EmailPrefs[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const anyEmail = form.notifyEmail || form.notifyAssignedEmail || form.notifyDueEmail || form.notifyCommentEmail || form.dailyDigest;
 
   return (
     <section className="card p-5">
-      <h2 className="flex items-center gap-2 font-semibold"><Bell size={17} /> {t("Otros avisos y resumen diario")}</h2>
+      <h2 className="flex items-center gap-2 font-semibold"><Mail size={17} /> {t("Avisos por email")}</h2>
       <p className="mt-0.5 text-sm text-slate-500">
-        {t("Asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:")}
+        {t("Menciones, asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:")}
       </p>
       <form
         className="mt-4 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
+          const sent = form;
           start(async () => {
-            const res = await updateCollabPrefs(form);
+            const res = await updateEmailPrefs(sent);
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
-            if (res.ok) setSaved(form);
+            if (res.ok) setSaved(sent);
           });
         }}
       >
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={form.notifyEmail} onChange={(e) => set("notifyEmail", e.target.checked)} />
+          <span>
+            {t("Email cuando me mencionan")}
+            {/* A todo el mundo (cualquiera puede configurar un informe): este aviso va con las menciones (noticeEmailKind). */}
+            <span className="block text-xs text-slate-500">{t("Con las menciones te llegan también los avisos de que alguien se ha dado de baja de un informe semanal que configuraste.")}</span>
+            {adminNotices && (
+              <span className="block text-xs text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</span>
+            )}
+          </span>
+        </label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-0.5" checked={form.notifyAssignedEmail} onChange={(e) => set("notifyAssignedEmail", e.target.checked)} />
           <span>{t("Email cuando me asignan una tarea")}</span>
@@ -72,7 +101,7 @@ export function NotificationExtras({ prefs, emailAvailable, timeZone }: Props) {
             </div>
           )}
         </div>
-        {!emailAvailable && (form.notifyAssignedEmail || form.notifyDueEmail || form.notifyCommentEmail || form.dailyDigest) && (
+        {!emailAvailable && anyEmail && (
           <p className="text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</p>
         )}
         <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>

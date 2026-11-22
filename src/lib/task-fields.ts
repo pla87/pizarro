@@ -21,8 +21,8 @@ export const TASK_PRIORITIES = ["BAJA", "MEDIA", "ALTA", "URGENTE"] as const;
 export type TaskPriorityValue = (typeof TASK_PRIORITIES)[number];
 
 export const PRIORITY_LABEL: Record<TaskPriorityValue, string> = { BAJA: "Baja", MEDIA: "Media", ALTA: "Alta", URGENTE: "Urgente" };
-/** Colores de la insignia (texto sobre fondo suave); URGENTE y ALTA llaman más la atención. */
-export const PRIORITY_COLOR: Record<TaskPriorityValue, string> = { BAJA: "#64748b", MEDIA: "#2563eb", ALTA: "#d97706", URGENTE: "#dc2626" };
+/** Fondo de la insignia (texto blanco encima: todos con 4,5:1 o más); URGENTE y ALTA llaman más la atención. */
+export const PRIORITY_COLOR: Record<TaskPriorityValue, string> = { BAJA: "#64748b", MEDIA: "#2563eb", ALTA: "#b45309", URGENTE: "#dc2626" };
 
 export const MAX_CLIENT = 120;
 export const MAX_COST = 9_999_999_999.99;

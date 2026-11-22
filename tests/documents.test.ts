@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
-  confirmDocumentKind, decodeDocumentText, detectDocumentKind, documentDownloadName, documentMime, isPreviewable, looksLikePdf, looksLikeText, sanitizeDocumentName,
+  confirmDocumentKind, decodeDocumentText, detectDocumentKind, documentDownloadName, documentMime, isPreviewable, isUntypedImage, looksLikePdf, looksLikeText, sanitizeDocumentName,
 } from "../src/lib/document-kind";
 import { classifyHtmlLink, htmlLinkTarget } from "../src/lib/html-doc-links";
 import { cleanOrphanFiles, parseUploadName } from "../src/lib/orphan-files";
@@ -21,6 +21,15 @@ test("detectDocumentKind: por extensión, sin distinguir mayúsculas", () => {
   assert.equal(detectDocumentKind("datos.csv", "text/csv"), "TEXT");
   assert.equal(detectDocumentKind("hoja.xlsx", "application/vnd.ms-excel"), "OTHER");
   assert.equal(detectDocumentKind("paquete.zip", "application/zip"), "OTHER");
+});
+
+test("isUntypedImage: sin tipo (o con el genérico) y extensión de imagen; nunca SVG ni con otro tipo declarado", () => {
+  for (const [name, mime] of [["foto.avif", ""], ["FOTO.WEBP", "application/octet-stream"], ["a.png", null], ["b.jpg", undefined], ["c.gif", " application/octet-stream; x=1"]] as const) {
+    assert.equal(isUntypedImage(name, mime), true, `${name} ${mime}`);
+  }
+  for (const [name, mime] of [["logo.svg", ""], ["datos.bin", ""], ["sin-extension", ""], ["foto.avif", "text/plain"], ["foto.png", "image/png"], ["foto.heic", ""]] as const) {
+    assert.equal(isUntypedImage(name, mime), false, `${name} ${mime}`);
+  }
 });
 
 test("detectDocumentKind: el SVG nunca es imagen; el HTML es su propio tipo (vista aislada, nunca como página)", () => {

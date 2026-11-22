@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, startTransition, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Users, Wallet, type LucideIcon } from "lucide-react";
@@ -20,10 +20,11 @@ import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { columnGateSnapshot } from "./columnGate";
 import { useBoard, useSelectedCount, useTasks } from "./context";
-import { cardsReserve, FIRST_PAINT_CARDS, nextCardLimit } from "./deferredCards";
+import { cardsReserve } from "./deferredCards";
 import { useShortcut } from "./shortcuts";
 import { EvergreenPanel } from "./EvergreenPanel";
 import { SortableTaskCard } from "./TaskCard";
+import { useCardLimit } from "./useCardLimit";
 import { useFileZone } from "./useFileZone";
 import { lazyDialog } from "../lazyDialog";
 
@@ -272,27 +273,6 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
     </section>
   );
 });
-
-/**
- * Cuántas tarjetas pinta una columna con `count`: FIRST_PAINT_CARDS en el servidor y al hidratar; después, tanda a tanda
- * cuando el navegador está libre, hasta todas. Una vez todas, ya no vuelve a recortar (columna que crece, filtro que se
- * quita).
- */
-function useCardLimit(count: number): number {
-  const [limit, setLimit] = useState(FIRST_PAINT_CARDS);
-  useEffect(() => {
-    if (limit === Infinity) return;
-    const next = () => startTransition(() => setLimit((l) => nextCardLimit(l, count)));
-    // Sin requestIdleCallback (Safari), en la vuelta siguiente. Con él, como mucho al segundo aunque no quede libre.
-    if (typeof window.requestIdleCallback !== "function") {
-      const id = window.setTimeout(next, 1);
-      return () => window.clearTimeout(id);
-    }
-    const id = window.requestIdleCallback(next, { timeout: 1000 });
-    return () => window.cancelIdleCallback(id);
-  }, [limit, count]);
-  return limit;
-}
 
 /**
  * Marca `data-more-below` en la columna (el padre de la lista) mientras hay tarjetas, o parte de una, por debajo de lo que

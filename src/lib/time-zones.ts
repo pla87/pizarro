@@ -28,7 +28,7 @@ const TZ_ALIASES: Readonly<Record<string, string>> = {
 };
 
 /** Las habituales, arriba de la lista (en este orden). */
-export const COMMON_TIME_ZONES = [
+const COMMON_TIME_ZONES = [
   "Europe/Madrid",
   "Atlantic/Canary",
   "Europe/Lisbon",

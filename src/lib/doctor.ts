@@ -228,7 +228,8 @@ export async function collectDiagnostics(opts: DoctorOptions): Promise<Record<st
   report.sessions = await section(async () => ({
     active: await db.session.count({ where: { expiresAt: { gt: now } } }),
     activeUsers: await db.user.count({ where: { active: true } }),
-    // El tope de usuarios activos y de dónde sale: «env» (MAX_USERS), «default» (sin la variable) o «invalid» (no vale).
+    // El tope de usuarios activos (null: sin tope) y de dónde sale: «env» (MAX_USERS), «default» (sin la variable, sin
+    // tope) o «invalid» (no vale y no se aplica: sin tope).
     maxUsers: maxUsersConfig().max,
     maxUsersSource: maxUsersConfig().source,
     admins: await db.user.count({ where: { active: true, role: "ADMIN" } }),

@@ -1,12 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { saveReportSchedule } from "@/actions/report-schedule";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { formatDate } from "@/lib/format";
 import { useActionTransition } from "@/components/useActionTransition";
-import type { ReportRecipientView } from "@/lib/report-recipient";
+import type { ReportRecipientView, ReportUnsubscribedView } from "@/lib/report-recipient";
 
 interface ReportScheduleValue {
   enabled: boolean;
@@ -22,9 +24,10 @@ const WEEKDAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado
 /**
  * Informe PDF semanal por email del proyecto: destinatario, día de la semana y hora. El destinatario se elige de la lista
  * de personas del proyecto, por su nombre (nadie ve ni escribe el email de otra persona); un administrador puede poner
- * además una dirección externa en un proyecto de equipo.
+ * además una dirección externa en un proyecto de equipo. Si el destinatario se dio de baja con el enlace del email, se
+ * dice quién y cuándo, y solo esa persona puede volver a activarlo para sí misma (saveReportSchedule).
  */
-export function ReportScheduleSection({ projectId, initial, emailAvailable, timeZone, recipients, people, currentUserId }: {
+export function ReportScheduleSection({ projectId, initial, emailAvailable, timeZone, recipients, people, currentUserId, unsubscribed = null }: {
   projectId: string;
   initial: ReportScheduleValue;
   emailAvailable: boolean;
@@ -38,8 +41,12 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
   /** Personas a las que puede ir, por nombre. */
   people: { id: string; name: string }[];
   currentUserId: string;
+  /** Última baja desde el enlace del email (null: nadie se ha dado de baja, o ya volvió a activarlo). */
+  unsubscribed?: ReportUnsubscribedView | null;
 }) {
   const t = useT();
+  const locale = useIntlLocale();
+  const router = useRouter();
   const toast = useToast();
   const [pending, start] = useActionTransition();
   const [enabled, setEnabled] = useState(initial.enabled);
@@ -52,6 +59,9 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
   const [otherEmail, setOtherEmail] = useState("");
 
   const recipient = choice === "keep" ? { keep: true as const } : choice === "other" ? { email: otherEmail } : { userId: choice.slice("user:".length) };
+  // ¿Va hacia quien se dio de baja? Solo esa persona puede volver a activarlo (el servidor también lo comprueba).
+  const toUnsubscribed = !!unsubscribed && (choice === unsubscribed.choice || (choice === "other" && !!unsubscribed.external && otherEmail.trim().toLowerCase() === unsubscribed.external.toLowerCase()));
+  const blocked = enabled && toUnsubscribed && !unsubscribed?.self;
 
   return (
     <section className="card scroll-mt-4 p-5">
@@ -64,6 +74,8 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
           start(async () => {
             const res = await saveReportSchedule(projectId, { enabled, recipient, weekday, hour });
             toast(res.ok ? t("Informe semanal guardado") : res.error, res.ok ? "success" : "error");
+            // Quien se dio de baja lo ha vuelto a activar para sí: la nota de la baja ya no vale.
+            if (res.ok && unsubscribed?.self && enabled && toUnsubscribed) router.refresh();
           });
         }}
       >
@@ -120,8 +132,18 @@ export function ReportScheduleSection({ projectId, initial, emailAvailable, time
           </div>
         </div>
         <p className="text-xs text-slate-500">{t("Hora de la app ({tz}).", { tz: timeZone })}</p>
+        {unsubscribed && (
+          <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="rs-unsubscribed">
+            {t("{name} se dio de baja el {date}.", { name: unsubscribed.who, date: formatDate(unsubscribed.at, "date", locale) })}{" "}
+            {unsubscribed.self
+              ? t("Puedes volver a activarlo para ti cuando quieras.")
+              : blocked
+                ? t("Solo esa persona puede volver a activarlo para sí misma: elige a otra.")
+                : t("Solo esa persona puede volver a activarlo para sí misma.")}
+          </p>
+        )}
         {!emailAvailable && enabled && <p className="text-xs text-amber-700 dark:text-amber-300">{t("El envío de emails aún no está configurado en el servidor.")}</p>}
-        <button className="btn-primary" disabled={pending || (choice === "other" && !otherEmail.trim())}>{t("Guardar")}</button>
+        <button className="btn-primary" disabled={pending || blocked || (choice === "other" && !otherEmail.trim())}>{t("Guardar")}</button>
       </form>
     </section>
   );

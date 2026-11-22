@@ -1,4 +1,4 @@
-// Plantilla «Curso o máster» y columna «Programa» contra PostgreSQL real: crear el proyecto desde la plantilla (español e
+// Plantilla «Curso o charla» y columna «Programa» contra PostgreSQL real: crear el proyecto desde la plantilla (español e
 // inglés), rol PROGRAM, PDF del programa por la ruta (orden, fechas, responsable, acceso) y copia en la Documentación
 // con sus límites (cuota y tamaño máximo).
 import assert from "node:assert/strict";
@@ -34,7 +34,7 @@ const postReq = (p: string, c: string, q = "save=1", origin = true) =>
   new Request(url(p, c, q), { method: "POST", headers: origin ? { origin: "http://localhost", host: "localhost" } : { host: "localhost" } });
 const text = async (res: Response) => pdfRuns(new Uint8Array(await res.arrayBuffer())).join("");
 
-/** Proyecto creado desde la plantilla de serie «Curso o máster», con tres sesiones en «Programa». */
+/** Proyecto creado desde la plantilla de serie «Curso o charla», con tres sesiones en «Programa». */
 async function courseProject(user: { id: string }) {
   await db.projectTemplate.deleteMany({ where: { builtinKey: "curso-master" } });
   await db.builtinTemplateSeeded.deleteMany({ where: { key: "curso-master" } });
@@ -53,7 +53,7 @@ async function courseProject(user: { id: string }) {
   return { projectId: created.id, programId: program.id };
 }
 
-describe("plantilla «Curso o máster»", () => {
+describe("plantilla «Curso o charla»", () => {
   test("crea el proyecto con la columna Programa (rol PROGRAM), sus tipos, etiquetas y la fecha de inicio; en inglés, en inglés", async () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();
@@ -61,13 +61,14 @@ describe("plantilla «Curso o máster»", () => {
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     const tpl = (await listTemplatesSorted(db)).find((t) => t.builtinKey === "curso-master")!;
-    assert.equal(tpl.name, "Curso o máster");
+    assert.equal(tpl.name, "Curso o charla");
     assert.equal(tpl.builtinModified, false);
     const p = expectOk(await createProject("Máster de prueba", { templateId: tpl.id }));
     const cols = await db.column.findMany({ where: { projectId: p.id }, orderBy: { position: "asc" } });
     assert.deepEqual(cols.map((c) => [c.name, c.role, c.isDone]), [
       ["Ideas", "NONE", false], ["Materiales", "NONE", false], ["Ejercicios y exámenes", "NONE", false],
       ["Plan de trabajo para IA", "AI_PLAN", false], ["Programa", "PROGRAM", false], ["Seguimiento de alumnos", "NONE", false],
+      ["Publicado", "NONE", true],
     ]);
     const kinds = await db.taskKind.findMany({ where: { projectId: p.id }, orderBy: { position: "asc" } });
     assert.deepEqual(kinds.map((k) => k.name), ["Sesión", "Preparar material", "Preparar ejercicio", "Preparar examen", "Revisar perfil de alumno", "Corregir", "Tutoría"]);
@@ -79,7 +80,7 @@ describe("plantilla «Curso o máster»", () => {
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
     await loginAs(admin);
     const en = expectOk(await listTemplates()).find((t) => t.id === tpl.id)!;
-    assert.equal(en.name, "Course or master's");
+    assert.equal(en.name, "Course or talk");
     const pe = expectOk(await createProject("Test master", { templateId: en.id }));
     const colsEn = await db.column.findMany({ where: { projectId: pe.id }, orderBy: { position: "asc" } });
     assert.equal(colsEn.find((c) => c.role === "PROGRAM")!.name, "Program");
@@ -95,7 +96,7 @@ describe("plantilla «Curso o máster»", () => {
     await db.projectTemplate.update({ where: { builtinKey: "curso-master" }, data: { taskFields: [] } });
     assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "curso-master")!.builtinModified, true);
     // Las que no tienen campos siguen sin modificar (su huella no cambia).
-    assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "negocio")!.builtinModified, false);
+    assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "vibecoding")!.builtinModified, false);
   });
 });
 

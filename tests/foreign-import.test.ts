@@ -307,6 +307,38 @@ describe("fechas, saneado y detección de formato", () => {
     assert.equal(parseDay("pronto"), null);
   });
 
+  test("parseDay con orden: mes/día o día/mes, y al revés solo si en ese orden el mes no existe", () => {
+    assert.equal(parseDay("03/04/2026", "UTC", "mdy"), "2026-03-04");
+    assert.equal(parseDay("03/04/2026", "UTC", "dmy"), "2026-04-03");
+    assert.equal(parseDay("21/03/26", "UTC", "mdy"), "2026-03-21");
+    assert.equal(parseDay("03-21-2026", "UTC", "dmy"), "2026-03-21");
+    assert.equal(parseDay("13/13/2026", "UTC", "mdy"), null);
+    // Sin orden, día/mes (lo de siempre).
+    assert.equal(parseDay("03/04/2026"), parseDay("03/04/2026", "UTC", "dmy"));
+  });
+
+  test("CSV: un solo orden día/mes para toda la columna de fechas; con todas ambiguas, el idioma de quien importa", () => {
+    const head = "Title,Status,Due date\n";
+    const dues = (text: string, locale?: "es" | "en") => parseCsvBoard(head + text, { t, locale }).tasks.map((x) => x.due);
+    // Excel de EE. UU.: 03/21 solo puede ser mes/día, así que 03/04 es 4 de marzo (antes salía 3 de abril).
+    assert.deepEqual(dues("A,Hecho,03/04/2026\nB,Hecho,03/21/2026\n"), ["2026-03-04", "2026-03-21"]);
+    assert.deepEqual(dues("A,Hecho,03/04/2026\nB,Hecho,21/03/2026\n", "en"), ["2026-04-03", "2026-03-21"]);
+    assert.deepEqual(dues("A,Hecho,03/04/2026\nB,Hecho,\n", "en"), ["2026-03-04", null]);
+    assert.deepEqual(dues("A,Hecho,03/04/2026\nB,Hecho,2026-05-06\n", "es"), ["2026-04-03", "2026-05-06"]);
+    assert.deepEqual(parseCsvBoard(head + "A,Hecho,03/04/2026\n", { t, locale: "en" }).warnings, []);
+    // Incompatibles: aviso (también al crear el proyecto: va en los avisos del tablero).
+    const mixed = parseCsvBoard(head + "A,Hecho,21/03/2026\nB,Hecho,03/21/2026\nC,Hecho,03/04/2026\n", { t: makeT("en"), locale: "en" });
+    assert.deepEqual(mixed.tasks.map((x) => x.due), ["2026-03-21", "2026-03-21", "2026-03-04"]);
+    assert.ok(mixed.dateWarning && mixed.warnings.includes(mixed.dateWarning));
+    assert.match(mixed.dateWarning, /two formats .* month\/day/);
+    // Las subtareas (por «tarea madre») no tienen fecha y no deciden el orden.
+    const sub = parseCsvBoard("Title,Due date,Parent task\nMadre,03/04/2026,\nHija,21/03/2026,Madre\n", { t, locale: "en" });
+    assert.deepEqual(sub.tasks.map((x) => x.due), ["2026-03-04"]);
+    assert.equal(sub.dateWarning, undefined);
+    // parseForeign (importar un proyecto desde un CSV) pasa el idioma.
+    assert.deepEqual(parseForeign(head + "A,Hecho,03/04/2026\n", "csv", { t, locale: "en" }).tasks.map((x) => x.due), ["2026-03-04"]);
+  });
+
   test("cleanMarkdown: sin HTML, sin controles ni esquemas peligrosos; conserva Markdown y enlaces http", () => {
     const md = cleanMarkdown("Hola <b>mundo</b>\u0000\u0007<iframe src=x></iframe>\n\n[ok](https://example.com) [mal](data:text/html;base64,AAA) <https://example.com/auto>\n![x](javascript:1)");
     assert.equal(md, "Hola mundo\n\n[ok](https://example.com) mal <https://example.com/auto>\nx");

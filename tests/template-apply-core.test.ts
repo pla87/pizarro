@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BUILTIN_TEMPLATES } from "../src/lib/builtin-templates";
 import { defaultColumns } from "../src/lib/constants";
-import { PROJECT_EXAMPLES } from "../src/lib/project-examples";
+import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { templateInputSchema } from "../src/lib/project-templates";
 import {
   nameKey, planAdd, planIsEmpty, planReplace, suggestColumnChoices, suggestKindChoices, summarizePlan,
@@ -195,10 +195,10 @@ test("los topes de columnas y etiquetas impiden aplicar con un aviso", () => {
   assert.ok(planReplace(p, t).errors.some((e) => e.text.startsWith("Quedarían")));
 });
 
-test("todas las plantillas de serie y de los ejemplos se pueden aplicar en los dos modos a un proyecto por defecto", () => {
+test("todas las plantillas de serie, en los dos idiomas, se pueden aplicar en los dos modos a un proyecto por defecto", () => {
   const sources = [
     ...BUILTIN_TEMPLATES.map((b) => templateInputSchema.parse(b.data)),
-    ...PROJECT_EXAMPLES.flatMap((e) => (["es", "en"] as const).map((l) => templateInputSchema.parse(e[l].template))),
+    ...BUILTIN_TEMPLATES.map((b) => canonicalTemplateEn(b.key)!),
   ];
   for (const t of sources) {
     const shape: ApplyTemplateShape = { ...t, columns: t.columns.map((c) => ({ ...c, wipLimit: c.wipLimit ?? null })) };

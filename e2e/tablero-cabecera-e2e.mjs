@@ -4,10 +4,10 @@
 // cuyo nombre lleva espacios dobles o duros. Ronda 57: en escritorio la cabecera ya no lleva selector de proyecto (está en
 // la barra lateral; en el móvil sigue el de la barra superior) ni «Informe PDF», y los botones de solo icono van juntos
 // (4 px entre ellos, cada uno con su zona de toque); «Nueva tarea» preselecciona el último tipo usado. Ronda 60 («tipos»):
-// con un proyecto creado desde la plantilla «Reformas y obras» (se abre su tablero, no los ajustes), el «+» de una columna
+// con un proyecto creado desde la plantilla «Casa y familia» (se abre su tablero, no los ajustes), el «+» de una columna
 // abre «Nueva tarea» con la plantilla del tipo marcado ya puesta; cambiar de tipo sustituye lo que puso el anterior sin
 // acumular y conserva lo editado; en el detalle, cambiar de tipo cambia el prefijo del título y el formulario sin
-// rellenar; el editor de plantillas muestra los tipos generales en positivo. Misma base y servidor que board-e2e.mjs:
+// rellenar; el editor de plantillas muestra los tipos generales en positivo. Misma base y servidor que tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-cabecera-e2e.mjs   # PART=hdr,keys,early,pres,title,badge,help,del,kind,tipos
 import os from "node:os";
 import * as L from "./qa/lib.mjs";
@@ -276,11 +276,11 @@ if (only.includes("kind")) {
 
 // --- Plantillas de los tipos en «Nueva tarea» y en el detalle (ronda 60) -------------------------------------------
 if (only.includes("tipos")) {
-  L.scenario("tipos: proyecto de «Reformas y obras», tipo marcado con su plantilla y cambios de tipo sin acumular");
-  const NAME = "Reformas R60";
+  L.scenario("tipos: proyecto de «Casa y familia», tipo marcado con su plantilla y cambios de tipo sin acumular");
+  const NAME = "Casa R60";
   await L.q(`DELETE FROM "Project" WHERE name=$1`, [NAME]);
-  // «Plantillas» en «Nuevo proyecto» es de administradores: la sesión se abre como miembro (sin el segundo paso de
-  // acceso de los administradores) y pasa a admin.
+  // La sesión se abre como miembro (sin el segundo paso de acceso de los administradores) y pasa a admin: crea un
+  // proyecto de equipo y abre el editor de plantillas.
   const s = await L.session();
   const { page } = s;
   try {
@@ -291,8 +291,8 @@ if (only.includes("tipos")) {
     await page.getByRole("menuitem", { name: "Nuevo proyecto" }).click();
     const nd = page.locator("[role=dialog]").filter({ has: page.locator("#project-name") });
     await nd.waitFor();
-    await L.waitFor(async () => (await nd.locator("#project-start optgroup[label=Plantillas] option", { hasText: "Reformas y obras" }).count()) === 1, { timeout: 8000 });
-    await nd.locator("#project-start").selectOption({ label: "Reformas y obras" });
+    await L.waitFor(async () => (await nd.locator("#project-start optgroup[label='Plantillas de serie'] option", { hasText: "Casa y familia" }).count()) === 1, { timeout: 8000 });
+    await nd.locator("#project-start").selectOption({ label: "Casa y familia" });
     await nd.locator("#project-name").fill(NAME);
     const from = new URL(page.url()).pathname;
     await nd.getByRole("button", { name: "Crear", exact: true }).click();
@@ -300,8 +300,9 @@ if (only.includes("tipos")) {
     await page.waitForURL((u) => u.pathname !== from && /^\/p\/[^/]+/.test(u.pathname), { timeout: 15000 });
     L.check("TIPOS: con una plantilla, al crear el proyecto se abre su tablero (no los ajustes)", !page.url().includes("/settings"), page.url());
     const [proj] = await L.q(`SELECT id, description FROM "Project" WHERE name=$1`, [NAME]);
-    L.check("TIPOS: el proyecto toma la descripción de la plantilla", /^Reformar una vivienda o local/.test(proj?.description ?? ""), proj?.description);
-    const col = L.colLoc(page, "Presupuestos");
+    L.check("TIPOS: el proyecto toma la descripción de la plantilla", /^Compras, tareas de casa/.test(proj?.description ?? ""), proj?.description);
+    L.eq("TIPOS: sin la casilla, sin tarjetas de ejemplo", Number((await L.q(`SELECT count(*) n FROM "Task" WHERE "projectId"=$1`, [proj.id]))[0].n), 0);
+    const col = L.colLoc(page, "Por hacer");
     await col.waitFor({ timeout: 15000 });
     await sleep(500);
 
@@ -312,10 +313,10 @@ if (only.includes("tipos")) {
     const descText = () => dlg.evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + (el.querySelector("[contenteditable=true]")?.textContent ?? ""));
     const subtasks = async () => (await dlg.locator("ul li").allInnerTexts()).map((x) => x.trim());
     const state = async () => ({ kind: await checked(), title: await titleBox().inputValue(), desc: await descText(), subtasks: await subtasks() });
-    const PRESU_SUBS = ["Pedir presupuesto", "Comparar con otros", "Aceptar o rechazar"];
-    const PERMISO_SUBS = ["Reunir la documentación", "Presentar la solicitud", "Guardar la resolución"];
+    const PAPELEO_SUBS = ["Reunir documentos", "Pedir cita o hacerlo online", "Archivar el justificante"];
+    const CITA_SUBS = ["Pedir la cita", "Preparar documentación", "Apuntar indicaciones"];
     const openPlus = async () => {
-      await col.getByRole("button", { name: "Añadir tarea en Presupuestos" }).click();
+      await col.getByRole("button", { name: "Añadir tarea en Por hacer" }).click();
       await dlg.waitFor();
       await titleBox().waitFor();
       await sleep(300);
@@ -325,57 +326,63 @@ if (only.includes("tipos")) {
       return dlg.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false);
     };
 
-    // 1. El «+» de una columna: el tipo marcado trae su plantilla sin pulsarlo.
+    // 1. El «+» de una columna: el tipo marcado (el primero, «Compras») trae su plantilla sin pulsarlo.
     await openPlus();
     const first = await state();
     // El prefijo va con un espacio detrás para escribir a continuación (se quita al guardar).
-    L.eq("TIPOS: «+» abre con «Presupuesto» marcado y su título de plantilla", [first.kind, first.title], ["Presupuesto", "Presupuesto: "]);
-    L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Empresa o profesional"), first.desc);
-    L.eq("TIPOS: y sus tres subtareas", first.subtasks, PRESU_SUBS);
+    L.eq("TIPOS: «+» abre con «Compras» marcado, su título de plantilla y sin subtareas", [first.kind, first.title, first.subtasks], ["Compras", "Comprar ", []]);
+    L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Para cuándo"), first.desc);
     L.check("TIPOS: lo que puso la plantilla no pide confirmar al cerrar", await closesWithoutAsking());
 
     // 2. Cambiar de tipo sin tocar nada: se sustituye, no se acumula.
     await openPlus();
-    await dlg.getByRole("radio", { name: "Permisos y licencias" }).click();
+    await dlg.getByRole("radio", { name: "Papeleo", exact: true }).click();
     await sleep(200);
-    const permiso = await state();
-    L.eq("TIPOS: a «Permisos y licencias»: su título y sus tres subtareas", [permiso.title, permiso.subtasks], ["Permiso: ", PERMISO_SUBS]);
-    L.check("TIPOS: y su descripción, sin la de «Presupuesto»", permiso.desc.includes("Trámite") && !permiso.desc.includes("Empresa o profesional"), permiso.desc);
-    await dlg.getByRole("radio", { name: "Presupuesto", exact: true }).click();
+    const papeleo = await state();
+    L.eq("TIPOS: a «Papeleo»: su título y sus tres subtareas", [papeleo.title, papeleo.subtasks], ["Gestionar ", PAPELEO_SUBS]);
+    L.check("TIPOS: y su descripción, sin la de «Compras»", papeleo.desc.includes("Trámite") && !papeleo.desc.includes("Para cuándo"), papeleo.desc);
+    await dlg.getByRole("radio", { name: "Cita", exact: true }).click();
+    await sleep(200);
+    const cita = await state();
+    L.eq("TIPOS: a «Cita»: su título y sus tres subtareas, sin las de «Papeleo»", [cita.title, cita.subtasks], ["Cita: ", CITA_SUBS]);
+    L.check("TIPOS: y su descripción, sin la de «Papeleo»", cita.desc.includes("Quién") && !cita.desc.includes("Trámite"), cita.desc);
+    await dlg.getByRole("radio", { name: "Papeleo", exact: true }).click();
     await sleep(200);
     const back = await state();
-    L.eq("TIPOS: y otra vez a «Presupuesto»: lo suyo, sin acumular", [back.title, back.subtasks], ["Presupuesto: ", PRESU_SUBS]);
-    L.check("TIPOS: la descripción solo lleva la de «Presupuesto»", back.desc.includes("Empresa o profesional") && !back.desc.includes("Trámite"), back.desc);
+    L.eq("TIPOS: y otra vez a «Papeleo»: lo suyo, sin acumular", [back.title, back.subtasks], ["Gestionar ", PAPELEO_SUBS]);
+    L.check("TIPOS: la descripción solo lleva la de «Papeleo»", back.desc.includes("Trámite") && !back.desc.includes("Quién"), back.desc);
     L.check("TIPOS: cambiar de tipo sin escribir nada tampoco pide confirmar al cerrar", await closesWithoutAsking());
 
     // 3. Con algo editado: el prefijo del título se cambia y lo escrito se conserva; la subtarea propia también.
     await openPlus();
-    await titleBox().fill("Presupuesto: fontanería R60");
+    await dlg.getByRole("radio", { name: "Papeleo", exact: true }).click();
+    await sleep(200);
+    await titleBox().fill("Gestionar padrón R60");
     await dlg.getByPlaceholder("Añadir subtarea…").fill("Mía R60");
     await dlg.getByPlaceholder("Añadir subtarea…").press("Enter");
-    await dlg.getByRole("radio", { name: "Permisos y licencias" }).click();
+    await dlg.getByRole("radio", { name: "Cita", exact: true }).click();
     await sleep(200);
     const edited = await state();
-    L.eq("TIPOS: con lo escrito, el prefijo pasa a «Permiso:» y se conserva el resto", edited.title, "Permiso: fontanería R60");
-    L.eq("TIPOS: la subtarea propia se queda y las del tipo se cambian", edited.subtasks, [...["Mía R60"], ...PERMISO_SUBS]);
+    L.eq("TIPOS: con lo escrito, el prefijo pasa a «Cita:» y se conserva el resto", edited.title, "Cita: padrón R60");
+    L.eq("TIPOS: la subtarea propia se queda y las del tipo se cambian", edited.subtasks, [...["Mía R60"], ...CITA_SUBS]);
     await dlg.getByRole("button", { name: "Crear tarea" }).click();
     await dlg.waitFor({ state: "detached", timeout: 10000 });
-    const TITLE = "Permiso: fontanería R60";
+    const TITLE = "Cita: padrón R60";
     const row = async () => (await L.q(`SELECT t.id, t.title, t.description, k.name kind, (SELECT count(*)::int FROM "Subtask" s WHERE s."taskId"=t.id) subs FROM "Task" t JOIN "TaskKind" k ON k.id=t."kindId" WHERE t."projectId"=$1 ORDER BY t."createdAt" DESC LIMIT 1`, [proj.id]))[0];
     const created = await row();
-    L.eq("TIPOS: la tarea se crea con el tipo, el título y las cuatro subtareas", [created?.kind, created?.title, created?.subs], ["Permisos y licencias", TITLE, 4]);
-    L.check("TIPOS: y con la descripción de «Permisos y licencias» sola", /^\*\*Trámite:\*\*/.test(created?.description ?? "") && !created.description.includes("Empresa"), created?.description);
+    L.eq("TIPOS: la tarea se crea con el tipo, el título y las cuatro subtareas", [created?.kind, created?.title, created?.subs], ["Cita", TITLE, 4]);
+    L.check("TIPOS: y con la descripción de «Cita» sola", /^\*\*Quién:\*\*/.test(created?.description ?? "") && !created.description.includes("Trámite"), created?.description);
 
     // 4. En el detalle: cambiar de tipo cambia el prefijo del título y el formulario sin rellenar del anterior.
     await L.cardLoc(page, TITLE).click();
     await dlg.waitFor();
     // Hasta que llega la descripción (el cambio de tipo la necesita para cambiar la plantilla).
-    await L.waitFor(async () => (await dlg.innerText()).includes("Trámite"), { timeout: 10000 });
+    await L.waitFor(async () => (await dlg.innerText()).includes("Quién"), { timeout: 10000 });
     await sleep(300);
-    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Presupuesto", exact: true }).click();
-    await L.eqEventually("TIPOS: detalle: el título pasa a «Presupuesto: fontanería R60»", async () => (await row())?.title, "Presupuesto: fontanería R60");
+    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Papeleo", exact: true }).click();
+    await L.eqEventually("TIPOS: detalle: el título pasa a «Gestionar padrón R60»", async () => (await row())?.title, "Gestionar padrón R60");
     const after = await row();
-    L.check("TIPOS: detalle: la descripción pasa a la de «Presupuesto», sin la de «Permisos»", /^\*\*Empresa o profesional:\*\*/.test(after?.description ?? "") && !after.description.includes("Trámite"), after?.description);
+    L.check("TIPOS: detalle: la descripción pasa a la de «Papeleo», sin la de «Cita»", /^\*\*Trámite:\*\*/.test(after?.description ?? "") && !after.description.includes("Quién"), after?.description);
     // 4b. Con la descripción abierta y sin guardar: cambiar de tipo parte de lo escrito y no lo pierde (antes el editor se
     // volvía a montar con lo guardado). El editor sigue abierto y la descripción no se guarda hasta pulsar Guardar.
     await dlg.getByRole("button", { name: "Editar", exact: true }).first().click();
@@ -385,11 +392,11 @@ if (only.includes("tipos")) {
     await page.keyboard.press("Enter");
     await page.keyboard.type("Nota R60 sin guardar");
     await sleep(400);
-    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Permisos y licencias" }).click();
-    await L.eqEventually("TIPOS: detalle con la descripción abierta: el título pasa a «Permiso: fontanería R60»", async () => (await row())?.title, "Permiso: fontanería R60");
+    await dlg.getByRole("radiogroup", { name: "Tipo" }).getByRole("radio", { name: "Cita", exact: true }).click();
+    await L.eqEventually("TIPOS: detalle con la descripción abierta: el título pasa a «Cita: padrón R60»", async () => (await row())?.title, "Cita: padrón R60");
     const typedDesc = await descText();
-    L.check("TIPOS: detalle: lo escrito sin guardar sigue en el editor, con el formulario de «Permisos»", typedDesc.includes("Nota R60 sin guardar") && typedDesc.includes("Trámite"), typedDesc);
-    L.check("TIPOS: detalle: la descripción sin guardar no se guarda sola", /^\*\*Empresa o profesional:\*\*/.test((await row())?.description ?? ""), (await row())?.description);
+    L.check("TIPOS: detalle: lo escrito sin guardar sigue en el editor, con el formulario de «Cita»", typedDesc.includes("Nota R60 sin guardar") && typedDesc.includes("Quién"), typedDesc);
+    L.check("TIPOS: detalle: la descripción sin guardar no se guarda sola", /^\*\*Trámite:\*\*/.test((await row())?.description ?? ""), (await row())?.description);
     await dlg.getByRole("button", { name: "Cancelar", exact: true }).first().click();
     await sleep(300);
     await page.keyboard.press("Escape");
@@ -397,7 +404,7 @@ if (only.includes("tipos")) {
 
     // 5. Editor de plantillas: tipos generales en positivo; con «ocultar todos», ninguno marcado.
     await page.goto(`${L.BASE}/admin/templates`);
-    await page.getByRole("button", { name: "Editar Reformas y obras" }).click();
+    await page.getByRole("button", { name: "Editar Casa y familia" }).click();
     const ed = page.getByRole("dialog").filter({ hasText: "Editar plantilla" });
     await ed.waitFor();
     const generals = ed.locator("section").filter({ has: page.getByRole("heading", { name: "Tipos generales que se usan" }) });

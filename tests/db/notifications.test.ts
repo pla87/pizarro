@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { notificationBody } from "../../src/lib/notification-text";
 import { unreadCount } from "../../src/lib/notification-access";
+import { markAllNotificationsRead, markNotificationRead } from "../../src/actions/notifications";
+import { updateEmailPrefs } from "../../src/actions/collab-prefs";
 import { UNREAD_COUNT_CAP } from "../../src/lib/unread-core";
 import { makeT } from "../../src/i18n/core";
 
@@ -235,5 +237,44 @@ describe("recuento de avisos sin leer (cabecera y página de Avisos)", () => {
     await db.notification.createMany({ data: Array.from({ length: 120 }, (_, i) => ({ userId: u.id, taskId: a.id, createdAt: at(10 + i) })) });
     assert.equal(UNREAD_COUNT_CAP, 100);
     assert.equal(await unreadCount(u.id, "MEMBER"), UNREAD_COUNT_CAP);
+  });
+
+  test("leer uno o todos devuelve el recuento real de después (con tope), aunque otra pestaña haya leído otros", async () => {
+    const owner = await makeUser();
+    const u = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner, members: [u] });
+    const a = await makeTask(f);
+    const at = (i: number) => new Date(Date.now() - i * 60_000);
+    const mine = await db.notification.createManyAndReturn({ data: Array.from({ length: 4 }, (_, i) => ({ userId: u.id, taskId: a.id, createdAt: at(i) })), select: { id: true } });
+    const theirs = await db.notification.create({ data: { userId: owner.id, taskId: a.id }, select: { id: true } });
+    await loginAs(u);
+    assert.equal(expectOk(await markNotificationRead(mine[0]!.id)).unreadCount, 3);
+    // Otra pestaña lee uno: el número siguiente ya lo descuenta (bajarlo aquí daba 2 y luego 1 de más o de menos).
+    await db.notification.update({ where: { id: mine[1]!.id }, data: { readAt: new Date() } });
+    assert.equal(expectOk(await markNotificationRead(mine[0]!.id)).unreadCount, 2, "releer el mismo no baja de más");
+    // El de otra persona no se marca ni cuenta.
+    assert.equal(expectOk(await markNotificationRead(theirs.id)).unreadCount, 2);
+    assert.equal((await db.notification.findUniqueOrThrow({ where: { id: theirs.id } })).readAt, null);
+    // Con más de 100 sin leer, leer uno sigue en el tope («99+»): no se inventa un 99.
+    await db.notification.createMany({ data: Array.from({ length: 150 }, (_, i) => ({ userId: u.id, taskId: a.id, createdAt: at(10 + i) })) });
+    assert.equal(expectOk(await markNotificationRead(mine[2]!.id)).unreadCount, UNREAD_COUNT_CAP);
+    assert.equal(expectOk(await markAllNotificationsRead()).unreadCount, 0);
+    assert.equal(await db.notification.count({ where: { userId: u.id, readAt: null } }), 0);
+  });
+});
+
+describe("«Avisos por email» de Mi perfil", () => {
+  test("una sola acción guarda todas las casillas y la hora del resumen a la vez", async () => {
+    const u = await makeUser();
+    await loginAs(u);
+    const all = { notifyEmail: false, notifyAssignedEmail: true, notifyDueEmail: false, notifyCommentEmail: true, dailyDigest: true, digestHour: 19 };
+    expectOk(await updateEmailPrefs(all));
+    const select = { notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, digestHour: true } as const;
+    assert.deepEqual(await db.user.findUniqueOrThrow({ where: { id: u.id }, select }), all);
+    // Faltar una casilla (un navegador con la página de antes) o traer otra cosa no guarda nada a medias.
+    const { notifyEmail: _omit, ...partial } = all;
+    expectFail(await updateEmailPrefs(partial as typeof all));
+    expectFail(await updateEmailPrefs({ ...all, notifyEmail: true, role: "ADMIN" } as typeof all));
+    assert.deepEqual(await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { ...select, role: true } }), { ...all, role: "MEMBER" });
   });
 });

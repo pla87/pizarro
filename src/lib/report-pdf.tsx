@@ -21,13 +21,14 @@ Font.registerHyphenationCallback(pdfWordParts);
 const C = {
   text: "#0f172a",
   muted: "#64748b",
-  faint: "#94a3b8",
   line: "#e2e8f0",
   soft: "#f8fafc",
   brand: "#4f46e5",
   brandSoft: "#eef2ff",
-  green: "#059669",
-  amber: "#d97706",
+  // Verde y ámbar 700 (5,5:1 y 5:1 con blanco): las etiquetas de estado van en blanco sobre ellos, a 7 pt, y también se
+  // usan como color de texto sobre el blanco de la página. Con los 600 se quedaban en 3,8:1 y 3,2:1.
+  green: "#047857",
+  amber: "#b45309",
   red: "#dc2626",
 };
 
@@ -37,7 +38,8 @@ const STATUS_COLOR: Record<DeliverableStatus, string> = {
   "En riesgo": C.amber,
   Retrasado: C.red,
   "Sin fecha": C.muted,
-  "Sin tareas": C.faint,
+  // Gris medio y no el claro (2,6:1 con el blanco de la etiqueta).
+  "Sin tareas": C.muted,
 };
 
 const s = StyleSheet.create({
@@ -64,7 +66,7 @@ const s = StyleSheet.create({
   td: { paddingVertical: 3, paddingHorizontal: 5 },
   small: { fontSize: 7.5, color: C.muted },
   pill: { fontSize: 7, fontFamily: "Helvetica-Bold", paddingVertical: 1.5, paddingHorizontal: 4, borderRadius: 3, color: "#fff" },
-  footer: { position: "absolute", bottom: 20, left: 36, right: 36, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.faint },
+  footer: { position: "absolute", bottom: 20, left: 36, right: 36, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: C.muted },
 });
 
 function Bar({ value, color = C.brand }: { value: number; color?: string }) {
@@ -84,9 +86,9 @@ function dueLabel(t: { dueDate: string | null; daysLeft: number | null; done?: b
   if (!t.dueDate) return "—";
   const date = formatDay(t.dueDate, today, x.locale);
   if (t.done || t.daysLeft === null) return date;
-  if (t.daysLeft < 0) return `${date} ${x.t("(hace {n} d)", { n: -t.daysLeft })}`;
+  if (t.daysLeft < 0) return `${date} ${x.t("(hace {n} d)", { n: (-t.daysLeft).toLocaleString(x.locale) })}`;
   if (t.daysLeft === 0) return `${date} ${x.t("(hoy)")}`;
-  return `${date} ${x.t("(en {n} d)", { n: t.daysLeft })}`;
+  return `${date} ${x.t("(en {n} d)", { n: t.daysLeft.toLocaleString(x.locale) })}`;
 }
 
 function dueColor(t: ReportTask): string {
@@ -336,10 +338,10 @@ const Footer = ({ left }: { left: React.ReactNode }) => (
   </View>
 );
 
-function Kv({ label, value, color = C.text }: { label: string; value: number; color?: string }) {
+function Kv({ label, value, locale, color = C.text }: { label: string; value: number; locale: string; color?: string }) {
   return (
     <View style={s.kpi}>
-      <Text style={[s.kpiValue, { color }]}>{value}</Text>
+      <Text style={[s.kpiValue, { color }]}>{value.toLocaleString(locale)}</Text>
       <Text style={s.kpiLabel}>{label}</Text>
     </View>
   );
@@ -401,10 +403,10 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   const pendingColumns = r.columns.filter((c) => !c.isDone && c.count > 0);
   const people = r.people.filter((p) => p.open > 0);
   const attention = [
-    k.unassignedOpen ? t("{n} sin responsable", { n: k.unassignedOpen }) : null,
-    k.withoutDueOpen ? t("{n} sin plazo", { n: k.withoutDueOpen }) : null,
+    k.unassignedOpen ? t("{n} sin responsable", { n: num(k.unassignedOpen) }) : null,
+    k.withoutDueOpen ? t("{n} sin plazo", { n: num(k.withoutDueOpen) }) : null,
   ].filter(Boolean);
-  const pendingTypes = r.types.filter((t) => t.open > 0).map((t) => `${t.label} ${t.open}`).join(" · ");
+  const pendingTypes = r.types.filter((t) => t.open > 0).map((t) => `${t.label} ${num(t.open)}`).join(" · ");
   const planned = [...r.overdue, ...r.upcoming];
   const h2 = (text: string) => <Text style={s.h2} minPresenceAhead={70}>{text}</Text>;
   /** Una sección «título + tabla»; si la tabla se trocea, el título va solo con el primer trozo. */
@@ -427,21 +429,21 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
           <View style={{ marginBottom: 8 }} wrap={false}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
               <Text style={{ fontFamily: "Helvetica-Bold" }}>{t("Avance: {pct}%", { pct: k.progressPct })}</Text>
-              <Text style={s.small}>{t("{done} de {total} tarjetas terminadas", { done: k.done, total: k.total })}</Text>
+              <Text style={s.small}>{t("{done} de {total} tarjetas terminadas", { done: num(k.done), total: num(k.total) })}</Text>
             </View>
             <Bar value={k.progressPct} color={C.green} />
             <View style={[s.kpis, { marginTop: 8 }]}>
-              <Kv label={t("Pendientes")} value={k.open} />
-              <Kv label={t("Vencidas")} value={k.overdue} color={k.overdue ? C.red : C.text} />
-              <Kv label={t("Vencen en 7 días")} value={k.dueSoon} color={k.dueSoon ? C.amber : C.text} />
-              <Kv label={t("Terminadas")} value={k.done} color={C.green} />
+              <Kv label={t("Pendientes")} value={k.open} locale={locale} />
+              <Kv label={t("Vencidas")} value={k.overdue} locale={locale} color={k.overdue ? C.red : C.text} />
+              <Kv label={t("Vencen en 7 días")} value={k.dueSoon} locale={locale} color={k.dueSoon ? C.amber : C.text} />
+              <Kv label={t("Terminadas")} value={k.done} locale={locale} color={C.green} />
             </View>
             {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
-            {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: k.fixed })}</Text> : null}
+            {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: num(k.fixed) })}</Text> : null}
             {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
             {trimmed ? (
               <Text style={[s.small, { marginTop: 2, color: C.amber }]}>
-                {t("Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.", { n: r.listLimit! })}
+                {t("Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.", { n: num(r.listLimit!) })}
                 {r.boardUrl ? <> <Link src={r.boardUrl} style={{ color: C.brand }}>{t("Abrir el tablero")}</Link></> : null}
               </Text>
             ) : r.omittedTasks ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.", { n: num(k.total + k.fixed - r.omittedTasks), total: num(k.total + k.fixed) })}</Text> : null}
@@ -467,7 +469,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
         <>
           {ci === 0 && first ? h2(t("Pendiente")) : null}
           <View style={{ marginBottom: last ? 6 : 0 }}>
-            {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {c.count}</Text> : null}
+            {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {num(c.count)}</Text> : null}
             {table}
             {last && c.more ? <MoreLine n={c.more} url={r.boardUrl} t={t} locale={locale} /> : null}
           </View>
@@ -489,15 +491,15 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
     ...section(t("Entregables"), r.deliverables, [
       { label: t("Entregable"), width: "34%", render: (d) => <View><Text style={{ fontFamily: "Helvetica-Bold" }}>{d.name}</Text>{d.description ? <Text style={s.small}>{d.description}</Text> : null}</View> },
       { label: t("Fecha objetivo"), width: "20%", render: (d) => dueLabel({ dueDate: d.dueDate, daysLeft: d.daysLeft, done: d.status === "Completado" }, r.today, x) },
-      { label: t("Avance"), width: "24%", render: (d) => <View><Text style={s.small}>{d.done}/{d.total} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
+      { label: t("Avance"), width: "24%", render: (d) => <View><Text style={s.small}>{num(d.done)}/{num(d.total)} · {d.pct}%</Text><Bar value={d.pct} color={STATUS_COLOR[d.status]} /></View> },
       { label: t("Estado"), width: "22%", render: (d) => <View style={{ flexDirection: "row" }}><Text style={[s.pill, { backgroundColor: STATUS_COLOR[d.status] }]}>{t(d.status)}</Text></View> },
     ], (d) => 1.5 + rowUnits(d.name, 34) + (d.description ? textUnits(d.description, 40) : 0), big),
 
     // Carga por persona
     ...section(t("Carga por persona"), people, [
-      { label: t("Persona"), width: "60%", render: (p) => p.name },
-      { label: t("Pendientes"), width: "20%", render: (p) => String(p.open) },
-      { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{p.overdue}</Text> },
+      { label: t("Responsable"), width: "60%", render: (p) => p.name },
+      { label: t("Pendientes"), width: "20%", render: (p) => num(p.open) },
+      { label: t("Vencidas"), width: "20%", render: (p) => <Text style={p.overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{num(p.overdue)}</Text> },
     ], (p) => rowUnits(p.name, 60), big),
 
     // Terminadas recientemente
@@ -515,7 +517,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
       { label: t("Nº"), width: "9%", render: (x) => `R${x.number}` },
       { label: t("Título"), width: "56%", render: (x) => x.title },
       { label: t("Fecha"), width: "21%", render: (x) => formatDay(x.deployedAt.slice(0, 10), r.today, locale) },
-      { label: t("Tareas"), width: "14%", render: (x) => String(x.taskCount) },
+      { label: t("Tareas"), width: "14%", render: (x) => num(x.taskCount) },
     ], (rel) => rowUnits(rel.title, 56), big),
   ];
 
@@ -554,7 +556,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
             <Text style={s.eyebrow}>{t("Planificación semanal")}</Text>
             <Text style={s.title}>{r.column}</Text>
             <Text style={s.meta}>
-              {r.project} · {t("Semana del {from} al {to}", weekRangeEnds(r.weekStart, r.weekEnd, locale))} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total })}
+              {r.project} · {t("Semana del {from} al {to}", weekRangeEnds(r.weekStart, r.weekEnd, locale))} · {byDay ? t("Por día") : t("Por persona")} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total.toLocaleString(locale) })}
             </Text>
           </View>
           {r.sections.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
@@ -563,7 +565,7 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
     },
     ...r.sections.flatMap((sec) => tableBlocks(sec.tasks, cols, (x) => rowUnits(x.title, titleWidth), big, (table, first) => (first ? (
       <View>
-        <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length})</Text></Text>
+        <Text style={s.h3} minPresenceAhead={50}>{sec.label} <Text style={s.small}>({sec.tasks.length.toLocaleString(locale)})</Text></Text>
         {table}
       </View>
     ) : table), 2)),
@@ -599,7 +601,7 @@ function checklistDoc(r: ChecklistPdfInput, t: T, locale: string): PagedDoc {
       units: run.reduce((n, it) => n + itemUnits(it), i === 0 ? 2 : 0),
       node: i === 0 ? (
         <View>
-          <Text style={s.h3} minPresenceAhead={40}>{g.label} <Text style={s.small}>({g.items.filter((i) => i.done).length}/{g.items.length})</Text></Text>
+          <Text style={s.h3} minPresenceAhead={40}>{g.label} <Text style={s.small}>({g.items.filter((i) => i.done).length.toLocaleString(locale)}/{g.items.length.toLocaleString(locale)})</Text></Text>
           {run.map(item)}
         </View>
       ) : item(run[0]!),
@@ -613,7 +615,7 @@ function checklistDoc(r: ChecklistPdfInput, t: T, locale: string): PagedDoc {
             <Text style={s.eyebrow}>{t("Lista consolidada")}</Text>
             <Text style={s.title}>{r.column}</Text>
             <Text style={s.meta}>
-              {r.project} · {formatDay(r.today, undefined, locale)} · {r.by === "card" ? t("Por tarjeta") : t("Por tipo de tarea")} · {t("{done} de {total} hechas", { done, total })}
+              {r.project} · {formatDay(r.today, undefined, locale)} · {r.by === "card" ? t("Por tarjeta") : t("Por tipo de tarea")} · {t("{done} de {total} hechas", { done: done.toLocaleString(locale), total: total.toLocaleString(locale) })}
             </Text>
           </View>
           {r.groups.length === 0 && <Text style={s.small}>{t("No hay subtareas en esta columna.")}</Text>}
@@ -681,7 +683,7 @@ function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
           <View style={s.header}>
             <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
             <Text style={s.title}>{r.project}</Text>
-            <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length })}</Text>
+            <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length.toLocaleString(locale) })}</Text>
           </View>
           {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
         </>
@@ -847,7 +849,7 @@ const SESSION_ROW = { flexDirection: "row", gap: 10 } as const;
 const SESSION_END = { paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: C.line };
 
 function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
-  const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length });
+  const count = r.sessions.length === 1 ? t("1 sesión") : t("{n} sesiones", { n: r.sessions.length.toLocaleString(locale) });
   const circle = (x: ProgramSessionPdf) => (
     <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: C.brandSoft, alignItems: "center", justifyContent: "center" }}>
       <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5, color: C.brand }}>{x.n}</Text>
@@ -856,7 +858,7 @@ function programDoc(r: ProgramPdfDocument, t: T, locale: string): PagedDoc {
   const head = (x: ProgramSessionPdf) => (
     <View wrap={false} minPresenceAhead={30}>
       <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 11.5, lineHeight: 1.25 }}>{t("Sesión {n}", { n: x.n })}: {x.title}</Text>
-      <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.faint, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
+      <Text style={{ fontSize: 8.5, color: x.date ? C.brand : C.muted, marginTop: 2, fontFamily: "Helvetica-Bold" }}>{x.date ?? t("Fecha por determinar")}</Text>
       {r.withAssignee && x.assignee ? <Text style={{ ...s.small, marginTop: 1 }}>{t("Responsable")}: {x.assignee}</Text> : null}
     </View>
   );

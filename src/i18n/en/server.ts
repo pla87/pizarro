@@ -30,7 +30,7 @@ export const server: Record<string, string> = {
   "Demasiadas tareas creadas seguidas. Espera un minuto.": "Too many tasks created in a row. Please wait a minute.",
   "Demasiadas etiquetas creadas seguidas. Espera un minuto.": "Too many labels created in a row. Please wait a minute.",
   "Demasiados entregables creados seguidos. Espera un minuto.": "Too many deliverables created in a row. Please wait a minute.",
-  "La tarea está archivada. Recupérala para modificarla.": "The task is archived. Restore it to modify it.",
+  "La tarea está archivada. Restáurala para modificarla.": "The task is archived. Restore it to modify it.",
   "Una tarea no puede tener más de 100 subtareas.": "A task cannot have more than 100 subtasks.",
   "Esta tarea ya tiene el máximo de {n} comentarios.": "This task already has the maximum of {n} comments.",
   "Indica un número.": "Enter a number.",
@@ -198,7 +198,6 @@ export const server: Record<string, string> = {
   "Avance": "Progress",
   "Estado": "Status",
   "Carga por persona": "Workload by person",
-  "Persona": "Person",
   "Terminadas en los últimos {n} días": "Completed in the last {n} days",
   "Últimas releases": "Latest releases",
   "Nº": "No.",
@@ -270,7 +269,7 @@ export const server: Record<string, string> = {
   "Borró la subtarea «{subtask}»": "Deleted the subtask “{subtask}”",
   "Canceló los cambios en «{title}»": "Discarded the changes to “{title}”",
   "Borró el adjunto «{name}» de «{task}»": "Deleted the attachment “{name}” from “{task}”",
-  "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
+  "Restauró «{title}» en «{col}»": "Restored “{title}” in “{col}”",
   "Comentó en «{title}»": "Commented on “{title}”",
   "Borró un comentario de «{title}»": "Deleted a comment on “{title}”",
   "Quitó el enlace «{title}»": "Removed the link “{title}”",
@@ -310,8 +309,6 @@ export const server: Record<string, string> = {
   "Escribe el secreto de nuevo al cambiar el ID de cliente": "Enter the secret again when you change the client ID",
   "Falta el secreto de cliente de Google.": "The Google client secret is missing.",
   "Versión no válida.": "Invalid version.",
-  "Elige una plantilla o un ejemplo, no los dos.": "Choose a template or an example, not both.",
-  "El ejemplo ya no existe.": "The example no longer exists.",
   // Copia con Ctrl soltada en el panel de fijas (ronda 55)
   "Duplicó «{title}» como fija en «{col}»": "Duplicated “{title}” as pinned in “{col}”",
   // Informe semanal: destinatario (ronda 56)
@@ -327,4 +324,7 @@ export const server: Record<string, string> = {
   "Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.": "The lists show the first {n} of {total} tasks; progress and counts include all of them.",
   // Informe semanal por email: listados recortados en proyectos enormes
   "Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.": "This report shows at most {n} tasks per list; progress and counts include all of them.",
+  // Historial de las tareas (TaskEvent, un año) y deshacer (7 días): guardan la clave de antes de «Restaurar».
+  // Textos guardados por versiones anteriores (se traducen al leerlos)
+  "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
 };

@@ -232,7 +232,8 @@ export function noticeBody(m: NoticeMessage, t: T): string {
 }
 
 /** Texto del enlace del aviso: a la tarea o, en un aviso de proyecto, al proyecto. */
-export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string => (m.type && isProjectNotice(m.type) ? t("Abrir el proyecto") : t("Abrir la tarea"));
+export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string =>
+  m.type === "REPORT_UNSUBSCRIBED" ? t("Abrir los informes del proyecto") : m.type && isProjectNotice(m.type) ? t("Abrir el proyecto") : t("Abrir la tarea");
 
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {

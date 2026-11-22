@@ -7,7 +7,7 @@ import { appTimeZone } from "@/lib/board";
 import { emailEnabled } from "@/lib/notify";
 import { getMyChannels } from "@/lib/messaging";
 import { MessagingSection } from "./MessagingSection";
-import { NotificationExtras } from "./NotificationExtras";
+import { EmailNoticesSection } from "./EmailNoticesSection";
 import { currentSessionId, requireUserPage } from "@/lib/session";
 import { recoveryCodesLeft } from "@/lib/two-factor";
 import { deviceLabel } from "@/lib/user-agent";
@@ -109,20 +109,22 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         theme={row.theme}
         accent={row.accent}
         locale={row.locale}
-        notifications={{
-          notifyEmail: row.notifyEmail,
-          emailAvailable: emailEnabled(),
-          adminNotices: user.role === "ADMIN",
-        }}
+        notifications={{ emailAvailable: emailEnabled() }}
         notificationExtras={
-          <>
-          {tab === "avisos" && <MessagingSection initial={await getMyChannels(user.id)} />}
-          <NotificationExtras
-            prefs={{ notifyAssignedEmail: row.notifyAssignedEmail, notifyDueEmail: row.notifyDueEmail, notifyCommentEmail: row.notifyCommentEmail, dailyDigest: row.dailyDigest, digestHour: row.digestHour }}
-            emailAvailable={emailEnabled()}
-            timeZone={appTimeZone()}
-          />
-          </>
+          tab === "avisos" ? (
+            <>
+              <EmailNoticesSection
+                prefs={{
+                  notifyEmail: row.notifyEmail, notifyAssignedEmail: row.notifyAssignedEmail, notifyDueEmail: row.notifyDueEmail,
+                  notifyCommentEmail: row.notifyCommentEmail, dailyDigest: row.dailyDigest, digestHour: row.digestHour,
+                }}
+                emailAvailable={emailEnabled()}
+                adminNotices={user.role === "ADMIN"}
+                timeZone={appTimeZone()}
+              />
+              <MessagingSection initial={await getMyChannels(user.id)} />
+            </>
+          ) : null
         }
         tab={tab}
         unknownTab={!google && asked.kind === "unknown" ? asked.asked : undefined}

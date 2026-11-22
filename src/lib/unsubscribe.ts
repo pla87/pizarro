@@ -1,22 +1,15 @@
 import "server-only";
 import { db } from "./db";
 import { logEvent } from "./log";
-import { appUrl } from "./mail";
 import { maskEmail } from "./mask-email";
-import {
-  EMAIL_PREF_FIELD, parseUnsubscribeToken, unsubscribeHeaders, unsubscribeSignatureOk, unsubscribeToken, type UnsubscribeKind,
-} from "./unsubscribe-core";
+import { notifyReportUnsubscribed } from "./notify";
+import { EMAIL_PREF_FIELD, parseUnsubscribeToken, unsubscribeSignatureOk, type UnsubscribeKind } from "./unsubscribe-core";
 
 // Baja en un clic (RFC 8058) de los emails de avisos, del resumen diario y del informe semanal. Los emails llevan las
 // cabeceras List-Unsubscribe (POST a /api/unsubscribe/<token>, sin sesión) y un enlace al pie a /unsubscribe/<token>, una
 // página que pide confirmar con un botón: abrir un enlace nunca da de baja (los escáneres de enlaces de los gestores de
 // correo los abren todos). Los emails de cuentas (invitación, restablecer, códigos, avisos de seguridad) no llevan baja.
-
-/** Enlace del pie (página de confirmación) y cabeceras de la baja en un clic para un email de `kind` a `email`. */
-export function unsubscribeLinks(kind: UnsubscribeKind, id: string, email: string): { page: string; headers: Record<string, string> } {
-  const token = unsubscribeToken(kind, id, email);
-  return { page: `${appUrl()}/unsubscribe/${token}`, headers: unsubscribeHeaders(`${appUrl()}/api/unsubscribe/${token}`) };
-}
+// Los enlaces de los emails los compone unsubscribe-links.ts.
 
 /** Lo que apaga un enlace de baja válido. `receiving`: si ese email sigue activado ahora. */
 export interface UnsubscribeTarget {
@@ -54,10 +47,27 @@ export async function applyUnsubscribe(token: string, via: "one-click" | "page",
   const target = await resolveUnsubscribe(token);
   if (!target) return null;
   let changed: boolean;
+  let reportSetterId: string | null = null;
   if (target.kind === "report") {
-    // Solo si sigue yendo a la misma dirección (otra persona pudo cambiar el destinatario entre medias).
-    const r = await db.reportSchedule.updateMany({ where: { projectId: target.id, enabled: true, recipient: target.email }, data: { enabled: false } });
-    changed = r.count > 0;
+    // Solo si sigue yendo a la misma dirección (otra persona pudo cambiar el destinatario entre medias). Se apunta quién
+    // se dio de baja y cuándo: Ajustes del proyecto → Informes lo muestra y no deja reactivarlo hacia esa dirección salvo
+    // a esa misma persona (saveReportSchedule).
+    const unsubscribed = { unsubscribedEmail: target.email, unsubscribedAt: new Date() };
+    const off = await db.reportSchedule.updateManyAndReturn({
+      where: { projectId: target.id, enabled: true, recipient: target.email },
+      data: { enabled: false, ...unsubscribed },
+      select: { createdById: true },
+    });
+    changed = off.length > 0;
+    reportSetterId = off[0]?.createdById ?? null;
+    // Ya desactivado (alguien lo apagó entre medias): no deja de salir nada, pero se apunta igual la baja, para que nadie
+    // lo vuelva a activar hacia esa dirección sin saberlo.
+    if (!changed) {
+      await db.reportSchedule.updateMany({
+        where: { projectId: target.id, recipient: target.email, OR: [{ unsubscribedEmail: null }, { NOT: { unsubscribedEmail: { equals: target.email, mode: "insensitive" } } }] },
+        data: unsubscribed,
+      });
+    }
   } else {
     const field = EMAIL_PREF_FIELD[target.kind];
     const r = await db.user.updateMany({ where: { id: target.id, email: target.email, [field]: true }, data: { [field]: false } });
@@ -74,5 +84,18 @@ export async function applyUnsubscribe(token: string, via: "one-click" | "page",
       details: { kind: target.kind, via, to: maskEmail(target.email) },
     });
   }
+  // Aviso a quien lo configuró (salvo que sea la misma persona que se ha dado de baja). Un fallo no deshace la baja.
+  if (changed && reportSetterId) {
+    const setter = await db.user.findUnique({ where: { id: reportSetterId }, select: { email: true } });
+    if (setter && setter.email.toLowerCase() !== target.email.toLowerCase()) {
+      await notifyReportUnsubscribed(target.id, reportSetterId, await unsubscriberLabel(target.email)).catch((err) => console.error("[unsubscribe] aviso", err));
+    }
+  }
   return { ...target, receiving: false, changed };
+}
+
+/** Quién se ha dado de baja del informe, para el aviso: su nombre si tiene cuenta o, si no, su dirección enmascarada. */
+async function unsubscriberLabel(email: string): Promise<string> {
+  const person = await db.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } }, select: { name: true } });
+  return person?.name ?? maskEmail(email);
 }

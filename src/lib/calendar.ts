@@ -122,6 +122,32 @@ export function rangeBandsForWeek(weekDays: string[], ranges: { id: string; star
   return bands;
 }
 
+/**
+ * Bandas que se dibujan en una semana con un tope de `max`: las primeras, salvo que alguna de `keep` (la que se arrastra
+ * o la que se acaba de mover con el teclado) quede fuera; entonces ocupa el sitio de las últimas. `hidden` son las que
+ * van a «+N más» (las mismas que faltan en `shown`, para no repetir ni perder ninguna).
+ */
+export function visibleBands(bands: Band[], max: number, keep: (string | null | undefined)[]): { shown: Band[]; hidden: Band[] } {
+  const shown = bands.slice(0, max);
+  const kept = new Set(keep.filter((id): id is string => Boolean(id)));
+  let slot = shown.length - 1;
+  for (const id of kept) {
+    const band = bands.find((b) => b.id === id);
+    if (!band || shown.includes(band)) continue;
+    while (slot >= 0 && kept.has(shown[slot]!.id)) slot--;
+    if (slot < 0) break;
+    shown[slot--] = band;
+  }
+  return { shown, hidden: bands.filter((b) => !shown.includes(b)) };
+}
+
+/** ¿Un rango (o un día, con start = due) queda antes («prev») o después («next») de la cuadrícula que va de `first` a `last`? */
+export function outsideGrid(range: { start: string; due: string }, first: string, last: string): "prev" | "next" | null {
+  if (range.due < first) return "prev";
+  if (range.start > last) return "next";
+  return null;
+}
+
 /** Qué se arrastra de una banda: toda ella, su borde izquierdo (inicio) o el derecho (fin). */
 export type RangeDragMode = "move" | "start" | "end";
 
@@ -137,6 +163,21 @@ export function dragRange(origin: { start: string; due: string }, mode: RangeDra
   }
   if (mode === "start") return { start: hover > origin.due ? origin.due : hover, due: origin.due };
   return { start: origin.start, due: hover < origin.start ? origin.start : hover };
+}
+
+/** Con el dedo o un lápiz, una banda solo se arrastra tras mantenerla pulsada este tiempo sin moverla. */
+export const TOUCH_DRAG_DELAY_MS = 350;
+/** Distancia (px) que hay que mover el puntero para que cuente como movimiento y no como pulsación. */
+const DRAG_SLOP_PX = 5;
+
+/**
+ * Qué hacer con un movimiento del puntero sobre una banda antes de que empiece el arrastre: con el ratón, arrastrar en
+ * cuanto se mueve; con el dedo, solo si ya se ha mantenido pulsada (`held`); si se mueve antes, se suelta la banda para
+ * que el navegador desplace la página (deslizar para bajar por el mes no debe cambiar ninguna fecha).
+ */
+export function pendingBandDrag(pointerType: string, held: boolean, distance: number): "wait" | "drag" | "abort" {
+  if (distance < DRAG_SLOP_PX) return "wait";
+  return pointerType === "mouse" || held ? "drag" : "abort";
 }
 
 /** Columna (0..cols-1) que corresponde a la coordenada x dentro de una fila de `width` px que empieza en `left`; se ajusta a los extremos. */

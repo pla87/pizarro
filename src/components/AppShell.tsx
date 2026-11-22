@@ -8,17 +8,18 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { logout } from "@/actions/auth";
 import { useT } from "@/i18n/client";
-import { createProject, listProjectExamples } from "@/actions/projects";
+import { createProject, listProjectStarts } from "@/actions/projects";
 import { projectOutsideList } from "@/actions/project-visit";
-import { listTemplates } from "@/actions/templates";
 import type { CurrentUser } from "@/lib/session";
-import { applyUnreadChange, onUnreadChange } from "@/lib/unread-core";
+import type { FeedbackStatus } from "@/lib/feedback-core";
+import { onUnreadCount } from "@/lib/unread-core";
 import { AppBadge } from "./AppBadge";
 import { InstallApp } from "./InstallApp";
 import { LicenseNudge } from "./LicenseNudge";
+import { FeedbackButton, FeedbackProvider } from "./feedback/Feedback";
 import { clearDraftsOnLogout } from "./board/drafts";
 import { OPEN_PROJECT_MENU_EVENT } from "./board/shortcuts";
 import { filesFrom, hasFiles } from "./board/upload";
@@ -64,6 +65,8 @@ interface Props {
   diskLow?: boolean;
   /** Recordatorio de licencia para este administrador: destino de «Comprar» (null: no se muestra). */
   licenseNudge?: string | null;
+  /** «Informar de un error o enviar una sugerencia» (null: no es una build oficial sin modificar y no hay botón). */
+  feedback?: FeedbackStatus | null;
   children: React.ReactNode;
 }
 
@@ -81,7 +84,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -90,6 +93,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   const drawerOpen = drawerPath === pathname;
   const setDrawerOpen = (open: boolean) => setDrawerPath(open ? pathname : null);
   useEscapeClose(drawerOpen, () => setDrawerPath(null), { yieldToModal: true });
+  const closeDrawer = useCallback(() => setDrawerPath(null), []);
   // Menú móvil como diálogo: el foco entra en «Cerrar menú», Tab no sale de él y al cerrar vuelve a «Abrir menú».
   const drawerRef = useRef<HTMLElement>(null);
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
@@ -105,13 +109,14 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   // Deshacer y presencia son del proyecto que se está viendo, no del recordado.
   const inProject = Boolean(projectId && current?.id === projectId);
 
-  // Avisos sin leer: los da el layout y los baja la lista de Avisos al leer uno (`pz:unread`), sin volver a pedir la
-  // página (al abrir un aviso, eso pedía otra vez el tablero entero). Cada render del layout en el servidor (refresco,
-  // recarga) trae un `user` nuevo y con él el número del servidor, aunque coincida con el anterior.
+  // Avisos sin leer: los da el layout y, al leer uno en la lista de Avisos, el número que devuelve la acción
+  // (`pz:unread`), tal cual, sin volver a pedir la página (al abrir un aviso, eso pedía otra vez el tablero entero).
+  // Cada render del layout en el servidor (refresco, recarga) trae un `user` nuevo y con él el número del servidor,
+  // aunque coincida con el anterior.
   const [unreadSeen, setUnreadSeen] = useState({ from: user, count: serverUnread });
   if (unreadSeen.from !== user) setUnreadSeen({ from: user, count: serverUnread });
   const unread = unreadSeen.from === user ? unreadSeen.count : serverUnread;
-  useEffect(() => onUnreadChange((change) => setUnreadSeen((s) => ({ ...s, count: applyUnreadChange(s.count, change) }))), []);
+  useEffect(() => onUnreadCount((count) => setUnreadSeen((s) => ({ ...s, count }))), []);
 
   // Mover/copiar texto arrastrado entre campos (incluido el editor TipTap).
   useEffect(() => installDragMove(), []);
@@ -131,6 +136,8 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   );
 
   return (
+    // El diálogo de informar de un error cierra antes el menú móvil: la captura es de la página, no del menú.
+    <FeedbackProvider status={feedback} isAdmin={user.role === "ADMIN"} version={version} email={user.email} beforeOpen={closeDrawer}>
     <ProjectsContext.Provider value={{ projects, currentId: current?.id ?? null }}>
     {/* `unread` llega con tope de 100 (layout): con 100 o más la insignia pide 100 (algunos sistemas lo muestran como
         «99+»), nunca un número menor que el real. */}
@@ -179,6 +186,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
       </div>
     </div>
     </ProjectsContext.Provider>
+    </FeedbackProvider>
   );
 }
 
@@ -366,6 +374,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
             <div className="truncate text-sm font-medium">{user.name}</div>
             <HoverPrefetchLink href="/changelog" className="text-xs text-slate-500 hover:underline">v{version}</HoverPrefetchLink>
           </div>
+          <FeedbackButton />
           <form action={logout} onSubmit={() => clearDraftsOnLogout(user.clearDraftsOnLogout)}>
             <button type="submit" className="btn-icon" title={t("Cerrar sesión")} aria-label={t("Cerrar sesión")}>
               <LogOut size={17} />
@@ -454,12 +463,8 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProjec
   );
 }
 
-/** «example:clave» → ["example", "clave"]; «blank» → ["blank", ""]. */
-function splitOrigin(value: string): ["blank" | "example" | "template", string] {
-  const i = value.indexOf(":");
-  const kind = i < 0 ? value : value.slice(0, i);
-  return [kind === "example" || kind === "template" ? kind : "blank", i < 0 ? "" : value.slice(i + 1)];
-}
+/** «template:id» → el id; «blank» → "". */
+const templateIdOf = (value: string) => (value.startsWith("template:") ? value.slice("template:".length) : "");
 
 /** Botón «Nuevo proyecto» fuera del selector (la portada sin proyectos): abre el mismo diálogo. */
 export function NewProjectButton({ isAdmin }: { isAdmin: boolean }) {
@@ -483,14 +488,13 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [pending, start] = useActionTransition();
   const pathname = usePathname();
   const [target, setTarget] = useState<string | null>(null);
-  // Plantillas de proyecto de la instancia (solo administradores): solo la estructura, sin tarjetas.
-  const [templates, setTemplates] = useState<{ id: string; name: string; description: string }[]>([]);
-  // Ejemplos de serie (con tarjetas de muestra): los puede usar todo el mundo.
-  const [examples, setExamples] = useState<{ key: string; name: string; description: string }[]>([]);
-  // Con qué empieza el proyecto: una sola opción a la vez (en blanco, un ejemplo o una plantilla), nunca dos mezcladas.
-  const [origin, setOrigin] = useState<{ kind: "blank" } | { kind: "example"; key: string } | { kind: "template"; id: string }>({ kind: "blank" });
-  const exampleKey = origin.kind === "example" ? origin.key : "";
-  // Último nombre puesto por el autocompletado de un ejemplo: solo se sustituye o se quita mientras siga sin tocarse.
+  // Plantillas con las que empezar: las de serie de la instalación (para todos) y las propias (solo administradores).
+  const [starts, setStarts] = useState<{ id: string; name: string; description: string; builtin: boolean; examples: boolean }[]>([]);
+  // Con qué empieza el proyecto: en blanco ("") o el id de una plantilla.
+  const [templateId, setTemplateId] = useState("");
+  // «Con tarjetas de ejemplo» (solo con una plantilla de serie que las tenga); desmarcada por defecto.
+  const [withExamples, setWithExamples] = useState(false);
+  // Último nombre puesto por el autocompletado de una plantilla: solo se sustituye o se quita mientras siga sin tocarse.
   const autoName = useRef("");
   // Quien no es administrador solo puede crear proyectos privados.
   const [isPrivate, setIsPrivate] = useState(!isAdmin);
@@ -499,33 +503,33 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   // Con una importación en curso el diálogo no se cierra (Esc, fondo, atrás): la subida sigue y se enseña su resultado.
   const [importBusy, setImportBusy] = useState(false);
   // Sin red se piden al volver la conexión (antes el fallo quedaba sin atender).
-  useEffect(() => loadWhenOnline(listProjectExamples, (res) => res.ok && setExamples(res.data), () => {}), []);
-  // Las plantillas (solo administradores) se piden al abrir el modal.
-  useEffect(() => {
-    if (!isAdmin) return;
-    return loadWhenOnline(listTemplates, (res) => res.ok && setTemplates(res.data), () => {});
-  }, [isAdmin]);
+  useEffect(() => loadWhenOnline(listProjectStarts, (res) => res.ok && setStarts(res.data), () => {}), []);
   // Se cierra al llegar al proyecto nuevo, no antes: cerrar retira su entrada del historial
   // y eso cancelaría la navegación en curso.
   useEffect(() => {
     if (target && pathname === target) onClose();
   }, [target, pathname, onClose]);
-  const showTemplates = isAdmin && templates.length > 0;
-  // Valor del desplegable «Empezar con» y la línea que describe la opción elegida.
-  const originValue = origin.kind === "example" ? `example:${origin.key}` : origin.kind === "template" ? `template:${origin.id}` : "blank";
-  const example = origin.kind === "example" ? examples.find((ex) => ex.key === origin.key) : undefined;
-  const template = origin.kind === "template" ? templates.find((tpl) => tpl.id === origin.id) : undefined;
-  const originHelp = example
-    ? t("{description} Con tarjetas de muestra que puedes borrar.", { description: example.description })
-    : template
-      ? template.description.trim() || t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.")
-      : t("Columnas por defecto, sin tarjetas.");
-  // Elegir un ejemplo propone su nombre (si el campo está vacío o aún tiene el que puso otro ejemplo); lo demás lo quita.
-  const pickOrigin = (next: typeof origin, exampleName?: string) => {
-    setOrigin(next);
+  const builtins = starts.filter((tpl) => tpl.builtin);
+  const own = starts.filter((tpl) => !tpl.builtin);
+  const template = templateId ? starts.find((tpl) => tpl.id === templateId) : undefined;
+  const examples = !!template?.examples && withExamples;
+  // La línea que describe la opción elegida. Sin descripción, la genérica, que con ejemplos no dice a la vez «sin
+  // tarjetas» y «con tarjetas».
+  const description = template?.description.trim() ?? "";
+  const originHelp = !template
+    ? t("Columnas por defecto, sin tarjetas.")
+    : examples
+      ? description
+        ? t("{description} Con tarjetas de muestra que puedes borrar.", { description })
+        : t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.")
+      : description || t("La estructura de la plantilla (columnas, tipos, etiquetas y campos), sin tarjetas.");
+  // Elegir una plantilla propone su nombre (si el campo está vacío o aún tiene el que puso otra); en blanco lo quita.
+  const pickTemplate = (id: string) => {
+    setTemplateId(id);
+    const picked = id ? starts.find((tpl) => tpl.id === id) : undefined;
     const untouched = !name.trim() || name === autoName.current;
-    if (next.kind === "example" && exampleName) {
-      if (untouched) { setName(exampleName); autoName.current = exampleName; }
+    if (picked) {
+      if (untouched) { setName(picked.name); autoName.current = picked.name; }
     } else {
       if (autoName.current && name === autoName.current) setName("");
       autoName.current = "";
@@ -534,11 +538,11 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     start(async () => {
-      const res = await createProject(name, { templateId: origin.kind === "template" ? origin.id : null, exampleKey: exampleKey || null, isPrivate });
+      const res = await createProject(name, { templateId: template ? template.id : null, withExamples: examples, isPrivate });
       if (!res.ok) return toast(res.error, "error");
-      // Con una plantilla o un ejemplo, al tablero: ya trae columnas, tipos y etiquetas, y lo siguiente es crear tareas
-      // (antes se abrían siempre los ajustes). En blanco, a los ajustes, para adaptar las columnas por defecto y los tipos.
-      const dest = origin.kind === "blank" ? `/p/${res.data.id}/settings` : `/p/${res.data.id}`;
+      // Con una plantilla, al tablero: ya trae columnas, tipos y etiquetas, y lo siguiente es crear tareas (antes se abrían
+      // siempre los ajustes). En blanco, a los ajustes, para adaptar las columnas por defecto y los tipos.
+      const dest = template ? `/p/${res.data.id}` : `/p/${res.data.id}/settings`;
       setTarget(dest);
       router.push(dest);
     });
@@ -564,35 +568,39 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
           <input id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
         </div>
-        {/* Un solo desplegable: en blanco, un ejemplo (con tarjetas de muestra) o una plantilla (solo admins), nunca dos a la vez.
-            Siempre visible (los ejemplos llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción. */}
+        {/* Un solo desplegable: en blanco, una plantilla de serie o una propia (solo admins). Siempre visible (las plantillas
+            llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción y, con una de serie, la
+            casilla de las tarjetas de ejemplo. */}
         <div>
           <label className="label" htmlFor="project-start">{t("Empezar con")}</label>
           <select
             id="project-start"
             className="input"
-            value={originValue}
+            value={template ? `template:${template.id}` : "blank"}
             aria-describedby="project-start-help"
-            onChange={(e) => {
-              const [kind, id] = splitOrigin(e.target.value);
-              if (kind === "example") pickOrigin({ kind, key: id }, examples.find((ex) => ex.key === id)?.name);
-              else if (kind === "template") pickOrigin({ kind, id });
-              else pickOrigin({ kind: "blank" });
-            }}
+            onChange={(e) => pickTemplate(templateIdOf(e.target.value))}
           >
             <option value="blank">{t("Proyecto en blanco")}</option>
-            {examples.length > 0 && (
-              <optgroup label={t("Ejemplos")}>
-                {examples.map((ex) => <option key={ex.key} value={`example:${ex.key}`}>{ex.name}</option>)}
+            {builtins.length > 0 && (
+              <optgroup label={t("Plantillas de serie")}>
+                {builtins.map((tpl) => <option key={tpl.id} value={`template:${tpl.id}`}>{tpl.name}</option>)}
               </optgroup>
             )}
-            {showTemplates && (
-              <optgroup label={t("Plantillas")}>
-                {templates.map((tpl) => <option key={tpl.id} value={`template:${tpl.id}`}>{tpl.name}</option>)}
+            {own.length > 0 && (
+              <optgroup label={t("Plantillas propias")}>
+                {own.map((tpl) => <option key={tpl.id} value={`template:${tpl.id}`}>{tpl.name}</option>)}
               </optgroup>
             )}
           </select>
-          <p id="project-start-help" className="mt-1 line-clamp-3 text-xs text-slate-500">{originHelp}</p>
+          {/* Se lee entera con las de serie (en el móvil, recortada, se perdía justo «Con tarjetas de muestra…»); solo una
+              propia, con una descripción que puede ser larga, se recorta. */}
+          <p id="project-start-help" className={cn("mt-1 text-xs text-slate-500", template && !template.builtin && "line-clamp-4")}>{originHelp}</p>
+          {template?.examples && (
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={withExamples} onChange={(e) => setWithExamples(e.target.checked)} />
+              <span>{t("Con tarjetas de ejemplo")}</span>
+            </label>
+          )}
         </div>
         {isAdmin ? (
           <label className="flex items-center gap-2 text-sm">

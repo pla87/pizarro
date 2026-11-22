@@ -9,6 +9,7 @@ import { subscribeProject } from "../../src/lib/realtime";
 import { undoTemplateChange as undoInLib } from "../../src/lib/template-apply";
 import { planReplace, summarizePlan } from "../../src/lib/template-apply-core";
 import type { TemplateInput } from "../../src/lib/project-templates";
+import { seedBuiltinTemplates } from "../../src/lib/template-store";
 
 const TEMPLATE: TemplateInput = {
   name: "Plantilla de prueba",
@@ -37,6 +38,17 @@ async function makeTemplate(data: TemplateInput = TEMPLATE) {
       hideAllGeneralKinds: data.hideAllGeneralKinds ?? false, labels: data.labels ?? [], taskFields: data.taskFields ?? [], releaseTemplates: data.releaseTemplates ?? [], position: 1,
     },
   });
+}
+
+/** Referencia a la plantilla de serie `key` de la instalación (la siembra si otra prueba la borró). */
+async function builtinRef(key: string) {
+  let row = await db.projectTemplate.findUnique({ where: { builtinKey: key } });
+  if (!row) {
+    await db.builtinTemplateSeeded.deleteMany({ where: { key } });
+    await seedBuiltinTemplates(db);
+    row = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } });
+  }
+  return { source: "template", id: row.id } as const;
 }
 
 /** Proyecto privado de `owner` (lo gestiona sin ser administrador) con tareas en sus tres columnas. */
@@ -104,9 +116,9 @@ test("cambiar de plantilla: empareja, mueve las tareas (archivadas incluidas), c
   const ownKind = await db.taskKind.findUniqueOrThrow({ where: { id: f.kindId } });
   const before = await state(f.project.id);
   const tpl = await makeTemplate();
-  // Un proyecto privado lo gestiona su miembro; las plantillas de la instalación son solo de administradores.
+  // Un proyecto privado lo gestiona su miembro; las plantillas propias son solo de administradores.
   await loginAs(owner);
-  expectFail(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id }), /Solo los administradores/);
+  expectFail(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id }), /Solo los administradores pueden usar las plantillas propias/);
   const admin = await makeUser({ role: "ADMIN" });
   await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
   await loginAs(admin);
@@ -169,7 +181,7 @@ test("cambiar de plantilla: empareja, mueve las tareas (archivadas incluidas), c
 test("nada que tenga tareas se borra: una columna o un tipo con tareas que se pide quitar se conserva", async () => {
   const { owner, f } = await setup();
   await loginAs(owner);
-  const ref = { source: "example", key: "familia-casa" } as const;
+  const ref = await builtinRef("casa-familia");
   const preview = expectOk(await previewTemplateChange(f.project.id, ref));
   expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE", {
     columns: Object.fromEntries(preview.project.columns.map((c) => [c.id, "drop"])),
@@ -208,21 +220,28 @@ test("permisos: solo quien gestiona el proyecto; los miembros de un proyecto de 
   const f = await makeProject({ members: [member] });
   await loginAs(member);
   expectFail(await listApplicableTemplates(f.project.id), FORBIDDEN);
-  expectFail(await applyTemplateChange(f.project.id, { source: "example", key: "familia-casa" }, "ADD"), FORBIDDEN);
+  expectFail(await applyTemplateChange(f.project.id, await builtinRef("casa-familia"), "ADD"), FORBIDDEN);
   expectFail(await undoTemplateChange(f.project.id), FORBIDDEN);
-  // Un administrador ve las generales y las de la instalación.
+  // Un administrador ve las de serie y las propias.
   const admin = await makeUser({ role: "ADMIN" });
   const tpl = await makeTemplate();
+  const home = await builtinRef("casa-familia");
   await loginAs(admin);
   const list = expectOk(await listApplicableTemplates(f.project.id));
-  assert.ok(list.some((x) => x.group === "general"));
+  assert.ok(list.some((x) => x.group === "general" && x.ref.id === home.id));
   assert.ok(list.some((x) => x.group === "installation" && x.ref.source === "template" && x.ref.id === tpl.id));
+  // Quien gestiona su proyecto privado sin ser administrador ve y aplica las de serie, pero no las propias.
+  const { owner, f: own } = await setup();
+  await loginAs(owner);
+  const mine = expectOk(await listApplicableTemplates(own.project.id));
+  assert.ok(mine.some((x) => x.ref.id === home.id) && mine.every((x) => x.group === "general"));
+  expectFail(await applyTemplateChange(own.project.id, { source: "template", id: tpl.id }, "ADD"), /Solo los administradores/);
 });
 
 test("el deshacer caduca a las 24 horas", async () => {
   const { owner, f } = await setup();
   await loginAs(owner);
-  expectOk(await applyTemplateChange(f.project.id, { source: "example", key: "familia-casa" }, "ADD"));
+  expectOk(await applyTemplateChange(f.project.id, await builtinRef("casa-familia"), "ADD"));
   await assert.rejects(undoInLib(f.project.id, new Date(Date.now() + 25 * 3_600_000)), /han pasado más de 24 horas/);
   expectOk(await undoTemplateChange(f.project.id));
 });
@@ -230,7 +249,7 @@ test("el deshacer caduca a las 24 horas", async () => {
 test("una columna de presupuesto de la plantilla activa el coste; al deshacer vuelven los campos de antes", async () => {
   const { owner, f } = await setup();
   await loginAs(owner);
-  const ref = { source: "example", key: "empresa-clientes" } as const;
+  const ref = await builtinRef("eventos-viajes");
   const preview = expectOk(await previewTemplateChange(f.project.id, ref));
   assert.ok(preview.template.columns.some((c) => c.role === "BUDGET"));
   expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE"));
@@ -307,7 +326,7 @@ test("cambiar de plantilla: la vista previa trae las tareas fijas y las que pier
 test("límite: como mucho 5 cambios de plantilla (aplicar o deshacer) por proyecto cada 10 minutos; los avisos no cuentan", async () => {
   const { owner, f } = await setup();
   await loginAs(owner);
-  const ref = { source: "example", key: "equipo-software" } as const;
+  const ref = await builtinRef("vibecoding");
   // Deshacer sin nada que deshacer es un aviso: no gasta el límite.
   for (let i = 0; i < 6; i++) expectFail(await undoTemplateChange(f.project.id), /No hay ningún cambio de plantilla/);
   for (let i = 0; i < 5; i++) {
