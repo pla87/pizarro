@@ -197,7 +197,8 @@ export async function resendInvite(userId: string) {
 }
 
 /**
- * «Copiar enlace de invitación» (miembros del proyecto y Administración → Usuarios, sin email configurado): como
+ * «Generar enlace de invitación nuevo» (miembros del proyecto y Administración → Usuarios, sin email configurado; la
+ * interfaz pide confirmación porque el enlace que ya se pasó deja de valer): como
  * «Reenviar invitación», emite un enlace nuevo (72 h, al mismo proyecto) y el anterior deja de valer, pero no lo envía:
  * lo devuelve para que el administrador se lo pase por otro canal. Solo para quien aún no ha entrado. El enlace no se
  * registra: solo quién lo generó y para quién.

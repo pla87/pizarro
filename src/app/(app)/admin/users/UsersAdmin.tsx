@@ -83,9 +83,15 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
     }
   };
 
-  // Sin email: «Copiar enlace de invitación» emite uno nuevo (el anterior deja de valer) y lo muestra para pasárselo.
+  // Sin email: «Generar enlace de invitación nuevo» emite uno (el anterior deja de valer, por eso se confirma) y lo
+  // muestra para pasárselo.
   const [inviteLink, setInviteLink] = useState<{ user: UserRow; link: string } | null>(null);
   const freshLink = async (u: UserRow) => {
+    if (!(await confirm({
+      title: t("Generar enlace de invitación nuevo"),
+      message: t("Se generará un enlace de invitación nuevo para {name}. El que ya le hayas pasado dejará de valer.", { name: u.name }),
+      confirmLabel: t("Generar enlace nuevo"),
+    }))) return;
     setResending(u.id);
     try {
       const res = await copyInviteLink(u.id).catch((e) => actionThrowResult(e, t));
@@ -140,7 +146,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
           // iconos y las insignias en la fila, el nombre y el email se quedaban sin sitio).
           const actions: { key: string; icon: typeof Pencil; label: string; title?: string; onClick: () => void; disabled?: boolean; danger?: boolean }[] = [
             ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
-            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Copiar enlace de invitación de {name}", { name: u.name }), title: t("Copiar enlace de invitación"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
+            ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Generar enlace de invitación nuevo para {name}", { name: u.name }), title: t("Genera un enlace de invitación nuevo; el anterior deja de valer"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
             { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
             ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
             ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
