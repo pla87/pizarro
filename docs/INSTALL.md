@@ -230,6 +230,8 @@ Edita `.env` y ejecuta `docker compose up -d`: Compose recrea solo los contenedo
 
 Los límites por defecto están pensados para 2 GB: app 1 GB (montón de Node 640 MB), PostgreSQL 512 MB y Caddy 128 MB. Si un proceso supera su límite, Docker lo reinicia en lugar de dejar sin memoria al servidor. Con más RAM puedes subir `APP_MEM_LIMIT` y `APP_HEAP_MB` (deja `APP_HEAP_MB` en torno al 60–70 % de `APP_MEM_LIMIT`).
 
+**Cuántas personas.** No hay tope de usuarios activos. Un servidor de 1 GB de RAM va holgado hasta unas 25 personas activas a la vez; para más, sube la memoria (2 GB hasta ~50) y vigila la base de datos (el *Diagnóstico para soporte* de *Administración → Ajustes* da la memoria del proceso y el tamaño de la base). Lo que crece con cada persona conectada es poco: cada pestaña con un tablero abierto mantiene un canal en vivo (como mucho 10 por persona) y, cuando alguien cambia algo, las demás pestañas de ese tablero piden lo que ha cambiado (repartidas en 2 s, `LIVE_REFRESH_JITTER_MS`); las cachés y las colas de imágenes y subidas tienen tope fijo. Si quieres poner un tope (por la licencia, o para no pasarte de la máquina), define `MAX_USERS` con el máximo y reinicia: *Administración → Usuarios* lo muestra («N de M usuarios activos») y no deja dar de alta, invitar ni reactivar a nadie más. Las personas desactivadas no cuentan.
+
 ### 3.3 Solo red local (sin dominio)
 
 En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve solo HTTP y la cookie de sesión no se marca *Secure*. No lo expongas así a Internet.

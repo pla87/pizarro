@@ -1,6 +1,6 @@
 # Pizarro
 
-Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 personas por defecto, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
+Kanban ligero y generador de *release notes* para equipos pequeños (sin tope de personas; opcional, `MAX_USERS`). Tiene tableros multiproyecto, capturas pegadas desde el portapapeles y exportación de releases agrupadas por tipo, con cabecera y pie personalizados por usuario.
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Instalar:** guía paso a paso en la web, [getpizarro.com/instalar](https://getpizarro.com/instalar/) ([English](https://getpizarro.com/en/install/)): requisitos, instalación en un comando, primeros pasos, Railway, copias, actualizar y problemas frecuentes. Se genera desde `docs/web/instalar.md` y `docs/web/en/install.md`.
@@ -15,7 +15,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (hasta 10 pe
 
 | Área | Qué incluye |
 |---|---|
-| Acceso | Login con email y contraseña (bcrypt). Sesiones en base de datos con cookie `HttpOnly` y `SameSite=Lax`. Sin registro público. Roles `ADMIN` y `MEMBER`. Máximo de 10 usuarios activos. |
+| Acceso | Login con email y contraseña (bcrypt). Sesiones en base de datos con cookie `HttpOnly` y `SameSite=Lax`. Sin registro público. Roles `ADMIN` y `MEMBER`. Sin tope de usuarios activos (opcional con `MAX_USERS`). |
 | Proyectos | Selector en la barra lateral. Cada proyecto tiene sus columnas, tareas, etiquetas y releases. Por defecto son visibles para todos; un admin puede **restringir la visibilidad** a usuarios concretos. |
 | Tablero | Columnas configurables por proyecto: crear, renombrar, reordenar, asignar un rol y borrar si están vacías. Arrastrar y soltar entre columnas y dentro de cada una. Selección múltiple y movimiento en lote. |
 | Tarjetas | Tipo (por defecto *Funcionalidad* y *Corrección*; los admins crean más tipos generales y cada proyecto puede tener tipos propios, con su color), color, responsable opcional, etiquetas, enlace externo, checklist, descripción en Markdown y capturas (pegar con Ctrl/⌘+V, archivo o cámara). Se pueden archivar y restaurar. |
@@ -121,7 +121,7 @@ steps:
 | `SEED_ADMIN_PASSWORD` | Solo el primer arranque | mínimo 10 caracteres | Contraseña inicial: cámbiala después desde *Mi perfil*. |
 | `SEED_ADMIN_NAME` | No | `Administrador` | Nombre visible del admin inicial. |
 | `SETUP_TOKEN` | No | 8+ caracteres | Código fijo que el asistente `/setup` acepta además del código del log (que cambia en cada arranque mientras falte la configuración). |
-| `MAX_USERS` | No | `10` | Máximo de usuarios activos. |
+| `MAX_USERS` | No | (sin tope) | Tope opcional de usuarios activos (entero de 1 a 1.000.000; un valor que no lo sea se avisa en el log y no se aplica). Las personas desactivadas no cuentan; cambiarlo pide reiniciar. Un servidor de 1 GB de RAM va holgado hasta unas 25 personas activas a la vez; para más, sube la memoria (2 GB hasta ~50) y vigila la base de datos. |
 | `MAX_UPLOAD_MB` | No | (sin tope) | Tope opcional, para todo el servidor, del tamaño de un adjunto. El tamaño máximo real es el de cada proyecto (ajustes del proyecto, 20 MB por defecto, hasta 100); si defines esta variable, ningún proyecto la supera. Se lee al subir cada archivo: cambiarla no exige recompilar. El proxy admite siempre hasta 100 MB por petición. |
 | `DATABASE_POOL_SIZE` | No | `10` | Conexiones del pool (entero de 1 a 500; un valor que no lo sea se avisa en el log y se usa 10). |
 | `DATABASE_CONNECT_TIMEOUT_MS` | No | `20000` | Tope (ms, de 1000 a 300000) para conseguir una conexión con PostgreSQL. Pasado, la petición falla y el log dice «No se puede conectar con PostgreSQL» con el servidor y el motivo (antes esperaba sin límite). |

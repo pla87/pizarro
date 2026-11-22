@@ -25,7 +25,7 @@ if (only.includes("admin")) {
     await page.goto(`${L.BASE}/admin/users`);
     await page.getByRole("heading", { name: "Usuarios" }).waitFor({ timeout: 20000 });
     const text = await bodyText(page);
-    L.check("USERS: el recuento va solo, sin la explicación larga", /\d+ de \d+ usuarios activos/.test(text) && !text.includes("No hay registro público"));
+    L.check("USERS: el recuento va solo, sin la explicación larga", /\d+ (?:de \d+ )?usuarios? activos?/.test(text) && !text.includes("No hay registro público"));
     await page.getByRole("button", { name: "Más información: Usuarios" }).click();
     await L.eqEventually("USERS: la nota «i» se abre con la explicación", async () => (await tip(page).count()) && (await tip(page).innerText()).includes("No hay registro público"), true);
     await page.keyboard.press("Escape");

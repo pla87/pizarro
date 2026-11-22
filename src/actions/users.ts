@@ -48,10 +48,11 @@ const createSchema = z.object({
  * En ningún caso el admin llega a conocer la contraseña definitiva.
  */
 /**
- * Lanza si ya hay MAX_USERS usuarios activos. Dentro de una transacción toma antes un candado común a altas y
- * reactivaciones (pg_advisory_xact_lock), para que dos a la vez no puedan pasarse del tope.
+ * Lanza si ya hay MAX_USERS usuarios activos (sin la variable no hay tope y no hace nada). Dentro de una transacción toma
+ * antes un candado común a altas y reactivaciones (pg_advisory_xact_lock), para que dos a la vez no puedan pasarse del tope.
  */
 async function assertUserSlot(client: Prisma.TransactionClient | typeof db): Promise<void> {
+  if (MAX_USERS === null) return;
   if (client !== db) await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:max-users'))::text`;
   if ((await client.user.count({ where: { active: true } })) >= MAX_USERS) {
     const t = await getT();

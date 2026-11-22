@@ -377,11 +377,18 @@ export const admin: Record<string, string> = {
   "Copiar lo que has escrito": "Copy what you wrote",
   // Usuarios: de dónde sale el máximo de usuarios activos (MAX_USERS)
   "El máximo de {max} lo fija la variable MAX_USERS del servidor.": "The maximum of {max} is set by the server's MAX_USERS variable.",
-  "La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.": "The server's MAX_USERS variable is not a valid whole number: the default maximum, {max}, is used.",
-  "El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.": "The maximum of {max} is the default: the server's MAX_USERS variable is not set.",
-  "Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.": "To change it, set MAX_USERS to the number you want (Railway → Variables; with Docker, in the .env file) and restart Pizarro. Deactivated people don't count.",
   // Plantillas de proyecto: tipos generales en positivo, como en los ajustes del proyecto
   "Tipos generales que se usan": "General types in use",
   "Ninguno (ocultar todos los tipos generales)": "None (hide all general types)",
   "Ocultos que ya no existen:": "Hidden ones that no longer exist:",
+  // Usuarios: MAX_USERS es opcional (sin la variable, sin tope)
+  "1 usuario activo": "1 active user",
+  "{n} usuarios activos": "{n} active users",
+  "Para cambiarlo, pon otro número en MAX_USERS, o quítala para no tener tope (Railway → Variables; con Docker, en el .env), y reinicia Pizarro. Las personas desactivadas no cuentan.":
+    "To change it, set MAX_USERS to another number, or remove it for no limit (Railway → Variables; with Docker, in the .env file), and restart Pizarro. Deactivated people don't count.",
+  "La variable MAX_USERS del servidor no es un número entero válido y no se aplica: no hay tope de usuarios activos.":
+    "The server's MAX_USERS variable is not a valid whole number and is ignored: there is no limit on active users.",
+  "No hay tope de usuarios activos.": "There is no limit on active users.",
+  "Si quieres uno, pon el máximo en la variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.":
+    "If you want one, set the maximum in the server's MAX_USERS variable (Railway → Variables; with Docker, in the .env file) and restart Pizarro. Deactivated people don't count.",
 };

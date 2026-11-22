@@ -38,10 +38,11 @@ interface UserRow {
   invitePending: boolean;
 }
 
-export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", defaultMaxUsers = 10, emailAvailable, noRecovery, defaultLocale = "ES" }: {
-  users: UserRow[]; meId: string; maxUsers: number;
+export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", emailAvailable, noRecovery, defaultLocale = "ES" }: {
+  /** Tope de usuarios activos (MAX_USERS), o null si no hay. */
+  users: UserRow[]; meId: string; maxUsers: number | null;
   /** De dónde sale el máximo (la variable MAX_USERS del servidor, su valor por defecto o el defecto porque no vale). */
-  maxUsersSource?: MaxUsersSource; defaultMaxUsers?: number;
+  maxUsersSource?: MaxUsersSource;
   emailAvailable: boolean; noRecovery?: boolean; defaultLocale?: UserLocale;
 }) {
   const t = useT();
@@ -108,22 +109,23 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
         <div>
           <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
           <p className="flex items-center gap-1 text-sm text-slate-500">
-            {t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })}
-            {/* De dónde sale el máximo y cómo ampliarlo (antes solo decía que no hay registro público). */}
+            {maxUsers !== null
+              ? t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })
+              : activeCount === 1 ? t("1 usuario activo") : t("{n} usuarios activos", { n: activeCount })}
+            {/* Si hay tope, de dónde sale y cómo cambiarlo; si no, cómo ponerlo (antes solo decía que no hay registro público). */}
             <InfoTip topic={t("Usuarios")}>
               <span className="block">
-                {maxUsersSource === "env"
-                  ? t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })
-                  : maxUsersSource === "invalid"
-                    ? t("La variable MAX_USERS del servidor no es un número entero válido: se usa el máximo por defecto, {max}.", { max: maxUsers })
-                    : t("El máximo de {max} es el valor por defecto: la variable MAX_USERS del servidor no está definida.", { max: defaultMaxUsers })}{" "}
-                {t("Para cambiarlo, pon en MAX_USERS el número que quieras (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}
+                {maxUsers !== null
+                  ? <>{t("El máximo de {max} lo fija la variable MAX_USERS del servidor.", { max: maxUsers })}{" "}{t("Para cambiarlo, pon otro número en MAX_USERS, o quítala para no tener tope (Railway → Variables; con Docker, en el .env), y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>
+                  : <>{maxUsersSource === "invalid"
+                      ? t("La variable MAX_USERS del servidor no es un número entero válido y no se aplica: no hay tope de usuarios activos.")
+                      : t("No hay tope de usuarios activos.")}{" "}{t("Si quieres uno, pon el máximo en la variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.")}</>}
               </span>
               <span className="mt-1 block">{t("No hay registro público: solo un administrador da de alta usuarios.")}</span>
             </InfoTip>
           </p>
         </div>
-        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={activeCount >= maxUsers} title={activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
+        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={maxUsers !== null && activeCount >= maxUsers} title={maxUsers !== null && activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
           <UserPlus size={16} /> {t("Nuevo usuario")}
         </button>
       </div>
