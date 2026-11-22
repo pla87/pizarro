@@ -80,8 +80,12 @@ export function useBackToClose(active: boolean, onClose: () => void | boolean | 
       window.history.pushState({ ...state, pzModals: [...(state.pzModals ?? []), token] }, "");
       pushed = true;
     };
-    // Diferido: el doble montaje de React en desarrollo no deja entradas huérfanas.
-    const timer = setTimeout(push, 0);
+    // Diferido: el doble montaje de React en desarrollo no deja entradas huérfanas. Y tras los «atrás» silenciosos
+    // pendientes: si este modal se abre al cerrarse otro (p. ej. el enlace de invitación al crear un usuario), el
+    // retroceso del que se cierra es asíncrono y, si la entrada nueva llegara antes, la quitaría él.
+    const timer = setTimeout(() => whenNoSilentPops(() => {
+      if (alive) push();
+    }), 0);
     const onPop = (e: PopStateEvent) => {
       if (silentEvents.has(e)) return;
       if (pushed && !inState()) {
