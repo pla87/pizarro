@@ -122,6 +122,32 @@ export function rangeBandsForWeek(weekDays: string[], ranges: { id: string; star
   return bands;
 }
 
+/**
+ * Bandas que se dibujan en una semana con un tope de `max`: las primeras, salvo que alguna de `keep` (la que se arrastra
+ * o la que se acaba de mover con el teclado) quede fuera; entonces ocupa el sitio de las últimas. `hidden` son las que
+ * van a «+N más» (las mismas que faltan en `shown`, para no repetir ni perder ninguna).
+ */
+export function visibleBands(bands: Band[], max: number, keep: (string | null | undefined)[]): { shown: Band[]; hidden: Band[] } {
+  const shown = bands.slice(0, max);
+  const kept = new Set(keep.filter((id): id is string => Boolean(id)));
+  let slot = shown.length - 1;
+  for (const id of kept) {
+    const band = bands.find((b) => b.id === id);
+    if (!band || shown.includes(band)) continue;
+    while (slot >= 0 && kept.has(shown[slot]!.id)) slot--;
+    if (slot < 0) break;
+    shown[slot--] = band;
+  }
+  return { shown, hidden: bands.filter((b) => !shown.includes(b)) };
+}
+
+/** ¿Un rango (o un día, con start = due) queda antes («prev») o después («next») de la cuadrícula que va de `first` a `last`? */
+export function outsideGrid(range: { start: string; due: string }, first: string, last: string): "prev" | "next" | null {
+  if (range.due < first) return "prev";
+  if (range.start > last) return "next";
+  return null;
+}
+
 /** Qué se arrastra de una banda: toda ella, su borde izquierdo (inicio) o el derecho (fin). */
 export type RangeDragMode = "move" | "start" | "end";
 
