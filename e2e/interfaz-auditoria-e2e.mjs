@@ -109,7 +109,10 @@ if (only.includes("feedback")) {
     await preview.waitFor({ timeout: 30000 });
     const shot = await preview.evaluate(async (img) => {
       await img.decode();
-      const blob = await (await fetch(img.src)).blob();
+      // Tamaño: el que enseña el diálogo («123 KB», «1,2 MB»; la CSP no deja leer el blob: con fetch, connect-src 'self').
+      const label = [...img.parentElement.querySelectorAll("span")].map((x) => x.textContent).find((x) => /\d\s*(KB|MB|B)$/.test(x ?? "")) ?? "";
+      const [, num, unit] = /([\d.,]+)\s*(KB|MB|B)$/.exec(label) ?? [];
+      const blob = { size: Math.round(Number((num ?? "0").replace(/\./g, "").replace(",", ".")) * (unit === "MB" ? 1024 * 1024 : unit === "KB" ? 1024 : 1)) };
       const c = document.createElement("canvas");
       c.width = img.naturalWidth;
       c.height = img.naturalHeight;
@@ -117,9 +120,10 @@ if (only.includes("feedback")) {
       ctx.drawImage(img, 0, 0);
       const px = (x, y) => Array.from(ctx.getImageData(Math.round((x * c.width) / innerWidth), Math.round((y * c.height) / innerHeight), 1, 1).data).slice(0, 3);
       // El menú lateral (blanco con el tema claro), que con el fondo del diálogo saldría oscurecido.
-      return { type: blob.type, size: blob.size, w: img.naturalWidth, side: px(200, innerHeight / 2) };
+      return { size: blob.size, w: img.naturalWidth, side: px(200, innerHeight / 2) };
     });
-    L.check("FEEDBACK: la captura es un JPEG de 1600 px de ancho como mucho y de menos de 1,5 MB", shot.type === "image/jpeg" && shot.w <= 1600 && shot.w >= 1000 && shot.size > 0 && shot.size <= 1.5 * 1024 * 1024, JSON.stringify(shot));
+    // Que es un JPEG lo dicen la descarga (.jpg, abajo) y capture.ts; el servidor lo comprueba por su firma (tests/db).
+    L.check("FEEDBACK: la captura mide 1600 px de ancho como mucho y menos de 1,5 MB", shot.w <= 1600 && shot.w >= 1000 && shot.size > 0 && shot.size <= 1.5 * 1024 * 1024, JSON.stringify(shot));
     L.check("FEEDBACK: la captura no lleva el fondo oscuro del diálogo (el menú lateral sale claro)", shot.side.every((v) => v > 225), JSON.stringify(shot.side));
     L.check("FEEDBACK: aviso de que la captura puede tener datos de su trabajo", (await dlg.getByText("La captura puede contener datos de tu trabajo").count()) === 1);
     const dl = dlg.getByRole("link", { name: "Descargar la captura" });
@@ -157,13 +161,15 @@ if (only.includes("feedback")) {
     // Con una versión publicada más nueva: desactivado, con el motivo en el title y, a un administrador, «Cómo actualizar».
     await setLatest("999.0.0");
     await asAdmin();
+    await L.goto(s.page, `${L.BASE}/p/${p.id}`);
     const disabled = await L.waitFor(async () => {
       await L.reload(s.page);
       return (await footerBug.getAttribute("aria-disabled")) === "true";
     }, { timeout: 90000, step: 5000 });
     L.check("FEEDBACK: sin la última versión, el botón sale desactivado (aria-disabled)", !!disabled);
     L.eq("FEEDBACK: … con el motivo en el title", await footerBug.getAttribute("title"), OUTDATED);
-    await footerBug.click();
+    // aria-disabled: Playwright no lo da por «enabled», pero el botón sigue respondiendo (explica el motivo).
+    await footerBug.click({ force: true });
     await s.page.getByText(OUTDATED, { exact: true }).first().waitFor();
     L.check("FEEDBACK: al pulsarlo no se abre el diálogo y el aviso ofrece «Cómo actualizar» al administrador",
       (await s.page.getByRole("dialog", { name: NAME }).count()) === 0 && (await s.page.getByRole("button", { name: "Cómo actualizar" }).count()) >= 1);
