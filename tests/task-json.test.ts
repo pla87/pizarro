@@ -6,7 +6,8 @@ import {
   TASKS_TEXT_MAX_CHARS, tasksExportFileName, type TaskJsonSource, actionTextFits,
 } from "../src/lib/task-json";
 import { importPreview } from "../src/lib/task-json-form";
-import { parseDay } from "../src/lib/foreign-import/text";
+import { decideDayOrder, parseDay } from "../src/lib/foreign-import/text";
+import { makeT } from "../src/i18n/core";
 import { esT } from "../src/i18n/shared";
 import { assertFast } from "./timing";
 
@@ -137,7 +138,7 @@ test("el título queda en una línea: saltos de línea y tabuladores pasan a ser
 
 test("fechas: AAAA-MM-DD, ISO completa, DD/MM/AAAA; null y vacío la quitan", () => {
   assert.deepEqual(
-    ["2026-12-01", "2026-1-5", "2026-12-01T23:59:59Z", "2026-12-01 10:00", "01/12/2026", "1.12.2026", "", null].map(parseDayLoose),
+    ["2026-12-01", "2026-1-5", "2026-12-01T23:59:59Z", "2026-12-01 10:00", "01/12/2026", "1.12.2026", "", null].map((v) => parseDayLoose(v)),
     ["2026-12-01", "2026-01-05", "2026-12-01", "2026-12-01", "2026-12-01", "2026-12-01", null, null],
   );
   for (const bad of ["2026-13-01", "2026-02-30", "12/2026", "mañana", 20261201, {}]) assert.equal(parseDayLoose(bad), undefined, String(bad));
@@ -348,11 +349,70 @@ test("los diálogos que importan tareas leen con la zona horaria de la aplicaci�
   const { readFileSync } = await import("node:fs");
   for (const file of ["NewTaskDialog.tsx", "TaskDialog.tsx", "ImportTasksDialog.tsx"]) {
     const src = readFileSync(new URL(`../src/components/board/${file}`, import.meta.url), "utf8");
-    const calls = src.match(/parseTasksText\([^)]*\)/g) ?? [];
+    const calls = src.match(/parseTasksText\([^;]*?\}\)/g) ?? [];
     assert.ok(calls.length > 0, file);
-    for (const call of calls) assert.match(call, /, \{ t, timeZone: appTimeZone\(\)$/, `${file}: ${call}`);
+    for (const call of calls) assert.match(call, /, \{ t, timeZone: appTimeZone\(\), locale(?:: uiLocale)? \}\)$/, `${file}: ${call}`);
   }
   // Y el error de un formato reconocido que no se puede leer se enseña (no «No hay ninguna tarea en JSON.»).
   const form = readFileSync(new URL("../src/components/board/NewTaskDialog.tsx", import.meta.url), "utf8");
   assert.match(form, /if \(read\.error\) \{\s*toast\(read\.error, "error"\);/);
+});
+
+test("fechas con barras: un solo orden día/mes para todo el texto, decidido por las fechas y, si todas son ambiguas, por el idioma", () => {
+  const due = (text: string, locale?: "es" | "en") => parseTasksText(text, { locale }).tasks.map((x) => x.task.dueDate);
+  // Una que solo puede ser mes/día (03/21) hace que la ambigua (03/04) también lo sea, en cualquier idioma.
+  const us = JSON.stringify([{ title: "A", dueDate: "03/04/2026" }, { title: "B", dueDate: "03/21/2026" }]);
+  for (const locale of ["es", "en"] as const) assert.deepEqual(due(us, locale), ["2026-03-04", "2026-03-21"], locale);
+  // Y una que solo puede ser día/mes (21/03), al revés.
+  const eu = JSON.stringify([{ title: "A", dueDate: "03/04/2026" }, { title: "B", dueDate: "21/03/2026" }]);
+  for (const locale of ["es", "en"] as const) assert.deepEqual(due(eu, locale), ["2026-04-03", "2026-03-21"], locale);
+  // Todas ambiguas: el idioma de quien importa (en → mes/día; es o sin idioma → día/mes).
+  const both = JSON.stringify([{ title: "A", dueDate: "03/04/2026" }, { title: "B", dueDate: "05/06/26" }]);
+  assert.deepEqual(due(both, "en"), ["2026-03-04", "2026-05-06"]);
+  assert.deepEqual(due(both, "es"), ["2026-04-03", "2026-06-05"]);
+  assert.deepEqual(due(both), ["2026-04-03", "2026-06-05"]);
+  // Cuenta también la fecha de inicio y las tareas sueltas, en bloques o dentro de { task }.
+  const loose = `{"title":"A","startDate":"02/25/2026","dueDate":"03/04/2026"}\n\n\`\`\`json\n{"task":{"title":"B","dueDate":"01/02/2026"}}\n\`\`\``;
+  const read = parseTasksText(loose, { locale: "es" });
+  assert.deepEqual(read.tasks.map((x) => [x.task.startDate, x.task.dueDate]), [["2026-02-25", "2026-03-04"], [undefined, "2026-01-02"]]);
+  assert.deepEqual(read.warnings, []);
+  assert.equal(read.dateWarning, undefined);
+  // Una sola tarea (Importar tarea, pegar): su fecha de inicio decide la límite.
+  assert.deepEqual(parseTaskJson('{"title":"T","startDate":"12/31/2026","dueDate":"01/02/2027"}'), { kind: "task", task: { title: "T", startDate: "2026-12-31", dueDate: "2027-01-02" }, problems: [] });
+});
+
+test("fechas con barras incompatibles entre sí: se avisa, las ambiguas van por el idioma y las otras de la única manera posible", () => {
+  const text = JSON.stringify({ format: "pizarro.tasks", tasks: [{ title: "A", dueDate: "21/03/2026" }, { title: "B", dueDate: "03/21/2026" }, { title: "C", dueDate: "03/04/2026" }] });
+  const en = parseTasksText(text, { t: makeT("en"), locale: "en" });
+  assert.deepEqual(en.tasks.map((x) => x.task.dueDate), ["2026-03-21", "2026-03-21", "2026-03-04"]);
+  assert.equal(en.warnings.length, 1);
+  assert.equal(en.dateWarning, en.warnings[0]);
+  assert.match(en.dateWarning!, /two formats .* read as month\/day/);
+  const es = parseTasksText(text, { locale: "es" });
+  assert.deepEqual(es.tasks.map((x) => x.task.dueDate), ["2026-03-21", "2026-03-21", "2026-04-03"]);
+  assert.match(es.dateWarning!, /dos formatos .* leído como día\/mes/);
+  // Lo mismo en un CSV pegado (y en uno de Jira o Asana: el mismo lector).
+  const csv = parseTasksText("Title,Due date\nA,21/03/2026\nB,03/21/2026\nC,03/04/2026", { locale: "en" });
+  assert.deepEqual(csv.tasks.map((x) => x.task.dueDate), ["2026-03-21", "2026-03-21", "2026-03-04"]);
+  assert.ok(csv.dateWarning && csv.warnings.includes(csv.dateWarning));
+});
+
+test("parseDayLoose y decideDayOrder: el orden pedido, y al revés solo si en ese orden el mes no existe", () => {
+  assert.equal(parseDayLoose("03/04/2026", "mdy"), "2026-03-04");
+  assert.equal(parseDayLoose("03/04/2026", "dmy"), "2026-04-03");
+  assert.equal(parseDayLoose("21/03/2026", "mdy"), "2026-03-21");
+  assert.equal(parseDayLoose("03/21/2026", "dmy"), "2026-03-21");
+  assert.equal(parseDayLoose("13/13/2026", "mdy"), undefined);
+  for (const v of ["03/04/2026", "21/03/26", "3.4.2026", "03-21-2026"]) {
+    for (const order of ["dmy", "mdy"] as const) assert.equal(parseDayLoose(v, order), parseDay(v, "UTC", order), `${v} ${order}`);
+  }
+  assert.deepEqual(decideDayOrder(["03/04/2026", "03/21/2026"]), { order: "mdy", mixed: false });
+  assert.deepEqual(decideDayOrder(["03/04/2026", "21/03/2026"], "en"), { order: "dmy", mixed: false });
+  assert.deepEqual(decideDayOrder(["03/04/2026", "2026-12-31", null, 7, "pronto"], "en"), { order: "mdy", mixed: false });
+  assert.deepEqual(decideDayOrder(["03/04/2026"], "es"), { order: "dmy", mixed: false });
+  assert.deepEqual(decideDayOrder([]), { order: "dmy", mixed: false });
+  assert.deepEqual(decideDayOrder(["21/03/2026", "03/21/2026"], "en"), { order: "mdy", mixed: true });
+  assert.deepEqual(decideDayOrder(["21/03/2026", "03/21/2026"], "es"), { order: "dmy", mixed: true });
+  // Ni día ni mes (13/13) no decide nada.
+  assert.deepEqual(decideDayOrder(["13/13/2026", "03/04/2026"], "en"), { order: "mdy", mixed: false });
 });

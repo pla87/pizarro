@@ -1,4 +1,5 @@
 // Utilidades de texto y fechas comunes a los lectores de otros Kanban. Sin dependencias de Node.
+import type { Locale, T } from "@/i18n/shared";
 import { MAX_DESCRIPTION, MAX_TITLE } from "../constants";
 
 /** Quita lo que un texto importado nunca debe llevar: caracteres de control y NUL, y menciones @[x](user:id) falsas. */
@@ -238,12 +239,54 @@ export function instantDay(d: Date, timeZone = "UTC"): string | null {
   return d.toISOString().slice(0, 10);
 }
 
+/** Orden de una fecha con barras (o puntos o guiones): día/mes («31/12/2026») o mes/día («12/31/2026», EE. UU.). */
+export type DayOrder = "dmy" | "mdy";
+
+/** Fecha con barras, puntos o guiones y el año al final: «31/12/2026», «1.2.26», «03-04-2026». */
+const SLASH_DAY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/;
+
+/** Día y mes de «a/b/año» según el orden: si en ese orden el mes pasa de 12, se lee al revés (la única lectura posible). */
+export function slashDayMonth(a: number, b: number, order: DayOrder): [month: number, day: number] {
+  if (order === "mdy") return a <= 12 ? [a, b] : [b, a];
+  return b <= 12 ? [b, a] : [a, b];
+}
+
+/**
+ * Orden de las fechas con barras de un fichero (o de una columna de un CSV), decidido una vez para todas: una que solo
+ * puede ser día/mes («21/03/2026») hace que todo el fichero sea día/mes; una que solo puede ser mes/día («03/21/2026»),
+ * mes/día. Si todas son ambiguas («03/04/2026»), el idioma de quien importa: en inglés (EE. UU.) mes/día, en español
+ * día/mes. `mixed`: hay de las dos clases (fechas incompatibles entre sí); entonces las ambiguas van por el idioma y las
+ * otras se leen de la única manera posible, y quien importa debe ser avisado. Antes se decidía fecha a fecha y en un
+ * mismo CSV americano «03/04/2026» salía 3 de abril y «03/21/2026», 21 de marzo, sin avisar.
+ */
+export function decideDayOrder(values: Iterable<unknown>, locale: Locale = "es"): { order: DayOrder; mixed: boolean } {
+  let dmy = false;
+  let mdy = false;
+  for (const v of values) {
+    if (typeof v !== "string") continue;
+    const m = SLASH_DAY.exec(v.trim());
+    if (!m) continue;
+    const a = +m[1]!, b = +m[2]!;
+    if (a > 12 && b <= 12) dmy = true;
+    else if (b > 12 && a <= 12) mdy = true;
+    if (dmy && mdy) break;
+  }
+  const byLocale: DayOrder = locale === "en" ? "mdy" : "dmy";
+  return { order: dmy && mdy ? byLocale : dmy ? "dmy" : mdy ? "mdy" : byLocale, mixed: dmy && mdy };
+}
+
+/** Aviso de fechas con barras en dos órdenes (decideDayOrder: `mixed`), ya traducido; `order`: cómo se han leído las ambiguas. */
+export function mixedDayOrderWarning(t: T, order: DayOrder): string {
+  return t("Hay fechas en dos formatos (día/mes y mes/día): las que valen de las dos maneras (como 03/04/2026) se han leído como {order}. Revísalas.", { order: order === "mdy" ? t("mes/día") : t("día/mes") });
+}
+
 /**
  * Fecha de un CSV (o de cualquier texto) → YYYY-MM-DD, o null si no se entiende. Admite ISO (con hora o no),
- * 31/12/2026 (día primero; si el segundo número pasa de 12 se entiende mes primero), 31-dic-2026, 15/Jan/26 10:20 AM,
- * «January 15, 2026» y «15 de enero de 2026». Una fecha ISO con hora y zona (Z o ±hh:mm) pasa al día de `timeZone`.
+ * 31/12/2026 (en el orden `order`, decidido para todo el fichero con decideDayOrder; si en ese orden el mes pasa de 12,
+ * al revés), 31-dic-2026, 15/Jan/26 10:20 AM, «January 15, 2026» y «15 de enero de 2026». Una fecha ISO con hora y zona
+ * (Z o ±hh:mm) pasa al día de `timeZone`.
  */
-export function parseDay(raw: string, timeZone = "UTC"): string | null {
+export function parseDay(raw: string, timeZone = "UTC", order: DayOrder = "dmy"): string | null {
   const s = raw.trim();
   if (!s || s.length > 100) return null;
   let m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);
@@ -253,10 +296,10 @@ export function parseDay(raw: string, timeZone = "UTC"): string | null {
   }
   m = /^(\d{4})[/.](\d{1,2})[/.](\d{1,2})\b/.exec(s);
   if (m) return validDay(+m[1]!, +m[2]!, +m[3]!);
-  m = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/.exec(s);
+  m = SLASH_DAY.exec(s);
   if (m) {
-    const a = +m[1]!, b = +m[2]!, y = fullYear(+m[3]!);
-    return b > 12 && a <= 12 ? validDay(y, a, b) : validDay(y, b, a);
+    const [month, day] = slashDayMonth(+m[1]!, +m[2]!, order);
+    return validDay(fullYear(+m[3]!), month, day);
   }
   m = /^(\d{1,2})[\s/.-]+(?:de\s+)?([a-záéíóú]+)\.?[\s/.-]+(?:de\s+)?(\d{2}|\d{4})\b/i.exec(s);
   if (m && MONTHS[fold(m[2]!)]) return validDay(fullYear(+m[3]!), MONTHS[fold(m[2]!)]!, +m[1]!);

@@ -90,4 +90,9 @@ export const importar: Record<string, string> = {
   "{n} nombres de tipo pasaban de {max} caracteres y se han recortado.": "{n} type names were longer than {max} characters and have been shortened.",
   "1 nombre de etiqueta pasaba de {max} caracteres y se ha recortado.": "1 label name was longer than {max} characters and has been shortened.",
   "{n} nombres de etiqueta pasaban de {max} caracteres y se han recortado.": "{n} label names were longer than {max} characters and have been shortened.",
+  // Fechas con barras: un solo orden día/mes por archivo
+  "Hay fechas en dos formatos (día/mes y mes/día): las que valen de las dos maneras (como 03/04/2026) se han leído como {order}. Revísalas.":
+    "Dates come in two formats (day/month and month/day): the ones that work both ways (like 03/04/2026) were read as {order}. Please check them.",
+  "día/mes": "day/month",
+  "mes/día": "month/day",
 };

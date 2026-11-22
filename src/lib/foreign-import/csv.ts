@@ -17,11 +17,11 @@
 // Las columnas del tablero son los estados distintos por orden de aparición, salvo las que cuentan como terminadas
 // («Hecho», «Done», «Cerrado»…), que van al final. Las cabeceras de cada herramienta están escritas de memoria (sin poder
 // exportar de cada una): si alguna difiere en una versión, basta con renombrar la columna a una de las de arriba.
-import type { T } from "@/i18n/core";
+import type { Locale, T } from "@/i18n/core";
 import { AppError } from "../errors";
 import type { TaskPriorityValue } from "../task-fields";
 import { FOREIGN_LIMITS, type ForeignBoard, type ForeignPerson, type ForeignTask } from "./types";
-import { cleanMarkdown, cleanName, cleanTitle, fold, isDoneName, parseDay } from "./text";
+import { cleanMarkdown, cleanName, cleanTitle, decideDayOrder, fold, isDoneName, mixedDayOrderWarning, parseDay } from "./text";
 
 /** Separador de campos: el que más aparece en la primera línea (fuera de comillas) entre «,», «;» y tabulador. */
 export function detectDelimiter(text: string): "," | ";" | "\t" {
@@ -180,6 +180,8 @@ function people(cell: string, emailCell: string): ForeignPerson[] {
 interface CsvOptions {
   t: T;
   timeZone?: string;
+  /** Idioma de quien importa: desempata el orden día/mes cuando todas las fechas con barras son ambiguas. */
+  locale?: Locale;
   /** Nombre del archivo sin extensión: nombre del proyecto. */
   fileName?: string;
 }
@@ -243,6 +245,9 @@ export function parseCsvRows(rows: string[][], opts: CsvOptions): ForeignBoard {
     return i;
   };
 
+  // Un solo orden día/mes para toda la columna de fechas (decideDayOrder): no «03/04» de una manera y «03/21» de otra.
+  const dates = decideDayOrder(columns.due ? data.filter((_, i) => !subOf.has(i)).map((r) => cell(r.row, "due")) : [], opts.locale);
+
   const tasks: ForeignTask[] = [];
   const taskAt = new Map<number, ForeignTask>();
   const subtasks = new Map<number, { title: string; done: boolean }[]>();
@@ -272,7 +277,7 @@ export function parseCsvRows(rows: string[][], opts: CsvOptions): ForeignBoard {
 
     let due: string | null = null;
     const dueCell = cell(row, "due");
-    if (dueCell) { due = parseDay(dueCell, opts.timeZone); if (!due) badDates++; }
+    if (dueCell) { due = parseDay(dueCell, opts.timeZone, dates.order); if (!due) badDates++; }
 
     let priority: TaskPriorityValue | null = null;
     const prCell = cell(row, "priority");
@@ -294,6 +299,8 @@ export function parseCsvRows(rows: string[][], opts: CsvOptions): ForeignBoard {
 
   if (noTitle) warnings.push(noTitle === 1 ? t("1 fila no tenía título y se ha ignorado.") : t("{n} filas no tenían título y se han ignorado.", { n: noTitle }));
   if (clipped.n) warnings.push(clipped.n === 1 ? t("1 texto era más largo de lo permitido y se ha recortado.") : t("{n} textos eran más largos de lo permitido y se han recortado.", { n: clipped.n }));
+  const dateWarning = dates.mixed ? mixedDayOrderWarning(t, dates.order) : undefined;
+  if (dateWarning) warnings.push(dateWarning);
   if (badDates) warnings.push(badDates === 1 ? t("1 fecha límite no se pudo interpretar y se ha ignorado.") : t("{n} fechas límite no se pudieron interpretar y se han ignorado.", { n: badDates }));
   if (badPriorities) warnings.push(badPriorities === 1 ? t("1 prioridad no se reconoció y se ha ignorado.") : t("{n} prioridades no se reconocieron y se han ignorado.", { n: badPriorities }));
   if (extraLabels) warnings.push(extraLabels === 1 ? t("1 etiqueta de tarea sobraba (máximo {max} por tarea) y no se ha importado.", { max: FOREIGN_LIMITS.labelsPerTask }) : t("{n} etiquetas de tareas sobraban (máximo {max} por tarea) y no se han importado.", { n: extraLabels, max: FOREIGN_LIMITS.labelsPerTask }));
@@ -306,5 +313,5 @@ export function parseCsvRows(rows: string[][], opts: CsvOptions): ForeignBoard {
   const moved = new Map(order.map((old, i) => [old, i]));
   for (const task of tasks) if (task.column !== null) task.column = moved.get(task.column)!;
 
-  return { name: cleanName(opts.fileName ?? "", 80) || "CSV", description: "", columns: order.map((i) => columnNames[i]!), tasks, warnings };
+  return { name: cleanName(opts.fileName ?? "", 80) || "CSV", description: "", columns: order.map((i) => columnNames[i]!), tasks, warnings, ...(dateWarning ? { dateWarning } : {}) };
 }
