@@ -1368,6 +1368,30 @@ if (only.includes("r46")) {
   await mDesc.getByRole("button", { name: "Descartar cambios" }).tap();
   await d.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
   await L.eqEventually("R46b móvil: tras descartar, el título se guarda y la descripción no", async () => { const r = await taskRow(); return [r.title, r.description]; }, ["Detalle R46 título", ""]);
+  // Pie del detalle en el móvil: los cinco botones del mismo alto, en una sola fila y dentro del pie. Donde no cabe
+  // «Descartar cambios» se lee «Descartar» (el nombre accesible sigue entero).
+  await U.openTask(mp, "Detalle R46 título");
+  const footFit = () => mp.evaluate(() => {
+    const box = [...document.querySelectorAll("[role=dialog] .\\@container")].find((c) => c.offsetParent);
+    const btns = [...(box?.querySelectorAll("button") ?? [])].filter((b) => b.offsetParent);
+    const r = box?.getBoundingClientRect();
+    return {
+      n: btns.length,
+      heights: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height))).size,
+      rows: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+      inside: !!r && btns.every((b) => b.getBoundingClientRect().left >= r.left - 0.5 && b.getBoundingClientRect().right <= r.right + 0.5),
+      discard: btns.find((b) => b.getAttribute("aria-label") === "Descartar cambios")?.innerText.trim(),
+    };
+  });
+  for (const [width, label] of [[430, "Descartar cambios"], [390, "Descartar"], [320, "Descartar"]]) {
+    await mp.setViewportSize({ width, height: 844 });
+    await sleep(300);
+    const fit = await footFit();
+    L.eq(`R61C1 móvil ${width} px: pie del detalle con cinco botones del mismo alto, en una fila y dentro`, [fit.n, fit.heights, fit.rows, fit.inside], [5, 1, 1, true]);
+    L.eq(`R61C1 móvil ${width} px: el botón de descartar dice «${label}»`, fit.discard, label);
+  }
+  await mp.setViewportSize({ width: 390, height: 844 });
+  await U.closeDialog(mp);
   // Comentario en edición + atrás.
   await U.openTask(mp, "Detalle R46 título");
   const mMine = d.locator("[data-comment-id]").first();
