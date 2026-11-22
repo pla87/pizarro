@@ -247,13 +247,61 @@ describe("plantillas de proyecto de serie", () => {
     const list = await listTemplatesSorted(db);
     assert.deepEqual(list.filter((t) => t.builtinKey).map((t) => t.builtinKey).sort(), [...BUILTIN_KEYS].sort());
     assert.deepEqual(list.filter((t) => !t.builtinKey).map((t) => t.name).sort(), ["Mudanza", "Nuestros viajes"]);
-    assert.equal(await db.builtinTemplateSeeded.count({ where: { key: { in: ["negocio", "viajes", "mudanza"] } } }), 0);
+    // Sus registros de siembra se quedan como lápida: la versión anterior, si se vuelve a ella, no las recrea.
+    assert.equal(await db.builtinTemplateSeeded.count({ where: { key: { in: ["negocio", "viajes", "mudanza"] } } }), 3);
     assert.deepEqual((await db.column.findMany({ where: { projectId: before.id }, orderBy: { position: "asc" } })).map((c) => c.name), ["Por hacer", "Hecho"]);
     // Idempotente: el siguiente arranque no toca nada.
     assert.deepEqual(await retireBuiltinTemplates(db), { removed: [], kept: [] });
     assert.deepEqual(await seedBuiltinTemplates(db), []);
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    assert.deepEqual(list.map((t) => t.id).sort(), (await listTemplatesSorted(db)).map((t) => t.id).sort());
     // «Recuperar plantillas de serie» recrea las seis si se borran.
     await db.projectTemplate.deleteMany({ where: { builtinKey: { not: null } } });
     assert.deepEqual(expectOk(await restoreDefaultTemplates()), { restored: BUILTIN_KEYS.length, left: 0 });
+  });
+
+  test("dos arranques a la vez: cada plantilla retirada la retira uno solo y ninguno falla (antes, P2025 en el segundo)", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    const vibe = canonicalTemplate("vibecoding")!;
+    const old = (name: string): TemplateData => ({ ...vibe, name, columns: [{ name: "Por hacer", role: "NONE", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }], kinds: [] });
+    const rows: [string, TemplateData, string][] = [
+      ["negocio", old("Negocio"), templateFingerprint(old("Negocio"))], // sin tocar: se borra
+      ["viajes", old("Nuestros viajes"), templateFingerprint(old("Viajes"))], // modificada: se queda como propia
+    ];
+    for (const [i, [key, data, appliedHash]] of rows.entries()) {
+      await db.projectTemplate.create({
+        data: {
+          builtinKey: key, name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds,
+          hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields, releaseTemplates: data.releaseTemplates, position: i + 1,
+        },
+      });
+      await db.builtinTemplateSeeded.create({ data: { key, appliedHash } });
+    }
+    // El otro arranque llega justo después de que este lea las plantillas y las retira antes que él.
+    const bind = <T extends object>(o: T, p: string | symbol) => {
+      const v = Reflect.get(o, p);
+      return typeof v === "function" ? v.bind(o) : v;
+    };
+    let other: Awaited<ReturnType<typeof retireBuiltinTemplates>> | null = null;
+    const racing = new Proxy(db, {
+      get(target, prop) {
+        if (prop !== "projectTemplate") return bind(target, prop);
+        return new Proxy(target.projectTemplate, {
+          get(delegate, p) {
+            if (p !== "findMany") return bind(delegate, p);
+            return async (args: Parameters<typeof db.projectTemplate.findMany>[0]) => {
+              const found = await db.projectTemplate.findMany(args);
+              other ??= await retireBuiltinTemplates(db);
+              return found;
+            };
+          },
+        });
+      },
+    });
+    const late = await retireBuiltinTemplates(racing);
+    assert.deepEqual(other, { removed: ["negocio"], kept: ["viajes"] });
+    assert.deepEqual(late, { removed: [], kept: [] });
+    assert.deepEqual((await db.projectTemplate.findMany({ select: { name: true, builtinKey: true } })), [{ name: "Nuestros viajes", builtinKey: null }]);
   });
 });
