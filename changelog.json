@@ -1,6 +1,79 @@
 {
   "versions": [
     {
+      "version": "1.66.0",
+      "date": "2026-11-23",
+      "releasedAt": "2026-11-23T01:04:04+01:00",
+      "summary": "Informes de errores en privado por email, guías para instalar en Render y Fly.io, alta de usuarios con enlace de invitación, cambiar de tipo sin mezclar formularios, doble clic en la descripción sin saltos, fechas y Logs en el idioma de cada persona, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "«Informar de un error» envía en privado a feedback@getpizarro.com: desde el servidor si la instalación envía emails o, si no, con «Enviar por email» desde tu programa de correo; GitHub queda como alternativa pública.",
+          "Guías para instalar Pizarro en Render (botón «Deploy to Render») y en Fly.io, con la dirección pública deducida sola y las órdenes de recuperación de cada plataforma.",
+          "Al crear un proyecto desde una plantilla, la primera vez se ve su descripción encima de las columnas (se cierra con la X y no vuelve)."
+        ],
+        "mejoras": [
+          "Alta de usuarios sin email por un solo camino: se crea la cuenta y se muestra al momento el enlace de invitación (sin contraseña inicial); si el email falla, también.",
+          "Al cambiar de tipo con el formulario a medias, cada respuesta va a su apartado sin repetir cabeceras ni dejar apartados vacíos; en el detalle, el aviso dice que el tipo está guardado y la descripción no.",
+          "Doble clic en la descripción: el texto no se mueve y el cursor queda donde pulsaste.",
+          "La lista de «@» se abre hacia arriba si no cabe, nunca queda cortada, y la opción elegida siempre está a la vista; los botones redondos del tablero se ocultan con un diálogo abierto.",
+          "Fechas con hora legibles en cada idioma («22 nov 2026, 21:41» / «Nov 22, 2026, 9:41 PM») y mensajes de Logs en inglés para los eventos más comunes.",
+          "Copias de seguridad: las tareas que no tienen nada que hacer dicen «Omitida» con su motivo, un solo aviso cuando solo se copian en el disco del servidor y un destino externo mal configurado sale como error.",
+          "Releases despliega las coincidencias de la búsqueda; Mis tareas con el filtro «Vencidas y próximos 7 días»; el Calendario dice el nombre del proyecto al pasar por sus siglas y «Cita» pasa a índigo.",
+          "Mi perfil → Avisos avisa arriba si el servidor no envía emails; la nota «i» de Usuarios empieza en sencillo; «¿Olvidaste tu contraseña?» muestra solo la orden de tu instalación.",
+          "Al importar, las fechas con puntos («1.12.2026») son siempre día/mes y el JSON entiende las mismas fechas que el CSV."
+        ],
+        "correcciones": [
+          "«+ Nuevo proyecto» desde el menú: el nombre entra entero, el menú se cierra y el foco vuelve a su sitio.",
+          "Informar de un error: resaltado de foco en toda la opción y un solo párrafo sobre GitHub; la pantalla de verificación en dos pasos ya no descoloca la elección de método.",
+          "Zona horaria: el buscador ya no pega lo escrito detrás de la zona ni da error al volver a entrar; porcentaje del disco «usado» y con espacio.",
+          "Atrás ya no pierde el enlace de invitación recién creado; «Forzar cambio de contraseña» anula también la invitación pendiente.",
+          "Un CSV con la cabecera cortada a mitad de una letra ya no se lee como Windows-1252; «Curso o charla» y «Estudios» en inglés americano.",
+          "Con el servidor de correo caído, los resúmenes e informes se cortan al primer fallo en vez de generarse para nada."
+        ],
+        "tecnicos": [
+          "Retirado railway.json: Railway dejó de leerlo; la comprobación de salud se pone en el panel (Settings → Deploy).",
+          "render.yaml y deploy/fly.toml; IP del cliente con la cabecera de cada plataforma; el workflow de comprobaciones valida deploy/Caddyfile.",
+          "Menos servidor: Mis tareas cuenta subtareas con una consulta, registro de visitas con tope, optimizador de imágenes de Next apagado; la descripción del proyecto solo se lee con ?nuevo=1.",
+          "Más secretos fuera de las capturas (Telegram, WhatsApp, códigos de 2FA, contraseña visible); retirado el formato de fecha dateNumeric."
+        ]
+      },
+      "en": {
+        "summary": "Private bug reports by email, install guides for Render and Fly.io, user sign-up with an invitation link, switching type without mixing forms, double-click on the description without jumps, dates and Logs in each person's language, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "“Report a bug” sends privately to feedback@getpizarro.com: from the server if the installation sends email, otherwise with “Send by email” from your mail app; GitHub stays as a public alternative.",
+            "Guides to install Pizarro on Render (“Deploy to Render” button) and Fly.io, with the public address worked out automatically and each platform's recovery commands.",
+            "When you create a project from a template, its description shows above the columns the first time (close it with the X; it doesn't come back)."
+          ],
+          "mejoras": [
+            "Adding users without email takes a single path: the account is created and the invitation link is shown right away (no initial password), also when sending the email fails.",
+            "Switching type with a half-filled form puts each answer in its section without repeating headings or leaving empty sections; in the task detail, the notice says the type is saved and the description isn't.",
+            "Double-clicking the description no longer moves the text, and the cursor lands where you clicked.",
+            "The “@” list opens upward when it doesn't fit, is never cut off, and the selected option stays in view; the board's round buttons hide while a dialog is open.",
+            "Readable dates with time in each language (“Nov 22, 2026, 9:41 PM”) and Logs messages in English for the most common events.",
+            "Backups: jobs with nothing to do say “Skipped” with the reason, a single notice when copies only go to the server's disk, and a misconfigured external destination shows as an error.",
+            "Releases expands the search matches; My tasks has the “Overdue and next 7 days” filter; the Calendar shows the project name when hovering its initials, and “Appointment” is now indigo.",
+            "Profile → Notifications warns at the top when the server doesn't send email; the Users “i” note starts in plain words; “Forgot your password?” shows only your installation's command.",
+            "When importing, dates with dots (“1.12.2026”) are always day/month, and JSON understands the same dates as CSV."
+          ],
+          "correcciones": [
+            "“+ New project” from the menu: the whole name gets typed, the menu closes and focus returns where it was.",
+            "Report a bug: focus highlight around the whole option and a single paragraph about GitHub; the two-step verification screen no longer misplaces the method choice.",
+            "Time zone: the search no longer appends what you type to the zone or shows an error when you come back; disk percentage now says “used”.",
+            "Back no longer loses a newly created invitation link; “Force password change” also cancels a pending invitation.",
+            "A CSV whose header is cut in the middle of a letter is no longer read as Windows-1252; “Course or talk” and “Study” in American English.",
+            "With the mail server down, digests and reports stop at the first failure instead of being built for nothing."
+          ],
+          "tecnicos": [
+            "Removed railway.json: Railway no longer reads it; the health check is set in the panel (Settings → Deploy).",
+            "render.yaml and deploy/fly.toml; client IP from each platform's header; the checks workflow validates deploy/Caddyfile.",
+            "Less server work: My tasks counts subtasks in one query, page-view log with a hard cap, Next's image optimizer turned off; the project description is only read with ?nuevo=1.",
+            "More secrets kept out of screenshots (Telegram, WhatsApp, 2FA codes, visible password); removed the dateNumeric date format."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.65.0",
       "date": "2026-11-22",
       "releasedAt": "2026-11-22T13:35:41+01:00",
