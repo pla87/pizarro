@@ -86,6 +86,19 @@ const SMTP_DOWN_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EAUTH",
  */
 const smtpDown = (err: unknown): boolean => SMTP_DOWN_CODES.has(String((err as { code?: unknown } | null)?.code ?? ""));
 
+/**
+ * ¿Rechazó el servidor de correo el email para siempre (un buzón que no existe, un dominio que no acepta correo…)? Son
+ * las respuestas 5xx de SMTP y los EENVELOPE sin respuesta del servidor (una dirección que nodemailer no acepta). Un
+ * EENVELOPE con 4xx (p. ej. una lista gris) es temporal, y un EAUTH (535) es del servidor entero y va con smtpDown.
+ * Reintentarlo en una hora daría lo mismo.
+ */
+export function smtpRejected(err: unknown): boolean {
+  if (smtpDown(err)) return false;
+  const e = err as { code?: unknown; responseCode?: unknown } | null;
+  const status = typeof e?.responseCode === "number" ? e.responseCode : 0;
+  return (status >= 500 && status < 600) || (e?.code === "EENVELOPE" && !status);
+}
+
 function logSmtpDown(what: string, err: unknown): void {
   logEvent({ level: "warn", category: "notify", action: "mail.smtpDown", label: { k: "SMTP sin respuesta ({what}): {error}. Lo pendiente se intentará en la siguiente pasada.", p: { what: logText(what), error: logText(maskEmailsIn((err as Error).message)) } } });
 }
@@ -295,6 +308,13 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
       clearReportFailure(s.projectId);
       logEvent({ ...base, level: "error", action: "report.scheduledTooLarge", label: { k: "Informe semanal no enviado a {to}: {error}. No se reintenta hasta el próximo envío; se avisa a quien lo configuró", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
       await notifyReportTooLarge(s.projectId, creator, url);
+      return false;
+    }
+    if (sending && smtpRejected(err)) {
+      // El servidor de correo rechaza la dirección o el mensaje para siempre: reintentarlo cada hora volvería a generar
+      // el PDF para nada hasta medianoche. Como sin memoria para el PDF, se deja la reserva hasta el próximo envío.
+      clearReportFailure(s.projectId);
+      logEvent({ ...base, level: "error", action: "report.scheduledRejected", label: { k: "Informe semanal no enviado a {to}: el servidor de correo lo rechaza ({error}). No se reintenta hasta el próximo envío", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
       return false;
     }
     noteReportFailure(s.projectId, now);

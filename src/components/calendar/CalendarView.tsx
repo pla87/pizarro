@@ -784,7 +784,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
             <li>
               <button type="button" role="checkbox" aria-checked={draft.length === 0} onClick={() => setDraft([])} className={optionCls}>
                 <CheckBox on={draft.length === 0} />
-                <span className="font-medium">{t("Todos")}</span>
+                <span className="font-medium">{t("Todos los proyectos")}</span>
               </button>
             </li>
             {projects.map((p) => (

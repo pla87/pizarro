@@ -43,11 +43,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const grid = monthGrid(month, calendarWeekStart(locale));
 
   // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
-  // sin ninguno válido equivale a «todos». Las dos consultas no dependen una de otra: en paralelo.
+  // sin ninguno válido equivale a «todos». Estas consultas no dependen unas de otras: en paralelo.
+  // Sin suscripción, la opción que se marca (según si en sus proyectos las tareas suelen tener responsable) se calcula al
+  // abrir «Suscribirse» (suggestedCalendarFeedScope): eran dos recuentos de tareas en cada visita.
   const requested = parseProjectParam(one(sp.project), MAX_PROJECT_FILTER);
-  const [projects, picked] = await Promise.all([
+  const [projects, picked, feedRow] = await Promise.all([
     listVisibleProjects(user),
     requested.length ? db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true, isPrivate: true } }) : Promise.resolve([]),
+    db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } }),
   ]);
   const projectIds = requested.filter((id) => picked.some((p) => p.id === id));
   // Un proyecto elegido que no está entre los de trabajo (p. ej. un enlace) también debe poder verse en el selector.
@@ -102,7 +105,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         db.task.count({ where: overdueWhere }),
       ])
     : Promise.resolve([[] as OverdueRow[], 0] as const);
-  const [rows, repeatRows, [overdueRows, overdueTotal], deliverableRows] = await Promise.all([
+  const [rows, repeatRows, [overdueRows, overdueTotal], [deliverableRows, progressBy]] = await Promise.all([
     db.task.findMany({
       where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
       take: MAX_TASKS,
@@ -136,6 +139,9 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       },
     }),
     overduePromise,
+    // Total y hechas por entregable, con el mismo criterio que el informe PDF (archivadas = hechas; las fijas no cuentan),
+    // contadas en la BD sin traer las tareas. El total es el de todo el entregable, no solo el de la persona filtrada.
+    // Se encadena a su consulta para que vaya a la vez que las demás.
     db.deliverable.findMany({
       // La banda de un entregable cubre la semana previa a su fecha: se cargan también los del mes siguiente que la tocan.
       // Con el filtro de responsable, solo los que tienen alguna tarea de esas personas (o sin responsable, si se eligió):
@@ -149,11 +155,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         dueDate: true,
         project: { select: { id: true, name: true } },
       },
-    }),
+    }).then(async (found) => [found, await deliverableProgressByIds(found.map((d) => d.id))] as const),
   ]);
-  // Total y hechas por entregable, con el mismo criterio que el informe PDF (archivadas = hechas; las fijas no cuentan),
-  // contadas en la BD sin traer las tareas. El total es el de todo el entregable, no solo el de la persona filtrada.
-  const progressBy = await deliverableProgressByIds(deliverableRows.map((d) => d.id));
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
   const repeats: CalendarRepeat[] = [];
   let repeatsCut = repeatRows.length >= MAX_REPEAT_SOURCES;
@@ -169,9 +172,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     if (repeats.length >= MAX_REPEATS) break;
   }
 
-  // Sin suscripción, la opción que se marca (según si en sus proyectos las tareas suelen tener responsable) se calcula al
-  // abrir «Suscribirse» (suggestedCalendarFeedScope): eran dos recuentos de tareas en cada visita.
-  const feedRow = await db.calendarFeed.findUnique({ where: { userId: user.id }, select: { scope: true } });
   const tasks: CalendarTask[] = rows.map((r) => ({
     id: r.id,
     title: mentionsToPlain(r.title),
