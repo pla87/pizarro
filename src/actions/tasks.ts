@@ -17,7 +17,7 @@ import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotT
 import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { COLUMN_ORDER, lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { assertColumnRoom } from "@/lib/column-capacity";
@@ -236,7 +236,7 @@ export async function getProjectFormData(projectId: string) {
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
     const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
-      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
+      db.column.findMany({ where: { projectId: id }, orderBy: COLUMN_ORDER, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
@@ -1594,7 +1594,7 @@ export async function restoreTask(taskId: string) {
     const origin = task.archivedFromColumnId
       ? await db.column.findFirst({ where: { id: task.archivedFromColumnId, projectId }, select: { id: true, name: true } })
       : null;
-    const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } }));
+    const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true } }));
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     const undo = await captureTasks([taskId], ARCHIVE_FIELDS);
     const assigned = await db.$transaction(async (tx) => {

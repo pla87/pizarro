@@ -11,7 +11,7 @@ import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity, lockProject } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
-import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
+import { COLUMN_ORDER, lockTaskRows, lockTaskRowsForDelete, resolveColumnPositionTies, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -782,8 +782,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const releaseFiles: string[] = [];
   // Tareas que vuelven a una posición guardada: al terminar se comprueba que no coincidan con otra (ver resolvePositionTies).
   const placed: string[] = [];
+  // Columnas que vuelven a una posición guardada (recreadas o recolocadas): lo mismo, con resolveColumnPositionTies.
+  const placedColumns: string[] = [];
   const columnIds = new Set((await db.column.findMany({ where: { projectId }, select: { id: true } })).map((c) => c.id));
-  const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
+  const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
   const safeColumn = async (id: string | undefined) => (id && columnIds.has(id) ? id : await firstColumn());
   // Quién puede seguir siendo responsable (activo y con acceso al proyecto) y quién existe aún (autor):
@@ -1034,6 +1036,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (!count) miss++;
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           else if (op.costOff) await dropCostField(projectId);
+          if (count && op.data.position !== undefined) placedColumns.push(op.id);
           break;
         }
         case "column.remove": {
@@ -1042,7 +1045,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const moved = await db.$transaction(async (tx) => {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
             if (await tx.task.count({ where: { columnId: op.id, archivedAt: null } })) return null;
-            const other = await tx.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
+            const other = await tx.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: COLUMN_ORDER, select: { id: true } });
             if (!other) return null;
             const ids = (await tx.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id);
             await tx.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } });
@@ -1061,6 +1064,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: liveColumnRole(op.row.role as ColumnRoleValue), assigneeId: known(op.row.assigneeId), defaultKindId: await existingKind(op.row.defaultKindId) } });
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
+          placedColumns.push(op.row.id);
           break;
         }
         case "label.remove":
@@ -1271,6 +1275,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   }
   await clearStrayEvergreen(projectId);
   await resolvePositionTies(placed);
+  await resolveColumnPositionTies(projectId, placedColumns);
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;
