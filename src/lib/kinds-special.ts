@@ -116,7 +116,7 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   return join(title.trim());
 }
 
-export const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
+const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
 /** Una viñeta o casilla sin texto («- », «* [ ]», «1.»): el hueco de una lista en la plantilla, no una etiqueta. */
 export const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
 
