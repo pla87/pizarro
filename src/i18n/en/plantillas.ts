@@ -9,4 +9,6 @@ export const plantillas: Record<string, string> = {
   "Nuevo pie": "New footer",
   // «Recuperar plantillas de serie» con el máximo de plantillas
   "Recuperadas {n} de {total}: las demás no caben (máximo {max} plantillas).": "Restored {n} of {total}: the rest do not fit (maximum {max} templates).",
+  // Editor de plantillas de proyecto: quién puede usar las propias
+  "Todas las personas pueden usar las plantillas propias para sus proyectos privados.": "Everyone can use custom templates for their private projects.",
 };

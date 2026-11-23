@@ -45,24 +45,24 @@ async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, te
 
 /**
  * Plantillas para «Nuevo proyecto» → «Empezar con» (cualquier persona con sesión), en su idioma: las de serie de la
- * instalación (con o sin tarjetas de ejemplo) y, para los administradores, también las propias.
+ * instalación (con o sin tarjetas de ejemplo) y las propias.
  */
 export async function listProjectStarts() {
   return runAction({ name: "projects.listProjectStarts" }, async () => {
-    const user = await requireUser();
-    return listStartTemplates(db, await getLocale(), user.role === "ADMIN");
+    await requireUser();
+    return listStartTemplates(db, await getLocale());
   });
 }
 
 /**
- * Crea un proyecto. Con `templateId` parte de una plantilla: cualquiera puede usar las de serie (en un proyecto privado,
- * si no es administrador) y solo los administradores las propias. Con `withExamples` y una plantilla de serie, añade
- * unas pocas tarjetas de muestra con la etiqueta «Ejemplo». Sin plantilla, las columnas por defecto.
+ * Crea un proyecto. Con `templateId` parte de una plantilla, de serie o propia (en un proyecto privado, si no es
+ * administrador). Con `withExamples` y una plantilla de serie, añade unas pocas tarjetas de muestra con la etiqueta
+ * «Ejemplo». Sin plantilla, las columnas por defecto.
  */
 export async function createProject(name: string, options?: { templateId?: string | null; isPrivate?: boolean; withExamples?: boolean }) {
   return runAction({ name: "projects.createProject", args: [name, options] }, async () => {
     const user = await requireUser();
-    // Quien no es administrador solo puede crear proyectos privados (las plantillas propias las gestionan los admins).
+    // Quien no es administrador solo puede crear proyectos privados.
     if (user.role !== "ADMIN" && !options?.isPrivate) throw forbidden();
     if (!rateLimit(`project-create:${user.id}`, 10, 60 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     const capped = user.role !== "ADMIN";
@@ -77,7 +77,6 @@ export async function createProject(name: string, options?: { templateId?: strin
       ? await db.projectTemplate.findUnique({ where: { id: v.id.parse(options.templateId) } })
       : null;
     if (options?.templateId && !templateRow) throw new AppError("La plantilla ya no existe.");
-    if (templateRow && !templateRow.builtinKey && user.role !== "ADMIN") throw forbidden();
     // Una plantilla de serie sin modificar se aplica en inglés a quien usa la interfaz en inglés.
     const stored = templateRow ? localizeTemplate(parseStoredTemplate(templateRow), templateRow.builtinKey, locale) : null;
     // Las tarjetas de ejemplo (de una plantilla de serie) añaden su etiqueta «Ejemplo» a la plantilla.

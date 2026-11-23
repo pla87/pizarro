@@ -38,12 +38,11 @@ interface StartTemplate {
 }
 
 /**
- * Plantillas con las que se puede empezar: los administradores, todas; los demás, solo las de serie que tenga la
- * instalación (las propias las gestionan los administradores). Por orden alfabético, en el idioma pedido.
+ * Plantillas con las que se puede empezar (cualquier persona): las de serie que tenga la instalación y las propias (las
+ * crean y editan los administradores). Por orden alfabético, en el idioma pedido.
  */
-export async function listStartTemplates(db: PrismaClient, locale: "es" | "en", isAdmin: boolean): Promise<StartTemplate[]> {
+export async function listStartTemplates(db: PrismaClient, locale: "es" | "en"): Promise<StartTemplate[]> {
   return (await listTemplatesSorted(db, locale))
-    .filter((t) => isAdmin || t.builtinKey)
     .map((t) => ({ id: t.id, name: t.name, description: t.description, builtin: !!t.builtinKey, examples: hasExamples(t.builtinKey) }));
 }
 

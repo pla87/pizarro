@@ -66,21 +66,20 @@ function shapeOf(t: TemplateData): ApplyTemplateShape {
   };
 }
 
-/** La plantilla elegida, en el idioma de quien la aplica. Las propias, solo para administradores (como al crear un proyecto). */
-async function resolveRef(rawRef: unknown, isAdmin: boolean, locale: "es" | "en"): Promise<TemplateData> {
+/** La plantilla elegida (de serie o propia), en el idioma de quien la aplica. */
+async function resolveRef(rawRef: unknown, locale: "es" | "en"): Promise<TemplateData> {
   const ref = refSchema.parse(rawRef);
   const row = await db.projectTemplate.findUnique({ where: { id: ref.id } });
   if (!row) throw new AppError("La plantilla ya no existe.");
-  if (!row.builtinKey && !isAdmin) throw new AppError("Solo los administradores pueden usar las plantillas propias.");
   return localizeTemplate(parseStoredTemplate(row), row.builtinKey, locale);
 }
 
-/** Plantillas que se pueden aplicar al proyecto: las de serie de la instalación y, para los administradores, las propias. */
+/** Plantillas que se pueden aplicar al proyecto: las de serie de la instalación y las propias. */
 export async function listApplicableTemplates(projectId: string) {
   return runAction({ name: "templateApply.listApplicableTemplates", args: [projectId] }, async (): Promise<ApplicableTemplate[]> => {
     const user = await requireUser();
     await findManageableProject(user, projectId);
-    const list = await listStartTemplates(db, await getLocale(), user.role === "ADMIN");
+    const list = await listStartTemplates(db, await getLocale());
     const pick = (builtin: boolean, group: ApplicableTemplate["group"]) =>
       list.filter((t) => t.builtin === builtin).map((t): ApplicableTemplate => ({ ref: { source: "template", id: t.id }, name: t.name, description: t.description, group }));
     return [...pick(true, "general"), ...pick(false, "installation")];
@@ -95,7 +94,7 @@ export async function previewTemplateChange(projectId: string, ref: TemplateRef)
     const notice = reserveTemplatePreview(user.id);
     if (notice) await throwRate(notice);
     const locale = await getLocale();
-    const template = shapeOf(await resolveRef(ref, user.role === "ADMIN", locale));
+    const template = shapeOf(await resolveRef(ref, locale));
     return { template, project: await loadProjectShape(db, project.id, locale) };
   });
 }
@@ -115,7 +114,7 @@ export async function applyTemplateChange(projectId: string, ref: TemplateRef, m
     const project = await findManageableProject(user, projectId);
     const locale = await getLocale();
     const parsedMode = z.enum(["ADD", "REPLACE"]).parse(mode);
-    const data = await resolveRef(ref, user.role === "ADMIN", locale);
+    const data = await resolveRef(ref, locale);
     const parsedChoices = parsedMode === "REPLACE" ? choicesSchema.parse(choices ?? {}) : undefined;
     const result = await withinChangeLimit(user.id, project.id, () => applyTemplateToProject({
       projectId: project.id, userId: user.id, locale, templateName: data.name, template: shapeOf(data), mode: parsedMode, choices: parsedChoices,
