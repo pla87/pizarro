@@ -168,11 +168,11 @@ export async function run() {
   await L.q(`UPDATE "Column" SET name='Próximo salto QA' WHERE "projectId"=$1 AND role='NEXT_RELEASE'`, [proj.id]);
   await L.goto(p, `${L.BASE}/p/${proj.id}/releases`);
   await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
-  L.eq("Releases vacía: nombra la columna con el rol «Siguiente salto», con su nombre actual", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Genera una desde la columna «Próximo salto QA» del tablero.");
+  L.eq("Releases vacía: nombra la columna con el rol «Siguiente salto», con su nombre actual", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Se generan con el botón «Generar release» de la columna «Próximo salto QA» del tablero.");
   await L.q(`UPDATE "Column" SET role='NONE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id]);
   await L.goto(p, `${L.BASE}/p/${proj.id}/releases`);
   await p.getByText(/^Aún no hay releases/).waitFor({ timeout: 15000 });
-  L.eq("Releases vacía sin esa columna: explica qué rol ponerle a una", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «Siguiente salto (genera releases)».");
+  L.eq("Releases vacía sin esa columna: explica qué rol ponerle a una", (await p.getByText(/^Aún no hay releases/).innerText()).trim(), "Aún no hay releases. Se generan con el botón «Generar release» de la columna que tenga el rol «Siguiente salto (genera releases)»: elígelo en el menú de una columna del tablero, en «Rol de la columna».");
   await L.q(`UPDATE "Column" SET name=$2, role='NEXT_RELEASE' WHERE "projectId"=$1 AND name='Próximo salto QA'`, [proj.id, COL.next]);
   await L.goto(p, `${L.BASE}/p/${proj.id}`);
   await L.board(p);

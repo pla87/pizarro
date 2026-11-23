@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { LOCK_BACKUP } from "./advisory-locks";
 import { backupFileName, fileSha256, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
@@ -14,10 +14,10 @@ import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, 
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
-import { isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
+import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, type DiskRoom } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
 import { logSize } from "./format-size";
@@ -48,6 +48,8 @@ export interface BackupRun {
   filesNew?: number;
   durationMs?: number;
   error?: string;
+  /** Copia fallida por disco lleno: bytes del volcado que se llegaron a escribir (cota inferior para el reintento). */
+  partialBytes?: number;
 }
 
 export interface RestoreTestRun extends BackupRun {
@@ -226,21 +228,49 @@ export function externalCopyRunning(): boolean {
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-/**
- * Lista los ficheros de UPLOAD_DIR (sin backups/ ni temporales) con su sha256: solo se leen los nuevos o cambiados
- * (caché por ruta, tamaño y fecha en backups/files-index.json).
- */
-async function collectFiles(key: Buffer) {
+/** Ficheros de UPLOAD_DIR que entran en la copia (solo recorrido y tamaños, sin leerlos). */
+function scanBackupFiles() {
   // Exportaciones (pueden pesar GB y caducan en 24 h) e importaciones en curso son temporales: no entran en la copia.
   // Fuera también lo compartido con «Compartir → Pizarro» sin usar (UPLOAD_DIR/shared: temporal, caduca a los 30 minutos).
   const exclude = [backupsDir(), path.join(uploadDir(), "exports"), path.join(uploadDir(), "imports"), path.join(uploadDir(), "shared")];
   const extDir = process.env.BACKUP_EXTERNAL_DIR?.trim();
   if (extDir && path.isAbsolute(extDir)) exclude.push(extDir);
-  const scanned = await scanFiles(uploadDir(), exclude);
+  return scanFiles(uploadDir(), exclude);
+}
+
+/**
+ * Lista los ficheros de UPLOAD_DIR (sin backups/ ni temporales) con su sha256: solo se leen los nuevos o cambiados
+ * (caché por ruta, tamaño y fecha en backups/files-index.json).
+ */
+async function collectFiles(key: Buffer) {
+  const scanned = await scanBackupFiles();
   const indexFile = path.join(backupsDir(), INDEX_FILE);
   const { entries, index } = await hashFiles(scanned, await loadHashIndex(indexFile), fileNameKey(key));
   await saveHashIndex(indexFile, index);
   return entries;
+}
+
+/** Holgura sobre el volcado anterior: la base crece entre una copia y la siguiente. */
+const DUMP_GROWTH = 1.2;
+
+/**
+ * Bytes del volcado que va a escribir la copia, estimados sin escribir nada: el volcado anterior × 1,2. Sin copia
+ * anterior, null: no se comprueba de antemano (el tamaño de la base en PostgreSQL suele ser varias veces el volcado y,
+ * como nunca bajaría, bloquearía la primera copia para siempre; si el disco se llena al volcar, ENOSPC se traduce y se
+ * limpia). Los ficheros no cuentan: «nuevo» según files-index.json no es lo mismo que «falta en el almacén» (tras una
+ * restauración o un cp sin conservar las fechas, todos parecen nuevos aunque sus objetos ya estén guardados), y un
+ * corte por ENOSPC al guardarlos no repite en el reintento lo ya escrito.
+ */
+async function estimateDumpBytes(prev: BackupStatus): Promise<number | null> {
+  let dump = prev.lastBackup?.ok && prev.lastBackup.bytes ? prev.lastBackup.bytes : 0;
+  if (!dump) {
+    const [latest] = await localStemsByName();
+    if (latest) dump = await stat(path.join(backupsDir(), dumpKey(latest.stem))).then((s) => s.size, () => 0);
+  }
+  // Sin ninguna copia, pero la anterior se quedó sin disco a mitad: lo que llegó a escribir es una cota inferior. Así el
+  // reintento de cada hora no vuelve a llenar el disco hasta ENOSPC (y a tumbar las subidas) mientras no haya sitio.
+  if (!dump && prev.lastBackup && !prev.lastBackup.ok && prev.lastBackup.partialBytes) dump = prev.lastBackup.partialBytes;
+  return dump ? Math.ceil(dump * DUMP_GROWTH) : null;
 }
 
 const BUSY = "Ya hay una copia en curso.";
@@ -261,7 +291,7 @@ export async function createBackup(): Promise<BackupRun> {
   } catch (err) {
     // Sin conexión para el bloqueo: la base de datos no contesta, así que la copia tampoco se habría podido hacer.
     const run: BackupRun = { at: new Date().toISOString(), ok: false, error: message(err) };
-    logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}` });
+    logEvent({ level: "error", category: "system", action: "backup.failed", label: { k: "Falló la copia de seguridad: {error}", p: { error: logText(run.error ?? "") } } });
     await updateStatus((s) => ({ ...s, lastBackup: run })).catch((e) => console.error("[backup] no se pudo guardar el estado", e));
     return run;
   } finally {
@@ -278,7 +308,15 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   let dumpTmp: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
-    const name = backupFileName(new Date());
+    // Antes de escribir nada: si no cabe el volcado estimado (más el margen común de disco), falla con «disco lleno» sin
+    // empezar. La tarea lo reintenta cada hora (ver dailyBackupJob), pero cada intento solo mira el disco.
+    const estimate = await estimateDumpBytes(prevStatus);
+    if (estimate !== null) {
+      await assertDiskRoom(backupsDir(), estimate).catch((err) => {
+        throw Object.assign(err as Error, { estimate });
+      });
+    }
+    const name = await freshBackupName();
     const stem = name.replace(/\.pzbak$/, "");
     file = path.join(backupsDir(), name);
     // El volcado se escribe como temporal (no cuenta como copia) y solo pasa a llamarse .pzbak justo antes de escribir
@@ -302,7 +340,7 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     // nueva es casi vacía): la retención nunca la borra.
     // Si no se puede saber cuál es (p. ej. un manifiesto ilegible), esta vez no se aplica la retención.
     const h = await localCopyHealth(local, key, copySummary(manifest), prevStatus).catch((err) => {
-      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): ${message(err)}` });
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", label: { k: "No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): {error}", p: { error: logText(message(err)) } } });
       return null;
     });
     health = h;
@@ -310,17 +348,20 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
       const sh = h.shrink;
       logEvent({
         level: "warn", category: "system", action: "backup.shrunk",
-        message: `La copia ${sh.stem} tiene ${sh.local} ${shrinkWhat(sh.what)} y la última buena (${sh.goodStem}) tiene ${sh.remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva ${sh.goodStem}.`,
+        label: {
+          k: "La copia {stem} tiene {local} {what} y la última buena ({good}) tiene {remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva {good}.",
+          p: { stem: sh.stem, local: sh.local, what: logText(shrinkWhat(sh.what)), good: sh.goodStem, remote: sh.remote },
+        },
         details: { ...sh },
       });
     }
     // Si la retención falla, se avisa, pero la copia vale.
     const noPrune = { removedBackups: 0, removedObjects: 0, gcSkipped: null, removedTemp: 0 };
     const pruned = !h ? noPrune : await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`], protect: h.good ? [h.good] : [] }).catch((err) => {
-      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales: ${message(err)}` });
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", label: { k: "No se aplicó la retención de las copias locales: {error}", p: { error: logText(message(err)) } } });
       return noPrune;
     });
-    if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", message: `No se limpió el almacén de ficheros local: ${pruned.gcSkipped}` });
+    if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", label: { k: "No se limpió el almacén de ficheros local: {reason}", p: { reason: pruned.gcSkipped } } });
     run = {
       at: new Date().toISOString(), ok: true, file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length,
       files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: local.files ? sync.uploaded : 0, durationMs: Date.now() - started,
@@ -334,11 +375,24 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     });
   } catch (err) {
     // Disco lleno al volcar o al guardar los ficheros: el mensaje de la app, no el de Node («ENOSPC: no space left…»).
-    run = { at: new Date().toISOString(), ok: false, error: isNoSpaceError(err) ? NO_SPACE_MESSAGE : message(err), durationMs: Date.now() - started };
+    const noSpace = isNoSpaceError(err);
+    const partialBytes = noSpace && dumpTmp ? await stat(dumpTmp).then((s) => s.size, () => 0) : 0;
+    run = { at: new Date().toISOString(), ok: false, error: noSpace ? NO_SPACE_MESSAGE : message(err), durationMs: Date.now() - started, ...(partialBytes ? { partialBytes } : {}) };
     // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
     const doomed = [dumpTmp, file, file && `${file}.json`, file && path.join(backupsDir(), manifestKey(path.basename(file).replace(/\.pzbak$/, "")))];
     await Promise.all(doomed.filter((f): f is string => !!f).map((f) => rm(f, { force: true }))).catch(() => {});
-    logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}`, durationMs: run.durationMs });
+    const { estimate, room } = err as { estimate?: number; room?: DiskRoom };
+    logEvent({
+      level: "error", category: "system", action: "backup.failed",
+      label: estimate !== undefined && room
+        ? {
+            k: "Falló la copia de seguridad: {error} (se estiman {dump} para el volcado de la base de datos; hay {free} libres y se exige dejar un margen de {margin}, que fija DISK_MIN_FREE_MB; no se ha escrito nada)",
+            p: { error: logText(run.error ?? ""), dump: logSize(estimate), free: logSize(room.free), margin: logSize(room.margin) },
+          }
+        : { k: "Falló la copia de seguridad: {error}", p: { error: logText(run.error ?? "") } },
+      durationMs: run.durationMs,
+      ...(estimate !== undefined && room ? { details: { estimatedDumpBytes: estimate, freeBytes: room.free, marginBytes: room.margin } } : {}),
+    });
   } finally {
     // Copia nueva (y las viejas podadas): la lista y el aviso de las páginas de administración se vuelven a leer.
     invalidateMemo(BACKUP_MEMO);
@@ -356,6 +410,19 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     return { ...s, lastBackup: run, copies: known, shrink: shrink ? { ...shrink, at } : undefined };
   }).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;
+}
+
+/**
+ * Nombre de la copia nueva (por la hora, al segundo) que no use ya otra: dos copias en el mismo segundo (una base pequeña,
+ * «Crear copia ahora» justo después de la programada) compartirían raíz y la segunda pisaría el volcado de la primera, que
+ * quizá ya está en el destino externo; con un bloqueo de retención en el bucket, sobrescribirlo falla. Se usa el segundo
+ * siguiente libre.
+ */
+async function freshBackupName(): Promise<string> {
+  const taken = (n: string) => Promise.all([n, manifestKey(n.replace(/\.pzbak$/, ""))].map((f) => stat(path.join(backupsDir(), f)).then(() => true, () => false))).then((r) => r.some(Boolean));
+  let at = new Date();
+  while (await taken(backupFileName(at))) at = new Date(at.getTime() + 1000);
+  return backupFileName(at);
 }
 
 interface CopyHealth {
@@ -424,7 +491,7 @@ export async function acceptBackupShrink(by?: { id: string; name: string }, seen
   if (!shrink) return null;
   logEvent({
     level: "warn", category: "system", action: "backup.shrinkAccepted",
-    message: `Reducción de las copias confirmada como intencionada desde ${shrink.stem}: ${shrink.goodStem} ya no se conserva siempre`,
+    label: { k: "Reducción de las copias confirmada como intencionada desde {stem}: {good} ya no se conserva siempre", p: { stem: shrink.stem, good: shrink.goodStem } },
     userId: by?.id, userName: by?.name, details: { ...shrink },
   });
   return shrink.stem;
@@ -457,7 +524,7 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
   const key = backupKey();
   const { destinations, errors } = opts.config ?? externalDestinations();
   if (!key || (destinations.length === 0 && errors.length === 0)) return [];
-  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", message: externalConfigMessage(errors) });
+  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", label: { k: "Destino externo de copias mal configurado: {errors}", p: { errors: errors.join(" ") } } });
   if (destinations.length === 0) return [];
   if (lock.busy || lock.external) return [];
   lock.external = true;
@@ -466,7 +533,7 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
     if (!res.ran) console.info("[backup] destino externo: otro proceso está copiando; se omite esta pasada");
     return res.ran ? res.value : [];
   } catch (err) {
-    logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
+    logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a destino externo: {error}", p: { error: logText(message(err)) } } });
     return [{ at: new Date().toISOString(), ok: false, label: "externo", error: message(err) }];
   } finally {
     lock.external = false;
@@ -521,12 +588,21 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
         run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, ...(pruned?.retained ? { retained: pruned.retained } : {}), durationMs: Date.now() - started, warning };
         logEvent({
           level: warning ? "warn" : "info", category: "system", action: "backup.external",
-          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${logSize(sync.bytes)})${pruned?.retained ? `. ${pruned.retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza)` : ""}${warning ? `. ${warning}` : ""}`,
+          label: {
+            k: pruned?.retained
+              ? warning
+                ? "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza). {warning}"
+                : "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza)"
+              : warning
+                ? "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {warning}"
+                : "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size})",
+            p: { dest: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, size: logSize(sync.bytes), retained: pruned?.retained ?? 0, warning: logText(warning ?? "") },
+          },
           durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null, retained: pruned?.retained ?? 0 },
         });
       } catch (err) {
         run = { at: at(), ok: false, label: dest.label, file: manifest.stem, durationMs: Date.now() - started, error: message(err) };
-        logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a ${dest.label}: ${run.error}`, durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem } });
+        logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a {dest}: {error}", p: { dest: dest.label, error: logText(run.error ?? "") } }, durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem } });
       }
       runs.push(run);
       const r = run;
@@ -536,7 +612,7 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
       })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
     }
   } catch (err) {
-    logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
+    logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a destino externo: {error}", p: { error: logText(message(err)) } } });
     runs.push({ at: at(), ok: false, label: "externo", error: message(err) });
   }
   return runs;
@@ -656,9 +732,14 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
     level: run.ok ? "info" : "error",
     category: "system",
     action: "backup.restoreTest",
-    message: run.ok
-      ? `Prueba de restauración correcta${run.mode === "database" ? " (restaurada en una base temporal)" : ""}: ${run.file} (${run.rows} filas en ${run.tables} tablas, ${run.objectsChecked ?? 0} ficheros comprobados)`
-      : `Prueba de restauración fallida: ${run.error}`,
+    label: run.ok
+      ? {
+          k: run.mode === "database"
+            ? "Prueba de restauración correcta (restaurada en una base temporal): {file} ({rows} filas en {tables} tablas, {objects} ficheros comprobados)"
+            : "Prueba de restauración correcta: {file} ({rows} filas en {tables} tablas, {objects} ficheros comprobados)",
+          p: { file: String(run.file), rows: String(run.rows), tables: String(run.tables), objects: run.objectsChecked ?? 0 },
+        }
+      : { k: "Prueba de restauración fallida: {error}", p: { error: logText(String(run.error)) } },
     durationMs: run.durationMs,
     details: { file: run.file ?? null, ok: run.ok, rows: run.rows ?? null, mode: run.mode ?? null, objectsChecked: run.objectsChecked ?? null, referencesChecked: run.referencesChecked ?? null },
   });

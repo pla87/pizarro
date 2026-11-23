@@ -1,4 +1,4 @@
-import { logEvent } from "@/lib/log";
+import { logEvent, logText } from "@/lib/log";
 import { loadMessagingConfig } from "@/lib/messaging-config";
 import { safeEqual, scrubSecrets, telegramMode, TELEGRAM_WEBHOOK_MAX_BYTES } from "@/lib/messaging-core";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (!cfg.telegram.active || !cfg.telegram.webhookSecret || telegramMode(process.env.APP_URL).mode !== "webhook") return new Response(null, { status: 404 });
   if (!safeEqual(req.headers.get("x-telegram-bot-api-secret-token") ?? "", cfg.telegram.webhookSecret)) {
     // Quien no sabe el secreto no llega a leer el cuerpo; los fallos repetidos desde una IP se frenan.
-    if (rateLimit(`telegram:webhook:bad:${rateIp(ip)}`, 1, 10 * 60_000)) logEvent({ level: "warn", category: "api", action: "telegram.webhookUnauthorized", message: "Llamada al webhook de Telegram con un secreto incorrecto", ip });
+    if (rateLimit(`telegram:webhook:bad:${rateIp(ip)}`, 1, 10 * 60_000)) logEvent({ level: "warn", category: "api", action: "telegram.webhookUnauthorized", label: { k: "Llamada al webhook de Telegram con un secreto incorrecto" }, ip });
     return new Response(null, { status: 401 });
   }
   const declared = declaredLength(req.headers);
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   try {
     await handleTelegramUpdate(update, cfg);
   } catch (err) {
-    logEvent({ level: "error", category: "api", action: "telegram.webhookFailed", message: `Fallo al procesar un mensaje del bot de Telegram: ${scrubSecrets((err as Error)?.message ?? String(err), [cfg.telegram.token])}` });
+    logEvent({ level: "error", category: "api", action: "telegram.webhookFailed", label: { k: "Fallo al procesar un mensaje del bot de Telegram: {error}", p: { error: logText(scrubSecrets((err as Error)?.message ?? String(err), [cfg.telegram.token])) } } });
   }
   return new Response(null, { status: 200 });
 }

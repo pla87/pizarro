@@ -26,10 +26,12 @@ import { quotaError as quotaErrorFor } from "../quota-message";
 import { quotaExceededFor, storageUsage } from "../storage-usage";
 import { normalizeTaskFields } from "../task-fields";
 import {
-  processImportedImage, removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveDocumentFile,
+  IMAGE_QUEUE_FULL_MESSAGE, processImportedImage, removeAttachmentFiles, removeDocumentFiles, removeReleaseAttachmentFiles, sanitizeMime, saveAttachmentFiles, saveDocumentFile,
   saveRawAttachmentFile, saveReleaseAttachmentFile,
 } from "../uploads";
 import { uploadDir } from "../upload-dir";
+import { isShuttingDown } from "../shutdown";
+import { INTERRUPTED_MESSAGE } from "./errors";
 import { openImportJournal } from "./import-journal";
 import { remapAttachmentRefs } from "../attachment-refs";
 import { releaseFloorFromImport, retireReleaseNumber } from "../release-number";
@@ -58,6 +60,8 @@ interface ImportOptions {
    * que se va a escribir se sustituye por ese tamaño; sin él se usa una reserva propia. Se libera al terminar, también si falla.
    */
   diskReservation?: string;
+  /** ¿Hay que dejarlo? (el trabajo en segundo plano ya no existe). Se mira mientras se espera turno en la cola de imágenes. */
+  stopped?: () => Promise<boolean>;
 }
 export interface ImportProgress {
   phase: "validar" | "archivos" | "base de datos";
@@ -108,6 +112,29 @@ export function safeFileName(raw: string, fallback = "archivo"): string {
 
 /** Distancia mínima entre dos posiciones que el archivo trae iguales (conserva su orden relativo). */
 const nextUp = (n: number) => n + Math.max(Math.abs(n) * 2 ** -40, 2 ** -30);
+
+/** Cuánto espera como mucho cada imagen a que la cola de imágenes (uploads.ts) tenga hueco antes de dar la importación por fallida. */
+const IMAGE_QUEUE_WAIT_MS = 10 * 60_000;
+
+/**
+ * Procesa una imagen del archivo esperando turno: si la cola de imágenes está llena (muchas subidas a la vez), una
+ * importación en segundo plano no falla entera, sino que vuelve a intentarlo (cada vez más espaciado, hasta 5 s) durante
+ * IMAGE_QUEUE_WAIT_MS como mucho. Mientras espera no ocupa sitio en la cola, así que las subidas de las personas siguen
+ * entrando. Deja de esperar si el servidor se apaga o el trabajo ya no existe.
+ */
+async function imageWhenQueueFree<R>(run: () => Promise<R>, stopped?: () => Promise<boolean>): Promise<R> {
+  const deadline = Date.now() + IMAGE_QUEUE_WAIT_MS;
+  for (let pause = 100; ; pause = Math.min(pause * 2, 5000)) {
+    try {
+      return await run();
+    } catch (err) {
+      if (!(err instanceof AppError && err.message === IMAGE_QUEUE_FULL_MESSAGE) || Date.now() + pause > deadline) throw err;
+      if (isShuttingDown()) throw new AppError(INTERRUPTED_MESSAGE, 503);
+      if (await stopped?.()) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pause));
+  }
+}
 
 export async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknown>): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) await insert(rows.slice(i, i + CHUNK));
@@ -263,7 +290,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         if (a.isImage) {
           let image;
           try {
-            image = await processImportedImage(buf);
+            image = await imageWhenQueueFree(() => processImportedImage(buf), opts.stopped);
           } catch (err) {
             if (err instanceof AppError && err.status === 503) throw err;
             warnings.push(t("«{name}» no es una imagen válida y no se ha importado.", { name }));
@@ -307,7 +334,8 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         if (a.isImage) {
           try {
             // Sin miniatura: la copia de histórico solo guarda la imagen completa.
-            buf = (await processImportedImage(buf, { thumb: false })).full;
+            const input = buf;
+            buf = (await imageWhenQueueFree(() => processImportedImage(input, { thumb: false }), opts.stopped)).full;
           } catch (err) {
             if (err instanceof AppError && err.status === 503) throw err;
             warnings.push(t("«{name}» no es una imagen válida y no se ha importado.", { name: a.fileName }));
@@ -344,7 +372,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       if (kind === "IMAGE") {
         try {
           // Sin miniatura: la Documentación solo guarda la imagen completa.
-          stored = (await processImportedImage(buf, { thumb: false })).full;
+          stored = (await imageWhenQueueFree(() => processImportedImage(buf, { thumb: false }), opts.stopped)).full;
         } catch (err) {
           if (err instanceof AppError && err.status === 503) throw err;
           kind = "OTHER"; // no es una imagen que sharp entienda: queda como descarga
@@ -542,7 +570,12 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
         await tx.column.createMany({
-          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null, planCount: c.planCount ?? 0 })),
+          data: data.columns.map((c) => ({
+            id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null, planCount: c.planCount ?? 0,
+            // «Asignación a persona»: la persona solo si existe aquí (como el responsable de las tareas); el plazo, siempre.
+            // Solo con rol NONE (es exclusivo con los demás roles).
+            ...(c.role === "NONE" ? { assigneeId: uid(c.assignee ?? null), assignDueDays: c.assignDueDays ?? null } : {}),
+          })),
         });
         for (const c of data.columns) {
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });

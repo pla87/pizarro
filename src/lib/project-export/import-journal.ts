@@ -111,7 +111,7 @@ export async function recoverImportJournals(now: number = Date.now(), staleMs: n
         removed += count;
         logEvent({
           level: "warn", category: "system", action: "projects.importCleaned",
-          message: `Importación de un proyecto interrumpida: borrados los ${count} ficheros que había escrito`,
+          label: { k: "Importación de un proyecto interrumpida: borrados los {n} ficheros que había escrito", p: { n: count } },
           details: { journal: name, files: count, attachments: doomed.a.length, releaseAttachments: doomed.r.length, documents: doomed.d.length },
         });
       }

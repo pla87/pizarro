@@ -7,9 +7,9 @@ import { LOCK_TRANSFER_CLAIM } from "./advisory-locks";
 import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
-import { logEvent } from "./log";
+import { logError, logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
-import { ArchiveError } from "./project-export/errors";
+import { ArchiveError, INTERRUPTED_MESSAGE } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
 import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
@@ -52,7 +52,6 @@ const HEARTBEAT_MS = 10_000;
 const SWEEP_EVERY_MS = 60_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
 const MAX_ATTEMPTS = 2;
-const INTERRUPTED = "Interrumpido por un reinicio";
 /** Hueco de más que se pide al disco sobre el tamaño del archivo al importar (imágenes recodificadas, temporales…). */
 const IMPORT_FACTOR = 1.5;
 
@@ -276,7 +275,7 @@ export async function executeJob(job: JobRow): Promise<void> {
     logEvent({
       level: err instanceof AppError || err instanceof ZipReadError ? "warn" : "error", category: "api",
       action: job.kind === "EXPORT" ? "projects.exportFailed" : "projects.importFailed",
-      message: `Fallo en ${job.kind === "EXPORT" ? "la exportación" : "la importación"} de un proyecto: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: job.kind === "EXPORT" ? "Fallo en la exportación de un proyecto: {error}" : "Fallo en la importación de un proyecto: {error}", p: { error: logError(err) } },
       userId: job.userId, userName: user?.name ?? null, projectId: projectId ?? undefined, path: "background:transfer", durationMs: performance.now() - started, details: { jobId: job.id },
     });
   } finally {
@@ -397,7 +396,7 @@ async function runExport(job: JobRow, user: { id: string; role: "ADMIN" | "MEMBE
   const u = await db.user.findUnique({ where: { id: job.userId }, select: { name: true } });
   logEvent({
     category: "api", action: "projects.export",
-    message: `Proyecto «${project.name}» exportado (${built.manifest.counts.tasks} tareas, ${logSize(size)})`,
+    label: { k: "Proyecto «{name}» exportado ({tasks} tareas, {size})", p: { name: project.name, tasks: String(built.manifest.counts.tasks), size: logSize(size) } },
     userId: job.userId, userName: u?.name ?? null, projectId: project.id, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, options: built.manifest.options, counts: built.manifest.counts, bytes: size, missingFiles: built.missingFiles },
   });
@@ -419,10 +418,15 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   reserveDisk(job.id, uploadDir(), importBytes);
   const summary = opts.format === "trello" || opts.format === "csv"
     ? await importForeignFile(opts.tempFile, opts.format, user, { isPrivate: !!opts.isPrivate, t, fileName: opts.name, onProgress: (p) => progress.set(p) })
-    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id });
+    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id,
+      // Si el trabajo desaparece (se borró la cuenta) o lo retomó otro trabajador, deja de esperar turno para sus imágenes.
+      stopped: async () => (await db.projectTransferJob.count({ where: { id: job.id, status: "RUNNING", startedAt: job.startedAt } }).catch(() => 1)) === 0 });
   logEvent({
     category: "api", action: "projects.import",
-    message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${logSize((opts.bytes ?? 0))})`,
+    label: {
+      k: "Proyecto «{name}» importado desde {source} ({tasks} tareas, {size})",
+      p: { name: summary.name, source: { k: summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo" }, tasks: summary.counts.tasks, size: logSize(opts.bytes ?? 0) },
+    },
     userId: user.id, userName: user.name, projectId: summary.projectId, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, bytes: opts.bytes, isPrivate: !!opts.isPrivate, counts: summary.counts, unmappedUsers: summary.unmappedUsers.length, addedMembers: summary.addedMembers, warnings: summary.warnings.length },
   });
@@ -487,14 +491,17 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
     const requeue = job.kind === "EXPORT" && job.attempts < MAX_ATTEMPTS;
     const res = requeue
       ? await db.projectTransferJob.updateMany({ where: guard, data: { status: "QUEUED", attempts: job.attempts + 1, startedAt: null, progress: {} } })
-      : await db.projectTransferJob.updateMany({ where: guard, data: { status: "FAILED", error: INTERRUPTED, finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS) } });
+      : await db.projectTransferJob.updateMany({ where: guard, data: { status: "FAILED", error: INTERRUPTED_MESSAGE, finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS) } });
     if (res.count === 0) continue;
     touched++;
     if (job.kind === "EXPORT") await rm(exportTmpFile(job), { force: true }).catch(() => {});
     else await rm(String((job.options as { tempFile?: string }).tempFile ?? ""), { force: true }).catch(() => {});
     logEvent({
       level: "warn", category: "system", action: "projects.transferInterrupted",
-      message: `${job.kind === "EXPORT" ? "Exportación" : "Importación"} de un proyecto interrumpida por un reinicio (${requeue ? "se vuelve a poner en cola" : "marcada como fallida"})`,
+      label: {
+        k: job.kind === "EXPORT" ? "Exportación de un proyecto interrumpida por un reinicio ({what})" : "Importación de un proyecto interrumpida por un reinicio ({what})",
+        p: { what: { k: requeue ? "se vuelve a poner en cola" : "marcada como fallida" } },
+      },
       userId: job.userId, projectId: job.projectId ?? undefined, details: { jobId: job.id, attempts: job.attempts },
     });
   }
@@ -555,7 +562,7 @@ export async function purgeTransferJobs(now: Date = new Date()): Promise<number>
     // sin carpeta exports/: nada que limpiar
   }
   await db.projectTransferJob.deleteMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, finishedAt: { lt: new Date(now.getTime() - ROW_KEEP_MS) } } });
-  if (removed) logEvent({ category: "system", action: "projects.transferPurged", message: `Archivos de exportación caducados borrados: ${removed}`, details: { count: removed } });
+  if (removed) logEvent({ category: "system", action: "projects.transferPurged", label: { k: "Archivos de exportación caducados borrados: {n}", p: { n: removed } }, details: { count: removed } });
   return removed;
 }
 

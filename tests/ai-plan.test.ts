@@ -26,7 +26,7 @@ const base = (over: Partial<AiPlanInput> = {}): AiPlanInput => ({
       attachments: [{ name: "log.txt" }, { name: "mi_registro*.txt" }],
     },
     { id: "t2", title: "Añadir pruebas", kind: "Funcionalidad", blockedBy: { title: "Arreglar el login", index: 1 } },
-    { id: "t3", title: "Revisar estilo", evergreen: true, blockedBy: { title: "Otra cosa" } },
+    { id: "t3", title: "Revisar estilo", blockedBy: { title: "Otra cosa" } },
   ],
   ...over,
 });
@@ -61,8 +61,16 @@ describe("texto del plan de trabajo para IA", () => {
       "- **Enlace:** [https://github.com/example/web/issues/1](<https://github.com/example/web/issues/1>)",
       "- **Documentos:** [Diseño \\[v2\\]](<https://docs.google.com/document/d/x>)",
       "- **Adjuntos:** `log.txt`, `mi_registro*.txt`",
-      "**Descripción:**", "**Checklist (criterios de aceptación):**", "- [x] Reproducir", "- [ ] Corregir y probar",
+      "**Checklist:**", "- [x] Reproducir", "- [ ] Corregir y probar",
     ]) assert.ok(t1.includes(line), line);
+    // La descripción va sin rótulo, justo después de los datos (la cabecera ya dice que las subtareas son los criterios).
+    assert.ok(t1.includes("- **Adjuntos:** `log.txt`, `mi_registro*.txt`\n\nFalla al entrar."), t1);
+    assert.ok(!md.includes("**Descripción:**") && !md.includes("criterios de aceptación):"), md);
+    // Salvo si empieza con una lista: la línea en blanco no la separa de la de los datos (en Markdown, serían más datos).
+    const listed = buildAiPlanMarkdown(base({ project: { name: "Web", description: "1. Uno" }, tasks: [{ id: "t1", title: "A", kind: "Bug", description: "- Reproducir\n- Corregir" }, { id: "t2", title: "B", description: "- Sin datos" }] }));
+    assert.ok(listed.includes("- **Tipo:** Bug\n\n**Descripción:**\n\n- Reproducir\n- Corregir"), listed);
+    assert.ok(listed.includes("- **Tareas:** 2\n\n**Descripción:**\n\n1. Uno"), listed);
+    assert.ok(listed.includes("### 2. B\n\n- Sin datos"), listed);
     // Títulos de la descripción rebajados (no compiten con los del plan), pero no dentro del código; entidades y enlaces a adjuntos.
     assert.ok(t1.includes("#### Pasos"));
     assert.ok(t1.includes("```\n# no es un título\n```"));
@@ -76,10 +84,10 @@ describe("texto del plan de trabajo para IA", () => {
     assert.ok(t2.includes("- **Depende de:** la tarea 1 («Arreglar el login»)"));
   });
 
-  test("tarea fija y dependencia de una tarea que no está en el plan", () => {
+  test("dependencia de una tarea que no está en el plan; las fijas no llevan nota (es cosa de Pizarro, no de la IA)", () => {
     const md = buildAiPlanMarkdown(base());
     const t3 = md.slice(md.indexOf("### 3."));
-    assert.ok(t3.includes("- _Tarea fija: entra en todos los planes._"));
+    assert.ok(!md.includes("Tarea fija"));
     assert.ok(t3.includes("- **Depende de:** «Otra cosa» (no está en este plan)"));
   });
 
@@ -92,7 +100,7 @@ describe("texto del plan de trabajo para IA", () => {
 
   test("en inglés, con las plantillas de serie en inglés", () => {
     const md = buildAiPlanMarkdown(base({ header: AI_PLAN_DEFAULTS.en.header, footer: AI_PLAN_DEFAULTS.en.footer }), makeT("en"));
-    for (const piece of ["# Work plan – Web", "## Instructions for the AI", "## Project context", "- **Type:** Corrección", "- **Due date:** 2026-11-30", "**Checklist (acceptance criteria):**", "- **Depends on:** task 1", "## Delivery"]) {
+    for (const piece of ["# Work plan – Web", "## Instructions for the AI", "## Project context", "- **Type:** Corrección", "- **Due date:** 2026-11-30", "**Checklist:**", "- **Depends on:** task 1", "## Delivery"]) {
       assert.ok(md.includes(piece), piece);
     }
   });
@@ -115,6 +123,26 @@ describe("texto del plan de trabajo para IA", () => {
     assert.equal(planDescription("~~~\n## x\n~~~\n## y"), "~~~\n## x\n~~~\n##### y");
     assert.equal(planDescription("###### seis"), "###### seis");
     assert.equal(planDescription(null), "");
+  });
+
+  test("planDescription: sin los apartados del formulario del tipo que siguen vacíos; los respondidos se quedan", () => {
+    assert.equal(planDescription("**Qué mejora:** el buscador\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n"), "**Qué mejora:** el buscador");
+    assert.equal(
+      planDescription("**Qué mejora:**\n\nEl buscador.\n\n**Por qué:**\n\n- \n* [ ]\n1.\n\n**Riesgo:** sin cambios visibles.\n\n**Notas**:\n"),
+      "**Qué mejora:**\n\nEl buscador.\n\n**Riesgo:** sin cambios visibles.",
+    );
+    // Con algo debajo (texto, una lista, código) es una respuesta; una negrita sin «:» no es una etiqueta del formulario.
+    assert.equal(planDescription("**Esquema:**\n\n- uno\n\n**Pregunta:**\n```\nnpm test\n```"), "**Esquema:**\n\n- uno\n\n**Pregunta:**\n```\nnpm test\n```");
+    assert.equal(planDescription("Hecho a medias.\n\n**¡Urgente!**"), "Hecho a medias.\n\n**¡Urgente!**");
+    // Una respuesta que empieza en negrita sin «:» no es la etiqueta siguiente: el apartado se queda con su título.
+    assert.equal(planDescription("**Pasos:**\n\n**1.** Abrir ajustes\n**2.** Guardar"), "**Pasos:**\n\n**1.** Abrir ajustes\n**2.** Guardar");
+    assert.equal(planDescription("**Por qué:**\n\n**Riesgo:** ninguno"), "**Riesgo:** ninguno");
+    // Dentro de un bloque de código no se toca nada.
+    assert.equal(planDescription("```\n**Por qué:**\n```"), "```\n**Por qué:**\n```");
+    // Solo etiquetas vacías: no queda nada (y la tarea sale sin descripción).
+    assert.equal(planDescription("**Qué hay que hacer:**\n\n**Plazo:**\n"), "");
+    const md = buildAiPlanMarkdown(base({ tasks: [{ id: "t1", title: "A", description: "**Por qué:**\n\n- \n" }] }));
+    assert.ok(md.includes("### 1. A\n\n## Entrega"), md);
   });
 
   test("planDescription: un bloque de código sin cerrar se cierra al final (no se traga las tareas siguientes ni el pie)", () => {
@@ -262,11 +290,11 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(md.includes("![c](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     // Una imagen que no es adjunto de ninguna tarea del plan se queda en su texto alternativo (sin enlace a Pizarro).
     assert.ok(md.includes("Mira ![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp) y otra y "), md);
-    assert.ok(md.includes("ZIP «adjuntos/…» que acompaña a este plan"));
+    assert.ok(md.includes("(descomprímelo junto a este fichero)") && md.includes("Las imágenes van en WebP."), md);
     const plain = withPaths(false);
     assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("Mira captura y otra y c"), plain);
     assert.ok(plain.includes("- **Adjuntos:** `Plano final.png`"));
-    // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que solo van sus nombres, pese a la cabecera de serie.
+    // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que solo van sus nombres (por si la cabecera habla de un ZIP).
     assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos"));
     for (const text of [md, plain]) assert.ok(!text.includes("pz.example.com") && !text.includes("Pizarro"), text);
     assert.ok(!md.includes("no lleva ZIP"));
@@ -303,10 +331,12 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.equal(aiPlanZipName({ day: "2026-11-23", version: 3, project: "Mi Web" }, 2, 3, "en"), "plan-2026-11-23-v3-Mi_Web-attachments-2of3.zip");
   });
 
-  test("la plantilla de serie explica el ZIP en los dos idiomas, cada una con su carpeta", () => {
-    assert.ok(AI_PLAN_DEFAULTS.es.header.includes("«adjuntos/…»") && AI_PLAN_DEFAULTS.es.header.includes("`adjuntos/03-titulo-de-la-tarea/plano.webp`"));
-    assert.ok(AI_PLAN_DEFAULTS.en.header.includes('"attachments/…"') && AI_PLAN_DEFAULTS.en.header.includes("`attachments/03-task-title/drawing.webp`"));
-    assert.ok(!AI_PLAN_DEFAULTS.en.header.includes("adjuntos") && !AI_PLAN_DEFAULTS.es.header.includes("attachments"));
+  test("la plantilla de serie no habla del ZIP (va en todos los planes): lo explica el contexto, solo cuando hay adjuntos", () => {
+    for (const l of ["es", "en"] as const) assert.ok(!/ZIP|adjuntos|attachments/.test(AI_PLAN_DEFAULTS[l].header), l);
+    const withZip = buildAiPlanMarkdown(base({ tasks: [{ id: "t1", title: "A", attachments: [{ id: "a1", name: "p.png", path: "adjuntos/01-a/p.webp" }] }] }));
+    assert.ok(withZip.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.\n"), withZip);
+    const without = buildAiPlanMarkdown(base({ tasks: [{ id: "t1", title: "A" }] }));
+    assert.ok(!without.includes("ZIP"), without);
   });
 
   test("plan en inglés: la carpeta raíz es «attachments/» y una tarea sin letras, «NN-task»", () => {

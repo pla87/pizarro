@@ -16,6 +16,10 @@ export interface BoardColumn {
   routineTargetColumnId: string | null;
   /** Límite orientativo de tarjetas no archivadas (1-999, null = sin límite): solo avisa al pasarlo. */
   wipLimit: number | null;
+  /** «Asignación a persona» (rol NONE): persona a la que pasa toda tarea que entra (null = ninguna). */
+  assigneeId: string | null;
+  /** «Asignación a persona»: plazo en días para la fecha límite de las que entran sin fecha (null = sin plazo). */
+  assignDueDays: number | null;
 }
 
 export interface BoardTask extends TaskFieldValues {

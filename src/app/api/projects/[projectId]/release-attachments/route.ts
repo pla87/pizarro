@@ -195,7 +195,10 @@ async function servePart(req: Request, t: Awaited<ReturnType<typeof getT>>, user
     return new Response(t("No hay adjuntos disponibles"), { status: 404 });
   }
   logEvent({
-    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", message: `ZIP de adjuntos de ${planZip ? "plan de trabajo" : "release"} (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${logSize(zipPart.bytes)})`,
+    category: "api", action: planZip ? "aiPlan.zipDownload" : "release.zipDownload", label: {
+      k: planZip ? "ZIP de adjuntos de plan de trabajo (paquete {part}/{parts}, {files} ficheros, {size})" : "ZIP de adjuntos de release (paquete {part}/{parts}, {files} ficheros, {size})",
+      p: { part: mode.part, parts: packages.length, files: fileCount, size: logSize(zipPart.bytes) },
+    },
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/release-attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { tasks: items.length, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });

@@ -13,6 +13,7 @@
 //   4. Se escriben los registros pendientes (como mucho FLUSH_MS) y se sale.
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { andList, type Label } from "./undo-label";
 
 const GRACE_MS = 5_000;
 const FLUSH_MS = 3_000;
@@ -130,7 +131,7 @@ export async function stopListening(): Promise<Listening> {
 
 export interface ShutdownDeps {
   flushLogs: () => Promise<void>;
-  logEvent: (e: { level?: "info" | "warn" | "error"; category: string; action: string; message: string; details?: unknown }) => void;
+  logEvent: (e: { level?: "info" | "warn" | "error"; category: string; action: string; label: Label; details?: unknown }) => void;
   closeStreams: () => number;
   stopListening: () => Promise<Listening>;
   exit: (code: number) => void;
@@ -184,7 +185,7 @@ export async function runShutdown(signal: NodeJS.Signals, deps?: ShutdownDeps): 
         level: "warn",
         category: "system",
         action: "system.shutdown.no_listener",
-        message: `Apagado ordenado (${signal}): no se encontró el servidor HTTP entre los manejadores activos; no se dejó de aceptar conexiones ni se esperó a las peticiones en curso`,
+        label: { k: "Apagado ordenado ({signal}): no se encontró el servidor HTTP entre los manejadores activos; no se dejó de aceptar conexiones ni se esperó a las peticiones en curso", p: { signal } },
         details: { signal },
       });
     }
@@ -192,12 +193,16 @@ export async function runShutdown(signal: NodeJS.Signals, deps?: ShutdownDeps): 
     streams = d.closeStreams();
     // Peticiones y emails en curso, a la vez y con el mismo plazo.
     [open, pending] = await Promise.all([listening.drained(d.graceMs), waitForInFlight(d.graceMs)]);
-    const left = [open && `${open} conexión(es) con peticiones sin terminar`, pending && `${pending} envío(s) de email sin terminar`].filter(Boolean);
+    const left: Label[] = [];
+    if (open) left.push({ k: "{n} conexión(es) con peticiones sin terminar", p: { n: open } });
+    if (pending) left.push({ k: "{n} envío(s) de email sin terminar", p: { n: pending } });
     d.logEvent({
       level: left.length ? "warn" : "info",
       category: "system",
       action: "system.shutdown",
-      message: `Apagado ordenado (${signal}): ${left.length ? `${left.join(" y ")} tras ${d.graceMs / 1000} s` : "sin peticiones ni envíos pendientes"}`,
+      label: left.length
+        ? { k: "Apagado ordenado ({signal}): {left} tras {seconds} s", p: { signal, left: andList(left), seconds: d.graceMs / 1000 } }
+        : { k: "Apagado ordenado ({signal}): sin peticiones ni envíos pendientes", p: { signal } },
       details: { signal, openConnections: open, pendingSends: pending, closedStreams: streams, closedListeners: listeners, ms: Date.now() - started },
     });
     // Los avisos que registran los envíos al terminar (continuaciones de la misma cola de microtareas) ya se han añadido.

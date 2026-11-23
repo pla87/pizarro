@@ -7,6 +7,7 @@ import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { dateToIso, todayIso } from "../../src/lib/dates";
 import { appTimeZone } from "../../src/lib/format";
+import { MAX_LABELS_PER_PROJECT } from "../../src/lib/constants";
 import { EXAMPLE_LABEL, PROJECT_EXAMPLES, type ExampleLocale } from "../../src/lib/project-examples";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { seedBuiltinTemplates } from "../../src/lib/template-store";
@@ -120,24 +121,43 @@ describe("plantillas de serie con tarjetas de ejemplo", () => {
     assert.equal(at("Lista de la compra"), "Lista de la compra");
   });
 
-  test("quien no es administrador usa las de serie (en privado), con o sin ejemplos; las propias, no", async () => {
+  test("quien no es administrador usa las de serie (en privado), con o sin ejemplos, y también las propias", async () => {
     const ids = await freshBuiltins();
     const own = await db.projectTemplate.create({ data: { name: "Propia de prueba", columns: [{ name: "Por hacer", role: "NONE", isDone: false }], position: 99_000 } });
     const member = await makeUser();
     await loginAs(member);
     const list = expectOk(await listProjectStarts());
-    assert.ok(list.length === BUILTIN_KEYS.length && list.every((t) => t.builtin));
+    assert.equal(list.filter((t) => t.builtin).length, BUILTIN_KEYS.length);
+    assert.ok(list.some((t) => t.id === own.id && !t.builtin && !t.examples));
     const p = expectOk(await createProject("Mi casa", { templateId: ids["casa-familia"], withExamples: true, isPrivate: true }));
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: p.id } })).isPrivate, true);
     assert.equal(await db.task.count({ where: { projectId: p.id } }), PROJECT_EXAMPLES.find((e) => e.key === "casa-familia")!.es.tasks.length);
     expectFail(await createProject("X", { templateId: ids["casa-familia"], isPrivate: false }), FORBIDDEN);
-    expectFail(await createProject("X", { templateId: own.id, isPrivate: true }), FORBIDDEN);
+    // Con una propia, también en privado (y sin tarjetas de ejemplo: solo las tienen las de serie).
+    resetRateLimit(`project-create:${member.id}`);
+    expectFail(await createProject("X", { templateId: own.id, isPrivate: false }), FORBIDDEN);
+    const r = expectOk(await createProject("Mía", { templateId: own.id, withExamples: true, isPrivate: true }));
+    const mine = await db.project.findUniqueOrThrow({ where: { id: r.id }, include: { columns: true } });
+    assert.equal(mine.isPrivate, true);
+    assert.deepEqual(mine.columns.map((c) => c.name), ["Por hacer"]);
+    assert.equal(await db.task.count({ where: { projectId: r.id } }), 0);
     // La casilla con una plantilla propia no añade nada.
     const admin = await makeUser({ role: "ADMIN" });
     await loginAs(admin);
     const q = expectOk(await createProject("Propia", { templateId: own.id, withExamples: true }));
     assert.equal(await db.task.count({ where: { projectId: q.id } }), 0);
     await db.projectTemplate.delete({ where: { id: own.id } });
+  });
+
+  test("plantilla con el máximo de etiquetas: no añade «Ejemplo» y las tarjetas salen sin ella", async () => {
+    const ids = await freshBuiltins();
+    const labels = Array.from({ length: MAX_LABELS_PER_PROJECT }, (_, i) => ({ name: `Etiqueta ${i}`, color: "#a855f7" }));
+    await db.projectTemplate.update({ where: { id: ids["casa-familia"] }, data: { labels } });
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const p = expectOk(await createProject("Casa llena", { templateId: ids["casa-familia"], withExamples: true }));
+    assert.equal(await db.label.count({ where: { projectId: p.id } }), MAX_LABELS_PER_PROJECT);
+    assert.equal(await db.task.count({ where: { projectId: p.id } }), PROJECT_EXAMPLES.find((e) => e.key === "casa-familia")!.es.tasks.length);
   });
 
   test("en blanco sigue igual: columnas por defecto y ninguna tarjeta", async () => {

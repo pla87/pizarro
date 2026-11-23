@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { visibleProjectsWhere } from "@/lib/access";
 import { runAction } from "@/lib/action";
+import { describeAction } from "@/lib/action-context";
 import { MAX_RELEASE_TEMPLATES_PER_KIND, PALETTE } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE } from "@/lib/edit-conflict-core";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { templateInputSchema, type TemplateInput } from "@/lib/project-templates";
-import { MAX_TEMPLATES } from "@/lib/project-templates-core";
+import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATES } from "@/lib/project-templates-core";
 import { listTemplatesSorted, lockTemplates, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -49,6 +50,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
         if (!(await db.projectTemplate.count({ where: { id } }))) throw notFound();
         throw new AppError(EDIT_CONFLICT_MESSAGE, 409, EDIT_CONFLICT_CODE);
       }
+      describeAction("Modificó la plantilla de proyecto «{name}»", { name: data.name });
       revalidatePath("/admin/templates");
       const saved = await db.projectTemplate.findUnique({ where: { id }, select: { updatedAt: true } });
       return { id, version: saved?.updatedAt.toISOString() };
@@ -63,6 +65,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
       const last = await tx.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
       return tx.projectTemplate.create({ data: { ...row, position: (last?.position ?? 0) + POSITION_STEP }, select: { id: true, updatedAt: true } });
     });
+    describeAction("Creó la plantilla de proyecto «{name}»", { name: data.name });
     revalidatePath("/admin/templates");
     return { id: created.id, version: created.updatedAt.toISOString() };
   });
@@ -115,7 +118,7 @@ export async function templateFromProject(projectId: string) {
       select: {
         name: true,
         description: true,
-        columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true, wipLimit: true } },
+        columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true, wipLimit: true, assignDueDays: true } },
         kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },
@@ -130,7 +133,8 @@ export async function templateFromProject(projectId: string) {
     return {
       name: cutText(t("Plantilla de {name}", { name: project.name }), 80),
       description: "",
-      columns: project.columns.slice(0, 20),
+      // «Asignación a persona»: el plazo sí, la persona no (las columnas de plantilla no tienen persona).
+      columns: project.columns.slice(0, MAX_TEMPLATE_COLUMNS).map(({ assignDueDays, ...c }) => (c.role === "NONE" && assignDueDays != null ? { ...c, assignDueDays } : c)),
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),
       hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name),
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),

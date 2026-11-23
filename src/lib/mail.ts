@@ -6,7 +6,7 @@ import { after } from "next/server";
 import nodemailer from "nodemailer";
 import { resolveAppUrl } from "./app-url";
 import { escapeHtml } from "./html-escape";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { getInstanceSettings } from "./instance";
 import { loadMailConfig, peekMailConfig, savedMailEnabled } from "./mail-config";
 import { withSenderName, type MailConfig } from "./mail-settings-core";
@@ -32,7 +32,7 @@ export function outboxDir(env: NodeJS.ProcessEnv = process.env): string | null {
     outboxWarned = true;
     const message = "MAIL_OUTBOX_DIR está definida en producción y se ignora: los emails se envían por SMTP (o no se envían si no hay SMTP). Quítala de las variables del servicio.";
     console.error(`[mail] ${message}`);
-    logEvent({ level: "error", category: "system", action: "mail.outboxIgnored", message });
+    logEvent({ level: "error", category: "system", action: "mail.outboxIgnored", label: { k: message } });
   }
   return null;
 }
@@ -211,10 +211,10 @@ export function sendMailInBackground(label: string, send: () => Promise<void>): 
   const runSend = async () => {
     try {
       await send();
-      logEvent({ category: "auth", action: "auth.emailSent", message: `Email enviado: ${label}` });
+      logEvent({ category: "auth", action: "auth.emailSent", label: { k: "Email enviado: {what}", p: { what: logText(label) } } });
     } catch (err) {
       logMailError(`[mail] ${label}`, err);
-      logEvent({ level: "error", category: "auth", action: "auth.emailFailed", message: `Fallo al enviar el email (${label}): ${maskEmailsIn((err as Error).message)}` });
+      logEvent({ level: "error", category: "auth", action: "auth.emailFailed", label: { k: "Fallo al enviar el email ({what}): {error}", p: { what: logText(label), error: logText(maskEmailsIn((err as Error).message)) } } });
     }
   };
   try {

@@ -1,6 +1,7 @@
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
-import { getUpdateNotice, runsOnRailway } from "@/lib/update-check";
+import { setupCodeSource } from "@/lib/setup-core";
+import { getUpdateNotice } from "@/lib/update-check";
 import { lowDiskSpace } from "@/lib/health";
 import { getOtherInstanceNotice } from "@/lib/instance-lock";
 import { uploadDir } from "@/lib/upload-dir";
@@ -19,7 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <h1 className="text-xl font-bold">{t("Administración")}</h1>
       {otherInstance && <InstanceNotice since={otherInstance.since} />}
       {disk && <DiskNotice freeBytes={disk.freeBytes} minBytes={disk.minBytes} />}
-      {update && <UpdateNotice version={update.version} url={update.url} railway={runsOnRailway()} />}
+      {update && <UpdateNotice version={update.version} url={update.url} platform={setupCodeSource()} />}
       <AdminTabs />
       {children}
     </div>

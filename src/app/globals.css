@@ -129,8 +129,10 @@
   --color-slate-200: #e5dec3;
   --color-slate-300: #d0c59f;
   --color-slate-400: #aea072;
-  --color-slate-500: #8b7f55;
-  --color-slate-600: #6d6342;
+  /* Texto secundario: #7a6f4a da 5:1 sobre blanco (con #8b7f55 se quedaba en 3,99:1). */
+  --color-slate-500: #7a6f4a;
+  /* #665c3d: 4,9:1 sobre slate-200 (el contador de tarjetas de la cabecera de columna; con #6d6342, 4,43:1). */
+  --color-slate-600: #665c3d;
   --color-slate-700: #554d34;
   --color-slate-800: #393423;
   --color-slate-900: #242116;
@@ -140,13 +142,19 @@
   --color-brand-200: #f2d675;
   --color-brand-300: #e9c24a;
   --color-brand-500: #d4a017;
-  --color-brand-600: #9a7209;
+  /* Botones y enlaces: #8c6807 da 5,1:1 con texto blanco y sobre blanco, y 4,8:1 sobre slate-50 (con #9a7209, 4,4 y 4,1).
+     El icono de la app y la muestra de Mi perfil conservan #9a7209. */
+  --color-brand-600: #8c6807;
   --color-brand-700: #7d5c06;
   --color-progress: #2563eb;
   @variant dark {
     /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
     --color-slate-50: #ffffff;
     --color-slate-100: #ffffff;
+    /* En oscuro se queda el tono anterior: el nuevo bajaría de 4:1 a 3,2:1 sobre slate-900. */
+    --color-slate-500: #8b7f55;
+    /* En oscuro, el de antes: ahí slate-600 es fondo o borde, no texto. */
+    --color-slate-600: #6d6342;
     --color-brand-500: #e8b931;
     --color-progress: #5b9bff;
   }
@@ -599,7 +607,7 @@ select:not([multiple], [size]) {
     }
   }
   /* Lo mismo para el rojo de errores y opciones de borrar (red-600: 3,8:1 en oscuro) y el acento de enlaces y opciones
-     como «Nuevo proyecto» (brand-600: 2,9:1): en oscuro, red-400 y brand-300, como los que ya traen su dark:. */
+     que no traigan su dark: (brand-600: 2,9:1): en oscuro, red-400 y brand-300, como los que ya traen su dark:. */
   .text-red-600:where(:not([class*="dark:text-"])) {
     @variant dark {
       color: var(--color-red-400);

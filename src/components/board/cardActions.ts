@@ -138,6 +138,7 @@ export function useCardActions(deps: Deps) {
         }
         if (latest) patchTask(id, { position: res.data.position });
         res.data.spawned.forEach(upsertTask);
+        for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
         toast(t("Movida a «{name}»", { name: target.name }));
       },
 

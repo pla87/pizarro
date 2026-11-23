@@ -1,14 +1,17 @@
 "use server";
 
 import { z } from "zod";
-import { describeAction, noteProject } from "@/lib/action-context";
+import type { Prisma } from "@/generated/prisma/client";
+import { describeAction, noteProject, noteTasks } from "@/lib/action-context";
 import { columnsLockName } from "@/lib/advisory-locks";
 import { assertFitsProgramRole } from "@/lib/column-capacity";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
-import { assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
+import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
+import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
+import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
-import { DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS } from "@/lib/constants";
+import { DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
@@ -19,7 +22,7 @@ import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 import { getT } from "@/i18n/server";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -68,55 +71,140 @@ export async function setColumnRole(columnId: string, role: string) {
   return runAction({ name: "columns.setColumnRole", args: [columnId, role] }, async () => {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
-    // Elegir el rol que ya tiene no cambia nada: ni entrada en el historial ni deshacer.
-    if (value === column.role) return { costEnabled: false };
-    // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
-    const clearWaiting = column.role === "WAITING" && value !== "WAITING";
-    const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";
-    // Deshacer: solo lo que cambia (esta columna, la que tenía el rol si es único y las tareas fijas que dejan de serlo),
-    // para no pisar al deshacer los roles que otras personas hayan cambiado en otras columnas.
-    const [holders, fixed] = await Promise.all([
-      isUniqueColumnRole(value) ? db.column.findMany({ where: { projectId: column.projectId, role: value, id: { not: columnId } }, select: { id: true } }) : [],
-      db.task.findMany({
-        // Pierden la marca las de esta columna si su rol nuevo no tiene fijas y, con un rol único (la release), las de la
-        // columna que lo tenía y lo pierde. Las de otras columnas de plan para IA se conservan.
-        where: {
-          projectId: column.projectId, evergreen: true,
-          OR: [
-            ...(hasEvergreenTasks(value) ? [] : [{ columnId }]),
-            ...(isUniqueColumnRole(value) && hasEvergreenTasks(value) ? [{ columnId: { not: columnId }, column: { role: value } }] : []),
-          ],
-        },
-        select: { id: true },
-      }),
-    ]);
-    // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba (y el deshacer lo
-    // vuelve a desactivar: `costOff`).
-    const project = value === "BUDGET" && column.role !== "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
-    const enablesCost = project !== null && !project.taskFields.includes("cost");
-    addUndo(
-      { t: "column.set", id: column.id, data: { role: column.role, ...(clearWaiting ? { waitingDays: column.waitingDays } : {}), ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}) }, ...(enablesCost ? { costOff: true as const } : {}) },
-      ...holders.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: value } })),
-      ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])),
-    );
+    // Elegir el rol que ya tiene no cambia nada: ni entrada en el historial ni deshacer. «Sin rol» en una columna
+    // «Asignación a persona» (rol NONE con persona o plazo) sí: deja de asignar.
+    if (value === column.role && !isAssignColumn(column)) return { costEnabled: false };
     describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
-    await db.$transaction(async (tx) => {
-      // «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones; con más tareas no se le da el rol (con la
-      // columna bloqueada, para que nadie meta tareas a la vez: column-capacity.ts).
-      if (value === "PROGRAM" && column.role !== "PROGRAM") await assertFitsProgramRole(tx, column);
-      if (enablesCost) await tx.project.update({ where: { id: column.projectId }, data: { taskFields: normalizeTaskFields([...project!.taskFields, "cost"]) } });
-      // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING, WEEKLY_PLAN y BUDGET se pueden repetir.
-      if (isUniqueColumnRole(value)) {
-        await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
-      }
-      await tx.column.update({ where: { id: columnId }, data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}) } });
-      // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
-      if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
-      // Las tareas fijas solo existen en la columna de release y en las de plan para IA: las que quedan fuera pasan a normales.
-      await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
-    });
-    return { costEnabled: enablesCost };
+    return changeColumnRole(column, value, null);
   });
+}
+
+type FoundColumn = Awaited<ReturnType<typeof findColumn>>;
+
+/**
+ * El cambio de rol de una columna, también hacia «Asignación a persona» (`assign`: rol NONE con persona y plazo). Cualquier
+ * otro rol (o «Sin rol») quita la persona y el plazo; deshacer los devuelve. `inside` se ejecuta en la misma transacción,
+ * después de cambiar la columna. Quien llama anota la acción (describeAction).
+ */
+async function changeColumnRole<R = undefined>(
+  column: FoundColumn, value: ColumnRoleValue, assign: { assigneeId: string; dueDays: number | null } | null,
+  inside?: (tx: Prisma.TransactionClient) => Promise<R>,
+): Promise<{ costEnabled: boolean; inside?: R }> {
+  const columnId = column.id;
+  // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
+  const clearWaiting = column.role === "WAITING" && value !== "WAITING";
+  const clearRoutine = column.role === "ROUTINES" && value !== "ROUTINES";
+  // «Asignación a persona» no es un valor del rol: la marcan la persona y el plazo.
+  const assignData = assign ? { assigneeId: assign.assigneeId, assignDueDays: assign.dueDays } : { assigneeId: null, assignDueDays: null };
+  const assignChanged = assignData.assigneeId !== column.assigneeId || assignData.assignDueDays !== column.assignDueDays;
+  // Deshacer: solo lo que cambia (esta columna, la que tenía el rol si es único y las tareas fijas que dejan de serlo),
+  // para no pisar al deshacer los roles que otras personas hayan cambiado en otras columnas.
+  const [holders, fixed] = await Promise.all([
+    isUniqueColumnRole(value) ? db.column.findMany({ where: { projectId: column.projectId, role: value, id: { not: columnId } }, select: { id: true } }) : [],
+    db.task.findMany({
+      // Pierden la marca las de esta columna si su rol nuevo no tiene fijas y, con un rol único (la release), las de la
+      // columna que lo tenía y lo pierde. Las de otras columnas de plan para IA se conservan.
+      where: {
+        projectId: column.projectId, evergreen: true,
+        OR: [
+          ...(hasEvergreenTasks(value) ? [] : [{ columnId }]),
+          ...(isUniqueColumnRole(value) && hasEvergreenTasks(value) ? [{ columnId: { not: columnId }, column: { role: value } }] : []),
+        ],
+      },
+      select: { id: true },
+    }),
+  ]);
+  // Una columna de presupuesto suma el coste de sus tareas: el campo Coste se activa si no lo estaba (y el deshacer lo
+  // vuelve a desactivar: `costOff`).
+  const project = value === "BUDGET" && column.role !== "BUDGET" ? await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { taskFields: true } }) : null;
+  const enablesCost = project !== null && !project.taskFields.includes("cost");
+  addUndo(
+    {
+      t: "column.set", id: column.id,
+      data: {
+        role: column.role,
+        ...(clearWaiting ? { waitingDays: column.waitingDays } : {}),
+        ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}),
+        ...(assignChanged ? { assigneeId: column.assigneeId, assignDueDays: column.assignDueDays } : {}),
+      },
+      ...(enablesCost ? { costOff: true as const } : {}),
+    },
+    ...holders.map((c) => ({ t: "column.set" as const, id: c.id, data: { role: value } })),
+    ...(await captureTasks(fixed.map((t) => t.id), ["evergreen", "evergreenEvery"])),
+  );
+  const result = await db.$transaction(async (tx) => {
+    // «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones; con más tareas no se le da el rol (con la
+    // columna bloqueada, para que nadie meta tareas a la vez: column-capacity.ts).
+    if (value === "PROGRAM" && column.role !== "PROGRAM") await assertFitsProgramRole(tx, column);
+    if (enablesCost) await tx.project.update({ where: { id: column.projectId }, data: { taskFields: normalizeTaskFields([...project!.taskFields, "cost"]) } });
+    // Solo NEXT_RELEASE e IN_PRODUCTION son únicos; WAITING, WEEKLY_PLAN y BUDGET se pueden repetir.
+    if (isUniqueColumnRole(value)) {
+      await tx.column.updateMany({ where: { projectId: column.projectId, role: value }, data: { role: "NONE" } });
+    }
+    await tx.column.update({
+      where: { id: columnId },
+      data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}), ...(assignChanged ? assignData : {}) },
+    });
+    // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
+    if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
+    // Las tareas fijas solo existen en la columna de release y en las de plan para IA: las que quedan fuera pasan a normales.
+    await tx.task.updateMany({ where: { projectId: column.projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
+    return inside ? await inside(tx) : undefined;
+  });
+  return { costEnabled: enablesCost, ...(result !== undefined ? { inside: result } : {}) };
+}
+
+const assignSchema = z.object({
+  assigneeId: v.id,
+  dueDays: z.number().int("Indica un número entero de días.").min(1, "Mínimo 1 día.").max(MAX_ASSIGN_DUE_DAYS, "Máximo 365 días.").nullable(),
+});
+
+/**
+ * «Asignación a persona»: la columna pasa a tener esa persona (de las que pueden tener tareas del proyecto) y, opcional,
+ * un plazo (`dueDays`, 1-365). Si tenía otro rol, lo pierde (rol NONE: es exclusivo con los demás). Todas sus tarjetas no
+ * archivadas pasan a la persona (las que tenían otra o ninguna; el plazo es solo para las que entren después). Mismo
+ * permiso que cambiar el rol. Todo en una transacción y un solo paso de deshacer (columna y tarjetas); un solo aviso a la
+ * persona por todo el lote. Con la misma persona solo cambia el plazo: las tarjetas que ya están no se tocan.
+ */
+export async function setColumnAssignee(columnId: string, input: { assigneeId: string; dueDays: number | null }) {
+  return runAction({ name: "columns.setColumnAssignee", args: [columnId, input] }, async (): Promise<{ reassigned: number }> => {
+    const user = await requireUser();
+    const column = await findColumn(columnId);
+    const data = assignSchema.parse(input);
+    await assertAssignable(column.projectId, data.assigneeId);
+    const samePerson = isAssignColumn(column) && column.assigneeId === data.assigneeId;
+    if (samePerson && column.assignDueDays === data.dueDays) return { reassigned: 0 };
+    if (samePerson) {
+      // Solo el plazo: vale para las que entren a partir de ahora. Si entretanto otra persona ha cambiado la columna, no se
+      // pisa su cambio.
+      const { count } = await db.column.updateMany({ where: { id: columnId, role: "NONE", assigneeId: data.assigneeId }, data: { assignDueDays: data.dueDays } });
+      if (!count) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
+      addUndo({ t: "column.set", id: column.id, data: { assignDueDays: column.assignDueDays } });
+      if (data.dueDays == null) describeAction("Quitó el plazo de la columna «{col}»", { col: column.name });
+      else if (data.dueDays === 1) describeAction("Cambió el plazo de la columna «{col}» a 1 día", { col: column.name });
+      else describeAction("Cambió el plazo de la columna «{col}» a {n} días", { col: column.name, n: data.dueDays });
+      return { reassigned: 0 };
+    }
+    const rule = { columnId, projectId: column.projectId, assigneeId: data.assigneeId, dueDays: data.dueDays };
+    const name = await userName(data.assigneeId);
+    describeAction(
+      isAssignColumn(column) ? "Cambió la persona de la columna «{col}» a {name}" : "Convirtió la columna «{col}» en «Asignación a persona» ({name})",
+      { col: column.name, name },
+    );
+    const { inside: reassigned } = await changeColumnRole(column, "NONE", { assigneeId: data.assigneeId, dueDays: data.dueDays }, async (tx) => {
+      // Con la columna bloqueada: nadie mete ni saca tarjetas mientras se reasignan.
+      await lockColumns(tx, [columnId]);
+      const ids = (await tx.task.findMany({ where: { columnId, archivedAt: null }, select: { id: true } })).map((t) => t.id);
+      return assignOnEnter(tx, columnId, ids, { assigneeOnly: true, rule });
+    });
+    if (reassigned) noteTasks(reassigned.newlyAssigned);
+    await finishAssignOnEnter(reassigned ?? null, user.id, { personName: name });
+    return { reassigned: reassigned?.newlyAssigned.length ?? 0 };
+  });
+}
+
+async function userName(id: string): Promise<string> {
+  return (await db.user.findUnique({ where: { id }, select: { name: true } }))?.name ?? "?";
 }
 
 /** Días que una tarea puede esperar en una columna WAITING antes de recordárselo a su responsable (null = por defecto). */
@@ -222,7 +310,7 @@ export async function deleteColumn(columnId: string) {
     addUndo(
       ...pointing.map((c) => ({ t: "column.set" as const, id: c.id, data: { routineTargetColumnId: column.id } })),
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit, planCount: column.planCount } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit, planCount: column.planCount, assigneeId: column.assigneeId, assignDueDays: column.assignDueDays } },
     );
     await db.$transaction(async (tx) => {
       // Bloqueo de las columnas del proyecto (el de createColumn) y la otra columna, otra vez dentro: borrar a la vez las

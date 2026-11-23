@@ -10,10 +10,10 @@ import { PRIORITY_COLOR, PRIORITY_LABEL } from "@/lib/task-fields";
 import type { BoardColumn, BoardTask, LabelOption, UserOption } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
-import { MentionText } from "../ui/MentionText";
 import { TypeBadge } from "../ui/TypeBadge";
 import { cn } from "../ui/cn";
 import { useBoard, useTask } from "./context";
+import { CardTitle } from "./TaskCard";
 import { ariaSortOf, DEFAULT_LIST_SORT, nextSort, sortTasks, type ListSort, type ListSortKey } from "./listSort";
 import { cardCount } from "./count-texts";
 import { FIRST_PAINT_ROWS, rowsReserve } from "./deferredCards";
@@ -231,7 +231,7 @@ const TableRow = memo(function TableRow({ task, lookups, today, locale, t, prior
             className="min-w-0 flex-1 rounded text-left font-medium break-words"
             // El resto de la fila abre la tarea con el ratón; el botón es la parada del teclado.
           >
-            <MentionText text={task.title} />
+            <CardTitle title={task.title} />
           </button>
           <BlockedBadge task={task} t={t} />
           <TypeBadge kind={kind} />
@@ -287,7 +287,7 @@ const CompactRow = memo(function CompactRow({ task, lookups, today, locale, t }:
       <button type="button" data-task-card={task.id} onClick={() => openTask(task.id)} className="flex w-full items-stretch gap-2.5 px-3 py-2.5 text-left focus-visible:outline-offset-[-3px]">
         <ColorBar color={task.color} />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></span>
+          <span className="block text-sm leading-snug font-medium break-words"><CardTitle title={task.title} /></span>
           <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
             <span>{column?.name}</span>
             <BlockedBadge task={task} t={t} />

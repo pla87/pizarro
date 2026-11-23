@@ -68,3 +68,52 @@ test("shareStatusOf: nada que compartir o todo fallido = no compartido; algún f
   assert.equal(shareStatusOf(3, 1), "PARTIAL");
   assert.equal(shareStatusOf(3, 0), "SHARED");
 });
+
+test("compartir con los miembros: los permisos de Drive se piden de 5 en 5, no todos a la vez", async () => {
+  const { shareFile } = await import("../src/lib/google");
+  const realFetch = globalThis.fetch;
+  let active = 0;
+  let peak = 0;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    peak = Math.max(peak, ++active);
+    await new Promise((r) => setTimeout(r, 5));
+    active--;
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  try {
+    const emails = Array.from({ length: 12 }, (_, i) => `p${i}@example.com`);
+    const out = await shareFile("token", "file1", { type: "users", emails }, "writer");
+    assert.equal(calls, 12);
+    assert.equal(peak, 5);
+    assert.equal(out.failed, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("compartir con Drive colgado: un plazo para todo el reparto; lo que queda sin pedir cuenta como fallido", async () => {
+  const { shareFile } = await import("../src/lib/google");
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  // Drive no contesta: cada petición solo termina cuando se corta.
+  globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
+    calls++;
+    return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+  }) as typeof fetch;
+  // Los plazos son AbortSignal.timeout, que no mantienen vivo el proceso: sin otro temporizador en marcha (en CI no hay
+  // nada más), Node se queda sin tareas antes de que salten y cancela la prueba. En el servidor siempre hay algo vivo.
+  const keepAlive = setInterval(() => {}, 1000);
+  try {
+    const emails = Array.from({ length: 12 }, (_, i) => `p${i}@example.com`);
+    const started = Date.now();
+    const out = await shareFile("token", "file1", { type: "users", emails }, "writer", 50);
+    assert.ok(Date.now() - started < 2000, "no espera 10 s por tanda");
+    assert.equal(calls, 5, "solo la primera tanda llega a pedirse");
+    assert.deepEqual(out, { status: "NOT_SHARED", failed: 12 });
+  } finally {
+    clearInterval(keepAlive);
+    globalThis.fetch = realFetch;
+  }
+});

@@ -58,9 +58,9 @@ services:
       APP_URL: ${APP_URL:?Define APP_URL en .env}
       UPLOAD_DIR: /app/uploads
       PORT: "3000"
-      # Techo del montón de JavaScript, por debajo del límite del contenedor: un exceso reinicia el proceso
-      # en lugar de dejar sin memoria al servidor (sharp y los PDF usan memoria fuera del montón).
-      NODE_OPTIONS: --max-old-space-size=${APP_HEAP_MB:-640}
+      # Sin NODE_OPTIONS=--max-old-space-size: Node ajusta su montón al límite del contenedor (mem_limit, abajo), y esa
+      # opción vale para todo el proceso y anula el techo propio del generador de PDF (PDF_WORKER_MAX_MB). APP_HEAP_MB
+      # ya no se usa: si sigue en .env no rompe nada (el diagnóstico avisa de que sobra).
       # Docker la reinicia sin límite: ante una excepción no capturada es mejor salir y arrancar limpio.
       EXIT_ON_UNCAUGHT_EXCEPTION: ${EXIT_ON_UNCAUGHT_EXCEPTION:-1}
     volumes:

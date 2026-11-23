@@ -17,6 +17,8 @@ test("logSize: bytes por debajo de 1 KB (antes «subido (0 KB)»), KB redondeado
   assert.equal(logSize(312), "312 B");
   assert.equal(logSize(1024), "1 KB");
   assert.equal(logSize(5 * 1024 * 1024), "5120 KB");
+  assert.equal(logSize(10 * 1024 * 1024), "10.0 MB");
+  assert.equal(logSize(57329604 * 1024), "54.7 GB");
 });
 
 test("formatPercent: «40 %» en español y «40%» en inglés americano, sin decimales", () => {

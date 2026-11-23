@@ -18,6 +18,8 @@ import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 import { buildProgramSessions, programDocumentName } from "./course-program";
 import { PROGRAM_MAX_SESSIONS } from "./program-limit";
+import { buildAssignPlan, firstDescriptionLine, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
+import { calendarWeekStart } from "./calendar";
 import type { Prisma } from "@/generated/prisma/client";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
@@ -156,7 +158,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
   if (!project) return null;
 
   const today = todayIso(appTimeZone());
-  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts] = await Promise.all([
+  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts, subtaskGroups] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
@@ -172,7 +174,6 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
         assignee: { select: { name: true } },
         updatedAt: true,
         evergreen: true,
-        subtasks: { select: { done: true } },
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
       },
     }),
@@ -191,7 +192,16 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
       }),
     ]),
     reportCounts(projectId, today, opts.locale),
+    // Solo los recuentos de subtareas (hechas/total), agrupados en la BD: leer cada fila eran hasta 100 por tarea.
+    db.subtask.groupBy({ by: ["taskId", "done"], where: { task: { projectId, archivedAt: null } }, _count: { _all: true } }),
   ]);
+  const subtaskCounts = new Map<string, { total: number; done: number }>();
+  for (const g of subtaskGroups) {
+    const c = subtaskCounts.get(g.taskId) ?? { total: 0, done: 0 };
+    c.total += g._count._all;
+    if (g.done) c.done += g._count._all;
+    subtaskCounts.set(g.taskId, c);
+  }
   const doneAt = new Map<string, string>();
   const noteDone = (taskId: string | null, at: Date | null | undefined) => {
     const iso = at?.toISOString();
@@ -220,8 +230,8 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
       assigneeName: task.assignee?.name ?? null,
       dueDate: dateToIso(task.dueDate),
       deliverableId: task.deliverableId,
-      subtaskTotal: task.subtasks.length,
-      subtaskDone: task.subtasks.filter((x) => x.done).length,
+      subtaskTotal: subtaskCounts.get(task.id)?.total ?? 0,
+      subtaskDone: subtaskCounts.get(task.id)?.done ?? 0,
       updatedAt: task.updatedAt.toISOString(),
       doneAt: doneAt.get(task.id) ?? null,
       evergreen: task.evergreen,
@@ -355,6 +365,54 @@ export function generateWeekPlanPdf(
     );
     const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, weekStart: week.start, weekEnd: week.end, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
     return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
+  })();
+}
+
+/**
+ * PDF «Plan de <persona>» de una columna «Asignación a persona»: las tareas no archivadas de la columna que son de su
+ * persona, agrupadas por vencimiento (vencidas, hoy, esta semana, este mes, más adelante y sin fecha) y, dentro de cada
+ * grupo, por fecha límite. La semana empieza en lunes en español y en domingo en inglés (como la cuadrícula del
+ * calendario: calendarWeekStart). Null si la columna no tiene persona o no es «Asignación a persona» (con otro rol, la
+ * persona que conserve de una versión anterior no cuenta: isAssignColumn). De las subtareas pendientes se leen solo las
+ * que salen (PLAN_SUBTASKS_SHOWN) y cuántas son.
+ */
+export function generateAssignPlanPdf(
+  projectId: string, columnId: string, opts: PdfRequestOpts,
+): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
+  return (async () => {
+    const t = makeT(opts.locale);
+    const column = await db.column.findFirst({
+      where: { id: columnId, projectId, role: "NONE", assigneeId: { not: null } },
+      select: { name: true, assigneeId: true, assignee: { select: { name: true } }, project: { select: { name: true, taskFields: true } } },
+    });
+    if (!column?.assignee) return null;
+    const withPriority = normalizeTaskFields(column.project.taskFields).includes("priority");
+    const [tasks, others] = await Promise.all([
+      db.task.findMany({
+        where: { projectId, columnId, archivedAt: null, assigneeId: column.assigneeId },
+        orderBy: [{ position: "asc" }, { id: "asc" }],
+        take: 2000,
+        select: {
+          title: true, description: true, dueDate: true, priority: true, kind: { select: { id: true, name: true } },
+          subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], take: PLAN_SUBTASKS_SHOWN, select: { title: true } },
+          _count: { select: { subtasks: { where: { done: false } } } },
+        },
+      }),
+      db.task.count({ where: { projectId, columnId, archivedAt: null, OR: [{ assigneeId: null }, { assigneeId: { not: column.assigneeId! } }] } }),
+    ]);
+    const today = todayIso(appTimeZone());
+    const rows: AssignPlanTask[] = tasks.map((x) => ({
+      title: mentionsToPlain(x.title, false),
+      kind: localizeGeneralKind(x.kind, opts.locale).name,
+      priority: withPriority ? x.priority : null,
+      dueDate: dateToIso(x.dueDate),
+      firstLine: firstDescriptionLine(mentionsToPlain(x.description, false)),
+      pendingSubtasks: x.subtasks.map((st) => mentionsToPlain(st.title, false)),
+      pendingCount: x._count.subtasks,
+    }));
+    const groups = buildAssignPlan(rows, today, calendarWeekStart(opts.locale));
+    const pdf = await renderPdf({ kind: "assignPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, person: column.assignee.name, today, groups, others } }, opts.signal);
+    return { pdf, filename: `${t("plan")}-${slugOf(column.assignee.name, t("persona"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
 

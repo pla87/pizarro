@@ -423,6 +423,10 @@ test("compose: usa la imagen publicada por defecto y compose.build.yml permite c
   assert.match(app, /^ {6}POSTGRES_PASSWORD: ""$/m);
   assert.match(app, /^ {6}APP_DB_PASSWORD: ""$/m);
   assert.match(app, /^ {6}DATABASE_URL: postgresql:\/\/\$\{APP_DB_USER:-pizarro\}:\$\{APP_DB_PASSWORD:-\$\{POSTGRES_PASSWORD:/m);
+  // Sin --max-old-space-size (anularía el resourceLimits del worker de PDF): Node ajusta su montón a mem_limit.
+  assert.doesNotMatch(app, /^\s+NODE_OPTIONS:/m);
+  assert.doesNotMatch(c, /max-old-space-size=/);
+  assert.match(app, /^ {4}mem_limit: \$\{APP_MEM_LIMIT:-1g\}$/m);
   const b = readFileSync("deploy/compose.build.yml", "utf8");
   assert.match(b, /^\s+build:/m);
   assert.match(b, /dockerfile: Dockerfile/);

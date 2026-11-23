@@ -3,7 +3,7 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, Users, Wallet, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
 import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
@@ -11,6 +11,7 @@ import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { budgetSummary, formatEuro } from "@/lib/task-fields";
+import { isAssignColumn } from "@/lib/column-assign-core";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
@@ -18,6 +19,7 @@ import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator, MenuSub } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
+import { AssignDialog, AssignHeader, AssignPlanButton, assignPlanPdf } from "./AssignColumn";
 import { columnGateSnapshot } from "./columnGate";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { cardsReserve } from "./deferredCards";
@@ -58,7 +60,7 @@ const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
 };
 
 /** Diálogos de una columna: los abre su menú o el botón de acción de su rol (ColumnActionButton). */
-type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget";
+type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget" | "assign";
 
 const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
 /** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
@@ -112,6 +114,10 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const isNextRelease = column.role === "NEXT_RELEASE";
   // La release y los planes para IA acaban en su panel de tareas fijas («Siempre en la release» / «… en el plan»).
   const withFixed = hasEvergreenTasks(column.role);
+  // «Asignación a persona» (rol NONE con persona o plazo): persona en la cabecera y «Generar plan» al pie.
+  const assign = isAssignColumn(column);
+  // Columnas que acaban en algo fijo al pie (panel de fijas o «Generar plan»).
+  const withFooter = withFixed || assign;
   const [dialog, setDialog] = useState<ColumnDialog | null>(null);
   const action = roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc, toast);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
@@ -122,9 +128,9 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const fileZone = useFileZone((files) => openNewTask(column.id, false, files));
   // Esquinas inferiores rectas mientras quedan tarjetas por ver abajo (las de tareas fijas acaban siempre en su panel).
   const listRef = useRef<HTMLDivElement>(null);
-  useMoreBelow(listRef, !withFixed);
-  // Con panel de fijas: sin hueco final mientras las tarjetas caben (ver useFitsWithoutTail).
-  useFitsWithoutTail(listRef, withFixed);
+  useMoreBelow(listRef, !withFooter);
+  // Con panel de fijas o pie: sin hueco final mientras las tarjetas caben (ver useFitsWithoutTail).
+  useFitsWithoutTail(listRef, withFooter);
   // Columnas largas: el servidor pinta las primeras tarjetas y el resto llega justo después de hidratar (deferredCards.ts).
   const shown = useCardLimit(taskIds.length);
   const painted = taskIds.length > shown ? taskIds.slice(0, shown) : taskIds;
@@ -145,7 +151,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         // release» / «… en el plan»): el panel va pegado al fondo de la columna y su barra deja libre a la derecha el sitio
         // del «+» flotante (EvergreenPanel). Antes esas columnas acababan 4,75 rem más arriba y dejaban un hueco vacío.
         // Columnas especiales (con botón de acción): el mismo borde suave del color de la app.
-        action != null && !wipOver && "ring-1 ring-brand-500/30",
+        (action != null || assign) && !wipOver && "ring-1 ring-brand-500/30",
       )}
       aria-label={column.name}
       data-wip-over={wipOver || undefined}
@@ -214,6 +220,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         </div>
       </header>
       {action}
+      {assign && <AssignHeader column={column} onEdit={() => setDialog("assign")} />}
+      {dialog === "assign" && <AssignDialog column={column} onClose={() => setDialog(null)} />}
       {dialog === "checklist" && <ChecklistDialog column={column} onClose={() => setDialog(null)} />}
       {dialog === "routine" && <RoutineTargetDialog column={column} onClose={() => setDialog(null)} />}
       {dialog === "program" && <ProgramDialog column={column} onClose={() => setDialog(null)} />}
@@ -269,6 +277,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           </div>
         </div>
       </SortableContext>
+      {assign && <AssignPlanButton column={column} cardCount={cardCount} />}
       {withFixed && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} kind={isNextRelease ? "release" : "plan"} />}
     </section>
   );
@@ -481,7 +490,8 @@ function roleAction(
 }
 
 function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; cardCount: number; openDialog: (d: ColumnDialog) => void }) {
-  const { setColumns, track, refresh, project, columns } = useBoard();
+  const { setColumns, track, refresh, project, columns, users } = useBoard();
+  const assign = isAssignColumn(column);
   const toast = useToast();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -535,7 +545,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       },
       () =>
         setColumns((cols) =>
-          cols.map((c) => (c.id === column.id ? { ...c, role } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
+          cols.map((c) => (c.id === column.id ? { ...c, role, assigneeId: null, assignDueDays: null } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
         ),
     );
 
@@ -617,23 +627,38 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
       <MenuSeparator />
       {/* Los 13 roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
-      <MenuSub icon={Tag} label={t("Rol de la columna")} summary={t(COLUMN_ROLE_LABEL[column.role])}>
-        {COLUMN_ROLES.map((r) => (
-          <MenuItem
-            key={r}
-            role="menuitemradio"
-            aria-checked={column.role === r}
-            onClick={() => {
-              // El rol que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
-              if (column.role !== r) setRole(r);
-            }}
-            icon={ROLE_ICON[r]}
-            title={t(COLUMN_ROLE_HINT[r])}
-            className={cn("py-1.5 text-xs", column.role === r && "font-semibold text-brand-600 dark:text-brand-300")}
-          >
-            {column.role === r ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
-          </MenuItem>
-        ))}
+      <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
+        {COLUMN_ROLES.map((r) => {
+          // «Asignación a persona» tiene rol NONE: entonces «Sin rol» no es el elegido (y elegirlo la deja sin persona).
+          const current = column.role === r && !(assign && r === "NONE");
+          return (
+            <MenuItem
+              key={r}
+              role="menuitemradio"
+              aria-checked={current}
+              onClick={() => {
+                // El rol que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
+                if (!current) setRole(r);
+              }}
+              icon={ROLE_ICON[r]}
+              title={t(COLUMN_ROLE_HINT[r])}
+              className={cn("py-1.5 text-xs", current && "font-semibold text-brand-600 dark:text-brand-300")}
+            >
+              {current ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
+            </MenuItem>
+          );
+        })}
+        {/* No es un valor del rol (la columna queda con rol NONE): abre el diálogo de la persona y el plazo. */}
+        <MenuItem
+          role="menuitemradio"
+          aria-checked={assign}
+          onClick={() => setDialog("assign")}
+          icon={UserCheck}
+          title={t("Todo lo que entra se asigna a una persona (y, opcional, con un plazo): botón «Generar plan».")}
+          className={cn("py-1.5 text-xs", assign && "font-semibold text-brand-600 dark:text-brand-300")}
+        >
+          {assign ? "● " : ""}{t("Asignación a persona")}
+        </MenuItem>
       </MenuSub>
       {column.role === "WAITING" && (
         <MenuItem icon={Hourglass} onClick={editWaitingDays}>
@@ -654,6 +679,15 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       {column.role === "DELIVERY" && <ReasonMenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen para el cliente (PDF)")}</ReasonMenuItem>}
       {column.role === "BUDGET" && <ReasonMenuItem icon={Wallet} onClick={() => setDialog("budget")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen de presupuesto")}</ReasonMenuItem>}
       {column.role === "PROGRAM" && <ReasonMenuItem icon={GraduationCap} onClick={() => setDialog("program")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Publicar programa (PDF)")}</ReasonMenuItem>}
+      {assign && (
+        <ReasonMenuItem
+          icon={FileDown}
+          onClick={() => assignPlanPdf(project.id, column.id)}
+          reason={!users.some((u) => u.id === column.assigneeId) ? t("Elige antes la persona de la columna") : empty ? t("No hay tarjetas en esta columna") : null}
+        >
+          {t("Generar plan")}
+        </ReasonMenuItem>
+      )}
       {column.role === "AI_PLAN" && <ReasonMenuItem icon={Bot} onClick={() => setDialog("plan")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Generar plan de trabajo")}</ReasonMenuItem>}
       <MenuSeparator />
       <MenuItem icon={Gauge} onClick={editWipLimit}>

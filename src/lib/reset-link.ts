@@ -1,5 +1,7 @@
 import { db } from "./db";
 import { issueAuthToken } from "./auth-token-issue";
+import { LOG_LABEL_KEY } from "./log-message";
+import { renderLabelEs } from "./undo-label";
 
 // Enlace de restablecimiento sin email (node dist/reset-link.mjs). Sin «server-only»: lo usa el script de línea de órdenes.
 
@@ -17,15 +19,19 @@ export async function createResetLink(email: string, opts: { appUrl: string; res
   const twoFactorCleared = Boolean(opts.reset2fa) && !!user.twoFactorMethod;
   // Rastro en el registro de actividad (Administración → Logs). Se escribe la fila directamente: log.ts es «server-only»
   // y su cola en memoria no llegaría a vaciarse antes de que el script termine. Nunca lleva el enlace ni el token.
+  const label = {
+    k: opts.reset2fa ? "Enlace de restablecimiento generado desde la consola para «{name}» y verificación en dos pasos reiniciada" : "Enlace de restablecimiento generado desde la consola para «{name}»",
+    p: { name: user.name },
+  };
   const audit = db.appLog.create({
     data: {
       level: "info",
       category: "auth",
       action: "auth.resetLinkCli",
-      message: `Enlace de restablecimiento generado desde la consola para «${user.name}»${opts.reset2fa ? " y verificación en dos pasos reiniciada" : ""}`,
+      message: renderLabelEs(label),
       userId: user.id,
       userName: user.name,
-      details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared },
+      details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared, [LOG_LABEL_KEY]: label },
     },
   });
   try {

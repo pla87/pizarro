@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
+import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
@@ -22,9 +23,40 @@ import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 import { isEditConflict } from "@/lib/edit-conflict-core";
+import { MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
+
+/** Valor del selector de rol para una columna «Asignación a persona» (rol NONE con plazo). */
+const ASSIGN = "ASSIGN";
+/** Plazo con que empieza una columna de plantilla al elegir «Asignación a persona» (en una plantilla, sin plazo no lo es). */
+const DEFAULT_TEMPLATE_ASSIGN_DAYS = 7;
+
+/** Días del plazo de una columna «Asignación a persona» de la plantilla: guarda solo un número válido (1-365). */
+function AssignDaysInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const [text, setText] = useState(String(value));
+  const invalid = typeof parseAssignDays(text) !== "number";
+  return (
+    <input
+      className="input w-16"
+      type="number"
+      inputMode="numeric"
+      min={1}
+      max={MAX_ASSIGN_DUE_DAYS}
+      required
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = parseAssignDays(e.target.value);
+        if (typeof n === "number") onChange(n);
+      }}
+      aria-invalid={invalid || undefined}
+      aria-label={label}
+      title={label}
+    />
+  );
+}
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
 function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds" | "hideAllGeneralKinds">, t: T): string {
@@ -50,7 +82,8 @@ const withoutKeys = <T,>(list: Keyed<T>[]): T[] => list.map(({ key, ...rest }) =
 type Draft = {
   name: string;
   description: string;
-  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null }>[];
+  /** `assignDueDays`: columna «Asignación a persona» (rol NONE con plazo; la persona no viaja en las plantillas). */
+  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }>[];
   kinds: Keyed<{ name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }>[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
@@ -216,6 +249,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
           {t("Con qué columnas, tipos y etiquetas arranca un proyecto nuevo.")}
           <InfoTip topic={t("Plantillas de proyecto")}>{t("Se elige una al crear el proyecto. Cambiar una plantilla no afecta a los proyectos ya creados.")}</InfoTip>
         </p>
+        <p className="text-sm text-slate-500">{t("Todas las personas pueden usar las plantillas propias para sus proyectos privados.")}</p>
       </div>
 
       {templates.length > 0 && (
@@ -306,12 +340,32 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                 {draft.columns.map((c, i) => {
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
+                  const assignDays = c.role === "NONE" ? (c.assignDueDays ?? null) : null;
                   return (
                     <li key={c.key} className="flex flex-wrap items-center gap-2">
-                      <input className="input min-w-0 flex-1 basis-40" value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
-                      <select className="input w-auto" value={c.role} onChange={(e) => setCol({ role: e.target.value as ColumnRoleValue })} aria-label={t("Rol especial")}>
-                        {COLUMN_ROLES.map((r) => <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>)}
+                      {/* Con el plazo al lado, el nombre cede algo de ancho en escritorio para que la fila no se parta. */}
+                      <input className={cn("input min-w-0 flex-1 basis-40", assignDays != null && "sm:basis-28")} value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
+                      <select
+                        className="input w-auto"
+                        value={assignDays != null ? ASSIGN : c.role}
+                        // «Asignación a persona» es rol NONE con plazo; cualquier otro rol (o «Ninguno») quita el plazo.
+                        onChange={(e) => setCol(e.target.value === ASSIGN ? { role: "NONE", assignDueDays: assignDays ?? DEFAULT_TEMPLATE_ASSIGN_DAYS } : { role: e.target.value as ColumnRoleValue, assignDueDays: null })}
+                        aria-label={t("Rol especial")}
+                      >
+                        {COLUMN_ROLES.flatMap((r) => [
+                          <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>,
+                          ...(r === "NONE" ? [
+                            // Solo el nombre: el plazo va en el campo de al lado (con él dentro, el selector partía la fila).
+                            <option key={ASSIGN} value={ASSIGN}>{t("Asignación a persona")}</option>,
+                          ] : []),
+                        ])}
                       </select>
+                      {assignDays != null && (
+                        <span className="flex items-center gap-1 whitespace-nowrap text-sm">
+                          <AssignDaysInput value={assignDays} onChange={(n) => setCol({ assignDueDays: n })} label={t("Días del plazo de la columna {n}", { n: i + 1 })} />
+                          {assignDays === 1 ? t("día") : t("días")}
+                        </span>
+                      )}
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>

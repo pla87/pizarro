@@ -6,6 +6,7 @@ import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { weekRangeEnds } from "./calendar";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
+import { ASSIGN_PLAN_LABEL, PLAN_SUBTASKS_SHOWN, type AssignPlanPdfInput, type AssignPlanTask } from "./column-assign-core";
 import { programBlocks, type ProgramPdfDocument, type ProgramPdfInput } from "./course-program";
 import type { PdfBlock, PdfRun } from "./pdf-markdown";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
@@ -697,6 +698,83 @@ function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
   return { title: `${t("Resumen para el cliente")} · ${r.project}`, build, footer: <Footer left={r.project} /> };
 }
 
+// --- Plan de una columna «Asignación a persona» --------------------------------------------------------------------------
+
+/** Tamaño de una tarea del plan: título, línea de datos, primera línea de la descripción y subtareas pendientes. */
+const planTaskUnits = (x: AssignPlanTask) =>
+  2 + textUnits(x.title, 85) + (x.firstLine ? textUnits(x.firstLine, 110) : 0)
+  + x.pendingSubtasks.slice(0, PLAN_SUBTASKS_SHOWN).reduce((n, title) => n + textUnits(`[ ] ${title}`, 105), 0)
+  + (x.pendingCount > PLAN_SUBTASKS_SHOWN ? 1 : 0);
+
+function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
+  const total = r.groups.reduce((n, g) => n + g.tasks.length, 0);
+  const card = (x: AssignPlanTask, overdue: boolean, units: number) => {
+    const unbroken = units <= DELIVERY_UNBROKEN_UNITS;
+    const meta = [x.kind, x.priority ? `${t("Prioridad")}: ${t(PRIORITY_LABEL[x.priority as keyof typeof PRIORITY_LABEL] ?? x.priority)}` : null].filter(Boolean).join(" · ");
+    const head = (
+      <>
+        <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
+        <Text style={s.small}>
+          {meta}
+          {x.dueDate ? <Text style={overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{`${meta ? " · " : ""}${t("Vence el {date}", { date: formatDay(x.dueDate, r.today, locale) })}`}</Text> : null}
+        </Text>
+        {x.firstLine ? <Text style={{ color: C.muted, marginTop: 2 }}>{x.firstLine}</Text> : null}
+      </>
+    );
+    const more = x.pendingCount - PLAN_SUBTASKS_SHOWN;
+    return (
+      <View style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={!unbroken}>
+        {unbroken ? head : <View wrap={false} minPresenceAhead={36}>{head}</View>}
+        {x.pendingSubtasks.slice(0, PLAN_SUBTASKS_SHOWN).map((title, j) => (
+          <View key={j} style={{ flexDirection: "row", marginLeft: 8, marginTop: 1 }} wrap={false}>
+            <Text style={{ width: 16, color: C.muted }}>[ ]</Text>
+            <Text style={{ flex: 1 }}>{title}</Text>
+          </View>
+        ))}
+        {more > 0 ? <Text style={{ ...s.small, marginLeft: 8, marginTop: 1 }}>{more === 1 ? t("y 1 subtarea más") : t("y {n} subtareas más", { n: more.toLocaleString(locale) })}</Text> : null}
+      </View>
+    );
+  };
+  const build = (): Block[] => [
+    {
+      units: 8,
+      node: (
+        <>
+          <View style={s.header}>
+            <Text style={s.eyebrow}>{t("Plan de tareas")}</Text>
+            <Text style={s.title}>{t("Plan de {name}", { name: r.person })}</Text>
+            <Text style={s.meta}>
+              {r.column} · {r.project} · {formatDay(r.today, undefined, locale)} · {total === 1 ? t("1 tarea") : t("{n} tareas", { n: total.toLocaleString(locale) })}
+            </Text>
+            {r.others > 0 ? <Text style={s.meta}>{r.others === 1 ? t("1 tarjeta de la columna es de otra persona y no sale en el plan.") : t("{n} tarjetas de la columna son de otras personas y no salen en el plan.", { n: r.others.toLocaleString(locale) })}</Text> : null}
+          </View>
+          {total === 0 && <Text style={s.small}>{t("No hay tareas de esta persona en la columna.")}</Text>}
+        </>
+      ),
+    },
+    ...r.groups.flatMap((g): Block[] => [
+      {
+        units: 2,
+        keep: true,
+        node: (
+          <Text style={{ ...s.h3, ...(g.bucket === "overdue" ? { color: C.red } : {}) }} minPresenceAhead={50}>
+            {t(ASSIGN_PLAN_LABEL[g.bucket])} <Text style={s.small}>({g.tasks.length.toLocaleString(locale)})</Text>
+          </Text>
+        ),
+      },
+      ...g.tasks.map((x) => {
+        const units = planTaskUnits(x);
+        return { units, node: card(x, g.bucket === "overdue", units) };
+      }),
+    ]),
+  ];
+  return {
+    title: `${t("Plan de {name}", { name: r.person })} · ${r.column} · ${r.project}`,
+    build,
+    footer: <Footer left={<>{t("Plan de {name}", { name: r.person })} · {r.column} · {r.project}</>} />,
+  };
+}
+
 // --- Markdown de las descripciones (bloques de pdf-markdown.ts) ---------------------------------------------------------
 
 function runFont(r: PdfRun): string {
@@ -918,6 +996,7 @@ export type PdfJob = (
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
   | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput }
   | { kind: "program"; locale: Locale; input: ProgramPdfInput }
+  | { kind: "assignPlan"; locale: Locale; input: AssignPlanPdfInput }
 ) & { singlePageUnits?: number };
 
 /** El documento de un trabajo. Los textos de los datos se adaptan antes a la fuente (ver pdf-text.ts). */
@@ -931,6 +1010,7 @@ function jobDoc(raw: PdfJob): PagedDoc {
     case "weekPlan": return weekPlanDoc(pdfSafeData(raw.input), t, locale);
     case "checklist": return checklistDoc(pdfSafeData(raw.input), t, locale);
     case "delivery": return deliveryDoc(pdfSafeData(raw.input), t, locale);
+    case "assignPlan": return assignPlanDoc(pdfSafeData(raw.input), t, locale);
     default: throw new Error(`Tipo de PDF desconocido: ${(raw as { kind: unknown }).kind}`);
   }
 }

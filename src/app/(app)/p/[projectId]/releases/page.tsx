@@ -89,8 +89,8 @@ export default async function ReleasesPage({
         <div className="card flex flex-col items-center gap-2 p-10 text-center text-sm text-slate-500">
           <Rocket size={32} className="text-slate-300" />
           {nextColumn
-            ? t("Aún no hay releases. Genera una desde la columna «{name}» del tablero.", { name: nextColumn.name })
-            : t("Aún no hay releases. Para generarlas, elige en el menú de una columna del tablero el rol «{role}».", { role: t(COLUMN_ROLE_LABEL.NEXT_RELEASE) })}
+            ? t("Aún no hay releases. Se generan con el botón «Generar release» de la columna «{name}» del tablero.", { name: nextColumn.name })
+            : t("Aún no hay releases. Se generan con el botón «Generar release» de la columna que tenga el rol «{role}»: elígelo en el menú de una columna del tablero, en «Rol de la columna».", { role: t(COLUMN_ROLE_LABEL.NEXT_RELEASE) })}
         </div>
       ) : (
         <ReleasesList

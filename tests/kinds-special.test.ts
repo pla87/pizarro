@@ -118,8 +118,9 @@ test("el título escrito no se pierde nunca al elegir un tipo con prefijo", () =
   assert.equal(switchKindTitle(CASA, COMPRAS, "Leche y pan"), "Comprar Leche y pan");
   assert.equal(switchKindTitle(null, COMPRAS, "  Leche y pan "), "Comprar Leche y pan");
   assert.equal(switchKindTitle(CASA, SALUD, "dentista"), "Cita: dentista");
-  // Salud → Casa → Compras: «dentista» sigue ahí.
-  assert.equal(switchKindTitle(CASA, COMPRAS, switchKindTitle(SALUD, CASA, "Cita: dentista")), "Comprar Cita: dentista");
+  // Salud → Casa → Compras: «dentista» sigue ahí (sin el «Cita:» de Salud, que se quita al pasar a Casa).
+  assert.equal(switchKindTitle(SALUD, CASA, "Cita: dentista"), "dentista");
+  assert.equal(switchKindTitle(CASA, COMPRAS, switchKindTitle(SALUD, CASA, "Cita: dentista")), "Comprar dentista");
   // Si ya empieza por el prefijo del nuevo, no se duplica.
   assert.equal(switchKindTitle(CASA, COMPRAS, "Comprar pan"), "Comprar pan");
   // Vacío: el prefijo con su espacio, para escribir detrás y que se siga reconociendo al cambiar otra vez de tipo.
@@ -131,6 +132,23 @@ test("el título escrito no se pierde nunca al elegir un tipo con prefijo", () =
   assert.equal(switchKindTitle(null, { titleTemplate: "Comprar", descriptionTemplate: "" }, ""), "Comprar ");
   // A un tipo sin prefijo, el título escrito se queda tal cual.
   assert.equal(switchKindTitle(COMPRAS, CASA, "Leche y pan"), "Leche y pan");
+});
+
+test("a un tipo sin prefijo se quita el prefijo del anterior (Casa → Reforma u obra → Casa)", () => {
+  const CASA = { titleTemplate: "", descriptionTemplate: "" };
+  // Como en la plantilla de serie: «Obra: » (con su espacio, que se recorta al comparar).
+  const OBRA = { titleTemplate: "Obra: ", descriptionTemplate: "" };
+  const ida = switchKindTitle(CASA, OBRA, "Pintar el salón");
+  assert.equal(ida, "Obra: Pintar el salón");
+  assert.equal(switchKindTitle(OBRA, CASA, ida), "Pintar el salón");
+  // Ida y vuelta con el título vacío: no queda nada del prefijo.
+  assert.equal(switchKindTitle(OBRA, CASA, switchKindTitle(CASA, OBRA, "")), "");
+  // Con otro separador también («Compra - pan»).
+  assert.equal(switchKindTitle({ titleTemplate: "Compra -", descriptionTemplate: "" }, CASA, "Compra - pan"), "pan");
+  // Un prefijo que acaba en palabra es parte de la frase: se queda («Comprar pan» no pasa a «pan»).
+  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, CASA, "Comprar pan"), "Comprar pan");
+  // Escrito a mano sin el prefijo del anterior: no se toca.
+  assert.equal(switchKindTitle(OBRA, CASA, "Pintar"), "Pintar");
 });
 
 test("la descripción: la plantilla anterior sin tocar se cambia y lo escrito debajo se conserva", () => {

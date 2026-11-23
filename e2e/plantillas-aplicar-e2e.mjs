@@ -319,51 +319,46 @@ if (only.includes("estilo")) {
   await seedR51();
   const s = await L.session();
   const { page } = s;
-  // Las plantillas propias solo las ven los administradores: se sube el rol tras entrar (sin el 2FA de admin).
-  await L.q(`UPDATE "User" SET role='ADMIN' WHERE id=$1`, [adm.id]);
-  try {
-    for (const scheme of ["dark", "light"]) {
-      await page.emulateMedia({ colorScheme: scheme });
-      await settings(page, R51);
-      L.eq(`ESTILO ${scheme}: la página está en modo ${scheme === "dark" ? "oscuro" : "claro"}`, await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), scheme === "dark");
-      await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
-      const dlg = wizard(page);
-      await dlg.locator("[data-template-choice]").first().waitFor({ timeout: 10000 });
-      const builtins = await dlg.locator("fieldset").filter({ hasText: "Plantillas de serie" }).locator("[data-template-choice]").count();
-      L.check(`ESTILO ${scheme}: hay plantillas de serie de la instalación`, builtins > 0, String(builtins));
-      const all = await measureChoices(dlg);
-      const bad = all.filter((x) => !x.name || x.ratio < 4.5);
-      L.check(`ESTILO ${scheme}: el nombre de cada plantilla elegida tiene contraste suficiente (≥ 4,5)`, bad.length === 0, JSON.stringify(bad.length ? bad : all.slice(0, 3)));
-      const course = all.find((x) => /^Curso o charla/.test(x.name));
-      L.check(`ESTILO ${scheme}: la plantilla de serie «Curso o charla» tiene nombre visible`, !!course && course.ratio >= 4.5, JSON.stringify(course ?? all.map((x) => x.name)));
-      if (scheme === "dark") {
-        // Control: con las clases de antes (fondo claro sin variante oscura), la medida sí detecta el nombre ilegible.
-        const card = dlg.locator("[data-template-choice]").first();
-        const old = await card.evaluate((el) => { const c = el.className; el.className = "flex items-start gap-2 rounded-md border border-brand-500 bg-brand-50 p-2 text-sm"; return c; });
-        const ratio = await card.locator("[data-template-name]").evaluate(contrastOf);
-        await card.evaluate((el, c) => { el.className = c; }, old);
-        L.check("ESTILO dark: (control) con el estilo antiguo el nombre no se leía", ratio < 2, String(ratio));
-      }
-      // La captura, con una de serie elegida (la de la captura del fallo).
-      if (course) await dlg.locator("[data-template-choice]").filter({ hasText: /^Curso o charla/ }).locator("input").check();
-      await page.screenshot({ path: `${SHOTS}/r51-plantilla-${scheme}.png` });
-      await page.keyboard.press("Escape");
-      await dlg.waitFor({ state: "detached", timeout: 5000 });
+  // Las plantillas propias también las ve quien no es administrador (en sus proyectos privados).
+  for (const scheme of ["dark", "light"]) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await settings(page, R51);
+    L.eq(`ESTILO ${scheme}: la página está en modo ${scheme === "dark" ? "oscuro" : "claro"}`, await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches), scheme === "dark");
+    await page.getByRole("button", { name: "Aplicar plantilla…" }).click();
+    const dlg = wizard(page);
+    await dlg.locator("[data-template-choice]").first().waitFor({ timeout: 10000 });
+    const builtins = await dlg.locator("fieldset").filter({ hasText: "Plantillas de serie" }).locator("[data-template-choice]").count();
+    L.check(`ESTILO ${scheme}: hay plantillas de serie de la instalación`, builtins > 0, String(builtins));
+    const all = await measureChoices(dlg);
+    const bad = all.filter((x) => !x.name || x.ratio < 4.5);
+    L.check(`ESTILO ${scheme}: el nombre de cada plantilla elegida tiene contraste suficiente (≥ 4,5)`, bad.length === 0, JSON.stringify(bad.length ? bad : all.slice(0, 3)));
+    const course = all.find((x) => /^Curso o charla/.test(x.name));
+    L.check(`ESTILO ${scheme}: la plantilla de serie «Curso o charla» tiene nombre visible`, !!course && course.ratio >= 4.5, JSON.stringify(course ?? all.map((x) => x.name)));
+    if (scheme === "dark") {
+      // Control: con las clases de antes (fondo claro sin variante oscura), la medida sí detecta el nombre ilegible.
+      const card = dlg.locator("[data-template-choice]").first();
+      const old = await card.evaluate((el) => { const c = el.className; el.className = "flex items-start gap-2 rounded-md border border-brand-500 bg-brand-50 p-2 text-sm"; return c; });
+      const ratio = await card.locator("[data-template-name]").evaluate(contrastOf);
+      await card.evaluate((el, c) => { el.className = c; }, old);
+      L.check("ESTILO dark: (control) con el estilo antiguo el nombre no se leía", ratio < 2, String(ratio));
     }
-    // Las demás tarjetas de opción usan el mismo estilo: idioma, edición, tema y tarjetas en Mi perfil → Preferencias.
-    await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto(`${L.BASE}/settings?tab=preferencias`);
-    const themeCard = page.getByRole("button", { name: "Oscuro", exact: true });
-    await themeCard.waitFor({ timeout: 15000 });
-    const pressed = page.locator("button.choice-card[aria-pressed=true], button.choice-card[aria-checked=true]");
-    L.check("ESTILO: Mi perfil usa las tarjetas de opción comunes", (await pressed.count()) > 0);
-    const ratios = [];
-    for (let i = 0; i < (await pressed.count()); i++) ratios.push(await pressed.nth(i).evaluate(contrastOf));
-    L.check("ESTILO: las tarjetas elegidas de Mi perfil se leen en oscuro", ratios.every((r) => r >= 4.5), JSON.stringify(ratios));
-    await page.screenshot({ path: `${SHOTS}/r51-opciones-dark.png` });
-  } finally {
-    await L.q(`UPDATE "User" SET role='MEMBER' WHERE id=$1`, [adm.id]);
+    // La captura, con una de serie elegida (la de la captura del fallo).
+    if (course) await dlg.locator("[data-template-choice]").filter({ hasText: /^Curso o charla/ }).locator("input").check();
+    await page.screenshot({ path: `${SHOTS}/r51-plantilla-${scheme}.png` });
+    await page.keyboard.press("Escape");
+    await dlg.waitFor({ state: "detached", timeout: 5000 });
   }
+  // Las demás tarjetas de opción usan el mismo estilo: idioma, edición, tema y tarjetas en Mi perfil → Preferencias.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto(`${L.BASE}/settings?tab=preferencias`);
+  const themeCard = page.getByRole("button", { name: "Oscuro", exact: true });
+  await themeCard.waitFor({ timeout: 15000 });
+  const pressed = page.locator("button.choice-card[aria-pressed=true], button.choice-card[aria-checked=true]");
+  L.check("ESTILO: Mi perfil usa las tarjetas de opción comunes", (await pressed.count()) > 0);
+  const ratios = [];
+  for (let i = 0; i < (await pressed.count()); i++) ratios.push(await pressed.nth(i).evaluate(contrastOf));
+  L.check("ESTILO: las tarjetas elegidas de Mi perfil se leen en oscuro", ratios.every((r) => r >= 4.5), JSON.stringify(ratios));
+  await page.screenshot({ path: `${SHOTS}/r51-opciones-dark.png` });
   L.assertNoErrors("ESTILO", [s]);
   await s.ctx.close();
 }

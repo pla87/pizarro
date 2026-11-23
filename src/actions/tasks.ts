@@ -13,13 +13,14 @@ import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
-import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
+import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { assertColumnRoom } from "@/lib/column-capacity";
+import { assignedPatches, assignOnEnter, assignUndoOps, columnAssignment, finishAssignOnEnter, newTaskAssignment, notifyAssigned, type AssignedPatch } from "@/lib/column-assign";
 import { getMaxCommentsPerTask } from "@/lib/app-settings";
 import { requireUser, type CurrentUser } from "@/lib/session";
 import * as v from "@/lib/validation";
@@ -103,8 +104,7 @@ const CHANGE_LABELS: Record<string, string> = {
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
 function describeChanges(data: Record<string, unknown>): Label {
   const names: Label[] = [...new Set(Object.keys(data).filter((k) => data[k] !== undefined).map((k) => CHANGE_LABELS[k] ?? k))].map((k) => ({ k }));
-  if (names.length <= 1) return names[0] ?? { k: "sin cambios" };
-  return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
+  return names.length ? andList(names) : { k: "sin cambios" };
 }
 
 /** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google (y MAX_SUBTASKS, en constants). */
@@ -172,24 +172,29 @@ export async function createTask(input: z.input<typeof createSchema>) {
     const evergreen = data.evergreen && (await evergreenColumn) > 0;
     const repeat = normalizeRecurrence(data.recurrence, data.recurrenceDay, data.dueDate, todayIso(appTimeZone()));
     assertTaskCreateRate(user.id);
-    const task = await db.$transaction(async (tx) => {
+    const { task, assigneeId } = await db.$transaction(async (tx) => {
       await assertTaskCapacity(tx, data.projectId);
       // Al final de la columna, con la columna bloqueada: dos altas a la vez no comparten posición.
       await lockColumns(tx, [data.columnId]);
       // Columna «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones (column-capacity.ts).
-      await assertColumnRoom(tx, data.columnId, 1);
+      const room = await assertColumnRoom(tx, data.columnId, 1);
+      // Columna «Asignación a persona»: la tarea nace de su persona y, sin fecha, con la del plazo (column-assign.ts).
+      // Con la columna ya leída por assertColumnRoom: en una columna normal, ninguna consulta más.
+      const assigned = newTaskAssignment(await columnAssignment(tx, room), {
+        assigneeId: data.assigneeId, dueDate: data.dueDate ? isoToDate(data.dueDate) : null, startDate: optional.startDate ? isoToDate(optional.startDate) : null,
+      });
       const position = positionBetween(await lastPositionIn(tx, data.columnId), null);
-      return tx.task.create({
+      const task = await tx.task.create({
         data: {
           projectId: data.projectId,
           columnId: data.columnId,
           title: data.title,
           kindId: data.kindId,
           description: data.description,
-          assigneeId: data.assigneeId,
+          assigneeId: assigned.assigneeId,
           color: data.color,
           linkUrl: data.linkUrl,
-          dueDate: data.dueDate ? isoToDate(data.dueDate) : null,
+          dueDate: assigned.dueDate,
           deliverableId: data.deliverableId,
           evergreen,
           ...repeat,
@@ -202,6 +207,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
         },
         select: { id: true },
       });
+      return { task, assigneeId: assigned.assigneeId };
     });
     noteTask(task.id);
     addUndo({ t: "task.remove", id: task.id });
@@ -213,7 +219,7 @@ export async function createTask(input: z.input<typeof createSchema>) {
     const descMentions = extractMentionIds(data.description);
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: descMentions, text: data.description });
     await notifyMentions({ actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: extractMentionIds(data.title).filter((id) => !descMentions.includes(id)), text: data.title });
-    if (data.assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: makeExcerpt(data.title) });
+    if (assigneeId) await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: task.id, projectId: data.projectId, recipientIds: [assigneeId], excerpt: makeExcerpt(data.title) });
     return withClip(await loadBoardTask(task.id), clipOf(input.title));
   });
 }
@@ -229,7 +235,7 @@ export async function getProjectFormData(projectId: string) {
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
     const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
-      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } }),
+      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
@@ -290,11 +296,13 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const templates = new Map<string, string[]>();
     for (const k of await kindTemplates) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
     assertTaskCreateRate(user.id, data.tasks.length);
-    const ids = await db.$transaction(async (tx) => {
+    const { ids, assigneeId } = await db.$transaction(async (tx) => {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
       await assertTaskCapacity(tx, data.projectId, data.tasks.length);
       await lockColumns(tx, [data.columnId]);
-      await assertColumnRoom(tx, data.columnId, data.tasks.length);
+      const room = await assertColumnRoom(tx, data.columnId, data.tasks.length);
+      // Columna «Asignación a persona»: todas nacen de su persona (y, sin fecha, con la del plazo).
+      const assigned = newTaskAssignment(await columnAssignment(tx, room), { assigneeId: data.assigneeId, dueDate });
       let position = await lastPositionIn(tx, data.columnId);
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
@@ -304,8 +312,8 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
             columnId: data.columnId,
             title: t.title,
             kindId: t.kindId,
-            assigneeId: data.assigneeId,
-            dueDate,
+            assigneeId: assigned.assigneeId,
+            dueDate: assigned.dueDate,
             deliverableId: data.deliverableId,
             ...fieldData(optional),
             position,
@@ -325,13 +333,13 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
           ),
         });
       }
-      return created.map((t) => t.id);
+      return { ids: created.map((t) => t.id), assigneeId: assigned.assigneeId };
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
     describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
     // Un solo aviso para todo el lote (enlaza a la primera tarea), como createTask pero sin inundar al responsable.
-    if (data.assigneeId && ids[0]) {
-      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [data.assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
+    if (assigneeId && ids[0]) {
+      await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
     }
     const rows = await loadBoardTasksByIds(ids);
     // `ids` conserva el orden de entrada (la tarea i es la línea i): ahí se sabe qué título llegó demasiado largo.
@@ -393,7 +401,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
         if (!column) throw new AppError("Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.");
       }
       await lockColumns(tx, [columnId]);
-      await assertColumnRoom(tx, columnId, 1);
+      const room = await assertColumnRoom(tx, columnId, 1);
       // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
       // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna. Fija: al final.
       const { position } = evergreen
@@ -401,7 +409,10 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
         : dest
           ? await placeInColumn(tx, columnId, dest.prevId, dest.nextId)
           : await placeInColumn(tx, columnId, taskId, null);
-      return tx.task.create({
+      // Columna «Asignación a persona» (también la propia: la original pudo cambiar de responsable después de entrar).
+      const rule = await columnAssignment(tx, room);
+      const assigned = newTaskAssignment(rule, { assigneeId: src.assigneeId, dueDate: src.dueDate, startDate: src.startDate });
+      const row = await tx.task.create({
         data: {
           projectId,
           columnId,
@@ -410,8 +421,8 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           kindId: src.kindId,
           color: src.color,
           linkUrl: src.linkUrl,
-          assigneeId: src.assigneeId,
-          dueDate: src.dueDate,
+          assigneeId: assigned.assigneeId,
+          dueDate: assigned.dueDate,
           deliverableId: src.deliverableId,
           cost: src.cost, costPaid: src.costPaid, estimatedHours: src.estimatedHours, actualHours: src.actualHours,
           priority: src.priority, client: src.client, startDate: src.startDate,
@@ -427,8 +438,11 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
         },
         select: { id: true },
       });
+      // Aviso solo si la copia cambia de manos (duplicar una tarea suya en la misma columna no avisa a nadie).
+      return { id: row.id, notify: rule && rule.assigneeId !== src.assigneeId ? rule : null };
     });
     addUndo({ t: "task.remove", id: copy.id });
+    if (copy.notify) await notifyAssigned(copy.notify, [copy.id], user.id, [{ id: copy.id, title }]);
     noteTasks([copy.id]);
     if (evergreen) describeAction("Duplicó «{title}» como fija en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
     else if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
@@ -724,7 +738,7 @@ export async function moveTask(taskId: string, columnId: string, prevId: string 
 }
 
 /** El cuerpo de moveTask, para usarlo también desde pasteTaskJson dentro de su misma acción. */
-async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string, prevId: string | null, nextId: string | null): Promise<{ position: number; spawned: BoardTask[] }> {
+async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string, prevId: string | null, nextId: string | null): Promise<{ position: number; spawned: BoardTask[]; assigned: AssignedPatch[] }> {
   {
     const id = v.id.parse(taskId);
     // Es la acción más frecuente del tablero: la tarea (con el permiso) y la columna destino se leen
@@ -748,10 +762,10 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
     nextId = v.id.nullable().parse(nextId);
     const before = { title: mentionsToPlain(task.title), column: from.name };
     // Sin vecinas (selector «Columna» del detalle, o columna vacía) o con una que ya no está: al final, como la pinta el tablero.
-    const { position, undoPosition } = await db.$transaction(async (tx) => {
+    const { position, undoPosition, assigned } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [columnId]);
       // Solo cuenta si llega de otra columna: reordenar dentro de la misma no suma.
-      await assertColumnRoom(tx, columnId, [taskId]);
+      const room = await assertColumnRoom(tx, columnId, [taskId]);
       const placed = await placeInColumn(tx, columnId, prevId === taskId ? null : prevId, nextId === taskId ? null : nextId, taskId);
       // Deshacer: la posición ya leída, salvo si se ha renumerado su propia columna (la habrá movido).
       const undoPosition = placed.rebalanced && fromColumnId === columnId
@@ -761,9 +775,15 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       // archivada en la columna nueva y con la de antes como origen).
       const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
       if (!count) throw await inactiveTaskError(tx, taskId);
-      return { position: placed.position, undoPosition };
+      // Columna «Asignación a persona»: solo al llegar de otra columna (reordenar dentro de la misma no es entrar). La regla
+      // sale de la lectura de assertColumnRoom, hecha con la columna bloqueada: una columna que se convierte a la vez no
+      // se escapa, y en una columna normal no hay ninguna consulta más.
+      const assigned = fromColumnId !== columnId ? await assignOnEnter(tx, room, [taskId]) : null;
+      return { position: placed.position, undoPosition, assigned };
     });
-    addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}) } });
+    // Un solo paso de deshacer: vuelve a su columna con el responsable y la fecha límite que tenía.
+    const assignUndo = assignUndoOps(assigned)[0]?.data ?? {};
+    addUndo({ t: "task.set", id: taskId, data: { columnId: fromColumnId, position: undoPosition, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}), ...assignUndo } });
     // Recurrente que llega a una columna terminada: nace la siguiente aparición.
     const spawned = target.isDone && !from.isDone ? await spawnRecurrences([taskId], user.id) : [];
     const to = target.name;
@@ -775,7 +795,9 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
     // Historial: solo si cambia de columna (reordenar dentro de la misma no cuenta). «done» alimenta el resumen diario.
     if (before.column === to) skipTaskEvents();
     else recordTaskEvent(taskId, target.isDone ? "done" : "move", { k: "Movió la tarea de «{from}» a «{to}»", p: { from: before.column, to } });
-    return { position, spawned };
+    await finishAssignOnEnter(assigned, user.id, { undo: false });
+    // `assigned`: responsable y fecha nuevos de la tarjeta (columna «Asignación a persona»), para la pestaña que mueve.
+    return { position, spawned, assigned: assignedPatches(assigned) };
   }
 }
 
@@ -805,12 +827,12 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     const toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
     noteTasks(toMove.map((t) => t.id));
     const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
-    const moved = await db.$transaction(async (tx) => {
+    const { moved, assigned } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
       // Todo o nada: si no caben todas las que llegan de otras columnas, no se mueve ninguna.
-      await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
+      const room = await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
       let list: { id: string; position: number }[];
       if (place) {
         const ids = toMove.map((t) => t.id);
@@ -828,9 +850,13 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
         list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
       }
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
-      return list;
+      // Columna «Asignación a persona»: las que llegan de otra columna (las que ya estaban solo se recolocan). Con la regla
+      // de la lectura de assertColumnRoom, hecha con la columna bloqueada (como moveTask).
+      const assigned = await assignOnEnter(tx, room, toMove.filter((t) => t.columnId !== column.id).map((t) => t.id));
+      return { moved: list, assigned };
     });
-    addUndo(...undo);
+    // Un solo paso de deshacer: también vuelven el responsable y la fecha límite que tenían.
+    addUndo(...undo, ...assignUndoOps(assigned));
     // Las recurrentes que no estaban en una columna terminada y llegan a una: nace la siguiente aparición.
     let spawned: BoardTask[] = [];
     if (column.isDone) spawned = await spawnRecurrences(toMove.filter((t) => !t.column.isDone).map((t) => t.id), user.id);
@@ -840,7 +866,9 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     skipTaskEvents();
     // Historial: solo las que cambian de columna (reordenar dentro de la misma no cuenta, como en moveTask).
     for (const t of toMove) if (t.columnId !== column.id) recordTaskEvent(t.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
-    return { columnId: column.id, moved, spawned };
+    // Un solo aviso a la persona de la columna por todo el lote (como al crear varias asignadas).
+    await finishAssignOnEnter(assigned, user.id, { undo: false });
+    return { columnId: column.id, moved, spawned, assigned: assignedPatches(assigned) };
   });
 }
 
@@ -1065,7 +1093,7 @@ export async function getTaskDetail(taskId: string) {
     noteTask(id);
     const oldest = task.comments.at(-1);
     const olderComments = oldest && task.comments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
-    describeAction(`Abrió la tarea «${task.title}»`, { taskId });
+    describeAction("Abrió la tarea «{title}»", { title: task.title }, { taskId });
     return {
       id: task.id,
       description: task.description,
@@ -1568,8 +1596,8 @@ export async function restoreTask(taskId: string) {
       : null;
     const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } }));
     if (!column) throw new AppError("El proyecto no tiene columnas.");
-    addUndo(...(await captureTasks([taskId], ARCHIVE_FIELDS)));
-    await db.$transaction(async (tx) => {
+    const undo = await captureTasks([taskId], ARCHIVE_FIELDS);
+    const assigned = await db.$transaction(async (tx) => {
       // Al recuperarla vuelve a contar como activa: si el proyecto está en el tope, no cabe.
       await assertTaskCapacity(tx, projectId);
       await lockColumns(tx, [column.id]);
@@ -1577,12 +1605,16 @@ export async function restoreTask(taskId: string) {
       // la columna, como al mover): otra pestaña pudo recuperarla entre medias, y sin el bloqueo las dos salían bien.
       const [fresh] = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`;
       if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
-      await assertColumnRoom(tx, column.id, [taskId]);
+      const room = await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
+      // Vuelve a entrar en su columna: si es «Asignación a persona», pasa a su persona (como al moverla allí).
+      return assignOnEnter(tx, room, [taskId]);
     });
+    addUndo(...undo, ...assignUndoOps(assigned));
     describeAction("Restauró «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
+    await finishAssignOnEnter(assigned, user.id, { undo: false });
     return { task: await loadBoardTask(taskId), columnName: column.name };
   });
 }
@@ -1858,7 +1890,7 @@ export async function getTaskJson(taskId: string) {
     if (!row) throw notFound();
     noteProject(row.projectId);
     noteTask(id);
-    describeAction(`Copió la tarea «${mentionsToPlain(row.title)}» como JSON`, { taskId: id });
+    describeAction("Copió la tarea «{title}» como JSON", { title: mentionsToPlain(row.title) }, { taskId: id });
     return stringifyTaskJson(row.json);
   });
 }

@@ -88,15 +88,39 @@ function sanitize(value: unknown, depth = 0): unknown {
  */
 function withLabel(details: unknown, label: Label | undefined): Prisma.InputJsonValue | undefined {
   if (!label || (details !== undefined && (details === null || typeof details !== "object" || Array.isArray(details)))) return details as Prisma.InputJsonValue | undefined;
-  return { ...(details as Record<string, unknown> | undefined), [LOG_LABEL_KEY]: sanitize(maskLabel(label)) } as Prisma.InputJsonValue;
+  return { ...(details as Record<string, unknown> | undefined), [LOG_LABEL_KEY]: storedLabel(label) } as unknown as Prisma.InputJsonValue;
 }
 
-/** Las variables de la plantilla, sin rutas con credencial (como el mensaje). */
-function maskLabel(label: Label): Label {
-  if (!label.p) return label;
-  const param = (v: Params[string]): Params[string] =>
-    typeof v === "string" ? maskSecretPaths(v) : typeof v === "number" ? v : Array.isArray(v) ? v.map(maskLabel) : maskLabel(v);
-  return { k: label.k, p: Object.fromEntries(Object.entries(label.p).map(([n, v]) => [n, param(v)])) };
+/**
+ * La plantilla tal como se guarda: textos limpios y recortados como los detalles y sin rutas con credencial (como el
+ * mensaje; también el texto de las anidadas, que puede ser un error tal cual), pero con su propio tope de profundidad,
+ * contado en plantillas (el de log-message.ts): con el de los detalles, una lista dentro de una variable anidada
+ * («Modificó «X»: título y tipo») se guardaba como «[…]».
+ */
+function storedLabel(label: Label, depth = 0): Label {
+  const k = sanitize(maskSecretPaths(label.k)) as string;
+  if (!label.p) return { k };
+  const param = (name: string, v: Params[string]): Params[string] => {
+    if (SECRET_KEY.test(name)) return "[oculto]";
+    if (typeof v === "string") return sanitize(maskSecretPaths(v)) as string;
+    if (typeof v === "number") return v;
+    if (depth >= 3) return "…";
+    return Array.isArray(v) ? v.slice(0, 30).map((l) => storedLabel(l, depth + 1)) : storedLabel(v, depth + 1);
+  };
+  return { k, p: Object.fromEntries(Object.entries(label.p).slice(0, 40).map(([n, v]) => [clipText(n, 200), param(n, v)])) };
+}
+
+/**
+ * Texto para una variable de la plantilla que se traduce si es del diccionario (los errores de AppError, los motivos
+ * fijos) y sale tal cual si no (el mensaje de un error de una biblioteca).
+ */
+export function logText(text: string): Label {
+  return { k: text };
+}
+
+/** El mensaje de un error como variable de la plantilla (ver logText). */
+export function logError(err: unknown): Label {
+  return logText(err instanceof Error ? err.message : String(err));
 }
 
 /** Texto opcional limpio y recortado (null si no hay). */

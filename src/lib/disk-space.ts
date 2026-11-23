@@ -73,17 +73,25 @@ export function uploadWriteError(err: unknown, what: { action: string; bytes: nu
   if (!isNoSpaceError(err)) return err;
   logEvent({
     level: "error", category: "system", action: what.action,
-    message: `Disco lleno: no se pudo guardar una subida de ${logSize(what.bytes)}`,
+    label: { k: "Disco lleno: no se pudo guardar una subida de {size}", p: { size: logSize(what.bytes) } },
     details: { bytes: what.bytes, ...what.details, error: err instanceof Error ? err.message : String(err) },
   });
   return new AppError(UPLOAD_NO_SPACE_MESSAGE, 507, "disk_full");
+}
+
+/** Espacio del volumen cuando assertDiskRoom lo da por lleno (va en el error, para el registro). */
+export interface DiskRoom {
+  /** Bytes libres, ya descontado lo reservado por los demás trabajos. */
+  free: number;
+  /** Margen exigido (ver diskMarginBytes). */
+  margin: number;
 }
 
 /**
  * Falla (507) si en el volumen de `dir` no caben `needed` bytes más el margen. Si el sistema de ficheros no informa
  * del espacio libre no se bloquea nada: es una salvaguarda, no una garantía. `free` y `total` permiten inyectar los datos en las pruebas
  * (sin `total` en una prueba solo cuenta el mínimo configurado). Lo reservado por los demás trabajos en marcha de
- * este proceso en `dir` (salvo `selfId`) se descuenta del espacio libre.
+ * este proceso en `dir` (salvo `selfId`) se descuenta del espacio libre. El error lleva `room` (DiskRoom).
  */
 export async function assertDiskRoom(
   dir: string,
@@ -103,5 +111,6 @@ export async function assertDiskRoom(
     size = s?.total ?? null;
   }
   if (available === null) return;
-  if (available - reservedDiskBytes(dir, selfId) < needed + diskMarginBytes(size)) throw new AppError(NO_SPACE_MESSAGE, 507, "disk_full");
+  const room: DiskRoom = { free: available - reservedDiskBytes(dir, selfId), margin: diskMarginBytes(size) };
+  if (room.free < needed + room.margin) throw Object.assign(new AppError(NO_SPACE_MESSAGE, 507, "disk_full"), { room });
 }

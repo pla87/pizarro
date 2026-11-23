@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./db";
 import { decryptSecret, decryptSecretInfo, encryptSecret } from "./crypto";
 import { AppError } from "./errors";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { idTokenKeyId, verifiedConnectEmail } from "./google-id-token";
 import { googleKeys } from "./google-login";
 import { googleConfig, googleEnabled, googleWorkspaceDomain } from "./google-config";
@@ -146,7 +146,7 @@ async function accessToken(userId: string): Promise<string> {
     // Permiso revocado o caducado: se elimina la conexión para que el usuario reconecte.
     if ((err as { googleError?: string }).googleError === "invalid_grant") {
       await db.googleAccount.delete({ where: { userId } }).catch(() => {});
-      logEvent({ level: "warn", category: "google", action: "google.tokenRevoked", message: "Permiso de Google revocado o caducado: conexión eliminada", userId });
+      logEvent({ level: "warn", category: "google", action: "google.tokenRevoked", label: { k: "Permiso de Google revocado o caducado: conexión eliminada" }, userId });
       throw reconnectError();
     }
     throw err;
@@ -157,6 +157,11 @@ async function accessToken(userId: string): Promise<string> {
   });
   return tokens.access_token;
 }
+
+/** Permisos de Drive que se piden a la vez al compartir un archivo con los miembros del proyecto. */
+const SHARE_BATCH = 5;
+/** Plazo para todo el reparto (cada permiso tiene además el suyo, de 10 s): con Drive colgado, crear no espera minutos. */
+const SHARE_TOTAL_MS = 30_000;
 
 /** Con quién se comparte el archivo: todo el dominio del Workspace o solo unas personas (proyectos privados). */
 type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
@@ -185,11 +190,11 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error("[google] Error al crear archivo", res.status, json?.error?.message);
-    logEvent({ level: "error", category: "google", action: "google.createFileFailed", message: `Google Drive rechazó crear «${name}» (HTTP ${res.status})`, userId, details: { kind, status: res.status, error: json?.error?.message } });
+    logEvent({ level: "error", category: "google", action: "google.createFileFailed", label: { k: "Google Drive rechazó crear «{name}» (HTTP {status})", p: { name, status: res.status } }, userId, details: { kind, status: res.status, error: json?.error?.message } });
     throw new AppError(res.status === 403 ? "Google ha denegado la creación del archivo (revisa que la API de Drive esté activada)." : "No se pudo crear el archivo en Google Drive.");
   }
   const file = { id: String(json.id), name: String(json.name), url: String(json.webViewLink) };
-  logEvent({ category: "google", action: "google.createFile", message: `Archivo de Google (${kind}) creado: «${file.name}»`, userId, details: { kind, fileId: file.id } });
+  logEvent({ category: "google", action: "google.createFile", label: { k: "Archivo de Google ({kind}) creado: «{name}»", p: { kind, name: file.name } }, userId, details: { kind, fileId: file.id } });
   const sharing = share ? await shareFile(token, file.id, share, role) : { status: "NOT_SHARED", failed: 0 } satisfies ShareOutcome;
   return { ...file, share: sharing };
 }
@@ -199,25 +204,43 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
  * desde la tarjeta, se comparte con el dominio de Workspace (GOOGLE_WORKSPACE_DOMAIN) o solo con los emails de los
  * miembros del proyecto, según el modo del proyecto. Devuelve cuántos permisos se crearon y cuántos fallaron.
  */
-async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string): Promise<ShareOutcome> {
+export async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string, totalMs = SHARE_TOTAL_MS): Promise<ShareOutcome> {
   const bodies = sharePermissionBodies(target, { domain: googleWorkspaceDomain(), role });
   let failed = 0;
-  // En paralelo: con muchos miembros, uno detrás de otro podía tardar más de un minuto.
-  await Promise.all(bodies.map(async (body) => {
+  const deadline = AbortSignal.timeout(totalMs);
+  // En tandas de SHARE_BATCH: uno detrás de otro podía tardar más de un minuto con muchos miembros, y todos a la vez
+  // hacían que Drive respondiera `userRateLimitExceeded` y dejara a varias personas sin acceso.
+  const share = async (body: (typeof bodies)[number]) => {
     const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), deadline]),
     }).catch(() => null);
     // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
     if (!res?.ok) {
       failed++;
       const what = body.type === "domain" ? "con el dominio" : "con un miembro del proyecto";
-      console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status);
-      logEvent({ level: "warn", category: "google", action: "google.shareFailed", message: `No se pudo compartir el archivo ${what} (HTTP ${res?.status ?? "sin respuesta"})`, details: { fileId, status: res?.status ?? null } });
+      console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status ?? "sin respuesta");
+      logEvent({
+        level: "warn", category: "google", action: "google.shareFailed",
+        label: res
+          ? { k: "No se pudo compartir el archivo {what} (HTTP {status})", p: { what: logText(what), status: res.status } }
+          : { k: "No se pudo compartir el archivo {what}: Google Drive no ha respondido a tiempo", p: { what: logText(what) } },
+        details: { fileId, status: res?.status ?? null },
+      });
     }
-  }));
+  };
+  for (let i = 0; i < bodies.length; i += SHARE_BATCH) {
+    // Pasado el plazo, lo que queda sin pedir cuenta como fallido (el aviso de «compartido a medias»).
+    if (deadline.aborted) {
+      const left = bodies.length - i;
+      failed += left;
+      logEvent({ level: "warn", category: "google", action: "google.shareFailed", label: { k: "No se pudo compartir el archivo con {n} miembro(s) más del proyecto: Google Drive tarda demasiado", p: { n: left } }, details: { fileId, skipped: left } });
+      break;
+    }
+    await Promise.all(bodies.slice(i, i + SHARE_BATCH).map(share));
+  }
   return { status: shareStatusOf(bodies.length, failed), failed };
 }
 

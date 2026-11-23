@@ -10,7 +10,8 @@ import { addUndo } from "./undo";
 import { noteTasks } from "./action-context";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
-import { logEvent } from "./log";
+import { columnAssignment, notifyAssigned, type ColumnAssignment } from "./column-assign";
+import { logError, logEvent } from "./log";
 import { copyAttachmentsBatch } from "./attachment-copy";
 import { attachmentRefIds, remapAttachmentRefs } from "./attachment-refs";
 import type { BoardTask } from "./types";
@@ -93,7 +94,12 @@ async function copyDescriptionAttachments(spawned: { src: { id: string; projectI
     if (res.skipped.length) {
       logEvent({
         level: "warn", category: "system", action: "recurrence.attachmentsSkipped",
-        message: `La siguiente aparición de «${r.src.title}» no lleva copia de ${res.skipped.length === 1 ? "un adjunto" : `${res.skipped.length} adjuntos`} de su descripción: sigue apuntando a los de la anterior`,
+        label: {
+          k: res.skipped.length === 1
+            ? "La siguiente aparición de «{title}» no lleva copia de un adjunto de su descripción: sigue apuntando a los de la anterior"
+            : "La siguiente aparición de «{title}» no lleva copia de {n} adjuntos de su descripción: sigue apuntando a los de la anterior",
+          p: { title: r.src.title, n: res.skipped.length },
+        },
         projectId: r.src.projectId,
         details: { taskId: r.toTaskId, fromTaskId: r.fromTaskId, skipped: res.skipped.map((s) => ({ name: s.name, size: s.size, reason: s.reason })) },
       });
@@ -161,9 +167,18 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   // Solo las columnas «Programa del curso» tienen tope de sesiones: las demás van en lote. Leído fuera de la transacción,
   // solo sirve para repartir: el tope lo deciden createOne y createMany con la columna bloqueada (una columna puede pasar
   // a PROGRAM entre esta lectura y el alta).
-  const programCols = new Set(
-    (await db.column.findMany({ where: { id: { in: [...new Set(plan.map((p) => p.columnId))] }, role: "PROGRAM" }, select: { id: true } })).map((c) => c.id),
-  );
+  const targetCols = await db.column.findMany({
+    where: { id: { in: [...new Set(plan.map((p) => p.columnId))] } },
+    select: { id: true, projectId: true, role: true, assigneeId: true, assignDueDays: true },
+  });
+  const programCols = new Set(targetCols.filter((c) => c.role === "PROGRAM").map((c) => c.id));
+
+  // Columnas «Asignación a persona» de destino: la aparición nace de su persona (fecha no hace falta: siempre lleva la de
+  // la regla de repetición). Con la misma lectura, fuera de las transacciones, como programCols (en columnas normales,
+  // ninguna consulta más): un cambio de persona en ese mismo instante deja la aparición con la persona anterior, como si
+  // hubiera nacido justo antes del cambio.
+  const assignRules = new Map<string, ColumnAssignment | null>();
+  for (const c of targetCols) assignRules.set(c.id, await columnAssignment(db, c));
 
   /** Centinela de createMany: una columna del lote es ya «Programa del curso» (se repite una a una). */
   const PROGRAM_SINCE_READ = new Error("program-column");
@@ -193,7 +208,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       if (!next) {
         logEvent({
           level: "warn", category: "system", action: "recurrence.skippedColumnLimit",
-          message: `No se creó la siguiente aparición de «${src.title}»: su columna tiene el máximo de sesiones`,
+          label: { k: "No se creó la siguiente aparición de «{title}»: su columna tiene el máximo de sesiones", p: { title: src.title } },
           details: { taskId: src.id, projectId: src.projectId, columnId },
         });
         return null;
@@ -273,7 +288,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     if ((active.get(src.projectId) ?? 0) >= MAX_ACTIVE_TASKS_PER_PROJECT) {
       logEvent({
         level: "warn", category: "system", action: "recurrence.skippedCap",
-        message: `No se creó la siguiente aparición de «${src.title}»: el proyecto tiene el máximo de tareas activas`,
+        label: { k: "No se creó la siguiente aparición de «{title}»: el proyecto tiene el máximo de tareas activas", p: { title: src.title } },
         details: { taskId: src.id, projectId: src.projectId },
       });
       continue;
@@ -299,7 +314,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
         kindId: src.kindId,
         color: src.color,
         linkUrl: src.linkUrl,
-        assigneeId: assignable(src.projectId, src.assigneeId),
+        assigneeId: assignRules.get(columnId)?.assigneeId ?? assignable(src.projectId, src.assigneeId),
         deliverableId,
         dueDate,
         startDate,
@@ -326,12 +341,20 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     }
   }
   await flush();
+  // Las que una columna «Asignación a persona» ha dado a otra persona: un aviso por columna (como cualquier asignación).
+  const handedOver = new Map<ColumnAssignment, { id: string; title: string }[]>();
+  const columnOf = new Map(plan.map((p) => [p.src.id, p.columnId]));
+  for (const { src, id } of spawned) {
+    const rule = assignRules.get(columnOf.get(src.id)!);
+    if (rule && rule.assigneeId !== src.assigneeId) (handedOver.get(rule) ?? handedOver.set(rule, []).get(rule)!).push({ id, title: src.title });
+  }
+  for (const [rule, rows] of handedOver) await notifyAssigned(rule, rows.map((r) => r.id), actorId, rows);
   // Las demás pestañas piden también las apariciones nuevas (canal en vivo; fuera de una acción no hace nada).
   noteTasks(created);
   // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue
   // siendo un éxito (las descripciones conservan la referencia a los de la anterior).
   await copyDescriptionAttachments(spawned).catch((err) =>
-    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", message: `No se copiaron los adjuntos de la descripción: ${err instanceof Error ? err.message : String(err)}` }),
+    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", label: { k: "No se copiaron los adjuntos de la descripción: {error}", p: { error: logError(err) } } }),
   );
   // En el orden en que nacieron; varias, con una sola lectura para todas (antes, una por tarea).
   if (created.length <= 1) return Promise.all(created.map((id) => loadBoardTask(id)));

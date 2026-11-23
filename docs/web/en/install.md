@@ -268,15 +268,17 @@ from its web dashboard, with no terminal.
      ```
 
 6. **Turn on the health check.** In Pizarro's service, go to *Settings → Deploy* and type `/api/health` in
-   **Healthcheck Path** and `600` in **Healthcheck Timeout** (if you don't see that field, add
-   `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600` in *Variables*). That way Railway doesn't treat a deploy as good until Pizarro
+   **Healthcheck Path** and `600` in **Healthcheck Timeout** (that field shows up as soon as you fill in the first
+   one). That way Railway doesn't treat a deploy as good until Pizarro
    answers, and if something fails during an update, it keeps the previous version. On the same screen, leave
-   *Restart Policy* on *On Failure* and a single replica (that's the default) and *Custom Start Command* empty.
+   *Restart Policy* on *On Failure* and a single replica (that's the default; with the volume, Railway doesn't let you
+   raise it) and *Custom Start Command* empty.
 7. **Deploy, just once.** At the top left you will see "Apply N changes": click **Deploy**. Railway builds Pizarro and
    starts it, which takes a few minutes. If Railway got to deploy before you had added the variables or the volume, you
    may get a "Build failed" email: that's normal and there's nothing to do. The deploy that counts is this one, with
    everything in place. To see that the health check is on, open the deployment in *Deployments* and look at the end
-   of *Build Logs*: it should show `Starting Healthcheck` with `Path: /api/health` and, once Pizarro answers,
+   of *Build Logs* (not *Deploy Logs*): it should show `Starting Healthcheck` with `Path: /api/health` and
+   `Retry window: 10m0s` and, once Pizarro answers,
    `Healthcheck succeeded!` (before that, a few `Attempt #… failed` lines: that's normal while it gets ready).
 8. **Wait for Pizarro to prepare the database.** The first time it takes 2 or 3 more minutes, even if Railway already
    shows *Active*. In Pizarro's service, open *Deployments → View logs*, scroll to the end of the log and wait for the
@@ -532,12 +534,15 @@ changes the database needs are applied automatically. If the update is interrupt
 stays intact.
 
 **On Railway** you don't need to do anything: if the service follows the `stable` branch, it updates itself every time
-a version is published.
+a version is published. If it already follows it and the version hasn't arrived, press ⌘K (Ctrl+K) in the service → *Deploy Latest Commit*.
 
 **On Render,** when a version comes out, click *Manual Deploy → Deploy latest reference* in Pizarro's service: it
 downloads the latest one and starts it.
 
 **On Fly.io,** in the folder where you saved `fly.toml`, type `fly deploy` again.
+
+**With `npm start`** (without Docker), stop the server, get the new version's code (`stable` branch) and, in Pizarro's
+folder, run `npm ci`, `npx prisma migrate deploy` and `npm run build`; then start it again with `npm start`.
 
 **Going back to an earlier version** (or installing a specific one): add `--version` with its number.
 

@@ -28,14 +28,20 @@ import type { Locale } from "@/i18n/shared";
 import { getT } from "@/i18n/server";
 import type { ColumnRole } from "@/generated/prisma/client";
 import { cutText } from "./graphemes";
+import { assignOnEnter, type AssignOnEnterResult } from "./column-assign";
+import { dateToIso, isoToDate } from "./dates";
 
 type Tx = Prisma.TransactionClient;
 type Client = Tx | typeof db;
 
-interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null; planCount?: number }
+interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null; planCount?: number; assigneeId?: string | null; assignDueDays?: number | null }
 interface KindSnap { id: string; name: string; color: string; position: number; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; createdAt: string }
-/** Tarea que el cambio tocó: lo que tenía (columna, posición, tipo, fija) y adónde fue (null = no cambió eso). */
-interface TaskSnap { id: string; c: string; p: number; k: string; e: boolean; ee: number; tc: string | null; tk: string | null }
+/**
+ * Tarea que el cambio tocó: lo que tenía (columna, posición, tipo, fija) y adónde fue (null = no cambió eso). Si al unirse a
+ * una columna «Asignación a persona» pasó a su persona: `a`/`d`, responsable y fecha límite que tenía; `ta`/`td`, los
+ * que recibió (el deshacer solo los devuelve si siguen así).
+ */
+interface TaskSnap { id: string; c: string; p: number; k: string; e: boolean; ee: number; tc: string | null; tk: string | null; a?: string | null; d?: string | null; ta?: string; td?: string | null }
 
 /** Lo que había antes del cambio y lo que creó (lo necesario para deshacerlo). */
 interface TemplateChangeSnapshot {
@@ -97,7 +103,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
 
 /** Instantánea de lo que hay ahora (antes de tocar nada). */
 async function takeSnapshot(tx: Tx, projectId: string): Promise<TemplateChangeSnapshot> {
-  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true } });
+  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true } });
   const kinds = await tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } });
   const hidden = await tx.projectHiddenKind.findMany({ where: { projectId }, select: { kindId: true } });
   const labels = await tx.label.findMany({ where: { projectId }, select: { id: true, name: true, color: true } });
@@ -129,6 +135,8 @@ interface ApplyResult {
   /** Tipos generales que vuelven a verse y tareas fijas que pasan a normales. */
   shownGenerals: number;
   unpinnedTasks: number;
+  /** Tareas que han pasado a la persona de una columna «Asignación a persona» (para avisarla al terminar). */
+  handedOver?: AssignOnEnterResult[];
 }
 
 /**
@@ -192,7 +200,7 @@ async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: Ap
     const last = await tx.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
     const base = last?.position ?? 0;
     const created = await tx.column.createManyAndReturn({
-      data: plan.addColumns.map((c, i) => ({ projectId, name: c.name, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, position: base + (i + 1) * POSITION_STEP })),
+      data: plan.addColumns.map((c, i) => ({ projectId, name: c.name, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, assignDueDays: c.role === "NONE" ? c.assignDueDays : null, position: base + (i + 1) * POSITION_STEP })),
       select: { id: true },
     });
     snap.createdColumns = created.map((c) => c.id);
@@ -231,7 +239,7 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
   for (const c of plan.columns) {
     if (c.reuse) targetId.push(c.reuse);
     else {
-      const row = await tx.column.create({ data: { projectId, name: c.name, role: "NONE", isDone: c.isDone, wipLimit: c.wipLimit, position: (c.index + 1) * POSITION_STEP }, select: { id: true } });
+      const row = await tx.column.create({ data: { projectId, name: c.name, role: "NONE", isDone: c.isDone, wipLimit: c.wipLimit, assignDueDays: c.role === "NONE" ? c.assignDueDays : null, position: (c.index + 1) * POSITION_STEP }, select: { id: true } });
       targetId.push(row.id);
       created.push(row.id);
     }
@@ -239,8 +247,13 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
   snap.createdColumns = created;
   // Nombre, rol, orden y límite de cada columna final (antes de mover tareas: así los disparadores de la base de datos ven
   // ya el rol de su columna nueva); las conservadas, después y en su orden.
-  const finals: { id: string; name?: string; isDone?: boolean; wipLimit?: number | null; role: string; position: number }[] = [
-    ...plan.columns.map((c, i) => ({ id: targetId[i]!, name: c.name, isDone: c.isDone, ...(c.wipLimit !== null || !c.reuse ? { wipLimit: c.wipLimit } : {}), role: c.role, position: (i + 1) * POSITION_STEP })),
+  const finals: { id: string; name?: string; isDone?: boolean; wipLimit?: number | null; assignDueDays?: number | null; role: string; position: number }[] = [
+    ...plan.columns.map((c, i) => ({
+      id: targetId[i]!, name: c.name, isDone: c.isDone, ...(c.wipLimit !== null || !c.reuse ? { wipLimit: c.wipLimit } : {}),
+      // «Asignación a persona»: el plazo de la plantilla si trae uno; la persona de la columna reutilizada se queda.
+      ...(c.role === "NONE" && c.assignDueDays !== null ? { assignDueDays: c.assignDueDays } : {}),
+      role: c.role, position: (i + 1) * POSITION_STEP,
+    })),
     ...plan.kept.map((k, i) => ({ id: k.id, role: k.role, position: (plan.columns.length + i + 1) * POSITION_STEP })),
   ];
   for (const f of finals) {
@@ -252,6 +265,9 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
         ...(f.name !== undefined ? { name: f.name } : {}),
         ...(f.isDone !== undefined ? { isDone: f.isDone } : {}),
         ...(f.wipLimit !== undefined ? { wipLimit: f.wipLimit } : {}),
+        ...(f.assignDueDays !== undefined ? { assignDueDays: f.assignDueDays } : {}),
+        // Con otro rol deja de ser «Asignación a persona» (es exclusivo con los demás roles), como al cambiarlo a mano.
+        ...(f.role !== "NONE" ? { assigneeId: null, assignDueDays: null } : {}),
         role: f.role as ColumnRole,
         position: f.position,
         // Lo mismo que al cambiar el rol a mano (setColumnRole): el plazo de espera y el destino de rutinas son de su rol.
@@ -264,6 +280,7 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
   }
   // Tareas de las columnas que se unen a otra (archivadas incluidas): al final de la de destino, en su orden.
   let movedTasks = 0;
+  const handedOver: AssignOnEnterResult[] = [];
   const order = new Map(shape.columns.map((c, i) => [c.id, i]));
   for (const [i, c] of plan.columns.entries()) {
     if (!c.absorb.length) continue;
@@ -281,6 +298,15 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     // se quita ya no existe, así que pasan a ser de la columna a la que se ha unido (si no, volverían a la primera).
     await tx.task.updateMany({ where: { id: { in: rows.map((r) => r.id) }, archivedAt: { not: null }, archivedFromColumnId: { in: c.absorb } }, data: { archivedFromColumnId: target } });
     for (const r of rows) tasks.get(r.id)!.tc = target;
+    // Entran en la columna: si es «Asignación a persona», pasan a su persona (como al moverlas allí a mano).
+    const assigned = await assignOnEnter(tx, target, rows.map((r) => r.id));
+    if (assigned) {
+      const dated = new Set(assigned.dated);
+      for (const b of assigned.before) {
+        Object.assign(tasks.get(b.id)!, { a: b.assigneeId, d: b.dueDate, ta: assigned.rule.assigneeId, td: dated.has(b.id) ? assigned.dueDate : b.dueDate });
+      }
+      handedOver.push(assigned);
+    }
     movedTasks += c.incoming;
   }
   // Columnas que se quitan: solo si de verdad están vacías (nunca se borra nada con tareas).
@@ -341,7 +367,7 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
 
   snap.tasks = [...tasks.values()];
   return {
-    mode: "REPLACE", movedTasks, retypedTasks,
+    mode: "REPLACE", movedTasks, retypedTasks, handedOver,
     addedColumns: created.length,
     removedColumns: remove.length,
     addedKinds: newKind.size,
@@ -406,6 +432,8 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
         where: { id: c.id },
         data: {
           name: c.name, position: c.position, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
+          // La persona de una columna «Asignación a persona» (si aún existe) y su plazo; instantáneas antiguas no los traen.
+          ...(c.assigneeId !== undefined ? { assigneeId: c.assigneeId && (await tx.user.count({ where: { id: c.assigneeId } })) ? c.assigneeId : null, assignDueDays: c.assignDueDays ?? null } : {}),
           routineTargetColumnId: c.routineTargetColumnId && allIds.has(c.routineTargetColumnId) ? c.routineTargetColumnId : null,
         },
       });
@@ -453,6 +481,23 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
                       ${upd.map((u) => u.kind)}::text[], ${upd.map((u) => u.ev)}::boolean[], ${upd.map((u) => u.eve)}::int4[])
             AS m("id", "col", "pos", "kind", "ev", "eve")
           WHERE t."id" = m."id" AND t."projectId" = ${projectId}`;
+      }
+    }
+
+    // 3b. Responsable y fecha límite de las que pasaron a la persona de una columna «Asignación a persona»: vuelven, solo si
+    // nadie los ha cambiado después (siguen con los que recibieron).
+    const handed = snap.tasks.filter((s) => s.ta !== undefined);
+    if (handed.length) {
+      const now = await tx.task.findMany({ where: { id: { in: handed.map((s) => s.id) }, projectId }, select: { id: true, assigneeId: true, dueDate: true } });
+      const byId = new Map(now.map((t) => [t.id, t]));
+      const existing = new Set((await tx.user.findMany({ where: { id: { in: handed.flatMap((s) => (s.a ? [s.a] : [])) } }, select: { id: true } })).map((u) => u.id));
+      for (const s of handed) {
+        const cur = byId.get(s.id);
+        if (!cur) continue;
+        const data: { assigneeId?: string | null; dueDate?: Date | null } = {};
+        if (cur.assigneeId === s.ta && s.a !== s.ta) data.assigneeId = s.a && existing.has(s.a) ? s.a : null;
+        if (s.td !== s.d && dateToIso(cur.dueDate) === s.td) data.dueDate = s.d ? isoToDate(s.d) : null;
+        if (Object.keys(data).length) await tx.task.update({ where: { id: s.id }, data, select: { id: true } });
       }
     }
 

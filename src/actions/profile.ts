@@ -333,11 +333,11 @@ export async function deleteMyAccount(input: z.input<typeof deleteAccountSchema>
       if (result === "wrong") throw new AppError("Código incorrecto o caducado.");
     }
     const { toTeam, deleted } = await eraseUser(user.id, { self: true, deleteProjects: data.deleteProjects, actor: { id: user.id, name: me.name } });
-    const parts = [`«${me.name}» borró su cuenta`];
-    if (deleted.length) parts.push(deleted.length === 1 ? `su proyecto privado «${deleted[0]!.name}»` : `sus ${deleted.length} proyectos privados`);
-    let message = parts.join(" y ");
-    if (toTeam.length) message += `; ${toTeam.length === 1 ? `su proyecto privado «${toTeam[0]!.name}» pasa` : `sus ${toTeam.length} proyectos privados pasan`} a ser de equipo`;
-    describeAction(message);
+    describeAction("«{name}» borró su cuenta{deleted}{toTeam}", {
+      name: me.name,
+      deleted: !deleted.length ? "" : deleted.length === 1 ? { k: " y su proyecto privado «{project}»", p: { project: deleted[0]!.name } } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
+      toTeam: !toTeam.length ? "" : toTeam.length === 1 ? { k: "; su proyecto privado «{project}» pasa a ser de equipo", p: { project: toTeam[0]!.name } } : { k: "; sus {n} proyectos privados pasan a ser de equipo", p: { n: toTeam.length } },
+    });
     // Sus sesiones ya no existen: aquí solo queda quitar la cookie de este navegador.
     await destroySession();
     if (emailEnabled()) sendMailInBackground("aviso de cuenta borrada", () => sendAccountDeletedMail(me));

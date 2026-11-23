@@ -76,9 +76,9 @@ export async function applyUnsubscribe(token: string, via: "one-click" | "page",
   if (changed) {
     logEvent({
       category: "notify", action: "notify.unsubscribed",
-      message: target.kind === "report"
-        ? `Informe semanal de «${target.projectName}» dado de baja por su destinatario (${maskEmail(target.email)}) desde el enlace del email`
-        : `${target.userName} se ha dado de baja de los emails «${target.kind}» desde el enlace del email`,
+      label: target.kind === "report"
+        ? { k: "Informe semanal de «{project}» dado de baja por su destinatario ({to}) desde el enlace del email", p: { project: String(target.projectName), to: maskEmail(target.email) } }
+        : { k: "{name} se ha dado de baja de los emails «{kind}» desde el enlace del email", p: { name: String(target.userName), kind: target.kind } },
       ip,
       ...(target.kind === "report" ? { projectId: target.id } : { userId: target.id, userName: target.userName ?? undefined }),
       details: { kind: target.kind, via, to: maskEmail(target.email) },

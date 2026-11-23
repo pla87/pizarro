@@ -93,7 +93,7 @@ function titleWithoutPrefix(prev: KindAutomation | null | undefined, title: stri
 /**
  * Título al pasar del tipo `prev` (el que tenía; null si ninguno) a `next`. Lo escrito no se pierde nunca: el prefijo del
  * anterior se cambia por el del nuevo y, si el título no lo llevaba, el del nuevo se pone delante («Leche y pan» →
- * «Comprar Leche y pan»). Si solo queda el prefijo, va con un espacio detrás para seguir escribiendo («Comprar pan» y no
+ * «Comprar Leche y pan»); a un tipo sin prefijo se quita el del anterior si acaba en «:», «-»… Si solo queda el prefijo, va con un espacio detrás para seguir escribiendo («Comprar pan» y no
  * «Comprarpan», que ya no se reconocería como prefijo): el espacio sobrante se quita al guardar.
  */
 export function switchKindTitle(prev: KindAutomation | null | undefined, next: KindAutomation, title: string): string {
@@ -102,9 +102,14 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   if (prev && prev.titleTemplate.trim() === prefix) return title;
   const join = (text: string) => (text ? `${prefix} ${text}` : `${prefix} `);
   const rest = titleWithoutPrefix(prev, title);
-  // Con el prefijo del anterior: se cambia por el del nuevo y se conserva lo escrito detrás. Si el nuevo no tiene, solo se
-  // quita el prefijo sin nada detrás («Respuesta a Juan» no pasa a «a Juan»).
-  if (rest !== null) return prefix ? join(rest) : rest ? title : "";
+  // Con el prefijo del anterior: se cambia por el del nuevo y se conserva lo escrito detrás. Si el nuevo no tiene, se quita
+  // el prefijo («Obra: Baño» pasa a «Baño» al volver a «Casa»; antes se quedaba «Obra: »), salvo si acaba en una palabra:
+  // entonces forma parte de la frase («Respuesta a Juan» no pasa a «a Juan», ni «Comprar pan» a «pan»).
+  if (rest !== null) {
+    if (prefix) return join(rest);
+    if (!rest) return "";
+    return /[\p{L}\p{N}]$/u.test(prev!.titleTemplate.trim()) ? title : rest;
+  }
   if (!prefix) return title;
   // Ya empieza por el prefijo del nuevo (escrito a mano o de antes): se queda como está.
   if (titleWithoutPrefix(next, title) !== null) return title;
@@ -113,7 +118,7 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
 
 const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
 /** Una viñeta o casilla sin texto («- », «* [ ]», «1.»): el hueco de una lista en la plantilla, no una etiqueta. */
-const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
+export const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
 
 /** Etiqueta de una línea de formulario: la parte en negrita del principio («**Plazo:** [fecha]» → «**Plazo:**») o la línea. */
 function formAnchor(line: string): string {

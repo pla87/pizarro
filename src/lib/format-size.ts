@@ -19,7 +19,13 @@ export function formatQuotaMb(mb: number, locale = "es-ES"): string {
   return formatSize(mb * 1024 * 1024, locale);
 }
 
-/** Tamaño para los mensajes del registro (en español, sin traducir): «512 B» por debajo de 1 KB, si no «840 KB». */
+/**
+ * Tamaño para los mensajes del registro (igual en los dos idiomas: punto decimal): «512 B» por debajo de 1 KB, «840 KB»
+ * por debajo de 10 MB, y por encima MB o GB con un decimal («54.7 GB»), para que una cifra grande se lea de un vistazo.
+ */
 export function logSize(bytes: number): string {
-  return bytes < 1024 ? `${bytes} B` : `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 10 * 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }

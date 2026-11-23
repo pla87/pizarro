@@ -708,8 +708,8 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 15.2 Railway sin `railway.json` (tus dos proyectos)
 
-1. *Settings → Deploy*: *Healthcheck Path* `/api/health`, *Healthcheck Timeout* `600` (o la variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`), *Restart Policy* «On Failure», una réplica (prompt 3 de `docs/PRUEBAS-CHROME.md`).
-2. Al desplegar, el log termina con «Starting Healthcheck», «Path: /api/health» y «Healthcheck succeeded!».
+1. *Settings → Deploy*: *Healthcheck Path* `/api/health`, *Healthcheck Timeout* `600` (el campo aparece al rellenar *Healthcheck Path*; no hace falta `RAILWAY_HEALTHCHECK_TIMEOUT_SEC`), *Restart Policy* «On Failure», una réplica (con el volumen, Railway no deja subirlas; prompt 3 de `docs/PRUEBAS-CHROME.md`).
+2. Al desplegar, el log de construcción (*Build Logs* del despliegue, no *Deploy Logs*) termina con «Starting Healthcheck», «Path: /api/health», «Retry window: 10m0s» y «Healthcheck succeeded!».
 
 ### 15.3 Informar de un error (tu Railway, instalación oficial)
 
@@ -732,3 +732,24 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 - Doble clic (doble toque) en una descripción larga: el editor se abre sin mover el texto.
 - «@» en un comentario con el teclado abierto: la lista no queda tapada ni cortada.
 - Menú → «+ Nuevo proyecto»: el menú se cierra y se escribe el nombre a la primera.
+
+## 16. Novedades de la v1.67.0
+
+### 16.1 Columna «Asignación a persona» (instalación de prueba, también en el móvil)
+
+1. Menú de una columna → *Rol de la columna* → *Asignación a persona*: elige persona y «Vence en 3 días».
+2. Crea una tarea en la columna (sin fecha): queda asignada y vence en 3 días. Arrastra otra con fecha: se asigna y conserva su fecha. Ctrl+Z la devuelve como estaba.
+3. Arrastra varias a la vez: la persona recibe un solo aviso.
+4. Cambia la persona: pide confirmación y reasigna todas. Cambia solo el plazo: no reasigna nada.
+5. *Generar plan*: el PDF agrupa en Vencidas, Hoy, Esta semana, Este mes, Más adelante y Sin fecha (en inglés, la semana empieza en domingo).
+6. Con la columna configurada, abre el tablero en otra pestaña: los cambios de responsable y fecha llegan sin recargar.
+
+### 16.2 Copias y Docker
+
+- Tu Railway: *Administración → Copias de seguridad* sigue saliendo *Correcta* cada día (la comprobación de espacio no debe bloquearla).
+- Servidor propio con Docker (si tienes uno): tras actualizar, el diagnóstico avisa si `deploy/.env` aún tiene `APP_HEAP_MB` (ya no se usa) y la memoria la fija `APP_MEM_LIMIT`.
+
+### 16.3 Logs en inglés y plantillas propias
+
+- Con la interfaz en inglés, los mensajes nuevos de *Logs* salen en inglés (también el CSV).
+- Un miembro (no administrador) ve las plantillas propias en *Nuevo proyecto* y en *Aplicar plantilla* de sus proyectos privados.

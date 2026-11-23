@@ -6,7 +6,7 @@ import { googleEnabled } from "@/lib/google";
 import { GOOGLE_LOGIN_COOKIE } from "@/lib/google-id-token";
 import { exchangeAndVerify, findUserForGoogle } from "@/lib/google-login";
 import { completeLogin } from "@/lib/login";
-import { logEvent } from "@/lib/log";
+import { logEvent, logText } from "@/lib/log";
 import { appUrl } from "@/lib/mail";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { ACCOUNT_DELETE_PURPOSE, accountDeleteReturn, reauthFreshness } from "@/lib/google-reauth";
@@ -14,6 +14,7 @@ import { safeNextPath } from "@/lib/redirect";
 import { currentSessionId, getCurrentUser } from "@/lib/session";
 import { confirmAccountDeleteWithGoogle, secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import { clientIp } from "@/lib/request";
+import type { Label } from "@/lib/undo-label";
 import { cookieSecure } from "@/lib/session-config";
 
 export const runtime = "nodejs";
@@ -36,8 +37,8 @@ export async function GET(req: Request) {
   // cuenta», no al acceso.
   const reauth = rest.at(-1) === ACCOUNT_DELETE_PURPOSE;
   const reauthStartedAt = reauth && rest.length === 2 ? Number(rest[0]) : Number.NaN;
-  const fail = (code: string, message: string, extra: Record<string, unknown> = {}): never => {
-    logEvent({ level: "warn", category: "auth", action: reauth ? "auth.googleReauthFailed" : "auth.googleLoginFailed", message: `${reauth ? "Confirmación con Google para borrar la cuenta" : "Acceso con Google"} no completado: ${message}`, path: "/api/auth/google/callback", ip, details: { reason: code, ...extra } });
+  const fail = (code: string, message: string | Label, extra: Record<string, unknown> = {}): never => {
+    logEvent({ level: "warn", category: "auth", action: reauth ? "auth.googleReauthFailed" : "auth.googleLoginFailed", label: { k: reauth ? "Confirmación con Google para borrar la cuenta no completada: {why}" : "Acceso con Google no completado: {why}", p: { why: typeof message === "string" ? logText(message) : message } }, path: "/api/auth/google/callback", ip, details: { reason: code, ...extra } });
     redirect(reauth ? `${appUrl()}${accountDeleteReturn("google_failed")}` : `${appUrl()}/login?error=${code}`);
   };
 
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
     return fail("google_failed", "error al hablar con Google");
   }
   if (!result.ok) {
-    return fail(result.reason === "domain" ? "google_domain" : result.reason === "email_unverified" ? "google_unverified" : "google_failed", `id_token rechazado (${result.reason})`);
+    return fail(result.reason === "domain" ? "google_domain" : result.reason === "email_unverified" ? "google_unverified" : "google_failed", { k: "id_token rechazado ({reason})", p: { reason: result.reason } });
   }
   if (reauth) {
     // Sin abrir sesión ni enlazar nada: tiene que ser la misma cuenta de Google enlazada a la sesión abierta.
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
     if (!me || !sessionId) redirect(`${appUrl()}/login`);
     const row = await db.user.findUnique({ where: { id: me.id }, select: { googleSub: true } });
     if (!row?.googleSub || row.googleSub !== result.identity.sub) {
-      logEvent({ level: "warn", category: "auth", action: "auth.googleReauthFailed", message: `${me.name}: para borrar su cuenta ha vuelto a entrar con otra cuenta de Google`, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });
+      logEvent({ level: "warn", category: "auth", action: "auth.googleReauthFailed", label: { k: "{name}: para borrar su cuenta ha vuelto a entrar con otra cuenta de Google", p: { name: me.name } }, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });
       redirect(`${appUrl()}${accountDeleteReturn("google_mismatch")}`);
     }
     // Tiene que haber escrito la contraseña de Google ahora: elegir la cuenta con la sesión de Google abierta no basta.
@@ -76,14 +77,14 @@ export async function GET(req: Request) {
     if (fresh !== "ok") {
       logEvent({
         level: "warn", category: "auth", action: "auth.googleReauthFailed",
-        message: `${me.name}: para borrar su cuenta ha vuelto a entrar con Google sin escribir la contraseña (${fresh === "missing" ? "Google no dice cuándo se autenticó" : "autenticación antigua"})`,
+        label: { k: "{name}: para borrar su cuenta ha vuelto a entrar con Google sin escribir la contraseña ({why})", p: { name: me.name, why: { k: fresh === "missing" ? "Google no dice cuándo se autenticó" : "autenticación antigua" } } },
         userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip,
         details: { reason: fresh, authTime: result.identity.authTime ?? null, startedAt: Number.isFinite(reauthStartedAt) ? reauthStartedAt : null },
       });
       redirect(`${appUrl()}${accountDeleteReturn("google_stale")}`);
     }
     await confirmAccountDeleteWithGoogle(me.id, sessionId);
-    logEvent({ category: "auth", action: "auth.googleReauth", message: `${me.name} ha vuelto a entrar con Google para borrar su cuenta`, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });
+    logEvent({ category: "auth", action: "auth.googleReauth", label: { k: "{name} ha vuelto a entrar con Google para borrar su cuenta", p: { name: me.name } }, userId: me.id, userName: me.name, path: "/api/auth/google/callback", ip });
     redirect(`${appUrl()}${accountDeleteReturn("google")}`);
   }
 

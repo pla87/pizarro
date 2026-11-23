@@ -165,6 +165,8 @@ async function logAction(
     const hidden = level !== "info" && !actx.projectId;
     const args = hidden ? argShape(rawArgs) : rawArgs;
     const details = hidden ? (argShape(actx.details ?? {}) as Record<string, unknown>) : actx.details;
+    // log-sin-plantilla: el mensaje de una acción fallida es el texto del error (un texto fijo del diccionario, que la
+    // página de Logs ya traduce) o el de describeAction, que trae su plantilla.
     logEvent({
       level,
       category: "action",

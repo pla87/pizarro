@@ -461,13 +461,13 @@ function ProjectSwitcher({ projects, current, isAdmin }: { projects: ShellProjec
             href="/projects"
             role="menuitem"
             tabIndex={-1}
-            className="mt-1 block rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:border-slate-800 dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
+            className="mt-1 block rounded-md border-t border-slate-200 px-2.5 py-2 text-sm text-brand-600 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:border-slate-800 dark:text-brand-300 dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
           >
             {t("Ver proyectos existentes")}
           </Link>
         )}
         {/* Para todos: quien no es administrador crea proyectos privados (el diálogo lo indica y el servidor lo exige). */}
-        <MenuItem icon={Plus} className="rounded-md text-brand-600" onClick={openNewProject}>
+        <MenuItem icon={Plus} className="rounded-md text-brand-600 dark:text-brand-300" onClick={openNewProject}>
           {t("Nuevo proyecto")}
         </MenuItem>
       </DropdownMenu>
@@ -501,7 +501,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
   const [pending, start] = useActionTransition();
   const pathname = usePathname();
   const [target, setTarget] = useState<string | null>(null);
-  // Plantillas con las que empezar: las de serie de la instalación (para todos) y las propias (solo administradores).
+  // Plantillas con las que empezar: las de serie de la instalación y las propias.
   const [starts, setStarts] = useState<{ id: string; name: string; description: string; builtin: boolean; examples: boolean }[]>([]);
   // Con qué empieza el proyecto: en blanco ("") o el id de una plantilla.
   const [templateId, setTemplateId] = useState("");
@@ -588,7 +588,7 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
           <label className="label" htmlFor="project-name">{t("Nombre")}</label>
           <input ref={nameRef} id="project-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required data-autofocus />
         </div>
-        {/* Un solo desplegable: en blanco, una plantilla de serie o una propia (solo admins). Siempre visible (las plantillas
+        {/* Un solo desplegable: en blanco, una plantilla de serie o una propia. Siempre visible (las plantillas
             llegan al momento y se añaden sin mover nada); debajo, una línea que describe la opción y, con una de serie, la
             casilla de las tarjetas de ejemplo. */}
         <div>

@@ -2,7 +2,7 @@ import { authorizeColumnRoute } from "@/lib/column-route";
 import { saveGeneratedDocument, type GeneratedDocumentProblem } from "@/lib/documents";
 import { generateProgramPdf, isPdfQueueError, nextProgramVersion } from "@/lib/report-build";
 import { AppError } from "@/lib/errors";
-import { logEvent } from "@/lib/log";
+import { logEvent, logText } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
 import { quotaError } from "@/lib/quota-message";
 import { clientIp, isSameOrigin } from "@/lib/request";
@@ -42,7 +42,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `Programa PDF generado de «${project.name}» (${logSize(report.pdf.length)})`,
+    category: "api", action: "report.pdf", label: { k: "Programa PDF generado de «{project}» ({size})", p: { project: project.name, size: logSize(report.pdf.length) } },
     userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers), durationMs: performance.now() - start,
     details: { tasks: report.taskCount, bytes: report.pdf.length, withAssignee, ...(report.omitted ? { omitted: report.omitted } : {}) },
   });
@@ -65,7 +65,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
       headers["X-Pizarro-Document-Name"] = encodeURIComponent(saved.document.name);
       headers["X-Pizarro-Document-Version"] = String(version);
       logEvent({
-        category: "api", action: "documents.upload", message: `Documento «${saved.document.name}» guardado desde «Publicar programa» (${logSize(report.pdf.length)})`,
+        category: "api", action: "documents.upload", label: { k: "Documento «{name}» guardado desde «Publicar programa» ({size})", p: { name: saved.document.name, size: logSize(report.pdf.length) } },
         userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers),
         details: { projectId, documentId: saved.document.id, storedBytes: report.pdf.length, kind: "PDF", source: "program", version },
       });
@@ -74,7 +74,7 @@ async function handle(req: Request, params: Params, method: "GET" | "POST") {
       const message = "problem" in saved ? problemMessage(saved.problem, t, { projectId, isAdmin: user.role === "ADMIN", locale: intlLocale(locale) }) : saved.error;
       headers["X-Pizarro-Document-Error"] = encodeURIComponent(message);
       logEvent({
-        level: "warn", category: "api", action: "documents.uploadFailed", message: `No se guardó el programa en la Documentación: ${message}`,
+        level: "warn", category: "api", action: "documents.uploadFailed", label: { k: "No se guardó el programa en la Documentación: {error}", p: { error: logText(message) } },
         userId: user.id, userName: user.name, projectId, path, ip: clientIp(req.headers), details: { projectId, bytes: report.pdf.length, source: "program" },
       });
     }

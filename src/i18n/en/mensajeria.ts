@@ -204,4 +204,18 @@ export const mensajeria: Record<string, string> = {
     "Codes cannot be sent by WhatsApp right now: your Pizarro administrator needs to create (or check) the verification template in Meta. Let them know and try again later.",
   "Todavía no se ha podido enviar el código a {phone}. Cuando el administrador lo arregle, pulsa «Enviar otro código».":
     "The code could not be sent to {phone} yet. Once the administrator fixes it, press “Send another code”.",
+  // Logs: lo que se anota al configurar y usar Telegram y WhatsApp
+  "Configuró el bot de Telegram @{bot}": "Set up the Telegram bot @{bot}",
+  "Activó los avisos por Telegram": "Turned on Telegram notifications",
+  "Desactivó los avisos por Telegram": "Turned off Telegram notifications",
+  "Quitó el bot de Telegram": "Removed the Telegram bot",
+  "Probó el bot de Telegram @{bot}": "Tested the Telegram bot @{bot}",
+  "Cambió la configuración de WhatsApp": "Changed the WhatsApp settings",
+  "Activó los avisos por WhatsApp": "Turned on WhatsApp notifications",
+  "Desactivó los avisos por WhatsApp": "Turned off WhatsApp notifications",
+  "Envió un WhatsApp de prueba a {to}": "Sent a test WhatsApp message to {to}",
+  "Desconectó Telegram": "Disconnected Telegram",
+  "Desconectó WhatsApp": "Disconnected WhatsApp",
+  "Guardó su número de WhatsApp {to}": "Saved their WhatsApp number {to}",
+  "Confirmó su número de WhatsApp": "Confirmed their WhatsApp number",
 };

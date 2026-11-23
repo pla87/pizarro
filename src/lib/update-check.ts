@@ -19,11 +19,6 @@ function updateCheckEnabled(): boolean {
   return !/^(0|false|off|no)$/i.test((process.env.UPDATE_CHECK ?? "").trim());
 }
 
-/** Railway reconstruye desde GitHub; un servidor propio se actualiza con get.sh o `docker compose pull`. */
-export function runsOnRailway(): boolean {
-  return Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
-}
-
 async function fetchLatestRelease() {
   const res = await fetch(UPDATE_CHECK_URL, {
     headers: { "User-Agent": `Pizarro/${pkg.version}`, Accept: "application/vnd.github+json" },

@@ -17,7 +17,7 @@ export async function GET() {
     return new Response(t("Demasiadas descargas del diagnóstico. Espera unos minutos."), { status: 429, headers: { "Cache-Control": "no-store" } });
   }
   const report = await collectDiagnostics({ source: "app" });
-  logEvent({ category: "api", action: "admin.doctor", message: "Descarga del diagnóstico", userId: user.id, userName: user.name, path: "/api/admin/doctor" });
+  logEvent({ category: "api", action: "admin.doctor", label: { k: "Descarga del diagnóstico" }, userId: user.id, userName: user.name, path: "/api/admin/doctor" });
   const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
   return new Response(JSON.stringify(report, null, 2), {
     headers: {

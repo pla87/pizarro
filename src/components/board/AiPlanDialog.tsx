@@ -164,7 +164,6 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         linkUrl: x.linkUrl,
         links: d?.links ?? [],
         attachments: (d?.attachments ?? []).map((a) => ({ id: a.id, name: a.originalName, path: zipOk ? paths.byAttachment.get(a.id) : undefined })),
-        evergreen: x.evergreen,
         blockedBy: x.blockedBy ? { title: x.blockedBy.title, index: index.get(x.blockedBy.id) ?? null } : null,
       };
     });
@@ -254,6 +253,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         const now = new Date().toISOString();
         for (const m of moved.data.moved) board.patchTask(m.id, { columnId: target.id, position: m.position, evergreen: false, evergreenEvery: 1, columnEnteredAt: now });
         moved.data.spawned.forEach(board.upsertTask);
+        for (const a of moved.data.assigned) board.patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
       }
     }
     setBusy(false);

@@ -3,12 +3,14 @@ import { createServer, request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import { beforeEach, describe, test } from "node:test";
 import { isShuttingDown, resetShutdownForTests, runShutdown, stopListening, trackInFlight, waitForInFlight, type ShutdownDeps } from "../src/lib/shutdown";
+import { makeT } from "../src/i18n/core";
+import { renderLabel, renderLabelEs, type Label } from "../src/lib/undo-label";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function fakeDeps(overrides: Partial<ShutdownDeps> = {}) {
   const calls: string[] = [];
-  const logs: { level?: string; message: string; details?: unknown }[] = [];
+  const logs: { level?: string; label: Label; details?: unknown }[] = [];
   const deps: ShutdownDeps = {
     flushLogs: async () => void calls.push("flush"),
     logEvent: (e) => (calls.push(`log:${e.action}`), void logs.push(e)),
@@ -107,8 +109,25 @@ describe("apagado ordenado", () => {
     const b = fakeDeps({ stopListening: async () => ({ closed: 1, drained: async (ms) => (await sleep(ms), 2) }), graceMs: 100 });
     await runShutdown("SIGTERM", b.deps);
     assert.equal(b.logs[0]?.level, "warn");
-    assert.match(b.logs[0]!.message, /2 conexión\(es\) con peticiones sin terminar/);
+    assert.equal(renderLabelEs(b.logs[0]!.label), "Apagado ordenado (SIGTERM): 2 conexión(es) con peticiones sin terminar tras 0.1 s");
     assert.equal((b.logs[0]!.details as { openConnections: number }).openConnections, 2);
+  });
+
+  test("el mensaje del registro se lee en el idioma de quien lo mira (también sin nada pendiente)", async () => {
+    const en = makeT("en");
+    const a = fakeDeps();
+    await runShutdown("SIGTERM", a.deps);
+    assert.equal(renderLabelEs(a.logs[0]!.label), "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes");
+    assert.equal(renderLabel(a.logs[0]!.label, en), "Graceful shutdown (SIGTERM): no pending requests or sends");
+
+    resetShutdownForTests();
+    let release = () => {};
+    void trackInFlight(() => new Promise<void>((r) => (release = r)));
+    const b = fakeDeps({ stopListening: async () => ({ closed: 1, drained: async () => 3 }), graceMs: 50 });
+    await runShutdown("SIGTERM", b.deps);
+    release();
+    assert.equal(renderLabelEs(b.logs[0]!.label), "Apagado ordenado (SIGTERM): 3 conexión(es) con peticiones sin terminar y 1 envío(s) de email sin terminar tras 0.05 s");
+    assert.equal(renderLabel(b.logs[0]!.label, en), "Graceful shutdown (SIGTERM): 3 connection(s) with unfinished requests and 1 unfinished email send(s) after 0.05 s");
   });
 });
 

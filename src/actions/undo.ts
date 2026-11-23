@@ -8,9 +8,9 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
-import { renderStoredLabel } from "@/lib/undo-label";
+import { decodeLabel, renderStoredLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
-import { makeT, type T } from "@/i18n/core";
+import type { T } from "@/i18n/core";
 import { actionContext } from "@/lib/action-context";
 import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
 import { applyUndo, discardEntries, fingerprintsOf, isObsoleteFingerprint, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
@@ -183,8 +183,15 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "UNDO" } }),
     db.undoEntry.count({ where: { userId: user.id, projectId: pid, kind: "REDO" } }),
   ]);
-  const parts = skipped ? ` (${skipped} parte${skipped === 1 ? "" : "s"} ya no existía${skipped === 1 ? "" : "n"})` : "";
-  describeAction(`${undo ? "Deshizo" : "Rehízo"}: ${renderStoredLabel(entry.label, makeT("es"))}${parts}`, { [undo ? "undoneId" : "redoneId"]: entry.id });
+  // Plantilla anidada (la etiqueta guardada; las de versiones antiguas son texto plano): Logs la pinta en el idioma de quien lee.
+  describeAction(
+    undo ? "Deshizo: {action}{parts}" : "Rehízo: {action}{parts}",
+    {
+      action: decodeLabel(entry.label) ?? entry.label,
+      parts: !skipped ? "" : skipped === 1 ? { k: " (1 parte ya no existía)" } : { k: " ({n} partes ya no existían)", p: { n: skipped } },
+    },
+    { [undo ? "undoneId" : "redoneId"]: entry.id },
+  );
   return { label: renderStoredLabel(entry.label, await getT()), remaining, skipped, redoable };
 }
 

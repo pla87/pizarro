@@ -20,10 +20,11 @@ import { lastPositionIn, lockColumns } from "./task-positions";
 import { rateLimit } from "./rate-limit";
 import { assertTaskCapacity } from "./caps";
 import { assertColumnRoom } from "./column-capacity";
+import { columnAssignment, newTaskAssignment, type ColumnAssignment } from "./column-assign";
 import { lockBlocking } from "./blocking";
 import { requireUser } from "./session";
 import * as v from "./validation";
-import { isoToDate, todayIso } from "./dates";
+import { dateToIso, isoToDate, todayIso } from "./dates";
 import { normalizeRecurrence } from "./recurrence-date";
 import { assignedBatchExcerpt } from "./notification-text";
 import { notifyTask } from "./notify";
@@ -217,6 +218,8 @@ export async function importTasks(projectId: string, text: string, opts: z.input
 
     const today = todayIso(appTimeZone());
     let ids: string[];
+    // Responsable con que nace cada tarea (el suyo o, en una columna «Asignación a persona», el de la columna).
+    const finalAssignee: (string | null)[] = items.map(() => null);
     try {
       ids = await db.$transaction(async (tx) => {
         // Todo o nada: si el lote no cabe en el proyecto o en una columna con tope, no se crea ninguna.
@@ -225,23 +228,30 @@ export async function importTasks(projectId: string, text: string, opts: z.input
         for (const it of items) perColumn.set(it.columnId, (perColumn.get(it.columnId) ?? 0) + 1);
         await lockColumns(tx, [...perColumn.keys()]);
         const last = new Map<string, number | null>();
+        const rules = new Map<string, ColumnAssignment | null>();
         for (const [columnId, n] of perColumn) {
-          await assertColumnRoom(tx, columnId, n);
+          const room = await assertColumnRoom(tx, columnId, n);
           last.set(columnId, await lastPositionIn(tx, columnId));
+          rules.set(columnId, await columnAssignment(tx, room));
         }
         const created = await tx.task.createManyAndReturn({
-          data: items.map((it) => {
+          data: items.map((it, i) => {
             const position = positionBetween(last.get(it.columnId) ?? null, null);
             last.set(it.columnId, position);
             const f = it.fields;
-            const dueDate = f.dueDate ?? null;
+            // Columna «Asignación a persona»: su persona y, sin fecha, la del plazo (column-assign.ts).
+            const assigned = newTaskAssignment(rules.get(it.columnId) ?? null, {
+              assigneeId: f.assigneeId ?? null, dueDate: f.dueDate ? isoToDate(f.dueDate) : null, startDate: f.startDate ? isoToDate(f.startDate) : null,
+            }, today);
+            finalAssignee[i] = assigned.assigneeId;
+            const dueDate = dateToIso(assigned.dueDate);
             return {
               projectId: pid,
               columnId: it.columnId,
               title: it.title,
               kindId: it.kindId,
               description: f.description ?? "",
-              assigneeId: f.assigneeId ?? null,
+              assigneeId: assigned.assigneeId,
               color: f.color ?? null,
               linkUrl: f.linkUrl ?? null,
               dueDate: dueDate ? isoToDate(dueDate) : null,
@@ -290,8 +300,8 @@ export async function importTasks(projectId: string, text: string, opts: z.input
     describeAction("Importó {count} desde JSON", { count: tasksN(ids.length) }, { taskIds: ids, notices: notices.length, failed: failed.length, labels: createdLabels.length });
     // Un aviso por responsable (no uno por tarea), como al crear varias.
     const byAssignee = new Map<string, number[]>();
-    items.forEach((it, i) => {
-      const a = it.fields.assigneeId;
+    items.forEach((_, i) => {
+      const a = finalAssignee[i];
       if (a && a !== user.id) (byAssignee.get(a) ?? byAssignee.set(a, []).get(a)!).push(i);
     });
     for (const [assigneeId, list] of byAssignee) {

@@ -52,7 +52,7 @@ describe("presencia de variables", () => {
 
   test("la lista cubre todas las variables de la app documentadas en .env.example, deploy/.env.example y el README", () => {
     // Solo de Docker Compose o de la compilación: no las lee el proceso de la app.
-    const notApp = new Set(["DOMAIN", "POSTGRES_PASSWORD", "APP_DB_USER", "APP_DB_PASSWORD", "APP_MEM_LIMIT", "APP_HEAP_MB", "POSTGRES_MEM_LIMIT", "CADDY_MEM_LIMIT", "COMPOSE_FILE", "PIZARRO_IMAGE", "GIT_SHA"]);
+    const notApp = new Set(["DOMAIN", "POSTGRES_PASSWORD", "APP_DB_USER", "APP_DB_PASSWORD", "APP_MEM_LIMIT", "POSTGRES_MEM_LIMIT", "CADDY_MEM_LIMIT", "COMPOSE_FILE", "PIZARRO_IMAGE", "GIT_SHA"]);
     const listed = new Set<string>(DOCUMENTED_ENV_VARS);
     const fromEnvFile = (path: string) => [...readFileSync(path, "utf8").matchAll(/^#?[ \t]*([A-Z][A-Z0-9_]{2,})=/gm)].map((m) => m[1]!);
     // Primera columna de la tabla de variables del README («| `A` / `B` | …»).
@@ -196,6 +196,13 @@ describe("avisos de configuración", () => {
     assert.deepEqual(codes({ SMTP_HOST: "127.0.0.1", SMTP_PORT: "587" }), []);
     assert.deepEqual(codes({ SMTP_HOST: "relay.example.com", SMTP_PORT: "25", SMTP_ALLOW_PLAINTEXT: "1" }), []);
     assert.deepEqual(codes({ SMTP_HOST: "relay.example.com", SMTP_PORT: "25", SMTP_ALLOW_PLAINTEXT: "true" }), []);
+  });
+
+  test("memoria: NODE_OPTIONS con --max-old-space-size (anula el techo del PDF) y APP_HEAP_MB, que ya no se usa", () => {
+    assert.deepEqual(codes({ NODE_OPTIONS: "--use-openssl-ca --max-old-space-size=640" }), ["node_options_heap"]);
+    assert.match(configWarnings({ NODE_OPTIONS: "--max-old-space-size=640" })[0]!.text, /PDF_WORKER_MAX_MB/);
+    assert.deepEqual(codes({ APP_HEAP_MB: "640" }), ["app_heap_mb_unused"]);
+    assert.deepEqual(codes({ NODE_OPTIONS: "--use-openssl-ca", APP_HEAP_MB: " " }), []);
   });
 
   test("el aviso no lleva el valor de ninguna variable", () => {

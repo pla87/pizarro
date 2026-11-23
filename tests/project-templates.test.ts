@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTemplateApplication, summarizeTemplate, templateInputSchema } from "../src/lib/project-templates";
 import { POSITION_STEP } from "../src/lib/positions";
-import { generalKindUsed, setGeneralKindUsed } from "../src/lib/project-templates-core";
+import { generalKindUsed, MAX_TEMPLATE_COLUMNS, setGeneralKindUsed } from "../src/lib/project-templates-core";
 
 const base = {
   name: "Web",
@@ -29,8 +29,11 @@ test("rechaza columnas repetidas, roles repetidos y sin columnas", () => {
 });
 
 test("límites y colores", () => {
-  const many = Array.from({ length: 21 }, (_, i) => ({ name: `C${i}`, role: "NONE" as const, isDone: false }));
-  assert.equal(templateInputSchema.safeParse({ ...base, columns: many }).success, false);
+  // Tantas columnas como admite un proyecto (30), no más.
+  const cols = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `C${i}`, role: "NONE" as const, isDone: false }));
+  assert.equal(MAX_TEMPLATE_COLUMNS, 30);
+  assert.equal(templateInputSchema.safeParse({ ...base, columns: cols(30) }).success, true);
+  assert.equal(templateInputSchema.safeParse({ ...base, columns: cols(31) }).success, false);
   assert.equal(templateInputSchema.safeParse({ ...base, kinds: [{ name: "Bug", color: "rojo" }] }).success, false);
   assert.equal(templateInputSchema.safeParse({ ...base, kinds: [{ name: "Bug", color: "#FF0000" }] }).success, true);
   assert.equal(templateInputSchema.safeParse({ ...base, labels: [{ name: "x", color: "#123456" }] }).success, false);
