@@ -365,7 +365,7 @@ Guardas que conviene conocer:
 - PDF largos (ronda 58, `src/lib/pdf-chunks.ts`): más de ~20 páginas se maquetan en tramos de varios `<Page>` cortados donde
   el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
   él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
-  de @react-pdf, pasa `tests/report-pages.test.ts`.
+  de @react-pdf, pasa `tests/report-pages.test.ts` y `tests/report-pages-iguales.test.ts`.
 - Tablero en vivo por tarjeta (ronda 60, `src/components/board/livePatch.ts`): el canal manda `taskIds` (hasta 50) y
   `full`; para las acciones de `PATCHABLE_ACTIONS` el navegador pide solo esas tarjetas a `GET
   /api/projects/<id>/board-tasks?ids=…` (mismo permiso que el tablero, 15 s de tiempo máximo) y las aplica
@@ -444,6 +444,24 @@ Guardas que conviene conocer:
     da por subido un objeto que ya existe con su tamaño cuando el bloqueo de R2 rechaza el reintento.
   - Memoria: nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el `resourceLimits` del worker de PDF): ni en Compose ni
     en `render.yaml`; Node ajusta su montón al límite del contenedor.
+
+- Ronda 64:
+  - Roles de columna retirados (`RETIRED_COLUMN_ROLES`, `SELECTABLE_COLUMN_ROLES`, `liveColumnRole` en `constants.ts`):
+    *Agenda* y *Entrega al cliente* ya no se ofrecen y todo lo que entra (validación, importar, plantillas, deshacer) los
+    lee como `NONE`. **Fase 2 (v1.69):** repetir los dos `UPDATE` de `20261129100000_retirar_roles_agenda_entrega` antes
+    de quitar los valores del enum (una vuelta atrás a la v1.67 puede volver a escribirlos) y seguir aceptando "AGENDA" y
+    "DELIVERY" en la importación, las plantillas y el deshacer (ZIP exportados con la v1.67). Quitar también `deliveryDoc`
+    / `DeliveryPdfInput` (`report-pdf.tsx`, solo pruebas) pasando antes esas pruebas a otro PDF.
+  - Orden de columnas: siempre con `COLUMN_ORDER` (`[{position},{id}]`, `task-positions.ts`); tras deshacer una columna,
+    `resolveColumnPositionTies` renumera si hay empate. Mover, crear, borrar y aplicar plantilla toman `columnsLockName`.
+  - PDF de columna (plan por persona, semana, lista consolidada): se descargan con `columnDownload.ts` (un clic a la vez,
+    `busy` en `ColumnActionButton` sin `aria-disabled`) y sus rutas responden `attachment`. Un PDF de columna nuevo, igual.
+  - Logs: `log-legacy.ts` traduce al leer las filas antiguas sin plantilla; `es-text.ts` (`esText`) monta los errores
+    con datos que luego se traducen; `client-error-origin.ts` descarta rechazos de promesas sin pila de `/_next/`.
+  - Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
+    `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
+  - Prefijos de tipo (`switchKindTitle` con `known`): de otros tipos solo se quitan los que acaban en signo; los que acaban
+    en palabra, solo si son del tipo anterior (no borrar lo que escribió la persona).
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
