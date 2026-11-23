@@ -10,6 +10,7 @@ import { addUndo } from "./undo";
 import { noteTasks } from "./action-context";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
+import { columnAssignment, notifyAssigned, type ColumnAssignment } from "./column-assign";
 import { logError, logEvent } from "./log";
 import { copyAttachmentsBatch } from "./attachment-copy";
 import { attachmentRefIds, remapAttachmentRefs } from "./attachment-refs";
@@ -170,6 +171,12 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     (await db.column.findMany({ where: { id: { in: [...new Set(plan.map((p) => p.columnId))] }, role: "PROGRAM" }, select: { id: true } })).map((c) => c.id),
   );
 
+  // Columnas «Asignación a persona» de destino: la aparición nace de su persona (fecha no hace falta: siempre lleva la de
+  // la regla de repetición). Leído aquí, fuera de las transacciones, como programCols: un cambio de persona en ese mismo
+  // instante deja la aparición con la persona anterior, como si hubiera nacido justo antes del cambio.
+  const assignRules = new Map<string, ColumnAssignment | null>();
+  for (const columnId of new Set(plan.map((p) => p.columnId))) assignRules.set(columnId, await columnAssignment(db, columnId));
+
   /** Centinela de createMany: una columna del lote es ya «Programa del curso» (se repite una a una). */
   const PROGRAM_SINCE_READ = new Error("program-column");
 
@@ -304,7 +311,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
         kindId: src.kindId,
         color: src.color,
         linkUrl: src.linkUrl,
-        assigneeId: assignable(src.projectId, src.assigneeId),
+        assigneeId: assignRules.get(columnId)?.assigneeId ?? assignable(src.projectId, src.assigneeId),
         deliverableId,
         dueDate,
         startDate,
@@ -331,6 +338,14 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     }
   }
   await flush();
+  // Las que una columna «Asignación a persona» ha dado a otra persona: un aviso por columna (como cualquier asignación).
+  const handedOver = new Map<ColumnAssignment, { id: string; title: string }[]>();
+  const columnOf = new Map(plan.map((p) => [p.src.id, p.columnId]));
+  for (const { src, id } of spawned) {
+    const rule = assignRules.get(columnOf.get(src.id)!);
+    if (rule && rule.assigneeId !== src.assigneeId) (handedOver.get(rule) ?? handedOver.set(rule, []).get(rule)!).push({ id, title: src.title });
+  }
+  for (const [rule, rows] of handedOver) await notifyAssigned(rule, rows.map((r) => r.id), actorId, rows);
   // Las demás pestañas piden también las apariciones nuevas (canal en vivo; fuera de una acción no hace nada).
   noteTasks(created);
   // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue

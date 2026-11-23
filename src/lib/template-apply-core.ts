@@ -28,7 +28,8 @@ export type TemplateRef = { source: "template"; id: string };
 /** Plantilla tal como la necesita el asistente (la forma de TemplateData, sin zod). */
 export interface ApplyTemplateShape {
   name: string;
-  columns: { name: string; role: string; isDone: boolean; wipLimit?: number | null }[];
+  /** `assignDueDays`: plazo de una columna «Asignación a persona» (rol NONE; la persona no viaja en las plantillas). */
+  columns: { name: string; role: string; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
   labels: { name: string; color: string }[];
   hiddenGeneralKinds: string[];
@@ -172,7 +173,7 @@ interface CommonPlan {
 
 export interface AddPlan extends CommonPlan {
   mode: "ADD";
-  addColumns: { index: number; name: string; role: string; isDone: boolean; wipLimit: number | null }[];
+  addColumns: { index: number; name: string; role: string; isDone: boolean; wipLimit: number | null; assignDueDays: number | null }[];
   addKinds: number[];
   /** Tipos generales que el proyecto oculta y la plantilla usa: vuelven a verse. */
   showGenerals: string[];
@@ -182,7 +183,7 @@ export interface ReplacePlan extends CommonPlan {
   mode: "REPLACE";
   /** Columnas finales de la plantilla, en orden: la actual que se reutiliza (la primera emparejada) o una nueva. */
   columns: {
-    index: number; name: string; role: string; isDone: boolean; wipLimit: number | null;
+    index: number; name: string; role: string; isDone: boolean; wipLimit: number | null; assignDueDays: number | null;
     reuse: string | null;
     /** Columnas actuales cuyas tareas pasan a esta y que después se quitan. */
     absorb: string[];
@@ -250,7 +251,7 @@ export function planAdd(project: ProjectShape, template: ApplyTemplateShape): Ad
     if (names.has(nameKey(c.name)) || (c.role !== "NONE" && roles.has(c.role))) return;
     names.add(nameKey(c.name));
     if (c.role !== "NONE") roles.add(c.role);
-    addColumns.push({ index, name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null });
+    addColumns.push({ index, name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, assignDueDays: c.assignDueDays ?? null });
   });
   const addKinds = resolveTemplateKinds(project, template).flatMap((r, i) => ("create" in r ? [i] : []));
   const used = templateUsedGenerals(project, template);
@@ -277,7 +278,7 @@ function templateIndex(choice: string | undefined, length: number): number | nul
 export function planReplace(project: ProjectShape, template: ApplyTemplateShape, choices: Partial<ApplyChoices> = {}): ReplacePlan {
   const colSuggest = suggestColumnChoices(project, template);
   const columns: ReplacePlan["columns"] = template.columns.map((c, index) => ({
-    index, name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, reuse: null, absorb: [], incoming: 0,
+    index, name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, assignDueDays: c.assignDueDays ?? null, reuse: null, absorb: [], incoming: 0,
   }));
   const kept: ReplacePlan["kept"] = [];
   const dropColumns: string[] = [];

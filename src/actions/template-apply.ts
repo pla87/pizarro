@@ -8,6 +8,7 @@ import { z } from "zod";
 import { describeAction } from "@/lib/action-context";
 import { runAction } from "@/lib/action";
 import { findManageableProject } from "@/lib/access";
+import { finishAssignOnEnter } from "@/lib/column-assign";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
@@ -56,7 +57,7 @@ const refSchema = z.object({ source: z.literal("template"), id: v.id });
 function shapeOf(t: TemplateData): ApplyTemplateShape {
   return {
     name: t.name,
-    columns: t.columns.map((c) => ({ name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null })),
+    columns: t.columns.map((c) => ({ name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, assignDueDays: c.role === "NONE" ? (c.assignDueDays ?? null) : null })),
     kinds: t.kinds.map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate })),
     labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
     hiddenGeneralKinds: t.hiddenGeneralKinds,
@@ -116,9 +117,11 @@ export async function applyTemplateChange(projectId: string, ref: TemplateRef, m
     const parsedMode = z.enum(["ADD", "REPLACE"]).parse(mode);
     const data = await resolveRef(ref, locale);
     const parsedChoices = parsedMode === "REPLACE" ? choicesSchema.parse(choices ?? {}) : undefined;
-    const result = await withinChangeLimit(user.id, project.id, () => applyTemplateToProject({
+    const { handedOver, ...result } = await withinChangeLimit(user.id, project.id, () => applyTemplateToProject({
       projectId: project.id, userId: user.id, locale, templateName: data.name, template: shapeOf(data), mode: parsedMode, choices: parsedChoices,
     }));
+    // Tareas unidas a una columna «Asignación a persona»: historial y un aviso a su persona (el deshacer es el del cambio).
+    for (const h of handedOver ?? []) await finishAssignOnEnter(h, user.id, { undo: false });
     if (parsedMode === "ADD") describeAction("Añadió lo que faltaba de la plantilla «{name}»", { name: data.name }, { result });
     else describeAction("Cambió el proyecto a la plantilla «{name}»", { name: data.name }, { result });
     revalidatePath(`/p/${project.id}`, "layout");

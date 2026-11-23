@@ -571,7 +571,12 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         if (data.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: data.releaseTemplates.map((r, i) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, projectId, createdAt: r.createdAt ? date(r.createdAt) : new Date(importedAt + i) })) });
 
         await tx.column.createMany({
-          data: data.columns.map((c) => ({ id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null, planCount: c.planCount ?? 0 })),
+          data: data.columns.map((c) => ({
+            id: columnIds.get(c.ref)!, projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, wipLimit: c.wipLimit ?? null, planCount: c.planCount ?? 0,
+            // «Asignación a persona»: la persona solo si existe aquí (como el responsable de las tareas); el plazo, siempre.
+            // Solo con rol NONE (es exclusivo con los demás roles).
+            ...(c.role === "NONE" ? { assigneeId: uid(c.assignee ?? null), assignDueDays: c.assignDueDays ?? null } : {}),
+          })),
         });
         for (const c of data.columns) {
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });
