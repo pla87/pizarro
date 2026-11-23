@@ -4,7 +4,7 @@ import { copyFile, mkdir, rename, rm } from "node:fs/promises";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError } from "./disk-space";
-import { logEvent } from "./log";
+import { logError, logEvent, logText } from "./log";
 import { checkQuota, type QuotaExceeded } from "./quota";
 import { getQuotaLimits } from "./quota-settings";
 import { storageUsage } from "./storage-usage";
@@ -198,7 +198,7 @@ export async function copyAttachmentsBatch(requests: readonly AttachmentCopyRequ
       diskFull = true;
       logEvent({
         level: "error", category: "system", action: "attachments.noSpace",
-        message: `Disco lleno: no se han copiado los adjuntos ${purpose} (${logSize(wanted)})`,
+        label: { k: "Disco lleno: no se han copiado los adjuntos {purpose} ({size})", p: { purpose: logText(purpose), size: logSize(wanted) } },
         details: { ...batchDetails(items[0]!), bytes: wanted },
       });
     }
@@ -226,7 +226,7 @@ export async function copyAttachmentsBatch(requests: readonly AttachmentCopyRequ
       if (!isMissing(err)) {
         logEvent({
           level: "error", category: "system", action: noSpace ? "attachments.noSpace" : "attachments.copyFailed",
-          message: `No se pudo copiar el adjunto «${it.src.originalName}» ${purpose}: ${err instanceof Error ? err.message : String(err)}`,
+          label: { k: "No se pudo copiar el adjunto «{name}» {purpose}: {error}", p: { name: it.src.originalName, purpose: logText(purpose), error: logError(err) } },
           details: { ...where(it), attachmentId: it.src.id, bytes: it.src.size },
         });
       }
@@ -264,7 +264,7 @@ export async function copyAttachmentsBatch(requests: readonly AttachmentCopyRequ
   } catch (err) {
     logEvent({
       level: "error", category: "system", action: "attachments.copyFailed",
-      message: `No se pudieron guardar los adjuntos copiados ${purpose}: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: "No se pudieron guardar los adjuntos copiados {purpose}: {error}", p: { purpose: logText(purpose), error: logError(err) } },
       details: batchDetails(staged[0]!.it),
     });
     for (const s of staged) skip(s.it, "error");

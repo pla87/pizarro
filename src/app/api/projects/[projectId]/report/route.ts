@@ -1,7 +1,7 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
 import { generateProjectReportPdf, isPdfQueueError, PDF_BUSY_MESSAGE } from "@/lib/report-build";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -33,7 +33,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
     if (isPdfQueueError(err) && err.code === "pdf_busy") return new Response(t(PDF_BUSY_MESSAGE), { status: err.status });
     if (isPdfQueueError(err) && err.code === "pdf_aborted") return new Response(t(err.message), { status: err.status });
     logEvent({
-      level: "error", category: "api", action: "report.pdfFailed", message: `Fallo al generar el informe PDF de «${project.name}»: ${err instanceof Error ? err.message : String(err)}`,
+      level: "error", category: "api", action: "report.pdfFailed", label: { k: "Fallo al generar el informe PDF de «{project}»: {error}", p: { project: project.name, error: logError(err) } },
       userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
     });
     if (isPdfQueueError(err)) return new Response(t(err.message), { status: err.status });
@@ -41,7 +41,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   }
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `Informe PDF generado de «${project.name}» (${logSize(report.pdf.length)})`,
+    category: "api", action: "report.pdf", label: { k: "Informe PDF generado de «{project}» ({size})", p: { project: project.name, size: logSize(report.pdf.length) } },
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/report`, ip: clientIp(_req.headers), durationMs: performance.now() - start,
     details: { tasks: report.taskCount, bytes: report.pdf.length },
   });

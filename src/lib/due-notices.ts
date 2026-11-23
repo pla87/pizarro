@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./db";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { dueChangeExcerpt } from "./notification-text";
 import { notifyTask } from "./notify";
 import { isShuttingDown } from "./shutdown";
@@ -103,10 +103,10 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
     // Con el apagado en marcha no se reclaman más lotes (siguen pendientes para el proceso nuevo).
     if (rows.length < BATCH || isShuttingDown()) break;
   }
-  if (sent) logEvent({ category: "notify", action: "notify.dueGrouped", message: `${sent} aviso(s) de cambio de fecha enviados tras esperar`, details: { count: sent } });
+  if (sent) logEvent({ category: "notify", action: "notify.dueGrouped", label: { k: "{n} aviso(s) de cambio de fecha enviados tras esperar", p: { n: sent } }, details: { count: sent } });
   // Un solo error por pasada en el registro (además del console.error de cada fallo), para verlo en Administración → Logs.
   if (failed) {
-    logEvent({ level: "error", category: "notify", action: "notify.dueFailed", message: `${failed} aviso(s) de cambio de fecha no se pudieron enviar (se reintentan pasados unos minutos): ${lastError}`, details: { count: failed, lastError } });
+    logEvent({ level: "error", category: "notify", action: "notify.dueFailed", label: { k: "{n} aviso(s) de cambio de fecha no se pudieron enviar (se reintentan pasados unos minutos): {error}", p: { n: failed, error: logText(String(lastError)) } }, details: { count: failed, lastError } });
   }
   return sent;
 }
@@ -115,7 +115,7 @@ export async function deliverDueNotices(now: Date = new Date(), notify: Notify =
 async function noticeProject(row: ClaimedNotice, now: Date): Promise<string | null> {
   if (row.fromDue === row.toDue || !row.actorId) return null; // vuelta a la fecha original: nada que contar
   if (now.getTime() - row.claimedAt.getTime() > DUE_NOTICE_GIVE_UP_MS) {
-    logEvent({ level: "warn", category: "notify", action: "notify.dueGaveUp", message: "Aviso de cambio de fecha descartado: su envío lleva más de un día fallando desde el primer intento", details: { taskId: row.taskId, firstAttemptAt: row.claimedAt.toISOString() } });
+    logEvent({ level: "warn", category: "notify", action: "notify.dueGaveUp", label: { k: "Aviso de cambio de fecha descartado: su envío lleva más de un día fallando desde el primer intento" }, details: { taskId: row.taskId, firstAttemptAt: row.claimedAt.toISOString() } });
     return null;
   }
   const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true, dueDate: true } });

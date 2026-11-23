@@ -50,7 +50,7 @@ export async function verifyLoginCode(_prev: VerifyState, formData: FormData): P
   if (!rateLimit(`2fa:ip:${rateIp(ip)}`, 60, 15 * 60_000)) return { error: t("Demasiados intentos. Espera unos minutos.") };
   const result = await checkCode(ch, String(formData.get("code") ?? ""));
   if (result === "locked") {
-    logEvent({ level: "warn", category: "auth", action: "auth.secondStepLocked", message: `${ch.user.name}: demasiados códigos incorrectos, hay que volver a entrar`, userId: ch.userId, userName: ch.user.name, path: "/login/verify", ip });
+    logEvent({ level: "warn", category: "auth", action: "auth.secondStepLocked", label: { k: "{name}: demasiados códigos incorrectos, hay que volver a entrar", p: { name: ch.user.name } }, userId: ch.userId, userName: ch.user.name, path: "/login/verify", ip });
     // El desafío ya no existe: la página se volvería a pintar redirigiendo a /login, así que el aviso viaja allí.
     redirect("/login?error=twofactor_locked");
   }
@@ -214,7 +214,7 @@ export async function regenerateRecoveryCodes(password: string) {
     if (!me.twoFactorMethod) throw new AppError("Activa primero la verificación en dos pasos.");
     await requirePassword(user.id, password);
     const codes = await replaceRecoveryCodes(user.id);
-    logEvent({ category: "auth", action: "auth.recoveryCodesRegenerated", message: `${user.name} ha generado códigos de recuperación nuevos`, userId: user.id, userName: user.name });
+    logEvent({ category: "auth", action: "auth.recoveryCodesRegenerated", label: { k: "{name} ha generado códigos de recuperación nuevos", p: { name: user.name } }, userId: user.id, userName: user.name });
     return { codes };
   });
 }

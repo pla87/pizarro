@@ -55,7 +55,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       if (range.kind === "invalid") return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}`, "Accept-Ranges": "bytes", "Cache-Control": "private, no-store" } });
       const partial = range.kind === "partial";
       // Solo se anota la descarga al empezar (no cada reanudación a mitad).
-      if (!partial || range.start === 0) logEvent({ category: "api", action: "projects.exportDownload", message: `Descarga de la exportación «${f.name}»`, userId: user.id, userName: user.name, projectId: job.projectId ?? undefined, path: `/api/transfer-jobs/${job.id}/download`, ip: clientIp(req.headers), details: { jobId: job.id, bytes: size } });
+      if (!partial || range.start === 0) logEvent({ category: "api", action: "projects.exportDownload", label: { k: "Descarga de la exportación «{name}»", p: { name: f.name } }, userId: user.id, userName: user.name, projectId: job.projectId ?? undefined, path: `/api/transfer-jobs/${job.id}/download`, ip: clientIp(req.headers), details: { jobId: job.id, bytes: size } });
       const stream = createReadStream(f.file, partial ? { start: range.start, end: range.end } : undefined);
       // Next quita el Content-Length al copiar la respuesta: el gancho de response-length.ts lo repone (en la 206, la
       // longitud del rango).

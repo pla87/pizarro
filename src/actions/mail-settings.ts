@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { AppError } from "@/lib/errors";
-import { logEvent } from "@/lib/log";
+import { logEvent, logText } from "@/lib/log";
 import { loadMailConfig, saveMailSettings as persist } from "@/lib/mail-config";
 import { sendMail } from "@/lib/mail";
 import { envMailConfig, sanitizeSmtpError, validateMailSettings, type MailSettingsInput } from "@/lib/mail-settings-core";
@@ -63,7 +63,7 @@ export async function sendMailTest() {
       });
     } catch (err) {
       const message = sanitizeSmtpError(err, [config.pass, config.user]);
-      logEvent({ level: "warn", category: "system", action: "settings.mailTestFailed", message: `Falló el email de prueba: ${maskEmailsIn(message)}`, userId: admin.id, userName: admin.name });
+      logEvent({ level: "warn", category: "system", action: "settings.mailTestFailed", label: { k: "Falló el email de prueba: {error}", p: { error: logText(maskEmailsIn(message)) } }, userId: admin.id, userName: admin.name });
       // Los mensajes internos conocidos se traducen; los del servidor SMTP salen tal cual.
       throw new AppError(`${t("No se pudo enviar el email de prueba.")} ${t(message)}`);
     }

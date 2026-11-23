@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { AppError } from "@/lib/errors";
 import { connectGoogleAccount, GoogleConnectError, googleEnabled } from "@/lib/google";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
 
@@ -13,7 +13,7 @@ const STATE_COOKIE = "tablon_google_state";
 function settings(req: Request, result: string, user?: { id: string; name: string }) {
   logEvent({
     level: result === "connected" || result === "cancelled" ? "info" : "warn", category: "google", action: result === "connected" ? "google.connected" : "google.connectFailed",
-    message: result === "connected" ? "Cuenta de Google conectada" : `Conexión con Google no completada (${result})`,
+    label: result === "connected" ? { k: "Cuenta de Google conectada" } : { k: "Conexión con Google no completada ({result})", p: { result } },
     userId: user?.id ?? null, userName: user?.name ?? null, path: "/api/google/callback", ip: clientIp(req.headers), details: { result },
   });
   const res = NextResponse.redirect(new URL(`/settings?google=${encodeURIComponent(result)}#google`, process.env.APP_URL ?? req.url));
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
   } catch (err) {
     console.error("[google] callback", err instanceof AppError ? err.message : err);
     logEvent({
-      level: "error", category: "google", action: "google.callbackError", message: `Error en la conexión con Google: ${err instanceof Error ? err.message : String(err)}`,
+      level: "error", category: "google", action: "google.callbackError", label: { k: "Error en la conexión con Google: {error}", p: { error: logError(err) } },
       userId: user.id, userName: user.name, path: "/api/google/callback", ip: clientIp(req.headers),
     });
 

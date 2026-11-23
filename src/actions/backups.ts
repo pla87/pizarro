@@ -72,7 +72,7 @@ export async function requestBackupDownload(input: { password?: string; code?: s
   return runAction({ name: "backups.requestDownload", args: [] }, async () => {
     const admin = await requireAdmin();
     const fail = (kind: "code" | "password"): never => {
-      logEvent({ level: "warn", category: "auth", action: "backups.downloadDenied", message: `${admin.name}: confirmación fallida para descargar la copia (${kind})`, userId: admin.id, userName: admin.name });
+      logEvent({ level: "warn", category: "auth", action: "backups.downloadDenied", label: { k: "{name}: confirmación fallida para descargar la copia ({kind})", p: { name: admin.name, kind } }, userId: admin.id, userName: admin.name });
       throw new AppError(kind === "code" ? "Código incorrecto o caducado." : "La contraseña no es correcta.");
     };
     const rateKey = `backup-dl:${admin.id}`;
@@ -84,7 +84,7 @@ export async function requestBackupDownload(input: { password?: string; code?: s
     } else if (!(await verifyPasswordCounted(String(input.password ?? "").slice(0, 200), row.passwordHash, rateKey))) {
       fail("password");
     }
-    logEvent({ category: "auth", action: "backups.downloadAuthorized", message: `${admin.name} ha confirmado su identidad para descargar la copia`, userId: admin.id, userName: admin.name });
+    logEvent({ category: "auth", action: "backups.downloadAuthorized", label: { k: "{name} ha confirmado su identidad para descargar la copia", p: { name: admin.name } }, userId: admin.id, userName: admin.name });
     return { token: issueBackupDownloadToken(admin.id) };
   });
 }

@@ -46,7 +46,7 @@ async function serve(req: Request, head: boolean): Promise<Response> {
   logEvent({
     category: "api",
     action: "backups.download",
-    message: `Descarga de la copia ${latest.name}`,
+    label: { k: "Descarga de la copia {file}", p: { file: latest.name } },
     userId: user.id,
     userName: user.name,
     path: "/api/admin/backups/latest",

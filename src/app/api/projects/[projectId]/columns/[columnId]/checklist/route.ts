@@ -18,7 +18,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "report.pdf", message: `PDF de la lista consolidada generado de «${project.name}» (${logSize(report.pdf.length)})`,
+    category: "api", action: "report.pdf", label: { k: "PDF de la lista consolidada generado de «{project}» ({size})", p: { project: project.name, size: logSize(report.pdf.length) } },
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/columns/${columnId}/checklist`, ip: clientIp(req.headers), durationMs: performance.now() - start,
     details: { items: report.itemCount, bytes: report.pdf.length, by },
   });

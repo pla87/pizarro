@@ -2,7 +2,7 @@ import { cachedFeedIcs, EMPTY_FEED_ETAG, EMPTY_FEED_ICS, FEED_CACHE_MS, feedMaxA
 import { FEED_LOG_EVERY_MS, feedLogDue, feedRateKey, isFeedTokenShape, tokenFromFilename } from "@/lib/calendar-feed-core";
 import { db } from "@/lib/db";
 import { ifNoneMatchHas } from "@/lib/etag";
-import { logEvent } from "@/lib/log";
+import { logEvent, logText } from "@/lib/log";
 import { rateIp, rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { maskSecretsFor } from "@/lib/secret-path";
@@ -63,7 +63,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ file: string }>
   } catch (err) {
     // Cualquier fallo (BD, memoria…): 500 genérico y el error al registro sin el token (ni en la ruta ni en el mensaje).
     const message = maskSecretsFor(err instanceof Error ? err.message : String(err), `/api/calendar/${file}`);
-    logEvent({ level: "error", category: "api", action: "calendar.feedFailed", message: `Fallo al servir el calendario suscrito: ${message}`, path: "/api/calendar/…", ip, durationMs: performance.now() - start });
+    logEvent({ level: "error", category: "api", action: "calendar.feedFailed", label: { k: "Fallo al servir el calendario suscrito: {error}", p: { error: logText(message) } }, path: "/api/calendar/…", ip, durationMs: performance.now() - start });
     return new Response("Internal error", { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
   }
 }
@@ -78,7 +78,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     const skipped = feedLogDue(feedLog, `429|${tokenKey}|${ipKey}`, Date.now(), RATE_LOG_EVERY_MS);
     if (skipped !== null) {
       logEvent({
-        level: "warn", category: "api", action: "calendar.feedRateLimited", message: "Calendario suscrito: demasiadas consultas seguidas (límite de ritmo)",
+        level: "warn", category: "api", action: "calendar.feedRateLimited", label: { k: "Calendario suscrito: demasiadas consultas seguidas (límite de ritmo)" },
         path: "/api/calendar/…", ip, durationMs: performance.now() - start, details: { skipped },
       });
     }
@@ -91,7 +91,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
     const skipped = feedLogDue(feedLog, `404|${ipKey}`, Date.now());
     if (skipped !== null) {
       logEvent({
-        category: "api", action: "calendar.feedRejected", message: "Calendario suscrito: enlace no válido (regenerado, desactivado o de un usuario inactivo)",
+        category: "api", action: "calendar.feedRejected", label: { k: "Calendario suscrito: enlace no válido (regenerado, desactivado o de un usuario inactivo)" },
         path: "/api/calendar/…", ip, durationMs: performance.now() - start, details: { skipped },
       });
     }
@@ -110,7 +110,7 @@ async function serveFeed(req: Request, file: string, ip: string, start: number):
   const skipped = feedLogDue(feedLog, `ok|${feed.feedId}|${rateIp(ip)}`, Date.now());
   if (skipped !== null) {
     logEvent({
-      category: "api", action: "calendar.feed", message: `Calendario suscrito consultado (${tasks} tareas, ${deliverables} entregables)`,
+      category: "api", action: "calendar.feed", label: { k: "Calendario suscrito consultado ({tasks} tareas, {deliverables} entregables)", p: { tasks, deliverables } },
       userId: feed.user.id, userName: feed.user.name, path: "/api/calendar/…", ip, durationMs: performance.now() - start,
       details: { tasks, deliverables, repeats, skipped, sampledEveryHours: FEED_LOG_EVERY_MS / 3_600_000 },
     });

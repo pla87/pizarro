@@ -34,7 +34,7 @@ async function purgeNonImageCopies(now: Date = new Date()): Promise<number> {
   const ids = old.map((a) => a.id);
   await db.releaseAttachment.deleteMany({ where: { id: { in: ids } } });
   await removeReleaseAttachmentFiles(ids);
-  logEvent({ category: "system", action: "releases.nonImageCopiesPurged", message: `Copias de ficheros no imagen borradas (más de ${NON_IMAGE_COPY_DAYS} días): ${ids.length}`, details: { count: ids.length } });
+  logEvent({ category: "system", action: "releases.nonImageCopiesPurged", label: { k: "Copias de ficheros no imagen borradas (más de {days} días): {n}", p: { days: NON_IMAGE_COPY_DAYS, n: ids.length } }, details: { count: ids.length } });
   return ids.length;
 }
 
@@ -84,7 +84,7 @@ function undoReferencedTokens(ops: unknown[]): Set<string> {
  * de las importaciones cortadas por un reinicio (import-journal.ts).
  */
 async function purgeOrphanFiles(): Promise<number> {
-  const [{ db }, { logEvent }, { cleanOrphanFiles }, { uploadDir }, { recoverImportJournals }] = await Promise.all([
+  const [{ db }, { logEvent, logText }, { cleanOrphanFiles }, { uploadDir }, { recoverImportJournals }] = await Promise.all([
     import("@/lib/db"),
     import("@/lib/log"),
     import("@/lib/orphan-files"),
@@ -117,9 +117,9 @@ async function purgeOrphanFiles(): Promise<number> {
     const why = report.abortReason === "noRows"
       ? "la base de datos no tiene ningún adjunto ni documento (¿base de datos nueva, equivocada o a medio restaurar?)"
       : "demasiados; ¿base de datos equivocada?";
-    logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", message: `Limpieza de huérfanos cancelada: ${report.orphans} de ${report.scanned} ficheros parecen huérfanos (${why})`, details: { ...report } });
+    logEvent({ level: "warn", category: "system", action: "uploads.orphansAborted", label: { k: "Limpieza de huérfanos cancelada: {orphans} de {scanned} ficheros parecen huérfanos ({why})", p: { orphans: report.orphans, scanned: report.scanned, why: logText(why) } }, details: { ...report } });
   } else if (report.deleted > 0) {
-    logEvent({ category: "system", action: "uploads.orphansPurged", message: `Ficheros huérfanos borrados: ${report.deleted} (${logSize(report.bytes)})`, details: { ...report } });
+    logEvent({ category: "system", action: "uploads.orphansPurged", label: { k: "Ficheros huérfanos borrados: {n} ({size})", p: { n: report.deleted, size: logSize(report.bytes) } }, details: { ...report } });
   }
   return report.deleted;
 }

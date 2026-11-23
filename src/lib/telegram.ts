@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { makeT, toLocale, type Locale } from "../i18n/core";
 import { db } from "./db";
 import { labelledHmac, labelledHmacCandidates } from "./keyring";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { loadMessagingConfig, readMessagingConfigStrict, type MessagingConfig } from "./messaging-config";
 import {
   MessagingApiError, parseStartCode, scrubSecrets, telegramCommand, telegramMode, telegramPlain, telegramSendBody, telegramSyncRetryMs,
@@ -281,7 +281,7 @@ export async function syncTelegram(): Promise<{ mode: PollState["mode"]; error: 
     p.lastError = scrubSecrets((err as Error).message, [token]);
     p.syncFailures++;
     // Se registra el primero de una racha, no cada reintento.
-    if (p.syncFailures === 1) logEvent({ level: "error", category: "system", action: "telegram.syncFailed", message: `No se pudo preparar el bot de Telegram (${m.mode}): ${p.lastError}. Se volverá a intentar solo.` });
+    if (p.syncFailures === 1) logEvent({ level: "error", category: "system", action: "telegram.syncFailed", label: { k: "No se pudo preparar el bot de Telegram ({mode}): {error}. Se volverá a intentar solo.", p: { mode: m.mode, error: logText(String(p.lastError)) } } });
     scheduleSyncRetry();
     return { mode: p.mode, error: p.lastError };
   }
@@ -365,7 +365,7 @@ export async function disconnectTelegramChat(chatId: string, reason: "stop" | "b
   if (!rows.length) return 0;
   await db.userChannel.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
   const why = reason === "stop" ? "escribió /stop" : reason === "blocked" ? "bloqueó el bot" : "Telegram rechazó el envío (bot bloqueado o chat borrado)";
-  for (const r of rows) logEvent({ level: reason === "stop" ? "info" : "warn", category: "notify", action: "notify.telegramDisconnected", message: `Telegram desconectado para ${r.user.name}: ${why}`, userId: r.userId, userName: r.user.name, details: { reason } });
+  for (const r of rows) logEvent({ level: reason === "stop" ? "info" : "warn", category: "notify", action: "notify.telegramDisconnected", label: { k: "Telegram desconectado para {name}: {why}", p: { name: r.user.name, why: logText(why) } }, userId: r.userId, userName: r.user.name, details: { reason } });
   return rows.length;
 }
 
@@ -397,7 +397,7 @@ export async function handleTelegramUpdate(u: TelegramUpdate, cfg?: MessagingCon
       create: { userId: user.id, channel: "TELEGRAM", address: chatId, label, verifiedAt: now, consentAt: now },
       update: { address: chatId, label, verifiedAt: now, consentAt: now },
     });
-    logEvent({ category: "notify", action: "notify.telegramLinked", message: `Telegram conectado para ${user.name}`, userId: user.id, userName: user.name });
+    logEvent({ category: "notify", action: "notify.telegramLinked", label: { k: "Telegram conectado para {name}", p: { name: user.name } }, userId: user.id, userName: user.name });
     const ut = tFor(toLocale(user.locale));
     return reply(token, chatId, ut("Listo, {name}: a partir de ahora recibirás aquí tus avisos de Pizarro. Para dejar de recibirlos, escribe /stop o desconéctalo en Mi perfil → Avisos.", { name: user.name.replace(/\s+/g, " ").trim().slice(0, 60) }));
   }

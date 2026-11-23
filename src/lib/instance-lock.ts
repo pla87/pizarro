@@ -10,6 +10,7 @@ import {
 import { logEvent } from "./log";
 import { connectPgClient } from "./pg-connect";
 import { onShutdown } from "./shutdown";
+import { renderLabelEs, type Label } from "./undo-label";
 
 // ¿Hay otra copia de Pizarro usando esta misma base de datos? (otro servicio de Railway, un despliegue viejo que sigue en
 // marcha, un `npm start` de prueba apuntando a la base de producción…). Dos copias a la vez se pisan: el bot de Telegram
@@ -123,12 +124,15 @@ const minutes = (ms: number) => Math.max(1, Math.round(ms / 60_000));
 
 function logChange(prev: InstanceLockStatus, next: InstanceLockStatus): void {
   if (next.status === "conflict") {
-    const message = `Hay otra copia de Pizarro usando esta misma base de datos desde hace más de ${minutes(INSTANCE_CONFLICT_GRACE_MS)} minutos. Dos copias a la vez se pisan (Telegram por sondeo, tareas de fondo, copias de seguridad, archivos subidos). Detén la que sobra: un servicio o un despliegue antiguo de Railway, otro servidor o un npm start de prueba con esta DATABASE_URL.`;
-    console.warn(`[instance] AVISO: ${message}`);
-    logEvent({ level: "warn", category: "system", action: "system.otherInstance", message, details: { holderSince: next.holderSince } });
+    const label: Label = {
+      k: "Hay otra copia de Pizarro usando esta misma base de datos desde hace más de {minutes} minutos. Dos copias a la vez se pisan (Telegram por sondeo, tareas de fondo, copias de seguridad, archivos subidos). Detén la que sobra: un servicio o un despliegue antiguo de Railway, otro servidor o un npm start de prueba con esta DATABASE_URL.",
+      p: { minutes: minutes(INSTANCE_CONFLICT_GRACE_MS) },
+    };
+    console.warn(`[instance] AVISO: ${renderLabelEs(label)}`);
+    logEvent({ level: "warn", category: "system", action: "system.otherInstance", label, details: { holderSince: next.holderSince } });
   } else if (prev.status === "conflict" && next.status === "held") {
     console.log("[instance] La otra copia de Pizarro ya no usa esta base de datos.");
-    logEvent({ category: "system", action: "system.otherInstanceGone", message: "La otra copia de Pizarro ya no usa esta base de datos." });
+    logEvent({ category: "system", action: "system.otherInstanceGone", label: { k: "La otra copia de Pizarro ya no usa esta base de datos." } });
     void db.appState.deleteMany({ where: { key: INSTANCE_NOTICE_KEY } }).catch(() => {});
   } else if (next.status === "pooler") {
     console.log("[instance] La conexión con PostgreSQL pasa por un pooler en modo transacción (PgBouncer): no se puede comprobar si otra copia de Pizarro usa esta base.");

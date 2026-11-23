@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { z } from "zod";
 import { Prisma } from "../generated/prisma/client";
 import { db } from "./db";
-import { logEvent } from "./log";
+import { logError, logEvent } from "./log";
 import { attachmentFileNames } from "./release";
 import { attachmentPath, compactImage, copyReleaseAttachmentFile, releaseAttachmentFileSize, removeReleaseAttachmentFiles, saveReleaseAttachmentFile } from "./uploads";
 
@@ -88,7 +88,7 @@ async function copyAttachments(releaseId: string, { items, allowed, projectId, u
         // Fichero ausente o ilegible (p. ej. el adjunto se borró mientras tanto): se omite; si ya había fila, se ha retirado para no dejarla sin fichero.
         logEvent({
           level: "error", category: "system", action: "releases.saveAttachments",
-          message: `Adjunto omitido en la release: «${names[i] ?? att.originalName}» (${err instanceof Error ? err.message : String(err)})`,
+          label: { k: "Adjunto omitido en la release: «{name}» ({error})", p: { name: names[i] ?? att.originalName, error: logError(err) } },
           userId, userName, projectId, details: { releaseId, attachmentId: att.id },
         });
       }
@@ -123,7 +123,7 @@ export function runReleaseAttachmentsJob(releaseId: string, job: PendingJob): Pr
   return saveReleaseAttachments(releaseId, job).catch((err) =>
     logEvent({
       level: "error", category: "system", action: "releases.saveAttachments",
-      message: `No se pudieron guardar los adjuntos de la release: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: "No se pudieron guardar los adjuntos de la release: {error}", p: { error: logError(err) } },
       userId: job.userId, userName: job.userName, projectId: job.projectId, details: { releaseId },
     }),
   );
@@ -139,13 +139,13 @@ export async function resumePendingReleaseAttachments(): Promise<number> {
   for (const r of pending) {
     const parsed = pendingJobSchema.safeParse(r.attachmentsPending);
     if (!parsed.success) {
-      logEvent({ level: "warn", category: "system", action: "releases.resumeAttachments", message: "Trabajo pendiente de adjuntos de release ilegible: se descarta", details: { releaseId: r.id } });
+      logEvent({ level: "warn", category: "system", action: "releases.resumeAttachments", label: { k: "Trabajo pendiente de adjuntos de release ilegible: se descarta" }, details: { releaseId: r.id } });
       await db.release.updateMany({ where: { id: r.id }, data: { attachmentsPending: Prisma.DbNull } });
       continue;
     }
     await runReleaseAttachmentsJob(r.id, parsed.data);
     resumed++;
-    logEvent({ category: "system", action: "releases.resumeAttachments", message: "Copia de adjuntos de release retomada tras el reinicio", projectId: parsed.data.projectId, details: { releaseId: r.id } });
+    logEvent({ category: "system", action: "releases.resumeAttachments", label: { k: "Copia de adjuntos de release retomada tras el reinicio" }, projectId: parsed.data.projectId, details: { releaseId: r.id } });
   }
   return resumed;
 }

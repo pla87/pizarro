@@ -46,7 +46,7 @@ export async function GET(req: Request) {
     path: "/api/auth/google",
     maxAge: 600,
   });
-  logEvent({ category: "auth", action: reauth ? "auth.googleReauthStart" : "auth.googleLoginStart", message: reauth ? "Vuelve a entrar con Google para borrar su cuenta" : "Inicio de «Iniciar sesión con Google»", path: "/api/auth/google/start", ip });
+  logEvent({ category: "auth", action: reauth ? "auth.googleReauthStart" : "auth.googleLoginStart", label: { k: reauth ? "Vuelve a entrar con Google para borrar su cuenta" : "Inicio de «Iniciar sesión con Google»" }, path: "/api/auth/google/start", ip });
   redirect(buildLoginAuthUrl({
     clientId: googleConfig().clientId,
     redirectUri: googleLoginRedirectUri(),

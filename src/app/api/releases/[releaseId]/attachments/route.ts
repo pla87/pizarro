@@ -75,7 +75,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ releaseId: stri
   // El mismo nombre que da la página (y el diálogo de generarla): fecha, número y proyecto.
   const name = releaseZipName({ day: isoDate(release.deployedAt, appTimeZone()), number: release.number, project: release.project.name }, mode.part, packages.length, await getLocale());
   logEvent({
-    category: "api", action: "release.zipDownload", message: `ZIP de adjuntos de la release «${release.title}» (paquete ${mode.part}/${packages.length}, ${fileCount} ficheros, ${logSize(zipPart.bytes)})`,
+    category: "api", action: "release.zipDownload", label: { k: "ZIP de adjuntos de la release «{release}» (paquete {part}/{parts}, {files} ficheros, {size})", p: { release: release.title, part: mode.part, parts: packages.length, files: fileCount, size: logSize(zipPart.bytes) } },
     userId: user.id, userName: user.name, projectId: release.projectId, path: `/api/releases/${releaseId}/attachments`, ip: clientIp(req.headers),
     durationMs: performance.now() - start, details: { releaseId, part: mode.part, parts: packages.length, files: fileCount, bytes: zipPart.bytes },
   });

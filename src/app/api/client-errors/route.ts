@@ -56,7 +56,10 @@ export async function POST(req: Request) {
     level: "error",
     category: "client",
     action: `client.${e.source}`,
-    message: `Error en el navegador${user ? "" : " (sin sesión)"}${path ? ` en ${path}` : ""}: ${e.message}`,
+    label: {
+      k: user ? (path ? "Error en el navegador en {path}: {error}" : "Error en el navegador: {error}") : path ? "Error en el navegador (sin sesión) en {path}: {error}" : "Error en el navegador (sin sesión): {error}",
+      p: { path: path ?? "", error: e.message },
+    },
     userId: user?.id ?? null,
     userName: user?.name ?? null,
     path: path ?? null,

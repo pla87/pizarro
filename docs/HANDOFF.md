@@ -400,7 +400,10 @@ Guardas que conviene conocer:
     prefijo `skip:` y `lastOk = true` (`src/lib/job-run.ts`, `jobRunView`, que usan la pantalla y el diagnóstico). Un
     motivo nuevo necesita su texto en `BackupsAdmin.tsx`.
   - Mensajes de Logs traducibles: `logEvent({ label })` guarda la plantilla `{k, p}` en `details.$msg` (`LOG_LABEL_KEY`,
-    `src/lib/log-message.ts`) y el mensaje en español para buscar. Un evento frecuente nuevo, con `label`.
+    `src/lib/log-message.ts`) y el mensaje en español para buscar. Todo `logEvent` nuevo va con `label` (sin `message`):
+    los datos en `p`, los motivos y errores como plantilla anidada (`logText`/`logError` de `log.ts`, que se traducen si
+    están en el diccionario) y las listas con `andList` («título y tipo»). `tests/log-message.test.ts` falla con un
+    `logEvent` sin plantilla (excepción: comentario `// log-sin-plantilla: motivo`) o con un texto sin traducción.
   - URL sin recargar: `replaceUrlKeepingState` (`src/lib/replace-url.ts`), nunca `history.replaceState(window.history.state…)`
     (Next vuelve a escribir la dirección vieja en el siguiente refresco).
   - Modales que se abren al cerrarse otro: `useBackToClose` espera a que no haya «atrás» silenciosos pendientes

@@ -6,7 +6,7 @@ import { projectUsersWhere } from "./access";
 import { db } from "./db";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { ellipsize } from "./graphemes";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
 import { notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
@@ -136,7 +136,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     if (!project || !n.user.active) continue;
     const taskId = n.task?.id ?? null;
     if (!allowed.has(`${project.id}:${n.user.id}`)) {
-      logEvent({ category: "notify", action: "notify.skippedNoAccess", message: `Envío externo omitido: ${n.user.name} ya no tiene acceso al proyecto`, userId: n.user.id, userName: n.user.name, projectId: project.id, details: { notificationId: n.id, taskId } });
+      logEvent({ category: "notify", action: "notify.skippedNoAccess", label: { k: "Envío externo omitido: {name} ya no tiene acceso al proyecto", p: { name: n.user.name } }, userId: n.user.id, userName: n.user.name, projectId: project.id, details: { notificationId: n.id, taskId } });
       continue;
     }
     const locale = toLocale(n.user.locale);
@@ -166,7 +166,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
         logEvent({ ...base, action: "notify.email", label: { k: "Email de aviso ({type}) enviado a {name}", p: { type: n.type, name: n.user.name } }, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       } catch (err) {
         errors.push(`email: ${(err as Error).message}`);
-        logEvent({ ...base, level: "error", action: "notify.emailFailed", message: `Fallo al enviar email a ${n.user.name}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
+        logEvent({ ...base, level: "error", action: "notify.emailFailed", label: { k: "Fallo al enviar email a {name}: {error}", p: { name: n.user.name, error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { notificationId: n.id, taskId, to: maskEmail(n.user.email) } });
       }
     }
     for (const ch of channelsFor(n.type, n.user.channels, messaging)) {
@@ -175,7 +175,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       const details = { notificationId: n.id, taskId, type: n.type, ...(ch.channel === "WHATSAPP" ? { to: maskPhone(ch.address) } : {}) };
       // Tope por persona y canal: una avalancha de avisos no se convierte en una avalancha de mensajes (ni de gasto).
       if (!rateLimit(`notify:${key}:${n.user.id}`, CHANNEL_LIMIT_PER_HOUR[ch.channel], 60 * 60_000)) {
-        if (rateLimit(`notify:${key}:${n.user.id}:warned`, 1, 60 * 60_000)) logEvent({ ...base, level: "warn", action: `notify.${key}RateLimited`, message: `Tope de ${CHANNEL_LIMIT_PER_HOUR[ch.channel]} mensajes por hora de ${name} alcanzado para ${n.user.name}: los siguientes avisos de esta hora solo quedan en la app`, details });
+        if (rateLimit(`notify:${key}:${n.user.id}:warned`, 1, 60 * 60_000)) logEvent({ ...base, level: "warn", action: `notify.${key}RateLimited`, label: { k: "Tope de {max} mensajes por hora de {channel} alcanzado para {name}: los siguientes avisos de esta hora solo quedan en la app", p: { max: CHANNEL_LIMIT_PER_HOUR[ch.channel], channel: name, name: n.user.name } }, details });
         continue;
       }
       const t0 = performance.now();
@@ -191,11 +191,11 @@ export async function deliver(notificationIds: string[]): Promise<void> {
           await sendWhatsappNotice(messaging.whatsapp, ch.address, waMsg, tw, waLocale === "en");
           update.whatsappSentAt = new Date();
         }
-        logEvent({ ...base, action: `notify.${key}`, message: `${name}: aviso (${n.type}) enviado a ${n.user.name}`, durationMs: performance.now() - t0, details });
+        logEvent({ ...base, action: `notify.${key}`, label: { k: "{channel}: aviso ({type}) enviado a {name}", p: { channel: name, type: n.type, name: n.user.name } }, durationMs: performance.now() - t0, details });
       } catch (err) {
         const reason = scrubSecrets((err as Error).message, [messaging.telegram.token, messaging.whatsapp.token, ch.address]);
         errors.push(`${key}: ${reason}`);
-        logEvent({ ...base, level: "error", action: `notify.${key}Failed`, message: `Fallo al enviar ${name} a ${n.user.name}: ${reason}`, durationMs: performance.now() - t0, details });
+        logEvent({ ...base, level: "error", action: `notify.${key}Failed`, label: { k: "Fallo al enviar {channel} a {name}: {error}", p: { channel: name, name: n.user.name, error: logText(reason) } }, durationMs: performance.now() - t0, details });
         // Telegram 403: la persona bloqueó el bot o borró el chat. Se desconecta para no seguir intentándolo.
         if (ch.channel === "TELEGRAM" && classifyFailure("TELEGRAM", err) === "disconnect") await disconnectTelegramChat(ch.address, "send-failed").catch(() => {});
       }
@@ -301,7 +301,7 @@ export async function notifyTask(opts: {
   // Por email, Telegram o WhatsApp solo si la persona lo quiere para este tipo (lo decide deliver).
   const external = await externalAllowed(opts.actorId, opts.type, opts.taskId, created.map((c) => c.userId), createdIds);
   logEvent({
-    category: "notify", action: `notify.${opts.type.toLowerCase()}`, message: `${createdIds.length} aviso(s) ${opts.type} creados (${external.size} con envío externo)`,
+    category: "notify", action: `notify.${opts.type.toLowerCase()}`, label: { k: "{n} aviso(s) {type} creados ({external} con envío externo)", p: { n: createdIds.length, type: opts.type, external: external.size } },
     userId: opts.actorId ?? undefined, projectId: opts.projectId,
     details: { taskId: opts.taskId, recipients: created.map((c) => c.userId), externalRecipients: [...external] },
   });
@@ -389,7 +389,7 @@ export async function notifyProjectsToTeam(projects: readonly { id: string }[], 
   const toDeliver = created.filter((c) => wanted.has(c.userId) && rateLimit(`notify:system:${c.userId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)).map((c) => c.id);
   for (const p of still) {
     logEvent({
-      category: "notify", action: "notify.project_to_team", message: `${admins.length} aviso(s) a administradores: un proyecto privado ha pasado a ser de equipo`,
+      category: "notify", action: "notify.project_to_team", label: { k: "{n} aviso(s) a administradores: un proyecto privado ha pasado a ser de equipo", p: { n: admins.length } },
       projectId: p.id, details: { recipients: admins.map((a) => a.id), externalRecipients: created.filter((c) => c.projectId === p.id && toDeliver.includes(c.id)).map((c) => c.userId) },
     });
   }
@@ -429,7 +429,7 @@ export async function notifyReportUnsubscribed(projectId: string, setterId: stri
   // Mismo tope por hora que los avisos del sistema, por destinatario.
   const external = wanted && rateLimit(`notify:system:${setter.id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000);
   logEvent({
-    category: "notify", action: "notify.report_unsubscribed", message: `Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja${external ? " (con envío externo)" : ""}`,
+    category: "notify", action: "notify.report_unsubscribed", label: { k: external ? "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja (con envío externo)" : "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja" },
     projectId, details: { recipients: [setter.id], externalRecipients: external ? [setter.id] : [] },
   });
   if (external) {

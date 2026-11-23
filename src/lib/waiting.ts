@@ -5,7 +5,7 @@ import { appTimeZone } from "./format";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "./db";
 import { getInstanceSettings } from "./instance";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { notifyTask } from "./notify";
 import { isShuttingDown, trackInFlight } from "./shutdown";
 
@@ -44,10 +44,10 @@ export async function deliverWaitingReminders(now: Date = new Date()): Promise<n
     sent += await remindBatch(rows, now, tz, failures);
     if (due.length < want) break;
   }
-  if (sent) logEvent({ category: "notify", action: "notify.waiting", message: `${sent} recordatorio(s) de tareas en espera enviados`, details: { count: sent } });
+  if (sent) logEvent({ category: "notify", action: "notify.waiting", label: { k: "{n} recordatorio(s) de tareas en espera enviados", p: { n: sent } }, details: { count: sent } });
   // Un solo error por pasada en el registro (además del console.error de cada fallo), para verlo en Administración → Logs.
   if (failures.count) {
-    logEvent({ level: "error", category: "notify", action: "notify.waitingFailed", message: `${failures.count} recordatorio(s) de tareas en espera no se pudieron enviar (se reintentan en la siguiente pasada): ${failures.lastError}`, details: { count: failures.count, lastError: failures.lastError } });
+    logEvent({ level: "error", category: "notify", action: "notify.waitingFailed", label: { k: "{n} recordatorio(s) de tareas en espera no se pudieron enviar (se reintentan en la siguiente pasada): {error}", p: { n: failures.count, error: logText(String(failures.lastError)) } }, details: { count: failures.count, lastError: failures.lastError } });
   }
   return sent;
 }

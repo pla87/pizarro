@@ -7,7 +7,7 @@ import { LOCK_TRANSFER_CLAIM } from "./advisory-locks";
 import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveDisk } from "./disk-space";
 import { AppError } from "./errors";
-import { logEvent } from "./log";
+import { logError, logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
 import { ArchiveError } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
@@ -276,7 +276,7 @@ export async function executeJob(job: JobRow): Promise<void> {
     logEvent({
       level: err instanceof AppError || err instanceof ZipReadError ? "warn" : "error", category: "api",
       action: job.kind === "EXPORT" ? "projects.exportFailed" : "projects.importFailed",
-      message: `Fallo en ${job.kind === "EXPORT" ? "la exportación" : "la importación"} de un proyecto: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: job.kind === "EXPORT" ? "Fallo en la exportación de un proyecto: {error}" : "Fallo en la importación de un proyecto: {error}", p: { error: logError(err) } },
       userId: job.userId, userName: user?.name ?? null, projectId: projectId ?? undefined, path: "background:transfer", durationMs: performance.now() - started, details: { jobId: job.id },
     });
   } finally {
@@ -397,7 +397,7 @@ async function runExport(job: JobRow, user: { id: string; role: "ADMIN" | "MEMBE
   const u = await db.user.findUnique({ where: { id: job.userId }, select: { name: true } });
   logEvent({
     category: "api", action: "projects.export",
-    message: `Proyecto «${project.name}» exportado (${built.manifest.counts.tasks} tareas, ${logSize(size)})`,
+    label: { k: "Proyecto «{name}» exportado ({tasks} tareas, {size})", p: { name: project.name, tasks: String(built.manifest.counts.tasks), size: logSize(size) } },
     userId: job.userId, userName: u?.name ?? null, projectId: project.id, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, options: built.manifest.options, counts: built.manifest.counts, bytes: size, missingFiles: built.missingFiles },
   });
@@ -422,7 +422,10 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
     : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id });
   logEvent({
     category: "api", action: "projects.import",
-    message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${logSize((opts.bytes ?? 0))})`,
+    label: {
+      k: "Proyecto «{name}» importado desde {source} ({tasks} tareas, {size})",
+      p: { name: summary.name, source: { k: summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo" }, tasks: summary.counts.tasks, size: logSize(opts.bytes ?? 0) },
+    },
     userId: user.id, userName: user.name, projectId: summary.projectId, path: "background:transfer", durationMs: performance.now() - started,
     details: { jobId: job.id, bytes: opts.bytes, isPrivate: !!opts.isPrivate, counts: summary.counts, unmappedUsers: summary.unmappedUsers.length, addedMembers: summary.addedMembers, warnings: summary.warnings.length },
   });
@@ -494,7 +497,10 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
     else await rm(String((job.options as { tempFile?: string }).tempFile ?? ""), { force: true }).catch(() => {});
     logEvent({
       level: "warn", category: "system", action: "projects.transferInterrupted",
-      message: `${job.kind === "EXPORT" ? "Exportación" : "Importación"} de un proyecto interrumpida por un reinicio (${requeue ? "se vuelve a poner en cola" : "marcada como fallida"})`,
+      label: {
+        k: job.kind === "EXPORT" ? "Exportación de un proyecto interrumpida por un reinicio ({what})" : "Importación de un proyecto interrumpida por un reinicio ({what})",
+        p: { what: { k: requeue ? "se vuelve a poner en cola" : "marcada como fallida" } },
+      },
       userId: job.userId, projectId: job.projectId ?? undefined, details: { jobId: job.id, attempts: job.attempts },
     });
   }
@@ -555,7 +561,7 @@ export async function purgeTransferJobs(now: Date = new Date()): Promise<number>
     // sin carpeta exports/: nada que limpiar
   }
   await db.projectTransferJob.deleteMany({ where: { status: { in: ["DONE", "FAILED", "EXPIRED"] }, finishedAt: { lt: new Date(now.getTime() - ROW_KEEP_MS) } } });
-  if (removed) logEvent({ category: "system", action: "projects.transferPurged", message: `Archivos de exportación caducados borrados: ${removed}`, details: { count: removed } });
+  if (removed) logEvent({ category: "system", action: "projects.transferPurged", label: { k: "Archivos de exportación caducados borrados: {n}", p: { n: removed } }, details: { count: removed } });
   return removed;
 }
 
