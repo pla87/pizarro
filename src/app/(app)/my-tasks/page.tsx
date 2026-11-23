@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, Folder, ListChecks } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
+import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
 import { localizeGeneralKind } from "@/lib/kinds-localize";
@@ -25,7 +26,8 @@ const MAX_TASKS = 500;
 const FILTERS: { value: TaskFilter; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "overdue", label: "Vencidas" },
-  { value: "week", label: "Hasta 7 días" },
+  // Incluye las vencidas y las de hoy: el nombre lo dice, para que su cuenta cuadre con los grupos que muestra.
+  { value: "week", label: "Vencidas y próximos 7 días" },
 ];
 
 export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
@@ -50,12 +52,21 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
       dueDate: true,
       project: { select: { id: true, name: true } },
       column: { select: { name: true, role: true, isDone: true } },
-      subtasks: { select: { done: true } },
     },
   });
   // Más de las que caben: se muestran las primeras y se avisa con el total (nunca se cortan en silencio).
   const rows = fetched.slice(0, MAX_TASKS);
-  const total = fetched.length > MAX_TASKS ? await db.task.count({ where }) : rows.length;
+  const ids = rows.map((r) => r.id);
+  // Solo los recuentos de subtareas (hechas/total), calculados en SQL: leer cada fila eran hasta 100 por tarea.
+  const [total, subtaskCounts] = await Promise.all([
+    fetched.length > MAX_TASKS ? db.task.count({ where }) : rows.length,
+    ids.length
+      ? db.$queryRaw<{ taskId: string; total: number; done: number }[]>(Prisma.sql`
+          SELECT "taskId", count(*)::int AS "total", (count(*) FILTER (WHERE "done"))::int AS "done" FROM "Subtask"
+          WHERE "taskId" = ANY(${ids}::text[]) GROUP BY "taskId"`)
+      : [],
+  ]);
+  const subtasksOf = new Map(subtaskCounts.map((c) => [c.taskId, c]));
 
   const today = todayIso(appTimeZone());
   // La consulta ya excluye las columnas «hechas»: cada tarea se agrupa por su fecha límite.
@@ -115,7 +126,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
             </h2>
             <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
               {group.tasks.map((task) => {
-                const done = task.subtasks.filter((s) => s.done).length;
+                const sub = subtasksOf.get(task.id);
                 const projectId = task.project.id;
                 // El borde rojo de la izquierda solo marca las vencidas; el color propio de la tarea (el de la franja de su
                 // tarjeta en el tablero) va en un punto junto al título, para no confundirse con él aunque sea rojo.
@@ -147,7 +158,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                         </span>
                       );
                     })()}
-                    {task.subtasks.length > 0 && <span className="text-xs text-slate-500">{done}/{task.subtasks.length}</span>}
+                    {sub && sub.total > 0 && <span className="text-xs text-slate-500">{sub.done}/{sub.total}</span>}
                     <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {task.column.name}
                     </span>

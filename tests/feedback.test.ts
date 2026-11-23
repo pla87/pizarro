@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import {
-  CAPTURE_ATTEMPTS, captureScale, FEEDBACK_BODY_MAX_BYTES, FEEDBACK_LIMITS, feedbackMail, feedbackStatus, SCREENSHOT_MAX_BYTES,
+  CAPTURE_ATTEMPTS, captureScale, FEEDBACK_BODY_MAX_BYTES, FEEDBACK_LIMITS, feedbackMail, feedbackMailtoFits, feedbackMailtoUrl, feedbackStatus, MAILTO_URL_MAX, SCREENSHOT_MAX_BYTES,
   SCREENSHOT_MAX_PIXELS, SCREENSHOT_MAX_SIDE, SCREENSHOT_MAX_WIDTH, SCREENSHOT_QUALITY, screenshotFileName, screenshotProblem,
   screenshotSizeOk, sniffScreenshot,
 } from "../src/lib/feedback-core";
@@ -26,16 +26,51 @@ test("botón: solo en builds oficiales; desactivado si hay una versión publicad
   assert.equal(feedbackStatus({ official: true, current: "1.65.0", latest: "1.64.0", address: true, mail: true })!.outdated, false);
   assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: true })!.outdated, false);
   assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: "basura", address: true, mail: true })!.outdated, false);
-  // Sin envío de emails o sin dirección del producto: el camino de GitHub, con su motivo (el diálogo no culpa al correo
-  // de la instalación cuando lo que falta es la dirección del producto, que hoy es lo que pasa en todas).
+  // Sin envío de emails: «Enviar por email» desde el programa de correo (y GitHub de alternativa). Sin dirección del
+  // producto (no pasa con FEEDBACK_EMAIL puesta, pero sigue cubierto): solo GitHub, sin culpar al correo de la instalación.
   assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: true, mail: false }), { outdated: false, latest: null, githubReason: "no_mail" });
   assert.deepEqual(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: true }), { outdated: false, latest: null, githubReason: "no_address" });
   assert.equal(feedbackStatus({ official: true, current: "1.64.0", latest: null, address: false, mail: false })!.githubReason, "no_address");
 });
 
-test("dirección del producto: vacía hasta que el autor la cree (como BUY_URL)", () => {
-  // Si se rellena, que sea una dirección de email y nada más.
-  assert.ok(FEEDBACK_EMAIL === "" || /^[^\s@<>]+@[^\s@<>]+\.[a-z]{2,}$/i.test(FEEDBACK_EMAIL), FEEDBACK_EMAIL);
+test("dirección del producto: una dirección de email del dominio del producto, nada más", () => {
+  assert.match(FEEDBACK_EMAIL, /^[a-z0-9._-]+@getpizarro\.com$/);
+});
+
+test("«Enviar por email» (la instalación no envía emails): mailto con el asunto, los datos técnicos y el texto", () => {
+  const fields = { version: "1.65.0", commit: "0123456789abcdef", install: "railway" as const, browser: "Firefox 140 · Windows", language: "es" };
+  const href = feedbackMailtoUrl("feedback@example.com", "bug", "  Al mover una tarjeta\r\nse queda gris & sin «título» +1  ", fields);
+  assert.ok(href.startsWith("mailto:feedback@example.com?subject="), href);
+  // Espacios como %20 (un «+» sería un «+») y saltos de línea como CRLF (RFC 6068).
+  assert.ok(!/\+/.test(href.split("?")[1]!.replace(/%2B/g, "")), href);
+  const params = new URLSearchParams(href.slice(href.indexOf("?") + 1).replace(/\+/g, "%2B"));
+  assert.equal(params.get("subject"), "[Pizarro] Error: Al mover una tarjeta se queda gris & sin «título» +1");
+  const body = params.get("body")!;
+  assert.ok(!/[^\r]\n/.test(body), "saltos de línea CRLF");
+  const lines = body.split("\r\n");
+  assert.deepEqual(lines.slice(0, 6), ["Tipo: Error", "Versión: 1.65.0", "Commit: 0123456789abcdef", "Instalación: Railway", "Navegador y sistema: Firefox 140 · Windows", "Idioma: es"]);
+  // Sin «Responder a» (el remitente ya es su email) ni «Captura» (la adjunta ella).
+  assert.ok(!body.includes("Responder a") && !body.includes("Captura"), body);
+  assert.ok(body.endsWith("Al mover una tarjeta\r\nse queda gris & sin «título» +1\r\n"), body);
+  assert.equal(feedbackMailtoFits("feedback@example.com", "bug", "corto", fields), true);
+  const idea = new URLSearchParams(feedbackMailtoUrl("feedback@example.com", "idea", "Vista por semanas", fields).split("?")[1]);
+  assert.equal(idea.get("subject"), "[Pizarro] Sugerencia: Vista por semanas");
+  // Un texto largo (con tildes, que ocupan más codificadas): recortado con «…» sin pasar del tope.
+  for (const long of ["Una sugerencia larga con tildes y eñes. ".repeat(120), "😀".repeat(2000), "a".repeat(5000)]) {
+    const url = feedbackMailtoUrl("feedback@example.com", "idea", long, fields);
+    assert.ok(url.length <= MAILTO_URL_MAX, `${url.length}`);
+    assert.ok(url.length > MAILTO_URL_MAX - 60, `aprovecha el sitio: ${url.length}`);
+    const text = new URLSearchParams(url.split("?")[1]).get("body")!.split("---\r\n\r\n")[1]!;
+    assert.ok(text.trimEnd().endsWith("…"), text.slice(-20));
+    assert.ok(long.startsWith(text.trimEnd().slice(0, -1)));
+    assert.ok(!/[\uD800-\uDBFF]…/.test(text), "sin partir un emoji");
+    assert.equal(feedbackMailtoFits("feedback@example.com", "idea", long, fields), false);
+  }
+  // Medio emoji suelto (copiado de una app que lo cortó): no rompe el enlace (antes, «URI malformed» al pintar el diálogo).
+  const broken = feedbackMailtoUrl("feedback@example.com", "bug", "hola \uD83D x \uDE00 y 😀", fields);
+  const brokenBody = new URLSearchParams(broken.split("?")[1]).get("body")!;
+  assert.ok(brokenBody.endsWith("hola � x � y 😀\r\n"), brokenBody.slice(-30));
+  assert.equal(feedbackMailtoFits("feedback@example.com", "bug", "\uD83D", fields), true);
 });
 
 test("captura: nítida, pero sin pasar de 1600 px de ancho", () => {
@@ -102,6 +137,8 @@ test("email: tipo y comienzo del texto en el asunto, datos técnicos, respuesta 
   assert.match(idea.text, /^Responder a: persona@example\.com$/m);
   assert.match(idea.text, /^Captura: no$/m);
   assert.ok(!idea.subject.includes("\n"));
+  // El asunto se recorta por caracteres: sin medio emoji suelto.
+  assert.equal(feedbackMail({ kind: "idea", text: "😀".repeat(100), fields, replyTo: null, screenshotBytes: null }).subject, `[Pizarro] Sugerencia: ${"😀".repeat(69)}…`);
 });
 
 test("límites: 5 al día por persona y 20 por instalación; un rechazo no gasta y se devuelve lo que no sale", () => {
@@ -162,5 +199,10 @@ test("captura: los secretos a la vista llevan data-pz-no-capture (la captura los
   marked("app/(app)/p/[projectId]/settings/ProjectSettings.tsx", 'data-testid="member-link"');
   marked("app/setup/SetupWizard.tsx", 'id="setup-code"');
   marked("components/calendar/CalendarSubscribe.tsx", "value={links.https}");
+  marked("app/(app)/settings/MessagingSection.tsx", 'data-testid="telegram-link"');
+  marked("app/(app)/settings/MessagingSection.tsx", 'id="wa-code"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'id="enroll-code"');
+  marked("components/auth/TwoFactorEnroll.tsx", 'id="enroll-email-code"');
+  marked("components/ui/PasswordInput.tsx", "{...props}");
   assert.match(readFileSync(path.join(src, "components/feedback/capture.ts"), "utf8"), /hasAttribute\("data-pz-no-capture"\)/);
 });

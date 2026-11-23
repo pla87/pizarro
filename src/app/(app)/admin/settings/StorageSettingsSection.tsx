@@ -9,7 +9,7 @@ import { EditConflictNotice } from "@/components/ui/EditConflictNotice";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { useToast } from "@/components/ui/Toast";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { formatQuotaMb, formatSize } from "@/lib/format-size";
+import { formatPercent, formatQuotaMb, formatSize } from "@/lib/format-size";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB, quotaMbValid } from "@/lib/quota";
 import { isEditConflict } from "@/lib/edit-conflict-core";
 import { actionThrowResult } from "@/lib/stale-action";
@@ -78,7 +78,8 @@ export function StorageSettingsSection({ view, version: initialVersion }: { view
           <>
             <p>
               <span className="text-slate-500">{t("Disco:")}</span> {t("{used} usados de {total} · {free} libres", { used: fmt(view.disk.total - view.disk.free), total: fmt(view.disk.total), free: fmt(view.disk.free) })}
-              {usedPct !== null && <span className="ml-1 text-xs text-slate-500">({usedPct} %)</span>}
+              {/* «(0 % usado)»: solo «(0 %)» detrás de «libres» parecía el espacio libre. */}
+              {usedPct !== null && <span className="text-xs text-slate-500">{" "}{t("({pct} usado)", { pct: formatPercent(usedPct, locale) })}</span>}
             </p>
             <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" role="progressbar" aria-label={t("Disco usado")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={usedPct ?? 0}>
               <div className={cn("h-full rounded-full", (usedPct ?? 0) >= 90 ? "bg-red-500" : (usedPct ?? 0) >= 75 ? "bg-amber-500" : "bg-brand-600")} style={{ width: `${usedPct}%` }} />

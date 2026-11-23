@@ -7,6 +7,7 @@ import { db } from "./db";
 import { AppError, forbidden } from "./errors";
 import { sessionSecret } from "./keyring";
 import { logEvent } from "./log";
+import { pageViewDue } from "./page-view";
 import { revokeSession } from "./revoke";
 import { requestContext } from "./request-context";
 import { clientIp } from "./request";
@@ -186,22 +187,16 @@ export async function requireUserPage(): Promise<CurrentUser> {
 }
 
 /** Registra la visita de página una sola vez por petición (layout y página llaman a requireUserPage). */
-// Los refrescos automáticos del tablero (cada 2 min, en cada pestaña) repiten la misma visita: una por persona y página
-// cada 15 minutos basta.
-const PAGE_VIEW_DEDUP_MS = 15 * 60_000;
+// Una por persona y página cada 15 minutos (pageViewDue, con tope de memoria).
 const recentViews = (globalThis as unknown as { __pzViews?: Map<string, number> }).__pzViews ??= new Map();
 
 const logPageView = cache(async (user: CurrentUser): Promise<void> => {
   try {
     const { ip, path } = await requestContext();
     if (!path) return;
-    const key = `${user.id} ${path}`;
-    const now = Date.now();
-    if (now - (recentViews.get(key) ?? 0) < PAGE_VIEW_DEDUP_MS) return;
-    recentViews.set(key, now);
-    if (recentViews.size > 5000) for (const [k, at] of recentViews) if (now - at > PAGE_VIEW_DEDUP_MS) recentViews.delete(k);
+    if (!pageViewDue(recentViews, user.id, path, Date.now())) return;
     const projectId = /^\/p\/([a-z0-9]+)/i.exec(path)?.[1] ?? null;
-    logEvent({ category: "page", action: "page.view", message: `Visita a ${path}`, userId: user.id, userName: user.name, projectId, path, ip });
+    logEvent({ category: "page", action: "page.view", label: { k: "Visita a {path}", p: { path } }, userId: user.id, userName: user.name, projectId, path, ip });
   } catch {
     // El registro nunca debe romper la página.
   }

@@ -167,6 +167,20 @@ const STATUS_BAR: Record<DeliverableStatus, string> = {
 /** Iniciales del proyecto: las dos primeras palabras con letras o números, sin puntuación («Trello «raro» 🎉» → «TR»). */
 const initials = (name: string) => initialsOf(name, "firstTwo");
 
+/**
+ * Siglas del proyecto en una tarjeta del calendario (con varios proyectos a la vista). Al pasar el ratón por ellas sale
+ * el nombre del proyecto (`title`, antes solo lo tenían algunas vistas), y el lector de pantalla lee el nombre, no las
+ * siglas (texto oculto: un `aria-label` en un <span> sin rol no siempre se lee).
+ */
+function ProjectTag({ name }: { name: string }) {
+  return (
+    <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={name}>
+      <span aria-hidden>{initials(name)}</span>
+      <span className="sr-only">{name}</span>
+    </span>
+  );
+}
+
 /** Casilla de las opciones del filtro de proyectos. */
 function CheckBox({ on }: { on: boolean }) {
   return (
@@ -674,7 +688,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       )}
       data-overdue={isOverdue(task, today) || undefined}
     >
-      {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
+      {showProject && <ProjectTag name={task.projectName} />}
       <span dir="auto" className="truncate">{task.title}</span>
       {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
     </Link>
@@ -700,7 +714,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
         )}
       >
         <Repeat size={size === "sm" ? 11 : 13} className="shrink-0" aria-hidden />
-        {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={r.projectName}>{initials(r.projectName)}</span>}
+        {showProject && <ProjectTag name={r.projectName} />}
         <span dir="auto" className="min-w-0 flex-1 truncate">{r.title}</span>
         <span className="sr-only">{` (${t("Repetición prevista")}: ${rule})`}</span>
       </Link>
@@ -927,7 +941,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                             task.done && "opacity-55 line-through",
                           )}
                         >
-                          {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" aria-label={task.projectName}>{initials(task.projectName)}</span>}
+                          {showProject && <ProjectTag name={task.projectName} />}
                           <span dir="auto" className="truncate">{task.title}</span>
                           {!b.continuesLeft && <span onPointerDown={(e) => startBandDrag(e, "task", b.id, "start", { start: task.start!, due: task.due })} className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" aria-hidden />}
                           {b.endsHere && <span onPointerDown={(e) => startBandDrag(e, "task", b.id, "end", { start: task.start!, due: task.due })} className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" aria-hidden />}
@@ -1087,7 +1101,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           <span dir="auto" className="min-w-0 flex-1 truncate">{task.title}</span>
                           {isOverdue(task, today) && <span className="sr-only">{` (${t("Plazo vencido")})`}</span>}
                           {isRange(task.start, task.due) && <span className="shrink-0 text-xs tabular-nums opacity-80">{shortDay(task.start!)} → {shortDay(task.due)}</span>}
-                          {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
+                          {showProject && <ProjectTag name={task.projectName} />}
                         </Link>
                       </li>
                     ))}
@@ -1130,7 +1144,7 @@ function OverdueList({ overdue, today, showProject, jumpToToday }: { overdue: { 
                 className={cn("kind-badge flex min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-sm", OVERDUE_MARK)}
               >
                 <span dir="auto" className="min-w-0 flex-1 truncate">{task.title}</span>
-                {showProject && <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={task.projectName} aria-label={task.projectName}>{initials(task.projectName)}</span>}
+                {showProject && <ProjectTag name={task.projectName} />}
                 <span className="shrink-0 text-xs font-semibold tabular-nums">
                   <span className="sr-only">{`${t("Plazo vencido")}: `}</span>
                   {formatDay(task.due, today, locale)}

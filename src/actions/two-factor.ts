@@ -55,7 +55,7 @@ export async function verifyLoginCode(_prev: VerifyState, formData: FormData): P
     redirect("/login?error=twofactor_locked");
   }
   if (result === "wrong") {
-    logEvent({ level: "warn", category: "auth", action: "auth.secondStepFailed", message: `${ch.user.name}: código de verificación incorrecto`, userId: ch.userId, userName: ch.user.name, path: "/login/verify", ip });
+    logEvent({ level: "warn", category: "auth", action: "auth.secondStepFailed", label: { k: "{name}: código de verificación incorrecto", p: { name: ch.user.name } }, userId: ch.userId, userName: ch.user.name, path: "/login/verify", ip });
     return { error: t("Código incorrecto o caducado.") };
   }
   await dropChallenge(ch.id);
@@ -115,7 +115,7 @@ export async function confirmSetup(code: string, emailCode?: string) {
     }
     const codes = await commitEnrollment(ch.userId, ch.method, ch.pendingSecretEnc);
     await db.loginChallenge.update({ where: { id: ch.id }, data: { confirmed: true, pendingSecretEnc: null } });
-    logEvent({ category: "auth", action: "auth.twoFactorEnabled", message: `${ch.user.name} ha activado la verificación en dos pasos (${ch.method})`, userId: ch.userId, userName: ch.user.name, details: { method: ch.method } });
+    logEvent({ category: "auth", action: "auth.twoFactorEnabled", label: { k: "{name} ha activado la verificación en dos pasos ({method})", p: { name: ch.user.name, method: ch.method } }, userId: ch.userId, userName: ch.user.name, details: { method: ch.method } });
     if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos", () => sendTwoFactorChangedMail(ch.user, "enabled"));
     return { codes };
   });
@@ -185,7 +185,7 @@ export async function confirmEnrollment(code: string) {
     if (result === "locked") throw new AppError("Demasiados intentos. Empieza de nuevo.");
     if (result === "wrong") throw new AppError("Código incorrecto o caducado.");
     const codes = await commitEnrollment(user.id, ch.method, ch.pendingSecretEnc);
-    logEvent({ category: "auth", action: "auth.twoFactorEnabled", message: `${user.name} ha activado la verificación en dos pasos (${ch.method})`, userId: user.id, userName: user.name, details: { method: ch.method } });
+    logEvent({ category: "auth", action: "auth.twoFactorEnabled", label: { k: "{name} ha activado la verificación en dos pasos ({method})", p: { name: user.name, method: ch.method } }, userId: user.id, userName: user.name, details: { method: ch.method } });
     if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos", () => sendTwoFactorChangedMail(ch.user, "enabled"));
     return { codes };
   });
@@ -198,7 +198,7 @@ export async function disableTwoFactor(password: string) {
     if (user.role === "ADMIN") throw new AppError("La verificación en dos pasos es obligatoria para administradores. Puedes cambiar de método.");
     await requirePassword(user.id, password);
     await clearTwoFactor(user.id);
-    logEvent({ category: "auth", action: "auth.twoFactorDisabled", message: `${user.name} ha desactivado la verificación en dos pasos`, userId: user.id, userName: user.name });
+    logEvent({ category: "auth", action: "auth.twoFactorDisabled", label: { k: "{name} ha desactivado la verificación en dos pasos", p: { name: user.name } }, userId: user.id, userName: user.name });
     if (emailEnabled()) {
       const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { name: true, email: true, locale: true } });
       sendMailInBackground("aviso de verificación en dos pasos", () => sendTwoFactorChangedMail(me, "disabled"));

@@ -63,9 +63,11 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const keys = loginRateKeys(ip, email);
   // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
   const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
+  // En la plantilla del mensaje, el aviso de «no es un email» se traduce; el email, tal cual.
+  const emailParam = shownEmail === email ? email : { k: shownEmail };
   if (!rateLimit(keys.ip, 60, 15 * 60_000) || !(await reserveAccountAttempt(keys.account, email))) {
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión bloqueado por demasiados intentos (${shownEmail})`,
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión bloqueado por demasiados intentos ({email})", p: { email: emailParam } },
       path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
     });
     return { error: t("Demasiados intentos. Espera unos minutos.") };
@@ -78,7 +80,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!passwordLoginAllowed("ADMIN", policy)) {
     // Nadie entra con contraseña: la misma respuesta para todos, sin buscar siquiera la cuenta (tampoco delata si existe).
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión con contraseña rechazado (${shownEmail}): solo se admite Google`,
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión con contraseña rechazado ({email}): solo se admite Google", p: { email: emailParam } },
       path: "/login", ip, details: { email: shownEmail, reason: "google_only" },
     });
     return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
@@ -102,7 +104,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     const reason = !user ? "unknown_email" : googleOnlyRole ? "google_only" : !valid ? "wrong_password" : "inactive";
     const why = { unknown_email: "email desconocido", google_only: "solo se admite Google", wrong_password: "contraseña incorrecta", inactive: "usuario desactivado" }[reason];
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", message: `Inicio de sesión fallido (${shownEmail}): ${why}`,
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión fallido ({email}): {why}", p: { email: emailParam, why: { k: why } } },
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
     });
     return {
@@ -120,7 +122,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (step) {
     const challenge = await startChallenge(user.id, step === "VERIFY" ? "LOGIN" : "SETUP", { next });
     if (step === "VERIFY" && user.twoFactorMethod === "EMAIL") await sendEmailCode(challenge, user).catch(() => {});
-    logEvent({ category: "auth", action: "auth.secondStepRequested", message: `${user.name}: contraseña correcta, falta la verificación en dos pasos`, userId: user.id, userName: user.name, path: "/login", ip });
+    logEvent({ category: "auth", action: "auth.secondStepRequested", label: { k: "{name}: contraseña correcta, falta la verificación en dos pasos", p: { name: user.name } }, userId: user.id, userName: user.name, path: "/login", ip });
     redirect("/login/verify");
   }
   await completeLogin(user, { method: "password", path: "/login" });
@@ -130,7 +132,7 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
 export async function logout(): Promise<void> {
   const [user, ctx] = await Promise.all([getCurrentUser().catch(() => null), requestContext()]);
-  if (user) logEvent({ category: "auth", action: "auth.logout", message: `${user.name} ha cerrado sesión`, userId: user.id, userName: user.name, path: ctx.path, ip: ctx.ip });
+  if (user) logEvent({ category: "auth", action: "auth.logout", label: { k: "{name} ha cerrado sesión", p: { name: user.name } }, userId: user.id, userName: user.name, path: ctx.path, ip: ctx.ip });
   await destroySession();
   redirect("/login");
 }
@@ -215,7 +217,7 @@ export async function confirmAccountChange(token: string) {
   });
 }
 
-/** Pantalla «Elige una contraseña nueva» tras un cambio forzado o un alta con clave inicial. */
+/** Pantalla «Elige una contraseña nueva» tras un cambio forzado o al entrar con Google sin haber usado aún la invitación. */
 export async function setNewPassword(password: string) {
   return runAction({ name: "auth.setNewPassword", args: [] }, async () => {
     const user = await requirePendingUser();

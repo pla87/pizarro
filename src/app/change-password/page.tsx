@@ -11,7 +11,8 @@ export async function generateMetadata() {
   return { title: t("Elige una contraseña nueva") };
 }
 
-// Pantalla obligatoria tras un cambio forzado o un alta con clave inicial: hasta elegirla no se abre nada más.
+// Pantalla obligatoria tras un cambio forzado o al entrar con Google sin haber usado aún la invitación: hasta elegirla no se
+// abre nada más.
 export default async function ChangePasswordPage() {
   const user = await getPendingUser();
   if (!user) redirect((await getCurrentUser()) ? "/" : "/login");

@@ -2,20 +2,23 @@
 
 > **¿Buscas la guía paso a paso?** Está en la web, más sencilla y en español e inglés: <https://getpizarro.com/instalar/> (English: <https://getpizarro.com/en/install/>). Este documento es la referencia técnica completa.
 
-Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio y no cambia nada del despliegue en Railway.
+Esta guía instala Pizarro en un servidor propio (un VPS, un miniordenador en la oficina…) con **Docker Compose**: tres contenedores, **Caddy** (HTTPS automático), **Pizarro** y **PostgreSQL 16**. Todo vive en la carpeta `deploy/` del repositorio. Sin servidor propio, Pizarro también se instala en tres plataformas en la nube: **Railway**, **Render** y **Fly.io** (secciones de abajo).
 
 > Pizarro está pensado para **un solo proceso** (una réplica). Las tareas de fondo se turnan con un bloqueo en la base de datos, así que un reinicio o una herramienta de consola contra la misma base no duplican nada, pero no lo escales a varias réplicas (el canal en vivo, los límites de intentos y los vales de descarga viven en la memoria de cada proceso). No uses un *pooler* en modo transacción (PgBouncer en modo `transaction`): los bloqueos de las tareas de fondo necesitan una conexión de sesión.
 
 ## Instalación en un paso
 
-Dos caminos. Elige uno; los dos acaban en el mismo asistente `/setup`.
+Dos caminos: un servidor propio o una plataforma en la nube. Todos acaban en el mismo asistente `/setup`.
 
-| | Railway (nube) | Servidor propio (un comando) |
-|---|---|---|
-| Para quién | Sin servidor ni Linux a mano | Tienes un VPS o un equipo Linux |
-| Tiempo | 5–10 minutos | Unos minutos (descarga la imagen ya construida; solo con `--build` se compila en el servidor) |
-| Necesitas | Cuenta de Railway | Linux x86_64 o arm64, 1 GB de RAM (2 GB solo si construyes con `--build`), puertos 80/443 y un dominio con DNS ya apuntando al servidor (o red local sin dominio) |
-| Obtienes | Pizarro + PostgreSQL + volumen de adjuntos, con HTTPS | Pizarro + PostgreSQL 16 + Caddy (HTTPS automático) en Docker Compose |
+| | Servidor propio (un comando) | Railway | Render | Fly.io |
+|---|---|---|---|---|
+| Para quién | Tienes un VPS o un equipo Linux | Sin servidor ni Linux a mano; todo desde el panel web | Sin servidor; un botón crea todo desde `render.yaml` | Sin servidor; con su programa de terminal (`flyctl`) |
+| Tiempo | Unos minutos (descarga la imagen ya construida; solo con `--build` se compila en el servidor) | 10–15 minutos | Unos 10 minutos | Unos 15 minutos |
+| Necesitas | Linux x86_64 o arm64, 1 GB de RAM (2 GB solo si construyes con `--build`), puertos 80/443 y un dominio con DNS ya apuntando al servidor (o red local sin dominio) | Cuenta de Railway (y de GitHub) | Cuenta de Render con tarjeta (planes de pago) | Cuenta de Fly.io con tarjeta y `flyctl` |
+| Coste | El de tu servidor | Por uso, cada mes | Fijo por plan: servicio, disco y base de datos (el plan gratis solo sirve para probar) | Por uso: máquina, volumen y base de datos (sin plan gratis para cuentas nuevas) |
+| Obtienes | Pizarro + PostgreSQL 16 + Caddy (HTTPS automático) en Docker Compose | Pizarro + PostgreSQL + volumen de adjuntos, con HTTPS | Pizarro (imagen oficial) + PostgreSQL 16 + disco de adjuntos, con HTTPS | Pizarro (imagen oficial) + PostgreSQL gestionado + volumen de adjuntos, con HTTPS |
+
+Las tres plataformas necesitan lo mismo que un servidor propio: **PostgreSQL 16** (sin *pooler* en modo transacción), un **disco persistente** montado en `UPLOAD_DIR` (`/app/uploads`) para los adjuntos y las copias locales, y **un proceso siempre encendido** (una sola instancia, sin apagarse por inactividad: el canal en vivo y las tareas de fondo viven en él). Los precios cambian: consulta los actuales en la web de cada una antes de elegir.
 
 ### Servidor propio con un comando
 
@@ -45,7 +48,7 @@ Cada versión de Pizarro se publica como una **imagen Docker ya construida** en 
 - **Es exactamente lo que se probó:** todos los servidores ejecutan el mismo paquete, construido una sola vez con las comprobaciones pasadas, y no una compilación distinta en cada máquina.
 - **Volver atrás es rápido:** las versiones anteriores siguen publicadas; volver a una es cambiar el número de versión (sección 5), sin recompilar. Ojo: las migraciones de la base de datos solo avanzan, así que si la versión nueva ya migró los datos, volver atrás puede exigir restaurar antes una copia de seguridad.
 
-La imagen funciona en servidores normales (amd64) y en arm64 (p. ej. Raspberry Pi 5). Pizarro en Railway no la usa (ver sección 5).
+La imagen funciona en servidores normales (amd64) y en arm64 (p. ej. Raspberry Pi 5). Render y Fly.io la usan; Railway no: construye desde el repositorio (ver sección 5).
 
 > **Para quien publica el repositorio (mantenedor):** tras la primera release, el paquete `ghcr.io/pla87/pizarro` nace **privado** en GitHub. Hay que hacerlo público una vez (en GitHub: perfil u organización → *Packages* → `pizarro` → *Package settings* → *Change visibility* → *Public*); mientras no lo sea, ninguna instalación puede descargar la imagen (`docker compose pull` falla con «unauthorized» o «denied»).
 
@@ -63,14 +66,14 @@ docker compose up -d --build                                  # las veces siguie
 
 ### Railway
 
-El repositorio ya trae `railway.json` (builder Dockerfile, comando de arranque, healthcheck en `/api/health`, una réplica). Hay dos formas:
+Railway se configura en su panel, sin fichero de configuración en el repositorio. Pizarro traía un `railway.json`, pero Railway ha retirado ese formato («Config as Code»): los servicios nuevos ya no lo aceptan, deja de leerse en todos el 1 de diciembre de 2026, y lo que lo sustituye se aplica con la CLI de Railway, no al desplegar, así que no le sirve a quien instala desde una plantilla o un fork. Por eso se quitó del repositorio. Lo que hacía se cubre así: Railway construye con el `Dockerfile`, cuyo `CMD` ya arranca con `sh scripts/start.sh` (no hace falta *Custom Start Command*); una réplica y el reinicio en fallo son lo que Railway pone por defecto; y **el healthcheck hay que ponerlo a mano** (paso 5). Hay dos formas:
 
 **A. Con la plantilla publicada** (cuando exista el enlace «Deploy on Railway» de la plantilla de Pizarro): pulsa el botón, acepta las variables propuestas, espera al despliegue y sigue en «Primeros pasos». Los secretos se generan solos.
 
 **B. A mano** (paso a paso, con un botón que genera las claves en el navegador: <https://getpizarro.com/instalar/#railway>; más detalle en el README, «Guía de despliegue en Railway»). Railway no despliega cada cambio: los junta en el aviso «Apply N changes» (arriba a la izquierda) con un botón **Deploy**. Prepáralo todo y pulsa **Deploy** una sola vez, al final; si llega a desplegar antes de tener las variables o el volumen, manda un email «Build failed», que no importa.
 
 1. <https://railway.com/new> → **Database → PostgreSQL** (servicio `Postgres`). El nombre del proyecto se cambia en *Settings → General*.
-2. **+ Add → GitHub Repository**: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` y el `railway.json`. En *Settings → Source → **Branch connected to production*** elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar): solo avanza al publicarse una versión, así que Railway no redespliega con cada commit de `main` (detalle y cómo cambiar una instalación que ya usa `main`: README, «Guía de despliegue en Railway», paso 2). Con un fork, `stable` no se actualiza sola: tienes que sincronizarla tú desde el original (y la app no ofrecerá *Informar de un error*, porque no puede saber si el código está modificado).
+2. **+ Add → GitHub Repository**: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` (y su `CMD` para arrancar). En *Settings → Source → **Branch connected to production*** elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar): solo avanza al publicarse una versión, así que Railway no redespliega con cada commit de `main` (detalle y cómo cambiar una instalación que ya usa `main`: README, «Guía de despliegue en Railway», paso 2). Con un fork, `stable` no se actualiza sola: tienes que sincronizarla tú desde el original (y la app no ofrecerá *Informar de un error*, porque no puede saber si el código está modificado).
 3. *Settings → Networking → **Generate Domain*** y volumen: clic derecho en el servicio → *Attach volume* → *Mount path* `/app/uploads`. Sin volumen, los adjuntos y las copias locales se pierden en cada despliegue. El dominio no responde hasta el primer despliegue.
 4. Variables del servicio de la app (*Variables → Raw Editor*):
 
@@ -85,7 +88,18 @@ El repositorio ya trae `railway.json` (builder Dockerfile, comando de arranque, 
    | `APP_URL` | `https://<tu-dominio>` | **Solo con dominio propio.** Sin ella, Pizarro usa `https://` + `RAILWAY_PUBLIC_DOMAIN` (el dominio de *Generate Domain*, que Railway pone en el entorno) |
 
    No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso. `PORT` lo inyecta Railway.
-5. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques (Pizarro es de una sola instancia, ver arriba); la región da igual mientras `Postgres` esté en la misma. El healthcheck es `/api/health` (ya en `railway.json`, con margen de 120 s). El primer arranque aplica las migraciones y tarda 2–3 minutos más aunque Railway ya marque *Active*: en *Deployments → View logs*, al final, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`). Las líneas en rojo del principio del log son normales.
+5. **Ajustes de despliegue** (servicio de Pizarro → *Settings → Deploy*), antes de desplegar:
+   - **Healthcheck Path:** `/api/health`. Así Railway no da el despliegue por bueno hasta que Pizarro responde, y si falla (una migración, por ejemplo) mantiene el anterior.
+   - **Healthcheck Timeout:** `600` (10 minutos: el primer arranque aplica las migraciones). Si el panel no muestra ese campo, añade la variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`.
+   - **Restart Policy:** *On Failure* (lo que pone Railway por defecto).
+   - **Réplicas:** **1** (también lo que pone por defecto; en *Settings → Deploy*, junto a la región). Pizarro es de una sola instancia (ver arriba).
+
+   No rellenes *Custom Start Command*: lo da el `Dockerfile`.
+6. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques; la región da igual mientras `Postgres` esté en la misma.
+
+   **Cómo comprobar que el healthcheck está activo:** en *Deployments*, abre el despliegue y mira el log de construcción (*Build Logs*): al final, después de construir la imagen, sale el bloque `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s`; durante el primer arranque verás algunas líneas `Attempt #N failed with service unavailable` (normales mientras se aplican las migraciones) y al final `Healthcheck succeeded!`. Si ese bloque no sale, el servicio no tiene healthcheck: vuelve al paso 5. El panel puede tardar en mostrar los valores; lo que cuenta es el log.
+
+   El primer arranque aplica las migraciones y tarda 2–3 minutos más aunque Railway ya marque *Active*: en *Deployments → View logs*, al final, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`). Las líneas en rojo del principio del log son normales.
 
 Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera de Railway (gestor de contraseñas): sin `BACKUP_KEY` las copias no se pueden leer y sin `ENCRYPTION_KEY` todos pierden la verificación en dos pasos.
 
@@ -107,15 +121,92 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
    ```
 
    `secret(longitud)` y `secret(longitud, "alfabeto")` son las funciones de plantilla de Railway; `BACKUP_KEY` en hexadecimal (64 caracteres = 32 bytes) también vale para la app. La plantilla no necesita `APP_URL`: activa *Generate Domain* y Pizarro usa la dirección que Railway pone en `RAILWAY_PUBLIC_DOMAIN`. **Esta sintaxis está escrita de memoria: verifícala en la documentación de plantillas de Railway y haz un despliegue de prueba antes de publicar.**
-4. En el servicio de Pizarro configura el volumen (`/app/uploads`) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
+4. En el servicio de Pizarro configura el volumen (`/app/uploads`), los ajustes de despliegue del paso 5 (*Settings → Deploy*: healthcheck `/api/health` con 600 s, *On Failure*, una réplica; la plantilla copia lo que tenga el servicio) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
 5. En el servicio de Pizarro, la fuente debe ser el repositorio oficial con la rama **`stable`** (*Settings → Source → Branch* en el proyecto de origen antes de generar la plantilla). Comprueba en el despliegue de prueba (punto 7) que el servicio creado sigue `stable` y no `main`; si la plantilla no conserva la rama, indícalo en su descripción («tras desplegar: Settings → Source → Branch → stable»).
 6. Pulsa *Create template* y copia el enlace. Pon el botón «Deploy on Railway» en el README apuntando a ese enlace.
-7. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log, que `APP_URL` es correcta y que la rama es `stable`.
+7. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log, que `APP_URL` es correcta, que la rama es `stable` y que el log del despliegue trae `Starting Healthcheck` con `Path: /api/health`.
+
+### Render
+
+[Render](https://render.com) despliega la **imagen oficial** (`ghcr.io/pla87/pizarro`) con un disco para los adjuntos y una base de datos PostgreSQL 16 gestionada. El repositorio trae su *Blueprint*, `render.yaml`, que crea todo de una vez y genera las claves.
+
+**Coste.** El plan gratis de Render **solo sirve para probar**: el servicio se duerme a los 15 minutos sin visitas (y con él el canal en vivo, los avisos y las copias diarias), no admite disco (los adjuntos se perderían en cada despliegue) y la base de datos gratis caduca a los 30 días. Por eso `render.yaml` usa planes de pago: el servicio web *Starter* con un disco de 5 GB y la base *Basic-256mb* con 5 GB. Se paga cada cosa por separado; consulta el precio actual en <https://render.com/pricing> antes de empezar. *Starter* tiene 512 MB de memoria, por debajo del mínimo general de 1 GB (sección «Requisitos»): bastan para un equipo pequeño porque Node ajusta su memoria al límite del servicio y el Blueprint pone techo al generador de PDF (`PDF_WORKER_MAX_MB=128`: un PDF demasiado grande falla solo, sin tumbar la app). No añadas `NODE_OPTIONS=--max-old-space-size`: anularía ese techo. Para un equipo más grande, o si en *Events* ves reinicios por falta de memoria, sube el servicio a *Standard*, de 2 GB (*Settings → Instance Type*), y en *Environment* quita `PDF_WORKER_MAX_MB`.
+
+1. **Cuenta.** Crea una cuenta en <https://dashboard.render.com> y añade un método de pago (en los ajustes del *workspace*, *Billing*): sin él, Render no crea recursos de pago.
+2. **Botón «Deploy to Render».** Abre <https://render.com/deploy?repo=https://github.com/pla87/pizarro>. Render lee `render.yaml` y lista lo que va a crear: el servicio web `pizarro` (imagen `ghcr.io/pla87/pizarro:latest`, disco `pizarro-uploads` en `/app/uploads`, comprobación de salud en `/api/health`) y la base de datos `pizarro-db` (PostgreSQL 16), los dos en Frankfurt. Ponle un nombre al Blueprint y confirma (*Deploy Blueprint*). Con un fork, lo mismo desde *New → Blueprint*, eligiendo tu repositorio; para otra región, cambia `region` en los dos recursos de tu `render.yaml`.
+   - Variables que crea: `DATABASE_URL` (la dirección interna de `pizarro-db`), `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` (aleatorias, de 256 bits en base64, que valen para Pizarro), `UPLOAD_DIR=/app/uploads` y, para los 512 MB de *Starter*, `PDF_WORKER_MAX_MB=128`. No hace falta `APP_URL`: sin ella, Pizarro usa la dirección de Render (`RENDER_EXTERNAL_URL`, `https://<servicio>.onrender.com`). `PORT` lo pone Render.
+   - **Sin el botón** (a mano, en el panel): *New → Postgres* (versión 16, en la región que vayas a usar) y *New → Web Service → Existing Image* con `ghcr.io/pla87/pizarro:latest`, en la misma región; en *Environment*, las variables de arriba (`DATABASE_URL` = la *Internal Database URL* de la base; las claves, generadas con `openssl rand -base64 48`, y `openssl rand -base64 32` para `BACKUP_KEY`); en *Advanced*, **Health Check Path** `/api/health` y un disco (*Add Disk*) con *Mount Path* `/app/uploads`.
+3. **Espera al primer arranque.** Render descarga la imagen y arranca Pizarro, que aplica las migraciones (2–3 minutos la primera vez). En el servicio, pestaña *Logs*, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`).
+4. **Guarda las claves** fuera de Render (gestor de contraseñas): en *Environment* del servicio puedes ver y copiar `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY`. Sin `BACKUP_KEY` las copias no se pueden leer y sin `ENCRYPTION_KEY` todos pierden la verificación en dos pasos.
+5. Abre `https://<servicio>.onrender.com/setup` y sigue «Primeros pasos».
+
+**Comprobación de salud.** En *Settings → Health Checks* debe salir **Health Check Path** `/api/health` (lo pone el Blueprint). Render no da un despliegue por bueno hasta que esa ruta responde 200; si no llega a responder, lo marca como fallido en *Events*. Con disco, Render para la versión anterior antes de arrancar la nueva: cada despliegue tiene unos segundos sin servicio.
+
+**Una sola instancia.** Con disco, Render no deja escalar a más de una, que es lo que Pizarro necesita.
+
+**Dominio propio.** *Settings → Custom Domains → Add Custom Domain*, escribe `pizarro.example.com` y crea en tu proveedor de DNS el registro que te indica Render (para un subdominio, un `CNAME` hacia `<servicio>.onrender.com`). Render emite el certificado solo. Cuando aparezca como verificado, añade en *Environment* `APP_URL=https://pizarro.example.com` (con `https://`, sin barra final) y guarda con redespliegue. Lo demás (Google, sesiones, PWA) como en «Dominio propio en Railway» (sección 3.7).
+
+**Actualizar.** Render no vuelve a descargar la imagen por su cuenta. Cuando salga una versión, haz antes una copia (*Administración → Copias de seguridad → Crear copia ahora*) y en el servicio pulsa *Manual Deploy → Deploy latest reference*: descarga la `latest` del momento y aplica las migraciones al arrancar. Para quedarte en una versión, pon su número en *Settings → Image* (`ghcr.io/pla87/pizarro:1.65.0`) y cámbialo cuando quieras actualizar.
+
+**Copias de seguridad.** Con `BACKUP_KEY` (ya la pone el Blueprint) Pizarro hace sus copias diarias cifradas en el disco. Añade un destino externo (sección 4.1): las variables `BACKUP_S3_*` en *Environment* del servicio. Render tiene además sus propias copias de la base de datos de pago y del disco (consulta en su documentación cuánto tiempo las guarda); son un complemento, no sustituyen al destino externo. Para restaurar, abre la pestaña *Shell* del servicio y usa `node /app/dist/restore.mjs` como en la sección 6.3 (con `BACKUP_PAUSE=1` en *Environment* mientras restauras).
+
+**Consola.** La pestaña *Shell* del servicio abre una terminal dentro del contenedor. Por ejemplo, el enlace para recuperar el acceso: `node /app/dist/reset-link.mjs persona@example.com` (sección 7).
+
+### Fly.io
+
+[Fly.io](https://fly.io) ejecuta la **imagen oficial** en una máquina con un volumen para los adjuntos y una base PostgreSQL gestionada (*Managed Postgres*). Se maneja con su programa de terminal, `flyctl` (la orden `fly`), y el repositorio trae una configuración de ejemplo, `deploy/fly.toml`: imagen oficial, volumen en `/app/uploads`, comprobación HTTP de `/api/health` y una máquina siempre encendida con 1 GB de memoria.
+
+**Coste.** Fly.io no tiene plan gratis para cuentas nuevas: cobra por uso, cada mes, la máquina (encendida todo el mes), el volumen (por GB reservado) y la base de datos gestionada, que suele ser lo más caro. Consulta los precios actuales en <https://fly.io/pricing> antes de empezar. También puedes usar una base PostgreSQL 16 de otro proveedor (paso 4).
+
+1. **Instala `flyctl` y entra.** En un Mac, `brew install flyctl`; en Linux, `curl -L https://fly.io/install.sh | sh`; en Windows (PowerShell), `pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"`. Después `fly auth signup` (o `fly auth login` si ya tienes cuenta) y añade una tarjeta en el panel (*Billing*).
+2. **Prepara la carpeta y el nombre de la app.** El nombre es único en todo Fly.io y da la dirección `https://<nombre>.fly.dev`:
+   ```bash
+   mkdir pizarro-fly && cd pizarro-fly
+   curl -fsSLO https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/fly.toml
+   fly apps create <nombre>
+   ```
+   Abre `fly.toml` y cambia `app = "pizarro-example"` por tu nombre. La región es `fra` (Fráncfort); para otra, cambia `primary_region` (`fly platform regions` las lista) y usa la misma en los pasos 3 y 4. Todas las órdenes siguientes se ejecutan en esta carpeta.
+3. **Volumen para los adjuntos** (en la región de la app; se puede ampliar después con `fly volumes extend`, no reducir):
+   ```bash
+   fly volumes create pizarro_data --size 5 --region fra
+   ```
+   Fly avisa de que un solo volumen no tiene réplica: es lo esperado (Pizarro es de una sola máquina; las copias van aparte).
+4. **Base de datos.** Crea un clúster de *Managed Postgres* en la misma región (o en la más cercana que ofrezca) y únelo a la app:
+   ```bash
+   fly mpg create
+   fly mpg attach <id-del-clúster>
+   ```
+   `fly mpg create` pregunta el nombre, la región y el plan, y muestra el identificador del clúster; `fly mpg attach` guarda su dirección en el secreto `DATABASE_URL` de la app. Su *pooler* va en modo sesión por defecto, que es lo que Pizarro necesita: no lo cambies a modo transacción. Con otro proveedor, en su lugar: `fly secrets set DATABASE_URL='postgresql://…'` (PostgreSQL 16, con conexión directa o en modo sesión).
+5. **Claves.** Genera las cuatro en un fichero, pásalas a Fly como secretos y **guarda el fichero en tu gestor de contraseñas** antes de borrarlo:
+   ```bash
+   printf 'SESSION_SECRET=%s\nTOKEN_SECRET=%s\nENCRYPTION_KEY=%s\nBACKUP_KEY=%s\n' \
+     "$(openssl rand -base64 48)" "$(openssl rand -base64 48)" "$(openssl rand -base64 48)" "$(openssl rand -base64 32)" > pizarro-claves.env
+   fly secrets import < pizarro-claves.env
+   ```
+   `UPLOAD_DIR` ya va en `fly.toml`. No hace falta `APP_URL`: sin ella, Pizarro usa `https://<nombre>.fly.dev` (de `FLY_APP_NAME`). No definas `SEED_ADMIN_*`.
+6. **Despliega:**
+   ```bash
+   fly deploy
+   ```
+   Descarga la imagen, crea la máquina con el volumen montado y espera (hasta 10 minutos, `wait_timeout` de `fly.toml`) a que `/api/health` responda; el primer arranque aplica las migraciones y tarda 2–3 minutos. Después, `fly logs` muestra el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código.
+7. Abre `https://<nombre>.fly.dev/setup` y sigue «Primeros pasos».
+
+**Comprobación de salud.** `fly checks list` muestra la comprobación HTTP de `/api/health` y su estado (*passing* cuando todo va bien); `fly deploy` no da el despliegue por terminado hasta que pasa. Si no sale, revisa el bloque `[[http_service.checks]]` de tu `fly.toml`.
+
+**Una máquina siempre encendida.** `fly.toml` lleva `auto_stop_machines = "off"` y `min_machines_running = 1`: Fly no la apaga por inactividad (el canal en vivo y las tareas de fondo la necesitan). No la escales a más de una.
+
+**Dominio propio.** `fly certs add pizarro.example.com` muestra los registros DNS que hay que crear (para un subdominio, un `CNAME` hacia `<nombre>.fly.dev`, o los `A`/`AAAA` que indique); `fly certs show pizarro.example.com` dice cuándo está emitido el certificado. Entonces `fly secrets set APP_URL=https://pizarro.example.com` (reinicia la máquina con el valor nuevo). Lo demás (Google, sesiones, PWA) como en «Dominio propio en Railway» (sección 3.7).
+
+**Actualizar.** Haz antes una copia y, en la carpeta de `fly.toml`, `fly deploy`: vuelve a descargar la imagen `latest` y aplica las migraciones al arrancar. Para quedarte en una versión, pon su número en `image` (`ghcr.io/pla87/pizarro:1.65.0`) y cámbialo cuando quieras actualizar.
+
+**Copias de seguridad.** Con `BACKUP_KEY` Pizarro hace sus copias diarias cifradas en el volumen. Añade un destino externo (sección 4.1) con `fly secrets set BACKUP_S3_ENDPOINT=… BACKUP_S3_BUCKET=… BACKUP_S3_ACCESS_KEY_ID=… BACKUP_S3_SECRET_ACCESS_KEY=… BACKUP_S3_PREFIX=pizarro`. Fly hace además instantáneas del volumen (`fly volumes list` da su identificador y `fly volumes snapshots list <id>` las lista) y la base gestionada tiene sus propias copias (consulta en su documentación cuánto tiempo las guardan); son un complemento, no sustituyen al destino externo. Para restaurar, `fly ssh console` abre una terminal en la máquina: usa `node /app/dist/restore.mjs` como en la sección 6.3 (con `fly secrets set BACKUP_PAUSE=1` mientras restauras).
+
+**Consola.** `fly ssh console` abre una terminal en la máquina y `fly ssh console -C "<orden>"` ejecuta una sola. Por ejemplo, el enlace para recuperar el acceso: `fly ssh console -C "node /app/dist/reset-link.mjs persona@example.com"` (sección 7).
 
 ### Primeros pasos tras instalar
 
 1. **Asistente `/setup`:** abre `<tu dirección>/setup`, escribe el código (en el resumen del instalador o en los logs del despliegue), elige organización, idioma y zona horaria y crea el primer administrador. Después activa la verificación en dos pasos (obligatoria para administradores). Detalle en 2.3.
-2. **Email:** *Administración → Integraciones → Avisos por email*. Sin él no hay invitaciones ni «¿Olvidaste tu contraseña?». Detalle y proveedores en 3.6.
+2. **Email:** *Administración → Integraciones → Avisos por email*. Sin él no hay invitaciones por email ni «¿Olvidaste tu contraseña?»: al dar de alta a alguien, Pizarro muestra el enlace de invitación para que se lo pases por otro canal. Detalle y proveedores en 3.6.
 3. **Entrar con Google (opcional):** *Administración → Integraciones → Acceso con Google*; la guía desplegable te lleva paso a paso por Google Cloud con las direcciones listas para copiar. Resumen en 3.6, punto 2.
 4. **Copias de seguridad:** con `BACKUP_KEY` definida se hacen copias diarias cifradas dentro del servidor; añade un destino **externo** (S3 compatible o carpeta montada, sección 4.1 y 4.2) y guarda el kit de recuperación fuera del servidor.
 5. **Invita al equipo** desde *Administración → Usuarios*.
@@ -238,7 +329,7 @@ En `.env`: `DOMAIN=":80"` y `APP_URL="http://<ip-del-servidor>"`. Caddy sirve so
 
 Por HTTP sin TLS el navegador habla HTTP/1.1 y abre como mucho 6 conexiones a la vez con el mismo servidor, compartidas por todas las pestañas. Cada tablero a la vista mantiene una abierta para los cambios en vivo; las pestañas ocultas cierran la suya y la vuelven a abrir al mostrarse (si hubo cambios mientras tanto, el tablero se pone al día solo). Aun así, con muchas ventanas de Pizarro a la vista a la vez (no pestañas: ventanas visibles) puede tardar en cargar o guardar. Con HTTPS (un dominio, o un certificado propio en Caddy) el navegador usa HTTP/2, que lleva todo por una sola conexión, y ese límite desaparece: si en tu red se usa mucho Pizarro en varias ventanas, es la opción recomendada.
 
-> **Importante:** en Docker la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad), porque el Caddy incluido la sobrescribe siempre. Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si aun así lo publicas sin proxy, pon `TRUST_PROXY=0` en `.env`: entonces se usa la dirección de la conexión y nadie puede falsear su IP. Con `npm start` es al revés: por defecto no se fía de esas cabeceras, y si pones tu propio proxy delante, define `TRUST_PROXY=1`.
+> **Importante:** en Docker la aplicación se fía de la cabecera `X-Real-IP` para saber la IP del cliente (límites de intentos, registro de actividad), porque el Caddy incluido la sobrescribe siempre. Por eso el puerto 3000 de Pizarro nunca debe quedar expuesto directamente: solo a través del Caddy incluido (o de otro proxy que sobrescriba `X-Real-IP`). Si aun así lo publicas sin proxy, pon `TRUST_PROXY=0` en `.env`: entonces se usa la dirección de la conexión y nadie puede falsear su IP. Con `npm start` es al revés: por defecto no se fía de esas cabeceras, y si pones tu propio proxy delante, define `TRUST_PROXY=1`. En Fly.io y en Render la IP del cliente la da la cabecera que pone su proxy (`Fly-Client-IP` en Fly.io; `CF-Connecting-IP` en Render, que tiene Cloudflare delante), y solo si no llega se usan `X-Real-IP` o `X-Forwarded-For`. Pizarro reconoce esas plataformas por las variables que ponen ellas (`RENDER`, `RENDER_SERVICE_ID`, `FLY_APP_NAME`, `FLY_MACHINE_ID`): no las definas en ningún otro sitio, o cualquiera podría mandar esa cabecera con otra IP en cada intento y saltarse los límites.
 
 ### 3.4 Arquitecturas
 
@@ -289,11 +380,12 @@ Equivalente por variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_
 - **La dirección del servidor** (por ejemplo `*.up.railway.app` en Railway, o la IP en una red local): funciona sin comprar nada. Google suele aceptar la dirección completa como dominio autorizado (con `localhost` o una IP no funciona). Se ve menos profesional y, si luego cambias a un dominio propio, hay que actualizar Google (ver «Cambiar de una opción a otra»).
 - **Un dominio propio** (`pizarro.example.com`), recomendado para clientes. Pasos: añadir el dominio en el alojamiento, crear el registro DNS, esperar al HTTPS, poner `APP_URL` y redesplegar, y después hacer los pasos de Google con los valores nuevos. El dominio autorizado de Google es el dominio registrable (`example.com`), sin subdominios.
   - En **Railway**: ver «Dominio propio en Railway» (abajo).
+  - En **Render** y **Fly.io**: el apartado «Dominio propio» de su sección (al principio de esta guía). Lo que cambia al pasar a un dominio propio es lo mismo que en Railway.
   - Con **Docker Compose**: crea un registro DNS `A` (y `AAAA` si hay IPv6) de `pizarro.example.com` hacia la IP del servidor, con los puertos 80 y 443 abiertos. En `deploy/.env` pon `DOMAIN="pizarro.example.com"` y `APP_URL="https://pizarro.example.com"` (el instalador `./install.sh --domain pizarro.example.com` lo escribe por ti; Caddy usa `DOMAIN` y pide el certificado de Let's Encrypt solo en cuanto el DNS resuelve). Después `docker compose up -d` (se recrean los contenedores con los valores nuevos).
 
 **Cambiar de una opción a otra más adelante** (por ejemplo de `*.up.railway.app` a un dominio propio), sin cortar el acceso con Google:
 
-1. Pon `APP_URL` en la dirección nueva y redespliega (Railway: *Variables* → *Redeploy*; Docker Compose: `deploy/.env` y `docker compose up -d`).
+1. Pon `APP_URL` en la dirección nueva y redespliega (Railway: *Variables* → *Redeploy*; Render: *Environment*, guardando con redespliegue; Fly.io: `fly secrets set APP_URL=…`; Docker Compose: `deploy/.env` y `docker compose up -d`).
 2. Entra por la dirección nueva en *Administración → Integraciones → Acceso con Google*: arriba verás la «Dirección pública de Pizarro» y las direcciones de redirección ya calculadas. Si entras por una dirección distinta de `APP_URL`, un aviso lo indica y se muestran las URI de las dos (la de `APP_URL` y la que usas) para poder dar de alta ambas durante el cambio.
 3. En Google Cloud **añade** las URI de redirección nuevas sin quitar las antiguas (Google admite varias a la vez), y cambia la página principal, los enlaces de privacidad y condiciones y los dominios autorizados.
 4. Comprueba que «Iniciar sesión con Google» funciona con la dirección nueva y entonces quita las URI antiguas.
@@ -322,9 +414,9 @@ Qué cambia:
 
 ### 3.8 Dónde se guardan los ficheros y cuánto pueden ocupar
 
-Los adjuntos, sus miniaturas, las copias de adjuntos de las releases, la documentación, las exportaciones y las copias de seguridad locales viven en la carpeta `UPLOAD_DIR` (por defecto `/app/uploads` en la imagen; en Railway, el volumen montado en esa ruta; en Docker Compose, el volumen `pizarro_uploads`). La base de datos solo guarda sus nombres y tamaños.
+Los adjuntos, sus miniaturas, las copias de adjuntos de las releases, la documentación, las exportaciones y las copias de seguridad locales viven en la carpeta `UPLOAD_DIR` (por defecto `/app/uploads` en la imagen; en Railway, el volumen montado en esa ruta; en Render, el disco `pizarro-uploads`; en Fly.io, el volumen `pizarro_data`; en Docker Compose, el volumen `pizarro_uploads`). La base de datos solo guarda sus nombres y tamaños.
 
-- **Tamaño del disco.** En Railway el volumen se puede ampliar desde el propio volumen (*Settings → Size*); no hace falta redesplegar. En un servidor propio, ampliando el disco o el volumen de Docker.
+- **Tamaño del disco.** En Railway el volumen se puede ampliar desde el propio volumen (*Settings → Size*); no hace falta redesplegar. En Render, en la pestaña *Disks* del servicio; en Fly.io, con `fly volumes extend <id> --size <GB>`. En los dos se puede ampliar, no reducir. En un servidor propio, ampliando el disco o el volumen de Docker.
 - **Cuotas.** Cada proyecto tiene una cuota de almacenamiento (adjuntos, copias en releases y documentación, papelera incluida): **10 GB por defecto**. Se cambia en *Administración → Ajustes → Almacenamiento* (también la cuota total opcional del servidor y, para un proyecto concreto, en *Ajustes del proyecto → Adjuntos y límites*). Si defines `UPLOAD_QUOTA_MB_PER_PROJECT` o `UPLOAD_QUOTA_MB_TOTAL`, esas variables mandan sobre lo guardado en la aplicación. Orden: cuota propia del proyecto, variable de entorno, ajuste de Administración, 10 GB.
 - **Ver y liberar espacio.** *Administración → Ajustes → Almacenamiento* muestra la carpeta, el espacio del disco, lo que ocupa cada categoría y los 10 proyectos que más pesan. En *Ajustes del proyecto → Adjuntos y límites* se pueden borrar los adjuntos de tareas archivadas, vaciar la papelera de documentación y quitar las copias de adjuntos de releases antiguas (suelen ser lo que más pesa, porque duplican los adjuntos de las tareas).
 - Deja siempre margen en el volumen: las cuotas no incluyen miniaturas, copias de seguridad locales ni exportaciones.
@@ -421,6 +513,8 @@ Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/piza
 
 **Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada). Despliega desde la rama **`stable`**: el workflow *Release* la mueve al commit de cada versión publicada, así que Railway se actualiza solo al publicarse una versión, nunca con commits sueltos de `main`. Para quedarte en una versión, desactiva el despliegue automático del servicio (o apúntalo a la etiqueta `vX.Y.Z` si tu Railway lo permite). Cambiar una instalación que hoy sigue `main`: README, «Guía de despliegue en Railway», paso 2.
 
+**Render y Fly.io** usan la imagen publicada: en Render, *Manual Deploy → Deploy latest reference* en el servicio; en Fly.io, `fly deploy` en la carpeta de su `fly.toml`. Las dos descargan la `latest` del momento (o la versión que hayas fijado en la imagen) y aplican las migraciones al arrancar. Detalle en sus secciones, al principio de esta guía.
+
 **Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. El propio `get.sh` se descarga de la rama `stable`. Solo reciben `main` quienes lo piden expresamente (`--ref main` o Railway apuntado a `main`); `--build` sin poder consultar la última versión usa `stable`.
 
 **Aviso de versión nueva.** Pizarro consulta a GitHub, como mucho cada 12 horas, cuál es la última release publicada. Si es más nueva que la que corre, los administradores ven un aviso discreto en Administración (y un punto junto a «Administración» en el menú) con enlaces a las novedades y a esta sección; se puede ocultar y no vuelve a salir hasta la siguiente versión. Es una petición a `api.github.com` cada 12 horas desde tu servidor: solo pide un dato público (la última versión) y no se envía nada de tu instalación, pero GitHub ve la dirección IP del servidor. Si no quieres esa conexión saliente, desactívalo (abajo). Sin conexión o con el límite de GitHub agotado no pasa nada: simplemente no hay aviso. Para desactivarlo, `UPDATE_CHECK=0` en `deploy/.env` (y `docker compose up -d`) o en las variables de Railway.
@@ -503,7 +597,7 @@ Notas:
 
 ## 7. Estado y diagnóstico
 
-- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta y la carpeta de subidas se puede escribir. Si no, 503 con un motivo: `database` o `uploads_not_writable` (y `shutting_down` mientras se apaga). Docker la usa para marcar el contenedor como *unhealthy* y Railway, para dar por bueno un despliegue. Si a su disco le quedan menos de `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres, sigue en 200 con el aviso `"warnings":["low_disk_space"]` (así se puede desplegar una versión nueva) y *Administración* lo avisa.
+- **Salud:** `GET /api/health` responde `{"status":"ok"}` (200) si la base de datos contesta y la carpeta de subidas se puede escribir. Si no, 503 con un motivo: `database` o `uploads_not_writable` (y `shutting_down` mientras se apaga). Docker la usa para marcar el contenedor como *unhealthy*, y Railway, Render y Fly.io, para dar por bueno un despliegue (en Railway hay que ponerla en *Settings → Deploy → Healthcheck Path*; en Render la pone `render.yaml` y en Fly.io, `deploy/fly.toml`). Si a su disco le quedan menos de `HEALTH_MIN_FREE_MB` (200 MB por defecto) libres, sigue en 200 con el aviso `"warnings":["low_disk_space"]` (así se puede desplegar una versión nueva) y *Administración* lo avisa.
 - **Tareas de fondo:** *Administración → Copias de seguridad → Tareas de mantenimiento* muestra cuándo se ejecutó cada tarea y si falló.
 - **Logs:** *Administración → Logs* (errores de la app, incluidos los no capturados) y `docker compose logs app`.
 - **Diagnóstico para soporte:** si pides ayuda, adjunta el diagnóstico: *Administración → Ajustes → Descargar diagnóstico*, o por consola
@@ -513,7 +607,7 @@ Notas:
   ```
 
   Es un JSON legible con la versión, la memoria, qué variables están definidas (nunca su valor), el tamaño de la base de datos y las filas por tabla, las migraciones aplicadas y pendientes, el disco, las tareas de fondo, las copias, la comprobación de salud, los errores de las últimas 24 h agrupados por tipo y los avisos de configuración (`warnings`; p. ej. `smtp_starttls_required`, que la orden de consola repite en la terminal). No contiene datos personales, mensajes de los logs ni claves.
-- **Informar de un error:** en una versión publicada sin modificar, *Historial de versiones → Informar de un error* abre el formulario de incidencias de GitHub con la versión, el commit, el tipo de instalación, el navegador y el idioma ya rellenos (nada de usuarios, proyectos, emails ni la dirección de la instalación). Hace falta una cuenta de GitHub y la incidencia es pública. Los administradores pueden añadir *Administración → Ajustes → Copiar información técnica* (versión, commit, Node, PostgreSQL, migraciones, funciones activas y los **nombres** de las variables definidas, nunca sus valores). Los fallos de seguridad van en privado: `SECURITY.md`.
+- **Informar de un error:** en una versión publicada sin modificar, el botón del bicho junto a *Cerrar sesión* (o *Historial de versiones → Informar de un error*) envía el texto, la captura si se incluye y los datos técnicos (versión, commit, tipo de instalación, navegador y sistema, idioma; nada de usuarios, proyectos ni la dirección de la instalación) en privado a `feedback@getpizarro.com`: desde el servidor de correo de la instalación si envía emails, o, si no, con *Enviar por email*, que abre el programa de correo de quien informa (la captura se descarga para adjuntarla). Como alternativa pública, el formulario de incidencias de GitHub con esos datos ya rellenos (hace falta una cuenta de GitHub). Los administradores pueden añadir *Administración → Ajustes → Copiar información técnica* (versión, commit, Node, PostgreSQL, migraciones, funciones activas y los **nombres** de las variables definidas, nunca sus valores). Los fallos de seguridad van en privado: `SECURITY.md`.
 - **Rotar claves:** tras cambiar `ENCRYPTION_KEY` (con la anterior en `ENCRYPTION_KEY_PREVIOUS`), `docker compose exec app node dist/rotate-keys.mjs` vuelve a cifrar todo con la nueva; después quita la anterior. Detalles en `docs/MANUAL.md`, 4.4.
 - **Recuperar el acceso sin email:** si alguien olvida su contraseña, un administrador abre *Administración → Usuarios → Forzar cambio de contraseña*; sin email configurado la app muestra un enlace de un solo uso (30 minutos) para pasárselo por un canal de confianza. Si **ningún administrador puede entrar** (olvidó la contraseña o perdió el móvil de la verificación en dos pasos), genera el enlace desde la consola del servidor:
 
@@ -524,7 +618,7 @@ Notas:
   docker compose exec app node dist/reset-link.mjs persona@example.com --reset-2fa
   ```
 
-  Imprime `APP_URL/reset/<token>`: ábrelo en el navegador y elige la contraseña nueva. Sirve una sola vez y caduca a los 30 minutos; un usuario desactivado se rechaza. En **Railway** el código vive dentro del contenedor del servicio (donde existe `dist/`), así que hay que ejecutar la orden allí, y el panel web de Railway no tiene terminal: con la CLI (`brew install railway` o `npm install -g @railway/cli`), `railway login`, `railway link` y `railway ssh`, y dentro `node dist/reset-link.mjs persona@example.com`. Antes de eso, sin terminal: «¿Olvidaste tu contraseña?» si hay email, un código de recuperación del segundo paso, u otro administrador desde *Administración → Usuarios* (*Forzar cambio de contraseña* da un enlace de un solo uso; *Restablecer la verificación en dos pasos*). `railway run` no es lo adecuado: ejecuta en tu máquina (con las variables de Railway), donde normalmente no existe `dist/` ni se alcanza la base de datos interna.
+  Imprime `APP_URL/reset/<token>`: ábrelo en el navegador y elige la contraseña nueva. Sirve una sola vez y caduca a los 30 minutos; un usuario desactivado se rechaza. En **Railway** el código vive dentro del contenedor del servicio (donde existe `dist/`), así que hay que ejecutar la orden allí: en el panel web, servicio de Pizarro → pestaña *Console*, `node dist/reset-link.mjs persona@example.com`; si esa pestaña no está, con la CLI (`brew install railway` o `npm install -g @railway/cli`), `railway login`, `railway link` y `railway ssh`, y dentro la misma orden. En **Render**, en la pestaña *Shell* del servicio: `node /app/dist/reset-link.mjs persona@example.com`. En **Fly.io**, desde tu ordenador: `fly ssh console -C "node /app/dist/reset-link.mjs persona@example.com"`. Con **`npm start`**, en la carpeta de Pizarro: `node --env-file=.env dist/reset-link.mjs persona@example.com`. La pantalla *¿Olvidaste tu contraseña?* sin email enseña solo la orden de la instalación que corre (Docker, `npm start`, Railway, Render o Fly.io, la misma detección que el paso 1 de `/setup`). Antes de eso, sin terminal: «¿Olvidaste tu contraseña?» si hay email, un código de recuperación del segundo paso, u otro administrador desde *Administración → Usuarios* (*Forzar cambio de contraseña* da un enlace de un solo uso; *Restablecer la verificación en dos pasos*). `railway run` no es lo adecuado: ejecuta en tu máquina (con las variables de Railway), donde normalmente no existe `dist/` ni se alcanza la base de datos interna.
 - **Excepciones no capturadas:** se anotan en *Logs* y la app se reinicia sola (Docker la vuelve a levantar). Lo activa `compose.yml` con `EXIT_ON_UNCAUGHT_EXCEPTION=1`; ponlo a `0` para solo registrarlas.
 
 ## 8. Resolución de problemas
@@ -553,7 +647,7 @@ Notas:
 
 Si una migración falla mientras se aplica (disco lleno, un corte, un error de la propia migración), Prisma la deja apuntada como fallida en la tabla `_prisma_migrations` y en cada arranque siguiente se niega a seguir con `Error: P3009`. El arranque lo reconoce y escribe debajo `[start] ERROR: una migración de la base de datos falló a medias (P3009): <nombre>` con los pasos y el comando ya completo. Qué hacer:
 
-1. **Corrige la causa.** El error de la migración sale en el log del arranque en el que falló (`docker compose logs app`; en Railway, los *Deploy Logs* de ese despliegue). Si fue el disco, libera espacio antes de seguir.
+1. **Corrige la causa.** El error de la migración sale en el log del arranque en el que falló (`docker compose logs app`; en Railway, los *Deploy Logs* de ese despliegue; en Render, la pestaña *Logs*; en Fly.io, `fly logs`). Si fue el disco, libera espacio antes de seguir.
 2. **Mira qué hace la migración** (`prisma/migrations/<nombre>/migration.sql` en el repositorio, en la etiqueta de la versión que instalabas). Si no llegó a cambiar nada, o deshaces a mano lo que dejó hecho, márcala como revertida: en el siguiente arranque se aplica de nuevo, entera.
    - **Docker Compose** (en `/opt/pizarro/deploy`):
      ```bash
@@ -569,6 +663,11 @@ Si una migración falla mientras se aplica (disco lleno, un corte, un error de l
      ```bash
      docker run --rm -e DATABASE_URL='<DATABASE_PUBLIC_URL>' -w /app/migrator ghcr.io/pla87/pizarro:<versión> ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
      ```
+   - **Render** o **Fly.io**: la misma orden en la consola del servicio (*Shell* en Render; `fly ssh console` en Fly.io), mientras la app espera los 20 segundos antes de reintentar:
+     ```bash
+     cd /app/migrator && ./node_modules/.bin/prisma migrate resolve --rolled-back <nombre>
+     ```
+     Después, vuelve a desplegar (Render: *Manual Deploy*; Fly.io: `fly deploy`). En Render, si la consola no llega a abrirse, usa la orden de `docker run` de arriba con la *External Database URL* de la base. Antes, permite tu IP: el Blueprint deja la base sin acceso desde Internet (`ipAllowList: []`), así que en `pizarro-db` → *Networking* → *Access Control* añade tu IP pública (la que da, por ejemplo, <https://ifconfig.me>, con `/32`). Al terminar, quítala para que la base vuelva a quedar cerrada.
 3. **Si no sabes qué dejó hecho**, no la marques: restaura la copia que hiciste antes de actualizar (sección 6) y vuelve a actualizar.
 
 Si la terminaste a mano (aplicaste tú el resto de `migration.sql`), usa `--applied <nombre>` en lugar de `--rolled-back <nombre>`: Prisma la da por aplicada y sigue con las siguientes.

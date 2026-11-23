@@ -195,3 +195,24 @@ export async function waitForLockWaiter(): Promise<void> {
   }
   throw new Error("la acción no llegó a esperar el candado");
 }
+
+/**
+ * Ejecuta `fn` con un SMTP que no responde: sin el buzón de pruebas (MAIL_OUTBOX_DIR) y con SMTP_* hacia un puerto
+ * cerrado de esta máquina, así que cada envío falla enseguida con un error de conexión de nodemailer (ESOCKET).
+ */
+export async function withSmtpDown<T>(fn: () => Promise<T>): Promise<T> {
+  const keys = ["MAIL_OUTBOX_DIR", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM"] as const;
+  const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  delete process.env.MAIL_OUTBOX_DIR;
+  Object.assign(process.env, { SMTP_HOST: "127.0.0.1", SMTP_PORT: "1", SMTP_FROM: "pizarro@example.com" });
+  try {
+    return await fn();
+  } finally {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+    const { closeMailTransport } = await import("../../src/lib/mail");
+    closeMailTransport();
+  }
+}

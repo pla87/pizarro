@@ -137,13 +137,14 @@ test("la descripción: la plantilla anterior sin tocar se cambia y lo escrito de
   const tpl = PRESU.descriptionTemplate.trim();
   assert.equal(switchKindDescription(PRESU, PERMISO, `${tpl}\n\nNotas mías`), `${PERMISO.descriptionTemplate.trim()}\n\nNotas mías`);
   assert.equal(switchKindDescription(PRESU, PLAIN, `${tpl}\n`), "");
-  // Rellenada (el formulario ha cambiado): se conserva y se añade el texto del nuevo al principio, sin duplicarlo.
+  // Rellenada: la respuesta se conserva debajo del formulario nuevo y el apartado que sigue vacío se quita.
   const filled = tpl.replace("[nombre]", "Reformas López");
   const out = switchKindDescription(PRESU, PERMISO, filled);
-  assert.equal(out, `${PERMISO.descriptionTemplate.trim()}\n\n${filled}`);
+  assert.equal(out, `${PERMISO.descriptionTemplate.trim()}\n\n**Empresa o profesional:** Reformas López\n`);
   assert.equal(switchKindDescription(PRESU, PERMISO, out), out);
-  // Escrito en la misma línea que el final de la plantilla: también cuenta como cambiado.
-  assert.equal(switchKindDescription(PRESU, PLAIN, `${tpl} todo el baño`), `${tpl} todo el baño`);
+  // Escrito en la misma línea que el final de la plantilla: también cuenta como respondido; el apartado con «[nombre]» sin
+  // cambiar se quita.
+  assert.equal(switchKindDescription(PRESU, PLAIN, `${tpl} todo el baño`), "**Alcance incluido:** todo el baño\n");
   // El mismo tipo otra vez no duplica (tampoco el formulario ya rellenado).
   assert.equal(switchKindDescription(PRESU, PRESU, `${tpl}\n`), `${tpl}\n`);
   assert.equal(switchKindDescription(PRESU, PRESU, filled), filled);
@@ -157,7 +158,8 @@ test("la descripción: la respuesta escrita en la última línea del formulario 
   const out = switchKindDescription(SALUD, CASA, answered);
   assert.ok(out.includes("**Preguntas para la consulta:**\nLlevar análisis"), out);
   // El formulario nuevo va encima, separado por una línea en blanco: la respuesta no queda bajo «Material necesario».
-  assert.equal(out, `${CASA.descriptionTemplate.trim()}\n\n${answered}`);
+  // Los apartados de Salud sin responder se quitan.
+  assert.equal(out, `${CASA.descriptionTemplate.trim()}\n\n**Preguntas para la consulta:**\nLlevar análisis\n`);
   // Lo que ya había al elegir el tipo (compartido, enlazado) va tras una línea en blanco y se sigue cambiando de formulario.
   const shared = switchKindDescription(null, SALUD, "Texto compartido");
   assert.equal(shared, `${SALUD.descriptionTemplate.trim()}\n\nTexto compartido`);
@@ -176,4 +178,98 @@ test("las subtareas: las del anterior se cambian si siguen todas; si se ha quita
   // El mismo tipo: la lista no se toca (lo quitado no vuelve).
   assert.deepEqual(switchKindSubtasks(PRESU, PRESU, ["Comparar con otros", "Mía"]), ["Comparar con otros", "Mía"]);
   assert.deepEqual(switchKindSubtasks(PRESU, PRESU, [...PRESU.subtaskTemplate, "Mía"]), [...PRESU.subtaskTemplate, "Mía"]);
+});
+
+test("la descripción: al cambiar de tipo con el formulario a medias, cada respuesta va a su apartado y los vacíos se quitan", () => {
+  // Informe de prueba: «Cambiar bombilla del pasillo» (Casa, plantilla «Casa y familia») → «Reforma u obra».
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  const OBRA = { titleTemplate: "Obra: ", descriptionTemplate: "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n" };
+  const OBRA_WITH = (answer: string) => `**Estancia o zona:**\n\n${answer}\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n`;
+  // Escrito detrás de la etiqueta, en la misma línea (Markdown).
+  assert.equal(switchKindDescription(CASA, OBRA, "**Qué hay que hacer:** cambiar la bombilla\n\n**Material necesario:**\n"), OBRA_WITH("**Qué hay que hacer:** cambiar la bombilla"));
+  // Dentro de la negrita (el editor con barra sigue en negrita al escribir tras la etiqueta) y sin el salto final.
+  assert.equal(switchKindDescription(CASA, OBRA, "**Qué hay que hacer: cambiar la bombilla**\n\n**Material necesario:**"), OBRA_WITH("**Qué hay que hacer: cambiar la bombilla**"));
+  // En el párrafo siguiente (el editor con barra separa los párrafos con una línea en blanco).
+  const out = switchKindDescription(CASA, OBRA, "**Qué hay que hacer:**\n\nCambiar la bombilla\n\n**Material necesario:**");
+  assert.equal(out, OBRA_WITH("**Qué hay que hacer:**\n\nCambiar la bombilla"));
+  assert.equal(out.match(/Qué hay que hacer/g)?.length, 1);
+  assert.ok(!out.includes("Material necesario"));
+  // Y de vuelta: la respuesta vuelve a su apartado y los de la obra sin responder desaparecen.
+  assert.equal(switchKindDescription(OBRA, CASA, out), "**Qué hay que hacer:**\n\nCambiar la bombilla\n\n**Material necesario:**\n");
+  // Una respuesta sin apartado en el tipo nuevo va debajo de su formulario; lo escrito aparte, al final.
+  assert.equal(
+    switchKindDescription(CASA, OBRA, "**Qué hay que hacer:**\n\n**Material necesario:** bombilla LED\n\nNotas mías"),
+    `${OBRA.descriptionTemplate.trim()}\n\n**Material necesario:** bombilla LED\n\nNotas mías`,
+  );
+  // Con un apartado vacío borrado a mano, igual.
+  assert.equal(switchKindDescription(CASA, OBRA, "**Qué hay que hacer:** pintar"), OBRA_WITH("**Qué hay que hacer:** pintar"));
+  // Con algo escrito antes del formulario no se reconoce: se conserva entero (como antes).
+  assert.equal(switchKindDescription(CASA, OBRA, "Ojo\n**Qué hay que hacer:** x\n**Material necesario:**"), `${OBRA.descriptionTemplate.trim()}\n\nOjo\n**Qué hay que hacer:** x\n**Material necesario:**`);
+});
+
+test("la descripción: la respuesta del último apartado en el párrafo siguiente sigue con su etiqueta", () => {
+  // Con el editor con barra, «Bombilla LED» iba a parar bajo «Fechas previstas», como si fuera su respuesta.
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  const OBRA = { titleTemplate: "Obra: ", descriptionTemplate: "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n" };
+  const typed = "**Qué hay que hacer:**\n\nCambiar la bombilla\n\n**Material necesario:**\n\nBombilla LED";
+  const obra = switchKindDescription(CASA, OBRA, typed);
+  assert.equal(
+    obra,
+    "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\nCambiar la bombilla\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n\n**Material necesario:**\n\nBombilla LED\n",
+  );
+  // Ida y vuelta: todo vuelve a su sitio, sin repetir nada.
+  assert.equal(switchKindDescription(OBRA, CASA, obra), `${typed}\n`);
+  // Al revés, con «En mayo» bajo el último apartado de la obra: no pasa a «Estancia o zona».
+  const casa = switchKindDescription(OBRA, CASA, "**Estancia o zona:**\n\nBaño\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n\nEn mayo");
+  assert.equal(casa, "**Qué hay que hacer:**\n\n**Material necesario:**\n\n**Estancia o zona:**\n\nBaño\n\n**Fechas previstas:**\n\nEn mayo\n");
+  assert.equal(
+    switchKindDescription(CASA, OBRA, casa),
+    "**Estancia o zona:**\n\nBaño\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n\nEn mayo\n",
+  );
+  // Con varios párrafos, la respuesta entera se queda con su etiqueta.
+  assert.equal(
+    switchKindDescription(CASA, OBRA, "**Qué hay que hacer:** pintar\n\n**Material necesario:**\n\nbrocha\n\nrodillo"),
+    "**Estancia o zona:**\n\n**Qué hay que hacer:** pintar\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n\n**Material necesario:**\n\nbrocha\n\nrodillo\n",
+  );
+});
+
+test("la descripción: las viñetas vacías de la plantilla son parte de su apartado, no etiquetas", () => {
+  // Plantillas «Recados» y «Estudios»: una lista debajo de la etiqueta.
+  const RECADOS = { titleTemplate: "", descriptionTemplate: "**Para quién o para qué:**\n\n**No olvidar:**\n\n- \n" };
+  const ESTUDIO = { titleTemplate: "", descriptionTemplate: "**Tema o unidad:**\n\n**Qué tengo que saber:**\n\n- \n\n**Materiales:**\n" };
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  const list = "**Para quién o para qué:** mamá\n\n**No olvidar:**\n\n- pan\n- leche\n- huevos\n";
+  // La lista de la compra no pasa a ser lo que hay que saber del tema: va con su etiqueta, debajo del formulario nuevo.
+  const est = switchKindDescription(RECADOS, ESTUDIO, list);
+  assert.equal(est, `${ESTUDIO.descriptionTemplate.trim()}\n\n${list}`);
+  // Y de vuelta, sin «Para quién o para qué» dos veces.
+  assert.equal(switchKindDescription(ESTUDIO, RECADOS, est), list);
+  // Hacia «Casa», la lista no queda bajo «Material necesario».
+  assert.equal(
+    switchKindDescription(RECADOS, CASA, "**Para quién o para qué:**\n\n**No olvidar:**\n\n- pan\n- leche\n"),
+    "**Qué hay que hacer:**\n\n**Material necesario:**\n\n**No olvidar:**\n\n- pan\n- leche\n",
+  );
+  // Una respuesta que va a un apartado con lista del tipo nuevo ocupa también el sitio de la viñeta vacía.
+  assert.equal(
+    switchKindDescription(RECADOS, ESTUDIO, "**Para quién o para qué:**\n\n**No olvidar:**\n\n-\n\n**Qué tengo que saber:**\n\n- derivadas\n"),
+    "**Tema o unidad:**\n\n**Qué tengo que saber:**\n\n- derivadas\n\n**Materiales:**\n",
+  );
+  // La viñeta vacía, se guarde como «- » o como «-», no cuenta como respuesta.
+  assert.equal(switchKindDescription(RECADOS, CASA, "**Para quién o para qué:** yo\n\n**No olvidar:**\n\n-"), `${CASA.descriptionTemplate.trim()}\n\n**Para quién o para qué:** yo\n`);
+  // El formulario sin tocar con lo que ya había debajo: se cambia de formulario y se conserva lo de debajo.
+  assert.equal(switchKindDescription(RECADOS, CASA, switchKindDescription(null, RECADOS, "Texto compartido")), `${CASA.descriptionTemplate.trim()}\n\nTexto compartido`);
+});
+
+test("la descripción: con un tipo sin plantilla en medio, el formulario no se repite al volver", () => {
+  // «Mejora» → «Corrección» (tipo general, sin plantilla) → «Mejora»: antes se anteponía el formulario vacío a lo escrito.
+  const MEJORA = { titleTemplate: "", descriptionTemplate: "**Qué mejora:**\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n" };
+  const CORRECCION = { titleTemplate: "", descriptionTemplate: "" };
+  const typed = "**Qué mejora:** el login\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n";
+  const general = switchKindDescription(MEJORA, CORRECCION, typed);
+  assert.equal(general, "**Qué mejora:** el login\n");
+  const back = switchKindDescription(CORRECCION, MEJORA, general);
+  assert.equal(back, typed);
+  assert.equal(back.match(/Qué mejora/g)?.length, 1);
+  // Lo escrito en el tipo general (sin forma de formulario) sigue yendo debajo de la plantilla, como antes.
+  assert.equal(switchKindDescription(CORRECCION, MEJORA, "Falla al entrar"), `${MEJORA.descriptionTemplate.trim()}\n\nFalla al entrar`);
 });

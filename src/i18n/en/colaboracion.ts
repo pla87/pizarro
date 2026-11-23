@@ -81,7 +81,8 @@ export const colaboracion: Record<string, string> = {
   "Cambió la cadencia en la release a «{to}»": "Changed the release cadence to “{to}”",
   // Mis tareas: grupo de los 7 días siguientes a hoy
   "Próximos 7 días": "Next 7 days",
-  "Hasta 7 días": "Within 7 days",
+  // Filtro de Mis tareas: incluye las vencidas y las de hoy (su cuenta es la de los tres grupos)
+  "Vencidas y próximos 7 días": "Overdue and next 7 days",
   // Emails de avisos, resumen e informe: pie, lote de asignaciones, periodo del resumen y organización (ronda 59)
   "No respondas a este email: contesta en Pizarro.": "Don't reply to this email: reply in Pizarro.",
   "{actor} te ha asignado {n} tareas (entre ellas {task})": "{actor} assigned you {n} tasks (including {task})",
@@ -123,6 +124,12 @@ export const colaboracion: Record<string, string> = {
   "{actor} se ha dado de baja del informe semanal de {task}": "{actor} unsubscribed from the weekly report of {task}",
   "El informe ya no se envía. Solo esa persona puede volver a activarlo para sí misma; puedes elegir otro destinatario en Ajustes del proyecto → Informes.": "The report is no longer sent. Only they can turn it back on for themselves; you can choose another recipient in Project settings → Reports.",
   "Abrir los informes del proyecto": "Open the project's reports",
-  // Avisos por email: la baja del informe semanal va con las menciones (dicho a todos, no solo a administradores)
-  "Con las menciones te llegan también los avisos de que alguien se ha dado de baja de un informe semanal que configuraste.": "With mentions you also get notices that someone has unsubscribed from a weekly report you set up.",
+  // Avisos por email: qué más llega con «Email cuando me mencionan» y aviso destacado si el servidor no envía emails
+  "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste.":
+    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up.",
+  "Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste y, como administrador, el de que un proyecto privado ha pasado a ser de equipo al borrarse una cuenta.":
+    "Besides mentions, this option also emails you when someone unsubscribes from a weekly report you set up and, as an admin, when a private project becomes a team project because an account was deleted.",
+  "El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.":
+    "Email sending is not configured on the server yet: no emails are sent for now. What you check here is saved and will apply once it is configured.",
+  "Configurar el email": "Set up email",
 };

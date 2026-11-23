@@ -1,7 +1,7 @@
 // Tareas periódicas de mantenimiento (se arrancan desde instrumentation.ts, una vez por proceso). Si hay
 // varios procesos, solo uno las ejecuta cada vez (bloqueo de Postgres) y la última ejecución queda en JobRun.
 
-import type { JobDef } from "./jobs";
+import type { JobDef, JobSkip } from "./jobs";
 import { LOCK_MAIL, LOCK_MAINTENANCE, LOCK_RELEASE_RESUME } from "./advisory-locks";
 import { appTimeZone } from "./format";
 import { isShuttingDown } from "./shutdown";
@@ -125,15 +125,15 @@ async function purgeOrphanFiles(): Promise<number> {
 }
 
 /** Copia de seguridad diaria cifrada de la base de datos y los ficheros (si hay BACKUP_KEY). */
-async function backupJob(): Promise<void> {
+async function backupJob(): Promise<JobSkip | void> {
   const { dailyBackupJob } = await import("@/lib/backup");
-  await dailyBackupJob();
+  return dailyBackupJob();
 }
 
 /** Sube la última copia a los destinos externos (BACKUP_EXTERNAL_DIR / BACKUP_S3_*) si aún no la tienen. */
-async function backupExternalJob(): Promise<void> {
+async function backupExternalJob(): Promise<JobSkip | void> {
   const { externalBackupJob } = await import("@/lib/backup");
-  await externalBackupJob();
+  return externalBackupJob();
 }
 
 /** Avisa por email a los administradores si la última copia correcta tiene más de 48 h (como mucho cada 24 h). */
@@ -143,9 +143,9 @@ async function backupAlertJob(): Promise<void> {
 }
 
 /** Prueba de restauración mensual de la última copia. */
-async function restoreTestJob(): Promise<void> {
+async function restoreTestJob(): Promise<JobSkip | void> {
   const { monthlyRestoreTestJob } = await import("@/lib/backup");
-  await monthlyRestoreTestJob();
+  return monthlyRestoreTestJob();
 }
 
 /** Borra el historial de tareas de más de un año. */

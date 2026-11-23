@@ -49,9 +49,9 @@ export const almacenamiento: Record<string, string> = {
   "Almacenamiento usado": "Storage used",
   "Cuota llena: no se admiten más ficheros hasta liberar espacio o ampliarla.": "Quota full: no more files until you free up space or raise it.",
   "Cuota de almacenamiento del proyecto (MB)": "Project storage quota (MB)",
-  "La general": "The general one",
-  "Usar la general": "Use the general one",
-  "Vacía, se usa la general (Administración → Ajustes → Almacenamiento). Si la pones, manda sobre la general. Solo la cambian los administradores.": "Empty, the general one applies (Administration → Settings → Storage). If set, it overrides the general one. Only administrators can change it.",
+  "La general": "Default",
+  "Usar la general": "Use default",
+  "Vacía, se usa la general (Administración → Ajustes → Almacenamiento). Si la pones, manda sobre la general. Solo la cambian los administradores.": "Empty, the default applies (Administration → Settings → Storage). If set, it overrides the default. Only administrators can change it.",
   "Liberar espacio": "Free up space",
   "Borra los ficheros del servidor para siempre. Antes muestra qué se borrará y cuánto espacio se libera.": "Deletes the files from the server for good. It first shows what will be deleted and how much space is freed.",
   "Adjuntos de releases antiguas": "Attachments of old releases",
@@ -95,4 +95,6 @@ export const almacenamiento: Record<string, string> = {
   "El servidor no tiene espacio para guardar el archivo.": "The server has no space left to save the file.",
   // Cuotas: el formulario comprueba el mismo máximo que el servidor.
   "Debe ser un número entero de MB, entre {min} y {max}.": "Must be a whole number of MB, between {min} and {max}.",
+  // Disco: el porcentaje dice que es lo usado (detrás de «libres» parecía el espacio libre)
+  "({pct} usado)": "({pct} used)",
 };

@@ -510,8 +510,10 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
     start(async () => {
       const res = await resendInvite(m.id);
       if (!res.ok) return toast(res.error, "error");
-      toast(t("Invitación enviada"));
-      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: true });
+      // Si el email no sale, el enlace nuevo (el anterior ya no vale) queda a la vista para pasárselo a mano.
+      if (res.data.mailFailed) toast(t("No se pudo enviar el email: pásale el enlace."), "error");
+      else toast(t("Invitación enviada"));
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: !res.data.mailFailed });
     });
   const freshLink = async (m: MemberRow) => {
     // El enlace que ya se le pasó deja de valer: no se hace sin confirmarlo (antes, «Copiar…» parecía inofensivo).

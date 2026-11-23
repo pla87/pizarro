@@ -33,6 +33,19 @@ export function trustProxy(env: Env = process.env): boolean {
   return env.PIZARRO_LAUNCHER === "docker";
 }
 
+/**
+ * Cabecera en la que el proxy de la plataforma pone la IP del cliente, cuando no es X-Real-IP. En Fly.io, Fly-Client-IP
+ * (la fija su proxy); en Render, que tiene Cloudflare delante, CF-Connecting-IP (la fija Cloudflare). En las dos, el
+ * último salto de X-Forwarded-For es un proxy de la plataforma, no el cliente (todos parecerían venir de pocas IP y
+ * compartirían los límites de intentos), y X-Real-IP no consta que la sobrescriban. Sin esa cabecera en la petición, se
+ * sigue con X-Real-IP y X-Forwarded-For como en el resto.
+ */
+export function platformIpHeader(env: Env = process.env): string | null {
+  if (env.FLY_APP_NAME || env.FLY_MACHINE_ID) return "fly-client-ip";
+  if (env.RENDER || env.RENDER_SERVICE_ID) return "cf-connecting-ip";
+  return null;
+}
+
 /** ¿TRUST_PROXY tiene un valor que no se entiende? (se avisa en el log de arranque y se usa el valor por defecto). */
 export function trustProxyInvalid(env: Env = process.env): boolean {
   const v = env.TRUST_PROXY?.trim().toLowerCase();
@@ -47,13 +60,17 @@ function normalizeIp(ip: string): string {
 }
 
 /**
- * IP del cliente o null si no se sabe. Tras un proxy de confianza, X-Real-IP (la fija el proxy) o, si no, el último
- * salto de X-Forwarded-For (el que añadió el proxy; los anteriores los puede inventar el cliente). Sin proxy, o si el
- * proxy no las manda, la dirección de la conexión (solo si este proceso la anota él mismo: `peerInstalled`).
+ * IP del cliente o null si no se sabe. Tras un proxy de confianza, la cabecera propia de la plataforma
+ * (`platformHeader`, ver platformIpHeader) si la trae; si no, X-Real-IP (la fija el proxy) o el último salto de
+ * X-Forwarded-For (el que añadió el proxy; los anteriores los puede inventar el cliente). Sin proxy, o si el proxy no las
+ * manda, la dirección de la conexión (solo si este proceso la anota él mismo: `peerInstalled`).
  */
-export function clientIpFrom(get: (name: string) => string | null, { trusted, peerInstalled }: { trusted: boolean; peerInstalled: boolean }): string | null {
+export function clientIpFrom(
+  get: (name: string) => string | null,
+  { trusted, peerInstalled, platformHeader = null }: { trusted: boolean; peerInstalled: boolean; platformHeader?: string | null },
+): string | null {
   if (trusted) {
-    const ip = get("x-real-ip")?.trim() || get("x-forwarded-for")?.split(",").at(-1)?.trim();
+    const ip = (platformHeader ? get(platformHeader)?.trim() : "") || get("x-real-ip")?.trim() || get("x-forwarded-for")?.split(",").at(-1)?.trim();
     if (ip) return normalizeIp(ip);
   }
   const peer = peerInstalled ? get(PEER_IP_HEADER)?.trim() : "";

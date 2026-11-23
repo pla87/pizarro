@@ -245,14 +245,27 @@ export type DayOrder = "dmy" | "mdy";
 /** Fecha con barras, puntos o guiones y el año al final: «31/12/2026», «1.2.26», «03-04-2026». */
 const SLASH_DAY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/;
 
+/**
+ * Fecha con puntos en los dos separadores («1.12.2026», «01.12.26»): siempre día/mes, sea cual sea el idioma o el resto
+ * del fichero (decisión del propietario: con puntos no se escribe mes/día en ningún formato habitual). No cuenta para
+ * decidir el orden de las demás (decideDayOrder).
+ */
+const DOTTED_DAY = /^\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/;
+
+/** Orden con el que se lee una fecha con barras, puntos o guiones: el del fichero (`order`), salvo con puntos (día/mes). */
+function dayOrderFor(raw: string, order: DayOrder): DayOrder {
+  return DOTTED_DAY.test(raw.trim()) ? "dmy" : order;
+}
+
 /** Día y mes de «a/b/año» según el orden: si en ese orden el mes pasa de 12, se lee al revés (la única lectura posible). */
-export function slashDayMonth(a: number, b: number, order: DayOrder): [month: number, day: number] {
+function slashDayMonth(a: number, b: number, order: DayOrder): [month: number, day: number] {
   if (order === "mdy") return a <= 12 ? [a, b] : [b, a];
   return b <= 12 ? [b, a] : [a, b];
 }
 
 /**
- * Orden de las fechas con barras de un fichero (o de una columna de un CSV), decidido una vez para todas: una que solo
+ * Orden de las fechas con barras de un fichero (o de una columna de un CSV), decidido una vez para todas (las de puntos
+ * no cuentan: siempre día/mes, dayOrderFor): una que solo
  * puede ser día/mes («21/03/2026») hace que todo el fichero sea día/mes; una que solo puede ser mes/día («03/21/2026»),
  * mes/día. Si todas son ambiguas («03/04/2026»), el idioma de quien importa: en inglés (EE. UU.) mes/día, en español
  * día/mes. `mixed`: hay de las dos clases (fechas incompatibles entre sí); entonces las ambiguas van por el idioma y las
@@ -263,7 +276,7 @@ export function decideDayOrder(values: Iterable<unknown>, locale: Locale = "es")
   let dmy = false;
   let mdy = false;
   for (const v of values) {
-    if (typeof v !== "string") continue;
+    if (typeof v !== "string" || DOTTED_DAY.test(v.trim())) continue;
     const m = SLASH_DAY.exec(v.trim());
     if (!m) continue;
     const a = +m[1]!, b = +m[2]!;
@@ -283,7 +296,7 @@ export function mixedDayOrderWarning(t: T, order: DayOrder): string {
 /**
  * Fecha de un CSV (o de cualquier texto) → YYYY-MM-DD, o null si no se entiende. Admite ISO (con hora o no),
  * 31/12/2026 (en el orden `order`, decidido para todo el fichero con decideDayOrder; si en ese orden el mes pasa de 12,
- * al revés), 31-dic-2026, 15/Jan/26 10:20 AM, «January 15, 2026» y «15 de enero de 2026». Una fecha ISO con hora y zona
+ * al revés; con puntos, «1.12.2026», siempre día/mes), 31-dic-2026, 15/Jan/26 10:20 AM, «January 15, 2026» y «15 de enero de 2026». Una fecha ISO con hora y zona
  * (Z o ±hh:mm) pasa al día de `timeZone`.
  */
 export function parseDay(raw: string, timeZone = "UTC", order: DayOrder = "dmy"): string | null {
@@ -298,7 +311,7 @@ export function parseDay(raw: string, timeZone = "UTC", order: DayOrder = "dmy")
   if (m) return validDay(+m[1]!, +m[2]!, +m[3]!);
   m = SLASH_DAY.exec(s);
   if (m) {
-    const [month, day] = slashDayMonth(+m[1]!, +m[2]!, order);
+    const [month, day] = slashDayMonth(+m[1]!, +m[2]!, dayOrderFor(s, order));
     return validDay(fullYear(+m[3]!), month, day);
   }
   m = /^(\d{1,2})[\s/.-]+(?:de\s+)?([a-záéíóú]+)\.?[\s/.-]+(?:de\s+)?(\d{2}|\d{4})\b/i.exec(s);
@@ -319,19 +332,15 @@ export function parseInstant(raw: unknown): Date | null {
  * Bytes → texto: UTF-8 (con o sin BOM), UTF-16 con BOM (Excel) y, si no es UTF-8 válido, Windows-1252. `whole`: son todos
  * los bytes del archivo (no solo la cabecera que se mira para detectar el formato), así que no puede haber un carácter
  * cortado al final: sin él, un Windows-1252 cuyos únicos bytes no ASCII están en los 3 últimos los perdía («Peñ\n»).
+ * Sin `whole`, un carácter cortado al final de la cabecera se deja fuera (`stream`) en vez de tomarlo por Windows-1252:
+ * quitar siempre 3 bytes cortaba a veces el carácter anterior y pasaba toda la cabecera a Windows-1252 («TÃ­tulo»).
  */
 export function decodeText(buf: Uint8Array, whole = false): string {
   if (buf[0] === 0xff && buf[1] === 0xfe) return new TextDecoder("utf-16le").decode(buf.subarray(2));
   if (buf[0] === 0xfe && buf[1] === 0xff) return new TextDecoder("utf-16be").decode(buf.subarray(2));
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf, { stream: !whole });
   } catch {
-    // Cortado a mitad de un carácter (solo la cabecera que se mira para detectar) o realmente no es UTF-8.
-    if (whole) return new TextDecoder("windows-1252").decode(buf);
-    try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(buf.subarray(0, Math.max(0, buf.length - 3)));
-    } catch {
-      return new TextDecoder("windows-1252").decode(buf);
-    }
+    return new TextDecoder("windows-1252").decode(buf);
   }
 }

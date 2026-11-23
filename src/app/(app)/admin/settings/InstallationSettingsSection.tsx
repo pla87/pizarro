@@ -98,7 +98,11 @@ export function InstallationSettingsSection({ view, version: initialVersion }: {
             ? t("Fijada por la variable APP_URL del servidor.")
             : view.appUrlSource === "railway"
               ? t("Sin APP_URL: es la dirección pública que da Railway (RAILWAY_PUBLIC_DOMAIN). Si usas un dominio propio, define APP_URL en Variables y vuelve a desplegar.")
-              : t("Sin definir: los enlaces de los emails llevarán a http://localhost:3000. Define APP_URL en el servidor (por ejemplo https://pizarro.example.com) y vuelve a arrancar.")}
+              : view.appUrlSource === "render"
+                ? t("Sin APP_URL: es la dirección pública que da Render (RENDER_EXTERNAL_URL). Si usas un dominio propio, define APP_URL en Environment y vuelve a desplegar.")
+                : view.appUrlSource === "fly"
+                  ? t("Sin APP_URL: es la dirección pública que da Fly.io (https://<app>.fly.dev). Si usas un dominio propio, define APP_URL con fly secrets set.")
+                  : t("Sin definir: los enlaces de los emails llevarán a http://localhost:3000. Define APP_URL en el servidor (por ejemplo https://pizarro.example.com) y vuelve a arrancar.")}
         </span>
       </div>
       {conflict && <EditConflictNotice draft={[orgName, locale, view.zoneLocked ? "" : timeZone].filter(Boolean).join("\n")} />}

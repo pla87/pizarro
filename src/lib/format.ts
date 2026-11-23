@@ -60,18 +60,17 @@ export function resolveTimeZone(envTz: string | undefined, stored: string | unde
   return stored && validTimeZone(stored) ? stored : DEFAULT_TIME_ZONE;
 }
 
-type Style = "date" | "dateShort" | "dateLong" | "dateTime" | "dateTimeSeconds" | "dateTimeShort" | "time" | "timeHm" | "dateNumeric";
+// Un solo formato legible por idioma para fecha y hora en la interfaz: «22 nov 2026, 21:41» / «Nov 22, 2026, 9:41 PM»
+// (`dateTime`), y «22 nov 2026» / «Nov 22, 2026» para la fecha sola (`date`). Los cortos de Intl («22/11/26, 21:41»;
+// «11/22/26, 9:41 PM») se quitaron: mezclaban dos formatos en la misma pantalla y en inglés el día y el mes se confunden.
+type Style = "date" | "dateLong" | "dateTime" | "dateTimeSeconds" | "time" | "timeHm";
 
 const OPTIONS: Record<Style, Intl.DateTimeFormatOptions> = {
   date: { dateStyle: "medium" },
-  dateShort: { dateStyle: "short" },
-  /** 24/10/2026 (10/24/2026 en en-US): día, mes y año completo, numéricos, en el orden del idioma. */
-  dateNumeric: { day: "2-digit", month: "2-digit", year: "numeric" },
   dateLong: { dateStyle: "long" },
   dateTime: { dateStyle: "medium", timeStyle: "short" },
   /** Con segundos (13 nov 2026, 14:05:09; Nov 13, 2026, 2:05:09 PM): para distinguir copias hechas en el mismo minuto. */
   dateTimeSeconds: { dateStyle: "medium", timeStyle: "medium" },
-  dateTimeShort: { dateStyle: "short", timeStyle: "short" },
   time: { timeStyle: "short" },
   /** Hora y minutos con la costumbre del idioma: «08:14» (24 horas, con ceros) o «8:14 AM» (en-US). Ver hourMinute. */
   timeHm: {},
@@ -107,6 +106,19 @@ export function formatDate(value: Date | string, style: Style = "date", locale =
   const d = typeof value === "string" ? new Date(value) : value;
   const options = style === "timeHm" ? hourMinute(locale) : OPTIONS[style];
   return plainSpaces(d.toLocaleString(locale, { ...options, timeZone: appTimeZone() }));
+}
+
+/**
+ * Hora de una línea de Administración → Logs, compacta y con segundos (dos eventos del mismo minuto se distinguen):
+ * «22 nov 21:49:12» en español (24 horas) y «Nov 22 9:49:12 PM» en inglés americano (12 horas), en la zona de la app.
+ * Devuelve una función que reutiliza los formateadores (una página de logs pinta cien filas).
+ */
+export function logTimeFormatter(locale = "es-ES"): (d: Date) => string {
+  const timeZone = appTimeZone();
+  const day = new Intl.DateTimeFormat(locale, { timeZone, day: "numeric", month: "short" });
+  const time = new Intl.DateTimeFormat(locale, { timeZone, ...hourMinute(locale), second: "2-digit" });
+  // «22 nov.» en algunas versiones de ICU: sin el punto, como en formatDate («22 nov 2026»).
+  return (d) => plainSpaces(`${day.format(d).replace(/\.$/, "")} ${time.format(d)}`);
 }
 
 /**

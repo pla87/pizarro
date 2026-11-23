@@ -68,10 +68,10 @@ export function ApplyTemplate({ projectId, lastChange }: { projectId: string; la
               : t("Se cambió el proyecto a «{name}»", { name: lastChange.templateName })}
             {lastChange.userName ? ` (${lastChange.userName})` : ""}
             {" · "}
-            <span suppressHydrationWarning>{formatDate(lastChange.createdAt, "dateTimeShort", intl)}</span>
+            <span suppressHydrationWarning>{formatDate(lastChange.createdAt, "dateTime", intl)}</span>
           </p>
           <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-            {t("Se puede deshacer hasta el")} <span suppressHydrationWarning>{formatDate(lastChange.until, "dateTimeShort", intl)}</span>.
+            {t("Se puede deshacer hasta el")} <span suppressHydrationWarning>{formatDate(lastChange.until, "dateTime", intl)}</span>.
           </p>
           <button type="button" className="btn-secondary mt-2" disabled={pending} onClick={undo}>
             {pending ? <Loader2 size={15} className="animate-spin" /> : <Undo2 size={15} />} {t("Deshacer el cambio de plantilla")}

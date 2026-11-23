@@ -107,7 +107,7 @@ describe("ajustes de la instalación", () => {
     const origWarn = console.warn;
     console.warn = () => {};
     try {
-      assert.equal(formatDate(new Date("2026-03-01T12:00:00Z"), "dateNumeric"), "01/03/2026");
+      assert.equal(formatDate(new Date("2026-03-01T12:00:00Z"), "date"), "1 mar 2026");
     } finally {
       console.warn = origWarn;
       if (prev === undefined) delete process.env.APP_TIMEZONE;
@@ -160,5 +160,12 @@ describe("setupCodeSource (dónde ver el código del asistente)", () => {
     assert.equal(setupCodeSource({ PIZARRO_LAUNCHER: "npm" }), "npm");
     assert.equal(setupCodeSource({ PIZARRO_LAUNCHER: "docker" }), "docker");
     assert.equal(setupCodeSource({}), "unknown");
+  });
+
+  test("Render y Fly.io (con la imagen de Docker): manda la plataforma sobre PIZARRO_LAUNCHER", () => {
+    assert.equal(setupCodeSource({ RENDER: "true", PIZARRO_LAUNCHER: "docker" }), "render");
+    assert.equal(setupCodeSource({ RENDER_SERVICE_ID: "srv-x" }), "render");
+    assert.equal(setupCodeSource({ FLY_APP_NAME: "pizarro", PIZARRO_LAUNCHER: "docker" }), "fly");
+    assert.equal(setupCodeSource({ FLY_MACHINE_ID: "x" }), "fly");
   });
 });

@@ -395,6 +395,25 @@ Guardas que conviene conocer:
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
 
+- Ronda 62:
+  - Tareas de fondo que no hacen nada: devuelven `{ skipped: "<motivo>" }` y `runJob` lo guarda en `JobRun.lastError` con el
+    prefijo `skip:` y `lastOk = true` (`src/lib/job-run.ts`, `jobRunView`, que usan la pantalla y el diagnóstico). Un
+    motivo nuevo necesita su texto en `BackupsAdmin.tsx`.
+  - Mensajes de Logs traducibles: `logEvent({ label })` guarda la plantilla `{k, p}` en `details.$msg` (`LOG_LABEL_KEY`,
+    `src/lib/log-message.ts`) y el mensaje en español para buscar. Un evento frecuente nuevo, con `label`.
+  - URL sin recargar: `replaceUrlKeepingState` (`src/lib/replace-url.ts`), nunca `history.replaceState(window.history.state…)`
+    (Next vuelve a escribir la dirección vieja en el siguiente refresco).
+  - Modales que se abren al cerrarse otro: `useBackToClose` espera a que no haya «atrás» silenciosos pendientes
+    (`whenNoSilentPops`) antes de apilar su entrada; si no, Atrás salía de la página.
+  - IP del cliente en Render/Fly.io: `platformIpHeader()` (`CF-Connecting-IP` / `Fly-Client-IP`) solo si existen
+    `RENDER`/`RENDER_SERVICE_ID` o `FLY_APP_NAME`/`FLY_MACHINE_ID`; `resolveAppUrl()` deduce `APP_URL` también de
+    `RENDER_EXTERNAL_URL` y `FLY_APP_NAME`. `tests/cloud-platforms.test.ts` comprueba `render.yaml` y `deploy/fly.toml`
+    contra el Dockerfile y que no vuelva `railway.json`.
+  - Correo caído: `periodic-mail.ts` corta la pasada solo por errores del envío (`sending`) y aparta una hora a quien falló
+    (`failureMemory`, igual que los informes).
+  - Cambiar de tipo: `switchKindDescription` (`kinds-special.ts`) lee el formulario por apartados (`formBlocks`): solo las
+    etiquetas en negrita son anclas. `tests/kinds-special.test.ts` fija los casos raros.
+
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
 llevan enlaces de sesión ni nombres de modelos.
@@ -549,31 +568,36 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Estado al cerrar la ronda 61:** v1.65.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Las copias externas de la instalación del propietario funcionan (el panel de Cloudflare solo corta la lista a 25 filas) y
-el bucket tiene la regla de bloqueo `copias-pizarro` (`pizarro/pizarro-backup-`, 31 días). `FEEDBACK_EMAIL`
-(`src/lib/product.ts`) sigue vacía: hasta que el propietario cree la dirección, «Informar de un error» va a GitHub.
-Pendiente de antes: validar el `deploy/Caddyfile` en un VPS (prompt 3 de `PRUEBAS-CHROME.md`).
+**Estado al cerrar la ronda 62:** v1.66.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+`FEEDBACK_EMAIL` = `feedback@getpizarro.com` (`src/lib/product.ts`): la dirección debe existir y reenviar al buzón del
+propietario (prompt 1 de `PRUEBAS-CHROME.md`); si no, los informes de las instalaciones con email rebotan. `railway.json` se
+retiró (Railway dejó de leer «Config as Code» el 1-12-2026): la comprobación de salud se pone en el panel de cada servicio
+(prompt 3). El `Caddyfile` ya no necesita VPS: lo valida el job «Caddyfile» del workflow «Comprobaciones» en cada PR.
+Pendiente del propietario: crear la dirección de feedback, la regla de R2 de `pizarro/files/` (prompt 2) y la comprobación
+de salud en sus dos Railway (prompt 3).
 
-**Preguntas abiertas al propietario (tras la v1.65.0)**, con la numeración del informe final de la ronda 61 (entre
+**Preguntas abiertas al propietario (tras la v1.66.0)**, con la numeración del informe final de la ronda 62 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Crear la dirección para recibir los informes de errores (p. ej. una de getpizarro.com con reenvío gratuito de
-   Cloudflare Email Routing) y rellenar `FEEDBACK_EMAIL`. (SÍ)
-2. Segunda regla de bloqueo en R2 para `pizarro/files/` (los adjuntos que comparten las copias): 180 días; sin ella, un
-   `.pzbak` se restaura pero sin adjuntos. Coste: los adjuntos borrados siguen 180 días más en el bucket (céntimos). (SÍ)
-3. Fechas con puntos («1.12.2026») siempre como día/mes al importar. (SÍ)
-4. `MAX_USERS` mal escrito: hoy no aplica ningún tope (con aviso). (Dejarlo así)
-5. Textos en inglés de *Curso o charla* («Mark», «marking scheme», «Tutorial»): pasarlos a inglés americano («Grade»,
-   «grading rubric», «Office hours/Tutoring»). (SÍ)
-6. Que las tarjetas de ejemplo y «Aplicar plantilla» se puedan usar también con las plantillas propias para quien no es
-   administrador. (NO)
-7. Recordar todas las bajas del informe semanal, no solo la última. (Más adelante, si alguien lo pide)
-8. Interruptor en Administración para desactivar el informe de errores por email. (Solo si un cliente lo pide)
-9. Rol «Presupuesto» de una columna: hoy activa el campo Coste aunque quien lo pone no gestione el proyecto.
-   (Dejarlo así y documentarlo)
-10. Probar en un iPad real el arrastre de franjas del Calendario con pulsación larga (no se puede en la nube). (SÍ, en
-    la próxima auditoría con Claude in Chrome o a mano)
+1. Comprobar el espacio libre antes de la copia diaria (con el margen común) para que una copia que no cabe no llene el
+   disco y tumbe las subidas; hoy solo se traduce el error de disco lleno. (SÍ)
+2. Contraste del acento «mostaza»: el texto secundario queda en 3,99:1; oscurecerlo (p. ej. `#7a6f4a`). (SÍ)
+3. Importar un `.pizarro.zip` falla entero si la cola de imágenes está llena en ese momento: que espere turno. (SÍ, en la
+   próxima ronda)
+4. Aviso de versión nueva y ayuda de copias externas en Render/Fly.io: hoy hablan de `get.sh`/`docker compose pull`
+   (`UpdateNotice`, `runsOnRailway`). (SÍ, en la próxima ronda)
+5. Pasar poco a poco a plantilla traducible el resto de mensajes de Logs (unas 75 llamadas con texto libre). (SÍ, al tocar
+   cada una)
+6. Botón «+» de cada columna con un tipo por defecto de esa columna («Lista de la compra» → Compras). (Más adelante)
+7. Títulos automáticos de las plantillas con un mismo patrón («Obra:», «Cita:» frente a «Comprar», «Gestionar»). (Lo
+   decide el propietario: son sus plantillas)
+8. Explicar los códigos de release (R1F1, R1C1) con un texto al pasar el ratón en Releases y en las tarjetas. (SÍ, pequeño)
+9. Un solo modo de guardado en el detalle (hoy, tipo y título al momento; descripción y el resto con «Guardar»). (NO por
+   ahora)
+10. Respuesta escrita justo tras una etiqueta en negrita de la plantilla: TipTap la deja también en negrita. (NO)
+11. Si hay un destino externo válido y otro mal configurado, la tarea sale «Correcta» (el aviso sale en «Destino
+    externo»). (Dejarlo así)
+12. Probar en un iPad real el arrastre de franjas del Calendario. (Más adelante, decisión de la ronda 62)
 
 Límites conocidos (no se cambian): un administrador puede saber si existe un tipo con cierto nombre en otro proyecto (los
 nombres de tipos son únicos entre generales y de proyecto); volver a la v1.64 con avisos `REPORT_UNSUBSCRIBED` ya creados
@@ -583,6 +607,13 @@ Menores sin numerar de antes (recomendación NO salvo que se note): «Guardar de
 simultáneo; `INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro; «Esta semana» de domingo a sábado en
 inglés; búsquedas de releases de 1–2 caracteres sin índice; `socketTimeout` del SMTP; log de errores de Caddy; código
 propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores.
+
+**Decisiones de la ronda 62 (ya aplicadas):** `FEEDBACK_EMAIL` = feedback@getpizarro.com con «Enviar por email» (mailto)
+cuando la instalación no envía emails y GitHub como alternativa; guías de Render y Fly.io (`render.yaml`, `deploy/fly.toml`);
+retirado `railway.json`; fechas con puntos siempre día/mes; *Curso o charla* en inglés americano; `MAX_USERS` mal escrito sin
+tope (como estaba); no dejar a quien no es administrador usar plantillas propias con ejemplos; recordar todas las bajas del
+informe y el interruptor del informe de errores, solo si se pide; rol «Presupuesto» como está; alta sin email solo con
+enlace de invitación; «Cita» en índigo; copia externa mal configurada como error; retirado `dateNumeric`.
 
 **Decisiones de la ronda 61 (ya aplicadas):** 6 plantillas de serie (*Vibecoding*, *Trabajo y clientes*, *Casa y
 familia*, *Eventos y viajes*, *Estudios y aprendizaje*, *Curso o charla* con «Publicado») con «Con tarjetas de ejemplo» en

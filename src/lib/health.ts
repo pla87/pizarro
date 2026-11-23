@@ -3,8 +3,9 @@ import { access, mkdir, statfs } from "node:fs/promises";
 
 // Comprobaciones de /api/health: base de datos, carpeta de subidas escribible y espacio libre en su disco.
 // La respuesta solo lleva un motivo corto: nunca rutas, mensajes de error ni secretos. El disco casi lleno es un aviso
-// (`warnings`), no un fallo: con un 503 Railway no desplegaba la versión nueva (railway.json usa /api/health como
-// comprobación) y Docker marcaba el contenedor como «unhealthy», justo cuando hacía falta entrar a liberar espacio.
+// (`warnings`), no un fallo: con un 503 Railway no desplegaba la versión nueva (su comprobación de salud, Settings →
+// Deploy → Healthcheck Path, es /api/health, como la de Render y Fly.io) y Docker marcaba el contenedor como
+// «unhealthy», justo cuando hacía falta entrar a liberar espacio.
 
 const MB = 1024 * 1024;
 export const DEFAULT_MIN_FREE_MB = 200;

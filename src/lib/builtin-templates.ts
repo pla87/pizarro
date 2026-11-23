@@ -115,7 +115,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         kind("Compras", "#22c55e", "Comprar ", "**Dónde:**\n\n**Para cuándo:**\n"),
         kind("Casa", "#f97316", "", "**Qué hay que hacer:**\n\n**Material necesario:**\n"),
         kind("Papeleo", "#64748b", "Gestionar ", "**Trámite:**\n\n**Documentos necesarios:**\n\n**Plazo:**\n", ["Reunir documentos", "Pedir cita o hacerlo online", "Archivar el justificante"]),
-        kind("Cita", "#ef4444", "Cita: ", "**Quién:**\n\n**Dónde y cuándo:**\n\n**Qué preguntar o llevar:**\n", ["Pedir la cita", "Preparar documentación", "Apuntar indicaciones"]),
+        kind("Cita", "#6366f1", "Cita: ", "**Quién:**\n\n**Dónde y cuándo:**\n\n**Qué preguntar o llevar:**\n", ["Pedir la cita", "Preparar documentación", "Apuntar indicaciones"]),
         kind("Reforma u obra", "#8b5a2b", "Obra: ", "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\n**Quién lo hace y presupuesto:**\n\n**Fechas previstas:**\n", ["Pedir presupuestos", "Acordar la fecha", "Seguimiento durante la obra", "Revisar el resultado y pagar"]),
         kind("Mudanza", "#0ea5e9", "Mudanza: ", "**Qué hay que hacer (trámites, embalaje, transporte, suministros):**\n\n**Fecha:**\n", ["Pedir presupuestos de transporte", "Embalar y etiquetar", "Cambiar la dirección y los suministros", "Entregar las llaves"]),
       ],

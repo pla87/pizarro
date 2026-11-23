@@ -6,6 +6,14 @@ export function formatSize(bytes: number, locale = "es-ES"): string {
   return `${nf(bytes / 1024 / 1024 / 1024, 2)} GB`;
 }
 
+/**
+ * Porcentaje entero con la costumbre del idioma: «40 %» en español (con espacio) y «40%» en inglés americano (sin él).
+ * `pct` va de 0 a 100. El espacio duro de Intl sale como espacio normal (mismo HTML en el servidor y en el navegador).
+ */
+export function formatPercent(pct: number, locale = "es-ES"): string {
+  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(pct / 100).replace(/[\u00a0\u202f]/g, " ");
+}
+
 /** Cuota en MB legible: «10 GB», «500 MB». */
 export function formatQuotaMb(mb: number, locale = "es-ES"): string {
   return formatSize(mb * 1024 * 1024, locale);

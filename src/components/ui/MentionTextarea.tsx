@@ -1,7 +1,8 @@
 "use client";
 
 import { AtSign } from "lucide-react";
-import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import {
   addMentions, applyTextChange, hasMentionIn, mentionTouching, modelFromRaw, modelToRaw, normalizeModel, replaceRange, sliceToRaw,
@@ -14,6 +15,8 @@ import { normalizeSearch } from "@/lib/search-accents";
 import { Avatar } from "./Avatar";
 import { GOOGLE_COMMANDS as COMMANDS, GoogleFileIcon } from "./googleFiles";
 import { cn } from "./cn";
+import { textareaCaretRect } from "./editAnchorDom";
+import { scrollActiveOption, suggestionsStyle } from "./suggestionsPopup";
 
 export type MentionCommand = GoogleFileKind;
 
@@ -169,6 +172,39 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
 
   const showBackdrop = pretty && model.mentions.length > 0;
 
+  // La lista va en un portal sobre <body>, junto al «@» (debajo o, si no cabe, encima): dentro del campo la cortaba el
+  // borde del diálogo (comentarios al pie del detalle, descripción larga). Se recoloca al desplazar o cambiar el tamaño.
+  const listOpen = !!query && options.length > 0;
+  const [listStyle, setListStyle] = useState<React.CSSProperties | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const placeList = useRef(() => {});
+  useLayoutEffect(() => {
+    placeList.current = () => {
+      const el = inner.current;
+      if (!el || !query) return;
+      const next = suggestionsStyle(textareaCaretRect(el, query.start), options);
+      // Sin cambios, el mismo objeto: no se vuelve a pintar el campo entero en cada evento de desplazamiento.
+      setListStyle((cur) => (cur && STYLE_KEYS.every((k) => cur[k] === next[k]) ? cur : next));
+    };
+    if (listOpen) placeList.current();
+  }, [listOpen, query, options, value]);
+  useEffect(() => {
+    if (!listOpen) return;
+    // El desplazamiento de la propia lista (rueda, o ↑↓ hasta una opción oculta) no mueve el «@»: no hace falta recolocarla.
+    const again = (e?: Event) => {
+      if (e?.type === "scroll" && e.target === listRef.current) return;
+      placeList.current();
+    };
+    window.addEventListener("scroll", again, true);
+    window.addEventListener("resize", again);
+    window.visualViewport?.addEventListener("resize", again);
+    return () => {
+      window.removeEventListener("scroll", again, true);
+      window.removeEventListener("resize", again);
+      window.visualViewport?.removeEventListener("resize", again);
+    };
+  }, [listOpen]);
+
   /** Copiar o cortar un trozo con menciones: texto legible para otras aplicaciones y el formato guardado para Pizarro. */
   const copyMentions = (e: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean) => {
     const el = e.currentTarget;
@@ -280,20 +316,27 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
         }}
         {...rest}
       />
-      {query && options.length > 0 && (
+      {listOpen && listStyle && typeof document !== "undefined" && createPortal(
         <ul
+          ref={listRef}
           role="listbox"
-          className="absolute left-0 z-40 mt-1 max-h-64 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          style={listStyle}
+          data-dictation-keep
+          className="z-[100] w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-sm text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         >
           {options.map((o, i) => (
-            <li key={`${o.kind}-${o.id}`} role="option" aria-selected={i === active}>
+            <li key={`${o.kind}-${o.id}`} ref={i === active ? scrollActiveOption : undefined} role="option" aria-selected={i === active}>
               <button
                 type="button"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   choose(o);
                 }}
-                onMouseEnter={() => setActive(i)}
+                // onMouseMove y no onMouseEnter: al desplazar la lista con ↑↓, el navegador lanza mouseenter en la
+                // opción que queda bajo el puntero quieto y la activa saltaría hacia atrás.
+                onMouseMove={() => {
+                  if (i !== active) setActive(i);
+                }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left",
                   i === active ? "bg-brand-50 dark:bg-brand-500/15" : "hover:bg-slate-50 dark:hover:bg-slate-800",
@@ -314,11 +357,15 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
           <li className="flex items-center gap-1 px-2 pt-1 pb-0.5 text-[11px] text-slate-500">
             <AtSign size={11} /> {t("↑↓ para elegir · Enter para insertar")}
           </li>
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   );
 });
+
+/** Lo que cambia del estilo de la lista de «@» al recolocarla (suggestionsStyle). */
+const STYLE_KEYS = ["top", "bottom", "left", "maxHeight"] as const;
 
 /** Contenido de la capa de resaltado: el texto tal cual (invisible) y cada mención con su fondo. */
 function backdropParts(model: MentionModel): React.ReactNode[] {

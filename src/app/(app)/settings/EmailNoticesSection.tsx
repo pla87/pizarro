@@ -1,7 +1,9 @@
 "use client";
 
-import { CalendarDays, Mail } from "lucide-react";
+import { AlertTriangle, CalendarDays, Mail } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
+import { cn } from "@/components/ui/cn";
 import { updateEmailPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
@@ -40,7 +42,6 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
   const [saved, setSaved] = useState(prefs);
   const dirty = (Object.keys(form) as (keyof EmailPrefs)[]).some((k) => form[k] !== saved[k]);
   const set = <K extends keyof EmailPrefs>(key: K, value: EmailPrefs[K]) => setForm((f) => ({ ...f, [key]: value }));
-  const anyEmail = form.notifyEmail || form.notifyAssignedEmail || form.notifyDueEmail || form.notifyCommentEmail || form.dailyDigest;
 
   return (
     <section className="card p-5">
@@ -48,8 +49,20 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
       <p className="mt-0.5 text-sm text-slate-500">
         {t("Menciones, asignaciones, cambios de fecha y comentarios de lo que sigues salen siempre en la campana; además, por email:")}
       </p>
+      {/* Sin email en el servidor, arriba y destacado (antes, una línea gris al final con las casillas como si funcionaran).
+          Las casillas se pueden seguir marcando (se guardan para cuando se configure), pero sus textos se ven atenuados: en gris
+          (slate-500, 4,7:1 sobre blanco) y no con transparencia, que dejaba las ayudas de debajo en 2,3:1. */}
+      {!emailAvailable && (
+        <p role="status" data-email-unavailable className="mt-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden />
+          <span>
+            {t("El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.")}
+            {adminNotices && <>{" "}<Link href="/admin/integrations" className="font-medium underline">{t("Configurar el email")}</Link></>}
+          </span>
+        </p>
+      )}
       <form
-        className="mt-4 space-y-3"
+        className={cn("mt-4 space-y-3", !emailAvailable && "[&_label]:text-slate-500 dark:[&_label]:text-slate-400")}
         onSubmit={(e) => {
           e.preventDefault();
           const sent = form;
@@ -64,11 +77,13 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
           <input type="checkbox" className="mt-0.5" checked={form.notifyEmail} onChange={(e) => set("notifyEmail", e.target.checked)} />
           <span>
             {t("Email cuando me mencionan")}
-            {/* A todo el mundo (cualquiera puede configurar un informe): este aviso va con las menciones (noticeEmailKind). */}
-            <span className="block text-xs text-slate-500">{t("Con las menciones te llegan también los avisos de que alguien se ha dado de baja de un informe semanal que configuraste.")}</span>
-            {adminNotices && (
-              <span className="block text-xs text-slate-500">{t("Como administrador, con las menciones te llegan también los avisos de proyectos privados que pasan a ser de equipo al borrarse una cuenta (por email y por Telegram o WhatsApp).")}</span>
-            )}
+            {/* A todo el mundo (cualquiera puede configurar un informe): este aviso va con las menciones (noticeEmailKind).
+                Telegram y WhatsApp tienen sus propias casillas en su tarjeta: aquí solo se habla del email. */}
+            <span className="block text-xs text-slate-500">
+              {adminNotices
+                ? t("Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste y, como administrador, el de que un proyecto privado ha pasado a ser de equipo al borrarse una cuenta.")
+                : t("Además de las menciones, esta casilla te envía el aviso de que alguien se ha dado de baja de un informe semanal que configuraste.")}
+            </span>
           </span>
         </label>
         <label className="flex items-start gap-2 text-sm">
@@ -101,9 +116,6 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
             </div>
           )}
         </div>
-        {!emailAvailable && anyEmail && (
-          <p className="text-xs text-slate-500">{t("El envío de emails aún no está configurado en el servidor.")}</p>
-        )}
         <button className="btn-primary" disabled={pending || !dirty}>{t("Guardar avisos")}</button>
       </form>
     </section>

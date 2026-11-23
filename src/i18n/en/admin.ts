@@ -53,7 +53,8 @@ export const admin: Record<string, string> = {
   "Usuario": "User",
   "Páginas vistas, tareas abiertas, informes y descargas": "Page views, opened tasks, reports and downloads",
   "Incluir consultas": "Include reads",
-  "Buscar (acción, mensaje, ruta)": "Search (action, message, path)",
+  // El mensaje se guarda en español (en inglés se ve traducido): la búsqueda lo encuentra por el texto en español.
+  "Buscar (acción, mensaje, ruta)": "Search (action, message in Spanish, path)",
   "Filtrar": "Filter",
   "Limpiar": "Clear",
   "← Volver a los más recientes": "← Back to the most recent",
@@ -71,7 +72,6 @@ export const admin: Record<string, string> = {
   "Usuario actualizado": "User updated",
   "Usuario creado": "User created",
   "Editar usuario": "Edit user",
-  "Contraseña inicial (mín. 10)": "Initial password (min. 10)",
   "Rol": "Role",
   "Administrador": "Administrator",
   "Usuario activo (si lo desactivas, se cierran sus sesiones)": "Active user (if you deactivate them, their sessions are closed)",
@@ -375,8 +375,6 @@ export const admin: Record<string, string> = {
   "No se ha guardado, para no pisar su cambio. Lo que has escrito sigue aquí: cópialo si lo quieres conservar y recarga para ver lo guardado.": "It was not saved, so as not to overwrite their change. What you wrote is still here: copy it if you want to keep it, and reload to see what was saved.",
   "No se ha guardado, para no pisar su cambio. Lo que has cambiado sigue aquí a la vista: al recargar verás lo que guardó la otra persona y podrás repetir tus cambios.": "It was not saved, so as not to overwrite their change. Your changes are still shown here: after reloading you will see what the other person saved and can make your changes again.",
   "Copiar lo que has escrito": "Copy what you wrote",
-  // Usuarios: de dónde sale el máximo de usuarios activos (MAX_USERS)
-  "El máximo de {max} lo fija la variable MAX_USERS del servidor.": "The maximum of {max} is set by the server's MAX_USERS variable.",
   // Plantillas de proyecto: tipos generales en positivo, como en los ajustes del proyecto
   "Tipos generales que se usan": "General types in use",
   "Ninguno (ocultar todos los tipos generales)": "None (hide all general types)",
@@ -384,11 +382,55 @@ export const admin: Record<string, string> = {
   // Usuarios: MAX_USERS es opcional (sin la variable, sin tope)
   "1 usuario activo": "1 active user",
   "{n} usuarios activos": "{n} active users",
-  "Para cambiarlo, pon otro número en MAX_USERS, o quítala para no tener tope (Railway → Variables; con Docker, en el .env), y reinicia Pizarro. Las personas desactivadas no cuentan.":
-    "To change it, set MAX_USERS to another number, or remove it for no limit (Railway → Variables; with Docker, in the .env file), and restart Pizarro. Deactivated people don't count.",
-  "La variable MAX_USERS del servidor no es un número entero válido y no se aplica: no hay tope de usuarios activos.":
-    "The server's MAX_USERS variable is not a valid whole number and is ignored: there is no limit on active users.",
-  "No hay tope de usuarios activos.": "There is no limit on active users.",
-  "Si quieres uno, pon el máximo en la variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env) y reinicia Pizarro. Las personas desactivadas no cuentan.":
-    "If you want one, set the maximum in the server's MAX_USERS variable (Railway → Variables; with Docker, in the .env file) and restart Pizarro. Deactivated people don't count.",
+  // Copias de seguridad: motivo de las tareas que no hacen nada y estado único sin destino externo
+  "Omitida": "Skipped",
+  "Omitida: ya hay una copia de las últimas 23 h": "Skipped: there is already a backup from the last 23 hours",
+  "Omitida: aún no hay ninguna copia": "Skipped: there is no backup yet",
+  "Omitida: no toca este mes": "Skipped: not due this month",
+  "Omitida: se repite mañana": "Skipped: it will be retried tomorrow",
+  "Copias automáticas activas, pero solo en el disco de este servidor.": "Automatic backups are on, but only to this server's disk.",
+  // Usuarios: el máximo de usuarios activos, primero en sencillo y lo técnico (MAX_USERS) después
+  "Puede haber como mucho {max} usuarios activos a la vez. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time. Deactivated people don't count.",
+  "No hay un máximo de usuarios activos.": "There is no maximum number of active users.",
+  "Para cambiar el máximo: variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env); sin ella no hay tope. Después, reinicia Pizarro.":
+    "To change the maximum: the server's MAX_USERS variable (Railway → Variables; with Docker, in the .env file); without it there is no limit. Then restart Pizarro.",
+  "La variable MAX_USERS del servidor no es un número entero válido y no se aplica.": "The server's MAX_USERS variable is not a valid whole number and is ignored.",
+  "Para poner un máximo: variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env). Después, reinicia Pizarro.":
+    "To set a maximum: the server's MAX_USERS variable (Railway → Variables; with Docker, in the .env file). Then restart Pizarro.",
+  // Logs: mensajes guardados con su plantilla (se traducen al leerlos)
+  "Visita a {path}": "Visit to {path}",
+  "{name} ha iniciado sesión": "{name} signed in",
+  "{name} ha iniciado sesión con Google": "{name} signed in with Google",
+  "{name} ha iniciado sesión con Google y verificación en dos pasos": "{name} signed in with Google and two-step verification",
+  "{name} ha iniciado sesión (con verificación en dos pasos)": "{name} signed in (with two-step verification)",
+  "{name} ha cerrado sesión": "{name} signed out",
+  "Resumen diario enviado a {name}": "Daily digest sent to {name}",
+  "Email de aviso ({type}) enviado a {name}": "Notification email ({type}) sent to {name}",
+  "Copia de seguridad creada: {file} ({size}, {rows} filas, {files} ficheros)": "Backup created: {file} ({size}, {rows} rows, {files} files)",
+  "Descarga de los logs en CSV (del {from} al {to})": "Logs downloaded as CSV (from {from} to {to})",
+  // Logs: más eventos de uso normal con su plantilla (acceso, verificación en dos pasos, proyectos, archivos, arranque)
+  "{name}: contraseña correcta, falta la verificación en dos pasos": "{name}: correct password, two-step verification pending",
+  "{name}: acceso con Google correcto, falta la verificación en dos pasos": "{name}: Google sign-in OK, two-step verification pending",
+  "{name}: código de verificación incorrecto": "{name}: incorrect verification code",
+  "{name} ha activado la verificación en dos pasos ({method})": "{name} turned on two-step verification ({method})",
+  "{name} ha desactivado la verificación en dos pasos": "{name} turned off two-step verification",
+  "Inicio de sesión bloqueado por demasiados intentos ({email})": "Sign-in blocked after too many attempts ({email})",
+  "Inicio de sesión con contraseña rechazado ({email}): solo se admite Google": "Password sign-in rejected ({email}): only Google is allowed",
+  "Inicio de sesión fallido ({email}): {why}": "Failed sign-in ({email}): {why}",
+  "[no es un email]": "[not an email]",
+  "email desconocido": "unknown email",
+  "solo se admite Google": "only Google is allowed",
+  "contraseña incorrecta": "wrong password",
+  "usuario desactivado": "deactivated user",
+  "Creó el proyecto «{name}»": "Created the project “{name}”",
+  "Creó el proyecto privado «{name}»": "Created the private project “{name}”",
+  "Creó el proyecto «{name}» con la plantilla «{template}»": "Created the project “{name}” from the template “{template}”",
+  "Creó el proyecto privado «{name}» con la plantilla «{template}»": "Created the private project “{name}” from the template “{template}”",
+  "Creó el proyecto «{name}» con la plantilla «{template}» y tarjetas de ejemplo": "Created the project “{name}” from the template “{template}” with sample cards",
+  "Creó el proyecto privado «{name}» con la plantilla «{template}» y tarjetas de ejemplo": "Created the private project “{name}” from the template “{template}” with sample cards",
+  "Archivo «{name}» subido ({size})": "File “{name}” uploaded ({size})",
+  "Imagen «{name}» subida ({size})": "Image “{name}” uploaded ({size})",
+  "Documento «{name}» subido ({size})": "Document “{name}” uploaded ({size})",
+  "Descarga de «{name}»": "Downloaded “{name}”",
+  "Arranque de Pizarro v{version}": "Pizarro v{version} started",
 };

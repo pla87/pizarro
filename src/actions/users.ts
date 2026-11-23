@@ -16,7 +16,7 @@ import { inviteProjectId, nameFromEmail } from "@/lib/project-invite";
 import { issueAuthToken } from "@/lib/auth-token";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
-import { hashPassword, passwordSchema } from "@/lib/password";
+import { hashPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/rate-limit";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { eraseUser } from "@/lib/user-delete";
@@ -35,18 +35,11 @@ import { publishChange } from "@/lib/realtime";
 const createSchema = z.object({
   name: v.personName,
   email: v.email,
-  /** Solo se pide sin email configurado; con email, la persona elige la suya desde la invitación. */
-  password: z.string().max(200).optional(),
   role: z.enum(["ADMIN", "MEMBER"]),
   /** Idioma de su interfaz y de la invitación; sin indicar, el de la instalación. */
   locale: z.enum(["ES", "EN"]).optional(),
 });
 
-/**
- * Alta de usuario. Con email configurado se envía una invitación (72 h) para que elija su contraseña;
- * sin email, el admin escribe una clave inicial y la persona está obligada a cambiarla al entrar.
- * En ningún caso el admin llega a conocer la contraseña definitiva.
- */
 /**
  * Lanza si ya hay MAX_USERS usuarios activos (sin la variable no hay tope y no hace nada). Dentro de una transacción toma
  * antes un candado común a altas y reactivaciones (pg_advisory_xact_lock), para que dos a la vez no puedan pasarse del tope.
@@ -60,36 +53,47 @@ async function assertUserSlot(client: Prisma.TransactionClient | typeof db): Pro
   }
 }
 
+/**
+ * Alta de usuario: siempre como invitación (enlace de un solo uso, 72 h, para elegir su contraseña), igual que «Invitar
+ * por email» de un proyecto. Con email configurado se le envía; sin email, o si el envío falla (la cuenta ya está
+ * creada), se devuelve el enlace para que el administrador se lo pase por otro canal. El administrador nunca conoce
+ * la contraseña.
+ */
 export async function createUser(input: z.input<typeof createSchema>) {
   return runAction({ name: "users.createUser", args: [{ name: input.name, email: input.email, role: input.role, locale: input.locale }] }, async () => {
     const admin = await requireAdmin();
     const data = createSchema.parse(input);
-    const invite = emailEnabled();
-    const initial = invite ? null : passwordSchema("La contraseña debe tener al menos 10 caracteres.").parse(data.password ?? "");
-    const created = await insertUser(data, initial);
+    const created = await insertUser(data);
     revalidatePath("/admin/users");
-    if (!invite) return { invited: false };
-    try {
-      const token = await issueAuthToken(created.id, "INVITE");
-      await sendInviteMail(created, `${appUrl()}/reset/${token}`, admin.name);
-    } catch (err) {
-      logMailError("[users] invitación", err);
-      throw new AppError("Usuario creado, pero no se pudo enviar la invitación. Revisa el envío de emails y pulsa «Reenviar invitación» en su fila.");
+    const token = await issueAuthToken(created.id, "INVITE");
+    const link = `${appUrl()}/reset/${token}`;
+    let mailFailed = false;
+    if (emailEnabled()) {
+      try {
+        await sendInviteMail(created, link, admin.name);
+        describeAction(`Dio de alta a «${created.name}» (invitación por email)`);
+        return { name: created.name, emailed: true, mailFailed, link: null };
+      } catch (err) {
+        logMailError("[users] invitación", err);
+        mailFailed = true;
+      }
     }
-    return { invited: true };
+    // El enlace no se registra: solo que hay que pasarlo a mano.
+    describeAction(`Dio de alta a «${created.name}»${mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
+    return { name: created.name, emailed: false, mailFailed, link: link as string | null };
   });
 }
 
 /**
- * Alta común de «Nuevo usuario» y de «Invitar por email» (un proyecto): tope de usuarios activos, email libre y
- * contraseña inicial (sin ella, una aleatoria que nadie conoce). Con `projectId`, la cuenta entra ya en ese proyecto.
+ * Alta común de «Nuevo usuario» y de «Invitar por email» (un proyecto): tope de usuarios activos, email libre y una
+ * contraseña provisional aleatoria que nadie conoce (la persona elige la suya con la invitación). Con `projectId`, la
+ * cuenta entra ya en ese proyecto.
  */
-async function insertUser(data: { name: string; email: string; role: "ADMIN" | "MEMBER"; locale?: "ES" | "EN" }, initial: string | null, projectId?: string) {
+async function insertUser(data: { name: string; email: string; role: "ADMIN" | "MEMBER"; locale?: "ES" | "EN" }, projectId?: string) {
   const locale = data.locale ?? ((await getInstanceSettings()).locale === "en" ? "EN" : "ES");
   await assertUserSlot(db);
   if (await db.user.count({ where: { email: data.email } })) throw new AppError("Ya existe un usuario con ese email.");
-  // Con invitación la contraseña provisional es aleatoria y nadie la conoce.
-  const passwordHash = await hashPassword(initial ?? randomBytes(32).toString("base64url"));
+  const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
   // El recuento se repite dentro de la transacción, con el candado: dos altas a la vez no pasan del tope.
   return db.$transaction(async (tx) => {
     await assertUserSlot(tx);
@@ -120,7 +124,7 @@ export async function inviteToProject(projectId: string, email: string) {
     if (existing) throw new AppError("Ya hay una cuenta con ese email: añádela con «Añadir miembro…».");
     // En el idioma de quien invita (no en el de la instalación): el email, la pantalla de elegir la contraseña y, después,
     // su interfaz. Lo cambia ella en su perfil.
-    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER", locale: admin.locale }, null, project.id);
+    const created = await insertUser({ name: v.name.parse(nameFromEmail(address)), email: address, role: "MEMBER", locale: admin.locale }, project.id);
     const token = await issueAuthToken(created.id, "INVITE", { projectId: project.id });
     const link = `${appUrl()}/reset/${token}`;
     let emailed = false;
@@ -167,7 +171,8 @@ async function inviteProject(userId: string): Promise<{ id: string; name: string
 
 /**
  * «Reenviar invitación» (Administración → Usuarios y miembros del proyecto): enlace nuevo (72 h) por email; el anterior
- * deja de valer. Solo para quien aún no ha entrado.
+ * deja de valer. Si el envío falla, se devuelve el enlace con `mailFailed` para pasarlo a mano. Solo para quien aún no
+ * ha entrado.
  */
 export async function resendInvite(userId: string) {
   return runAction({ name: "users.resendInvite", args: [userId] }, async () => {
@@ -179,20 +184,21 @@ export async function resendInvite(userId: string) {
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
     const project = await inviteProject(user.id);
-    let link: string;
+    // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
+    const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
+    const link = `${appUrl()}/reset/${token}`;
+    let mailFailed = false;
     try {
-      // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
-      const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
-      link = `${appUrl()}/reset/${token}`;
       if (project) await sendProjectInviteMail(user, link, admin.name, project.name);
       else await sendInviteMail(user, link, admin.name);
     } catch (err) {
+      // El enlace anterior ya no vale: el nuevo se devuelve para pasarlo a mano (como al invitar con el email caído).
       logMailError("[users] reenviar invitación", err);
-      throw new AppError("No se pudo enviar la invitación. Revisa el envío de emails en Administración → Integraciones.");
+      mailFailed = true;
     }
-    describeAction(`Reenvió la invitación a «${user.name}»`);
-    // El enlace nuevo, para «Copiar enlace» en los miembros del proyecto (como al invitar); no se registra.
-    return { link };
+    describeAction(`Reenvió la invitación a «${user.name}»${mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : ""}`);
+    // El enlace nuevo, para «Copiar enlace» (como al invitar); no se registra.
+    return { link, mailFailed };
   });
 }
 
@@ -352,9 +358,9 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
     await db.$transaction([
       db.user.update({ where: { id: user.id }, data: { mustChangePassword: true, passwordHash } }),
       db.session.deleteMany({ where: { userId: user.id } }),
-      // Los enlaces pendientes (un cambio de email pedido por quien conocía la contraseña, restablecimientos anteriores)
-      // dejan de valer: el único válido será el que se genera ahora.
-      db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
+      // Los enlaces pendientes (un cambio de email pedido por quien conocía la contraseña, restablecimientos anteriores,
+      // una invitación que pudo llegar a quien no debía) dejan de valer: el único válido será el que se genera ahora.
+      db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
       // También los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo).
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
       // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.

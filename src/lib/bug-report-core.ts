@@ -108,22 +108,30 @@ export function bugReportTextFits(f: BugReportFields, kind: "bug" | "idea", text
 }
 
 /**
- * Dirección del formulario de GitHub con los campos técnicos ya rellenos y, si lo hay, lo escrito en el diálogo
- * (recortado, con «…», para que la dirección no pase de ISSUE_URL_MAX).
+ * Lo más largo de `full` que cabe en un enlace de `max` caracteres como mucho: `build(texto)` da el enlace con ese texto.
+ * Si no cabe entero, se recorta con «…» (búsqueda binaria sobre los caracteres, sin partir un par sustituto); si no
+ * cabe ni un carácter, sin texto. La usan el formulario de GitHub y «Enviar por email» (mailto:).
  */
-export function bugReportUrl(f: BugReportFields, kind: "bug" | "idea" = "bug", text = ""): string {
-  const { build, full } = issueUrlParts(f, kind, text);
-  if (build(full).length <= ISSUE_URL_MAX) return build(full);
-  // Lo más largo que cabe (búsqueda binaria sobre los caracteres, sin partir un par sustituto).
+export function fitTextInUrl(full: string, build: (text: string) => string, max: number): string {
+  if (build(full).length <= max) return build(full);
   const chars = Array.from(full);
   let lo = 0;
   let hi = chars.length;
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (build(`${chars.slice(0, mid).join("").trimEnd()}…`).length <= ISSUE_URL_MAX) lo = mid;
+    if (build(`${chars.slice(0, mid).join("").trimEnd()}…`).length <= max) lo = mid;
     else hi = mid - 1;
   }
   return build(lo ? `${chars.slice(0, lo).join("").trimEnd()}…` : "");
+}
+
+/**
+ * Dirección del formulario de GitHub con los campos técnicos ya rellenos y, si lo hay, lo escrito en el diálogo
+ * (recortado, con «…», para que la dirección no pase de ISSUE_URL_MAX).
+ */
+export function bugReportUrl(f: BugReportFields, kind: "bug" | "idea" = "bug", text = ""): string {
+  const { build, full } = issueUrlParts(f, kind, text);
+  return fitTextInUrl(full, build, ISSUE_URL_MAX);
 }
 
 interface TechInfo {

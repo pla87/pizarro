@@ -243,7 +243,7 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
       <div key={c.id} className="flex gap-2">
         <span className="h-6 w-6 shrink-0" />
         <div className="min-w-0 flex-1">
-          <time className="text-xs text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
+          <time className="text-xs text-slate-400">{formatDate(c.createdAt, "dateTime", locale)}</time>
           <p className="mt-0.5 rounded-lg border border-dashed border-slate-200 px-3 py-2 text-sm italic text-slate-500 dark:border-slate-700">{t("Comentario borrado")}</p>
         </div>
       </div>
@@ -253,9 +253,9 @@ export function Comments({ taskId, detail, setDetail, users, onGoogle, editDirty
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 text-xs">
           <span className="font-semibold">{c.authorName ?? t("Usuario eliminado")}</span>
-          <time className="text-slate-400">{formatDate(c.createdAt, "dateTimeShort", locale)}</time>
+          <time className="text-slate-400">{formatDate(c.createdAt, "dateTime", locale)}</time>
           {c.editedAt && (
-            <span className="text-slate-400" title={t("Editado el {date}", { date: formatDate(c.editedAt, "dateTimeShort", locale) })}>
+            <span className="text-slate-400" title={t("Editado el {date}", { date: formatDate(c.editedAt, "dateTime", locale) })}>
               {t("(editado)")}
             </span>
           )}

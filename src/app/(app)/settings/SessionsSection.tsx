@@ -58,7 +58,7 @@ export function SessionsSection({ sessions }: { sessions: SessionRow[] }) {
               </div>
               <div className="text-xs text-slate-500">
                 {s.ip ? `IP ${s.ip} · ` : ""}
-                {t("Última actividad: {date}", { date: formatDate(s.lastSeenAt, "dateTimeShort", locale) })}
+                {t("Última actividad: {date}", { date: formatDate(s.lastSeenAt, "dateTime", locale) })}
               </div>
             </div>
             {!s.current && (

@@ -11,6 +11,7 @@ import { POST as feedbackRoute } from "../../src/app/api/feedback/route";
 import { getFeedbackStatus, handleFeedbackPost } from "../../src/lib/feedback";
 import { FEEDBACK_FIELDS, FEEDBACK_LIMITS, SCREENSHOT_MAX_BYTES } from "../../src/lib/feedback-core";
 import { invalidateMemo } from "../../src/lib/memo";
+import { FEEDBACK_EMAIL } from "../../src/lib/product";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import pkg from "../../package.json";
 
@@ -157,10 +158,18 @@ describe("/api/feedback", () => {
     assert.equal((await post({ kind: "bug", text: "x" })).status, 401);
     await loginAs(u);
     assert.equal((await post({ kind: "bug", text: "x" }, { headers: { origin: "https://evil.example.com" } })).status, 403);
-    // Sin la dirección del producto (FEEDBACK_EMAIL vacía, como ahora) la ruta de verdad no envía nada.
-    const real = await feedbackRoute(request({ kind: "bug", text: "x" }));
-    assert.equal(real.status, 404);
-    assert.equal(await errorOf(real), "unavailable");
+    // La ruta de verdad envía a la dirección del producto (FEEDBACK_EMAIL; aquí, al buzón de pruebas).
+    const real = await feedbackRoute(request({ kind: "bug", text: "por la ruta de verdad" }));
+    assert.equal(real.status, 200);
+    const [viaRoute, ...others] = await mails();
+    assert.equal(others.length, 0);
+    assert.equal(viaRoute!.to, FEEDBACK_EMAIL);
+    for (const f of await readdir(outbox)) await rm(path.join(outbox, f), { force: true });
+    resetLimits(u.id);
+    // Sin la dirección del producto (si algún día se vaciara), no envía nada.
+    const noAddress = await post({ kind: "bug", text: "x" }, { to: "" });
+    assert.equal(noAddress.status, 404);
+    assert.equal(await errorOf(noAddress), "unavailable");
     // Build no oficial.
     process.env.NEXT_PUBLIC_OFFICIAL_BUILD = "";
     try {

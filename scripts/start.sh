@@ -29,12 +29,14 @@ if [ -n "$missing" ]; then
   echo "[start] Con Docker Compose: revisa el fichero .env junto a compose.yml (docs/INSTALL.md)."
   echo "[start] En Railway: servicio de la app -> Variables. DATABASE_URL debe ser \${{Postgres.DATABASE_URL}}"
   echo "[start] (usa el nombre exacto de tu servicio de base de datos) y aplica los cambios con «Deploy»."
+  echo "[start] En Render: servicio de Pizarro -> Environment. En Fly.io: fly secrets list (y fly secrets set)."
   # Espera antes de salir para no reiniciar en bucle rápido.
   sleep 20
   exit 1
 fi
-# Sin APP_URL en Railway se usa su dirección pública (RAILWAY_PUBLIC_DOMAIN; lo dice el log del servidor, src/lib/app-url.ts).
-[ -n "$APP_URL" ] || [ -n "$RAILWAY_PUBLIC_DOMAIN" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
+# Sin APP_URL en Railway, Render o Fly.io se usa la dirección pública que da la plataforma (RAILWAY_PUBLIC_DOMAIN,
+# RENDER_EXTERNAL_URL o https://<FLY_APP_NAME>.fly.dev; lo dice el log del servidor, src/lib/app-url.ts).
+[ -n "$APP_URL" ] || [ -n "$RAILWAY_PUBLIC_DOMAIN" ] || [ -n "$RENDER_EXTERNAL_URL" ] || [ -n "$FLY_APP_NAME" ] || echo "[start] AVISO: APP_URL no está definida; los enlaces de los avisos y Google no funcionarán bien."
 
 # Espera a que PostgreSQL responda (hasta 3 min; sin espera si ya responde) y aplica las migraciones
 # (migrator/). Si falla, explica en español qué comprobar (base caída, migración a medias: P3009).
@@ -44,8 +46,13 @@ if ! node scripts/migrate.mjs; then
   exit 1
 fi
 
-# Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios.
-node dist/boot.mjs
+# Sincroniza changelog.json → AppVersionLog y crea el admin inicial si no hay usuarios. Si falla (p. ej. SEED_ADMIN_PASSWORD
+# demasiado corta), la misma espera que las migraciones: sin ella, Railway agotaba sus reintentos en segundos y Docker
+# reiniciaba en bucle rápido.
+if ! node dist/boot.mjs; then
+  sleep 20
+  exit 1
+fi
 
 echo "[start] Arrancando servidor en el puerto ${PORT:-3000}"
 # Apagado ordenado: Next.js no gestiona SIGTERM/SIGINT; lo hace src/instrumentation.ts (guarda los registros y espera a los emails).

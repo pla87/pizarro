@@ -113,7 +113,7 @@ describe("miembros de proyectos privados", () => {
 
 describe("contraseñas y cambio forzado", () => {
   test("ninguna acción de administración permite fijar la contraseña de otra persona", async () => {
-    // La API de usuarios solo ofrece alta (clave inicial obligada a cambiar), edición, forzar cambio, 2FA, borrado,
+    // La API de usuarios solo ofrece alta (como invitación: contraseña aleatoria que nadie conoce), edición, forzar cambio, 2FA, borrado,
     // reenviar la invitación (el enlace va al email de la persona), generar un enlace de invitación nuevo (sin email: el
     // admin se lo pasa, pero la contraseña la elige la persona) e invitar a un proyecto (cuenta con una contraseña
     // aleatoria que nadie conoce; el enlace de un solo uso es para que la persona elija la suya).
@@ -156,6 +156,21 @@ describe("contraseñas y cambio forzado", () => {
     // La sesión vieja ya no vale.
     restoreSession(targetCookie);
     assert.equal(await getCurrentUser(), null);
+  });
+
+  // Antes la invitación pendiente seguía valiendo hasta 72 h: quien la tuviera elegía la contraseña y entraba, aunque la
+  // pantalla dice que se anulan los enlaces pendientes.
+  test("forcePasswordChange anula también la invitación pendiente", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const target = await makeUser({ mustChangePassword: true });
+    const invite = await issueAuthToken(target.id, "INVITE");
+    await loginAs(admin);
+    assert.ok(await findUsableToken(invite, ["INVITE"]), "la invitación vale antes de forzar el cambio");
+    expectOk(await forcePasswordChange(target.id, { copyLink: true }));
+    assert.equal(await findUsableToken(invite, ["INVITE"]), null, "ya no vale");
+    assert.equal(await db.authToken.count({ where: { userId: target.id, purpose: "INVITE" } }), 0);
+    logout();
+    expectFail(await resetPassword(invite, "clave-del-intruso-segura-1"), /no es válido o ha caducado/);
   });
 
   test("tras forzarlo: la contraseña anterior no entra; con Google se llega a «Elige una contraseña nueva» y, elegida, el enlace deja de valer", async () => {

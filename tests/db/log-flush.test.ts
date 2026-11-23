@@ -4,10 +4,14 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 import type { Prisma } from "../../src/generated/prisma/client";
-import { db } from "./helpers";
+import { db, expectOk, loginAs, makeUser } from "./helpers";
 import { POST } from "../../src/app/api/client-errors/route";
 import { flushLogs, logEvent } from "../../src/lib/log";
+import { logDetailsShown, logMessageText } from "../../src/lib/log-message";
+import { makeT } from "../../src/i18n/core";
 import { resetRateLimit } from "../../src/lib/rate-limit";
+import { createProject } from "../../src/actions/projects";
+import { LOG_LABEL_KEY } from "../../src/lib/log-message";
 
 const state = (globalThis as unknown as { __pzLog: { queue: Prisma.AppLogCreateManyInput[]; lastPurge: number } }).__pzLog;
 const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
@@ -159,5 +163,56 @@ describe("guardado del lote", () => {
     void flushLogs();
     await flushLogs();
     assert.equal((await rows("lograce.")).length, 3);
+  });
+});
+
+describe("mensajes traducibles", () => {
+  test("con plantilla: el mensaje se guarda en español y la página lo pinta en inglés; los detalles no la muestran", async () => {
+    logEvent({ category: "test", action: "tlabel.login", label: { k: "{name} ha iniciado sesión", p: { name: "Ana" } }, details: { method: "password" } });
+    logEvent({ category: "test", action: "tlabel.view", label: { k: "Visita a {path}", p: { path: "/api/calendar/secreto123.ics" } } });
+    logEvent({ category: "test", action: "tlabel.plain", message: "Error inesperado. Inténtalo de nuevo." });
+    await flushLogs();
+    const [login, plain, view] = await rows("tlabel.");
+    const en = makeT("en");
+    assert.equal(login!.message, "Ana ha iniciado sesión");
+    assert.equal(logMessageText(login!, en), "Ana signed in");
+    assert.equal(logMessageText(login!, makeT("es")), "Ana ha iniciado sesión");
+    assert.deepEqual(logDetailsShown(login!.details), { method: "password" });
+    // Las variables, sin la credencial de la ruta (como el mensaje); sin otros detalles, «Sin detalles».
+    assert.equal(logMessageText(view!, en), "Visit to /api/calendar/…");
+    assert.equal(logDetailsShown(view!.details), null);
+    // Sin plantilla, un texto fijo del diccionario se traduce; el texto libre sale tal cual.
+    assert.equal(logMessageText(plain!, en), "Unexpected error. Please try again.");
+    assert.equal(logMessageText({ message: "Visita libre", details: null }, en), "Visita libre");
+  });
+
+  // Los más vistos en un recorrido normal salían en español en los logs en inglés (crear proyecto, el segundo paso del
+  // acceso, activar la verificación, subir archivos, el arranque).
+  test("crear un proyecto, el acceso en dos pasos, las subidas y el arranque también se leen en inglés", async () => {
+    const admin = await makeUser({ role: "ADMIN", name: "Admin Log" });
+    await loginAs(admin);
+    expectOk(await createProject("Casa log", { isPrivate: true }));
+    await flushLogs();
+    const created = await db.appLog.findFirstOrThrow({ where: { action: "projects.createProject", userId: admin.id }, orderBy: { createdAt: "desc" } });
+    const en = makeT("en");
+    assert.equal(created.message, "Creó el proyecto privado «Casa log»");
+    assert.equal(logMessageText(created, en), "Created the private project “Casa log”");
+
+    logEvent({ category: "test", action: "tlabel2.second", label: { k: "{name}: contraseña correcta, falta la verificación en dos pasos", p: { name: "Ana" } } });
+    logEvent({ category: "test", action: "tlabel2.totp", label: { k: "{name} ha activado la verificación en dos pasos ({method})", p: { name: "Ana", method: "TOTP" } } });
+    logEvent({ category: "test", action: "tlabel2.upload", label: { k: "Archivo «{name}» subido ({size})", p: { name: "nota.txt", size: "13 B" } } });
+    logEvent({ category: "test", action: "tlabel2.fail", label: { k: "Inicio de sesión fallido ({email}): {why}", p: { email: { k: "[no es un email]" }, why: { k: "contraseña incorrecta" } } } });
+    await flushLogs();
+    const [fail, second, totp, upload] = await rows("tlabel2.");
+    assert.equal(second!.message, "Ana: contraseña correcta, falta la verificación en dos pasos");
+    assert.equal(logMessageText(second!, en), "Ana: correct password, two-step verification pending");
+    assert.equal(logMessageText(totp!, en), "Ana turned on two-step verification (TOTP)");
+    assert.equal(logMessageText(upload!, en), "File “nota.txt” uploaded (13 B)");
+    assert.equal(fail!.message, "Inicio de sesión fallido ([no es un email]): contraseña incorrecta");
+    assert.equal(logMessageText(fail!, en), "Failed sign-in ([not an email]): wrong password");
+    // El arranque (scripts/boot.ts) escribe la fila directamente, con la plantilla en los detalles.
+    const boot = { message: "Arranque de Pizarro v1.0.0", details: { version: "1.0.0", [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version: "1.0.0" } } } };
+    assert.equal(logMessageText(boot, en), "Pizarro v1.0.0 started");
+    assert.deepEqual(logDetailsShown(boot.details), { version: "1.0.0" });
   });
 });

@@ -19,7 +19,7 @@ import { localizeGeneralKinds } from "@/lib/kinds-localize";
 import { Board } from "@/components/board/Board";
 import { EARLY_SHORTCUT_SCRIPT } from "@/components/board/earlyShortcut";
 
-type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string }> };
+type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ task?: string; nuevo?: string }> };
 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
@@ -42,9 +42,10 @@ export default async function BoardPage({ params, searchParams }: Params) {
   if (!project) notFound();
   // Antes de leer el tablero: un aviso publicado mientras se lee hará que la pestaña refresque al conectar (no se pierde).
   const live = liveCursor(projectId);
+  const { task, nuevo } = await searchParams;
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, intro] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true } }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
@@ -57,6 +58,11 @@ export default async function BoardPage({ params, searchParams }: Params) {
     listKinds(projectId),
     userTemplates(user.id),
     projectReleaseTemplates(projectId),
+    // Recién creado desde una plantilla («Nuevo proyecto» llega con ?nuevo=1): su descripción, encima de las columnas.
+    // Solo entonces: en las cargas y refrescos normales del tablero no hace falta.
+    nuevo === "1"
+      ? db.project.findUnique({ where: { id: projectId }, select: { description: true } }).then((p) => p?.description.trim() ?? "")
+      : "",
   ]);
 
   const data: BoardPageData = {
@@ -78,13 +84,12 @@ export default async function BoardPage({ params, searchParams }: Params) {
     liveRefreshJitterMs: liveRefreshJitterMs(),
     live,
   };
-  const { task } = await searchParams;
   // Alt+N / Alt+Mayús+N pulsados antes de que la página hidrate se anotan y se ejecutan al montar (earlyShortcut.ts).
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <>
       <script nonce={nonce} dangerouslySetInnerHTML={{ __html: EARLY_SHORTCUT_SCRIPT }} />
-      <Board data={data} initialTaskId={typeof task === "string" ? task : null} />
+      <Board data={data} initialTaskId={typeof task === "string" ? task : null} intro={intro} />
     </>
   );
 }

@@ -69,6 +69,8 @@ import { setUndoTask, UNDONE_EVENT } from "../undo-context";
 import { useIsMobile } from "../ui/useIsMobile";
 import { UndoButton } from "../UndoButton";
 import { subtasksDidNotFit } from "./count-texts";
+import { anchorFromPoint } from "../ui/editAnchorDom";
+import type { EditAnchor } from "@/lib/edit-anchor";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft, gone }: {
   task: BoardTask;
@@ -1012,9 +1014,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const nextDesc = switchKindDescription(prev, kind, typed);
       if (nextDesc !== typed) descReplace.current?.(nextDesc);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
-      if (nextTitleKept === title) return save({ kindId }, { kindId });
-      setTitle(nextTitleKept);
-      return save({ kindId, title: nextTitleKept }, { kindId, title: nextTitleKept });
+      if (nextTitleKept !== title) setTitle(nextTitleKept);
+      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept });
+      // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
+      void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar")));
+      return saved;
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
     if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId });
@@ -1402,8 +1406,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           {detail && (
             <p className="col-span-2 text-xs text-slate-500">
               {detail.createdByName
-                ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
-                : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "dateNumeric", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
+                ? t("Creada por {name} el {date} a las {time}", { name: detail.createdByName, date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })
+                : t("Creada el {date} a las {time}", { date: formatDate(detail.createdAt, "date", locale), time: formatDate(detail.createdAt, "timeHm", locale) })}
             </p>
           )}
           <div className="col-span-2">
@@ -1585,15 +1589,18 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   const { editorMode } = useBoard();
   const [value, setValue] = useState(draft ?? initial ?? "");
   const [editing, setEditingState] = useState(draft !== undefined);
+  // Punto del doble clic en la vista de lectura: el editor se abre con el cursor ahí y sin mover el texto (editAnchorDom).
+  const [startAt, setStartAt] = useState<EditAnchor | null>(null);
   // Cambios sin guardar = lo escrito difiere de `baseline`. Al abrir, el editor con barra puede reescribir el Markdown
   // (p. ej. «* a» → «- a») sin que nadie toque nada: lo que emite antes de la primera tecla, pegado, arrastre o clic en
   // él pasa a ser la referencia, para no preguntar al cerrar si no se ha cambiado nada. Un borrador recuperado ya cuenta como cambio.
   const touched = useRef(draft !== undefined && draft !== initial);
   const baseline = useRef(initial ?? "");
-  const setEditing = (on: boolean) => {
+  const setEditing = (on: boolean, at: EditAnchor | null = null) => {
     if (on && !editing) {
       touched.current = false;
       baseline.current = initial ?? "";
+      setStartAt(at);
     }
     setEditingState(on);
   };
@@ -1732,6 +1739,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             onValueChange={onEditorChange}
             users={users}
             autoFocus
+            startAt={startAt}
             onCommand={async (kind) => {
               touch();
               const link = await onGoogle(kind);
@@ -1751,7 +1759,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
       ) : value.trim() ? (
         <div
           className="cursor-text rounded-lg p-1 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-          onDoubleClick={() => setEditing(true)}
+          onDoubleClick={(e) => setEditing(true, anchorFromPoint(e.currentTarget, e.clientX, e.clientY))}
           tabIndex={0}
           role="group"
           aria-label={t("Descripción")}

@@ -1,11 +1,12 @@
 "use client";
 
-import { Copy, Download, ExternalLink, ImageOff, Loader2 } from "lucide-react";
+import { Copy, Download, ExternalLink, ImageOff, Loader2, Mail } from "lucide-react";
 import { useContext, useEffect, useId, useState } from "react";
 import { I18nContext } from "@/i18n/context";
 import { useT } from "@/i18n/client";
 import { bugReportFields, bugReportTextFits, bugReportUrl, describeBrowser, SECURITY_REPORT_URL, type BugReportFields, type InstallKind } from "@/lib/bug-report-core";
-import { FEEDBACK_FIELDS, FEEDBACK_LIMITS, FEEDBACK_TEXT_MAX, screenshotFileName, type FeedbackError, type FeedbackKind, type FeedbackStatus } from "@/lib/feedback-core";
+import { FEEDBACK_FIELDS, FEEDBACK_LIMITS, FEEDBACK_TEXT_MAX, feedbackMailtoFits, feedbackMailtoUrl, screenshotFileName, type FeedbackError, type FeedbackKind, type FeedbackStatus } from "@/lib/feedback-core";
+import { FEEDBACK_EMAIL } from "@/lib/product";
 import { formatSize } from "@/lib/format-size";
 import { copyText } from "../ui/clipboard";
 import { cn } from "../ui/cn";
@@ -21,10 +22,11 @@ const INSTALL = (process.env.NEXT_PUBLIC_OFFICIAL_BUILD || null) as InstallKind 
 type Shot = { blob: Blob; url: string };
 
 /**
- * Diálogo «Informar de un error o enviar una sugerencia». Sin `githubReason` se envía en privado por email (ruta
- * /api/feedback); con él (la instalación no envía emails o el producto aún no tiene dirección) abre el formulario
- * público de GitHub con el texto y los datos técnicos, y ofrece descargar la captura para adjuntarla a mano. El motivo
- * importa: sin la dirección del producto no se culpa al correo de la instalación.
+ * Diálogo «Informar de un error o enviar una sugerencia». Sin `githubReason` se envía en privado por email desde el
+ * servidor (ruta /api/feedback). Con «no_mail» (la instalación no envía emails), «Enviar por email» abre el programa de
+ * correo de la persona con el texto y los datos técnicos para FEEDBACK_EMAIL (mailto:), y GitHub queda como alternativa
+ * pública. Con «no_address» (el producto sin dirección), solo el formulario público de GitHub. Sin envío desde el
+ * servidor, la captura se descarga para adjuntarla a mano.
  */
 export function FeedbackDialog({ githubReason, version, email, onClose }: {
   githubReason: FeedbackStatus["githubReason"];
@@ -46,6 +48,8 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
   const [error, setError] = useState<string | null>(null);
   const [fields] = useState<BugReportFields>(() => ({ version, commit: COMMIT, install: INSTALL, browser: describeBrowser(navigator.userAgent), language: locale }));
   const mail = githubReason === null;
+  // Sin envío desde el servidor, pero con la dirección del producto: el email lo envía la persona desde su programa de correo.
+  const mailTo = githubReason === "no_mail" && FEEDBACK_EMAIL ? FEEDBACK_EMAIL : null;
 
   // La URL de la vista previa se libera al quitarla o al cerrar.
   useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url); }, [shot]);
@@ -119,10 +123,21 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
 
   const textId = `${ids}-text`;
   const githubHref = bugReportUrl(fields, kind, text);
-  // Un texto largo no cabe en la dirección del formulario y GitHub recibe solo el principio: se avisa antes, con un botón
-  // para copiarlo entero, y el diálogo no se cierra al continuar.
-  const truncated = !mail && !!text.trim() && !bugReportTextFits(fields, kind, text);
+  const mailtoHref = mailTo ? feedbackMailtoUrl(mailTo, kind, text, fields) : null;
+  // Un texto largo no cabe en el enlace y el email o GitHub reciben solo el principio: se avisa antes, con un botón para
+  // copiarlo entero, y el diálogo no se cierra al continuar. El enlace del email es el más corto: si cabe, cabe en los dos.
+  const truncated = !mail && !!text.trim() && !(mailTo ? feedbackMailtoFits(mailTo, kind, text, fields) : bugReportTextFits(fields, kind, text));
   const shotName = shot ? screenshotFileName(shot.blob.type) : "";
+  const empty = !text.trim();
+  const githubLink = (primary: boolean) => (
+    <a href={githubHref} target="_blank" rel="noopener noreferrer" className={cn(primary ? "btn-primary" : "btn-ghost mr-auto", empty && "pointer-events-none opacity-50")} aria-disabled={empty || undefined} onClick={(e) => {
+        // Con captura o con el texto recortado, el diálogo se queda abierto para descargarla o copiarlo después.
+        if (empty) e.preventDefault();
+        else if (!shot && !truncated) onClose();
+      }}>
+      {primary ? t("Continuar en GitHub") : t("o publicarlo en GitHub")} <ExternalLink size={14} />
+    </a>
+  );
 
   return (
     <Modal
@@ -132,20 +147,18 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
       title={t("Informar de un error o enviar una sugerencia")}
       footer={
         <>
+          {mailtoHref && githubLink(false)}
           <button type="button" className="btn-secondary" onClick={onClose} disabled={sending}>{t("Cancelar")}</button>
           {mail ? (
             <button type="submit" form={`${ids}-form`} className="btn-primary" disabled={sending || capturing || !text.trim()}>
               {sending && <Loader2 size={15} className="animate-spin" />} {sending ? t("Enviando…") : t("Enviar")}
             </button>
-          ) : (
-            <a href={githubHref} target="_blank" rel="noopener noreferrer" className={cn("btn-primary", !text.trim() && "pointer-events-none opacity-50")} aria-disabled={!text.trim() || undefined} onClick={(e) => {
-                // Con captura o con el texto recortado, el diálogo se queda abierto para descargarla o copiarlo después.
-                if (!text.trim()) e.preventDefault();
-                else if (!shot && !truncated) onClose();
-              }}>
-              {t("Continuar en GitHub")} <ExternalLink size={14} />
+          ) : mailtoHref ? (
+            // El diálogo no se cierra al pulsarlo: si el navegador no tiene programa de correo, no se pierde lo escrito.
+            <a href={mailtoHref} className={cn("btn-primary", empty && "pointer-events-none opacity-50")} aria-disabled={empty || undefined} onClick={(e) => { if (empty) e.preventDefault(); }}>
+              <Mail size={15} /> {t("Enviar por email")}
             </a>
-          )}
+          ) : githubLink(true)}
         </>
       }
     >
@@ -154,8 +167,9 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
           <legend className="label">{t("Tipo")}</legend>
           <div className="flex flex-wrap gap-2">
             {(["bug", "idea"] as const).map((k) => (
-              <label key={k} className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5", kind === k ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-100" : "border-slate-200 dark:border-slate-700")}>
-                <input type="radio" name={`${ids}-kind`} value={k} checked={kind === k} onChange={() => setKind(k)} />
+              // Con el teclado, el foco se ve en todo el recuadro de la opción (y no también, aparte, en el círculo).
+              <label key={k} className={cn("flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus", kind === k ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-100" : "border-slate-200 dark:border-slate-700")}>
+                <input type="radio" className="focus-visible:outline-none" name={`${ids}-kind`} value={k} checked={kind === k} onChange={() => setKind(k)} />
                 {k === "bug" ? t("Informar de un error") : t("Enviar una sugerencia")}
               </label>
             ))}
@@ -216,7 +230,7 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
         )}
 
         <div>
-          <p className="mb-1 text-xs text-slate-500">{mail ? t("Datos técnicos que se envían:") : t("Datos técnicos que se rellenan en GitHub:")}</p>
+          <p className="mb-1 text-xs text-slate-500">{mail || mailTo ? t("Datos técnicos que se envían:") : t("Datos técnicos que se rellenan en GitHub:")}</p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800/60">
             {bugReportFields(fields).map(([k, v]) => (
               <div key={k} className="contents">
@@ -234,15 +248,14 @@ export function FeedbackDialog({ githubReason, version, email, onClose }: {
         ) : (
           <div className="space-y-2 text-slate-600 dark:text-slate-300">
             <p>
-              {githubReason === "no_mail"
-                ? t("Esta instalación no puede enviarlo por email: se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.")
-                : t("Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos.")}
+              {mailTo
+                ? t("Esta instalación no envía emails: «Enviar por email» abre tu programa de correo con lo que has escrito y estos datos técnicos, para que lo envíes en privado a {email}. En GitHub, en cambio, la incidencia es pública y necesitas una cuenta: no incluyas datos personales ni capturas con información privada.", { email: mailTo })
+                : t("Se abrirá el formulario de Pizarro en GitHub con lo que has escrito y estos datos técnicos. La incidencia es pública y necesitas una cuenta de GitHub: no incluyas datos personales ni capturas con información privada.")}
             </p>
-            <p>{t("Necesitas una cuenta de GitHub. La incidencia es pública: no incluyas datos personales ni capturas con información privada.")}</p>
-            {shot && <p>{t("La captura no se adjunta sola: descárgala y, si no tiene información privada, añádela en GitHub.")}</p>}
+            {shot && <p>{mailTo ? t("La captura no se adjunta sola: descárgala y añádela al email.") : t("La captura no se adjunta sola: descárgala y, si no tiene información privada, añádela en GitHub.")}</p>}
             {truncated && (
               <div role="status" className="space-y-2 rounded-lg bg-amber-50 p-2 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
-                <p>{t("El texto es largo: GitHub solo recibirá el principio. Cópialo entero con este botón para pegarlo allí.")}</p>
+                <p>{mailTo ? t("El texto es largo: el email solo llevará el principio. Cópialo entero con este botón para pegarlo en él.") : t("El texto es largo: GitHub solo recibirá el principio. Cópialo entero con este botón para pegarlo allí.")}</p>
                 <button type="button" className="btn-secondary py-1 text-xs" onClick={async () => ((await copyText(text.trim())) ? toast(t("Texto copiado")) : toast(t("No se pudo copiar"), "error"))}>
                   <Copy size={14} /> {t("Copiar el texto")}
                 </button>

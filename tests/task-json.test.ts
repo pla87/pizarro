@@ -158,6 +158,22 @@ test("fechas: el año con dos cifras se lee igual que en los CSV («21/12/26» �
   for (const bad of ["1/2/2", "1/2/026", "29/2/27"]) assert.equal(parseDayLoose(bad), undefined, bad);
 });
 
+test("fechas: el JSON lee los mismos formatos que el CSV (parseDay), con puntos siempre día/mes", () => {
+  const cases: [string, string][] = [
+    ["2026/12/01", "2026-12-01"], ["2026.12.01", "2026-12-01"], ["1.12.2026 10:00", "2026-12-01"], ["1.12.2026.", "2026-12-01"],
+    ["1-dic-2026", "2026-12-01"], ["December 1, 2026", "2026-12-01"], ["1 de diciembre de 2026", "2026-12-01"],
+  ];
+  for (const [v, want] of cases) {
+    for (const order of ["dmy", "mdy"] as const) {
+      assert.equal(parseDayLoose(v, order), want, `${v} ${order}`);
+      assert.equal(parseDayLoose(v, order), parseDay(v, "UTC", order), `${v} ${order} igual que el CSV`);
+    }
+  }
+  // En un JSON de tareas entero, igual que pegado como CSV.
+  const json = parseTasksText(JSON.stringify({ tasks: [{ title: "A", dueDate: "2026/12/01", startDate: "1.12.2026 10:00" }] }));
+  assert.deepEqual([json.tasks[0]?.task.dueDate, json.tasks[0]?.task.startDate], ["2026-12-01", "2026-12-01"]);
+});
+
 // El servidor interpreta el texto que le manda cualquier persona con sesión: ningún JSON de hasta 200 000 caracteres
 // puede tenerlo ocupado varios segundos (expresiones regulares o comparaciones cuadráticas) ni hacerle lanzar.
 test("textos patológicos: se leen en poco tiempo y sin lanzar (responsable, importes, miles de etiquetas, listas anidadas)", () => {
@@ -415,4 +431,23 @@ test("parseDayLoose y decideDayOrder: el orden pedido, y al revés solo si en es
   assert.deepEqual(decideDayOrder(["21/03/2026", "03/21/2026"], "es"), { order: "dmy", mixed: true });
   // Ni día ni mes (13/13) no decide nada.
   assert.deepEqual(decideDayOrder(["13/13/2026", "03/04/2026"], "en"), { order: "mdy", mixed: false });
+});
+
+test("fechas con puntos: siempre día/mes, sea cual sea el idioma o el resto del fichero", () => {
+  for (const order of ["dmy", "mdy"] as const) {
+    assert.equal(parseDayLoose("1.12.2026", order), "2026-12-01", order);
+    assert.equal(parseDayLoose("01.12.26", order), "2026-12-01", order);
+    assert.equal(parseDayLoose("03.04.2026", order), "2026-04-03", order);
+    for (const v of ["1.12.2026", "01.12.26", "12.31.2026"]) assert.equal(parseDayLoose(v, order), parseDay(v, "UTC", order), `${v} ${order}`);
+  }
+  // No deciden el orden de las demás ni cuentan como «dos formatos».
+  assert.deepEqual(decideDayOrder(["21.03.2026", "03/04/2026"], "en"), { order: "mdy", mixed: false });
+  assert.deepEqual(decideDayOrder(["21.03.2026", "03/21/2026"], "es"), { order: "mdy", mixed: false });
+  // CSV en inglés con fechas americanas y una con puntos: la de puntos, día/mes; sin aviso de formatos mezclados.
+  const csv = parseTasksText("Title,Due date\nA,03/21/2026\nB,1.12.2026\nC,03/04/2026", { locale: "en" });
+  assert.deepEqual(csv.tasks.map((x) => x.task.dueDate), ["2026-03-21", "2026-12-01", "2026-03-04"]);
+  assert.equal(csv.dateWarning, undefined);
+  // JSON propio con el idioma en inglés: igual.
+  const json = parseTasksText(JSON.stringify([{ title: "A", dueDate: "01.12.26" }, { title: "B", dueDate: "12/21/2026" }]), { locale: "en" });
+  assert.deepEqual(json.tasks.map((x) => x.task.dueDate), ["2026-12-01", "2026-12-21"]);
 });

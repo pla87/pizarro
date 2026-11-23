@@ -50,6 +50,10 @@ function codeHint(source: SetupCodeSource, t: ReturnType<typeof useT>): string {
       return t("Escribe el código de configuración que aparece en la terminal donde ejecutaste npm start.");
     case "railway":
       return t("Escribe el código de configuración que aparece en los logs de Railway (servicio de la app → Deployments → View logs).");
+    case "render":
+      return t("Escribe el código de configuración que aparece en los logs de Render (servicio de Pizarro → Logs).");
+    case "fly":
+      return t("Escribe el código de configuración que aparece en los logs de Fly.io (en tu terminal: fly logs).");
     default:
       return t("Escribe el código de configuración que aparece en el log del servidor: con Docker, docker compose logs app; con npm start, la terminal; en Railway, los logs del despliegue.");
   }

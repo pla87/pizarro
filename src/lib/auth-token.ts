@@ -15,7 +15,7 @@ export async function findUsableToken(token: string, purposes: TokenPurpose[]) {
     where: { tokenHash: { in: authTokenHashes(token) } },
     select: {
       id: true, userId: true, purpose: true, data: true, expiresAt: true, usedAt: true,
-      user: { select: { id: true, name: true, email: true, locale: true, active: true } },
+      user: { select: { id: true, name: true, email: true, locale: true, active: true, role: true } },
     },
   });
   if (!row || !purposes.includes(row.purpose) || !isTokenUsable(row) || !row.user.active) return null;

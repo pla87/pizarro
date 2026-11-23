@@ -72,7 +72,7 @@ model User {
   dailyDigest    Boolean   @default(false)
   digestHour     Int       @default(8)
   lastDigestAt   DateTime?
-  /// Obliga a elegir una contraseña nueva antes de usar la app (alta con clave inicial o cambio forzado por un admin).
+  /// Obliga a elegir una contraseña nueva antes de usar la app (invitación pendiente o cambio forzado por un admin).
   mustChangePassword Boolean @default(false)
   /// Identificador estable («sub») de su cuenta de Google, guardado en el primer «Iniciar sesión con Google».
   googleSub      String?   @unique

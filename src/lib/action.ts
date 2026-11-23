@@ -8,7 +8,7 @@ import { publishChange } from "./realtime";
 import { LIVE_PATCH_MAX } from "@/components/board/livePatch";
 import { saveTaskEvents } from "./task-events";
 import { discardUndo, saveUndo, type UndoOp } from "./undo";
-import { encodeLabel } from "./undo-label";
+import { encodeLabel, type Label } from "./undo-label";
 import { requestContext } from "./request-context";
 import { getCurrentUser, getPendingUser } from "./session";
 import { toLocale, translate } from "@/i18n/core";
@@ -146,7 +146,7 @@ async function translateError(message: string): Promise<string> {
 
 async function logAction(
   meta: ActionMeta,
-  actx: { projectId?: string | null; details?: Record<string, unknown> },
+  actx: { projectId?: string | null; details?: Record<string, unknown>; message?: string; label?: Label },
   start: number,
   level: "info" | "warn" | "error",
   message: string,
@@ -170,6 +170,8 @@ async function logAction(
       category: "action",
       action: meta.name,
       message,
+      // La plantilla de describeAction, si el mensaje es el suyo: la página de Logs lo pinta en el idioma de quien lee.
+      label: actx.label && message === actx.message ? actx.label : undefined,
       userId: user?.id ?? null,
       userName: user?.name ?? null,
       projectId,

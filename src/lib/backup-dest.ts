@@ -191,7 +191,7 @@ export class S3Destination implements BackupDestination {
 
 // --- Configuración ------------------------------------------------------------------------------
 
-interface ExternalConfig {
+export interface ExternalConfig {
   destinations: BackupDestination[];
   /** Problemas de configuración (sin secretos), para mostrarlos en Administración. */
   errors: string[];

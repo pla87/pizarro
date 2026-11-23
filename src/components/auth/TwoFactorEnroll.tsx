@@ -56,9 +56,11 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
 
   if (!info) {
     return (
-      <div className="space-y-3">
+      <div className="@container space-y-3">
         <p className="text-sm text-slate-600 dark:text-slate-300">{t("Elige cómo quieres recibir el segundo código al entrar con contraseña.")}</p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        {/* Una opción por fila salvo que quepan las dos enteras (por el ancho de su recuadro, no de la pantalla): en el
+            acceso (/login/verify) una sola ocupaba media fila y el texto se partía, y el recuadro parecía descentrado. */}
+        <div className={emailAvailable ? "grid gap-2 @md:grid-cols-2" : "grid gap-2"}>
           <button type="button" className="btn-secondary justify-start gap-2" disabled={pending || disabled} onClick={() => choose("TOTP")}>
             <Smartphone size={16} /> {t("App de autenticación")}
           </button>
@@ -98,7 +100,7 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
           )}
           <div className="rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
             <div className="text-xs text-slate-500">{t("Clave secreta")}</div>
-            <code className="block select-all break-all font-mono text-base tracking-wider" data-testid="totp-secret" data-pz-no-capture="">{grouped(info.secret ?? "")}</code>
+            <code className="block select-all break-words font-mono text-base tracking-wider" data-testid="totp-secret" data-pz-no-capture="">{grouped(info.secret ?? "")}</code>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               <button type="button" className="text-brand-700 hover:underline dark:text-brand-300" onClick={() => void navigator.clipboard?.writeText(info.secret ?? "").catch(() => {})}>
                 {t("Copiar clave")}
@@ -115,12 +117,12 @@ export function TwoFactorEnroll({ emailAvailable, begin, confirm, onCodes, disab
       )}
       <div>
         <label className="label" htmlFor="enroll-code">{t("Código de verificación")}</label>
-        <input id="enroll-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={code} onChange={(e) => setCode(e.target.value)} />
+        <input id="enroll-code" data-pz-no-capture="" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={code} onChange={(e) => setCode(e.target.value)} />
       </div>
       {info.emailCodeSent && (
         <div>
           <label className="label" htmlFor="enroll-email-code">{t("Código enviado a tu email")}</label>
-          <input id="enroll-email-code" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={emailCode} onChange={(e) => setEmailCode(e.target.value)} />
+          <input id="enroll-email-code" data-pz-no-capture="" className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9 ]*" maxLength={8} required value={emailCode} onChange={(e) => setEmailCode(e.target.value)} />
           <p className="mt-1 text-xs text-slate-500">{t("Para confirmar que la cuenta es tuya, escribe también el código que te hemos enviado por email.")}</p>
         </div>
       )}

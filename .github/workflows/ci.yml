@@ -51,3 +51,21 @@ jobs:
 
       - name: Traducciones
         run: npm run i18n:check
+
+  caddyfile:
+    # El Caddyfile de deploy/ solo se prueba de verdad en un servidor; aquí se valida con la misma imagen de Caddy
+    # que fija deploy/compose.yml (por digest), en modo solo HTTP y con un dominio, sin pedir certificados.
+    name: Caddyfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validar deploy/Caddyfile
+        run: |
+          image=$(grep -Eo 'caddy:[^ ]+@sha256:[0-9a-f]{64}' deploy/compose.yml | head -1)
+          test -n "$image" || { echo "No encuentro la imagen de Caddy en deploy/compose.yml"; exit 1; }
+          for domain in ":80" "pizarro.example.com"; do
+            docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -e DOMAIN="$domain" "$image" \
+              caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          done

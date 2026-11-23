@@ -66,7 +66,7 @@ async function serve(req: Request, ctx: { params: Promise<{ attachmentId: string
   const logDownload = () => {
     if (!download || head) return;
     logEvent({
-      category: "api", action: "attachments.download", message: `Descarga de «${attachment.originalName}»`,
+      category: "api", action: "attachments.download", label: { k: "Descarga de «{name}»", p: { name: attachment.originalName } },
       userId: user.id, userName: user.name, projectId: attachment.projectId, path: url.pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },
     });
   };

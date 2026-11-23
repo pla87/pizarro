@@ -97,7 +97,8 @@ function TelegramBlock({ view, refresh }: { view: NonNullable<MyChannelsView["te
       ) : link ? (
         <div className="space-y-3 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50">
           <p>{t("Abre el enlace en el móvil (o escanea el código con la cámara) y pulsa «Iniciar» en Telegram. El enlace sirve una sola vez y caduca en 10 minutos.")}</p>
-          <div className="flex flex-wrap items-center gap-4">
+          {/* El QR y el enlace llevan el código de un solo uso: fuera de la captura de «Informar de un error». */}
+          <div className="flex flex-wrap items-center gap-4" data-testid="telegram-link" data-pz-no-capture="">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={link.qr} alt={t("Código QR para conectar Telegram")} width={132} height={132} className="rounded bg-white p-1" />
             <div className="space-y-2">
@@ -232,6 +233,7 @@ function WhatsappBlock({ view, refresh }: { view: NonNullable<MyChannelsView["wh
               <label className="label" htmlFor="wa-code">{t("Código de WhatsApp")}</label>
               <input
                 id="wa-code"
+                data-pz-no-capture=""
                 className="input tracking-widest"
                 inputMode="numeric"
                 autoComplete="one-time-code"

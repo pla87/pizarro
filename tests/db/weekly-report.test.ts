@@ -6,7 +6,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, beforeEach, describe, test } from "node:test";
-import { db, makeProject, makeTask, makeUser } from "./helpers";
+import { db, makeProject, makeTask, makeUser, withSmtpDown } from "./helpers";
 import { INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
 import { appTimeZone } from "../../src/lib/format";
 import { sendDueReports } from "../../src/lib/periodic-mail";
@@ -137,6 +137,18 @@ describe("email del informe semanal", () => {
     assert.equal(await sendDueReports(now, { generate: async () => { throw new Error("se cayó"); } }), 0);
     assert.equal((await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } })).lastSentAt, null);
     assert.deepEqual(await mails(), []);
+  });
+
+  // Antes, con el SMTP caído, cada pasada generaba el PDF de cada informe pendiente para después no poder enviarlo.
+  test("con el SMTP caído se corta la pasada al primer error: no se generan los PDF de los demás", async () => {
+    const creator = await makeUser({ role: "ADMIN" });
+    const projects = [await makeProject({ members: [creator] }), await makeProject({ members: [creator] })];
+    for (const f of projects) await schedule(f, creator, `caido-${Date.now()}@example.com`);
+    const calls: string[] = [];
+    assert.equal(await withSmtpDown(() => sendDueReports(new Date(), { generate: fakePdf(calls) })), 0);
+    assert.equal(calls.length, 1, "un solo PDF");
+    const rows = await db.reportSchedule.findMany({ where: { projectId: { in: projects.map((f) => f.project.id) } } });
+    assert.deepEqual(rows.map((r) => r.lastSentAt), [null, null], "los dos siguen pendientes para la pasada siguiente");
   });
 });
 

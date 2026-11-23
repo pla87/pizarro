@@ -2,6 +2,44 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.66.0 — 2026-11-23 01:04
+
+Informes de errores en privado por email, guías para instalar en Render y Fly.io, alta de usuarios con enlace de invitación, cambiar de tipo sin mezclar formularios, doble clic en la descripción sin saltos, fechas y Logs en el idioma de cada persona, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- «Informar de un error» envía en privado a feedback@getpizarro.com: desde el servidor si la instalación envía emails o, si no, con «Enviar por email» desde tu programa de correo; GitHub queda como alternativa pública.
+- Guías para instalar Pizarro en Render (botón «Deploy to Render») y en Fly.io, con la dirección pública deducida sola y las órdenes de recuperación de cada plataforma.
+- Al crear un proyecto desde una plantilla, la primera vez se ve su descripción encima de las columnas (se cierra con la X y no vuelve).
+
+### Mejoras
+
+- Alta de usuarios sin email por un solo camino: se crea la cuenta y se muestra al momento el enlace de invitación (sin contraseña inicial); si el email falla, también.
+- Al cambiar de tipo con el formulario a medias, cada respuesta va a su apartado sin repetir cabeceras ni dejar apartados vacíos; en el detalle, el aviso dice que el tipo está guardado y la descripción no.
+- Doble clic en la descripción: el texto no se mueve y el cursor queda donde pulsaste.
+- La lista de «@» se abre hacia arriba si no cabe, nunca queda cortada, y la opción elegida siempre está a la vista; los botones redondos del tablero se ocultan con un diálogo abierto.
+- Fechas con hora legibles en cada idioma («22 nov 2026, 21:41» / «Nov 22, 2026, 9:41 PM») y mensajes de Logs en inglés para los eventos más comunes.
+- Copias de seguridad: las tareas que no tienen nada que hacer dicen «Omitida» con su motivo, un solo aviso cuando solo se copian en el disco del servidor y un destino externo mal configurado sale como error.
+- Releases despliega las coincidencias de la búsqueda; Mis tareas con el filtro «Vencidas y próximos 7 días»; el Calendario dice el nombre del proyecto al pasar por sus siglas y «Cita» pasa a índigo.
+- Mi perfil → Avisos avisa arriba si el servidor no envía emails; la nota «i» de Usuarios empieza en sencillo; «¿Olvidaste tu contraseña?» muestra solo la orden de tu instalación.
+- Al importar, las fechas con puntos («1.12.2026») son siempre día/mes y el JSON entiende las mismas fechas que el CSV.
+
+### Correcciones
+
+- «+ Nuevo proyecto» desde el menú: el nombre entra entero, el menú se cierra y el foco vuelve a su sitio.
+- Informar de un error: resaltado de foco en toda la opción y un solo párrafo sobre GitHub; la pantalla de verificación en dos pasos ya no descoloca la elección de método.
+- Zona horaria: el buscador ya no pega lo escrito detrás de la zona ni da error al volver a entrar; porcentaje del disco «usado» y con espacio.
+- Atrás ya no pierde el enlace de invitación recién creado; «Forzar cambio de contraseña» anula también la invitación pendiente.
+- Un CSV con la cabecera cortada a mitad de una letra ya no se lee como Windows-1252; «Curso o charla» y «Estudios» en inglés americano.
+- Con el servidor de correo caído, los resúmenes e informes se cortan al primer fallo en vez de generarse para nada.
+
+### Cambios técnicos / DB
+
+- Retirado railway.json: Railway dejó de leerlo; la comprobación de salud se pone en el panel (Settings → Deploy).
+- render.yaml y deploy/fly.toml; IP del cliente con la cabecera de cada plataforma; el workflow de comprobaciones valida deploy/Caddyfile.
+- Menos servidor: Mis tareas cuenta subtareas con una consulta, registro de visitas con tope, optimizador de imágenes de Next apagado; la descripción del proyecto solo se lee con ?nuevo=1.
+- Más secretos fuera de las capturas (Telegram, WhatsApp, códigos de 2FA, contraseña visible); retirado el formato de fecha dateNumeric.
+
 ## v1.65.0 — 2026-11-22 13:35
 
 Seis plantillas de serie con tarjetas de ejemplo, botón para informar de un error o enviar una sugerencia con captura, avisos por email en una sola tarjeta, «Responsable» en todas partes, usuarios sin tope por defecto, fechas al importar decididas por fichero, y revisión y caza de bugs

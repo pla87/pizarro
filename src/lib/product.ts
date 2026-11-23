@@ -6,11 +6,12 @@ import type { T } from "../i18n/core";
 export const BUY_URL: string = "";
 
 /**
- * A dónde llegan los informes de «Informar de un error o enviar una sugerencia» (el botón junto a «Cerrar sesión»): cada
- * instalación oficial los envía por email desde su propio servidor de correo. Vacío hasta que el autor cree la dirección;
- * mientras tanto, el diálogo abre el formulario público de GitHub (y ofrece descargar la captura).
+ * A dónde llegan los informes de «Informar de un error o enviar una sugerencia» (el botón junto a «Cerrar sesión»): una
+ * dirección del producto, no de una persona. Las instalaciones oficiales que envían emails los mandan en privado desde su
+ * propio servidor de correo (/api/feedback); las que no, ofrecen «Enviar por email» (mailto:, desde el programa de correo
+ * de quien informa) y GitHub como alternativa pública. Si se vaciara, el diálogo solo abriría el formulario de GitHub.
  */
-export const FEEDBACK_EMAIL: string = "";
+export const FEEDBACK_EMAIL: string = "feedback@getpizarro.com";
 
 /** Precio de la licencia comercial, en euros y sin IVA (pago único por servidor). */
 export const LICENSE_PRICE_EUR = 100;
