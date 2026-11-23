@@ -11,6 +11,7 @@ import { pipeline } from "node:stream/promises";
 import { backupStem, parseBackupFileName, selectBackupsToKeep } from "./backup-core";
 import { decodeManifest, encryptFileObject, mapLimit, objectKey, objectSize, selectGarbage, uniqueObjects, FILES_PREFIX, type FullManifest, type ManifestFile } from "./backup-files";
 import { isDeleteRefused, parseS3Env, S3Client, type UploadBody } from "./backup-s3";
+import { esText } from "./es-text";
 
 export type DestinationId = "local" | "dir" | "s3";
 
@@ -53,10 +54,10 @@ export class DirDestination implements BackupDestination {
   private async checkRoot(): Promise<void> {
     if (!this.mustExist) return;
     const st = await stat(this.root).catch((err: NodeJS.ErrnoException) => {
-      if (err.code === "ENOENT") throw new Error(`La carpeta del destino externo no existe: ${this.root}. Créala o monta el disco; no se crea sola para no dejar las copias en el disco del sistema.`);
+      if (err.code === "ENOENT") throw new Error(esText("La carpeta del destino externo no existe: {path}. Créala o monta el disco; no se crea sola para no dejar las copias en el disco del sistema.", { path: this.root }));
       throw err;
     });
-    if (!st.isDirectory()) throw new Error(`El destino externo no es una carpeta: ${this.root}.`);
+    if (!st.isDirectory()) throw new Error(esText("El destino externo no es una carpeta: {path}.", { path: this.root }));
   }
 
   async put(key: string, body: UploadBody): Promise<void> {
@@ -69,7 +70,7 @@ export class DirDestination implements BackupDestination {
       await pipeline(src, createWriteStream(tmp, { mode: 0o600 }));
       const size = (await stat(tmp)).size;
       const expected = Buffer.isBuffer(body) ? body.length : body.size;
-      if (size !== expected) throw new Error(`Escritura incompleta en ${key} (${size} de ${expected} bytes).`);
+      if (size !== expected) throw new Error(esText("Escritura incompleta en {key} ({size} de {expected} bytes).", { key, size, expected }));
       await rename(tmp, file);
     } catch (err) {
       await rm(tmp, { force: true });
@@ -293,7 +294,7 @@ async function readBuffer(src: AsyncIterable<Buffer>, limit = 512 * 1024 * 1024)
 
 export async function readManifest(dest: BackupDestination, stem: string, key: Buffer): Promise<FullManifest> {
   const m = await decodeManifest(await readBuffer(await dest.get(manifestKey(stem))), key);
-  if (m.stem !== stem) throw new Error(`El manifiesto ${stem} dice pertenecer a ${m.stem}.`);
+  if (m.stem !== stem) throw new Error(esText("El manifiesto {stem} dice pertenecer a {other}.", { stem, other: m.stem }));
   return m;
 }
 

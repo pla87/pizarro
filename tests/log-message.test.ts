@@ -9,7 +9,8 @@ import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
 import { andList, renderLabel, renderLabelEs } from "../src/lib/undo-label";
 import { LOG_LABEL_KEY, logMessageText } from "../src/lib/log-message";
-import { legacyLogLabel } from "../src/lib/log-legacy";
+import { appTextLabel, legacyLogLabel, storedText } from "../src/lib/log-legacy";
+import { esText } from "../src/lib/es-text";
 
 const ROOT = path.join(import.meta.dirname, "..");
 /** Marca de una llamada que puede ir sin plantilla (con su motivo en el mismo comentario). */
@@ -238,4 +239,21 @@ test("filas antiguas sin plantilla: en inglés se reconoce la plantilla por su t
   assert.equal(logMessageText({ message: "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes", details: null }, en), "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes");
   // Plantillas con poco texto fijo no se usan («{a}: {b}» casaría con cualquier cosa).
   assert.equal(legacyLogLabel("x: y"), null);
+});
+
+test("errores de las copias guardados en español: se traducen al leerlos (fijos y con datos, también dentro de Logs)", () => {
+  const en = makeT("en");
+  assert.equal(storedText("BACKUP_KEY no está configurada.", en), "BACKUP_KEY is not set.");
+  const missing = esText("La carpeta del destino externo no existe: {path}. Créala o monta el disco; no se crea sola para no dejar las copias en el disco del sistema.", { path: "/mnt/copias" });
+  assert.match(storedText(missing, en), /^The external destination folder doesn't exist: \/mnt\/copias\. /);
+  // En español, tal cual.
+  assert.equal(storedText(missing, makeT("es")), missing);
+  // Un error de una biblioteca, tal cual.
+  assert.equal(storedText("ECONNRESET", en), "ECONNRESET");
+  // Logs: la variable del error se guarda como su plantilla y se lee en inglés.
+  const label = { k: "Falló la copia a destino externo: {error}", p: { error: appTextLabel(missing) } };
+  assert.equal(renderLabelEs(label), `Falló la copia a destino externo: ${missing}`);
+  assert.match(renderLabel(label, en), /: The external destination folder doesn't exist: \/mnt\/copias\./);
+  // Un error dentro de otro («Retención: …») también.
+  assert.equal(storedText(esText("Retención: {error}", { error: "BACKUP_KEY no está configurada." }), en), "Retention: BACKUP_KEY is not set.");
 });

@@ -6,6 +6,7 @@ import type pg from "pg";
 import type { BackupManifest } from "./backup-core";
 import { dumpDatabase, type Client, type RawSql } from "./backup-db";
 import { connectPgClient } from "./pg-connect";
+import { esText } from "./es-text";
 
 export class PgSql implements Client {
   private inTx = false;
@@ -96,7 +97,7 @@ export async function dumpDatabaseOwnConnection(
   try {
     return await dumpDatabase(sql, file, key);
   } catch (err) {
-    if (timedOut) throw new Error(`El volcado de la base de datos pasó de ${Math.round(timeoutMs / 60_000)} min y se ha cortado.`);
+    if (timedOut) throw new Error(esText("El volcado de la base de datos pasó de {min} min y se ha cortado.", { min: Math.round(timeoutMs / 60_000) }));
     throw err;
   } finally {
     clearTimeout(timer);

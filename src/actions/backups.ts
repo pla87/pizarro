@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
+import { storedText } from "@/lib/log-legacy";
 import { acceptBackupShrink, backupDestinationsInfo, backupKey, createBackup, startExternalCopy } from "@/lib/backup";
 import { issueBackupDownloadToken } from "@/lib/backup-download";
 import { db } from "@/lib/db";
@@ -23,7 +24,7 @@ export async function createBackupNow() {
     const run = await createBackup();
     if (!run.ok) {
       const t = await getT();
-      throw new AppError(`${t("No se pudo crear la copia:")} ${run.error ?? t("error desconocido")}`);
+      throw new AppError(`${t("No se pudo crear la copia:")} ${run.error ? storedText(run.error, t) : t("error desconocido")}`);
     }
     describeAction("Creó una copia de seguridad a mano");
     revalidatePath("/admin/backups");
