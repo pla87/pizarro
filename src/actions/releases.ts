@@ -279,7 +279,7 @@ export async function getReleaseTaskDetails(input: z.input<typeof detailsSchema>
     const user = await requireUser();
     const data = detailsSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    describeAction(`Generó el texto de una release con ${data.taskIds.length === 1 ? "1 tarea" : `${data.taskIds.length} tareas`}`);
+    describeAction("Generó el texto de una release con {count}", { count: tasksN(data.taskIds.length) });
     return db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId },
       select: {
@@ -339,7 +339,7 @@ export async function deleteRelease(releaseId: string) {
       return true;
     });
     if (!deleted) return { id };
-    describeAction(`Borró del histórico la release «${release.title}»`, { releaseId: id });
+    describeAction("Borró del histórico la release «{title}»", { title: release.title }, { releaseId: id });
     await removeReleaseAttachmentFiles(ids);
     return { id: release.id };
   });

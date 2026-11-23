@@ -71,7 +71,7 @@ export async function createUser(input: z.input<typeof createSchema>) {
     if (emailEnabled()) {
       try {
         await sendInviteMail(created, link, admin.name);
-        describeAction(`Dio de alta a «${created.name}» (invitación por email)`);
+        describeAction("Dio de alta a «{name}»{how}", { name: created.name, how: { k: " (invitación por email)" } });
         return { name: created.name, emailed: true, mailFailed, link: null };
       } catch (err) {
         logMailError("[users] invitación", err);
@@ -79,7 +79,7 @@ export async function createUser(input: z.input<typeof createSchema>) {
       }
     }
     // El enlace no se registra: solo que hay que pasarlo a mano.
-    describeAction(`Dio de alta a «${created.name}»${mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
+    describeAction("Dio de alta a «{name}»{how}", { name: created.name, how: mailFailed ? { k: " (falló el email; queda el enlace para pasarlo a mano)" } : { k: " (con enlace, sin email)" } });
     return { name: created.name, emailed: false, mailFailed, link: link as string | null };
   });
 }
@@ -139,7 +139,11 @@ export async function inviteToProject(projectId: string, email: string) {
       }
     }
     // El enlace no se registra: solo quién, a qué proyecto y por dónde.
-    describeAction(`Invitó a «${created.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (por email)" : mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : " (con enlace, sin email)"}`);
+    describeAction(project.isPrivate ? "Invitó a «{name}» al proyecto privado «{project}»{how}" : "Invitó a «{name}» al proyecto «{project}»{how}", {
+      name: created.name,
+      project: project.name,
+      how: emailed ? { k: " (por email)" } : mailFailed ? { k: " (falló el email; queda el enlace para pasarlo a mano)" } : { k: " (con enlace, sin email)" },
+    });
     revalidatePath("/", "layout");
     return { name: created.name, link, emailed, mailFailed };
   });
@@ -196,7 +200,7 @@ export async function resendInvite(userId: string) {
       logMailError("[users] reenviar invitación", err);
       mailFailed = true;
     }
-    describeAction(`Reenvió la invitación a «${user.name}»${mailFailed ? " (falló el email; queda el enlace para pasarlo a mano)" : ""}`);
+    describeAction("Reenvió la invitación a «{name}»{how}", { name: user.name, how: mailFailed ? { k: " (falló el email; queda el enlace para pasarlo a mano)" } : "" });
     // El enlace nuevo, para «Copiar enlace» (como al invitar); no se registra.
     return { link, mailFailed };
   });
@@ -221,7 +225,7 @@ export async function generateInviteLink(userId: string) {
     const project = await inviteProject(user.id);
     // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
     const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
-    describeAction(`Generó un enlace de invitación nuevo para «${user.name}» (sin enviarlo; el anterior deja de valer)`);
+    describeAction("Generó un enlace de invitación nuevo para «{name}» (sin enviarlo; el anterior deja de valer)", { name: user.name });
     return { link: `${appUrl()}/reset/${token}` };
   });
 }
@@ -375,7 +379,7 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
     // El token nunca se registra: describeAction solo dice qué se hizo.
     if (showLink) {
       const token = await issueAuthToken(user.id, "PASSWORD_RESET");
-      describeAction(`Generó un enlace de restablecimiento de contraseña para «${user.name}»`);
+      describeAction("Generó un enlace de restablecimiento de contraseña para «{name}»", { name: user.name });
       return { emailed: false, link: `${appUrl()}/reset/${token}` as string | null };
     }
     try {
@@ -401,7 +405,7 @@ export async function resetUserTwoFactor(userId: string) {
     if (user.id === admin.id) throw new AppError("Para cambiar tu propia verificación usa «Mi perfil».");
     if (!user.twoFactorMethod) throw new AppError("Esa persona no tiene activada la verificación en dos pasos.");
     await clearTwoFactor(user.id);
-    describeAction(`Restableció la verificación en dos pasos de «${user.name}»`);
+    describeAction("Restableció la verificación en dos pasos de «{name}»", { name: user.name });
     if (emailEnabled()) sendMailInBackground("aviso de verificación en dos pasos restablecida", () => sendTwoFactorChangedMail(user, "reset"));
     revalidatePath("/admin/users");
   });
@@ -427,7 +431,7 @@ export async function unlinkGoogle(userId: string) {
     ]);
     // Solo el acceso con Google: Drive, el calendario suscrito y los canales siguen como estaban (el diálogo lo dice).
     revokeUser(user.id);
-    describeAction(`Desvinculó la cuenta de Google de «${user.name}» (no se vuelve a enlazar sola)`);
+    describeAction("Desvinculó la cuenta de Google de «{name}» (no se vuelve a enlazar sola)", { name: user.name });
     if (emailEnabled()) sendMailInBackground("aviso de Google desvinculado", () => sendGoogleUnlinkedMail(user));
     revalidatePath("/admin/users");
   });
@@ -441,7 +445,7 @@ export async function allowGoogleRelink(userId: string) {
     if (!user) throw notFound();
     if (!user.googleRelinkBlocked) throw new AppError("Esa persona no tiene Google bloqueado.");
     await db.user.update({ where: { id: user.id }, data: { googleRelinkBlocked: false } });
-    describeAction(`Permitió de nuevo el acceso con Google a «${user.name}»`);
+    describeAction("Permitió de nuevo el acceso con Google a «{name}»", { name: user.name });
     revalidatePath("/admin/users");
   });
 }
@@ -461,10 +465,11 @@ export async function deleteUser(userId: string, deleteProjects: string[] = []) 
     const ids = z.array(v.id).max(1000).parse(deleteProjects);
     const { toTeam, deleted } = await eraseUser(user.id, { self: false, deleteProjects: ids, actor: { id: admin.id, name: admin.name } });
     // Los nombres de los proyectos privados no van al registro: los administradores no los veían.
-    let message = `Borró el usuario «${user.name}»`;
-    if (deleted.length) message += ` y ${deleted.length === 1 ? "su proyecto privado" : `sus ${deleted.length} proyectos privados`}`;
-    if (toTeam.length) message += `; ${toTeam.length === 1 ? "su proyecto privado pasa" : `sus ${toTeam.length} proyectos privados pasan`} a ser de equipo`;
-    describeAction(message);
+    describeAction("Borró el usuario «{name}»{deleted}{toTeam}", {
+      name: user.name,
+      deleted: !deleted.length ? "" : deleted.length === 1 ? { k: " y su proyecto privado" } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
+      toTeam: !toTeam.length ? "" : toTeam.length === 1 ? { k: "; su proyecto privado pasa a ser de equipo" } : { k: "; sus {n} proyectos privados pasan a ser de equipo", p: { n: toTeam.length } },
+    });
     revalidatePath("/", "layout");
   });
 }
