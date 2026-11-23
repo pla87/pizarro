@@ -6,6 +6,7 @@ import { CHANGE_CATEGORIES, type Changes } from "@/lib/changelog-core";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { normalizeSearch } from "@/lib/search-accents";
+import { EmailSafe } from "@/components/ui/EmailSafe";
 
 interface VersionRow {
   id: string;
@@ -62,14 +63,15 @@ export function ChangelogList({ versions, currentVersion }: { versions: VersionR
                 </time>
                 {v.version === currentVersion && <span className="badge bg-emerald-100 text-emerald-800 ring-emerald-600/20">{t("actual")}</span>}
               </div>
-              {v.summary && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{v.summary}</p>}
+              {/* EmailSafe: una nota puede llevar un email (p. ej. la dirección de los informes) y un proxy que reescribe emails rompería la hidratación. */}
+              {v.summary && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300"><EmailSafe text={v.summary} /></p>}
               <div className="mt-3 space-y-3">
                 {CHANGE_CATEGORIES.map((cat) =>
                   changes[cat.key].length ? (
                     <div key={cat.key}>
                       <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{t(cat.label)}</h3>
                       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
-                        {changes[cat.key].map((c, i) => <li key={i}>{c}</li>)}
+                        {changes[cat.key].map((c, i) => <li key={i}><EmailSafe text={c} /></li>)}
                       </ul>
                     </div>
                   ) : null,
