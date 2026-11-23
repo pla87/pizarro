@@ -188,10 +188,13 @@ test("Vibecoding: las subtareas de sus tipos son criterios comprobables, no paso
       assert.ok(s.length <= 50, `${k.name}: «${s}» es largo`);
     }
   }
-  // Las tarjetas de ejemplo tampoco citan los pasos de antes.
-  const old = /Pedir el cambio a la IA|Revisar el diff|Ask the AI for the change|Review the diff/;
+  // Las subtareas de las tarjetas de ejemplo, tampoco.
+  const exampleSteps = /^(pedir|revisar|probar|escribir|reproducir|arreglar|ask|review|try|write|reproduce|fix)\b/i;
   const ex = PROJECT_EXAMPLES.find((e) => e.key === "vibecoding")!;
-  for (const task of [...ex.es.tasks, ...ex.en.tasks]) for (const s of task.subtasks ?? []) assert.ok(!old.test(s), s);
+  for (const task of [...ex.es.tasks, ...ex.en.tasks]) for (const s of task.subtasks ?? []) {
+    assert.ok(!exampleSteps.test(s), `${task.title}: «${s}»`);
+    assert.ok(s.length <= 50, `${task.title}: «${s}» es largo`);
+  }
 });
 
 test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie los usa y una guardada antigua los lee como «Sin rol»", () => {
