@@ -99,9 +99,9 @@ test("el título: se cambia el prefijo y se conserva lo escrito detrás", () => 
   assert.equal(switchKindTitle(PRESU, PERMISO, "Presupuesto:"), "Permiso: ");
   // Un título que no empieza por el prefijo del anterior: lo escrito se conserva y el prefijo del nuevo va delante.
   assert.equal(switchKindTitle(PRESU, PERMISO, "Fontanería"), "Permiso: Fontanería");
-  // A un tipo sin prefijo: solo se quita el prefijo sin nada detrás.
+  // A un tipo sin prefijo: se quita el prefijo del anterior (también si acaba en palabra).
   assert.equal(switchKindTitle(PRESU, PLAIN, "Presupuesto:"), "");
-  assert.equal(switchKindTitle(RESP, PLAIN, "Respuesta a Juan"), "Respuesta a Juan");
+  assert.equal(switchKindTitle(RESP, PLAIN, "Respuesta a Juan"), "a Juan");
   // «Comprar» no es prefijo de «Comprarlo todo».
   assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, "Comprarlo todo"), "Gestionar Comprarlo todo");
   assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, "Comprar pan"), "Gestionar pan");
@@ -145,10 +145,37 @@ test("a un tipo sin prefijo se quita el prefijo del anterior (Casa → Reforma u
   assert.equal(switchKindTitle(OBRA, CASA, switchKindTitle(CASA, OBRA, "")), "");
   // Con otro separador también («Compra - pan»).
   assert.equal(switchKindTitle({ titleTemplate: "Compra -", descriptionTemplate: "" }, CASA, "Compra - pan"), "pan");
-  // Un prefijo que acaba en palabra es parte de la frase: se queda («Comprar pan» no pasa a «pan»).
-  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, CASA, "Comprar pan"), "Comprar pan");
+  // Un prefijo que acaba en palabra también se quita («Comprar pan» pasa a «pan»), pero no dentro de otra palabra.
+  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, CASA, "Comprar pan"), "pan");
+  assert.equal(switchKindTitle({ titleTemplate: "Comprar", descriptionTemplate: "" }, CASA, "Comprarlo todo"), "Comprarlo todo");
   // Escrito a mano sin el prefijo del anterior: no se toca.
   assert.equal(switchKindTitle(OBRA, CASA, "Pintar"), "Pintar");
+});
+
+test("el título: los prefijos no se acumulan al pasar por un tipo sin prefijo (Casa y familia)", () => {
+  // Como en la plantilla de serie «Casa y familia»: Compras «Comprar », Papeleo «Gestionar », Cita «Cita: », Casa sin título.
+  const COMPRAS = { titleTemplate: "Comprar ", descriptionTemplate: "" };
+  const PAPELEO = { titleTemplate: "Gestionar ", descriptionTemplate: "" };
+  const CITA = { titleTemplate: "Cita: ", descriptionTemplate: "" };
+  const CASA = { titleTemplate: "", descriptionTemplate: "" };
+  const kinds = [COMPRAS, CASA, PAPELEO, CITA];
+  const steps: [typeof CASA, string][] = [[PAPELEO, "Gestionar renovar pasaporte"], [COMPRAS, "Comprar renovar pasaporte"], [CASA, "renovar pasaporte"], [PAPELEO, "Gestionar renovar pasaporte"], [CASA, "renovar pasaporte"]];
+  let prev = CASA;
+  let title = "renovar pasaporte";
+  for (const [next, expected] of steps) {
+    title = switchKindTitle(prev, next, title, kinds);
+    assert.equal(title, expected);
+    prev = next;
+  }
+  // El prefijo que quedó de otro tipo (no del anterior) también se cambia, si es de un tipo del proyecto.
+  assert.equal(switchKindTitle(CASA, PAPELEO, "Comprar renovar pasaporte", kinds), "Gestionar renovar pasaporte");
+  assert.equal(switchKindTitle(CASA, CITA, "Comprar renovar pasaporte", kinds), "Cita: renovar pasaporte");
+  assert.equal(switchKindTitle(PAPELEO, CASA, "Cita: dentista", kinds), "dentista");
+  // Sin la lista de tipos, como antes.
+  assert.equal(switchKindTitle(CASA, PAPELEO, "Comprar renovar pasaporte"), "Gestionar Comprar renovar pasaporte");
+  // Lo mismo con switchKindText (Nueva tarea).
+  const tpl = (k: typeof CASA) => ({ ...k, subtaskTemplate: [] });
+  assert.equal(switchKindText(tpl(CASA), tpl(PAPELEO), { title: "Comprar pan", description: "", subtasks: [] }, kinds).title, "Gestionar pan");
 });
 
 test("la descripción: la plantilla anterior sin tocar se cambia y lo escrito debajo se conserva", () => {

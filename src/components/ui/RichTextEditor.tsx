@@ -1,6 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { Markdown } from "@tiptap/markdown";
 import { AtSign, Bold, Check, Code, Code2, Heading2, Heading3, IndentDecrease, IndentIncrease, Italic, Link2, List, ListOrdered, Minus, Pilcrow, Quote, Strikethrough, Underline, Unlink, X } from "lucide-react";
@@ -11,6 +12,7 @@ import { ListDeleteFix } from "@/lib/editor-keys";
 import { formatExtensions } from "@/lib/editor-extensions";
 import { safeMarkdownUrl } from "@/lib/safe-url";
 import { MentionChip } from "@/lib/editor-mention";
+import { mentionSuffix } from "@/lib/mention-edit";
 import { normalizeEditorMarkdown } from "@/lib/markdown-entities";
 import { COPY_MARKER } from "@/lib/markdown-copy";
 import { markdownFromPaste } from "@/lib/markdown-paste";
@@ -121,7 +123,14 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
           command: ({ editor: ed, range, props }) => {
             const opt = props as Option;
             if (opt.kind === "user") {
-              ed.chain().focus().insertContentAt(range, [{ type: "mention", attrs: { id: opt.id, label: opt.label } }, { type: "text", text: " " }]).run();
+              // Detrás, un espacio para seguir escribiendo; si el texto ya sigue con uno, no se pone otro y el cursor pasa detrás.
+              const after = ed.state.doc.textBetween(range.to, Math.min(range.to + 1, ed.state.doc.content.size), "\n", "\n");
+              const suffix = mentionSuffix(after);
+              const chain = ed.chain().focus().insertContentAt(range, suffix ? [{ type: "mention", attrs: { id: opt.id, label: opt.label } }, { type: "text", text: suffix }] : [{ type: "mention", attrs: { id: opt.id, label: opt.label } }]);
+              (suffix ? chain : chain.command(({ tr }) => {
+                tr.setSelection(TextSelection.create(tr.doc, Math.min(range.from + 2, tr.doc.content.size)));
+                return true;
+              })).run();
             } else {
               ed.chain().focus().deleteRange(range).run();
               mentionData.current.onCommand?.(opt.id);
@@ -175,6 +184,14 @@ export function RichTextEditor({ value, onChange, onSubmit, onCancel, id, placeh
     content: value,
     contentType: "markdown",
     editorProps: {
+      // Un espacio escrito justo detrás del que va tras una mención sobra («@Ana  para»): no se escribe.
+      handleTextInput: (view, from, to, text) => {
+        if (text !== " " || from !== to) return false;
+        const $at = view.state.doc.resolve(from);
+        const before = $at.nodeBefore;
+        if (!before?.isText || before.text !== " ") return false;
+        return view.state.doc.resolve(from - 1).nodeBefore?.type.name === "mention";
+      },
       attributes: {
         ...(id ? { id } : {}),
         class: "prose-md min-h-32 px-3 py-2 text-sm outline-none",
