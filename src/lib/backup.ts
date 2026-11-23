@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { LOCK_BACKUP } from "./advisory-locks";
 import { backupFileName, fileSha256, diagnoseBackupKey, parseBackupKey, verifyBackupFile, type BackupManifest } from "./backup-core";
@@ -10,11 +10,11 @@ import {
   checkShrink, copySummary, DirDestination, dumpKey, externalDestinations, lastGoodCopy, localFilesEnabled, listObjectKeys, listStems, manifestKey, pruneDestination, readManifest, stemDate,
   syncBackup, type BackupDestination, type CopyShrink, type CopySummary, type DestinationId, type ExternalConfig, type StemInfo,
 } from "./backup-dest";
-import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
+import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, loadHashIndex, objectSize, saveHashIndex, scanFiles, type FullManifest } from "./backup-files";
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
-import { isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
+import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
 import { logEvent } from "./log";
@@ -230,17 +230,52 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
  * Lista los ficheros de UPLOAD_DIR (sin backups/ ni temporales) con su sha256: solo se leen los nuevos o cambiados
  * (caché por ruta, tamaño y fecha en backups/files-index.json).
  */
-async function collectFiles(key: Buffer) {
+/** Ficheros de UPLOAD_DIR que entran en la copia (solo recorrido y tamaños, sin leerlos). */
+function scanBackupFiles() {
   // Exportaciones (pueden pesar GB y caducan en 24 h) e importaciones en curso son temporales: no entran en la copia.
   // Fuera también lo compartido con «Compartir → Pizarro» sin usar (UPLOAD_DIR/shared: temporal, caduca a los 30 minutos).
   const exclude = [backupsDir(), path.join(uploadDir(), "exports"), path.join(uploadDir(), "imports"), path.join(uploadDir(), "shared")];
   const extDir = process.env.BACKUP_EXTERNAL_DIR?.trim();
   if (extDir && path.isAbsolute(extDir)) exclude.push(extDir);
-  const scanned = await scanFiles(uploadDir(), exclude);
+  return scanFiles(uploadDir(), exclude);
+}
+
+async function collectFiles(key: Buffer) {
+  const scanned = await scanBackupFiles();
   const indexFile = path.join(backupsDir(), INDEX_FILE);
   const { entries, index } = await hashFiles(scanned, await loadHashIndex(indexFile), fileNameKey(key));
   await saveHashIndex(indexFile, index);
   return entries;
+}
+
+/** Holgura sobre el volcado anterior: la base crece entre una copia y la siguiente. */
+const DUMP_GROWTH = 1.2;
+
+/**
+ * Bytes que va a escribir la copia en el disco local, estimados sin escribir nada: el volcado anterior × 1,2 (sin copia
+ * anterior, el tamaño de la base de datos en PostgreSQL, que siempre es mayor que su volcado comprimido) y, si el almacén
+ * local guarda los ficheros, los que aún no estaban en la última copia (los que no figuran con el mismo tamaño y fecha en
+ * files-index.json; uno con el mismo contenido que otro ya guardado no se escribe, así que es una cota por arriba).
+ */
+async function estimateBackupBytes(local: DirDestination, prev: BackupStatus): Promise<{ dump: number; files: number }> {
+  let dump = prev.lastBackup?.ok && prev.lastBackup.bytes ? prev.lastBackup.bytes : 0;
+  if (!dump) {
+    const [latest] = await localStemsByName();
+    if (latest) dump = await stat(path.join(local.root, dumpKey(latest.stem))).then((s) => s.size, () => 0);
+  }
+  if (!dump) {
+    const rows = await db.$queryRawUnsafe<{ n: bigint | number }[]>("SELECT pg_database_size(current_database()) AS n").catch(() => []);
+    dump = Number(rows[0]?.n ?? 0) / DUMP_GROWTH;
+  }
+  let files = 0;
+  if (local.files) {
+    const index = await loadHashIndex(path.join(backupsDir(), INDEX_FILE));
+    for (const f of await scanBackupFiles()) {
+      const cached = index[f.rel];
+      if (!cached || cached[0] !== f.size || cached[1] !== f.mtimeMs) files += objectSize(f.size);
+    }
+  }
+  return { dump: Math.ceil(dump * DUMP_GROWTH), files };
 }
 
 const BUSY = "Ya hay una copia en curso.";
@@ -278,6 +313,12 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   let dumpTmp: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
+    // Antes de escribir nada: si no cabe la copia estimada (más el margen común de disco), falla con «disco lleno» sin
+    // empezar el volcado. La tarea lo reintenta cada hora (ver dailyBackupJob), pero cada intento solo mira el disco.
+    const estimate = await estimateBackupBytes(localDestination(), prevStatus);
+    await assertDiskRoom(backupsDir(), estimate.dump + estimate.files).catch((err) => {
+      throw Object.assign(err as Error, { estimate });
+    });
     const name = backupFileName(new Date());
     const stem = name.replace(/\.pzbak$/, "");
     file = path.join(backupsDir(), name);
@@ -338,7 +379,12 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
     const doomed = [dumpTmp, file, file && `${file}.json`, file && path.join(backupsDir(), manifestKey(path.basename(file).replace(/\.pzbak$/, "")))];
     await Promise.all(doomed.filter((f): f is string => !!f).map((f) => rm(f, { force: true }))).catch(() => {});
-    logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}`, durationMs: run.durationMs });
+    const estimate = (err as { estimate?: { dump: number; files: number } }).estimate;
+    logEvent({
+      level: "error", category: "system", action: "backup.failed",
+      message: `Falló la copia de seguridad: ${run.error}${estimate ? ` (se estiman ${logSize(estimate.dump + estimate.files)}: ${logSize(estimate.dump)} de base de datos y ${logSize(estimate.files)} de ficheros nuevos; no se ha escrito nada)` : ""}`,
+      durationMs: run.durationMs, ...(estimate ? { details: { estimatedDumpBytes: estimate.dump, estimatedFilesBytes: estimate.files } } : {}),
+    });
   } finally {
     // Copia nueva (y las viejas podadas): la lista y el aviso de las páginas de administración se vuelven a leer.
     invalidateMemo(BACKUP_MEMO);

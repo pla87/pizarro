@@ -1,9 +1,10 @@
 // El volcado de cada copia va en una conexión propia (no ocupa una del pool de la app durante minutos), con la misma
 // instantánea consistente (REPEATABLE READ) y la conexión cerrada siempre: al terminar, si falla y si pasa del tope.
-// También: una sola copia a la vez entre procesos y copias cortadas entre el volcado y el manifiesto.
+// También: una sola copia a la vez entre procesos, copias cortadas entre el volcado y el manifiesto y la comprobación
+// previa de espacio en el disco.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdtemp, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, open, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
@@ -218,6 +219,40 @@ describe("copias: una sola a la vez y copias cortadas", () => {
       assert.notEqual(last?.at, before, "se ha hecho la copia diaria");
       assert.equal(last?.ok, true, last?.error);
       assert.equal((await listBackups()).length, 2);
+    });
+  });
+});
+
+describe("copia diaria con el disco lleno", () => {
+  test("si no cabe la copia estimada, falla con «disco lleno» sin escribir nada; con sitio, vuelve a copiar", async () => {
+    const { createBackup, dailyBackupJob, listBackups } = await import("../../src/lib/backup");
+    const { NO_SPACE_MESSAGE } = await import("../../src/lib/disk-space");
+    await withBackupEnv({ DISK_MIN_FREE_MB: "" }, async (uploads) => {
+      const backups = path.join(uploads, "backups");
+      const written = async () => (await readdir(backups).catch(() => [])).filter((n) => n !== "status.json");
+      // Un fichero nuevo (disperso: no ocupa disco) de 8 TB: con el almacén local de ficheros, no cabe.
+      const huge = path.join(uploads, "enorme.bin");
+      const fh = await open(huge, "w");
+      await fh.truncate(8 * 2 ** 40);
+      await fh.close();
+      const run = await createBackup();
+      assert.equal(run.ok, false);
+      assert.equal(run.error, NO_SPACE_MESSAGE);
+      assert.deepEqual(await written(), [], "ni volcado, ni temporales, ni índice de ficheros");
+      // La tarea horaria falla con el mismo motivo (consta en Tareas de mantenimiento) y tampoco escribe nada.
+      await assert.rejects(dailyBackupJob(), { message: NO_SPACE_MESSAGE });
+      assert.deepEqual(await written(), []);
+      // Con sitio, la copia sale.
+      await rm(huge);
+      const ok = await createBackup();
+      assert.equal(ok.ok, true, ok.error);
+      const after1 = (await written()).sort();
+      // Con una copia anterior la estimación parte de su volcado (× 1,2): con un margen imposible tampoco se escribe nada.
+      process.env.DISK_MIN_FREE_MB = String(1e12);
+      const full = await createBackup();
+      assert.equal(full.error, NO_SPACE_MESSAGE);
+      assert.deepEqual((await written()).sort(), after1, "la copia buena sigue y no hay restos de la fallida");
+      assert.equal((await listBackups()).length, 1);
     });
   });
 });
