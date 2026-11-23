@@ -515,7 +515,7 @@ Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/piza
 
 **Render y Fly.io** usan la imagen publicada: en Render, *Manual Deploy → Deploy latest reference* en el servicio; en Fly.io, `fly deploy` en la carpeta de su `fly.toml`. Las dos descargan la `latest` del momento (o la versión que hayas fijado en la imagen) y aplican las migraciones al arrancar. Detalle en sus secciones, al principio de esta guía.
 
-**Con `npm start`** (sin Docker), tras la copia: para el servidor, descarga el código de la versión nueva (rama `stable`, por ejemplo con `git pull` si la clonaste de ella), y en la carpeta de Pizarro ejecuta `npm ci`, `npx prisma migrate deploy` y `npm run build`; después vuelve a arrancar con `npm start`. Aquí las migraciones no se aplican al arrancar: van a mano, con `npx prisma migrate deploy`.
+**Con `npm start`** (sin Docker), tras la copia: detén el servidor, descarga el código de la versión nueva (rama `stable`, por ejemplo con `git pull` si la clonaste de ella), y en la carpeta de Pizarro ejecuta `npm ci`, `npx prisma migrate deploy` y `npm run build`; después vuelve a arrancar con `npm start`. Aquí las migraciones no se aplican al arrancar: van a mano, con `npx prisma migrate deploy`.
 
 **Qué recibe cada instalación.** Nadie recibe commits sueltos: `latest` de la imagen, `get.sh` (sin `--version`), la rama `stable` y el aviso de versión nueva siguen la última **release publicada**. El propio `get.sh` se descarga de la rama `stable`. Solo reciben `main` quienes lo piden expresamente (`--ref main` o Railway apuntado a `main`); `--build` sin poder consultar la última versión usa `stable`.
 

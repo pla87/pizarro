@@ -43,6 +43,7 @@ function AssignDaysInput({ value, onChange, label }: { value: number; onChange: 
       inputMode="numeric"
       min={1}
       max={MAX_ASSIGN_DUE_DAYS}
+      required
       value={text}
       onChange={(e) => {
         setText(e.target.value);

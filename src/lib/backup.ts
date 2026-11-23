@@ -48,6 +48,8 @@ export interface BackupRun {
   filesNew?: number;
   durationMs?: number;
   error?: string;
+  /** Copia fallida por disco lleno: bytes del volcado que se llegaron a escribir (cota inferior para el reintento). */
+  partialBytes?: number;
 }
 
 export interface RestoreTestRun extends BackupRun {
@@ -265,6 +267,9 @@ async function estimateDumpBytes(prev: BackupStatus): Promise<number | null> {
     const [latest] = await localStemsByName();
     if (latest) dump = await stat(path.join(backupsDir(), dumpKey(latest.stem))).then((s) => s.size, () => 0);
   }
+  // Sin ninguna copia, pero la anterior se quedó sin disco a mitad: lo que llegó a escribir es una cota inferior. Así el
+  // reintento de cada hora no vuelve a llenar el disco hasta ENOSPC (y a tumbar las subidas) mientras no haya sitio.
+  if (!dump && prev.lastBackup && !prev.lastBackup.ok && prev.lastBackup.partialBytes) dump = prev.lastBackup.partialBytes;
   return dump ? Math.ceil(dump * DUMP_GROWTH) : null;
 }
 
@@ -370,7 +375,9 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     });
   } catch (err) {
     // Disco lleno al volcar o al guardar los ficheros: el mensaje de la app, no el de Node («ENOSPC: no space left…»).
-    run = { at: new Date().toISOString(), ok: false, error: isNoSpaceError(err) ? NO_SPACE_MESSAGE : message(err), durationMs: Date.now() - started };
+    const noSpace = isNoSpaceError(err);
+    const partialBytes = noSpace && dumpTmp ? await stat(dumpTmp).then((s) => s.size, () => 0) : 0;
+    run = { at: new Date().toISOString(), ok: false, error: noSpace ? NO_SPACE_MESSAGE : message(err), durationMs: Date.now() - started, ...(partialBytes ? { partialBytes } : {}) };
     // Un volcado a medias (o sin su manifiesto) no sirve: se borra para no llenar el disco con un reintento por hora.
     const doomed = [dumpTmp, file, file && `${file}.json`, file && path.join(backupsDir(), manifestKey(path.basename(file).replace(/\.pzbak$/, "")))];
     await Promise.all(doomed.filter((f): f is string => !!f).map((f) => rm(f, { force: true }))).catch(() => {});
