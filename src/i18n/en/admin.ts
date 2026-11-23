@@ -527,7 +527,7 @@ export const admin: Record<string, string> = {
     "Notice of a backup much smaller than the previous one sent to {n} administrator(s)",
   "Aviso de copia de seguridad atrasada enviado a {n} administrador(es)": "Overdue backup notice sent to {n} administrator(s)",
   "Falló la copia de seguridad: {error}": "Backup failed: {error}",
-  "Falló la copia de seguridad: {error} (se estiman {total}: {dump} de base de datos y {files} de ficheros nuevos; no se ha escrito nada)": "Backup failed: {error} (estimated {total}: {dump} of database and {files} of new files; nothing was written)",
+  "Falló la copia de seguridad: {error} (se estiman {dump} para el volcado de la base de datos; hay {free} libres y se exige dejar un margen de {margin}, que fija DISK_MIN_FREE_MB; no se ha escrito nada)": "Backup failed: {error} (the database dump is estimated at {dump}; {free} is free and a margin of {margin} must be left, set by DISK_MIN_FREE_MB; nothing was written)",
   "No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): {error}":
     "Local backup retention was not applied (could not check which one is the last good backup): {error}",
   "La copia {stem} tiene {local} {what} y la última buena ({good}) tiene {remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva {good}.":
@@ -562,7 +562,9 @@ export const admin: Record<string, string> = {
   "No se pudo compartir el archivo {what} (HTTP {status})": "Could not share the file {what} (HTTP {status})",
   "con el dominio": "with the domain",
   "con un miembro del proyecto": "with a project member",
-  "sin respuesta": "no response",
+  "No se pudo compartir el archivo {what}: Google Drive no ha respondido a tiempo": "Could not share the file {what}: Google Drive did not respond in time",
+  "No se pudo compartir el archivo con {n} miembro(s) más del proyecto: Google Drive tarda demasiado":
+    "Could not share the file with {n} more project member(s): Google Drive is taking too long",
   "Hay otra copia de Pizarro usando esta misma base de datos desde hace más de {minutes} minutos. Dos copias a la vez se pisan (Telegram por sondeo, tareas de fondo, copias de seguridad, archivos subidos). Detén la que sobra: un servicio o un despliegue antiguo de Railway, otro servidor o un npm start de prueba con esta DATABASE_URL.":
     "Another copy of Pizarro has been using this same database for more than {minutes} minutes. Two copies at once step on each other (Telegram polling, background jobs, backups, uploaded files). Stop the extra one: an old Railway service or deployment, another server, or a test npm start with this DATABASE_URL.",
   "La otra copia de Pizarro ya no usa esta base de datos.": "The other copy of Pizarro is no longer using this database.",
