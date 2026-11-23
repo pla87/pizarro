@@ -13,7 +13,7 @@ import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
-import { subtasksN, tasksN, type Label } from "@/lib/undo-label";
+import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
@@ -103,8 +103,7 @@ const CHANGE_LABELS: Record<string, string> = {
 /** «tipo, responsable y fecha límite» a partir de los campos cambiados. */
 function describeChanges(data: Record<string, unknown>): Label {
   const names: Label[] = [...new Set(Object.keys(data).filter((k) => data[k] !== undefined).map((k) => CHANGE_LABELS[k] ?? k))].map((k) => ({ k }));
-  if (names.length <= 1) return names[0] ?? { k: "sin cambios" };
-  return { k: "{list} y {last}", p: { list: names.slice(0, -1), last: names.at(-1)! } };
+  return names.length ? andList(names) : { k: "sin cambios" };
 }
 
 /** Límites por tarea / usuario, para que nadie sature la base de datos ni la API de Google (y MAX_SUBTASKS, en constants). */

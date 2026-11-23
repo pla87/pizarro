@@ -17,7 +17,7 @@ import { db } from "./db";
 import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
 import { logSize } from "./format-size";
@@ -297,7 +297,7 @@ export async function createBackup(): Promise<BackupRun> {
   } catch (err) {
     // Sin conexión para el bloqueo: la base de datos no contesta, así que la copia tampoco se habría podido hacer.
     const run: BackupRun = { at: new Date().toISOString(), ok: false, error: message(err) };
-    logEvent({ level: "error", category: "system", action: "backup.failed", message: `Falló la copia de seguridad: ${run.error}` });
+    logEvent({ level: "error", category: "system", action: "backup.failed", label: { k: "Falló la copia de seguridad: {error}", p: { error: logText(run.error ?? "") } } });
     await updateStatus((s) => ({ ...s, lastBackup: run })).catch((e) => console.error("[backup] no se pudo guardar el estado", e));
     return run;
   } finally {
@@ -344,7 +344,7 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     // nueva es casi vacía): la retención nunca la borra.
     // Si no se puede saber cuál es (p. ej. un manifiesto ilegible), esta vez no se aplica la retención.
     const h = await localCopyHealth(local, key, copySummary(manifest), prevStatus).catch((err) => {
-      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): ${message(err)}` });
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", label: { k: "No se aplicó la retención de las copias locales (no se pudo comprobar cuál es la última copia buena): {error}", p: { error: logText(message(err)) } } });
       return null;
     });
     health = h;
@@ -352,17 +352,20 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
       const sh = h.shrink;
       logEvent({
         level: "warn", category: "system", action: "backup.shrunk",
-        message: `La copia ${sh.stem} tiene ${sh.local} ${shrinkWhat(sh.what)} y la última buena (${sh.goodStem}) tiene ${sh.remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva ${sh.goodStem}.`,
+        label: {
+          k: "La copia {stem} tiene {local} {what} y la última buena ({good}) tiene {remote}. ¿Se ha perdido la base de datos o el volumen? La retención conserva {good}.",
+          p: { stem: sh.stem, local: sh.local, what: logText(shrinkWhat(sh.what)), good: sh.goodStem, remote: sh.remote },
+        },
         details: { ...sh },
       });
     }
     // Si la retención falla, se avisa, pero la copia vale.
     const noPrune = { removedBackups: 0, removedObjects: 0, gcSkipped: null, removedTemp: 0 };
     const pruned = !h ? noPrune : await pruneDestination(local, key, { extraKeys: (s) => [`${s}.pzbak.json`], protect: h.good ? [h.good] : [] }).catch((err) => {
-      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", message: `No se aplicó la retención de las copias locales: ${message(err)}` });
+      logEvent({ level: "warn", category: "system", action: "backup.pruneFailed", label: { k: "No se aplicó la retención de las copias locales: {error}", p: { error: logText(message(err)) } } });
       return noPrune;
     });
-    if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", message: `No se limpió el almacén de ficheros local: ${pruned.gcSkipped}` });
+    if (pruned.gcSkipped) logEvent({ level: "warn", category: "system", action: "backup.gcSkipped", label: { k: "No se limpió el almacén de ficheros local: {reason}", p: { reason: pruned.gcSkipped } } });
     run = {
       at: new Date().toISOString(), ok: true, file: name, bytes, rows: dbManifest.totalRows, tables: dbManifest.tables.length,
       files: manifest.fileCount, filesBytes: manifest.fileBytes, filesNew: local.files ? sync.uploaded : 0, durationMs: Date.now() - started,
@@ -383,7 +386,12 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     const estimate = (err as { estimate?: { dump: number; files: number } }).estimate;
     logEvent({
       level: "error", category: "system", action: "backup.failed",
-      message: `Falló la copia de seguridad: ${run.error}${estimate ? ` (se estiman ${logSize(estimate.dump + estimate.files)}: ${logSize(estimate.dump)} de base de datos y ${logSize(estimate.files)} de ficheros nuevos; no se ha escrito nada)` : ""}`,
+      label: estimate
+        ? {
+            k: "Falló la copia de seguridad: {error} (se estiman {total}: {dump} de base de datos y {files} de ficheros nuevos; no se ha escrito nada)",
+            p: { error: logText(run.error ?? ""), total: logSize(estimate.dump + estimate.files), dump: logSize(estimate.dump), files: logSize(estimate.files) },
+          }
+        : { k: "Falló la copia de seguridad: {error}", p: { error: logText(run.error ?? "") } },
       durationMs: run.durationMs, ...(estimate ? { details: { estimatedDumpBytes: estimate.dump, estimatedFilesBytes: estimate.files } } : {}),
     });
   } finally {
@@ -484,7 +492,7 @@ export async function acceptBackupShrink(by?: { id: string; name: string }, seen
   if (!shrink) return null;
   logEvent({
     level: "warn", category: "system", action: "backup.shrinkAccepted",
-    message: `Reducción de las copias confirmada como intencionada desde ${shrink.stem}: ${shrink.goodStem} ya no se conserva siempre`,
+    label: { k: "Reducción de las copias confirmada como intencionada desde {stem}: {good} ya no se conserva siempre", p: { stem: shrink.stem, good: shrink.goodStem } },
     userId: by?.id, userName: by?.name, details: { ...shrink },
   });
   return shrink.stem;
@@ -517,7 +525,7 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
   const key = backupKey();
   const { destinations, errors } = opts.config ?? externalDestinations();
   if (!key || (destinations.length === 0 && errors.length === 0)) return [];
-  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", message: externalConfigMessage(errors) });
+  if (errors.length) logEvent({ level: "error", category: "system", action: "backup.externalConfig", label: { k: "Destino externo de copias mal configurado: {errors}", p: { errors: errors.join(" ") } } });
   if (destinations.length === 0) return [];
   if (lock.busy || lock.external) return [];
   lock.external = true;
@@ -526,7 +534,7 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
     if (!res.ran) console.info("[backup] destino externo: otro proceso está copiando; se omite esta pasada");
     return res.ran ? res.value : [];
   } catch (err) {
-    logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
+    logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a destino externo: {error}", p: { error: logText(message(err)) } } });
     return [{ at: new Date().toISOString(), ok: false, label: "externo", error: message(err) }];
   } finally {
     lock.external = false;
@@ -581,12 +589,21 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
         run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, ...(pruned?.retained ? { retained: pruned.retained } : {}), durationMs: Date.now() - started, warning };
         logEvent({
           level: warning ? "warn" : "info", category: "system", action: "backup.external",
-          message: `Copia subida a ${dest.label}: ${manifest.stem} (${sync.uploaded} ficheros nuevos, ${sync.skipped} ya estaban, ${logSize(sync.bytes)})${pruned?.retained ? `. ${pruned.retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza)` : ""}${warning ? `. ${warning}` : ""}`,
+          label: {
+            k: pruned?.retained
+              ? warning
+                ? "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza). {warning}"
+                : "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {retained} objetos retenidos por el bloqueo del bucket (se borrarán cuando venza)"
+              : warning
+                ? "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size}). {warning}"
+                : "Copia subida a {dest}: {file} ({uploaded} ficheros nuevos, {skipped} ya estaban, {size})",
+            p: { dest: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, size: logSize(sync.bytes), retained: pruned?.retained ?? 0, warning: logText(warning ?? "") },
+          },
           durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups ?? null, removedObjects: pruned?.removedObjects ?? null, removedTemp: pruned?.removedTemp ?? null, retained: pruned?.retained ?? 0 },
         });
       } catch (err) {
         run = { at: at(), ok: false, label: dest.label, file: manifest.stem, durationMs: Date.now() - started, error: message(err) };
-        logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a ${dest.label}: ${run.error}`, durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem } });
+        logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a {dest}: {error}", p: { dest: dest.label, error: logText(run.error ?? "") } }, durationMs: run.durationMs, details: { dest: dest.id, file: manifest.stem } });
       }
       runs.push(run);
       const r = run;
@@ -596,7 +613,7 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
       })).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
     }
   } catch (err) {
-    logEvent({ level: "error", category: "system", action: "backup.externalFailed", message: `Falló la copia a destino externo: ${message(err)}` });
+    logEvent({ level: "error", category: "system", action: "backup.externalFailed", label: { k: "Falló la copia a destino externo: {error}", p: { error: logText(message(err)) } } });
     runs.push({ at: at(), ok: false, label: "externo", error: message(err) });
   }
   return runs;
@@ -716,9 +733,14 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
     level: run.ok ? "info" : "error",
     category: "system",
     action: "backup.restoreTest",
-    message: run.ok
-      ? `Prueba de restauración correcta${run.mode === "database" ? " (restaurada en una base temporal)" : ""}: ${run.file} (${run.rows} filas en ${run.tables} tablas, ${run.objectsChecked ?? 0} ficheros comprobados)`
-      : `Prueba de restauración fallida: ${run.error}`,
+    label: run.ok
+      ? {
+          k: run.mode === "database"
+            ? "Prueba de restauración correcta (restaurada en una base temporal): {file} ({rows} filas en {tables} tablas, {objects} ficheros comprobados)"
+            : "Prueba de restauración correcta: {file} ({rows} filas en {tables} tablas, {objects} ficheros comprobados)",
+          p: { file: String(run.file), rows: String(run.rows), tables: String(run.tables), objects: run.objectsChecked ?? 0 },
+        }
+      : { k: "Prueba de restauración fallida: {error}", p: { error: logText(String(run.error)) } },
     durationMs: run.durationMs,
     details: { file: run.file ?? null, ok: run.ok, rows: run.rows ?? null, mode: run.mode ?? null, objectsChecked: run.objectsChecked ?? null, referencesChecked: run.referencesChecked ?? null },
   });

@@ -73,7 +73,7 @@ export async function notifyBackupAlertIfDue(now: number = Date.now()): Promise<
   }
   logEvent({
     level: "warn", category: "system", action: "backup.alertMailed",
-    message: alert.reason === "shrunk" ? `Aviso de copia de seguridad mucho menor que la anterior enviado a ${sent} administrador(es)` : `Aviso de copia de seguridad atrasada enviado a ${sent} administrador(es)`, details: { sent, admins: admins.length, lastAt: alert.lastAt, reason: alert.reason },
+    label: { k: alert.reason === "shrunk" ? "Aviso de copia de seguridad mucho menor que la anterior enviado a {n} administrador(es)" : "Aviso de copia de seguridad atrasada enviado a {n} administrador(es)", p: { n: sent } }, details: { sent, admins: admins.length, lastAt: alert.lastAt, reason: alert.reason },
   });
   return sent;
 }

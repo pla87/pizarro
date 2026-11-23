@@ -1,4 +1,4 @@
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { rateIp, rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { applyUnsubscribe } from "@/lib/unsubscribe";
@@ -52,7 +52,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     return done ? text("Unsubscribed", 200) : text("Not found", 404);
   } catch (err) {
     if (err instanceof BodyTooLargeError) return text("Payload too large", 413);
-    logEvent({ level: "error", category: "api", action: "notify.unsubscribeFailed", message: `Fallo al dar de baja un email: ${err instanceof Error ? err.message : String(err)}`, path: "/api/unsubscribe/…", ip, durationMs: performance.now() - start });
+    logEvent({ level: "error", category: "api", action: "notify.unsubscribeFailed", label: { k: "Fallo al dar de baja un email: {error}", p: { error: logError(err) } }, path: "/api/unsubscribe/…", ip, durationMs: performance.now() - start });
     return text("Internal error", 500);
   }
 }

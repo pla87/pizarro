@@ -138,7 +138,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
   revokeUser(userId);
   for (const r of reportsOff) {
     logEvent({
-      level: "warn", category: "notify", action: "report.scheduleDisabled", message: `Informe semanal desactivado: se ha borrado la cuenta de su destinatario, «${userName}»`,
+      level: "warn", category: "notify", action: "report.scheduleDisabled", label: { k: "Informe semanal desactivado: se ha borrado la cuenta de su destinatario, «{name}»", p: { name: userName } },
       userId: opts.actor?.id ?? null, userName: opts.actor?.name ?? null, projectId: r.projectId, details: { deletedUserId: userId },
     });
   }
@@ -155,7 +155,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
       // La cuenta ya no existe: el fallo se registra en vez de devolver un error que diría que no se ha borrado, y el
       // proyecto pasa a ser de equipo (privado y sin miembros nadie podría verlo).
       console.error("[users] no se pudo borrar un proyecto privado de la cuenta borrada", err);
-      logEvent({ level: "error", category: "system", action: "users.privateProjectPurgeFailed", message: "No se pudo borrar un proyecto privado de una cuenta borrada", projectId: p.id, details: { error: err instanceof Error ? err.message : String(err) } });
+      logEvent({ level: "error", category: "system", action: "users.privateProjectPurgeFailed", label: { k: "No se pudo borrar un proyecto privado de una cuenta borrada" }, projectId: p.id, details: { error: err instanceof Error ? err.message : String(err) } });
       const { count } = await db.project.updateMany({ where: { id: p.id, isPrivate: true, members: { none: {} } }, data: { isPrivate: false, privateOwnerId: null } }).catch(() => ({ count: 0 }));
       if (count) result.toTeam.push(p);
     }
@@ -165,7 +165,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     revokeProject(p.id);
     logEvent({
       category: "action", action: "users.privateProjectToTeam",
-      message: `El proyecto privado «${p.name}» pasa a ser de equipo al borrarse la cuenta de «${userName}», su único miembro activo: ahora lo ven los administradores`,
+      label: { k: "El proyecto privado «{project}» pasa a ser de equipo al borrarse la cuenta de «{name}», su único miembro activo: ahora lo ven los administradores", p: { project: p.name, name: userName } },
       userId: opts.actor?.id ?? null, userName: opts.actor?.name ?? null, projectId: p.id, details: { deletedUserId: userId },
     });
   }
@@ -174,7 +174,7 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
   if (result.toTeam.length) {
     await notifyProjectsToTeam(result.toTeam, userName, opts.self ? null : opts.actor?.id ?? null).catch((err) => {
       console.error("[users] no se pudo avisar a los administradores", err);
-      logEvent({ level: "error", category: "notify", action: "notify.projectToTeamFailed", message: "No se pudo avisar a los administradores de los proyectos que pasan a ser de equipo", details: { error: err instanceof Error ? err.message : String(err), projects: result.toTeam.map((p) => p.id) } });
+      logEvent({ level: "error", category: "notify", action: "notify.projectToTeamFailed", label: { k: "No se pudo avisar a los administradores de los proyectos que pasan a ser de equipo" }, details: { error: err instanceof Error ? err.message : String(err), projects: result.toTeam.map((p) => p.id) } });
     });
   }
   return result;

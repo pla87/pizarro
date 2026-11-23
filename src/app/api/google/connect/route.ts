@@ -18,10 +18,10 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.redirect(new URL("/login", base));
   const ip = clientIp(req.headers);
   if (!googleEnabled()) {
-    logEvent({ level: "warn", category: "google", action: "google.connectDisabled", message: "Intento de conectar Google con la integración desactivada", userId: user.id, userName: user.name, path: "/api/google/connect", ip });
+    logEvent({ level: "warn", category: "google", action: "google.connectDisabled", label: { k: "Intento de conectar Google con la integración desactivada" }, userId: user.id, userName: user.name, path: "/api/google/connect", ip });
     return NextResponse.redirect(new URL("/settings?google=disabled", base));
   }
-  logEvent({ category: "google", action: "google.connectStart", message: "Inicio de la conexión con Google", userId: user.id, userName: user.name, path: "/api/google/connect", ip });
+  logEvent({ category: "google", action: "google.connectStart", label: { k: "Inicio de la conexión con Google" }, userId: user.id, userName: user.name, path: "/api/google/connect", ip });
   const state = randomBytes(24).toString("base64url");
   const res = NextResponse.redirect(googleAuthUrl(state));
   res.cookies.set(STATE_COOKIE, `${state}.${user.id}`, {

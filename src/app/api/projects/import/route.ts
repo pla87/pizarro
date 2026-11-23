@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/errors";
 import { assertDiskRoom } from "@/lib/disk-space";
 import { ArchiveError } from "@/lib/project-export/errors";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { assertCsvHeader } from "@/lib/foreign-import/csv";
 import { decodeText, foreignMaxBytes, sniffFormat } from "@/lib/foreign-import/parse";
 import { importMaxBytes } from "@/lib/project-export/config";
@@ -142,7 +142,7 @@ async function handlePost(req: Request): Promise<Response> {
     const job = await createImportJob(user.id, temp, received, isPrivate, fileName.replace(/\.(pizarro\.zip|zip|json|csv|tsv|txt)$/i, "").trim() || undefined, format);
     temp = null;
     logEvent({
-      category: "api", action: "projects.importQueued", message: `Importación de un proyecto en cola (${logSize(received)})`,
+      category: "api", action: "projects.importQueued", label: { k: "Importación de un proyecto en cola ({size})", p: { size: logSize(received) } },
       userId: user.id, userName: user.name, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { jobId: job.id, bytes: received, isPrivate, format },
     });
     return Response.json({ ok: true, jobId: job.id }, { status: 202, headers: { "Cache-Control": "private, no-store" } });
@@ -152,7 +152,7 @@ async function handlePost(req: Request): Promise<Response> {
     const known = err instanceof AppError ? err : err instanceof ZipReadError ? new ArchiveError("El archivo está dañado.", err.message) : null;
     logEvent({
       level: known ? "warn" : "error", category: "api", action: "projects.importFailed",
-      message: `Fallo al importar un proyecto: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: "Fallo al importar un proyecto: {error}", p: { error: logError(err) } },
       userId: user?.id ?? null, userName: user?.name ?? null, path: "/api/projects/import", ip, durationMs: performance.now() - start, details: { status },
     });
     if (known) {

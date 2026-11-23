@@ -1,7 +1,7 @@
 import { findManageableProject } from "@/lib/access";
 import { actionContext } from "@/lib/action-context";
 import { AppError } from "@/lib/errors";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent, logText } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { estimateProjectExport } from "@/lib/project-export/export";
 import { EXPORT_SCOPES, type ExportOptions } from "@/lib/project-export/types";
@@ -65,17 +65,17 @@ async function handle(req: Request, ctx: Ctx, mode: "estimate" | "create") {
     if (mode === "estimate") return Response.json(await estimateProjectExport(project.id, options), { headers: { "Cache-Control": "private, no-store" } });
     const job = await createExportJob(user.id, project.id, options);
     logEvent({
-      category: "api", action: "projects.exportQueued", message: `Exportación del proyecto «${project.name}» en cola`,
+      category: "api", action: "projects.exportQueued", label: { k: "Exportación del proyecto «{project}» en cola", p: { project: project.name } },
       userId: user.id, userName: user.name, projectId: project.id, path: `/api/projects/${project.id}/export`, ip, details: { jobId: job.id, options },
     });
     return Response.json({ ok: true, jobId: job.id }, { status: 202, headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {
     if (err instanceof AppError) {
-      logEvent({ level: "warn", category: "api", action: "projects.exportFailed", message: `Exportación rechazada: ${err.message}`, userId: user.id, userName: user.name, path: `/api/projects/${projectId}/export`, ip, details: { status: err.status } });
+      logEvent({ level: "warn", category: "api", action: "projects.exportFailed", label: { k: "Exportación rechazada: {error}", p: { error: logText(err.message) } }, userId: user.id, userName: user.name, path: `/api/projects/${projectId}/export`, ip, details: { status: err.status } });
       return Response.json({ error: t(err.message), ...(err.code ? { code: err.code } : {}) }, { status: err.status });
     }
     console.error("[project export]", err);
-    logEvent({ level: "error", category: "api", action: "projects.exportFailed", message: `Fallo al exportar: ${err instanceof Error ? err.message : String(err)}`, userId: user.id, userName: user.name, path: `/api/projects/${projectId}/export`, ip });
+    logEvent({ level: "error", category: "api", action: "projects.exportFailed", label: { k: "Fallo al exportar: {error}", p: { error: logError(err) } }, userId: user.id, userName: user.name, path: `/api/projects/${projectId}/export`, ip });
     return Response.json({ error: t("No se pudo exportar el proyecto.") }, { status: 500 });
   }
 }

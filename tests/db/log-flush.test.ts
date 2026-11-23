@@ -4,13 +4,16 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 import type { Prisma } from "../../src/generated/prisma/client";
-import { db, expectOk, loginAs, makeUser } from "./helpers";
+import { db, expectOk, loginAs, makeKind, makeProject, makeTask, makeUser } from "./helpers";
 import { POST } from "../../src/app/api/client-errors/route";
 import { flushLogs, logEvent } from "../../src/lib/log";
 import { logDetailsShown, logMessageText } from "../../src/lib/log-message";
 import { makeT } from "../../src/i18n/core";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { createProject } from "../../src/actions/projects";
+import { updateTask } from "../../src/actions/tasks";
+import { logText } from "../../src/lib/log";
+import { andList } from "../../src/lib/undo-label";
 import { LOG_LABEL_KEY } from "../../src/lib/log-message";
 
 const state = (globalThis as unknown as { __pzLog: { queue: Prisma.AppLogCreateManyInput[]; lastPurge: number } }).__pzLog;
@@ -214,5 +217,62 @@ describe("mensajes traducibles", () => {
     const boot = { message: "Arranque de Pizarro v1.0.0", details: { version: "1.0.0", [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version: "1.0.0" } } } };
     assert.equal(logMessageText(boot, en), "Pizarro v1.0.0 started");
     assert.deepEqual(logDetailsShown(boot.details), { version: "1.0.0" });
+  });
+
+  // Con la interfaz en inglés, editar dos campos salía «Edited “Obra: …”: […] and […]»: la lista anidada pasaba del tope
+  // de profundidad de los detalles y se guardaba como «[…]».
+  test("editar una tarjeta: los nombres de 1, 2 y 3 campos se leen en los dos idiomas", async () => {
+    const admin = await makeUser({ role: "ADMIN", name: "Admin Campos" });
+    await loginAs(admin);
+    const f = await makeProject();
+    const task = await makeTask(f, { title: "Obra: inicio" });
+    const other = await makeKind(f.project.id);
+    expectOk(await updateTask(task.id, { title: "Obra: uno" }));
+    expectOk(await updateTask(task.id, { title: "Obra: dos", kindId: other.id }));
+    expectOk(await updateTask(task.id, { title: "Obra: tres", kindId: f.kindId, color: "#ef4444" }));
+    await flushLogs();
+    const edits = await db.appLog.findMany({ where: { action: "tasks.updateTask", userId: admin.id }, orderBy: { createdAt: "asc" } });
+    const en = makeT("en");
+    assert.deepEqual(edits.map((r) => r.message), ["Modificó «Obra: uno»: título", "Modificó «Obra: dos»: título y tipo", "Modificó «Obra: tres»: título, tipo y color"]);
+    assert.deepEqual(edits.map((r) => logMessageText(r, en)), ["Edited “Obra: uno”: title", "Edited “Obra: dos”: title and type", "Edited “Obra: tres”: title, type and color"]);
+  });
+
+  test("copias, apagado, emails, PDF y exportar: guardados en español y leídos en inglés, con los motivos traducidos", async () => {
+    // Las mismas plantillas que escriben backup.ts, shutdown.ts, mail.ts, las rutas de PDF y transfer-jobs.ts.
+    logEvent({ category: "test", action: "tsample.backupFailed", label: { k: "Falló la copia de seguridad: {error}", p: { error: logText("No hay espacio suficiente en el disco del servidor para esta operación.") } } });
+    logEvent({
+      category: "test", action: "tsample.restore",
+      label: { k: "Prueba de restauración correcta: {file} ({rows} filas en {tables} tablas, {objects} ficheros comprobados)", p: { file: "pizarro-2026-11-23.tar", rows: "120", tables: "30", objects: 4 } },
+    });
+    logEvent({ category: "test", action: "tsample.shutdown", label: { k: "Apagado ordenado ({signal}): sin peticiones ni envíos pendientes", p: { signal: "SIGTERM" } } });
+    logEvent({
+      category: "test", action: "tsample.shutdownLeft",
+      label: { k: "Apagado ordenado ({signal}): {left} tras {seconds} s", p: { signal: "SIGTERM", seconds: 10, left: andList([{ k: "{n} conexión(es) con peticiones sin terminar", p: { n: 2 } }, { k: "{n} envío(s) de email sin terminar", p: { n: 1 } }]) } },
+    });
+    logEvent({ category: "test", action: "tsample.mail", label: { k: "Email enviado: {what}", p: { what: logText("aviso de contraseña cambiada") } } });
+    logEvent({ category: "test", action: "tsample.pdf", label: { k: "Informe PDF generado de «{project}» ({size})", p: { project: "Casa", size: "120 KB" } } });
+    logEvent({ category: "test", action: "tsample.import", label: { k: "Proyecto «{name}» importado desde {source} ({tasks} tareas, {size})", p: { name: "Casa", source: { k: "un CSV" }, tasks: 3, size: "2 KB" } } });
+    // Un error tal cual (de una biblioteca) sale sin traducir, y sin la credencial de una ruta.
+    logEvent({ category: "test", action: "tsample.raw", label: { k: "Fallo al servir el calendario suscrito: {error}", p: { error: logText("ECONNRESET en /api/calendar/secreto123.ics") } } });
+    await flushLogs();
+    const by = Object.fromEntries((await rows("tsample.")).map((r) => [r.action.slice("tsample.".length), r]));
+    const en = makeT("en");
+    const both = (key: string) => [by[key]!.message, logMessageText(by[key]!, en)];
+    assert.deepEqual(both("backupFailed"), ["Falló la copia de seguridad: No hay espacio suficiente en el disco del servidor para esta operación.", `Backup failed: ${en("No hay espacio suficiente en el disco del servidor para esta operación.")}`]);
+    assert.notEqual(en("No hay espacio suficiente en el disco del servidor para esta operación."), "No hay espacio suficiente en el disco del servidor para esta operación.");
+    assert.deepEqual(both("restore"), [
+      "Prueba de restauración correcta: pizarro-2026-11-23.tar (120 filas en 30 tablas, 4 ficheros comprobados)",
+      "Restore test passed: pizarro-2026-11-23.tar (120 rows in 30 tables, 4 files checked)",
+    ]);
+    assert.deepEqual(both("shutdown"), ["Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes", "Graceful shutdown (SIGTERM): no pending requests or sends"]);
+    assert.deepEqual(both("shutdownLeft"), [
+      "Apagado ordenado (SIGTERM): 2 conexión(es) con peticiones sin terminar y 1 envío(s) de email sin terminar tras 10 s",
+      "Graceful shutdown (SIGTERM): 2 connection(s) with unfinished requests and 1 unfinished email send(s) after 10 s",
+    ]);
+    assert.deepEqual(both("mail"), ["Email enviado: aviso de contraseña cambiada", "Email sent: notice of password changed"]);
+    assert.deepEqual(both("pdf"), ["Informe PDF generado de «Casa» (120 KB)", "PDF report generated for “Casa” (120 KB)"]);
+    assert.deepEqual(both("import"), ["Proyecto «Casa» importado desde un CSV (3 tareas, 2 KB)", "Project “Casa” imported from a CSV (3 tasks, 2 KB)"]);
+    assert.deepEqual(both("raw"), ["Fallo al servir el calendario suscrito: ECONNRESET en /api/calendar/…", "Failed to serve the subscribed calendar: ECONNRESET en /api/calendar/…"]);
+    assert.ok(!JSON.stringify(by.raw!.details).includes("secreto123"));
   });
 });

@@ -4,7 +4,7 @@ import { assertNotArchivedRow, loadTaskWithAccess } from "@/lib/access";
 import { AppError, notFound } from "@/lib/errors";
 import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
 import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { saveUndo } from "@/lib/undo";
@@ -172,7 +172,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ taskId: string 
     const user = await getCurrentUser().catch(() => null);
     logEvent({
       level: err instanceof AppError ? "warn" : "error", category: "api", action: "attachments.uploadFailed",
-      message: `Fallo al subir archivo: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: "Fallo al subir archivo: {error}", p: { error: logError(err) } },
       userId: user?.id ?? null, userName: user?.name ?? null, path: `/api/tasks/${taskIdForLog}/attachments`, ip, durationMs: performance.now() - start,
       details: { taskId: taskIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });

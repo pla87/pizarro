@@ -33,7 +33,7 @@ async function guardCode(code: string, l: Locale): Promise<string> {
   if (!(await checkSetupCode(db, code))) {
     rateLimit(ipKey, 8, WINDOW);
     rateLimit(allKey, 30, WINDOW);
-    logEvent({ level: "warn", category: "auth", action: "setup.codeFailed", message: "Código del asistente de instalación incorrecto", path: "/setup", ip });
+    logEvent({ level: "warn", category: "auth", action: "setup.codeFailed", label: { k: "Código del asistente de instalación incorrecto" }, path: "/setup", ip });
     throw new AppError(translate(l, "El código no es correcto o ha caducado."), 403);
   }
   return ip;
@@ -98,6 +98,6 @@ export async function completeSetupAction(form: SetupForm) {
       if (err instanceof AppError) throw new AppError(translate(l, err.message), err.status, err.code);
       throw err;
     }
-    logEvent({ category: "auth", action: "setup.completed", message: "Instalación configurada con el asistente de primer arranque", path: "/setup", ip });
+    logEvent({ category: "auth", action: "setup.completed", label: { k: "Instalación configurada con el asistente de primer arranque" }, path: "/setup", ip });
   });
 }

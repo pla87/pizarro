@@ -6,7 +6,7 @@ import { appTimeZone } from "./board";
 import { isoToDate, todayIso } from "./dates";
 import { db } from "./db";
 import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { unsubscribeLinks } from "./unsubscribe-links";
@@ -87,7 +87,7 @@ const SMTP_DOWN_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EAUTH",
 const smtpDown = (err: unknown): boolean => SMTP_DOWN_CODES.has(String((err as { code?: unknown } | null)?.code ?? ""));
 
 function logSmtpDown(what: string, err: unknown): void {
-  logEvent({ level: "warn", category: "notify", action: "mail.smtpDown", message: `SMTP sin respuesta (${what}): ${maskEmailsIn((err as Error).message)}. Lo pendiente se intentará en la siguiente pasada.` });
+  logEvent({ level: "warn", category: "notify", action: "mail.smtpDown", label: { k: "SMTP sin respuesta ({what}): {error}. Lo pendiente se intentará en la siguiente pasada.", p: { what: logText(what), error: logText(maskEmailsIn((err as Error).message)) } } });
 }
 
 // Si un envío falla (SMTP caído, PDF atascado…), no se reintenta en cada pasada del mantenimiento: como mucho una vez
@@ -168,7 +168,7 @@ async function sendDigest(u: DigestUser, now: Date, tz: string): Promise<boolean
   } catch (err) {
     digestFailures.note(u.id, now);
     await db.user.updateMany({ where: { id: u.id, lastDigestAt: now }, data: { lastDigestAt: u.lastDigestAt } });
-    logEvent({ level: "error", category: "notify", action: "digest.failed", message: `Fallo al enviar el resumen diario a ${u.name}: ${maskEmailsIn((err as Error).message)}`, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
+    logEvent({ level: "error", category: "notify", action: "digest.failed", label: { k: "Fallo al enviar el resumen diario a {name}: {error}", p: { name: u.name, error: logText(maskEmailsIn((err as Error).message)) } }, userId: u.id, userName: u.name, durationMs: performance.now() - t0 });
     return sending && smtpDown(err) ? { smtpDown: err } : false;
   }
 }
@@ -240,7 +240,7 @@ export async function sendDueReports(now: Date = new Date(), opts: { generate?: 
     const recipientOk = creator && allowed ? await reportRecipientAllowed(s.projectId, s.recipient, creator.role) : false;
     if (!creator || !allowed || !recipientOk) {
       await db.reportSchedule.update({ where: { projectId: s.projectId }, data: { enabled: false } });
-      logEvent({ level: "warn", category: "notify", action: "report.scheduleDisabled", message: "Informe semanal desactivado: quien lo configuró o su destinatario ya no tiene acceso al proyecto", projectId: s.projectId });
+      logEvent({ level: "warn", category: "notify", action: "report.scheduleDisabled", label: { k: "Informe semanal desactivado: quien lo configuró o su destinatario ya no tiene acceso al proyecto" }, projectId: s.projectId });
       continue;
     }
     if (isShuttingDown()) break;
@@ -285,7 +285,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     await sendMail({ to: s.recipient, ...mail, headers: unsub.headers, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
     sending = false;
     clearReportFailure(s.projectId);
-    logEvent({ ...base, action: "report.scheduledSent", message: `Informe semanal de «${report.project.name}» enviado a ${maskEmail(s.recipient)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
+    logEvent({ ...base, action: "report.scheduledSent", label: { k: "Informe semanal de «{project}» enviado a {to}", p: { project: report.project.name, to: maskEmail(s.recipient) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     return true;
   } catch (err) {
     if (pdfOutOfMemory(err)) {
@@ -293,13 +293,13 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
       // la reserva (ya no se intenta más hasta el próximo envío, tampoco en otro proceso) y se avisa una vez a quien lo
       // configuró.
       clearReportFailure(s.projectId);
-      logEvent({ ...base, level: "error", action: "report.scheduledTooLarge", message: `Informe semanal no enviado a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}. No se reintenta hasta el próximo envío; se avisa a quien lo configuró`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
+      logEvent({ ...base, level: "error", action: "report.scheduledTooLarge", label: { k: "Informe semanal no enviado a {to}: {error}. No se reintenta hasta el próximo envío; se avisa a quien lo configuró", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
       await notifyReportTooLarge(s.projectId, creator, url);
       return false;
     }
     noteReportFailure(s.projectId, now);
     await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
-    logEvent({ ...base, level: "error", action: "report.scheduledFailed", message: `Fallo al enviar el informe semanal a ${maskEmail(s.recipient)}: ${maskEmailsIn((err as Error).message)}`, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
+    logEvent({ ...base, level: "error", action: "report.scheduledFailed", label: { k: "Fallo al enviar el informe semanal a {to}: {error}", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
     return sending && smtpDown(err) ? { smtpDown: err } : false;
   }
 }
@@ -311,8 +311,8 @@ async function notifyReportTooLarge(projectId: string, creator: Creator, url: st
     const project = await db.project.findUnique({ where: { id: projectId }, select: { name: true } });
     if (!project) return;
     await sendMail({ to: creator.email, ...reportTooLargeMail({ name: creator.name, projectName: project.name, url }, makeT(toLocale(creator.locale))) });
-    logEvent({ ...base, action: "report.tooLargeNotified", message: `Aviso a ${creator.name}: el informe semanal de «${project.name}» es demasiado grande`, details: { to: maskEmail(creator.email) } });
+    logEvent({ ...base, action: "report.tooLargeNotified", label: { k: "Aviso a {name}: el informe semanal de «{project}» es demasiado grande", p: { name: creator.name, project: project.name } }, details: { to: maskEmail(creator.email) } });
   } catch (err) {
-    logEvent({ ...base, level: "error", action: "report.tooLargeNotifyFailed", message: `Fallo al avisar a ${creator.name} del informe demasiado grande: ${maskEmailsIn((err as Error).message)}` });
+    logEvent({ ...base, level: "error", action: "report.tooLargeNotifyFailed", label: { k: "Fallo al avisar a {name} del informe demasiado grande: {error}", p: { name: creator.name, error: logText(maskEmailsIn((err as Error).message)) } } });
   }
 }

@@ -4,7 +4,7 @@ import { assertProjectAccess } from "@/lib/access";
 import { AppError, notFound } from "@/lib/errors";
 import * as v from "@/lib/validation";
 import { actionContext } from "@/lib/action-context";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent } from "@/lib/log";
 import { publishChange } from "@/lib/realtime";
 import { rateLimit, rateLimitRetryAfterSec } from "@/lib/rate-limit";
 import { clientIp, isSameOrigin } from "@/lib/request";
@@ -140,7 +140,7 @@ async function handlePost(req: Request, ctx: { params: Promise<{ projectId: stri
     const user = await getCurrentUser().catch(() => null);
     logEvent({
       level: err instanceof AppError ? "warn" : "error", category: "api", action: "documents.uploadFailed",
-      message: `Fallo al subir documento: ${err instanceof Error ? err.message : String(err)}`,
+      label: { k: "Fallo al subir documento: {error}", p: { error: logError(err) } },
       userId: user?.id ?? null, userName: user?.name ?? null, path: `/api/projects/${projectIdForLog}/documents`, ip, durationMs: performance.now() - start,
       details: { projectId: projectIdForLog, file: fileInfo, status: err instanceof AppError ? err.status : 500 },
     });

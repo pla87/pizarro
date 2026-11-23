@@ -6,7 +6,7 @@ import {
   screenshotProblem, screenshotSizeOk, sniffScreenshot, type FeedbackError, type FeedbackKind, type FeedbackStatus,
 } from "./feedback-core";
 import { releaseFeedback, reserveFeedback } from "./feedback-rate";
-import { logEvent } from "./log";
+import { logEvent, logText } from "./log";
 import { emailEnabled, sendMail } from "./mail";
 import { maskEmailsIn } from "./mask-email";
 import { FEEDBACK_EMAIL } from "./product";
@@ -109,13 +109,13 @@ export async function handleFeedbackPost(req: Request, { to }: { to: string }): 
     try {
       await sendMail({ to, subject: mail.subject, text: mail.text, plainSender: true, ...(replyTo ? { replyTo } : {}), ...(attachment ? { attachments: [attachment] } : {}) });
     } catch (err) {
-      logEvent({ level: "error", category: "api", action: "feedback.failed", message: `No se pudo enviar el informe: ${maskEmailsIn((err as Error).message)}`, userId: user.id, userName: user.name, path: "/api/feedback", ip });
+      logEvent({ level: "error", category: "api", action: "feedback.failed", label: { k: "No se pudo enviar el informe: {error}", p: { error: logText(maskEmailsIn((err as Error).message)) } }, userId: user.id, userName: user.name, path: "/api/feedback", ip });
       return json(502, { error: "failed" });
     }
     sent = true;
     // Sin el texto ni la captura: solo que se ha enviado (lo que dice queda en el email).
     logEvent({
-      category: "api", action: "feedback.sent", message: kind === "bug" ? "Informe de error enviado al equipo de Pizarro" : "Sugerencia enviada al equipo de Pizarro",
+      category: "api", action: "feedback.sent", label: { k: kind === "bug" ? "Informe de error enviado al equipo de Pizarro" : "Sugerencia enviada al equipo de Pizarro" },
       userId: user.id, userName: user.name, path: "/api/feedback", ip, details: { kind, screenshotBytes: attachment?.content.length ?? 0, replyTo: !!replyTo },
     });
     return json(200, { ok: true });

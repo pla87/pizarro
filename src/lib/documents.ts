@@ -239,7 +239,7 @@ export async function purgeTrashedDocuments(now: Date = new Date()): Promise<num
   await removeDocumentFiles(rows.map((d) => d.id));
   logEvent({
     category: "system", action: "documents.trashPurged",
-    message: `Documentos de la papelera borrados (más de ${DOCUMENT_TRASH_DAYS} días): ${rows.length}`,
+    label: { k: "Documentos de la papelera borrados (más de {days} días): {n}", p: { days: DOCUMENT_TRASH_DAYS, n: rows.length } },
     details: { count: rows.length, bytes: rows.reduce((n, d) => n + Number(d.size), 0) },
   });
   return rows.length;

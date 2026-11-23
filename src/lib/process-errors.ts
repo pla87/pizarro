@@ -31,7 +31,7 @@ export function installProcessErrorHandlers(): void {
     if (++state.count > MAX_REJECTIONS_PER_HOUR) return;
     const { message, stack } = describe(reason);
     void import("@/lib/log")
-      .then(({ logEvent }) => logEvent({ level: "warn", category: "system", action: "system.unhandledRejection", message: `Promesa rechazada sin capturar: ${message}`, details: { stack } }))
+      .then(({ logEvent, logText }) => logEvent({ level: "warn", category: "system", action: "system.unhandledRejection", label: { k: "Promesa rechazada sin capturar: {error}", p: { error: logText(message) } }, details: { stack } }))
       .catch(() => {});
   });
 
@@ -39,8 +39,12 @@ export function installProcessErrorHandlers(): void {
     const exit = shouldExitOnUncaught();
     const { message, stack } = describe(err);
     void import("@/lib/log")
-      .then(async ({ logEvent, flushLogs }) => {
-        logEvent({ level: "error", category: "system", action: "system.uncaughtException", message: `Excepción no capturada (${origin})${exit ? ", se reinicia el proceso" : ""}: ${message}`, details: { stack } });
+      .then(async ({ logEvent, logText, flushLogs }) => {
+        logEvent({
+          level: "error", category: "system", action: "system.uncaughtException",
+          label: { k: exit ? "Excepción no capturada ({origin}), se reinicia el proceso: {error}" : "Excepción no capturada ({origin}): {error}", p: { origin, error: logText(message) } },
+          details: { stack },
+        });
         if (exit) await flushLogs();
       })
       .catch(() => {})

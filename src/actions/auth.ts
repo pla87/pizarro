@@ -156,7 +156,7 @@ export async function requestPasswordReset(email: string) {
         if (!user?.active) return;
         const token = await issueAuthToken(user.id, "PASSWORD_RESET");
         await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
-        logEvent({ category: "auth", action: "auth.resetRequested", message: `Enlace de restablecimiento enviado a ${user.name}`, userId: user.id, userName: user.name, ip });
+        logEvent({ category: "auth", action: "auth.resetRequested", label: { k: "Enlace de restablecimiento enviado a {name}", p: { name: user.name } }, userId: user.id, userName: user.name, ip });
       });
     }
   });
@@ -177,7 +177,7 @@ export async function resetPassword(token: string, password: string) {
     resetRateLimit(loginRateKeys(ip, row.user.email).account);
     logEvent({
       category: "auth", action: row.purpose === "INVITE" ? "auth.inviteAccepted" : "auth.passwordReset",
-      message: row.purpose === "INVITE" ? `${row.user.name} ha elegido su contraseña inicial` : `${row.user.name} ha restablecido su contraseña`,
+      label: { k: row.purpose === "INVITE" ? "{name} ha elegido su contraseña inicial" : "{name} ha restablecido su contraseña", p: { name: row.user.name } },
       userId: row.userId, userName: row.user.name, ip,
     });
   });
@@ -195,7 +195,7 @@ export async function confirmAccountChange(token: string) {
       if (!data.passwordHash) throw new AppError(INVALID_LINK);
       if (!(await consumeToken(row.id))) throw new AppError(INVALID_LINK);
       await applyNewPassword(row.userId, data.passwordHash);
-      logEvent({ category: "auth", action: "auth.passwordChanged", message: `${row.user.name} ha confirmado el cambio de contraseña`, userId: row.userId, userName: row.user.name, ip });
+      logEvent({ category: "auth", action: "auth.passwordChanged", label: { k: "{name} ha confirmado el cambio de contraseña", p: { name: row.user.name } }, userId: row.userId, userName: row.user.name, ip });
       return { kind: "PASSWORD" as const };
     }
     if (!data.newEmail) throw new AppError(INVALID_LINK);
@@ -212,7 +212,7 @@ export async function confirmAccountChange(token: string) {
       await retargetReportSchedules(tx, oldEmail, newEmail);
     });
     sendMailInBackground("aviso de email cambiado", () => sendEmailChangedMail(row.user, oldEmail, data.newEmail!));
-    logEvent({ category: "auth", action: "auth.emailChanged", message: `${row.user.name} ha confirmado su nuevo email`, userId: row.userId, userName: row.user.name, ip });
+    logEvent({ category: "auth", action: "auth.emailChanged", label: { k: "{name} ha confirmado su nuevo email", p: { name: row.user.name } }, userId: row.userId, userName: row.user.name, ip });
     return { kind: "EMAIL" as const };
   });
 }
@@ -228,6 +228,6 @@ export async function setNewPassword(password: string) {
     if (await verifyPasswordCounted(pw, row.passwordHash, rateKey)) throw new AppError("La contraseña nueva debe ser distinta de la actual.");
     await applyNewPassword(user.id, await hashPassword(pw));
     await createSession(user.id, { mustChangePassword: false });
-    logEvent({ category: "auth", action: "auth.passwordChosen", message: `${user.name} ha elegido una contraseña nueva`, userId: user.id, userName: user.name });
+    logEvent({ category: "auth", action: "auth.passwordChosen", label: { k: "{name} ha elegido una contraseña nueva", p: { name: user.name } }, userId: user.id, userName: user.name });
   });
 }

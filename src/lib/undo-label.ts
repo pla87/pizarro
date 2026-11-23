@@ -94,6 +94,15 @@ export function renderStoredLabel(raw: string, t: T): string {
 }
 
 
+/**
+ * «a», «a y b», «a, b y c» como plantilla traducible (en inglés, «a and b», «a, b and c»). Cada elemento se traduce;
+ * vacía, el texto vacío.
+ */
+export function andList(items: readonly Label[]): Label {
+  if (items.length <= 1) return items[0] ?? { k: "" };
+  return { k: "{list} y {last}", p: { list: items.slice(0, -1), last: items.at(-1)! } };
+}
+
 /** «1 tarea» / «N tareas» como plantilla traducible. */
 export function tasksN(n: number): Label {
   return n === 1 ? { k: "1 tarea" } : { k: "{n} tareas", p: { n } };

@@ -2,6 +2,7 @@ import { buildColumnIcs } from "@/lib/column-views";
 import { authorizeColumnRoute } from "@/lib/column-route";
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
+import { tasksN } from "@/lib/undo-label";
 
 export const runtime = "nodejs";
 
@@ -14,7 +15,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   const result = await buildColumnIcs(projectId, columnId, { t, locale });
   if (!result) return new Response(t("No encontrado"), { status: 404 });
   logEvent({
-    category: "api", action: "column.ics", message: `Calendario .ics generado de «${project.name}» (${result.count} tareas)`,
+    category: "api", action: "column.ics", label: { k: "Calendario .ics generado de «{project}» ({count})", p: { project: project.name, count: tasksN(result.count) } },
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/columns/${columnId}/ics`, ip: clientIp(req.headers), durationMs: performance.now() - start,
     details: { tasks: result.count },
   });

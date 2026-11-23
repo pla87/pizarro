@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { assertDiskRoom, NO_SPACE_MESSAGE, uploadWriteError } from "@/lib/disk-space";
 import { cleanFileName } from "@/lib/file-name";
 import { logSize } from "@/lib/format-size";
-import { logEvent } from "@/lib/log";
+import { logError, logEvent, logText } from "@/lib/log";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -65,7 +65,7 @@ async function handlePost(req: Request): Promise<Response> {
   try {
     await assertDiskRoom(uploadDir(), length ?? totalMaxBytes);
   } catch (err) {
-    logEvent({ level: "warn", category: "api", action: "share.failed", message: `No se pudo guardar lo compartido: ${err instanceof Error ? err.message : NO_SPACE_MESSAGE}`, userId: user.id, userName: user.name, path: "/api/share", ip });
+    logEvent({ level: "warn", category: "api", action: "share.failed", label: { k: "No se pudo guardar lo compartido: {error}", p: { error: logText(err instanceof Error ? err.message : NO_SPACE_MESSAGE) } }, userId: user.id, userName: user.name, path: "/api/share", ip });
     return failed("failed");
   }
   const release = await acquireUploadSlot(user.id, undefined, { declaredBytes: length, signal: req.signal });
@@ -90,11 +90,11 @@ async function handlePost(req: Request): Promise<Response> {
       shareId = await stageShare(user.id, text, files);
     } catch (err) {
       const e = uploadWriteError(err, { action: "share.noSpace", bytes, details: { files: files.length } });
-      logEvent({ level: "warn", category: "api", action: "share.failed", message: `No se pudo guardar lo compartido: ${e instanceof Error ? e.message : String(e)}`, userId: user.id, userName: user.name, path: "/api/share", ip });
+      logEvent({ level: "warn", category: "api", action: "share.failed", label: { k: "No se pudo guardar lo compartido: {error}", p: { error: logError(e) } }, userId: user.id, userName: user.name, path: "/api/share", ip });
       return failed("failed");
     }
     logEvent({
-      category: "api", action: "share.received", message: `Compartido con Pizarro: ${files.length} archivo(s), ${logSize(bytes)}`,
+      category: "api", action: "share.received", label: { k: "Compartido con Pizarro: {n} archivo(s), {size}", p: { n: files.length, size: logSize(bytes) } },
       userId: user.id, userName: user.name, path: "/api/share", ip, durationMs: performance.now() - start,
       details: { files: files.length, skipped: all.length - files.length, bytes, hasText: !!text.text, hasUrl: !!text.url },
     });

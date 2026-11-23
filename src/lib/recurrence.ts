@@ -10,7 +10,7 @@ import { addUndo } from "./undo";
 import { noteTasks } from "./action-context";
 import { MAX_ACTIVE_TASKS_PER_PROJECT } from "./constants";
 import { columnRoomProblem } from "./column-capacity";
-import { logEvent } from "./log";
+import { logError, logEvent } from "./log";
 import { copyAttachmentsBatch } from "./attachment-copy";
 import { attachmentRefIds, remapAttachmentRefs } from "./attachment-refs";
 import type { BoardTask } from "./types";
@@ -93,7 +93,12 @@ async function copyDescriptionAttachments(spawned: { src: { id: string; projectI
     if (res.skipped.length) {
       logEvent({
         level: "warn", category: "system", action: "recurrence.attachmentsSkipped",
-        message: `La siguiente aparición de «${r.src.title}» no lleva copia de ${res.skipped.length === 1 ? "un adjunto" : `${res.skipped.length} adjuntos`} de su descripción: sigue apuntando a los de la anterior`,
+        label: {
+          k: res.skipped.length === 1
+            ? "La siguiente aparición de «{title}» no lleva copia de un adjunto de su descripción: sigue apuntando a los de la anterior"
+            : "La siguiente aparición de «{title}» no lleva copia de {n} adjuntos de su descripción: sigue apuntando a los de la anterior",
+          p: { title: r.src.title, n: res.skipped.length },
+        },
         projectId: r.src.projectId,
         details: { taskId: r.toTaskId, fromTaskId: r.fromTaskId, skipped: res.skipped.map((s) => ({ name: s.name, size: s.size, reason: s.reason })) },
       });
@@ -193,7 +198,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
       if (!next) {
         logEvent({
           level: "warn", category: "system", action: "recurrence.skippedColumnLimit",
-          message: `No se creó la siguiente aparición de «${src.title}»: su columna tiene el máximo de sesiones`,
+          label: { k: "No se creó la siguiente aparición de «{title}»: su columna tiene el máximo de sesiones", p: { title: src.title } },
           details: { taskId: src.id, projectId: src.projectId, columnId },
         });
         return null;
@@ -273,7 +278,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
     if ((active.get(src.projectId) ?? 0) >= MAX_ACTIVE_TASKS_PER_PROJECT) {
       logEvent({
         level: "warn", category: "system", action: "recurrence.skippedCap",
-        message: `No se creó la siguiente aparición de «${src.title}»: el proyecto tiene el máximo de tareas activas`,
+        label: { k: "No se creó la siguiente aparición de «{title}»: el proyecto tiene el máximo de tareas activas", p: { title: src.title } },
         details: { taskId: src.id, projectId: src.projectId },
       });
       continue;
@@ -331,7 +336,7 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   // Las apariciones ya están guardadas: si copiar los adjuntos de la descripción falla, se anota y el movimiento sigue
   // siendo un éxito (las descripciones conservan la referencia a los de la anterior).
   await copyDescriptionAttachments(spawned).catch((err) =>
-    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", message: `No se copiaron los adjuntos de la descripción: ${err instanceof Error ? err.message : String(err)}` }),
+    logEvent({ level: "error", category: "system", action: "recurrence.attachmentsSkipped", label: { k: "No se copiaron los adjuntos de la descripción: {error}", p: { error: logError(err) } } }),
   );
   // En el orden en que nacieron; varias, con una sola lectura para todas (antes, una por tarea).
   if (created.length <= 1) return Promise.all(created.map((id) => loadBoardTask(id)));
