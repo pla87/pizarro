@@ -88,6 +88,15 @@ export function emailWanted(type: NotificationKind, u: { notifyEmail: boolean; n
   return u[EMAIL_PREF_FIELD[noticeEmailKind(type)]];
 }
 
+/**
+ * ¿Puede salir este aviso por fuera ahora? Email solo con el correo configurado en la instalación (emailEnabled) y
+ * Telegram/WhatsApp solo si están activados y conectados (channelsFor). Es lo que cuenta «con envío externo» en Logs:
+ * sin email ni canales, las preferencias de la persona (el email de menciones viene activado) no cuentan.
+ */
+function externalWanted(type: NotificationKind, u: Parameters<typeof emailWanted>[1] & { channels: ChannelRow[] }, cfg: MessagingConfig): boolean {
+  return (emailEnabled() && emailWanted(type, u)) || channelsFor(type, u.channels, cfg).length > 0;
+}
+
 const CHANNEL_SELECT = { channel: true, address: true, verifiedAt: true, consentAt: true, notifyMention: true, notifyAssigned: true, notifyDue: true, notifyComment: true } as const;
 type ChannelRow = { channel: "TELEGRAM" | "WHATSAPP"; address: string; verifiedAt: Date | null; consentAt: Date | null } & ChannelPrefs;
 
@@ -347,7 +356,7 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
     }),
     loadMessagingConfig(),
   ]);
-  const wanted = new Set(prefs.filter((u) => emailWanted(type, u) || channelsFor(type, u.channels, messaging).length > 0).map((u) => u.id));
+  const wanted = new Set(prefs.filter((u) => externalWanted(type, u, messaging)).map((u) => u.id));
   const allowed = new Set<string>();
   for (const id of recipientIds) {
     if (skip.has(id) || !wanted.has(id)) continue;
@@ -384,7 +393,7 @@ export async function notifyProjectsToTeam(projects: readonly { id: string }[], 
     db.user.findMany({ where: { id: { in: admins.map((a) => a.id) } }, select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } } }),
     loadMessagingConfig(),
   ]);
-  const wanted = new Set(prefs.filter((u) => emailWanted("PROJECT_TO_TEAM", u) || channelsFor("PROJECT_TO_TEAM", u.channels, messaging).length > 0).map((u) => u.id));
+  const wanted = new Set(prefs.filter((u) => externalWanted("PROJECT_TO_TEAM", u, messaging)).map((u) => u.id));
   // Mismo tope por hora que los avisos del sistema, por destinatario.
   const toDeliver = created.filter((c) => wanted.has(c.userId) && rateLimit(`notify:system:${c.userId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)).map((c) => c.id);
   for (const p of still) {
@@ -425,7 +434,7 @@ export async function notifyReportUnsubscribed(projectId: string, setterId: stri
     select: { id: true },
   });
   const messaging = await loadMessagingConfig();
-  const wanted = emailWanted("REPORT_UNSUBSCRIBED", setter) || channelsFor("REPORT_UNSUBSCRIBED", setter.channels, messaging).length > 0;
+  const wanted = externalWanted("REPORT_UNSUBSCRIBED", setter, messaging);
   // Mismo tope por hora que los avisos del sistema, por destinatario.
   const external = wanted && rateLimit(`notify:system:${setter.id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000);
   logEvent({
