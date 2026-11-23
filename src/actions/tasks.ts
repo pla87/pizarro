@@ -750,7 +750,7 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
     const [task, current, target] = await Promise.all([
       loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true, evergreenEvery: true }),
       db.column.findFirst({ where: { tasks: { some: { id } } }, select: columnSelect }),
-      col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true } }) : null,
+      col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true, assigneeId: true } }) : null,
     ]);
     const { projectId, columnId: fromColumnId } = task;
     assertNotArchivedRow(task);
@@ -775,8 +775,9 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       // archivada en la columna nueva y con la de antes como origen).
       const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
       if (!count) throw await inactiveTaskError(tx, taskId);
-      // Columna «Asignación a persona»: solo al llegar de otra columna (reordenar dentro de la misma no es entrar).
-      const assigned = fromColumnId !== columnId ? await assignOnEnter(tx, columnId, [taskId]) : null;
+      // Columna «Asignación a persona»: solo al llegar de otra columna (reordenar dentro de la misma no es entrar). La regla
+      // se vuelve a leer aquí, con la columna bloqueada; sin persona en la lectura de antes, ni se mira (el caso de siempre).
+      const assigned = fromColumnId !== columnId && target.assigneeId ? await assignOnEnter(tx, columnId, [taskId]) : null;
       return { position: placed.position, undoPosition, assigned };
     });
     // Un solo paso de deshacer: vuelve a su columna con el responsable y la fecha límite que tenía.
@@ -812,7 +813,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     const place = at == null ? null : z.object({ prevId: v.id.nullable(), nextId: v.id.nullable() }).parse(at);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
-      select: { id: true, projectId: true, name: true, isDone: true },
+      select: { id: true, projectId: true, name: true, isDone: true, assigneeId: true },
     });
     if (!column) throw notFound();
     noteProject(column.projectId);
@@ -849,7 +850,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
       }
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
       // Columna «Asignación a persona»: las que llegan de otra columna (las que ya estaban solo se recolocan).
-      const assigned = await assignOnEnter(tx, column.id, toMove.filter((t) => t.columnId !== column.id).map((t) => t.id));
+      const assigned = column.assigneeId ? await assignOnEnter(tx, column.id, toMove.filter((t) => t.columnId !== column.id).map((t) => t.id)) : null;
       return { moved: list, assigned };
     });
     // Un solo paso de deshacer: también vuelven el responsable y la fecha límite que tenían.
