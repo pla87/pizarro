@@ -65,7 +65,7 @@ export async function run() {
   const dlg = U.dialog(p);
   await dlg.getByText("Paso 1 de 2").waitFor();
   const titleInput = dlg.locator("#rel-title");
-  L.check("paso 1: título propuesto «Release AAAA-MM-DD · Proyecto»", /^Release \d{4}-\d{2}-\d{2} · /.test(await titleInput.inputValue()), await titleInput.inputValue());
+  L.check("paso 1: título propuesto «Release D mes AAAA · Proyecto»", /^Release \d{1,2} \S+ \d{4} · /.test(await titleInput.inputValue()), await titleInput.inputValue());
   L.eq("paso 1: las 4 tareas (3 + la fija) preseleccionadas", await dlg.locator("input[type=checkbox]:checked").count(), 4);
   L.check("paso 1: la fija lleva la marca «fija»", (await dlg.getByText("fija", { exact: true }).count()) === 1);
   await titleInput.fill("Release QA uno");
@@ -209,7 +209,7 @@ export async function run() {
   await p.locator("[role=dialog]").last().getByRole("button", { name: "Marcar como desplegado" }).click();
   await L.eqEventually("Alt+R: release desplegada (número 1 otra vez, sin releases previas)", async () => (await rels()).length, 1);
   const [r3] = await rels();
-  L.check("Alt+R: título del mismo día sin sufijo al ser la primera del día", /^Release \d{4}-\d{2}-\d{2} · /.test(r3.title), r3.title);
+  L.check("Alt+R: título del mismo día sin sufijo al ser la primera del día", /^Release \d{1,2} \S+ \d{4} · /.test(r3.title), r3.title);
   await L.eqEventually("Alt+R: orden en producción", () => L.dbOrder(COL.prod), PROD_AFTER);
   L.eq("Alt+R: la fija sigue en su columna", await L.dbOrder(COL.next), ["Fija"]);
   // Segunda del día: el título propuesto lleva (2)
