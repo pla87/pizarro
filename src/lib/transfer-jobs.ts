@@ -9,7 +9,7 @@ import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveD
 import { AppError } from "./errors";
 import { logError, logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
-import { ArchiveError } from "./project-export/errors";
+import { ArchiveError, INTERRUPTED_MESSAGE } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
 import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
@@ -52,7 +52,6 @@ const HEARTBEAT_MS = 10_000;
 const SWEEP_EVERY_MS = 60_000;
 /** Veces que una exportación interrumpida por un reinicio se vuelve a poner en cola antes de darla por fallida. */
 const MAX_ATTEMPTS = 2;
-const INTERRUPTED = "Interrumpido por un reinicio";
 /** Hueco de más que se pide al disco sobre el tamaño del archivo al importar (imágenes recodificadas, temporales…). */
 const IMPORT_FACTOR = 1.5;
 
@@ -492,7 +491,7 @@ export async function recoverInterruptedJobs(now: Date = new Date(), staleMs: nu
     const requeue = job.kind === "EXPORT" && job.attempts < MAX_ATTEMPTS;
     const res = requeue
       ? await db.projectTransferJob.updateMany({ where: guard, data: { status: "QUEUED", attempts: job.attempts + 1, startedAt: null, progress: {} } })
-      : await db.projectTransferJob.updateMany({ where: guard, data: { status: "FAILED", error: INTERRUPTED, finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS) } });
+      : await db.projectTransferJob.updateMany({ where: guard, data: { status: "FAILED", error: INTERRUPTED_MESSAGE, finishedAt: now, expiresAt: new Date(now.getTime() + TRANSFER_TTL_MS) } });
     if (res.count === 0) continue;
     touched++;
     if (job.kind === "EXPORT") await rm(exportTmpFile(job), { force: true }).catch(() => {});

@@ -31,6 +31,7 @@ import {
 } from "../uploads";
 import { uploadDir } from "../upload-dir";
 import { isShuttingDown } from "../shutdown";
+import { INTERRUPTED_MESSAGE } from "./errors";
 import { openImportJournal } from "./import-journal";
 import { remapAttachmentRefs } from "../attachment-refs";
 import { releaseFloorFromImport, retireReleaseNumber } from "../release-number";
@@ -114,8 +115,6 @@ const nextUp = (n: number) => n + Math.max(Math.abs(n) * 2 ** -40, 2 ** -30);
 
 /** Cuánto espera como mucho cada imagen a que la cola de imágenes (uploads.ts) tenga hueco antes de dar la importación por fallida. */
 const IMAGE_QUEUE_WAIT_MS = 10 * 60_000;
-/** El mismo texto que pone el trabajador a una importación cortada por un reinicio (transfer-jobs.ts). */
-const INTERRUPTED = "Interrumpido por un reinicio";
 
 /**
  * Procesa una imagen del archivo esperando turno: si la cola de imágenes está llena (muchas subidas a la vez), una
@@ -130,7 +129,7 @@ async function imageWhenQueueFree<R>(run: () => Promise<R>, stopped?: () => Prom
       return await run();
     } catch (err) {
       if (!(err instanceof AppError && err.message === IMAGE_QUEUE_FULL_MESSAGE) || Date.now() + pause > deadline) throw err;
-      if (isShuttingDown()) throw new AppError(INTERRUPTED, 503);
+      if (isShuttingDown()) throw new AppError(INTERRUPTED_MESSAGE, 503);
       if (await stopped?.()) throw err;
     }
     await new Promise((resolve) => setTimeout(resolve, pause));
