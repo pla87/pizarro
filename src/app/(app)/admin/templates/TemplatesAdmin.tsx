@@ -22,9 +22,39 @@ import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 import { isEditConflict } from "@/lib/edit-conflict-core";
+import { MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
 const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
+
+/** Valor del selector de rol para una columna «Asignación a persona» (rol NONE con plazo). */
+const ASSIGN = "ASSIGN";
+/** Plazo con que empieza una columna de plantilla al elegir «Asignación a persona» (en una plantilla, sin plazo no lo es). */
+const DEFAULT_TEMPLATE_ASSIGN_DAYS = 7;
+
+/** Días del plazo de una columna «Asignación a persona» de la plantilla: guarda solo un número válido (1-365). */
+function AssignDaysInput({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const [text, setText] = useState(String(value));
+  const invalid = typeof parseAssignDays(text) !== "number";
+  return (
+    <input
+      className="input w-20"
+      type="number"
+      inputMode="numeric"
+      min={1}
+      max={MAX_ASSIGN_DUE_DAYS}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = parseAssignDays(e.target.value);
+        if (typeof n === "number") onChange(n);
+      }}
+      aria-invalid={invalid || undefined}
+      aria-label={label}
+      title={label}
+    />
+  );
+}
 
 /** Resumen de una línea: «5 columnas · 2 tipos propios · 3 etiquetas · 1 general oculto». */
 function summarizeTemplate(tpl: Pick<TemplateDto, "columns" | "kinds" | "labels" | "hiddenGeneralKinds" | "hideAllGeneralKinds">, t: T): string {
@@ -50,7 +80,8 @@ const withoutKeys = <T,>(list: Keyed<T>[]): T[] => list.map(({ key, ...rest }) =
 type Draft = {
   name: string;
   description: string;
-  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null }>[];
+  /** `assignDueDays`: columna «Asignación a persona» (rol NONE con plazo; la persona no viaja en las plantillas). */
+  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }>[];
   kinds: Keyed<{ name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }>[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
@@ -307,12 +338,27 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                 {draft.columns.map((c, i) => {
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
+                  const assignDays = c.role === "NONE" ? (c.assignDueDays ?? null) : null;
                   return (
                     <li key={c.key} className="flex flex-wrap items-center gap-2">
                       <input className="input min-w-0 flex-1 basis-40" value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
-                      <select className="input w-auto" value={c.role} onChange={(e) => setCol({ role: e.target.value as ColumnRoleValue })} aria-label={t("Rol especial")}>
-                        {COLUMN_ROLES.map((r) => <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>)}
+                      <select
+                        className="input w-auto"
+                        value={assignDays != null ? ASSIGN : c.role}
+                        // «Asignación a persona» es rol NONE con plazo; cualquier otro rol (o «Ninguno») quita el plazo.
+                        onChange={(e) => setCol(e.target.value === ASSIGN ? { role: "NONE", assignDueDays: assignDays ?? DEFAULT_TEMPLATE_ASSIGN_DAYS } : { role: e.target.value as ColumnRoleValue, assignDueDays: null })}
+                        aria-label={t("Rol especial")}
+                      >
+                        {COLUMN_ROLES.flatMap((r) => [
+                          <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>,
+                          ...(r === "NONE" ? [
+                            <option key={ASSIGN} value={ASSIGN}>
+                              {assignDays == null ? t("Asignación a persona") : assignDays === 1 ? t("Asignación a persona (vence en 1 día)") : t("Asignación a persona (vence en {n} días)", { n: assignDays })}
+                            </option>,
+                          ] : []),
+                        ])}
                       </select>
+                      {assignDays != null && <AssignDaysInput value={assignDays} onChange={(n) => setCol({ assignDueDays: n })} label={t("Días del plazo de la columna {n}", { n: i + 1 })} />}
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>

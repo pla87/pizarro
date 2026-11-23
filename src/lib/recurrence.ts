@@ -167,15 +167,18 @@ export async function spawnRecurrences(taskIds: string[], actorId: string, title
   // Solo las columnas «Programa del curso» tienen tope de sesiones: las demás van en lote. Leído fuera de la transacción,
   // solo sirve para repartir: el tope lo deciden createOne y createMany con la columna bloqueada (una columna puede pasar
   // a PROGRAM entre esta lectura y el alta).
-  const programCols = new Set(
-    (await db.column.findMany({ where: { id: { in: [...new Set(plan.map((p) => p.columnId))] }, role: "PROGRAM" }, select: { id: true } })).map((c) => c.id),
-  );
+  const targetCols = await db.column.findMany({
+    where: { id: { in: [...new Set(plan.map((p) => p.columnId))] } },
+    select: { id: true, projectId: true, role: true, assigneeId: true, assignDueDays: true },
+  });
+  const programCols = new Set(targetCols.filter((c) => c.role === "PROGRAM").map((c) => c.id));
 
   // Columnas «Asignación a persona» de destino: la aparición nace de su persona (fecha no hace falta: siempre lleva la de
-  // la regla de repetición). Leído aquí, fuera de las transacciones, como programCols: un cambio de persona en ese mismo
-  // instante deja la aparición con la persona anterior, como si hubiera nacido justo antes del cambio.
+  // la regla de repetición). Con la misma lectura, fuera de las transacciones, como programCols (en columnas normales,
+  // ninguna consulta más): un cambio de persona en ese mismo instante deja la aparición con la persona anterior, como si
+  // hubiera nacido justo antes del cambio.
   const assignRules = new Map<string, ColumnAssignment | null>();
-  for (const columnId of new Set(plan.map((p) => p.columnId))) assignRules.set(columnId, await columnAssignment(db, columnId));
+  for (const c of targetCols) assignRules.set(c.id, await columnAssignment(db, c));
 
   /** Centinela de createMany: una columna del lote es ya «Programa del curso» (se repite una a una). */
   const PROGRAM_SINCE_READ = new Error("program-column");

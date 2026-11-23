@@ -164,22 +164,34 @@ const assignSchema = z.object({
  * un plazo (`dueDays`, 1-365). Si tenía otro rol, lo pierde (rol NONE: es exclusivo con los demás). Todas sus tarjetas no
  * archivadas pasan a la persona (las que tenían otra o ninguna; el plazo es solo para las que entren después). Mismo
  * permiso que cambiar el rol. Todo en una transacción y un solo paso de deshacer (columna y tarjetas); un solo aviso a la
- * persona por todo el lote.
+ * persona por todo el lote. Con la misma persona solo cambia el plazo: las tarjetas que ya están no se tocan.
  */
 export async function setColumnAssignee(columnId: string, input: { assigneeId: string; dueDays: number | null }) {
-  return runAction({ name: "columns.setColumnAssignee", args: [columnId, input] }, async (): Promise<{ reassigned: number; costEnabled: boolean }> => {
+  return runAction({ name: "columns.setColumnAssignee", args: [columnId, input] }, async (): Promise<{ reassigned: number }> => {
     const user = await requireUser();
     const column = await findColumn(columnId);
     const data = assignSchema.parse(input);
     await assertAssignable(column.projectId, data.assigneeId);
-    if (column.role === "NONE" && column.assigneeId === data.assigneeId && column.assignDueDays === data.dueDays) return { reassigned: 0, costEnabled: false };
+    const samePerson = isAssignColumn(column) && column.assigneeId === data.assigneeId;
+    if (samePerson && column.assignDueDays === data.dueDays) return { reassigned: 0 };
+    if (samePerson) {
+      // Solo el plazo: vale para las que entren a partir de ahora. Si entretanto otra persona ha cambiado la columna, no se
+      // pisa su cambio.
+      const { count } = await db.column.updateMany({ where: { id: columnId, role: "NONE", assigneeId: data.assigneeId }, data: { assignDueDays: data.dueDays } });
+      if (!count) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
+      addUndo({ t: "column.set", id: column.id, data: { assignDueDays: column.assignDueDays } });
+      if (data.dueDays == null) describeAction("Quitó el plazo de la columna «{col}»", { col: column.name });
+      else if (data.dueDays === 1) describeAction("Cambió el plazo de la columna «{col}» a 1 día", { col: column.name });
+      else describeAction("Cambió el plazo de la columna «{col}» a {n} días", { col: column.name, n: data.dueDays });
+      return { reassigned: 0 };
+    }
     const rule = { columnId, projectId: column.projectId, assigneeId: data.assigneeId, dueDays: data.dueDays };
     const name = await userName(data.assigneeId);
     describeAction(
       isAssignColumn(column) ? "Cambió la persona de la columna «{col}» a {name}" : "Convirtió la columna «{col}» en «Asignación a persona» ({name})",
       { col: column.name, name },
     );
-    const { costEnabled, inside: reassigned } = await changeColumnRole(column, "NONE", { assigneeId: data.assigneeId, dueDays: data.dueDays }, async (tx) => {
+    const { inside: reassigned } = await changeColumnRole(column, "NONE", { assigneeId: data.assigneeId, dueDays: data.dueDays }, async (tx) => {
       // Con la columna bloqueada: nadie mete ni saca tarjetas mientras se reasignan.
       await lockColumns(tx, [columnId]);
       const ids = (await tx.task.findMany({ where: { columnId, archivedAt: null }, select: { id: true } })).map((t) => t.id);
@@ -187,7 +199,7 @@ export async function setColumnAssignee(columnId: string, input: { assigneeId: s
     });
     if (reassigned) noteTasks(reassigned.newlyAssigned);
     await finishAssignOnEnter(reassigned ?? null, user.id, { personName: name });
-    return { reassigned: reassigned?.newlyAssigned.length ?? 0, costEnabled };
+    return { reassigned: reassigned?.newlyAssigned.length ?? 0 };
   });
 }
 

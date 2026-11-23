@@ -10,9 +10,13 @@ import { addDaysIso, isoWeekday } from "./dates";
 /** Plazo máximo de «Vence en N días». */
 export const MAX_ASSIGN_DUE_DAYS = 365;
 
-/** ¿Es una columna «Asignación a persona» (con persona o, venida de una plantilla, solo con el plazo)? */
-export function isAssignColumn(c: { assigneeId?: string | null; assignDueDays?: number | null }): boolean {
-  return c.assigneeId != null || c.assignDueDays != null;
+/**
+ * ¿Es una columna «Asignación a persona» (con persona o, venida de una plantilla, solo con el plazo)? Solo con rol NONE:
+ * la versión anterior no conoce estos campos y, si allí se le da otro rol, la columna los conserva; de vuelta aquí se
+ * comporta como la de su rol (y elegir «Sin rol» o «Asignación a persona» los limpia o los sustituye).
+ */
+export function isAssignColumn(c: { role: string; assigneeId?: string | null; assignDueDays?: number | null }): boolean {
+  return c.role === "NONE" && (c.assigneeId != null || c.assignDueDays != null);
 }
 
 /** ¿Vale como plazo? Entero de 1 a MAX_ASSIGN_DUE_DAYS. */
@@ -90,9 +94,24 @@ export function buildAssignPlan<T extends { dueDate: string | null }>(tasks: rea
   });
 }
 
-/** Primera línea con texto de una descripción en Markdown, sin marcas de formato y recortada a `max` caracteres. */
+/**
+ * Primera línea con texto de una descripción en Markdown, sin marcas de formato y recortada a `max` caracteres. Los
+ * bloques de código (de ``` o ~~~ a la línea que los cierra) se saltan enteros.
+ */
 export function firstDescriptionLine(markdown: string, max = 140): string {
+  /** Valla del bloque de código abierto («```», «~~~~»…) o null fuera de uno. */
+  let fence: string | null = null;
   for (const raw of markdown.split(/\r?\n/)) {
+    const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(raw)?.[1];
+    if (fence) {
+      // Lo cierra una valla del mismo carácter y al menos igual de larga, sin nada detrás.
+      if (mark && mark[0] === fence[0] && mark.length >= fence.length && !raw.trim().slice(mark.length).trim()) fence = null;
+      continue;
+    }
+    if (mark && !(mark[0] === "`" && raw.trim().slice(mark.length).includes("`"))) {
+      fence = mark;
+      continue;
+    }
     const line = raw
       .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
@@ -106,6 +125,9 @@ export function firstDescriptionLine(markdown: string, max = 140): string {
   return "";
 }
 
+/** Subtareas pendientes que el plan lista por tarea; las demás, en una línea «y N más». */
+export const PLAN_SUBTASKS_SHOWN = 15;
+
 /** Tarea tal como sale en el PDF del plan. */
 export interface AssignPlanTask {
   title: string;
@@ -116,8 +138,10 @@ export interface AssignPlanTask {
   dueDate: string | null;
   /** Primera línea de la descripción (vacía si no tiene). */
   firstLine: string;
-  /** Títulos de las subtareas sin marcar, en su orden. */
+  /** Títulos de las primeras PLAN_SUBTASKS_SHOWN subtareas sin marcar, en su orden (solo se leen esas). */
   pendingSubtasks: string[];
+  /** Cuántas subtareas sin marcar tiene en total (las que no salen van en una línea «y N más»). */
+  pendingCount: number;
 }
 
 /** Datos del PDF «Plan de <persona>» (los prepara report-build.ts; los pinta el worker). */

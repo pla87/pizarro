@@ -41,12 +41,22 @@ async function canBeAssigned(client: Tx | typeof db, projectId: string, userId: 
   return (await client.user.count({ where: { id: userId, active: true, ...projectUsersWhere(project, projectId) } })) > 0;
 }
 
-/** La regla de la columna, o null si no es «Asignación a persona» o su persona ya no puede tener tareas del proyecto. */
-export async function columnAssignment(client: Tx | typeof db, columnId: string): Promise<ColumnAssignment | null> {
-  const col = await client.column.findUnique({ where: { id: columnId }, select: { projectId: true, assigneeId: true, assignDueDays: true } });
-  if (!col?.assigneeId) return null;
+/** Lo que la regla necesita de la columna (p. ej. la lectura de assertColumnRoom, hecha con la columna bloqueada). */
+type AssignColumnRow = { id: string; projectId: string; role: string; assigneeId: string | null; assignDueDays: number | null };
+
+/**
+ * La regla de la columna, o null si no es «Asignación a persona» o su persona ya no puede tener tareas del proyecto.
+ * `column` es su id (se lee) o la columna ya leída: si no tiene persona (el caso de siempre), sin ninguna consulta. Solo
+ * con rol NONE (isAssignColumn): una columna con otro rol y persona guardada (cambiada en una versión anterior, que no la
+ * conoce) se comporta como la de su rol.
+ */
+export async function columnAssignment(client: Tx | typeof db, column: string | AssignColumnRow | null): Promise<ColumnAssignment | null> {
+  const col = typeof column === "string"
+    ? await client.column.findUnique({ where: { id: column }, select: { id: true, projectId: true, role: true, assigneeId: true, assignDueDays: true } })
+    : column;
+  if (!col?.assigneeId || col.role !== "NONE") return null;
   if (!(await canBeAssigned(client, col.projectId, col.assigneeId))) return null;
-  return { columnId, projectId: col.projectId, assigneeId: col.assigneeId, dueDays: col.assignDueDays };
+  return { columnId: col.id, projectId: col.projectId, assigneeId: col.assigneeId, dueDays: col.assignDueDays };
 }
 
 /** Fecha límite del plazo (hoy + N días), o null si la columna no tiene plazo o la tarea empieza después de esa fecha. */
@@ -84,14 +94,16 @@ export interface AssignOnEnterResult {
 
 /**
  * Aplica la regla a tareas que ACABAN de entrar en la columna (ya escritas en ella, dentro de la misma transacción y con
- * la columna bloqueada). Solo las activas de esa columna: las demás se ignoran. Null si la columna no asigna o no cambia
- * nada. Con `assigneeOnly` solo cambia la persona (cambiar la persona de la columna: el plazo es para las que entran).
+ * la columna bloqueada). `column` como en columnAssignment: mejor la columna que ya se ha leído con el candado
+ * (assertColumnRoom), así no hay consulta de más y la regla es la de ese momento. Solo las activas de esa columna: las
+ * demás se ignoran. Null si la columna no asigna o no cambia nada. Con `assigneeOnly` solo cambia la persona (cambiar la
+ * persona de la columna: el plazo es para las que entran).
  */
-export async function assignOnEnter(tx: Tx, columnId: string, taskIds: readonly string[], opts: { assigneeOnly?: boolean; rule?: ColumnAssignment } = {}): Promise<AssignOnEnterResult | null> {
+export async function assignOnEnter(tx: Tx, column: string | AssignColumnRow | null, taskIds: readonly string[], opts: { assigneeOnly?: boolean; rule?: ColumnAssignment } = {}): Promise<AssignOnEnterResult | null> {
   if (!taskIds.length) return null;
-  const rule = opts.rule ?? (await columnAssignment(tx, columnId));
+  const rule = opts.rule ?? (await columnAssignment(tx, column));
   if (!rule) return null;
-  const rows = await tx.task.findMany({ where: { id: { in: [...new Set(taskIds)] }, columnId, archivedAt: null }, select: { id: true, assigneeId: true, dueDate: true, startDate: true, title: true } });
+  const rows = await tx.task.findMany({ where: { id: { in: [...new Set(taskIds)] }, columnId: rule.columnId, archivedAt: null }, select: { id: true, assigneeId: true, dueDate: true, startDate: true, title: true } });
   const today = todayIso(appTimeZone());
   const dueDate = opts.assigneeOnly ? null : assignedDueDate(null, rule.dueDays, today);
   const newlyAssigned = rows.filter((r) => r.assigneeId !== rule.assigneeId).map((r) => r.id);

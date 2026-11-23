@@ -18,7 +18,7 @@ import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 import { buildProgramSessions, programDocumentName } from "./course-program";
 import { PROGRAM_MAX_SESSIONS } from "./program-limit";
-import { buildAssignPlan, firstDescriptionLine, type AssignPlanTask } from "./column-assign-core";
+import { buildAssignPlan, firstDescriptionLine, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
 import { calendarWeekStart } from "./calendar";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -372,7 +372,9 @@ export function generateWeekPlanPdf(
  * PDF «Plan de <persona>» de una columna «Asignación a persona»: las tareas no archivadas de la columna que son de su
  * persona, agrupadas por vencimiento (vencidas, hoy, esta semana, este mes, más adelante y sin fecha) y, dentro de cada
  * grupo, por fecha límite. La semana empieza en lunes en español y en domingo en inglés (como la cuadrícula del
- * calendario: calendarWeekStart). Null si la columna no tiene persona.
+ * calendario: calendarWeekStart). Null si la columna no tiene persona o no es «Asignación a persona» (con otro rol, la
+ * persona que conserve de una versión anterior no cuenta: isAssignColumn). De las subtareas pendientes se leen solo las
+ * que salen (PLAN_SUBTASKS_SHOWN) y cuántas son.
  */
 export function generateAssignPlanPdf(
   projectId: string, columnId: string, opts: PdfRequestOpts,
@@ -380,7 +382,7 @@ export function generateAssignPlanPdf(
   return (async () => {
     const t = makeT(opts.locale);
     const column = await db.column.findFirst({
-      where: { id: columnId, projectId, assigneeId: { not: null } },
+      where: { id: columnId, projectId, role: "NONE", assigneeId: { not: null } },
       select: { name: true, assigneeId: true, assignee: { select: { name: true } }, project: { select: { name: true, taskFields: true } } },
     });
     if (!column?.assignee) return null;
@@ -392,7 +394,8 @@ export function generateAssignPlanPdf(
         take: 2000,
         select: {
           title: true, description: true, dueDate: true, priority: true, kind: { select: { id: true, name: true } },
-          subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true } },
+          subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], take: PLAN_SUBTASKS_SHOWN, select: { title: true } },
+          _count: { select: { subtasks: { where: { done: false } } } },
         },
       }),
       db.task.count({ where: { projectId, columnId, archivedAt: null, OR: [{ assigneeId: null }, { assigneeId: { not: column.assigneeId! } }] } }),
@@ -405,6 +408,7 @@ export function generateAssignPlanPdf(
       dueDate: dateToIso(x.dueDate),
       firstLine: firstDescriptionLine(mentionsToPlain(x.description, false)),
       pendingSubtasks: x.subtasks.map((st) => mentionsToPlain(st.title, false)),
+      pendingCount: x._count.subtasks,
     }));
     const groups = buildAssignPlan(rows, today, calendarWeekStart(opts.locale));
     const pdf = await renderPdf({ kind: "assignPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, person: column.assignee.name, today, groups, others } }, opts.signal);

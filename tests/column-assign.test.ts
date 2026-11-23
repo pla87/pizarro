@@ -13,11 +13,13 @@ process.env.DATABASE_URL ??= "postgresql://none:none@localhost:5432/none";
 const { renderInWorker, stopPdfWorker } = await import("../src/lib/report-render");
 after(() => stopPdfWorker());
 
-test("qué columna es «Asignación a persona»: con persona o, venida de una plantilla, solo con el plazo", () => {
-  assert.equal(isAssignColumn({ assigneeId: "u1", assignDueDays: null }), true);
-  assert.equal(isAssignColumn({ assigneeId: null, assignDueDays: 7 }), true);
-  assert.equal(isAssignColumn({ assigneeId: null, assignDueDays: null }), false);
-  assert.equal(isAssignColumn({}), false);
+test("qué columna es «Asignación a persona»: con persona o, venida de una plantilla, solo con el plazo; solo con rol NONE", () => {
+  assert.equal(isAssignColumn({ role: "NONE", assigneeId: "u1", assignDueDays: null }), true);
+  assert.equal(isAssignColumn({ role: "NONE", assigneeId: null, assignDueDays: 7 }), true);
+  assert.equal(isAssignColumn({ role: "NONE", assigneeId: null, assignDueDays: null }), false);
+  assert.equal(isAssignColumn({ role: "NONE" }), false);
+  // Rol cambiado en la versión anterior (que no conoce la persona ni el plazo): se comporta como la de su rol.
+  assert.equal(isAssignColumn({ role: "WAITING", assigneeId: "u1", assignDueDays: 3 }), false);
 });
 
 test("plazo: entero de 1 a 365; vacío = sin plazo", () => {
@@ -41,7 +43,7 @@ test("fecha límite al entrar: la que ya tenía se respeta; sin fecha, hoy + N d
 
 // 2026-11-25 es miércoles. En español la semana va de lunes 23 a domingo 29; en inglés, de domingo 22 a sábado 28.
 const today = "2026-11-25";
-const task = (title: string, dueDate: string | null): AssignPlanTask => ({ title, kind: "Tarea", priority: null, dueDate, firstLine: "", pendingSubtasks: [] });
+const task = (title: string, dueDate: string | null): AssignPlanTask => ({ title, kind: "Tarea", priority: null, dueDate, firstLine: "", pendingSubtasks: [], pendingCount: 0 });
 const tasks = [
   task("Sin fecha", null),
   task("Domingo 29", "2026-11-29"),
@@ -90,7 +92,16 @@ test("primera línea de la descripción, sin marcas de Markdown y recortada", ()
   assert.equal(firstDescriptionLine(""), "");
   assert.equal(firstDescriptionLine("\n\n## Objetivo **claro**\nResto"), "Objetivo claro");
   assert.equal(firstDescriptionLine("![foto](/api/attachments/x)\n- [ ] Ver [el plano](https://example.com/p)"), "Ver el plano");
-  assert.equal(firstDescriptionLine("```\ncódigo\n```"), "código");
+  // Los bloques de código se saltan enteros (ni la etiqueta del lenguaje ni el código).
+  assert.equal(firstDescriptionLine("```\ncódigo\n```"), "");
+  assert.equal(firstDescriptionLine("```js\nconst x = 1;\n```\nTexto"), "Texto");
+  assert.equal(firstDescriptionLine("```\nconst x = 1;\n\n```\n\nTexto"), "Texto");
+  assert.equal(firstDescriptionLine("~~~\ncode\n~~~\nTexto"), "Texto");
+  // Solo cierra una valla del mismo carácter y al menos igual de larga.
+  assert.equal(firstDescriptionLine("````md\n```\nno\n````\nTexto"), "Texto");
+  assert.equal(firstDescriptionLine("```\n~~~\nno\n```\nTexto"), "Texto");
+  // Código en línea (en la misma línea) no abre un bloque.
+  assert.equal(firstDescriptionLine("```x``` y más"), "x y más");
   assert.equal(firstDescriptionLine("---\n> cita"), "cita");
   const long = firstDescriptionLine("a".repeat(300), 20);
   assert.equal(long.length, 20);
@@ -100,9 +111,10 @@ test("primera línea de la descripción, sin marcas de Markdown y recortada", ()
 test("PDF: título con la persona, columna y proyecto, grupos traducidos y fechas en cada idioma", async () => {
   const groups = buildAssignPlan(
     [
-      { title: "Revisar el contrato", kind: "Tarea", priority: "ALTA", dueDate: "2026-11-20", firstLine: "Con el cliente", pendingSubtasks: ["Leer", "Firmar"] },
-      { title: "Llamar", kind: "Tarea", priority: null, dueDate: "2026-11-26", firstLine: "", pendingSubtasks: [] },
-      { title: "Algún día", kind: "Idea", priority: null, dueDate: null, firstLine: "", pendingSubtasks: Array.from({ length: 17 }, (_, i) => `Paso ${i + 1}`) },
+      { title: "Revisar el contrato", kind: "Tarea", priority: "ALTA", dueDate: "2026-11-20", firstLine: "Con el cliente", pendingSubtasks: ["Leer", "Firmar"], pendingCount: 2 },
+      { title: "Llamar", kind: "Tarea", priority: null, dueDate: "2026-11-26", firstLine: "", pendingSubtasks: [], pendingCount: 0 },
+      // Solo se leen las 15 que salen y cuántas son.
+      { title: "Algún día", kind: "Idea", priority: null, dueDate: null, firstLine: "", pendingSubtasks: Array.from({ length: 15 }, (_, i) => `Paso ${i + 1}`), pendingCount: 17 },
     ],
     today, 1,
   );

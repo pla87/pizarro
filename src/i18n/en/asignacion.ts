@@ -40,4 +40,12 @@ export const asignacion: Record<string, string> = {
   "1 tarjeta de la columna es de otra persona y no sale en el plan.": "1 card in the column belongs to someone else and isn't in the plan.",
   "{n} tarjetas de la columna son de otras personas y no salen en el plan.": "{n} cards in the column belong to other people and aren't in the plan.",
   "No hay tareas de esta persona en la columna.": "This person has no tasks in the column.",
+  // Registro de actividad: cambiar solo el plazo
+  "Cambió el plazo de la columna «{col}» a 1 día": "Changed the deadline of the column “{col}” to 1 day",
+  "Cambió el plazo de la columna «{col}» a {n} días": "Changed the deadline of the column “{col}” to {n} days",
+  "Quitó el plazo de la columna «{col}»": "Removed the deadline of the column “{col}”",
+  // Editor de plantillas: columna «Asignación a persona» (solo el plazo)
+  "Asignación a persona (vence en 1 día)": "Assign to person (due in 1 day)",
+  "Asignación a persona (vence en {n} días)": "Assign to person (due in {n} days)",
+  "Días del plazo de la columna {n}": "Deadline days for column {n}",
 };

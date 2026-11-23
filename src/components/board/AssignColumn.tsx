@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { AlertTriangle, FileDown } from "lucide-react";
 import { setColumnAssignee } from "@/actions/columns";
-import { MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
+import { isAssignColumn, MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
@@ -83,6 +83,7 @@ export function AssignPlanButton({ column, cardCount }: { column: BoardColumn; c
 /**
  * Elegir la persona (las que pueden tener tareas del proyecto, como el selector de «Responsable») y, opcional, «Vence en
  * N días». Al cambiar de persona, todas las tarjetas de la columna pasan a ella: se pide confirmación con cuántas cambian.
+ * Cambiar solo el plazo no toca las tarjetas que ya están (es para las que entren): ni confirmación.
  */
 export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose: () => void }) {
   const t = useT();
@@ -90,9 +91,11 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
   const confirm = useConfirm();
   const { users, currentUserId, getTasks, track, refresh } = useBoard();
   const id = useId();
-  const valid = users.some((u) => u.id === column.assigneeId);
-  const [personId, setPersonId] = useState(valid ? column.assigneeId! : "");
-  const [days, setDays] = useState(column.assignDueDays != null ? String(column.assignDueDays) : "");
+  // Con otro rol, la persona y el plazo que pueda conservar (de una versión anterior) no cuentan: se empieza de cero.
+  const current = isAssignColumn(column) ? { assigneeId: column.assigneeId, dueDays: column.assignDueDays } : { assigneeId: null, dueDays: null };
+  const valid = users.some((u) => u.id === current.assigneeId);
+  const [personId, setPersonId] = useState(valid ? current.assigneeId! : "");
+  const [days, setDays] = useState(current.dueDays != null ? String(current.dueDays) : "");
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
@@ -100,10 +103,10 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
     if (!personId) return setError(t("Elige una persona."));
     if (dueDays === undefined) return setError(t("Indica un número entero de días entre 1 y {max}, o déjalo vacío.", { max: MAX_ASSIGN_DUE_DAYS }));
     onClose();
-    if (personId === column.assigneeId && dueDays === column.assignDueDays) return;
+    if (personId === current.assigneeId && dueDays === current.dueDays) return;
     const person = users.find((u) => u.id === personId)!;
-    // Las que cambian de manos (las de la persona elegida se quedan como están).
-    const changing = getTasks().filter((x) => x.columnId === column.id && x.assigneeId !== personId).length;
+    // Las que cambian de manos (las de la persona elegida se quedan como están). Con la misma persona, ninguna.
+    const changing = personId === current.assigneeId ? 0 : getTasks().filter((x) => x.columnId === column.id && x.assigneeId !== personId).length;
     if (changing > 0 && !(await confirm({
       title: t("Asignación a persona"),
       message: changing === 1
@@ -114,8 +117,7 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
     const res = await track(setColumnAssignee(column.id, { assigneeId: personId, dueDays }));
     if (!res.ok) return toast(res.error, "error");
     refresh();
-    if (res.data.costEnabled) toast(t("Se ha activado el campo Coste"));
-    else if (res.data.reassigned) toast(res.data.reassigned === 1 ? t("1 tarjeta asignada a {name}", { name: person.name }) : t("{n} tarjetas asignadas a {name}", { n: res.data.reassigned, name: person.name }));
+    if (res.data.reassigned) toast(res.data.reassigned === 1 ? t("1 tarjeta asignada a {name}", { name: person.name }) : t("{n} tarjetas asignadas a {name}", { n: res.data.reassigned, name: person.name }));
   };
 
   return (

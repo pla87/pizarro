@@ -177,9 +177,10 @@ export async function createTask(input: z.input<typeof createSchema>) {
       // Al final de la columna, con la columna bloqueada: dos altas a la vez no comparten posición.
       await lockColumns(tx, [data.columnId]);
       // Columna «Programa del curso»: como mucho PROGRAM_MAX_SESSIONS sesiones (column-capacity.ts).
-      await assertColumnRoom(tx, data.columnId, 1);
+      const room = await assertColumnRoom(tx, data.columnId, 1);
       // Columna «Asignación a persona»: la tarea nace de su persona y, sin fecha, con la del plazo (column-assign.ts).
-      const assigned = newTaskAssignment(await columnAssignment(tx, data.columnId), {
+      // Con la columna ya leída por assertColumnRoom: en una columna normal, ninguna consulta más.
+      const assigned = newTaskAssignment(await columnAssignment(tx, room), {
         assigneeId: data.assigneeId, dueDate: data.dueDate ? isoToDate(data.dueDate) : null, startDate: optional.startDate ? isoToDate(optional.startDate) : null,
       });
       const position = positionBetween(await lastPositionIn(tx, data.columnId), null);
@@ -299,9 +300,9 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
       await assertTaskCapacity(tx, data.projectId, data.tasks.length);
       await lockColumns(tx, [data.columnId]);
-      await assertColumnRoom(tx, data.columnId, data.tasks.length);
+      const room = await assertColumnRoom(tx, data.columnId, data.tasks.length);
       // Columna «Asignación a persona»: todas nacen de su persona (y, sin fecha, con la del plazo).
-      const assigned = newTaskAssignment(await columnAssignment(tx, data.columnId), { assigneeId: data.assigneeId, dueDate });
+      const assigned = newTaskAssignment(await columnAssignment(tx, room), { assigneeId: data.assigneeId, dueDate });
       let position = await lastPositionIn(tx, data.columnId);
       const created = await tx.task.createManyAndReturn({
         data: data.tasks.map((t) => {
@@ -400,7 +401,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
         if (!column) throw new AppError("Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.");
       }
       await lockColumns(tx, [columnId]);
-      await assertColumnRoom(tx, columnId, 1);
+      const room = await assertColumnRoom(tx, columnId, 1);
       // Sin destino, entre la original y la siguiente de su columna; con destino, donde se soltó (si las
       // posiciones se agotan, se renumera la columna). La original cuenta como una tarea más de la columna. Fija: al final.
       const { position } = evergreen
@@ -409,7 +410,7 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
           ? await placeInColumn(tx, columnId, dest.prevId, dest.nextId)
           : await placeInColumn(tx, columnId, taskId, null);
       // Columna «Asignación a persona» (también la propia: la original pudo cambiar de responsable después de entrar).
-      const rule = await columnAssignment(tx, columnId);
+      const rule = await columnAssignment(tx, room);
       const assigned = newTaskAssignment(rule, { assigneeId: src.assigneeId, dueDate: src.dueDate, startDate: src.startDate });
       const row = await tx.task.create({
         data: {
@@ -749,7 +750,7 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
     const [task, current, target] = await Promise.all([
       loadTaskWithAccess(user, id, { archivedAt: true, title: true, position: true, evergreen: true, evergreenEvery: true }),
       db.column.findFirst({ where: { tasks: { some: { id } } }, select: columnSelect }),
-      col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true, assigneeId: true } }) : null,
+      col.success ? db.column.findUnique({ where: { id: col.data }, select: { projectId: true, name: true, isDone: true } }) : null,
     ]);
     const { projectId, columnId: fromColumnId } = task;
     assertNotArchivedRow(task);
@@ -764,7 +765,7 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
     const { position, undoPosition, assigned } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [columnId]);
       // Solo cuenta si llega de otra columna: reordenar dentro de la misma no suma.
-      await assertColumnRoom(tx, columnId, [taskId]);
+      const room = await assertColumnRoom(tx, columnId, [taskId]);
       const placed = await placeInColumn(tx, columnId, prevId === taskId ? null : prevId, nextId === taskId ? null : nextId, taskId);
       // Deshacer: la posición ya leída, salvo si se ha renumerado su propia columna (la habrá movido).
       const undoPosition = placed.rebalanced && fromColumnId === columnId
@@ -775,8 +776,9 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
       const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId, position: placed.position, evergreen: false, evergreenEvery: 1 } });
       if (!count) throw await inactiveTaskError(tx, taskId);
       // Columna «Asignación a persona»: solo al llegar de otra columna (reordenar dentro de la misma no es entrar). La regla
-      // se vuelve a leer aquí, con la columna bloqueada; sin persona en la lectura de antes, ni se mira (el caso de siempre).
-      const assigned = fromColumnId !== columnId && target.assigneeId ? await assignOnEnter(tx, columnId, [taskId]) : null;
+      // sale de la lectura de assertColumnRoom, hecha con la columna bloqueada: una columna que se convierte a la vez no
+      // se escapa, y en una columna normal no hay ninguna consulta más.
+      const assigned = fromColumnId !== columnId ? await assignOnEnter(tx, room, [taskId]) : null;
       return { position: placed.position, undoPosition, assigned };
     });
     // Un solo paso de deshacer: vuelve a su columna con el responsable y la fecha límite que tenía.
@@ -812,7 +814,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     const place = at == null ? null : z.object({ prevId: v.id.nullable(), nextId: v.id.nullable() }).parse(at);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
-      select: { id: true, projectId: true, name: true, isDone: true, assigneeId: true },
+      select: { id: true, projectId: true, name: true, isDone: true },
     });
     if (!column) throw notFound();
     noteProject(column.projectId);
@@ -830,7 +832,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
       // Todo o nada: si no caben todas las que llegan de otras columnas, no se mueve ninguna.
-      await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
+      const room = await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
       let list: { id: string; position: number }[];
       if (place) {
         const ids = toMove.map((t) => t.id);
@@ -848,8 +850,9 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
         list = toMove.map((t) => ({ id: t.id, position: (pos += POSITION_STEP) }));
       }
       await setTaskColumnPositions(list, column.id, { clearEvergreen: true, client: tx });
-      // Columna «Asignación a persona»: las que llegan de otra columna (las que ya estaban solo se recolocan).
-      const assigned = column.assigneeId ? await assignOnEnter(tx, column.id, toMove.filter((t) => t.columnId !== column.id).map((t) => t.id)) : null;
+      // Columna «Asignación a persona»: las que llegan de otra columna (las que ya estaban solo se recolocan). Con la regla
+      // de la lectura de assertColumnRoom, hecha con la columna bloqueada (como moveTask).
+      const assigned = await assignOnEnter(tx, room, toMove.filter((t) => t.columnId !== column.id).map((t) => t.id));
       return { moved: list, assigned };
     });
     // Un solo paso de deshacer: también vuelven el responsable y la fecha límite que tenían.
@@ -1602,12 +1605,12 @@ export async function restoreTask(taskId: string) {
       // la columna, como al mover): otra pestaña pudo recuperarla entre medias, y sin el bloqueo las dos salían bien.
       const [fresh] = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`;
       if (!fresh?.archivedAt) throw new AppError("La tarea no está archivada.");
-      await assertColumnRoom(tx, column.id, [taskId]);
+      const room = await assertColumnRoom(tx, column.id, [taskId]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
       // columnEnteredAt/waitingNotifiedAt a mano: si la columna no cambia, el disparador no actúa.
       await tx.task.update({ where: { id: taskId }, data: { archivedAt: null, archivedFromColumnId: null, columnId: column.id, position, columnEnteredAt: new Date(), waitingNotifiedAt: null }, select: { id: true } });
       // Vuelve a entrar en su columna: si es «Asignación a persona», pasa a su persona (como al moverla allí).
-      return assignOnEnter(tx, column.id, [taskId]);
+      return assignOnEnter(tx, room, [taskId]);
     });
     addUndo(...undo, ...assignUndoOps(assigned));
     describeAction("Restauró «{title}» en «{col}»", { title: (await taskLabel(taskId)).title, col: column.name }, { taskId });
