@@ -431,6 +431,6 @@ export const admin: Record<string, string> = {
   "Archivo «{name}» subido ({size})": "File “{name}” uploaded ({size})",
   "Imagen «{name}» subida ({size})": "Image “{name}” uploaded ({size})",
   "Documento «{name}» subido ({size})": "Document “{name}” uploaded ({size})",
-  "Descarga de «{name}»": "Download of “{name}”",
+  "Descarga de «{name}»": "Downloaded “{name}”",
   "Arranque de Pizarro v{version}": "Pizarro v{version} started",
 };

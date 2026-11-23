@@ -342,8 +342,8 @@ for your files and the database, and generates the keys. It is all done from its
 `APP_URL` isn't needed: Pizarro uses Render's address. You only have to add it if you set up
 [your own domain](#domain). The plan the button creates (*Starter*, 512 MB of memory) is enough for a small team. For a
 bigger team, or if Render restarts the service because it ran out of memory (you'll see it in *Events*), switch the
-plan to *Standard* in *Settings → Instance Type* and, in **Environment**, delete `NODE_OPTIONS` and
-`PDF_WORKER_MAX_MB`: they cap memory so Pizarro fits in *Starter*.
+plan to *Standard* in *Settings → Instance Type* and, in **Environment**, delete `PDF_WORKER_MAX_MB`: it caps the
+memory used for PDFs so Pizarro fits in *Starter*.
 
 > [!NOTE]
 > **The health check is already set up.** *Settings → Health Checks* should show `/api/health`. Thanks to it, Render
