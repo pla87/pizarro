@@ -753,3 +753,38 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 - Con la interfaz en inglés, los mensajes nuevos de *Logs* salen en inglés (también el CSV).
 - Un miembro (no administrador) ve las plantillas propias en *Nuevo proyecto* y en *Aplicar plantilla* de sus proyectos privados.
+
+## 17. Novedades de la v1.68.0
+
+### 17.1 Descargas de las columnas (instalación de prueba; también en el móvil)
+
+1. Columna *Asignación a persona*: **Generar plan** está bajo la cabecera. Al pulsarlo se descarga el PDF (sin abrir otra pestaña) y, mientras se genera, el botón sale ocupado y un segundo clic no hace nada. Cada tarea lleva sus etiquetas y un resumen de la descripción sin los apartados vacíos de su tipo.
+2. Columna *Planificación semanal*: **PDF de la semana** (por día y por persona) se descarga igual. Lo mismo el **PDF** de *Ver lista* en una *Lista consolidada*.
+3. En el iPhone y en Android: comprueba que el PDF llega a *Descargas* (o al visor del sistema) y se puede abrir.
+
+### 17.2 Tipo por defecto y roles retirados (tu instalación, tras actualizar)
+
+1. En un proyecto que tuviera una columna con rol *Agenda* o *Entrega al cliente*: tras actualizar, la columna sigue con su nombre y sus tarjetas, y *Rol de la columna* dice *Sin rol*. Esos dos roles ya no salen en la lista. Si usabas el `.ics` de la Agenda, suscríbete desde *Calendario → Suscribirse*.
+2. Menú «⋯» de una columna → **Tipo por defecto…** → elige un tipo. El «+» de esa columna abre *Nueva tarea* con ese tipo (y su título automático). Con *Ninguno*, vuelve el último tipo que usaste.
+3. Exporta ese proyecto e impórtalo: la columna conserva su tipo por defecto.
+
+### 17.3 Prefijos de tipo (proyecto *Casa y familia*)
+
+- Crea una tarea «Pan» de tipo *Compras* (sale «Comprar Pan») y cambia a *Papeleo*, *Casa* y otra vez *Compras*: en cada cambio el título lleva solo el prefijo del tipo actual (o ninguno con *Casa*), sin acumularse.
+- Una tarea de *Casa* titulada «Comprar regalo de Ana» pasada a *Cita*: queda «Cita: Comprar regalo de Ana».
+
+### 17.4 Informe semanal con un destinatario rechazado (solo si tienes SMTP configurado)
+
+1. Configura el informe semanal de un proyecto de prueba a «Otra dirección…» con un buzón que no exista en tu propio dominio (`no-existe@` y tu dominio) para dentro de unos minutos.
+2. A la hora: en *Logs* (busca `scheduledRejected`) queda un error con el rechazo del servidor de correo, y en la hora siguiente no se reintenta (`report.scheduledFailed` sería un fallo de la configuración del correo, que sí se reintenta cada hora). Vuelve a poner un destinatario real.
+
+### 17.5 Usuarios y miembros
+
+- *Administración → Usuarios*, con alguien con la invitación pendiente: la cabecera dice «N activos · 1 invitación pendiente». En su fila no aparece *Forzar cambio de contraseña*; al pasar el ratón por los botones de icono sale su descripción.
+- *Ajustes del proyecto → General* de un proyecto de equipo: la lista se llama **Miembros**. Añade a esa persona pendiente: como administrador ves hasta cuándo vale su invitación y **Generar enlace de invitación nuevo**.
+
+### 17.6 Logs en inglés
+
+1. *Mi perfil → English*. Cambia el tema y el idioma: en *Administration → Logs* las filas dicen qué cambió.
+2. Cambia el rol de una columna: la fila dice de qué rol a qué rol.
+3. Reinicia el servicio (Railway → *Restart*) y vuelve a *Logs*: el apagado y el arranque salen en inglés. Vuelve a español.
