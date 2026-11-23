@@ -167,15 +167,17 @@ test("el título: los prefijos no se acumulan al pasar por un tipo sin prefijo (
     assert.equal(title, expected);
     prev = next;
   }
-  // El prefijo que quedó de otro tipo (no del anterior) también se cambia, si es de un tipo del proyecto.
-  assert.equal(switchKindTitle(CASA, PAPELEO, "Comprar renovar pasaporte", kinds), "Gestionar renovar pasaporte");
-  assert.equal(switchKindTitle(CASA, CITA, "Comprar renovar pasaporte", kinds), "Cita: renovar pasaporte");
+  // El prefijo que quedó de otro tipo (no del anterior) también se cambia si acaba en signo («Cita:»).
   assert.equal(switchKindTitle(PAPELEO, CASA, "Cita: dentista", kinds), "dentista");
-  // Sin la lista de tipos, como antes.
-  assert.equal(switchKindTitle(CASA, PAPELEO, "Comprar renovar pasaporte"), "Gestionar Comprar renovar pasaporte");
+  assert.equal(switchKindTitle(CASA, PAPELEO, "Cita: dentista", kinds), "Gestionar dentista");
+  // Uno que acaba en palabra solo si es del anterior: «Comprar regalo de Ana» lo escribió la persona en una tarea de Casa.
+  assert.equal(switchKindTitle(CASA, CITA, "Comprar regalo de Ana", kinds), "Cita: Comprar regalo de Ana");
+  assert.equal(switchKindTitle(CASA, PAPELEO, "Comprar entradas para el teatro", kinds), "Gestionar Comprar entradas para el teatro");
+  assert.equal(switchKindTitle(COMPRAS, CITA, "Comprar regalo de Ana", kinds), "Cita: regalo de Ana");
   // Lo mismo con switchKindText (Nueva tarea).
   const tpl = (k: typeof CASA) => ({ ...k, subtaskTemplate: [] });
-  assert.equal(switchKindText(tpl(CASA), tpl(PAPELEO), { title: "Comprar pan", description: "", subtasks: [] }, kinds).title, "Gestionar pan");
+  assert.equal(switchKindText(tpl(CASA), tpl(PAPELEO), { title: "Comprar pan", description: "", subtasks: [] }, kinds).title, "Gestionar Comprar pan");
+  assert.equal(switchKindText(tpl(CASA), tpl(PAPELEO), { title: "Cita: pan", description: "", subtasks: [] }, kinds).title, "Gestionar pan");
 });
 
 test("la descripción: la plantilla anterior sin tocar se cambia y lo escrito debajo se conserva", () => {

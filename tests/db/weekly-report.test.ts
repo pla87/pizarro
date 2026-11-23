@@ -170,6 +170,26 @@ describe("email del informe semanal", () => {
     const log = await db.appLog.findFirst({ where: { projectId: f.project.id, action: "report.scheduledRejected" } });
     assert.ok(log, "deja un error en Logs");
   });
+  // Antes también se daba por perdido el informe de la semana si el servidor rechazaba el remitente (un SMTP_FROM que no
+  // admite) o el mensaje: son fallos de la instalación y, arreglados, el informe debe salir en el reintento de la hora.
+  for (const at of ["MAIL FROM", "DATA"] as const) {
+    test(`un rechazo en ${at} (de la instalación, no del destinatario) se reintenta a la hora`, async () => {
+      const creator = await makeUser({ role: "ADMIN" });
+      const f = await makeProject({ members: [creator] });
+      await schedule(f, creator, `rechazo-${Date.now()}@example.com`);
+      const calls: string[] = [];
+      const now = new Date();
+      await withSmtpRejecting(async () => {
+        for (const h of [0, 1]) assert.equal(await sendDueReports(new Date(now.getTime() + h * 3_600_000), { generate: fakePdf(calls) }), 0);
+      }, at);
+      assert.equal(calls.length, 2, "se vuelve a intentar a la hora");
+      const row = await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } });
+      assert.equal(row.lastSentAt, null, "la reserva se devuelve");
+      await flushLogs();
+      assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.scheduledRejected" } }), 0);
+      assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.scheduledFailed" } }), 2);
+    });
+  }
 });
 
 describe("informe semanal de un proyecto enorme", () => {
