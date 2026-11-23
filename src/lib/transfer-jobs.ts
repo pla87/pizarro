@@ -419,7 +419,9 @@ async function runImport(job: JobRow, user: { id: string; name: string; email: s
   reserveDisk(job.id, uploadDir(), importBytes);
   const summary = opts.format === "trello" || opts.format === "csv"
     ? await importForeignFile(opts.tempFile, opts.format, user, { isPrivate: !!opts.isPrivate, t, fileName: opts.name, onProgress: (p) => progress.set(p) })
-    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id });
+    : await importProjectFile(opts.tempFile, user, { isPrivate: !!opts.isPrivate, t, onProgress: (p) => progress.set(p), journalName: job.id, diskReservation: job.id,
+      // Si el trabajo desaparece (se borró la cuenta) o lo retomó otro trabajador, deja de esperar turno para sus imágenes.
+      stopped: async () => (await db.projectTransferJob.count({ where: { id: job.id, status: "RUNNING", startedAt: job.startedAt } }).catch(() => 1)) === 0 });
   logEvent({
     category: "api", action: "projects.import",
     message: `Proyecto «${summary.name}» importado desde ${summary.source === "trello" ? "un JSON de Trello" : summary.source === "csv" ? "un CSV" : "un archivo"} (${summary.counts.tasks} tareas, ${logSize((opts.bytes ?? 0))})`,

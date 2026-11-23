@@ -583,6 +583,43 @@ describe("importar: validación del archivo", () => {
     assert.equal(safeDownloadMime(a.mimeType), "application/octet-stream");
   });
 
+  test("imágenes con la cola de imágenes llena: la importación espera su turno en vez de fallar; si el trabajo ya no existe, deja de esperar", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const png = await sharp({ create: { width: 300, height: 200, channels: 3, background: "#f90" } }).png().toBuffer();
+    const att = { originalName: "cola.png", mimeType: "image/png", isImage: true, width: null, height: null, size: png.length, createdBy: null, createdAt: "2026-01-01T00:00:00.000Z", file: sha(png) };
+    const doc = { ref: "x1", name: "plano.png", kind: "IMAGE", mimeType: "image/png", size: png.length, createdBy: null, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", file: sha(png) };
+    const file = await craft(minimal([{ attachments: [att] }], { documents: [doc] as ProjectExportData["documents"] }), [png]);
+    // Cola llena (uploads.ts): dos imágenes procesándose y diez esperando turno.
+    const iq = (globalThis as unknown as { __pzImageQueue: { running: number; queue: (() => void)[] } }).__pzImageQueue;
+    const fill = () => {
+      iq.running = 2;
+      iq.queue.push(...Array.from({ length: 10 }, () => () => {}));
+    };
+    const drain = () => {
+      iq.running = 0;
+      iq.queue.length = 0;
+    };
+    fill();
+    let done = false;
+    try {
+      const pending = importProjectFile(file, asImporter(admin), { isPrivate: true }).finally(() => (done = true));
+      await new Promise((r) => setTimeout(r, 400));
+      assert.equal(done, false, "espera mientras la cola está llena");
+      drain();
+      const s = await pending;
+      assert.equal(s.counts.taskAttachments, 1);
+      assert.equal(s.counts.documents, 1);
+      assert.deepEqual(s.warnings, []);
+      // Si el trabajo en segundo plano ya no existe, deja de esperar y falla con el aviso de la cola (sin dejar nada).
+      const before = await db.project.count();
+      fill();
+      await assert.rejects(importProjectFile(file, asImporter(admin), { isPrivate: true, stopped: async () => true }), /procesando muchas imágenes/);
+      assert.equal(await db.project.count(), before);
+    } finally {
+      drain();
+    }
+  });
+
   test("la cuota del proyecto y el tamaño máximo por archivo se respetan, y un fallo no deja ficheros ni filas", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const big = Buffer.alloc(2 * 1024 * 1024, 7);
