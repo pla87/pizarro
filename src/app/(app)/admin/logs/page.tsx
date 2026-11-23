@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { appTimeZone } from "@/lib/board";
 import { logTimeFormatter } from "@/lib/format";
 import { logDetailsShown, logMessageText } from "@/lib/log-message";
+import { legacyLogLabel } from "@/lib/log-legacy";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
 import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
@@ -244,7 +245,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             }
             const level = LEVELS.find((l) => l.value === r.level) ?? LEVELS[0];
             // Mensaje en el idioma de quien lee (si se guardó su plantilla) y detalles sin ella.
-            const message = logMessageText(r, t);
+            const message = logMessageText(r, t, appLocale === "en" ? legacyLogLabel : undefined);
             const details = logDetailsShown(r.details);
             const hasDetails = details !== null && details !== undefined;
             return (

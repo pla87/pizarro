@@ -327,4 +327,6 @@ export const server: Record<string, string> = {
   // Historial de las tareas (TaskEvent, un año) y deshacer (7 días): guardan la clave de antes de «Restaurar».
   // Textos guardados por versiones anteriores (se traducen al leerlos)
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
+  // Logs: lista guardada sin sus elementos por versiones anteriores
+  "varios campos": "several fields",
 };
