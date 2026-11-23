@@ -17,7 +17,10 @@ const CLASS = "btn-primary w-full py-1.5";
  */
 const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
-/** `busy`: la acción está en curso (p. ej. generando un PDF): el icono gira y el botón no hace nada hasta que acabe. */
+/**
+ * `busy`: la acción está en curso (p. ej. generando un PDF): el icono gira y el botón no hace nada hasta que acabe. Se ve
+ * ocupado, no desactivado: sin `aria-disabled` (su opacidad y su cursor de prohibido ganarían a los de `aria-busy`).
+ */
 export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title, busy }: {
   icon: LucideIcon;
   label: string;
@@ -33,7 +36,7 @@ export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title
         type="button"
         className={`${CLASS} ${OFF} aria-busy:cursor-progress`}
         onClick={busy ? undefined : disabled ? () => title && toast(title, "error") : onClick}
-        aria-disabled={disabled || busy ? true : undefined}
+        aria-disabled={disabled && !busy ? true : undefined}
         aria-busy={busy || undefined}
         title={title}
       >
@@ -43,15 +46,28 @@ export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title
   );
 }
 
-/** Igual, pero con varias opciones (p. ej. el PDF de la semana por día o por persona): abre un menú con ellas. */
-export function ColumnActionMenu({ icon: Icon, label, title, items, disabled }: {
+/**
+ * Igual, pero con varias opciones (p. ej. el PDF de la semana por día o por persona): abre un menú con ellas. `busy`: una
+ * de ellas está en curso; el icono gira y el botón no abre el menú hasta que acabe.
+ */
+export function ColumnActionMenu({ icon: Icon, label, title, items, disabled, busy }: {
   icon: LucideIcon;
   label: string;
   title?: string;
   disabled?: boolean;
+  busy?: boolean;
   items: { label: string; icon: LucideIcon; onClick: () => void }[];
 }) {
   const toast = useToast();
+  if (busy) {
+    return (
+      <div className="px-2 pb-1.5" data-column-action>
+        <button type="button" className={`${CLASS} cursor-progress`} title={title} aria-busy>
+          <Loader2 size={15} className="animate-spin" aria-hidden /> {label}
+        </button>
+      </div>
+    );
+  }
   if (disabled) {
     return (
       <div className="px-2 pb-1.5" data-column-action>

@@ -30,4 +30,5 @@ export const SECTION_TAB: Record<string, ProjectSettingsTab> = {
   labels: "tablero",
   deliverables: "tablero",
   kinds: "tablero",
+  members: "general",
 };

@@ -2,9 +2,10 @@ import { useSyncExternalStore } from "react";
 import type { useT } from "@/i18n/client";
 import type { useToast } from "../ui/Toast";
 
-// Descargas de una columna que se generan en el servidor (el PDF de «Generar plan»): se piden con fetch y se guardan con
-// un <a download>, sin salir del tablero ni abrir otra pestaña. Una a la vez por clave (botón y menú comparten el
-// estado): mientras tanto el botón se ve ocupado, y un error (429, sin red) sale en un aviso.
+// Descargas de una columna que se generan en el servidor (los PDF de «Generar plan», de la semana y de la lista
+// consolidada): se piden con fetch y se guardan con un <a download>, sin salir del tablero ni abrir otra pestaña. Una a
+// la vez por clave (botón y menú comparten el estado): mientras tanto el botón se ve ocupado, y un error (429, sin red)
+// sale en un aviso.
 
 const inFlight = new Set<string>();
 const listeners = new Set<() => void>();

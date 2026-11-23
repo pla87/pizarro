@@ -368,4 +368,10 @@ export const board: Record<string, string> = {
   "Responsable: {name}": "Assignee: {name}",
   // Buscador de «Tareas archivadas» (nombre accesible)
   "Buscar en las archivadas": "Search archived tasks",
+  // PDF de la semana y de la lista consolidada: se descargan sin abrir otra pestaña (columnDownload.ts)
+  "Generando PDF…": "Generating PDF…",
+  "No se pudo generar el PDF de la semana.": "The week PDF could not be generated.",
+  "Sin conexión: no se ha podido generar el PDF de la semana.": "Offline: the week PDF could not be generated.",
+  "No se pudo generar el PDF de la lista.": "The list PDF could not be generated.",
+  "Sin conexión: no se ha podido generar el PDF de la lista.": "Offline: the list PDF could not be generated.",
 };

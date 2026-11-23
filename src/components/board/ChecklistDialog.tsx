@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, FileDown } from "lucide-react";
+import { Copy, FileDown, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRadioGroup } from "@/components/ui/useRadioGroup";
 import { getColumnChecklist } from "@/actions/column-views";
@@ -15,6 +15,7 @@ import { copyText } from "../ui/clipboard";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
+import { downloadFile, useDownloadBusy } from "./columnDownload";
 
 /**
  * «Ver lista» de una columna con rol Lista consolidada: las subtareas de todas sus tarjetas en una sola lista,
@@ -63,7 +64,14 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
     const ok = await copyText(checklistMarkdown(groups, by, column.name));
     toast(ok ? t("Lista copiada") : t("No se pudo copiar"), ok ? "success" : "error");
   };
-  const pdf = () => window.open(`/api/projects/${project.id}/columns/${column.id}/checklist?by=${by}`, "_blank", "noopener");
+  // El PDF se descarga sin salir del tablero (columnDownload.ts): uno a la vez, con el botón ocupado, y un error en un aviso.
+  const pdfKey = `checklist:${column.id}`;
+  const pdfBusy = useDownloadBusy(pdfKey);
+  const pdf = () => void downloadFile(pdfKey, `/api/projects/${project.id}/columns/${column.id}/checklist?by=${by}`, {
+    fallbackName: "lista.pdf",
+    failed: t("No se pudo generar el PDF de la lista."),
+    offline: t("Sin conexión: no se ha podido generar el PDF de la lista."),
+  }, t, toast);
 
   const modes: [ChecklistGroupBy, string][] = [["card", t("Por tarjeta")], ["kind", t("Por tipo de tarea")]];
   const group = useRadioGroup(modes.length, modes.findIndex(([v]) => v === by), (i) => setBy(modes[i]![0]));
@@ -78,7 +86,7 @@ export function ChecklistDialog({ column, onClose }: { column: BoardColumn; onCl
         <div className="flex w-full flex-wrap items-center gap-2">
           <span className="mr-auto text-xs text-slate-500">{items ? t("{done} de {total} hechas", { done, total: items.length }) : ""}</span>
           <button className="btn-secondary min-h-10" onClick={copy} disabled={!items?.length}><Copy size={15} /> {t("Copiar como texto")}</button>
-          <button className="btn-secondary min-h-10" onClick={pdf} disabled={!items?.length}><FileDown size={15} /> PDF</button>
+          <button className="btn-secondary min-h-10 aria-busy:cursor-progress" onClick={pdfBusy ? undefined : pdf} disabled={!items?.length} aria-busy={pdfBusy || undefined}>{pdfBusy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <FileDown size={15} />} PDF</button>
         </div>
       }
     >
