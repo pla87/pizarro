@@ -38,20 +38,46 @@ export function detectDelimiter(text: string): "," | ";" | "\t" {
   return ",";
 }
 
+/** Columnas de la cabecera que se miran (el resto se ignoran): una cabecera de un millón de columnas no debe costar nada. */
+const MAX_HEADER_COLUMNS = 1000;
+
+/** Campos que se guardan por fila como máximo: la cabecera solo mira MAX_HEADER_COLUMNS, así que el resto no se usa. */
+export const MAX_CSV_FIELDS = MAX_HEADER_COLUMNS;
+
 /**
  * CSV según RFC 4180: campos entre comillas con «""» para una comilla, saltos de línea dentro de comillas, CRLF o LF,
  * BOM UTF-8 al principio. Las líneas totalmente vacías se ignoran. Una comilla en mitad de un campo sin comillas es literal.
- * Con `maxRows` se lanza un AppError en cuanto se supera (sin llegar a crear el resto de las filas).
+ * Con `maxRows` se lanza un AppError en cuanto se supera (sin llegar a crear el resto de las filas). De cada fila se
+ * guardan los primeros MAX_CSV_FIELDS campos.
+ * Los campos se copian por tramos (indexOf/slice), no carácter a carácter: sumar un carácter cada vez crea una cadena
+ * por carácter (unos 34 bytes cada una), y un CSV de 25 MB llegaba a ocupar 800 MB.
  */
 export function parseCsv(input: string, delimiter?: string, maxRows = Infinity): string[][] {
   const text = input.replace(/^\uFEFF/, "");
   const sep = delimiter ?? detectDelimiter(text);
+  const sepCode = sep.length === 1 ? sep.charCodeAt(0) : -1;
+  const n = text.length;
   const rows: string[][] = [];
   let row: string[] = [];
-  let field = "";
+  /** Tramos del campo actual: se juntan al cerrarlo (join da una cadena plana; sumar tramo a tramo encadena cadenas). */
+  let parts: string[] = [];
+  /** El campo ya tiene algo (también cuando el campo no se guarda). */
+  let started = false;
   let quoted = false;
   let wasQuoted = false;
-  const endField = () => { row.push(field); field = ""; };
+  /** ¿Se guarda el campo actual? */
+  let keep = true;
+  const add = (part: string) => {
+    if (!part) return;
+    started = true;
+    if (keep) parts.push(part);
+  };
+  const endField = () => {
+    if (keep) row.push(parts.length === 1 ? parts[0]! : parts.join(""));
+    parts = [];
+    started = false;
+    keep = row.length < MAX_CSV_FIELDS;
+  };
   const endRow = () => {
     const q = wasQuoted;
     endField();
@@ -61,22 +87,35 @@ export function parseCsv(input: string, delimiter?: string, maxRows = Infinity):
       if (rows.length > maxRows) throw new AppError("El CSV tiene demasiadas filas.");
     }
     row = [];
+    keep = true;
   };
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
+  let i = 0;
+  while (i < n) {
     if (quoted) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false;
-      } else field += ch;
-    } else if (ch === '"' && field === "") {
-      quoted = true;
-      wasQuoted = true;
-    } else if (ch === sep) endField();
-    else if (ch === "\n") endRow();
-    else if (ch === "\r") { if (text[i + 1] === "\n") i++; endRow(); }
-    else field += ch;
+      const j = text.indexOf('"', i);
+      if (j === -1) { add(text.slice(i)); break; }
+      add(text.slice(i, j));
+      if (text.charCodeAt(j + 1) === 34) { add('"'); i = j + 2; } else { quoted = false; i = j + 1; }
+      continue;
+    }
+    const c = text.charCodeAt(i);
+    if (c === 34 && !started) { quoted = true; wasQuoted = true; i++; }
+    else if (c === sepCode) { endField(); i++; }
+    else if (c === 10) { endRow(); i++; }
+    else if (c === 13) { i += text.charCodeAt(i + 1) === 10 ? 2 : 1; endRow(); }
+    else {
+      // Tramo sin comillas hasta el separador o el salto de línea (una comilla aquí ya es literal: el campo no está vacío).
+      let j = i + 1;
+      while (j < n) {
+        const d = text.charCodeAt(j);
+        if (d === sepCode || d === 10 || d === 13) break;
+        j++;
+      }
+      add(text.slice(i, j));
+      i = j;
+    }
   }
-  if (field !== "" || row.length || wasQuoted) endRow();
+  if (started || row.length || wasQuoted) endRow();
   return rows;
 }
 
@@ -101,9 +140,6 @@ const HEADERS: Record<Field, string[]> = {
 };
 /** Campos que juntan las columnas de todos los nombres de su lista que aparezcan (el resto se queda con la primera). */
 const MULTI: Field[] = ["labels", "assignee", "assigneeEmail"];
-
-/** Columnas de la cabecera que se miran (el resto se ignoran): una cabecera de un millón de columnas no debe costar nada. */
-const MAX_HEADER_COLUMNS = 1000;
 
 interface CsvMapping {
   /** Índices de las columnas del archivo que alimentan cada campo. */

@@ -736,4 +736,7 @@ export const admin: Record<string, string> = {
   "Cambió la configuración del acceso con Google": "Changed the Google sign-in settings",
   "Cambió la configuración del envío de emails": "Changed the email sending settings",
   "Consultó las tareas archivadas": "Viewed the archived tasks",
+  // Informe semanal rechazado para siempre por el servidor de correo.
+  "Informe semanal no enviado a {to}: el servidor de correo lo rechaza ({error}). No se reintenta hasta el próximo envío":
+    "Weekly report not sent to {to}: the mail server rejects it ({error}). Not retried until the next send",
 };
