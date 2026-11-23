@@ -17,6 +17,7 @@ import type { BackupFileInfo, BackupRun, BackupStatus, ExternalRun, RestoreTestR
 import type { BackupKeyDiagnosis } from "@/lib/backup-core";
 import type { DestinationId } from "@/lib/backup-dest";
 import type { JobRunInfo } from "@/lib/jobs";
+import type { SetupCodeSource } from "@/lib/setup-core";
 import { useActionTransition } from "@/components/useActionTransition";
 
 /** Tamaño con la coma decimal del idioma («2,3 MB»). */
@@ -64,7 +65,7 @@ function keyProblemText(p: BackupKeyDiagnosis | null, t: (s: string, v?: Record<
 }
 
 /** Panel «Copias de seguridad»: estado de la última copia, de la copia externa y de la última prueba de restauración. */
-export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning, paused = false, railway = false }: {
+export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUseCode, jobs, destinations, externalRunning, paused = false, platform = "unknown" }: {
   keyState: "ok" | "missing" | "invalid";
   keyProblem: BackupKeyDiagnosis | null;
   status: BackupStatus;
@@ -76,8 +77,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   externalRunning: boolean;
   /** BACKUP_PAUSE=1: las tareas automáticas de copia están detenidas. */
   paused?: boolean;
-  /** La app corre en Railway: las variables se añaden en el panel del servicio. */
-  railway?: boolean;
+  /** Dónde corre la app (setupCodeSource): en Railway, Render y Fly.io las variables se ponen en su panel o con su CLI. */
+  platform?: SetupCodeSource;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -337,7 +338,9 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           destinations.errors.length === 0 && (
             <p className="text-sm text-amber-700 dark:text-amber-300">
               {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
-              {railway && <>{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}{" "}</>}
+              {platform === "railway" && <>{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}{" "}</>}
+              {platform === "render" && <>{t("En Render: añade las variables BACKUP_S3_* en Environment del servicio de Pizarro y guarda con redespliegue.")}{" "}</>}
+              {platform === "fly" && <>{t("En Fly.io: guarda las variables BACKUP_S3_* con fly secrets set (la máquina se reinicia con los valores nuevos).")}{" "}</>}
               <a href={installSectionUrl("backups", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
           )

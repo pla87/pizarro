@@ -6,10 +6,27 @@ import { useState, useTransition } from "react";
 import { dismissUpdate } from "@/actions/update-notice";
 import { useLocale, useT } from "@/i18n/client";
 import { actionThrowResult } from "@/lib/stale-action";
+import type { SetupCodeSource } from "@/lib/setup-core";
 import { updateDocsUrl } from "@/lib/update-check-core";
 
+/** Cómo se actualiza cada instalación (la misma detección que el paso 1 de /setup, setupCodeSource). */
+function howToUpdate(platform: SetupCodeSource, t: ReturnType<typeof useT>): string {
+  switch (platform) {
+    case "railway":
+      return t("En Railway se actualiza solo si el servicio despliega desde la rama stable; si no, en el servicio pulsa ⌘K (Ctrl+K) → Deploy Latest Commit.");
+    case "render":
+      return t("En Render: en el servicio, Manual Deploy → Deploy latest reference (descarga la imagen latest).");
+    case "fly":
+      return t("En Fly.io: ejecuta fly deploy en la carpeta de tu fly.toml (descarga la imagen latest).");
+    case "npm":
+      return t("Con npm start: descarga el código de la versión nueva (rama stable), ejecuta npm ci, npx prisma migrate deploy y npm run build, y vuelve a arrancar.");
+    default:
+      return t("En tu servidor: vuelve a ejecutar el comando de instalación (get.sh) o «docker compose pull && docker compose up -d».");
+  }
+}
+
 /** Aviso discreto de versión nueva (solo administradores). Se oculta por versión. */
-export function UpdateNotice({ version, url, railway }: { version: string; url: string; railway: boolean }) {
+export function UpdateNotice({ version, url, platform }: { version: string; url: string; platform: SetupCodeSource }) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -28,11 +45,7 @@ export function UpdateNotice({ version, url, railway }: { version: string; url: 
           {" · "}
           <a className={link} href={updateDocsUrl(locale)} target="_blank" rel="noopener noreferrer">{t("Cómo actualizar")}</a>
         </p>
-        <p className="text-xs opacity-80">
-          {railway
-            ? t("En Railway: vuelve a desplegar desde GitHub (Deployments → Redeploy).")
-            : t("En tu servidor: vuelve a ejecutar el comando de instalación (get.sh) o «docker compose pull && docker compose up -d».")}
-        </p>
+        <p className="text-xs opacity-80">{howToUpdate(platform, t)}</p>
       </div>
       <button
         type="button"
