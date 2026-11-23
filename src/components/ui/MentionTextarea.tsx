@@ -5,7 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
 import {
-  addMentions, applyTextChange, hasMentionIn, mentionTouching, modelFromRaw, modelToRaw, normalizeModel, replaceRange, sliceToRaw,
+  addMentions, applyTextChange, hasMentionIn, mentionSuffix, mentionTouching, modelFromRaw, modelToRaw, normalizeModel, redundantMentionSpace, replaceRange, sliceToRaw,
   type MentionModel, type MentionSpan,
 } from "@/lib/mention-edit";
 import { mentionRegex, mentionToken } from "@/lib/mentions";
@@ -155,20 +155,40 @@ export const MentionTextarea = forwardRef<HTMLTextAreaElement, Props>(function M
     if (!query || !inner.current) return;
     const el = inner.current;
     const end = el.selectionStart;
+    // Detrás, un espacio para seguir escribiendo; si ya había uno, no se pone otro y el cursor pasa detrás de él.
+    const suffix = opt.kind === "user" ? mentionSuffix(el.value.slice(end)) : "";
+    const insert = opt.kind === "user" ? mentionToken(opt.label, opt.id) + suffix : "";
+    const skip = opt.kind === "user" && !suffix ? 1 : 0;
     if (pretty) {
       setQuery(null);
-      replaceWith(el, query.start, end, opt.kind === "user" ? mentionToken(opt.label, opt.id) + " " : "");
+      replaceWith(el, query.start, end, insert);
+      if (skip) {
+        const caret = query.start + modelFromRaw(insert).text.length + skip;
+        el.setSelectionRange(caret, caret);
+        if (pendingCaret.current !== null) pendingCaret.current = caret;
+      }
       if (opt.kind === "command") onCommand?.(opt.id);
       return;
     }
-    const insert = opt.kind === "user" ? mentionToken(opt.label, opt.id) + " " : "";
     const next = value.slice(0, query.start) + insert + value.slice(end);
     onValueChange(next);
     setQuery(null);
-    pendingCaret.current = query.start + insert.length;
+    pendingCaret.current = query.start + insert.length + skip;
     el.focus();
     if (opt.kind === "command") onCommand?.(opt.id);
   };
+
+  // Un espacio escrito justo detrás del que va tras una mención sobra («@Ana  para»): no se escribe.
+  useEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const onBefore = (e: InputEvent) => {
+      if (e.inputType !== "insertText" || e.data !== " " || e.isComposing || el.selectionStart !== el.selectionEnd) return;
+      if (redundantMentionSpace(el.value, el.selectionStart, pretty ? modelRef.current.mentions.map((m) => m.end) : undefined)) e.preventDefault();
+    };
+    el.addEventListener("beforeinput", onBefore);
+    return () => el.removeEventListener("beforeinput", onBefore);
+  }, [pretty]);
 
   const showBackdrop = pretty && model.mentions.length > 0;
 

@@ -381,7 +381,8 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
     }
   };
   const accentGroup = useRadioGroup(ACCENTS.length, ACCENTS.findIndex((a) => a.value === accent), (i) => chooseAccent(ACCENTS[i]!.value));
-  const sample = "#6366f1";
+  // Color de las muestras de tarjeta: el del tema de color elegido (antes, siempre el índigo del tema por defecto).
+  const sample = "var(--color-brand-500)";
   return (
     <section className="card p-5">
       <h2 className="flex items-center gap-2 font-semibold"><Palette size={17} /> {t("Apariencia")}</h2>
@@ -443,7 +444,7 @@ function AppearanceSection({ initial, initialTheme, initialAccent }: { initial: 
           >
             <div
               className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-2.5 pl-3 text-sm font-medium dark:border-slate-700 dark:bg-slate-900"
-              style={value === "FILLED" ? { backgroundColor: `${sample}26`, borderColor: `${sample}66` } : undefined}
+              style={value === "FILLED" ? { backgroundColor: `color-mix(in srgb, ${sample} 15%, transparent)`, borderColor: `color-mix(in srgb, ${sample} 40%, transparent)` } : undefined}
             >
               {value === "STRIPE" && <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: sample }} />}
               {t("Tarjeta de ejemplo")}

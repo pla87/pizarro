@@ -250,6 +250,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
     <div
       ref={rootRef}
       data-pz-modal=""
+      // Para globals.css: un diálogo centrado encima de otro oculta las copias flotantes (data-pz-layer).
+      data-pz-side={side}
       className={cn(
         "fixed inset-0 z-50 flex justify-center overscroll-contain sm:items-center sm:p-4",
         top ? "items-start pt-[env(safe-area-inset-top)] sm:pt-4" : "items-end",

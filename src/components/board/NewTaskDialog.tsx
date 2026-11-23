@@ -221,7 +221,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const kind = kinds.find((k) => k.id === id);
     if (!kind) return;
     // Con actualizaciones funcionales: tras pedir las opciones de otro proyecto, lo escrito mientras tanto no se pierde.
-    setTitle((cur) => switchKindTitle(prev, kind, cur));
+    setTitle((cur) => switchKindTitle(prev, kind, cur, kinds));
     setDescription((cur) => switchKindDescription(prev, kind, cur));
     // Las subtareas que se quedan conservan su clave (React no reutiliza la fila de otra); solo las nuevas llevan una nueva.
     setSubtaskItems((l) => {
@@ -232,7 +232,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
       });
     });
     // Si no había nada de la persona, lo que pone el tipo nuevo tampoco cuenta como escrito.
-    templateState.current = pristine ? { kindId: id, ...switchKindText(prev, kind, { title, description, subtasks }) } : null;
+    templateState.current = pristine ? { kindId: id, ...switchKindText(prev, kind, { title, description, subtasks }, kinds) } : null;
   };
   /** Ajusta las opciones al proyecto de `f`: conserva lo que siga existiendo en él y, si no, usa su primera columna / tipo. */
   const applyForm = (f: ProjectFormData, keep: { kindId: string; prevKind?: ProjectFormData["kinds"][number]; columnId: string; assigneeId: string; deliverableId: string; labelNames?: string[]; restoring?: boolean }) => {

@@ -49,4 +49,8 @@ export const detalle: Record<string, string> = {
 
   // Cambiar de tipo con la descripción abierta (ronda 62): el tipo se guarda; la descripción, al pulsar Guardar
   "Tipo guardado; la descripción, sin guardar": "Type saved; description not saved yet",
+
+  // Botón de la descripción en edición (el pie tiene otro «Guardar») y aviso tras cambiar de tipo con ella abierta
+  "Guardar descripción": "Save description",
+  "Tipo cambiado; falta guardar la descripción": "Type changed; description not saved yet",
 };
