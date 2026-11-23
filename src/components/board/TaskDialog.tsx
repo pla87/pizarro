@@ -1225,6 +1225,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             </div>
             {/* El progreso, solo con varias a la vez: con una basta su hueco (y no cambia la altura al empezar y acabar). */}
             {progress && progress.total > 1 && <UploadProgress progress={progress} className="mt-2" />}
+            {/* Con uno solo, el lector de pantalla oye «Subiendo…» aquí (los huecos no son región viva: serían varios avisos). */}
+            <span className="sr-only" role="status">{uploading > 0 && !(progress && progress.total > 1) ? t("Subiendo…") : ""}</span>
             {(files.length > 0 || pending.files > 0) && (
               <ul className={cn("space-y-1.5", (images.length > 0 || pending.images > 0) && "mt-2")}>
                 {files.map((a) => {

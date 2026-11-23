@@ -220,9 +220,10 @@ export async function withSmtpDown<T>(fn: () => Promise<T>): Promise<T> {
 
 /**
  * Ejecuta `fn` con un servidor de correo de prueba (en esta máquina) que acepta la conexión y rechaza para siempre cada
- * destinatario con «550 5.1.1» (un buzón que no existe): nodemailer falla con EENVELOPE y responseCode 550.
+ * envío en la fase `at`: por defecto cada destinatario con «550 5.1.1» (un buzón que no existe; nodemailer falla con
+ * EENVELOPE, `command` «RCPT TO» y responseCode 550); con «MAIL FROM», el remitente (553); con «DATA», el mensaje (554).
  */
-export async function withSmtpRejecting<T>(fn: () => Promise<T>): Promise<T> {
+export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" | "MAIL FROM" | "DATA" = "RCPT TO"): Promise<T> {
   const sockets = new Set<Socket>();
   const server = createServer((socket) => {
     sockets.add(socket);
@@ -230,16 +231,28 @@ export async function withSmtpRejecting<T>(fn: () => Promise<T>): Promise<T> {
     socket.setEncoding("utf8");
     socket.write("220 prueba ESMTP\r\n");
     let buf = "";
+    let inData = false;
     socket.on("data", (chunk: string) => {
       buf += chunk;
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim().toUpperCase();
+        const raw = buf.slice(0, nl).replace(/\r$/, "");
         buf = buf.slice(nl + 1);
+        if (inData) {
+          if (raw === ".") {
+            inData = false;
+            socket.write("554 5.7.1 Mensaje rechazado\r\n");
+          }
+          continue;
+        }
+        const line = raw.trim().toUpperCase();
         if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 prueba\r\n");
-        else if (line.startsWith("MAIL FROM")) socket.write("250 2.1.0 Ok\r\n");
-        else if (line.startsWith("RCPT TO")) socket.write("550 5.1.1 No existe ese buzón\r\n");
-        else if (line.startsWith("QUIT")) socket.end("221 Adiós\r\n");
+        else if (line.startsWith("MAIL FROM")) socket.write(at === "MAIL FROM" ? "553 5.7.1 Remitente no admitido\r\n" : "250 2.1.0 Ok\r\n");
+        else if (line.startsWith("RCPT TO")) socket.write(at === "RCPT TO" ? "550 5.1.1 No existe ese buzón\r\n" : "250 2.1.5 Ok\r\n");
+        else if (line === "DATA") {
+          inData = true;
+          socket.write("354 Adelante\r\n");
+        } else if (line.startsWith("QUIT")) socket.end("221 Adiós\r\n");
         else socket.write("250 Ok\r\n");
       }
     });

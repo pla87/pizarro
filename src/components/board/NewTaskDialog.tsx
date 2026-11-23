@@ -166,8 +166,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   });
   const [title, setTitle] = useState(init.title);
   const [kindId, setKindId] = useState(init.kindId);
-  // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna.
-  const kindPicked = useRef(false);
+  // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna. El de un borrador
+  // recuperado cuenta como elegido: antes, al cambiar de columna, pasaba en silencio al de la columna (y su prefijo).
+  const kindPicked = useRef(!foreignInit && !!d && board.kindById.has(d.kindId));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? columnPerson(board, columnId)?.id ?? ""));
   /**

@@ -96,7 +96,8 @@ function titleWithoutPrefix(prev: KindAutomation | null | undefined, title: stri
  * pone delante («Leche y pan» → «Comprar Leche y pan»). Si solo queda el prefijo, va con un espacio detrás para seguir
  * escribiendo («Comprar pan» y no «Comprarpan», que ya no se reconocería como prefijo): el espacio sobrante se quita al
  * guardar. `known` (los tipos del proyecto): si el título no empieza por el prefijo del anterior pero sí por el de otro
- * tipo (quedó de un cambio anterior), también se quita; así no se acumulan («Gestionar Comprar …»).
+ * tipo que acaba en signo («Cita:», quedó de un cambio anterior), también se quita; así no se acumulan («Gestionar Cita:
+ * …»). Uno que acaba en palabra («Comprar») solo se quita si es del tipo anterior: pudo escribirlo la persona.
  */
 export function switchKindTitle(prev: KindAutomation | null | undefined, next: KindAutomation, title: string, known: readonly KindAutomation[] = []): string {
   const prefix = next.titleTemplate.trim();
@@ -108,7 +109,12 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   if (rest === null && prefix && titleWithoutPrefix(next, title) !== null) return title;
   // Otro prefijo conocido del proyecto (el más largo primero: «Cita previa:» antes que «Cita»).
   if (rest === null) {
-    const others = known.map((k) => k.titleTemplate.trim()).filter((p) => p && p !== prefix).sort((a, b) => b.length - a.length);
+    // Solo los que acaban en signo («Cita:», «Bug -»): uno que acaba en palabra («Comprar», «Gestionar») pudo escribirlo
+    // la persona («Comprar regalo de Ana» en una tarea de Casa) y solo se quita si es el del tipo anterior, arriba.
+    const others = known
+      .map((k) => k.titleTemplate.trim())
+      .filter((p) => p && p !== prefix && !/[\p{L}\p{N}]$/u.test(p))
+      .sort((a, b) => b.length - a.length);
     for (const p of others) {
       rest = titleWithoutPrefix({ titleTemplate: p, descriptionTemplate: "" }, title);
       if (rest !== null) break;

@@ -87,16 +87,22 @@ const SMTP_DOWN_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EAUTH",
 const smtpDown = (err: unknown): boolean => SMTP_DOWN_CODES.has(String((err as { code?: unknown } | null)?.code ?? ""));
 
 /**
- * ¿Rechazó el servidor de correo el email para siempre (un buzón que no existe, un dominio que no acepta correo…)? Son
- * las respuestas 5xx de SMTP y los EENVELOPE sin respuesta del servidor (una dirección que nodemailer no acepta). Un
- * EENVELOPE con 4xx (p. ej. una lista gris) es temporal, y un EAUTH (535) es del servidor entero y va con smtpDown.
- * Reintentarlo en una hora daría lo mismo.
+ * ¿Rechazó el servidor de correo para siempre al destinatario (un buzón que no existe, un dominio que no acepta correo…)?
+ * Solo cuenta la fase RCPT TO con una respuesta 5xx (nodemailer pone `command` en sus errores) y la dirección que
+ * nodemailer no acepta antes de enviar (EENVELOPE sin respuesta del servidor). Reintentarlo en una hora daría lo mismo.
+ * Lo demás es de la instalación y se reintenta cada hora: el remitente rechazado (MAIL FROM 530/553, p. ej. un SMTP_FROM
+ * que el servidor no admite, o el que nodemailer no acepta), el mensaje rechazado en DATA y el acceso (EAUTH, con
+ * smtpDown). Un 4xx (p. ej. una lista gris) es temporal.
  */
 export function smtpRejected(err: unknown): boolean {
   if (smtpDown(err)) return false;
-  const e = err as { code?: unknown; responseCode?: unknown } | null;
-  const status = typeof e?.responseCode === "number" ? e.responseCode : 0;
-  return (status >= 500 && status < 600) || (e?.code === "EENVELOPE" && !status);
+  const e = err as { code?: unknown; responseCode?: unknown; command?: unknown; message?: unknown } | null;
+  if (e?.code !== "EENVELOPE") return false;
+  const status = typeof e.responseCode === "number" ? e.responseCode : 0;
+  if (e.command === "RCPT TO") return status >= 500 && status < 600;
+  // Sin respuesta del servidor: la dirección del destinatario no vale (nodemailer: «Invalid recipient …», «No recipients
+  // defined»); la del remitente («Invalid sender …») es de la configuración.
+  return !status && e.command !== "MAIL FROM" && !/^Invalid sender/.test(String(e.message ?? ""));
 }
 
 function logSmtpDown(what: string, err: unknown): void {
@@ -311,7 +317,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
       return false;
     }
     if (sending && smtpRejected(err)) {
-      // El servidor de correo rechaza la dirección o el mensaje para siempre: reintentarlo cada hora volvería a generar
+      // El servidor de correo rechaza al destinatario para siempre: reintentarlo cada hora volvería a generar
       // el PDF para nada hasta medianoche. Como sin memoria para el PDF, se deja la reserva hasta el próximo envío.
       clearReportFailure(s.projectId);
       logEvent({ ...base, level: "error", action: "report.scheduledRejected", label: { k: "Informe semanal no enviado a {to}: el servidor de correo lo rechaza ({error}). No se reintenta hasta el próximo envío", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
