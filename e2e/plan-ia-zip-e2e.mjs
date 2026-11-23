@@ -110,7 +110,7 @@ if (only.includes("zip")) {
   L.check("ZIP: la imagen pegada en la descripción apunta a la misma ruta del ZIP", text.includes(`![captura](${f1}/Plano_final.webp)`));
   L.check("ZIP: una imagen que no es adjunto del plan se queda en su texto alternativo (sin enlace a Pizarro)", text.includes("y esto ajena") && !text.includes("/api/attachments/zzzzzz"));
   L.check("ZIP: el contexto explica el ZIP «adjuntos/…» (3 archivos)", text.includes("- **Adjuntos:** 3 archivo(s) en el ZIP «adjuntos/…» que va con este plan"));
-  L.check("ZIP: la cabecera de serie también", text.includes("van en el ZIP «adjuntos/…» que acompaña a este plan"));
+  L.check("ZIP: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(descomprímelo junto a este fichero)") && text.includes("Las imágenes van en WebP.") && !text.includes("que acompaña a este plan"));
   const btn = dlg.getByRole("button", { name: "Descargar adjuntos (3)" });
   L.check("ZIP: botón «Descargar adjuntos (3)» en el paso 2", await btn.isVisible());
   const today = await appToday(page);
@@ -189,7 +189,7 @@ if (only.includes("en")) {
     L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("`attachments/02-task/notes.txt`"), text.slice(text.indexOf("### 2.")));
     L.check("EN: la imagen de la descripción apunta a la misma ruta", text.includes(`![shot](${f1}/Final_plan.webp)`));
     L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
-    L.check("EN: la cabecera de serie también, con su ejemplo", text.includes('come in the "attachments/…" ZIP that goes with this plan') && text.includes("`attachments/03-task-title/drawing.webp`"));
+    L.check("EN: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(unzip it next to this file)") && text.includes("Images are in WebP.") && !text.includes("`attachments/03-task-title/drawing.webp`"));
     L.check("EN: en el plan en inglés no queda ninguna ruta «adjuntos/»", !text.includes("adjuntos"), text);
     const btn = dlg.getByRole("button", { name: "Download attachments (2)" });
     const today = await appToday(page);

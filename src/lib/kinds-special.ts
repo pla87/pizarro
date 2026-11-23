@@ -111,9 +111,9 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
   return join(title.trim());
 }
 
-const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
+export const BOLD_LABEL = /^\*\*[^*\n]+\*\*/;
 /** Una viñeta o casilla sin texto («- », «* [ ]», «1.»): el hueco de una lista en la plantilla, no una etiqueta. */
-const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
+export const BARE_MARKER = /^(?:[-*+](?:\s*\[\s?\])?|\d+[.)])$/;
 
 /** Etiqueta de una línea de formulario: la parte en negrita del principio («**Plazo:** [fecha]» → «**Plazo:**») o la línea. */
 function formAnchor(line: string): string {
