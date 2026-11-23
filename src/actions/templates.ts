@@ -9,7 +9,7 @@ import { EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE } from "@/lib/edit-conflict-c
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { templateInputSchema, type TemplateInput } from "@/lib/project-templates";
-import { MAX_TEMPLATES } from "@/lib/project-templates-core";
+import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATES } from "@/lib/project-templates-core";
 import { listTemplatesSorted, lockTemplates, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
 import { requireAdmin } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -130,7 +130,7 @@ export async function templateFromProject(projectId: string) {
     return {
       name: cutText(t("Plantilla de {name}", { name: project.name }), 80),
       description: "",
-      columns: project.columns.slice(0, 20),
+      columns: project.columns.slice(0, MAX_TEMPLATE_COLUMNS),
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),
       hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name),
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),

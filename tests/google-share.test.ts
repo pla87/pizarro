@@ -68,3 +68,27 @@ test("shareStatusOf: nada que compartir o todo fallido = no compartido; algún f
   assert.equal(shareStatusOf(3, 1), "PARTIAL");
   assert.equal(shareStatusOf(3, 0), "SHARED");
 });
+
+test("compartir con los miembros: los permisos de Drive se piden de 5 en 5, no todos a la vez", async () => {
+  const { shareFile } = await import("../src/lib/google");
+  const realFetch = globalThis.fetch;
+  let active = 0;
+  let peak = 0;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    peak = Math.max(peak, ++active);
+    await new Promise((r) => setTimeout(r, 5));
+    active--;
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  try {
+    const emails = Array.from({ length: 12 }, (_, i) => `p${i}@example.com`);
+    const out = await shareFile("token", "file1", { type: "users", emails }, "writer");
+    assert.equal(calls, 12);
+    assert.equal(peak, 5);
+    assert.equal(out.failed, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

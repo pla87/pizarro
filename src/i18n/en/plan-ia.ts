@@ -43,8 +43,6 @@ export const planIa: Record<string, string> = {
   "{title} (no está en este plan)": "{title} (not in this plan)",
   "Enlace": "Link",
   "Documentos": "Documents",
-  "Tarea fija: entra en todos los planes.": "Fixed task: it goes into every plan.",
-  "Checklist (criterios de aceptación)": "Checklist (acceptance criteria)",
 
   // Plantillas (Mi perfil y Ajustes del proyecto)
   "Plantillas del plan de trabajo para IA": "AI work plan templates",
@@ -66,8 +64,8 @@ export const planIa: Record<string, string> = {
   // Límite de tareas de un plan
   "Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.": "A work plan holds at most 500 tasks: remove some from the selection.",
   // Adjuntos del plan (ZIP «adjuntos/…», rutas en el texto)
-  "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.":
-    "{n} file(s) in the “attachments/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own.",
+  "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.":
+    "{n} file(s) in the “attachments/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own and the images in the descriptions point to it. Images are in WebP.",
   "ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas": "“attachments/…” ZIP with the attachments of the plan's tasks: the text cites their paths",
   // Botones de columnas especiales sin tarjetas con lo que necesitan
   "Ninguna tarjeta tiene fecha límite": "No card has a due date",
@@ -77,4 +75,6 @@ export const planIa: Record<string, string> = {
     "This plan has no attachments ZIP: each task only cites the names of its own (ask for them if you need them), even if the instructions mention a ZIP.",
   "Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo cita sus nombres.": "A plan holds at most 200 tasks with attachments in the ZIP: the text only cites their names.",
   "Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta.": "Attachments are not saved with the plan: they go in the “Download attachments” ZIP and the text cites their path.",
+  // Plan más corto: rótulo de las subtareas de cada tarea
+  "Checklist": "Checklist",
 };

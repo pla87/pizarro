@@ -158,6 +158,9 @@ async function accessToken(userId: string): Promise<string> {
   return tokens.access_token;
 }
 
+/** Permisos de Drive que se piden a la vez al compartir un archivo con los miembros del proyecto. */
+const SHARE_BATCH = 5;
+
 /** Con quién se comparte el archivo: todo el dominio del Workspace o solo unas personas (proyectos privados). */
 type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
 
@@ -199,11 +202,12 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
  * desde la tarjeta, se comparte con el dominio de Workspace (GOOGLE_WORKSPACE_DOMAIN) o solo con los emails de los
  * miembros del proyecto, según el modo del proyecto. Devuelve cuántos permisos se crearon y cuántos fallaron.
  */
-async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string): Promise<ShareOutcome> {
+export async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string): Promise<ShareOutcome> {
   const bodies = sharePermissionBodies(target, { domain: googleWorkspaceDomain(), role });
   let failed = 0;
-  // En paralelo: con muchos miembros, uno detrás de otro podía tardar más de un minuto.
-  await Promise.all(bodies.map(async (body) => {
+  // En tandas de SHARE_BATCH: uno detrás de otro podía tardar más de un minuto con muchos miembros, y todos a la vez
+  // hacían que Drive respondiera `userRateLimitExceeded` y dejara a varias personas sin acceso.
+  const share = async (body: (typeof bodies)[number]) => {
     const res = await fetch(`${DRIVE_FILES_URL}/${encodeURIComponent(fileId)}/permissions?sendNotificationEmail=false&supportsAllDrives=true`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -217,7 +221,8 @@ async function shareFile(token: string, fileId: string, target: DriveShareTarget
       console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status);
       logEvent({ level: "warn", category: "google", action: "google.shareFailed", label: { k: "No se pudo compartir el archivo {what} (HTTP {status})", p: { what: logText(what), status: res?.status ?? logText("sin respuesta") } }, details: { fileId, status: res?.status ?? null } });
     }
-  }));
+  };
+  for (let i = 0; i < bodies.length; i += SHARE_BATCH) await Promise.all(bodies.slice(i, i + SHARE_BATCH).map(share));
   return { status: shareStatusOf(bodies.length, failed), failed };
 }
 

@@ -1,6 +1,7 @@
 // Calendario: cálculos puros (sin BD ni React) para la cuadrícula mensual, las bandas de entregables
 // y la agrupación por semanas de la vista móvil.
 import { addDaysIso, daysBetween, isoWeekday } from "./dates";
+import { isRowId } from "./row-id";
 import type { Locale } from "../i18n/shared";
 
 /** Mes en formato YYYY-MM. */
@@ -217,8 +218,8 @@ export const MAX_PERSON_FILTER = 50;
 
 /**
  * Valor de `?person=`: lista separada por comas de ids de usuario y/o «unassigned». Acepta los valores antiguos:
- * `me` (el usuario actual) y `none` (sin asignar). Sin duplicados y con tope; lo vacío se descarta.
- * Los ids no se validan aquí (eso es cosa del servidor, contra los usuarios visibles).
+ * `me` (el usuario actual) y `none` (sin asignar). Sin duplicados y con tope; lo vacío y lo que no tiene forma de id
+ * (`isRowId`: el carácter nulo rompía la consulta) se descartan. Que existan y se vean lo comprueba el servidor.
  */
 export function parsePersonParam(raw: string | undefined | null, meId: string, max: number = MAX_PERSON_FILTER): string[] {
   const out: string[] = [];
@@ -226,8 +227,17 @@ export function parsePersonParam(raw: string | undefined | null, meId: string, m
     const x = part.trim();
     if (!x) continue;
     const v = x === "me" ? meId : x === "none" ? PERSON_UNASSIGNED : x;
+    if (!isRowId(v)) continue;
     if (!out.includes(v)) out.push(v);
     if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * Valor de `?project=`: ids de proyecto separados por comas (o uno solo, como antes). Sin duplicados y con tope; lo
+ * vacío y lo que no tiene forma de id se descartan. Que existan y se vean lo comprueba el servidor.
+ */
+export function parseProjectParam(raw: string | undefined | null, max: number): string[] {
+  return [...new Set((raw ?? "").split(",").map((x) => x.trim()).filter(isRowId))].slice(0, max);
 }

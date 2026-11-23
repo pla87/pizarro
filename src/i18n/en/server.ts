@@ -297,7 +297,7 @@ export const server: Record<string, string> = {
   "Cambió el destino de la siguiente aparición de la columna «{name}»": "Changed the next occurrence destination of column “{name}”",
   "Máximo 20 plantillas de este tipo en el proyecto.": "Maximum 20 templates of this type in the project.",
   "Máximo 50 subtareas por tipo.": "Maximum 50 subtasks per type.",
-  "Máximo 20 columnas.": "Maximum 20 columns.",
+  "Máximo 30 columnas.": "Maximum 30 columns.",
   "Máximo 30 tipos propios.": "Maximum 30 custom types.",
   "Máximo 50 etiquetas.": "Maximum 50 labels.",
   "Máximo 20 plantillas de release de cada tipo.": "Maximum 20 release templates of each type.",

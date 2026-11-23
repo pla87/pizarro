@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, outsideGrid, pendingBandDrag, visibleBands, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
+import { bandsForWeek, calendarWeekStart, columnAt, dragRange, isRange, outsideGrid, pendingBandDrag, visibleBands, rangeBandsForWeek, groupByDay, groupWeeks, monthGrid, parseMonth, parsePersonParam, parseProjectParam, shiftMonth, weekRangeEnds } from "../src/lib/calendar";
 import { deliverableStatus } from "../src/lib/report";
 import { midnightStep, msUntilNextDay } from "../src/lib/dates";
 import { readFileSync } from "node:fs";
@@ -140,6 +140,13 @@ test("parsePersonParam: varias personas, sin asignar, duplicados y tope", () => 
   const many = Array.from({ length: 80 }, (_, i) => `u${i}`).join(",");
   assert.equal(parsePersonParam(many, "me1").length, 50);
   assert.equal(parsePersonParam(many, "me1", 3).length, 3);
+});
+
+test("parsePersonParam y parseProjectParam: los ids mal formados (el carácter nulo) se descartan antes de consultar", () => {
+  assert.deepEqual(parsePersonParam("a\u0000b,me,x.y," + "z".repeat(41) + ",u1", "me1"), ["me1", "u1"]);
+  assert.deepEqual(parseProjectParam(" p1 ,a\u0000b,p1,a'b,p2,", 50), ["p1", "p2"]);
+  assert.deepEqual(parseProjectParam("p1,p2,p3", 2), ["p1", "p2"]);
+  assert.deepEqual(parseProjectParam(undefined, 50), []);
 });
 
 test("parsePersonParam: enlaces antiguos (me, none, un id)", () => {

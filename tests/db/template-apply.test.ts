@@ -116,9 +116,9 @@ test("cambiar de plantilla: empareja, mueve las tareas (archivadas incluidas), c
   const ownKind = await db.taskKind.findUniqueOrThrow({ where: { id: f.kindId } });
   const before = await state(f.project.id);
   const tpl = await makeTemplate();
-  // Un proyecto privado lo gestiona su miembro; las plantillas propias son solo de administradores.
+  // Un proyecto privado lo gestiona su miembro, que también puede usar las plantillas propias.
   await loginAs(owner);
-  expectFail(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id }), /Solo los administradores pueden usar las plantillas propias/);
+  assert.equal(expectOk(await previewTemplateChange(f.project.id, { source: "template", id: tpl.id })).template.columns.length, TEMPLATE.columns.length);
   const admin = await makeUser({ role: "ADMIN" });
   await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
   await loginAs(admin);
@@ -230,12 +230,13 @@ test("permisos: solo quien gestiona el proyecto; los miembros de un proyecto de 
   const list = expectOk(await listApplicableTemplates(f.project.id));
   assert.ok(list.some((x) => x.group === "general" && x.ref.id === home.id));
   assert.ok(list.some((x) => x.group === "installation" && x.ref.source === "template" && x.ref.id === tpl.id));
-  // Quien gestiona su proyecto privado sin ser administrador ve y aplica las de serie, pero no las propias.
+  // Quien gestiona su proyecto privado sin ser administrador ve y aplica las de serie y también las propias.
   const { owner, f: own } = await setup();
   await loginAs(owner);
   const mine = expectOk(await listApplicableTemplates(own.project.id));
-  assert.ok(mine.some((x) => x.ref.id === home.id) && mine.every((x) => x.group === "general"));
-  expectFail(await applyTemplateChange(own.project.id, { source: "template", id: tpl.id }, "ADD"), /Solo los administradores/);
+  assert.ok(mine.some((x) => x.group === "general" && x.ref.id === home.id));
+  assert.ok(mine.some((x) => x.group === "installation" && x.ref.id === tpl.id));
+  expectOk(await applyTemplateChange(own.project.id, { source: "template", id: tpl.id }, "ADD"));
 });
 
 test("el deshacer caduca a las 24 horas", async () => {

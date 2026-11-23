@@ -4,6 +4,7 @@
 // Sin enlaces a Pizarro (a la tarea, al proyecto, a los adjuntos ni los de las descripciones): la IA no puede abrirlos
 // (piden la sesión iniciada). Los adjuntos se citan por su ruta en el ZIP que va con el plan, o por su nombre.
 
+import { BARE_MARKER, BOLD_LABEL } from "./kinds-special";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { plainAttachmentFileNames, releaseTemplateText } from "./release";
@@ -32,8 +33,6 @@ export interface AiPlanTask {
    * `attachments/…` en un plan en inglés; ver planAttachmentPaths).
    */
   attachments?: { id?: string; name: string; path?: string }[];
-  /** Tarea fija («Siempre en el plan»): entra en todos los planes. */
-  evergreen?: boolean;
   /** Tarea que bloquea a esta (si está en el plan, `index` es su número en él, desde 1). */
   blockedBy?: { title: string; index?: number | null } | null;
 }
@@ -96,7 +95,12 @@ export function planAttachmentPaths(tasks: { id: string; title: string; attachme
   return { byTask, byAttachment };
 }
 
-/** Plantillas de serie del plan (cuando ni la persona ni el proyecto tienen ninguna): pensadas para Claude Code. */
+/**
+ * Plantillas de serie del plan (cuando ni la persona ni el proyecto tienen ninguna): pensadas para Claude Code. No se
+ * guardan en la base de datos (una cabecera o un pie propio nuevo parte de este texto y desde ahí es suyo): cambiar
+ * este texto cambia los planes nuevos que usan la de serie, no las propias. Los adjuntos los explica el contexto del plan,
+ * solo cuando los hay.
+ */
 export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header: string; footerName: string; footer: string }> = {
   es: {
     headerName: "Claude Code (de serie)",
@@ -111,7 +115,6 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Haz cambios pequeños y fáciles de revisar, con el estilo y las convenciones que ya tiene el código.",
       "- Añade o actualiza las pruebas de lo que cambies y ejecútalas antes de dar una tarea por terminada.",
       "- No hagas nada irreversible (borrar datos, migraciones destructivas, desplegar o publicar) sin confirmación.",
-      "- Los adjuntos de las tareas (planos, capturas, documentos) van en el ZIP «adjuntos/…» que acompaña a este plan: descomprímelo junto a este fichero. Cada tarea cita la ruta de los suyos (p. ej. `adjuntos/03-titulo-de-la-tarea/plano.webp`) y las imágenes de las descripciones apuntan a esa misma ruta. Las imágenes van convertidas a WebP.",
     ].join("\n"),
     footerName: "Entrega (de serie)",
     footer: [
@@ -140,7 +143,6 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
       "- Make small changes that are easy to review, following the style and conventions the code already has.",
       "- Add or update tests for what you change and run them before you consider a task done.",
       "- Do nothing irreversible (deleting data, destructive migrations, deploying or publishing) without confirmation.",
-      "- The tasks' attachments (drawings, screenshots, documents) come in the \"attachments/…\" ZIP that goes with this plan: unzip it next to this file. Each task cites the path of its own (e.g. `attachments/03-task-title/drawing.webp`) and the images in the descriptions point to that same path. Images are converted to WebP.",
     ].join("\n"),
     footerName: "Delivery (built-in)",
     footer: [
@@ -226,13 +228,55 @@ function withoutAppLinks(line: string, origin: string | null | undefined, paths:
   });
 }
 
+/** Etiqueta de formulario sola en su línea («**Por qué:**» o «**Por qué**:»), como las de los tipos. */
+const FORM_LABEL_ONLY = /^\*\*[^*\n]+(?::\*\*|\*\*:)$/;
+
+/**
+ * Sin los apartados del formulario del tipo que siguen sin responder: una línea que es solo una etiqueta en negrita
+ * («**Por qué:**») y lo que tenga debajo hasta la siguiente etiqueta, si son solo líneas en blanco o viñetas y casillas
+ * vacías (el criterio de `switchKindDescription`). No dicen nada a la IA, que además no sabe si debe rellenarlos. Los
+ * apartados con algo escrito (también en la misma línea: «**Riesgo:** sin cambios…») se quedan, y dentro de un bloque
+ * de código no se toca nada.
+ */
+function withoutEmptyFormSections(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  let fence: string | null = null;
+  /** Dónde empieza en `out` el apartado sin respuesta en curso (su etiqueta). */
+  let pending: number | null = null;
+  for (const raw of lines) {
+    const l = raw.trim();
+    if (fence) {
+      const close = FENCE_CLOSE.exec(raw)?.[1];
+      if (close && close[0] === fence[0] && close.length >= fence.length) fence = null;
+      out.push(raw);
+      continue;
+    }
+    if (pending !== null) {
+      if (!l || BARE_MARKER.test(l)) {
+        out.push(raw);
+        continue;
+      }
+      // La siguiente etiqueta cierra el apartado vacío (se quita); cualquier otra cosa es su respuesta.
+      if (BOLD_LABEL.test(l)) out.length = pending;
+      pending = null;
+    }
+    const open = FENCE_OPEN.exec(raw);
+    if (open && !(open[1]![0] === "`" && open[2]!.includes("`"))) fence = open[1]!;
+    else if (FORM_LABEL_ONLY.test(l)) pending = out.length;
+    out.push(raw);
+  }
+  if (pending !== null) out.length = pending;
+  return out;
+}
+
 /**
  * Descripción de una tarea tal como entra en el plan: menciones en texto plano, entidades decodificadas (descripciones
  * antiguas con `&gt;`), sin enlaces a Pizarro (withoutAppLinks) y títulos rebajados tres niveles (bajo el «### n. Tarea» del plan),
  * también los setext («Texto» subrayado con === o ---), que pasan a «####». Dentro de los bloques de código no se toca
  * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Por lo mismo,
  * una línea que abriría un bloque HTML sin fin (`<!-- nota`, `<pre`, `<script`…) empieza con «\<». Sin líneas en blanco
- * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan.
+ * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan. Sin los
+ * apartados del formulario del tipo que siguen vacíos (withoutEmptyFormSections).
  */
 export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   const text = decodeEntities(mentionsToPlain(description ?? ""));
@@ -241,7 +285,7 @@ export function planDescription(description: string | null | undefined, origin?:
   let fence: string | null = null;
   /** Líneas seguidas de texto normal al final de `out` (las que un subrayado setext convertiría en título). */
   let paragraph = 0;
-  for (const raw of text.split(/\r\n|\r|\n/)) {
+  for (const raw of withoutEmptyFormSections(text.split(/\r\n|\r|\n/))) {
     const blank = raw.trim() === "";
     if (fence) {
       const close = FENCE_CLOSE.exec(raw)?.[1];
@@ -305,13 +349,13 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
     if (task.attachments.some((a) => a.path)) facts.push(`- **${t("Adjuntos")}:**`, ...task.attachments.map((a) => `  - ${a.path ? `\`${a.path}\`` : fileName(a.name)}`));
     else fact(t("Adjuntos"), task.attachments.map((a) => fileName(a.name)).join(", "));
   }
-  if (task.evergreen) facts.push(`- _${t("Tarea fija: entra en todos los planes.")}_`);
   const parts = [`### ${index}. ${oneLine(task.title)}`];
   if (facts.length) parts.push(facts.join("\n"));
   const description = planDescription(task.description, origin, paths);
-  if (description) parts.push(`**${t("Descripción")}:**`, description);
+  // La descripción va sin rótulo (sigue a los datos) y la checklist sin «criterios de aceptación» (lo dice la cabecera).
+  if (description) parts.push(description);
   if (task.subtasks?.length) {
-    parts.push(`**${t("Checklist (criterios de aceptación)")}:**`, task.subtasks.map((s) => `- [${s.done ? "x" : " "}] ${oneLine(s.title)}`).join("\n"));
+    parts.push(`**${t("Checklist")}:**`, task.subtasks.map((s) => `- [${s.done ? "x" : " "}] ${oneLine(s.title)}`).join("\n"));
   }
   return parts.join("\n\n");
 }
@@ -322,8 +366,9 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
  */
 export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   const zipped = input.tasks.flatMap((x) => x.attachments ?? []).filter((a) => a.path);
-  // Con adjuntos pero sin ZIP (más de 200 tareas con adjuntos) la cabecera de serie sigue hablando de un ZIP: no se toca (así
-  // se puede cambiar de plantilla en el texto ya editado, swapTemplateBlock) y la línea del contexto lo desmiente.
+  // Con adjuntos pero sin ZIP (más de 200 tareas con adjuntos), una cabecera propia copiada de la de serie de antes puede
+  // hablar de un ZIP: no se toca (así se puede cambiar de plantilla en el texto ya editado, swapTemplateBlock) y la línea
+  // del contexto lo desmiente. Con ZIP, la línea del contexto es la que explica cómo usarlo.
   const namesOnly = !zipped.length && input.tasks.some((x) => x.attachments?.length);
   const header = releaseTemplateText(input.header);
   const footer = releaseTemplateText(input.footer);
@@ -334,7 +379,7 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   context.push(`- **${t("Fecha")}:** ${input.date}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
   if (namesOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.")}`);
-  if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos.", { n: zipped.length })}`);
+  if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", description);
   const pathById = new Map(zipped.filter((a) => a.id).map((a) => [a.id!, a.path!]));

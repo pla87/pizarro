@@ -1,6 +1,6 @@
 import { listVisibleProjects, projectUsersWhere, visibleProjectsWhere, workingProjectsWhere } from "@/lib/access";
 import { appTimeZone } from "@/lib/board";
-import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, calendarWeekStart, monthGrid, parseMonth, parsePersonParam } from "@/lib/calendar";
+import { BAND_DAYS, MAX_PERSON_FILTER, PERSON_UNASSIGNED, calendarWeekStart, monthGrid, parseMonth, parsePersonParam, parseProjectParam } from "@/lib/calendar";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { deliverableProgressByIds } from "@/lib/deliverable-progress-db";
@@ -44,7 +44,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
   // `?project=a,b,c` (o un solo id, como antes). Los ids de la URL no se fían: solo valen los proyectos visibles;
   // sin ninguno válido equivale a «todos». Las dos consultas no dependen una de otra: en paralelo.
-  const requested = [...new Set(one(sp.project).split(",").map((x) => x.trim()).filter(Boolean))].slice(0, MAX_PROJECT_FILTER);
+  const requested = parseProjectParam(one(sp.project), MAX_PROJECT_FILTER);
   const [projects, picked] = await Promise.all([
     listVisibleProjects(user),
     requested.length ? db.project.findMany({ where: { ...visibleProjectsWhere(user), id: { in: requested } }, select: { id: true, name: true, isPrivate: true } }) : Promise.resolve([]),

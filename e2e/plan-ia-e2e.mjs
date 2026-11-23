@@ -169,8 +169,10 @@ if (only.includes("plan")) {
     "Tienda en línea con Next.js.", "- **Tareas:** 3", "### 1. Arreglar el login r51", "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Backend",
     "- **Fecha límite:** 2026-12-31", "- **Adjuntos:**\n  - `adjuntos/01-arreglar-el-login-r51/error.log`\n",
     "#### Pasos", "- [x] Reproducir", "- [ ] Corregir y probar", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1 («Arreglar el login r51»)",
-    "### 3. Revisar estilo r51", "- _Tarea fija: entra en todos los planes._", "## Entrega",
+    "### 3. Revisar estilo r51", "## Entrega",
   ]) L.check(`PLAN: el texto incluye «${piece.slice(0, 70)}»`, text.includes(piece), text.slice(0, 200));
+  // Más corto: sin «Tarea fija…» (es cosa de Pizarro), sin el rótulo «Descripción:» y la checklist sin «(criterios de aceptación)».
+  L.check("PLAN: sin rótulos que la IA no necesita", !text.includes("Tarea fija") && !text.includes("**Descripción:**") && !text.includes("criterios de aceptación):") && text.includes("**Checklist:**"), text);
   L.check("PLAN: la fija que no toca no entra", !text.includes("Actualizar dependencias r51"));
   L.check("PLAN: sin enlaces a Pizarro (ni a la tarea, ni al proyecto, ni a los adjuntos): la IA no puede abrirlos", !text.includes(L.BASE) && !text.includes("Tarea en Pizarro") && !text.includes("en Pizarro]"), text);
   L.check("PLAN: las tareas en el orden de la columna", text.indexOf("### 1.") < text.indexOf("### 2.") && text.indexOf("### 2.") < text.indexOf("### 3."));
@@ -492,7 +494,7 @@ if (only.includes("en")) {
     await page.screenshot({ path: `${SHOTS}/r51-en-paso1.png` });
     await toStep2(dlg, 3, true);
     const text = await planText(dlg);
-    for (const piece of ["# Work plan – Web r51", "## Instructions for the AI", "## Project context", "- **Type:** Bug fix", "- **Due date:** 2026-12-31", "**Checklist (acceptance criteria):**", "- **Depends on:** task 1", "## Delivery"]) {
+    for (const piece of ["# Work plan – Web r51", "## Instructions for the AI", "## Project context", "- **Type:** Bug fix", "- **Due date:** 2026-12-31", "**Checklist:**", "- **Depends on:** task 1", "## Delivery"]) {
       L.check(`EN: el texto incluye «${piece}»`, text.includes(piece), text.slice(0, 200));
     }
     const today = await appToday(page);

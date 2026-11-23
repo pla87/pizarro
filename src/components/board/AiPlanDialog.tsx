@@ -164,7 +164,6 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
         linkUrl: x.linkUrl,
         links: d?.links ?? [],
         attachments: (d?.attachments ?? []).map((a) => ({ id: a.id, name: a.originalName, path: zipOk ? paths.byAttachment.get(a.id) : undefined })),
-        evergreen: x.evergreen,
         blockedBy: x.blockedBy ? { title: x.blockedBy.title, index: index.get(x.blockedBy.id) ?? null } : null,
       };
     });

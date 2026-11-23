@@ -8,7 +8,7 @@
 // Todas las tarjetas de muestra llevan la etiqueta EXAMPLE_LABEL para poder encontrarlas y borrarlas juntas.
 import { canonicalTemplate } from "./builtin-templates";
 import { canonicalTemplateEn } from "./builtin-templates-en";
-import { MAX_DESCRIPTION, MAX_TITLE } from "./constants";
+import { MAX_DESCRIPTION, MAX_LABELS_PER_PROJECT, MAX_TITLE } from "./constants";
 import type { TemplateData } from "./project-templates";
 import type { TaskFieldKey } from "./task-fields";
 
@@ -395,7 +395,9 @@ export function resolveExamples(key: string, template: TemplateData, userLocale:
   if (!canonical) return null;
   const label = EXAMPLE_LABEL[locale];
   const hasLabel = template.labels.some((l) => l.name.trim().toLowerCase() === label.name.toLowerCase());
-  return { content: examples[locale], canonical, exampleLabel: label.name, template: hasLabel ? template : { ...template, labels: [...template.labels, label] } };
+  // Con la plantilla ya en el máximo de etiquetas de un proyecto no se añade: las tarjetas de muestra salen sin ella.
+  const keep = hasLabel || template.labels.length >= MAX_LABELS_PER_PROJECT;
+  return { content: examples[locale], canonical, exampleLabel: label.name, template: keep ? template : { ...template, labels: [...template.labels, label] } };
 }
 
 const FIELD_OF_TASK: Record<string, TaskFieldKey> = { priority: "priority", cost: "cost", estimatedHours: "hours", client: "client", startInDays: "startDate" };
