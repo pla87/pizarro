@@ -28,7 +28,20 @@ antes de empezar. No contiene datos personales: el repositorio es público y deb
      principal o se deja para el VPS.
    - Las rondas grandes llenan la memoria (15 GB, 4 CPU): no más de 4–5 agentes a la vez y, salvo encargo expreso, que no
      compilen ni pasen e2e (lo hace la sesión principal al final, con la build de producción).
+   - Rondas 62 y 63: el contenedor puede reiniciarse a mitad de ronda (se pierden los procesos, no los ficheros): al
+     volver, `pg_ctlcluster 16 main start` y recoger el informe final de los agentes que terminaron de sus ficheros de
+     salida. Los agentes tampoco pueden descargar binarios (Caddy): el `Caddyfile` lo valida el job «Caddyfile» de CI.
+   - La PR se fusiona aplastada (squash): después, la rama remota de trabajo conserva la historia vieja. Al empezar la
+     ronda siguiente, `git checkout -B <rama> origin/main` y `git push --force-with-lease` (solo contiene lo ya fusionado);
+     y borra los worktrees de la ronda anterior (`git worktree remove --force` + `git branch -D`), que ya están en `main`.
+   - Publicar desde la sesión: PR con las herramientas de GitHub, esperar sus dos comprobaciones (tipos/lint/pruebas y
+     «Caddyfile»), fusionar aplastando, lanzar *Release* con `actions_run_trigger` (`release.yml`, ref `main`) y comprobar
+     que `origin/stable` y la etiqueta `vX.Y.Z` apuntan al commit fusionado (unos 6 min).
+   - `tests/report-render.test.ts` («sin memoria…») falla a veces con la CPU cargada por varios agentes; sola, y con
+     `NODE_OPTIONS=--use-openssl-ca`, pasa.
 8. Prompts para Claude in Chrome pendientes: `docs/PRUEBAS-CHROME.md` (se actualizan al cerrar cada ronda).
+9. Las capturas, los informes de Claude in Chrome y las auditorías pueden traer el dominio real de la instalación del
+   propietario y su email: nunca se copian a ficheros, briefs ni commits (el grep de privacidad antes de cada fusión).
 
 ## 1. Qué es Pizarro
 
@@ -417,6 +430,21 @@ Guardas que conviene conocer:
   - Cambiar de tipo: `switchKindDescription` (`kinds-special.ts`) lee el formulario por apartados (`formBlocks`): solo las
     etiquetas en negrita son anclas. `tests/kinds-special.test.ts` fija los casos raros.
 
+- Ronda 63:
+  - Columna «Asignación a persona» (`src/lib/column-assign*.ts`): una columna con `assigneeId` (o `assignDueDays`) y rol
+    `NONE`. La regla al entrar una tarjeta está en un solo sitio (`columnAssignment`/`assignOnEnter`/`finishAssignOnEnter`)
+    y usa la columna que devuelve `assertColumnRoom` (`column-capacity.ts`), leída con el candado: **una vía nueva por la
+    que una tarea entre en una columna debe pasar por ahí** (crear, mover, importar, duplicar, recuperar, repeticiones,
+    aplicar plantilla). Con columnas normales no gasta consultas (`tests/db/assign-column.test.ts` lo cuenta).
+  - Logs: **todo `logEvent` lleva `label`** (plantilla `{k, p}` traducible; `logText`/`logError` para motivos y errores) y
+    las filas escritas a mano llevan `LOG_LABEL_KEY`; `tests/log-message.test.ts` falla si no (excepción con el comentario
+    `// log-sin-plantilla: motivo`). Listas con `andList` (`undo-label.ts`).
+  - Ids de la URL: `isRowId` (`src/lib/row-id.ts`, sin zod) antes de tocar la base; mal formados → 404.
+  - Copia diaria: `estimateDumpBytes` + `assertDiskRoom` antes de volcar; nombres únicos con `freshBackupName`; `S3Destination.put`
+    da por subido un objeto que ya existe con su tamaño cuando el bloqueo de R2 rechaza el reintento.
+  - Memoria: nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el `resourceLimits` del worker de PDF): ni en Compose ni
+    en `render.yaml`; Node ajusta su montón al límite del contenedor.
+
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
 llevan enlaces de sesión ni nombres de modelos.
@@ -571,35 +599,35 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Estado al cerrar la ronda 62:** v1.66.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-`FEEDBACK_EMAIL` = `feedback@getpizarro.com` (`src/lib/product.ts`): la dirección debe existir y reenviar al buzón del
-propietario (prompt 1 de `PRUEBAS-CHROME.md`); si no, los informes de las instalaciones con email rebotan. `railway.json` se
-retiró (Railway dejó de leer «Config as Code» el 1-12-2026): la comprobación de salud se pone en el panel de cada servicio
-(prompt 3). El `Caddyfile` ya no necesita VPS: lo valida el job «Caddyfile» del workflow «Comprobaciones» en cada PR.
-Pendiente del propietario: crear la dirección de feedback, la regla de R2 de `pizarro/files/` (prompt 2) y la comprobación
-de salud en sus dos Railway (prompt 3).
+**Estado al cerrar la ronda 63:** v1.67.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Hecho por el propietario con Claude in Chrome en la ronda 63: `feedback@getpizarro.com` con Cloudflare Email Routing
+(reenvía a su buzón; probado), regla de bloqueo de R2 `adjuntos-pizarro` (`pizarro/files/`, 180 días) además de
+`copias-pizarro` (`pizarro/pizarro-backup-`, 31 días), y comprobación de salud en sus dos Railway (`/api/health`, 600 s).
+Pendiente: los prompts 1–3 de `PRUEBAS-CHROME.md` (pruebas en real de la v1.67.0, DMARC si lo aprueba, auditoría).
 
-**Preguntas abiertas al propietario (tras la v1.66.0)**, con la numeración del informe final de la ronda 62 (entre
+**Preguntas abiertas al propietario (tras la v1.67.0)**, con la numeración del informe final de la ronda 63 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Comprobar el espacio libre antes de la copia diaria (con el margen común) para que una copia que no cabe no llene el
-   disco y tumbe las subidas; hoy solo se traduce el error de disco lleno. (SÍ)
-2. Contraste del acento «mostaza»: el texto secundario queda en 3,99:1; oscurecerlo (p. ej. `#7a6f4a`). (SÍ)
-3. Importar un `.pizarro.zip` falla entero si la cola de imágenes está llena en ese momento: que espere turno. (SÍ, en la
-   próxima ronda)
-4. Aviso de versión nueva y ayuda de copias externas en Render/Fly.io: hoy hablan de `get.sh`/`docker compose pull`
-   (`UpdateNotice`, `runsOnRailway`). (SÍ, en la próxima ronda)
-5. Pasar poco a poco a plantilla traducible el resto de mensajes de Logs (unas 75 llamadas con texto libre). (SÍ, al tocar
-   cada una)
-6. Botón «+» de cada columna con un tipo por defecto de esa columna («Lista de la compra» → Compras). (Más adelante)
-7. Títulos automáticos de las plantillas con un mismo patrón («Obra:», «Cita:» frente a «Comprar», «Gestionar»). (Lo
-   decide el propietario: son sus plantillas)
-8. Explicar los códigos de release (R1F1, R1C1) con un texto al pasar el ratón en Releases y en las tarjetas. (SÍ, pequeño)
-9. Un solo modo de guardado en el detalle (hoy, tipo y título al momento; descripción y el resto con «Guardar»). (NO por
-   ahora)
-10. Respuesta escrita justo tras una etiqueta en negrita de la plantilla: TipTap la deja también en negrita. (NO)
-11. Si hay un destino externo válido y otro mal configurado, la tarea sale «Correcta» (el aviso sale en «Destino
-    externo»). (Dejarlo así)
+1. Retirar los roles de columna más flojos: *Agenda* (solo descarga un .ics de la columna; la suscripción del calendario
+   ya lo cubre) y *Entrega al cliente* (un PDF básico que ninguna plantilla usa). En dos versiones: primero dejar de
+   ofrecerlos y convertir las columnas a «Sin rol», y quitar el valor del enum una versión después. (SÍ)
+2. A medio plazo, un solo «PDF de plan» para *Planificación semanal* y *Asignación a persona* (agrupado por día, por
+   persona o por vencimiento). (Más adelante)
+3. *Revisión con requisitos* (y quizá *Rutinas*) como opciones del menú de la columna, combinables con un rol. (Más
+   adelante)
+4. «Generar plan» de una columna de asignación: incluir también las tarjetas de otras personas (hoy solo las cuenta). (NO)
+5. Registro DMARC de getpizarro.com con `p=none` (prompt 2 de `PRUEBAS-CHROME.md`). (SÍ)
+6. Retirar la acción `listTemplates` (`src/actions/templates.ts`), que ya no usa la app (solo pruebas). (SÍ)
+7. Las subtareas de los tipos de *Vibecoding* («Pedir el cambio a la IA», «Revisar el diff», «Probarlo en local») son
+   pasos de la persona y llegan al plan para IA como criterios de aceptación: reescribirlas. (Lo decide el propietario:
+   son sus plantillas; recomendación SÍ)
+8. Margen de disco menor para la copia diaria (100 MB en vez del 1 GB común): la retención libera lo que escribe. (SÍ)
+9. Tipo por defecto en el «+» de cada columna: un ajuste opcional «Tipo por defecto» en el menú de la columna; sin él,
+   el último usado (respuesta a «¿en base a qué?»). (SÍ, pequeño)
+10. Suite e2e de la columna «Asignación a persona» (hoy la cubren pruebas unitarias y de base y la caza en navegador).
+    (SÍ, próxima ronda)
+11. Traducir los errores sueltos de copias y configuración que aún salen en español dentro de Logs en inglés («BACKUP_KEY
+    no está configurada.»…). (SÍ, pequeño)
 12. Probar en un iPad real el arrastre de franjas del Calendario. (Más adelante, decisión de la ronda 62)
 
 Límites conocidos (no se cambian): un administrador puede saber si existe un tipo con cierto nombre en otro proyecto (los
@@ -610,6 +638,16 @@ Menores sin numerar de antes (recomendación NO salvo que se note): «Guardar de
 simultáneo; `INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro; «Esta semana» de domingo a sábado en
 inglés; búsquedas de releases de 1–2 caracteres sin índice; `socketTimeout` del SMTP; log de errores de Caddy; código
 propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores.
+
+**Decisiones de la ronda 63 (ya aplicadas):** columna «Asignación a persona» con dos campos en `Column` (`assigneeId`,
+`assignDueDays`, rol `NONE`; sin valor nuevo de enum para poder volver a la v1.66) y «Generar plan» en PDF; plantillas
+propias usables por cualquiera (crear y editar, solo administradores); comprobación de espacio de la copia diaria (solo el
+volcado y solo con copia anterior o un intento fallido por disco lleno); importar `.pizarro.zip` espera turno en la cola de
+imágenes; Compose sin `NODE_OPTIONS` (`APP_HEAP_MB` en desuso, avisos en el diagnóstico); todos los `logEvent` con
+plantilla traducible (prueba guardiana `tests/log-message.test.ts`); mostaza legible; avisos de actualización y de copias
+por plataforma (`setupCodeSource`); códigos de release explicados; plan para IA un 23 % más corto; guardado automático del
+detalle, no (ya avisa al cerrar con cambios y guarda borradores); negrita tras la etiqueta de plantilla, no; destino de
+copia válido + otro mal configurado sigue «Correcta».
 
 **Decisiones de la ronda 62 (ya aplicadas):** `FEEDBACK_EMAIL` = feedback@getpizarro.com con «Enviar por email» (mailto)
 cuando la instalación no envía emails y GitHub como alternativa; guías de Render y Fly.io (`render.yaml`, `deploy/fly.toml`);
