@@ -12,6 +12,7 @@ import {
   isoDate,
   releaseFileName,
   releaseZipName,
+  splitReleaseCode,
   swapTemplateBlock,
   titleWithReleaseCode,
   zonedDayRange,
@@ -325,4 +326,13 @@ test("nombres de adjuntos: sin puntos ni espacios al final (Windows los quita: �
   const names = plainAttachmentFileNames(["informe.", "informe", "notas..", "notas", "..."].map((originalName) => ({ originalName, isImage: false })));
   assert.deepEqual(names, ["informe", "informe-2", "notas", "notas-2", "adjunto"]);
   for (const n of names) assert.ok(!/[. ]$/.test(n), n);
+});
+
+test("splitReleaseCode: el código del principio del título, para explicarlo en la tarjeta", () => {
+  const code = titleWithReleaseCode("Respuesta", "R32FU12");
+  assert.deepEqual(splitReleaseCode(code), { code: "R32FU12", release: 32, letters: "FU", order: 12, rest: ": Respuesta" });
+  // Con dos códigos, el primero (el de la última release).
+  assert.equal(splitReleaseCode("R5F1: R3F2: Respuesta")?.code, "R5F1");
+  // Sin «: » detrás, o sin el formato R + número + letras + número, no es un código.
+  for (const title of ["R3F1 sin dos puntos", "Revisar F1: algo", "R3: algo", "r3f1: algo", "F1: algo", ""]) assert.equal(splitReleaseCode(title), null, title);
 });

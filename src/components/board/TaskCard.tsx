@@ -23,6 +23,7 @@ import { useNearCard } from "./nearCards";
 import { isPendingCopy } from "./groupDrag";
 import { DueDatePopover } from "./DueDatePopover";
 import { recurrenceLabel } from "./recurrence-ui";
+import { splitReleaseCode } from "@/lib/release";
 import { overTitleLimit, TITLE_INPUT_LIMIT } from "./TitleLimit";
 import { titleLength } from "@/lib/title-clamp";
 import { focusCard, isTypingTarget, takeCardFocus } from "./shortcuts";
@@ -358,7 +359,7 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
             }}
           />
         ) : (
-          <p dir="auto" className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><MentionText text={task.title} /></p>
+          <p dir="auto" className="min-w-0 flex-1 text-sm leading-snug font-medium break-words"><CardTitle title={task.title} /></p>
         )}
         {handle}
       </div>
@@ -504,6 +505,20 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
 });
 
 /** Título editable en la tarjeta: Enter guarda, Esc cancela y al salir del campo también se guarda. */
+/** Título de la tarjeta (y de la fila en la vista de lista); el código de release del principio («R3F1: …») se explica al pasar el ratón. */
+export function CardTitle({ title }: { title: string }) {
+  const t = useT();
+  const rc = splitReleaseCode(title);
+  if (!rc) return <MentionText text={title} />;
+  const hint = t("Código de release: R{number} = release nº {number}; {letters} = letras del tipo; {order} = orden dentro del tipo", { number: rc.release, letters: rc.letters, order: rc.order });
+  return (
+    <>
+      <span title={hint}>{rc.code}</span>
+      <MentionText text={rc.rest} />
+    </>
+  );
+}
+
 function RenameInput({ title, onDone }: { title: string; onDone: (value: string, save: boolean, refocus: boolean) => void }) {
   const t = useT();
   const ref = useRef<HTMLInputElement>(null);

@@ -173,7 +173,7 @@ export function ReleaseEntry({ release, query = "", autoOpen = false }: Props) {
               {/* El espacio va delante del título, en el mismo texto: separa el número en el nombre accesible del botón
                   («R3 Release…», no «R3Release…»). Con lo buscado al principio del título queda solo, seguido de la
                   <mark>, y Chrome lo cuenta (accesibilidad-releases-e2e.mjs, PART=resaltar, lo comprueba). */}
-              <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">R{release.number}</span>
+              <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={t("Release nº {number}. Sus tareas llevan el código R{number} + las letras de su tipo + su orden dentro del tipo (R{number}F1, R{number}F2, R{number}C1…).", { number: release.number })}>R{release.number}</span>
               <Highlight text={` ${release.title}`} query={query} />
             </button>
           </h2>

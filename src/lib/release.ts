@@ -129,6 +129,16 @@ export function computeReleaseCodes(
 }
 
 /**
+ * Código de release al principio de un título («R3F1: Respuesta» → R3 + F + 1), para explicarlo al pasar el ratón en la
+ * tarjeta. Solo el primero (con «R5F1: R3F2: …», el de la última release). Sin código, null.
+ */
+export function splitReleaseCode(title: string): { code: string; release: number; letters: string; order: number; rest: string } | null {
+  const m = /^R(\d{1,6})([A-Z]{1,4})(\d{1,4})(?=: )/.exec(title);
+  if (!m) return null;
+  return { code: m[0], release: Number(m[1]), letters: m[2]!, order: Number(m[3]), rest: title.slice(m[0].length) };
+}
+
+/**
  * Título de una tarea al desplegarla: «R3F1: Respuesta». El código nuevo siempre se antepone (si ya
  * había otro, queda detrás: «R5F1: R3F2: Respuesta») y, si no cabe en el máximo, se recorta el final
  * del título original.
