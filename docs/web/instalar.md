@@ -268,15 +268,17 @@ Se hace desde su panel web, sin terminal.
      ```
 
 6. **Activa la comprobación de salud.** En el servicio de Pizarro, ve a *Settings → Deploy* y escribe
-   `/api/health` en **Healthcheck Path** y `600` en **Healthcheck Timeout** (si no ves ese campo, añade en *Variables*
-   `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`). Así Railway no da por bueno un despliegue hasta que Pizarro responde, y si
+   `/api/health` en **Healthcheck Path** y `600` en **Healthcheck Timeout** (este campo aparece en cuanto rellenas el
+   anterior). Así Railway no da por bueno un despliegue hasta que Pizarro responde, y si
    algo falla al actualizar, sigue con la versión anterior. En esa misma pantalla, deja *Restart Policy* en
-   *On Failure* y una sola réplica (es lo que viene) y *Custom Start Command* vacío.
+   *On Failure* y una sola réplica (es lo que viene; con el volumen, Railway no deja subirlas) y *Custom Start Command*
+   vacío.
 7. **Despliega una sola vez.** Arriba a la izquierda verás «Apply N changes»: pulsa **Deploy**. Railway construye
    Pizarro y lo arranca, y eso lleva unos minutos. Si Railway llegó a desplegar antes de que tuvieras las variables o el
    volumen, quizá te llegue un email «Build failed»: es normal y no tienes que hacer nada. El despliegue que vale es
    este, ya con todo. Para ver que la comprobación de salud está activa, abre el despliegue en *Deployments* y mira el
-   final de *Build Logs*: debe salir `Starting Healthcheck` con `Path: /api/health` y, cuando Pizarro ya responde,
+   final de *Build Logs* (no en *Deploy Logs*): debe salir `Starting Healthcheck` con `Path: /api/health` y
+   `Retry window: 10m0s` y, cuando Pizarro ya responde,
    `Healthcheck succeeded!` (antes, unas cuantas líneas `Attempt #… failed`: es normal mientras se prepara).
 8. **Espera a que Pizarro prepare la base de datos.** La primera vez tarda 2 o 3 minutos más, aunque Railway ya ponga
    *Active*. En el servicio de Pizarro, abre *Deployments → View logs*, baja al final del log y espera la línea

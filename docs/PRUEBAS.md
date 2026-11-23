@@ -708,8 +708,8 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 15.2 Railway sin `railway.json` (tus dos proyectos)
 
-1. *Settings → Deploy*: *Healthcheck Path* `/api/health`, *Healthcheck Timeout* `600` (o la variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`), *Restart Policy* «On Failure», una réplica (prompt 3 de `docs/PRUEBAS-CHROME.md`).
-2. Al desplegar, el log termina con «Starting Healthcheck», «Path: /api/health» y «Healthcheck succeeded!».
+1. *Settings → Deploy*: *Healthcheck Path* `/api/health`, *Healthcheck Timeout* `600` (el campo aparece al rellenar *Healthcheck Path*; no hace falta `RAILWAY_HEALTHCHECK_TIMEOUT_SEC`), *Restart Policy* «On Failure», una réplica (con el volumen, Railway no deja subirlas; prompt 3 de `docs/PRUEBAS-CHROME.md`).
+2. Al desplegar, el log de construcción (*Build Logs* del despliegue, no *Deploy Logs*) termina con «Starting Healthcheck», «Path: /api/health», «Retry window: 10m0s» y «Healthcheck succeeded!».
 
 ### 15.3 Informar de un error (tu Railway, instalación oficial)
 

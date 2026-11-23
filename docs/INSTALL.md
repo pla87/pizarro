@@ -90,14 +90,14 @@ Railway se configura en su panel, sin fichero de configuración en el repositori
    No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso. `PORT` lo inyecta Railway.
 5. **Ajustes de despliegue** (servicio de Pizarro → *Settings → Deploy*), antes de desplegar:
    - **Healthcheck Path:** `/api/health`. Así Railway no da el despliegue por bueno hasta que Pizarro responde, y si falla (una migración, por ejemplo) mantiene el anterior.
-   - **Healthcheck Timeout:** `600` (10 minutos: el primer arranque aplica las migraciones). Si el panel no muestra ese campo, añade la variable `RAILWAY_HEALTHCHECK_TIMEOUT_SEC=600`.
+   - **Healthcheck Timeout:** `600` (10 minutos: el primer arranque aplica las migraciones). El campo aparece en esa misma pantalla en cuanto rellenas *Healthcheck Path*; no hace falta ninguna variable.
    - **Restart Policy:** *On Failure* (lo que pone Railway por defecto).
-   - **Réplicas:** **1** (también lo que pone por defecto; en *Settings → Deploy*, junto a la región). Pizarro es de una sola instancia (ver arriba).
+   - **Réplicas:** **1** (lo que pone por defecto). Con un volumen, Railway no deja subirlas, así que el servicio de Pizarro se queda en una, que es lo que necesita (ver arriba).
 
    No rellenes *Custom Start Command*: lo da el `Dockerfile`.
 6. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques; la región da igual mientras `Postgres` esté en la misma.
 
-   **Cómo comprobar que el healthcheck está activo:** en *Deployments*, abre el despliegue y mira el log de construcción (*Build Logs*): al final, después de construir la imagen, sale el bloque `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s`; durante el primer arranque verás algunas líneas `Attempt #N failed with service unavailable` (normales mientras se aplican las migraciones) y al final `Healthcheck succeeded!`. Si ese bloque no sale, el servicio no tiene healthcheck: vuelve al paso 5. El panel puede tardar en mostrar los valores; lo que cuenta es el log.
+   **Cómo comprobar que el healthcheck está activo:** en *Deployments*, abre el despliegue y mira el log de construcción (*Build Logs*, no *Deploy Logs*): al final, después de construir la imagen, sale el bloque `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s`; durante el primer arranque verás algunas líneas `Attempt #N failed with service unavailable` (normales mientras se aplican las migraciones) y al final `Healthcheck succeeded!`. Si ese bloque no sale, el servicio no tiene healthcheck: vuelve al paso 5. El panel puede tardar en mostrar los valores; lo que cuenta es el log.
 
    El primer arranque aplica las migraciones y tarda 2–3 minutos más aunque Railway ya marque *Active*: en *Deployments → View logs*, al final, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`). Las líneas en rojo del principio del log son normales.
 
@@ -124,7 +124,7 @@ Una plantilla se crea desde la cuenta de Railway del propietario; no se puede ha
 4. En el servicio de Pizarro configura el volumen (`/app/uploads`), los ajustes de despliegue del paso 5 (*Settings → Deploy*: healthcheck `/api/health` con 600 s, *On Failure*, una réplica; la plantilla copia lo que tenga el servicio) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
 5. En el servicio de Pizarro, la fuente debe ser el repositorio oficial con la rama **`stable`** (*Settings → Source → Branch* en el proyecto de origen antes de generar la plantilla). Comprueba en el despliegue de prueba (punto 7) que el servicio creado sigue `stable` y no `main`; si la plantilla no conserva la rama, indícalo en su descripción («tras desplegar: Settings → Source → Branch → stable»).
 6. Pulsa *Create template* y copia el enlace. Pon el botón «Deploy on Railway» en el README apuntando a ese enlace.
-7. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log, que `APP_URL` es correcta, que la rama es `stable` y que el log del despliegue trae `Starting Healthcheck` con `Path: /api/health`.
+7. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log, que `APP_URL` es correcta, que la rama es `stable` y que el log de construcción del despliegue (*Build Logs*) trae `Starting Healthcheck` con `Path: /api/health`.
 
 ### Render
 
