@@ -63,7 +63,6 @@ export const admin: Record<string, string> = {
   "IP: {ip} · Usuario: {user} · Proyecto: {project}": "IP: {ip} · User: {user} · Project: {project}",
   "Sin detalles.": "No details.",
   "Info": "Info",
-  "{n} de {max} usuarios activos": "{n} of {max} active users",
   "Nuevo usuario": "New user",
   "(tú)": "(you)",
   "Admin": "Admin",
@@ -375,8 +374,6 @@ export const admin: Record<string, string> = {
   "Ninguno (ocultar todos los tipos generales)": "None (hide all general types)",
   "Ocultos que ya no existen:": "Hidden ones that no longer exist:",
   // Usuarios: MAX_USERS es opcional (sin la variable, sin tope)
-  "1 usuario activo": "1 active user",
-  "{n} usuarios activos": "{n} active users",
   // Copias de seguridad: motivo de las tareas que no hacen nada y estado único sin destino externo
   "Omitida": "Skipped",
   "Omitida: ya hay una copia de las últimas 23 h": "Skipped: there is already a backup from the last 23 hours",
@@ -385,7 +382,6 @@ export const admin: Record<string, string> = {
   "Omitida: se repite mañana": "Skipped: it will be retried tomorrow",
   "Copias automáticas activas, pero solo en el disco de este servidor.": "Automatic backups are on, but only to this server's disk.",
   // Usuarios: el máximo de usuarios activos, primero en sencillo y lo técnico (MAX_USERS) después
-  "Puede haber como mucho {max} usuarios activos a la vez. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time. Deactivated people don't count.",
   "No hay un máximo de usuarios activos.": "There is no maximum number of active users.",
   "Para cambiar el máximo: variable MAX_USERS del servidor (Railway → Variables; con Docker, en el .env); sin ella no hay tope. Después, reinicia Pizarro.":
     "To change the maximum: the server's MAX_USERS variable (Railway → Variables; with Docker, in the .env file); without it there is no limit. Then restart Pizarro.",
@@ -794,4 +790,11 @@ export const admin: Record<string, string> = {
   "Borrar las exportaciones de proyectos de más de 24 horas": "Delete project exports older than 24 hours",
   "Borrar lo compartido con Pizarro que nadie ha usado": "Delete things shared to Pizarro that nobody used",
   "Terminar las copias de adjuntos de releases que cortó un reinicio": "Finish release attachment copies cut short by a restart",
+  // Administración → Usuarios: activos e invitaciones pendientes por separado
+  "1 activo": "1 active",
+  "{n} activos": "{n} active",
+  "1 invitación pendiente": "1 pending invitation",
+  "{n} invitaciones pendientes": "{n} pending invitations",
+  "{n} de {max} como máximo": "{n} of {max} maximum",
+  "Puede haber como mucho {max} usuarios activos a la vez, contando las invitaciones pendientes. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time, counting pending invitations. Deactivated people don't count.",
 };
