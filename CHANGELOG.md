@@ -2,6 +2,41 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.67.0 — 2026-11-23 13:06
+
+Columna «Asignación a persona» con «Generar plan», plantillas propias para todos, Logs en el idioma de cada persona, copias que comprueban el espacio, plan para IA más corto, avisos de actualización por plataforma, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Rol de columna «Asignación a persona»: todo lo que entra se asigna a la persona elegida en la cabecera, con un plazo opcional («Vence en N días»); «Generar plan» descarga un PDF con sus tareas agrupadas en vencidas, hoy, esta semana, este mes, más adelante y sin fecha.
+- Cualquier persona puede usar las plantillas propias para sus proyectos privados (crearlas y editarlas sigue siendo de administradores).
+
+### Mejoras
+
+- Todos los mensajes de Administración → Logs se leen en el idioma de quien los consulta, también la lista de campos cambiados y el apagado del servidor.
+- El plan de trabajo para IA es un 23 % más corto sin perder nada útil: sin apartados del formulario sin responder ni rótulos de relleno.
+- La copia diaria comprueba antes si cabe en el disco y, si no, falla sin escribir nada; la importación de un proyecto espera su turno si el servidor procesa muchas imágenes.
+- El aviso de versión nueva y la ayuda de copias dicen qué hacer en Railway, Render, Fly.io, Docker o npm start.
+- Los códigos de release (R1F1) se explican al pasar el ratón; la página Releases vacía dice dónde está el botón «Generar release».
+- Tema «Mostaza» con botones y textos que se leen bien; al cambiar a un tipo sin título automático se quita el prefijo del anterior.
+- Copias sin destino externo: un solo aviso; las instrucciones, en gris en la tarjeta.
+- Tamaños grandes del registro en MB o GB.
+
+### Correcciones
+
+- Logs en inglés: ya no salen «[…]» en las tareas editadas con varios campos ni el apagado en español.
+- Con el bloqueo de R2, una subida reintentada ya no falla y dos copias en el mismo segundo ya no comparten nombre.
+- Ids mal formados en descargas, informe PDF, exportar y calendario: «no encontrado» en vez de un error del servidor.
+- Las tarjetas de ejemplo ya no pasan del tope de etiquetas; «Plantilla desde un proyecto» admite 30 columnas.
+- Docker Compose sin --max-old-space-size, que anulaba el tope de memoria del generador de PDF (APP_HEAP_MB ya no se usa).
+
+### Cambios técnicos / DB
+
+- Migración que solo añade dos columnas a Column (assigneeId, assignDueDays): sin valor nuevo de enum, segura al volver a la v1.66.
+- Prueba guardiana que exige plantilla traducible en cada mensaje de Logs.
+- El informe PDF cuenta las subtareas con groupBy; compartir con Drive va en tandas de 5 con un plazo total.
+- Documentación de Railway según lo visto en real: comprobación de salud en Build Logs y Timeout en el panel.
+
 ## v1.66.0 — 2026-11-23 01:04
 
 Informes de errores en privado por email, guías para instalar en Render y Fly.io, alta de usuarios con enlace de invitación, cambiar de tipo sin mezclar formularios, doble clic en la descripción sin saltos, fechas y Logs en el idioma de cada persona, y revisión y caza de bugs

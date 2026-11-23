@@ -1,6 +1,73 @@
 {
   "versions": [
     {
+      "version": "1.67.0",
+      "date": "2026-11-23",
+      "releasedAt": "2026-11-23T13:06:51+01:00",
+      "summary": "Columna «Asignación a persona» con «Generar plan», plantillas propias para todos, Logs en el idioma de cada persona, copias que comprueban el espacio, plan para IA más corto, avisos de actualización por plataforma, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Rol de columna «Asignación a persona»: todo lo que entra se asigna a la persona elegida en la cabecera, con un plazo opcional («Vence en N días»); «Generar plan» descarga un PDF con sus tareas agrupadas en vencidas, hoy, esta semana, este mes, más adelante y sin fecha.",
+          "Cualquier persona puede usar las plantillas propias para sus proyectos privados (crearlas y editarlas sigue siendo de administradores)."
+        ],
+        "mejoras": [
+          "Todos los mensajes de Administración → Logs se leen en el idioma de quien los consulta, también la lista de campos cambiados y el apagado del servidor.",
+          "El plan de trabajo para IA es un 23 % más corto sin perder nada útil: sin apartados del formulario sin responder ni rótulos de relleno.",
+          "La copia diaria comprueba antes si cabe en el disco y, si no, falla sin escribir nada; la importación de un proyecto espera su turno si el servidor procesa muchas imágenes.",
+          "El aviso de versión nueva y la ayuda de copias dicen qué hacer en Railway, Render, Fly.io, Docker o npm start.",
+          "Los códigos de release (R1F1) se explican al pasar el ratón; la página Releases vacía dice dónde está el botón «Generar release».",
+          "Tema «Mostaza» con botones y textos que se leen bien; al cambiar a un tipo sin título automático se quita el prefijo del anterior.",
+          "Copias sin destino externo: un solo aviso; las instrucciones, en gris en la tarjeta.",
+          "Tamaños grandes del registro en MB o GB."
+        ],
+        "correcciones": [
+          "Logs en inglés: ya no salen «[…]» en las tareas editadas con varios campos ni el apagado en español.",
+          "Con el bloqueo de R2, una subida reintentada ya no falla y dos copias en el mismo segundo ya no comparten nombre.",
+          "Ids mal formados en descargas, informe PDF, exportar y calendario: «no encontrado» en vez de un error del servidor.",
+          "Las tarjetas de ejemplo ya no pasan del tope de etiquetas; «Plantilla desde un proyecto» admite 30 columnas.",
+          "Docker Compose sin --max-old-space-size, que anulaba el tope de memoria del generador de PDF (APP_HEAP_MB ya no se usa)."
+        ],
+        "tecnicos": [
+          "Migración que solo añade dos columnas a Column (assigneeId, assignDueDays): sin valor nuevo de enum, segura al volver a la v1.66.",
+          "Prueba guardiana que exige plantilla traducible en cada mensaje de Logs.",
+          "El informe PDF cuenta las subtareas con groupBy; compartir con Drive va en tandas de 5 con un plazo total.",
+          "Documentación de Railway según lo visto en real: comprobación de salud en Build Logs y Timeout en el panel."
+        ]
+      },
+      "en": {
+        "summary": "“Assign to person” column with “Generate plan”, custom templates for everyone, Logs in each person's language, backups that check disk space first, a shorter AI plan, update notices per platform, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "“Assign to person” column role: everything that enters is assigned to the person chosen in the header, with an optional deadline (“Due in N days”); “Generate plan” downloads a PDF with their tasks grouped into overdue, today, this week, this month, later and no date.",
+            "Anyone can use custom templates for their private projects (creating and editing them is still for administrators)."
+          ],
+          "mejoras": [
+            "Every message in Administration → Logs reads in the viewer's language, including the list of changed fields and server shutdown.",
+            "The AI work plan is 23% shorter without losing anything useful: no unanswered form sections or filler labels.",
+            "The daily backup checks first that it fits on disk and, if not, fails without writing anything; importing a project waits its turn when the server is processing many images.",
+            "The new-version notice and the backups help say what to do on Railway, Render, Fly.io, Docker or npm start.",
+            "Release codes (R1F1) are explained on hover; the empty Releases page says where the “Generate release” button is.",
+            "“Mustard” theme with buttons and text that read well; switching to a type without an automatic title removes the previous prefix.",
+            "Backups without an external destination: a single notice; the instructions, in gray on the card.",
+            "Large sizes in the log shown in MB or GB."
+          ],
+          "correcciones": [
+            "Logs in English: no more “[…]” for tasks edited with several fields, and shutdown no longer in Spanish.",
+            "With R2 bucket lock, a retried upload no longer fails and two backups in the same second no longer share a name.",
+            "Malformed ids in downloads, PDF report, export and calendar: “not found” instead of a server error.",
+            "Example cards no longer exceed the label limit; “Template from a project” allows 30 columns.",
+            "Docker Compose without --max-old-space-size, which overrode the PDF generator's memory cap (APP_HEAP_MB is no longer used)."
+          ],
+          "tecnicos": [
+            "Migration that only adds two columns to Column (assigneeId, assignDueDays): no new enum value, safe when going back to v1.66.",
+            "Guard test requiring a translatable template for every Logs message.",
+            "The PDF report counts subtasks with groupBy; sharing with Drive goes in batches of 5 with an overall time limit.",
+            "Railway docs updated from real use: health check in Build Logs and Timeout in the panel."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.66.0",
       "date": "2026-11-23",
       "releasedAt": "2026-11-23T01:04:04+01:00",
