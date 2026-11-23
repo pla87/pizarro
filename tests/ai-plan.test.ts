@@ -66,6 +66,11 @@ describe("texto del plan de trabajo para IA", () => {
     // La descripción va sin rótulo, justo después de los datos (la cabecera ya dice que las subtareas son los criterios).
     assert.ok(t1.includes("- **Adjuntos:** `log.txt`, `mi_registro*.txt`\n\nFalla al entrar."), t1);
     assert.ok(!md.includes("**Descripción:**") && !md.includes("criterios de aceptación):"), md);
+    // Salvo si empieza con una lista: la línea en blanco no la separa de la de los datos (en Markdown, serían más datos).
+    const listed = buildAiPlanMarkdown(base({ project: { name: "Web", description: "1. Uno" }, tasks: [{ id: "t1", title: "A", kind: "Bug", description: "- Reproducir\n- Corregir" }, { id: "t2", title: "B", description: "- Sin datos" }] }));
+    assert.ok(listed.includes("- **Tipo:** Bug\n\n**Descripción:**\n\n- Reproducir\n- Corregir"), listed);
+    assert.ok(listed.includes("- **Tareas:** 2\n\n**Descripción:**\n\n1. Uno"), listed);
+    assert.ok(listed.includes("### 2. B\n\n- Sin datos"), listed);
     // Títulos de la descripción rebajados (no compiten con los del plan), pero no dentro del código; entidades y enlaces a adjuntos.
     assert.ok(t1.includes("#### Pasos"));
     assert.ok(t1.includes("```\n# no es un título\n```"));
@@ -129,6 +134,9 @@ describe("texto del plan de trabajo para IA", () => {
     // Con algo debajo (texto, una lista, código) es una respuesta; una negrita sin «:» no es una etiqueta del formulario.
     assert.equal(planDescription("**Esquema:**\n\n- uno\n\n**Pregunta:**\n```\nnpm test\n```"), "**Esquema:**\n\n- uno\n\n**Pregunta:**\n```\nnpm test\n```");
     assert.equal(planDescription("Hecho a medias.\n\n**¡Urgente!**"), "Hecho a medias.\n\n**¡Urgente!**");
+    // Una respuesta que empieza en negrita sin «:» no es la etiqueta siguiente: el apartado se queda con su título.
+    assert.equal(planDescription("**Pasos:**\n\n**1.** Abrir ajustes\n**2.** Guardar"), "**Pasos:**\n\n**1.** Abrir ajustes\n**2.** Guardar");
+    assert.equal(planDescription("**Por qué:**\n\n**Riesgo:** ninguno"), "**Riesgo:** ninguno");
     // Dentro de un bloque de código no se toca nada.
     assert.equal(planDescription("```\n**Por qué:**\n```"), "```\n**Por qué:**\n```");
     // Solo etiquetas vacías: no queda nada (y la tarea sale sin descripción).

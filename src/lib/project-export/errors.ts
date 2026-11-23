@@ -10,3 +10,6 @@ export class ArchiveError extends AppError {
     this.name = "ArchiveError";
   }
 }
+
+/** Error de una exportación o importación cortada por un reinicio (lo pone el trabajador, transfer-jobs.ts, y la importación al apagarse). */
+export const INTERRUPTED_MESSAGE = "Interrumpido por un reinicio";

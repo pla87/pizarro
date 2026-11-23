@@ -4,7 +4,7 @@
 // previa de espacio en el disco.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
@@ -244,35 +244,63 @@ describe("nombres de las copias", () => {
 });
 
 describe("copia diaria con el disco lleno", () => {
-  test("si no cabe la copia estimada, falla con «disco lleno» sin escribir nada; con sitio, vuelve a copiar", async () => {
+  test("con una copia anterior, si no cabe su volcado × 1,2 falla con «disco lleno» sin escribir nada; con sitio, vuelve a copiar", async () => {
     const { createBackup, dailyBackupJob, listBackups } = await import("../../src/lib/backup");
     const { NO_SPACE_MESSAGE } = await import("../../src/lib/disk-space");
+    const { flushLogs } = await import("../../src/lib/log");
     await withBackupEnv({ DISK_MIN_FREE_MB: "" }, async (uploads) => {
       const backups = path.join(uploads, "backups");
       const written = async () => (await readdir(backups).catch(() => [])).filter((n) => n !== "status.json");
-      // Un fichero nuevo (disperso: no ocupa disco) de 8 TB: con el almacén local de ficheros, no cabe.
-      const huge = path.join(uploads, "enorme.bin");
-      const fh = await open(huge, "w");
-      await fh.truncate(8 * 2 ** 40);
-      await fh.close();
-      const run = await createBackup();
-      assert.equal(run.ok, false);
-      assert.equal(run.error, NO_SPACE_MESSAGE);
-      assert.deepEqual(await written(), [], "ni volcado, ni temporales, ni índice de ficheros");
-      // La tarea horaria falla con el mismo motivo (consta en Tareas de mantenimiento) y tampoco escribe nada.
-      await assert.rejects(dailyBackupJob(), { message: NO_SPACE_MESSAGE });
-      assert.deepEqual(await written(), []);
-      // Con sitio, la copia sale.
-      await rm(huge);
       const ok = await createBackup();
       assert.equal(ok.ok, true, ok.error);
       const after1 = (await written()).sort();
-      // Con una copia anterior la estimación parte de su volcado (× 1,2): con un margen imposible tampoco se escribe nada.
+      // Un margen imposible: la estimación parte del volcado anterior (× 1,2) y no cabe.
       process.env.DISK_MIN_FREE_MB = String(1e12);
       const full = await createBackup();
       assert.equal(full.error, NO_SPACE_MESSAGE);
       assert.deepEqual((await written()).sort(), after1, "la copia buena sigue y no hay restos de la fallida");
       assert.equal((await listBackups()).length, 1);
+      // El registro dice cuánto hay libre y el margen exigido.
+      await flushLogs();
+      const row = await db.appLog.findFirst({ where: { action: "backup.failed" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { message: true, details: true } });
+      const details = row?.details as { estimatedDumpBytes?: number; freeBytes?: number; marginBytes?: number } | undefined;
+      assert.equal(details?.estimatedDumpBytes, Math.ceil(ok.bytes! * 1.2));
+      assert.equal(details?.marginBytes, 1e12 * 1024 * 1024);
+      assert.equal(typeof details?.freeBytes, "number");
+      assert.match(row?.message ?? "", /libres y se exige dejar un margen de .*DISK_MIN_FREE_MB/);
+      // La tarea horaria falla con el mismo motivo (consta en Tareas de mantenimiento) y tampoco escribe nada.
+      await assert.rejects(dailyBackupJob(Date.now() + 24 * 3600 * 1000), { message: NO_SPACE_MESSAGE });
+      assert.deepEqual((await written()).sort(), after1);
+    });
+  });
+
+  test("la primera copia (sin copia anterior) no se comprueba de antemano: el tamaño de la base en PostgreSQL no la bloquea", async () => {
+    const { createBackup } = await import("../../src/lib/backup");
+    await withBackupEnv({ DISK_MIN_FREE_MB: String(1e12) }, async () => {
+      const run = await createBackup();
+      assert.equal(run.ok, true, run.error);
+    });
+  });
+
+  test("tras una restauración (todos los ficheros con fecha nueva) la copia no los cuenta como «por escribir»", async () => {
+    const { createBackup, readStatus } = await import("../../src/lib/backup");
+    const { diskStats } = await import("../../src/lib/disk-space");
+    await withBackupEnv({ DISK_MIN_FREE_MB: "" }, async (uploads) => {
+      const MB = 1024 * 1024;
+      await writeFile(path.join(uploads, "grande.bin"), randomBytes(64 * MB));
+      const first = await createBackup();
+      assert.equal(first.ok, true, first.error);
+      // La restauración (o un cp sin conservar las fechas) vuelve a escribir los ficheros: su fecha ya no coincide con
+      // la de files-index.json, aunque sus objetos sigan en el almacén.
+      const later = new Date(Date.now() + 3600 * 1000);
+      await utimes(path.join(uploads, "grande.bin"), later, later);
+      // Cabe el volcado × 1,2 con 32 MB de holgura, pero no los 64 MB de «ficheros nuevos» encima.
+      const dump = Math.ceil((await readStatus()).lastBackup!.bytes! * 1.2);
+      const free = (await diskStats(path.join(uploads, "backups")))!.free;
+      process.env.DISK_MIN_FREE_MB = String(Math.floor((free - dump - 32 * MB) / MB));
+      await new Promise((r) => setTimeout(r, 1100)); // los nombres de las copias van por segundos
+      const again = await createBackup();
+      assert.equal(again.ok, true, again.error);
     });
   });
 });

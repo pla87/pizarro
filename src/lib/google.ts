@@ -160,6 +160,8 @@ async function accessToken(userId: string): Promise<string> {
 
 /** Permisos de Drive que se piden a la vez al compartir un archivo con los miembros del proyecto. */
 const SHARE_BATCH = 5;
+/** Plazo para todo el reparto (cada permiso tiene además el suyo, de 10 s): con Drive colgado, crear no espera minutos. */
+const SHARE_TOTAL_MS = 30_000;
 
 /** Con quién se comparte el archivo: todo el dominio del Workspace o solo unas personas (proyectos privados). */
 type DriveShareTarget = { type: "domain" } | { type: "users"; emails: string[] };
@@ -202,9 +204,10 @@ export async function createDriveFile(userId: string, kind: GoogleFileKind, name
  * desde la tarjeta, se comparte con el dominio de Workspace (GOOGLE_WORKSPACE_DOMAIN) o solo con los emails de los
  * miembros del proyecto, según el modo del proyecto. Devuelve cuántos permisos se crearon y cuántos fallaron.
  */
-export async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string): Promise<ShareOutcome> {
+export async function shareFile(token: string, fileId: string, target: DriveShareTarget, role: string, totalMs = SHARE_TOTAL_MS): Promise<ShareOutcome> {
   const bodies = sharePermissionBodies(target, { domain: googleWorkspaceDomain(), role });
   let failed = 0;
+  const deadline = AbortSignal.timeout(totalMs);
   // En tandas de SHARE_BATCH: uno detrás de otro podía tardar más de un minuto con muchos miembros, y todos a la vez
   // hacían que Drive respondiera `userRateLimitExceeded` y dejara a varias personas sin acceso.
   const share = async (body: (typeof bodies)[number]) => {
@@ -212,17 +215,32 @@ export async function shareFile(token: string, fileId: string, target: DriveShar
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), deadline]),
     }).catch(() => null);
     // Si la política del Workspace lo impide, el archivo sigue creado: solo se registra.
     if (!res?.ok) {
       failed++;
       const what = body.type === "domain" ? "con el dominio" : "con un miembro del proyecto";
-      console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status);
-      logEvent({ level: "warn", category: "google", action: "google.shareFailed", label: { k: "No se pudo compartir el archivo {what} (HTTP {status})", p: { what: logText(what), status: res?.status ?? logText("sin respuesta") } }, details: { fileId, status: res?.status ?? null } });
+      console.error(`[google] No se pudo compartir el archivo ${what}`, res?.status ?? "sin respuesta");
+      logEvent({
+        level: "warn", category: "google", action: "google.shareFailed",
+        label: res
+          ? { k: "No se pudo compartir el archivo {what} (HTTP {status})", p: { what: logText(what), status: res.status } }
+          : { k: "No se pudo compartir el archivo {what}: Google Drive no ha respondido a tiempo", p: { what: logText(what) } },
+        details: { fileId, status: res?.status ?? null },
+      });
     }
   };
-  for (let i = 0; i < bodies.length; i += SHARE_BATCH) await Promise.all(bodies.slice(i, i + SHARE_BATCH).map(share));
+  for (let i = 0; i < bodies.length; i += SHARE_BATCH) {
+    // Pasado el plazo, lo que queda sin pedir cuenta como fallido (el aviso de «compartido a medias»).
+    if (deadline.aborted) {
+      const left = bodies.length - i;
+      failed += left;
+      logEvent({ level: "warn", category: "google", action: "google.shareFailed", label: { k: "No se pudo compartir el archivo con {n} miembro(s) más del proyecto: Google Drive tarda demasiado", p: { n: left } }, details: { fileId, skipped: left } });
+      break;
+    }
+    await Promise.all(bodies.slice(i, i + SHARE_BATCH).map(share));
+  }
   return { status: shareStatusOf(bodies.length, failed), failed };
 }
 

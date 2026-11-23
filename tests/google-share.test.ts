@@ -92,3 +92,24 @@ test("compartir con los miembros: los permisos de Drive se piden de 5 en 5, no t
     globalThis.fetch = realFetch;
   }
 });
+
+test("compartir con Drive colgado: un plazo para todo el reparto; lo que queda sin pedir cuenta como fallido", async () => {
+  const { shareFile } = await import("../src/lib/google");
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  // Drive no contesta: cada petición solo termina cuando se corta.
+  globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
+    calls++;
+    return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
+  }) as typeof fetch;
+  try {
+    const emails = Array.from({ length: 12 }, (_, i) => `p${i}@example.com`);
+    const started = Date.now();
+    const out = await shareFile("token", "file1", { type: "users", emails }, "writer", 50);
+    assert.ok(Date.now() - started < 2000, "no espera 10 s por tanda");
+    assert.equal(calls, 5, "solo la primera tanda llega a pedirse");
+    assert.deepEqual(out, { status: "NOT_SHARED", failed: 12 });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
