@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
-import { archiveTask, archiveTasks, deleteSubtask, deleteTasks, getArchivedTasks, moveTask, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
+import { archiveTask, archiveTasks, deleteSubtask, deleteTasks, getArchivedTasks, makeEvergreen, moveTask, reorderSubtask, restoreTask, updateSubtask } from "../../src/actions/tasks";
 
 describe("subtareas de tareas archivadas", () => {
   test("no se pueden editar, reordenar ni borrar", async () => {
@@ -101,6 +101,21 @@ describe("archivar, mover y recuperar a la vez", () => {
     const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
     assert.ok(row.archivedAt);
     assert.deepEqual([row.columnId, row.archivedFromColumnId], [f.columns.todo, f.columns.todo]);
+  });
+
+  test("marcar como fija mientras otra persona la archiva: falla y sigue archivada, sin ser fija", async () => {
+    const { f, task } = await setup();
+    await db.column.update({ where: { id: f.columns.done }, data: { role: "NEXT_RELEASE", isDone: false } });
+    let pending: ReturnType<typeof makeEvergreen> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: task.id }, data: { archivedAt: new Date(), archivedFromColumnId: f.columns.todo }, select: { id: true } });
+      pending = makeEvergreen(task.id);
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await pending!, /archivada/);
+    const row = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.ok(row.archivedAt);
+    assert.deepEqual([row.columnId, row.archivedFromColumnId, row.evergreen], [f.columns.todo, f.columns.todo, false]);
   });
 
   test("recuperar mientras otra pestaña la recupera: la segunda falla y no la mueve otra vez", async () => {

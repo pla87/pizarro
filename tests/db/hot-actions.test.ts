@@ -9,7 +9,7 @@ import { describe, test } from "node:test";
 import pg from "pg";
 import sharp from "sharp";
 import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, type Fixture } from "./helpers";
-import { moveTask, moveTasks, updateTask } from "../../src/actions/tasks";
+import { addComment, createTasks, deleteComment, deleteTasks, duplicateTask, editComment, makeEvergreen, moveTask, moveTasks, updateTask } from "../../src/actions/tasks";
 import { deployRelease } from "../../src/actions/releases";
 import { flushLogs } from "../../src/lib/log";
 import { attachmentPath } from "../../src/lib/uploads";
@@ -406,5 +406,35 @@ describe("setTaskColumnPositions", () => {
     const row = await db.task.findUniqueOrThrow({ where: { id: a.id } });
     assert.deepEqual([row.columnId, row.position, row.evergreen], [f.columns.doing, 2.5, false]);
     assert.ok(row.updatedAt > before);
+  });
+});
+
+// Las menciones se guardan como @[Ana](user:<id>): en el registro y en el aviso de deshacer se ven como «@Ana», sin el id.
+describe("títulos con menciones en el registro y en deshacer", () => {
+  test("duplicar, fijar, crear y borrar varias, editar y borrar un comentario", async () => {
+    const { f } = await setup();
+    await db.column.update({ where: { id: f.columns.done }, data: { role: "NEXT_RELEASE", isDone: false } });
+    const raw = "Llamar a @[Ana](user:cmmentionid000000000000001)";
+    const a = await makeTask(f, { title: raw });
+    const since = new Date();
+    const copy = expectOk(await duplicateTask(a.id));
+    expectOk(await makeEvergreen(copy.id));
+    const comment = expectOk(await addComment(a.id, "hola"));
+    expectOk(await editComment(comment.id, "adiós"));
+    expectOk(await deleteComment(comment.id));
+    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, tasks: [{ title: raw, kindId: f.kindId }] }));
+    const created = await db.task.findMany({ where: { projectId: f.project.id, title: raw, createdAt: { gte: since } }, select: { id: true } });
+    expectOk(await deleteTasks(created.map((t) => t.id)));
+    await flushLogs();
+    const actions = ["duplicateTask", "makeEvergreen", "editComment", "deleteComment", "createTasks", "deleteTasks"].map((n) => `tasks.${n}`);
+    const logs = await db.appLog.findMany({ where: { action: { in: actions }, projectId: f.project.id, createdAt: { gte: since } }, select: { action: true, message: true } });
+    assert.deepEqual(new Set(logs.map((l) => l.action)), new Set(actions));
+    for (const l of logs) {
+      assert.ok(!l.message.includes("@["), `${l.action}: ${l.message}`);
+      assert.ok(l.message.includes("Llamar a @Ana"), `${l.action}: ${l.message}`);
+    }
+    const undo = await db.undoEntry.findMany({ where: { projectId: f.project.id, createdAt: { gte: since } }, select: { label: true } });
+    assert.ok(undo.length >= 4);
+    for (const u of undo) assert.ok(!u.label.includes("@[") && !u.label.includes("cmmentionid"), u.label);
   });
 });
