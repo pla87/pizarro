@@ -7,6 +7,8 @@ import { CHALLENGE_COOKIE } from "../../src/lib/two-factor";
 import { CHALLENGE_COOKIE_NAME } from "../../src/lib/reset-cookies";
 import { flushLogs } from "../../src/lib/log";
 import { resetRateLimit } from "../../src/lib/rate-limit";
+import { rejectionFromApp } from "../../src/lib/client-error-origin";
+import { logWhere, parseLogFilters } from "../../src/lib/log-query";
 
 const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
 
@@ -31,10 +33,12 @@ describe("/api/client-errors", () => {
     const res = await post(report("fallo anónimo 1"));
     assert.equal(res.status, 204);
     await flushLogs();
-    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo anónimo 1" } } });
+    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", details: { path: ["error"], string_contains: "fallo anónimo 1" } } });
     assert.equal(row.userId, null);
     assert.equal(row.action, "client.global-error");
-    assert.match(row.message, /sin sesión/);
+    // Frase llana con la ruta; el texto técnico, en los detalles.
+    assert.equal(row.message, "Error en el navegador (sin sesión) en /login");
+    assert.equal((row.details as { error: string }).error, "fallo anónimo 1");
     assert.equal((row.details as { anonymous: boolean }).anonymous, true);
   });
 
@@ -42,7 +46,7 @@ describe("/api/client-errors", () => {
     jar.set("tablon_session", "x".repeat(43));
     assert.equal((await post(report("fallo cookie vieja"))).status, 204);
     await flushLogs();
-    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo cookie vieja" } } });
+    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", details: { path: ["error"], string_contains: "fallo cookie vieja" } } });
     assert.equal((row.details as { anonymous: boolean }).anonymous, true);
   });
 
@@ -51,10 +55,10 @@ describe("/api/client-errors", () => {
     assert.equal(res.status, 204);
     await post({ source: "window", message: "fallo ruta confirm", path: "/confirm/SECRETTOKEN" });
     await flushLogs();
-    const a = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo ruta redactada" } } });
+    const a = await db.appLog.findFirstOrThrow({ where: { category: "client", details: { path: ["error"], string_contains: "fallo ruta redactada" } } });
     assert.equal(a.path, "/reset/…");
-    assert.ok(!a.message.includes("AbCdEf") && !a.message.includes("zzz"));
-    const b = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo ruta confirm" } } });
+    assert.ok(!JSON.stringify(a).includes("AbCdEf") && !JSON.stringify(a).includes("zzz"));
+    const b = await db.appLog.findFirstOrThrow({ where: { category: "client", details: { path: ["error"], string_contains: "fallo ruta confirm" } } });
     assert.equal(b.path, "/confirm/…");
   });
 
@@ -63,8 +67,9 @@ describe("/api/client-errors", () => {
     await loginAs(u);
     assert.equal((await post(report("fallo con sesión"))).status, 204);
     await flushLogs();
-    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", message: { contains: "fallo con sesión" } } });
+    const row = await db.appLog.findFirstOrThrow({ where: { category: "client", details: { path: ["error"], string_contains: "fallo con sesión" } } });
     assert.equal(row.userId, u.id);
+    assert.equal(row.message, "Error en el navegador en /login");
     assert.equal((row.details as { anonymous: boolean }).anonymous, false);
   });
 
@@ -113,6 +118,37 @@ describe("/api/client-errors", () => {
     await flushLogs();
     const rows = await db.appLog.findMany({ where: { category: "client", path: "/admin" }, select: { details: true } });
     assert.deepEqual(rows.map((r) => (r.details as { digest?: string }).digest), ["3891245"]);
+  });
+});
+
+describe("rechazos de promesas sin capturar (client.promise)", () => {
+  const origin = "https://pizarro.example.com";
+  test("solo los de los scripts de la app: con un fichero del propio origen bajo /_next/ en la pila", () => {
+    const app = new Error("fallo de la app");
+    app.stack = `Error: fallo de la app\n    at save (${origin}/_next/static/chunks/app-1234.js:1:200)`;
+    assert.equal(rejectionFromApp(app, origin), true);
+    // Firefox y Safari escriben la pila de otra forma.
+    assert.equal(rejectionFromApp({ stack: `save@${origin}/_next/static/chunks/a.js:1:2` }, origin), true);
+    // Desde la consola o un script ajeno: sin pila de la app.
+    const junk = new TypeError("Junk found after end of compressed data.");
+    junk.stack = "TypeError: Junk found after end of compressed data.";
+    assert.equal(rejectionFromApp(junk, origin), false);
+    const ext = new Error("x");
+    ext.stack = "Error: x\n    at chrome-extension://abcdef/content.js:3:4";
+    assert.equal(rejectionFromApp(ext, origin), false);
+    // Otro origen con /_next/ (una web incrustada) tampoco; ni un motivo que no es un error.
+    assert.equal(rejectionFromApp({ stack: "at https://otra.example.com/_next/static/chunks/a.js:1:2" }, origin), false);
+    assert.equal(rejectionFromApp("texto", origin), false);
+    assert.equal(rejectionFromApp(undefined, origin), false);
+  });
+
+  test("el buscador de Logs encuentra un error del navegador por su texto técnico (va en los detalles)", async () => {
+    assert.equal((await post({ source: "promise", message: "fallo buscable 42%", path: "/p/abc" })).status, 204);
+    await flushLogs();
+    const rows = await db.appLog.findMany({ where: logWhere(parseLogFilters({ q: "buscable 42%" }), []) });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.message, "Error en el navegador (sin sesión) en /p/abc");
+    assert.equal(await db.appLog.count({ where: logWhere(parseLogFilters({ q: "buscable 4_" }), []) }), 0);
   });
 });
 

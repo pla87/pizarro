@@ -27,6 +27,7 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
+import { invitePendingFrom } from "@/lib/user-entered";
 import { GOOGLE_SHARE_MODES, isDomainMode } from "@/lib/google-share";
 import { googleWorkspaceDomain } from "@/lib/google-config";
 import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
@@ -129,6 +130,7 @@ export async function updateProject(projectId: string, input: { name: string; de
     const data = z.object({ name: v.name, description: z.string().max(2000) }).parse(input);
     await findManageableProject(user, projectId);
     await db.project.update({ where: { id: projectId }, data });
+    describeAction("Cambió el nombre y la descripción del proyecto «{name}»", { name: data.name });
     revalidatePath("/", "layout");
   });
 }
@@ -260,7 +262,7 @@ export async function addProjectMember(projectId: string, userId: string) {
     const project = await findManageableProject(user, projectId);
     const target = await db.user.findFirst({
       where: { id: v.id.parse(userId), active: true },
-      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true },
+      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true, mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
     });
     if (!target) throw new AppError("Usuario no válido.");
     const pick = !project.isPrivate && target.role === "ADMIN";
@@ -285,7 +287,13 @@ export async function addProjectMember(projectId: string, userId: string) {
       mail: emailed ? { k: " (avisado por email)" } : "",
     });
     revalidatePath("/", "layout");
-    return { link, emailed };
+    // Quien aún no ha aceptado su invitación no puede abrir el tablero: a un administrador (el único que gestiona las
+    // invitaciones) se le dice si su invitación sigue valiendo o ha caducado, para darle un enlace de invitación nuevo.
+    if (user.role === "ADMIN" && invitePendingFrom(target)) {
+      const token = await db.authToken.findFirst({ where: { userId: target.id, purpose: "INVITE", expiresAt: { gt: new Date() } }, select: { expiresAt: true } });
+      return { link, emailed, invite: { userId: target.id, expiresAt: token?.expiresAt.toISOString() ?? null } };
+    }
+    return { link, emailed, invite: null };
   });
 }
 
@@ -396,6 +404,9 @@ export async function createLabel(projectId: string, input: { name: string; colo
     return db.$transaction(async (tx) => {
       await assertLabelCapacity(tx, projectId);
       return tx.label.create({ data: { projectId, ...data }, select: { id: true, name: true, color: true } });
+    }).then((created) => {
+      describeAction("Creó la etiqueta «{name}»", { name: created.name });
+      return created;
     });
   });
 }
@@ -404,7 +415,7 @@ async function findLabel(labelId: string) {
   const user = await requireUser();
   const label = await db.label.findFirst({
     where: { id: v.id.parse(labelId), project: visibleProjectsWhere(user) },
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, name: true },
   });
   if (!label) throw notFound();
   noteProject(label.projectId);
@@ -418,6 +429,7 @@ export async function updateLabel(labelId: string, input: { name: string; color:
     const dup = await db.label.count({ where: { projectId: label.projectId, name: data.name, id: { not: label.id } } });
     if (dup) throw new AppError("Ya existe una etiqueta con ese nombre.");
     await db.label.update({ where: { id: label.id }, data });
+    describeAction(label.name === data.name ? "Modificó la etiqueta «{name}»" : "Cambió el nombre de la etiqueta «{from}» a «{name}»", { from: label.name, name: data.name });
   });
 }
 
@@ -425,6 +437,7 @@ export async function deleteLabel(labelId: string) {
   return runAction({ name: "projects.deleteLabel", args: [labelId] }, async () => {
     const label = await findLabel(labelId);
     await db.label.delete({ where: { id: label.id } });
+    describeAction("Borró la etiqueta «{name}»", { name: label.name });
   });
 }
 

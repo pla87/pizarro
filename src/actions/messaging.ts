@@ -339,6 +339,7 @@ export async function saveChannelPrefs(channel: "TELEGRAM" | "WHATSAPP", prefs: 
     const data = prefsSchema.parse(prefs);
     const { count } = await db.userChannel.updateMany({ where: { userId: user.id, channel: ch }, data });
     if (!count) throw new AppError("Conecta primero este canal.");
+    describeAction("Cambió sus avisos por {channel}", { channel: ch === "TELEGRAM" ? "Telegram" : "WhatsApp" });
   });
 }
 

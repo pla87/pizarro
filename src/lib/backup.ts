@@ -14,13 +14,14 @@ import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, 
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
-import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, type DiskRoom } from "./disk-space";
+import { assertDiskRoom, backupMarginBytes, isNoSpaceError, NO_SPACE_MESSAGE, type DiskRoom } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
 import { logEvent, logText } from "./log";
 import { invalidateMemo, memo } from "./memo";
 import { backupsDir, uploadDir } from "./upload-dir";
 import { logSize } from "./format-size";
+import { esText } from "./es-text";
 
 // Copias de seguridad automáticas: cada día, la base de datos (volcado cifrado) y los ficheros de UPLOAD_DIR
 // (almacén incremental cifrado, ver backup-files.ts) en UPLOAD_DIR/backups y, si está configurado, en un destino
@@ -308,11 +309,11 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   let dumpTmp: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
-    // Antes de escribir nada: si no cabe el volcado estimado (más el margen común de disco), falla con «disco lleno» sin
-    // empezar. La tarea lo reintenta cada hora (ver dailyBackupJob), pero cada intento solo mira el disco.
+    // Antes de escribir nada: si no cabe el volcado estimado (más el margen de la copia, 100 MB: backupMarginBytes), falla
+    // con «disco lleno» sin empezar. La tarea lo reintenta cada hora (ver dailyBackupJob); cada intento solo mira el disco.
     const estimate = await estimateDumpBytes(prevStatus);
     if (estimate !== null) {
-      await assertDiskRoom(backupsDir(), estimate).catch((err) => {
+      await assertDiskRoom(backupsDir(), estimate, undefined, undefined, undefined, () => backupMarginBytes()).catch((err) => {
         throw Object.assign(err as Error, { estimate });
       });
     }
@@ -509,10 +510,10 @@ async function latestLocalManifest(key: Buffer): Promise<{ manifest: FullManifes
 /** Mensaje del bloqueo por copia mucho menor que la del destino (ver checkShrink). */
 function shrinkMessage(p: { what: "core" | "rows" | "files"; local: number; remote: number; stem: string }, stem: string): string {
   const what = shrinkWhat(p.what);
-  return `No se sube la copia ${stem}: tiene ${p.local} ${what} y la última del destino (${p.stem}) tiene ${p.remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».`;
+  return esText("No se sube la copia {stem}: tiene {local} {what} y la última del destino ({good}) tiene {remote}. ¿Se ha perdido la base de datos o el volumen? Para no sustituir una copia buena por una casi vacía, no se sube ni se aplica la retención. Restaura la copia buena (node dist/restore.mjs con su nombre; --list las muestra) o, si la reducción es intencionada, pulsa «Copiar ahora a destino externo».", { stem, local: p.local, what, good: p.stem, remote: p.remote });
 }
 
-const externalConfigMessage = (errors: string[]) => `Destino externo de copias mal configurado: ${errors.join(" ")}`;
+const externalConfigMessage = (errors: string[]) => esText("Destino externo de copias mal configurado: {errors}", { errors: errors.join(" ") });
 
 /**
  * Sube la última copia local a cada destino externo que aún no la tenga (o a todos con `force`), reanudando lo
@@ -574,16 +575,16 @@ async function syncExternalLocked(key: Buffer, destinations: BackupDestination[]
         if (!opts.force) {
           const shrink = await checkShrink(dest, manifest, key);
           if (shrink.problem) throw new Error(shrinkMessage(shrink.problem, manifest.stem));
-          if (shrink.unreadable) warning = `No se pudo comparar con la última copia del destino: ${shrink.unreadable}`;
+          if (shrink.unreadable) warning = esText("No se pudo comparar con la última copia del destino: {error}", { error: shrink.unreadable });
         }
         const sync = await syncBackup(dest, manifest, bytes, { size: manifest.db.bytes, open: () => createReadStream(dumpFile) }, { key, uploadRoot: uploadDir(), store });
         let pruned = null;
         try {
           pruned = await pruneDestination(dest, key);
-          if (pruned.gcSkipped) warning = [warning, `No se limpió el almacén: ${pruned.gcSkipped}`].filter(Boolean).join(" · ");
-          if (sync.missing) warning = [warning, `${sync.missing} ficheros ya borrados no se subieron (se borraron después de la copia)`].filter(Boolean).join(" · ");
+          if (pruned.gcSkipped) warning = [warning, esText("No se limpió el almacén: {error}", { error: pruned.gcSkipped })].filter(Boolean).join(" · ");
+          if (sync.missing) warning = [warning, esText("{n} ficheros ya borrados no se subieron (se borraron después de la copia)", { n: sync.missing })].filter(Boolean).join(" · ");
         } catch (err) {
-          warning = `Retención: ${message(err)}`;
+          warning = esText("Retención: {error}", { error: message(err) });
         }
         run = { at: at(), ok: true, label: dest.label, file: manifest.stem, uploaded: sync.uploaded, skipped: sync.skipped, bytes: sync.bytes, removedBackups: pruned?.removedBackups, removedObjects: pruned?.removedObjects, ...(pruned?.retained ? { retained: pruned.retained } : {}), durationMs: Date.now() - started, warning };
         logEvent({
@@ -719,7 +720,7 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
         if (!last) continue;
         const m = dest === local && manifest ? manifest : await readManifest(dest, last.stem, key);
         const check = await checkObjects(dest, m, key, 3);
-        if (check.missing > 0) throw new Error(`Faltan ${check.missing} de ${check.objects} ficheros en ${dest.label} (copia ${last.stem}).`);
+        if (check.missing > 0) throw new Error(esText("Faltan {missing} de {objects} ficheros en {dest} (copia {stem}).", { missing: check.missing, objects: check.objects, dest: dest.label, stem: last.stem }));
         objectsChecked += check.objects;
         objectsSampled += check.sampled;
       }

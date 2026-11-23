@@ -328,4 +328,6 @@ export const server: Record<string, string> = {
   // Cambiar el rol de una columna (hasta la v1.67, sin decir de qué rol a qué rol)
   "Cambió el rol de la columna «{name}»": "Changed the role of the column “{name}”",
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
+  // Logs: lista guardada sin sus elementos por versiones anteriores
+  "varios campos": "several fields",
 };

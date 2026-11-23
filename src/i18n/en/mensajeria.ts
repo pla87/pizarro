@@ -218,4 +218,6 @@ export const mensajeria: Record<string, string> = {
   "Desconectó WhatsApp": "Disconnected WhatsApp",
   "Guardó su número de WhatsApp {to}": "Saved their WhatsApp number {to}",
   "Confirmó su número de WhatsApp": "Confirmed their WhatsApp number",
+  // Logs: preferencias de un canal (antes solo «OK»)
+  "Cambió sus avisos por {channel}": "Changed their {channel} notifications",
 };

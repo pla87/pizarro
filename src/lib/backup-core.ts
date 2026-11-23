@@ -13,6 +13,7 @@ import { open, rename, rm } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createGzip } from "node:zlib";
+import { esText } from "./es-text";
 
 const BACKUP_FORMAT_VERSION = 1;
 const MAGIC = Buffer.from("PZBK1\n", "utf8");
@@ -324,18 +325,18 @@ export async function verifyBackupFile(file: string, key: Buffer, opts: { refere
     counts.set(parts.table, (counts.get(parts.table) ?? 0) + 1);
   }
   if (!manifest) throw new Error("La copia no tiene manifiesto (¿incompleta?).");
-  if (manifest.version !== BACKUP_FORMAT_VERSION) throw new Error(`Versión de copia no soportada: ${manifest.version}.`);
+  if (manifest.version !== BACKUP_FORMAT_VERSION) throw new Error(esText("Versión de copia no soportada: {version}.", { version: manifest.version }));
   if (hash.digest("hex") !== manifest.sha256) throw new Error("El sha256 de los datos no coincide con el manifiesto.");
   let total = 0;
   for (const t of manifest.tables) {
     const got = counts.get(t.name) ?? 0;
-    if (got !== t.rows) throw new Error(`Tabla ${t.name}: el manifiesto dice ${t.rows} filas y la copia tiene ${got}.`);
+    if (got !== t.rows) throw new Error(esText("Tabla {table}: el manifiesto dice {rows} filas y la copia tiene {got}.", { table: t.name, rows: t.rows, got }));
     total += got;
   }
-  for (const name of counts.keys()) if (!manifest.tables.some((t) => t.name === name)) throw new Error(`Tabla ${name} no figura en el manifiesto.`);
+  for (const name of counts.keys()) if (!manifest.tables.some((t) => t.name === name)) throw new Error(esText("Tabla {table} no figura en el manifiesto.", { table: name }));
   if (total !== manifest.totalRows) throw new Error("El total de filas no coincide con el manifiesto.");
   const dangling = refs?.missing(new Set(counts.keys()));
-  if (dangling) throw new Error(`La copia no se podría restaurar: ${dangling.rows} valores de ${dangling.child} (${dangling.columns}) apuntan a filas de ${dangling.parent} que no están en la copia.`);
+  if (dangling) throw new Error(esText("La copia no se podría restaurar: {rows} valores de {child} ({columns}) apuntan a filas de {parent} que no están en la copia.", { rows: dangling.rows, child: dangling.child, columns: dangling.columns, parent: dangling.parent }));
   return { manifest, counts, referencesChecked: refs?.checked ?? 0 };
 }
 

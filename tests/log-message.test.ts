@@ -8,6 +8,9 @@ import { test } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
 import { andList, renderLabel, renderLabelEs } from "../src/lib/undo-label";
+import { LOG_LABEL_KEY, logMessageText } from "../src/lib/log-message";
+import { appTextLabel, legacyLogLabel, storedText } from "../src/lib/log-legacy";
+import { esText } from "../src/lib/es-text";
 
 const ROOT = path.join(import.meta.dirname, "..");
 /** Marca de una llamada que puede ir sin plantilla (con su motivo en el mismo comentario). */
@@ -207,4 +210,50 @@ test("listas: «título», «título y tipo», «título, tipo y color» (en ing
   assert.equal(renderLabelEs(edited(3)), "Modificó «Obra: casa»: título, tipo y color");
   assert.equal(renderLabel(edited(3), en), "Edited “Obra: casa”: title, type and color");
   assert.deepEqual(andList([]), { k: "" });
+});
+
+test("lista guardada sin sus elementos por una versión anterior: «varios campos» en lugar de «[…] y […]»", () => {
+  const en = makeT("en");
+  const es = makeT("es");
+  const row = (list: unknown, last: unknown) => ({
+    message: "Modificó «Obra»: título y tipo",
+    details: { [LOG_LABEL_KEY]: { k: "Modificó «{title}»: {changes}", p: { title: "Obra", changes: { k: "{list} y {last}", p: { list, last } } } } },
+  });
+  assert.equal(logMessageText(row("[…]", "[…]"), es), "Modificó «Obra»: varios campos");
+  assert.equal(logMessageText(row("[…]", "[…]"), en), "Edited “Obra”: several fields");
+  assert.equal(logMessageText(row("…", "…"), en), "Edited “Obra”: several fields");
+  // Con sus elementos, como siempre.
+  assert.equal(logMessageText(row([{ k: "título" }], { k: "tipo" }), en), "Edited “Obra”: title and type");
+});
+
+test("filas antiguas sin plantilla: en inglés se reconoce la plantilla por su texto fijo; si no encaja, sale tal cual", () => {
+  const en = makeT("en");
+  const old = (message: string) => logMessageText({ message, details: { signal: "SIGTERM" } }, en, legacyLogLabel);
+  assert.equal(old("Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes"), en("Apagado ordenado ({signal}): sin peticiones ni envíos pendientes", { signal: "SIGTERM" }));
+  assert.notEqual(old("Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes"), "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes");
+  // Los datos del diccionario dentro del texto (una lista de campos) también se traducen.
+  assert.equal(old("Modificó «Obra, fase 2»: título y tipo"), "Edited “Obra, fase 2”: title and type");
+  // Texto libre que no reproduce ninguna plantilla: tal cual.
+  assert.equal(old("algo que escribió una versión muy antigua"), "algo que escribió una versión muy antigua");
+  // Sin `legacy` (en español, o quien no lo pase) no se busca nada.
+  assert.equal(logMessageText({ message: "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes", details: null }, en), "Apagado ordenado (SIGTERM): sin peticiones ni envíos pendientes");
+  // Plantillas con poco texto fijo no se usan («{a}: {b}» casaría con cualquier cosa).
+  assert.equal(legacyLogLabel("x: y"), null);
+});
+
+test("errores de las copias guardados en español: se traducen al leerlos (fijos y con datos, también dentro de Logs)", () => {
+  const en = makeT("en");
+  assert.equal(storedText("BACKUP_KEY no está configurada.", en), "BACKUP_KEY is not set.");
+  const missing = esText("La carpeta del destino externo no existe: {path}. Créala o monta el disco; no se crea sola para no dejar las copias en el disco del sistema.", { path: "/mnt/copias" });
+  assert.match(storedText(missing, en), /^The external destination folder doesn't exist: \/mnt\/copias\. /);
+  // En español, tal cual.
+  assert.equal(storedText(missing, makeT("es")), missing);
+  // Un error de una biblioteca, tal cual.
+  assert.equal(storedText("ECONNRESET", en), "ECONNRESET");
+  // Logs: la variable del error se guarda como su plantilla y se lee en inglés.
+  const label = { k: "Falló la copia a destino externo: {error}", p: { error: appTextLabel(missing) } };
+  assert.equal(renderLabelEs(label), `Falló la copia a destino externo: ${missing}`);
+  assert.match(renderLabel(label, en), /: The external destination folder doesn't exist: \/mnt\/copias\./);
+  // Un error dentro de otro («Retención: …») también.
+  assert.equal(storedText(esText("Retención: {error}", { error: "BACKUP_KEY no está configurada." }), en), "Retention: BACKUP_KEY is not set.");
 });

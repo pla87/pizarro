@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { createProject } from "../../src/actions/projects";
-import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
+import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
 import { applyTemplateChange } from "../../src/actions/template-apply";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { resetRateLimit } from "../../src/lib/rate-limit";
-import { listTemplatesSorted, retireBuiltinTemplates, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
+import { listStartTemplates, listTemplatesSorted, retireBuiltinTemplates, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
 import type { TemplateData } from "../../src/lib/project-templates";
 
 describe("plantillas de proyecto de serie", () => {
@@ -20,11 +20,12 @@ describe("plantillas de proyecto de serie", () => {
 
     assert.equal((await seedBuiltinTemplates(db)).length, BUILTIN_KEYS.length);
     assert.equal((await seedBuiltinTemplates(db)).length, 0);
-    // Al diálogo «Nuevo proyecto» solo van nombre y descripción, por orden alfabético; el resto se queda en el servidor.
-    const offered = expectOk(await listTemplates());
+    // Al diálogo «Nuevo proyecto» (listStartTemplates, la de la app) solo van nombre, descripción y dos marcas, por orden
+    // alfabético; columnas, tipos y textos de release se quedan en el servidor.
+    const offered = await listStartTemplates(db, "es");
     const names = offered.map((t) => t.name);
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, "es")));
-    assert.ok(offered.every((t) => Object.keys(t).sort().join() === "description,id,name"));
+    assert.ok(offered.every((t) => Object.keys(t).sort().join() === "builtin,description,examples,id,name"));
     const list = await listTemplatesSorted(db);
     assert.deepEqual(list.map((t) => [t.id, t.name, t.description]), offered.map((t) => [t.id, t.name, t.description]));
     assert.ok(list.every((t) => t.builtinKey && !t.builtinModified));
@@ -173,7 +174,7 @@ describe("plantillas de proyecto de serie", () => {
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
     await loginAs(admin);
 
-    const list = expectOk(await listTemplates());
+    const list = await listStartTemplates(db, "en");
     assert.ok(list.some((t) => t.name === "Home and family"));
     assert.ok(!list.some((t) => t.name === "Casa y familia"));
 

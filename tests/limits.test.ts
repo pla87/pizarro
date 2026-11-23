@@ -34,10 +34,13 @@ test("el diagnóstico marca MAX_USERS no válida (sin dar su valor)", () => {
   assert.equal(envPresence({}).MAX_USERS, "unset");
 });
 
-test("Administración → Usuarios: sin tope, «N usuarios activos» sin «de N» ni el botón desactivado", () => {
+test("Administración → Usuarios: «N activos · M invitaciones pendientes», «de N» solo con tope, y el botón desactivado en el tope", () => {
   const src = readFileSync(new URL("../src/app/(app)/admin/users/UsersAdmin.tsx", import.meta.url), "utf8");
-  assert.match(src, /maxUsers !== null\s*\? t\("\{n\} de \{max\} usuarios activos"/);
-  assert.match(src, /t\("\{n\} usuarios activos", \{ n: activeCount \}\)/);
+  assert.match(src, /maxUsers !== null \? \[t\("\{n\} de \{max\} como máximo", \{ n: activeCount, max: maxUsers \}\)\]/);
+  assert.match(src, /t\("\{n\} activos", \{ n: joinedCount \}\)/);
+  // Las invitaciones sin aceptar no cuentan como activas en el resumen (sí en el tope) y solo salen si hay alguna.
+  assert.match(src, /const joinedCount = activeCount - pendingCount;/);
+  assert.match(src, /\.\.\.\(pendingCount \? \[/);
   assert.match(src, /disabled=\{maxUsers !== null && activeCount >= maxUsers\}/);
   // La documentación de instalación dice que es opcional.
   const env = readFileSync(new URL("../.env.example", import.meta.url), "utf8");

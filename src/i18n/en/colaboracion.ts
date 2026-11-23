@@ -134,4 +134,6 @@ export const colaboracion: Record<string, string> = {
   "Configurar el email": "Set up email",
   // Logs: volver a activar el informe semanal tras darse de baja
   "Volvió a activar para sí el informe semanal por email del que se había dado de baja": "Turned the weekly email report they had unsubscribed from back on for themselves",
+  // Logs: avisos por email de Mi perfil (antes solo «OK»)
+  "Cambió sus avisos por email": "Changed their email notifications",
 };

@@ -4,6 +4,7 @@ import { actionContext } from "./action-context";
 import { db } from "./db";
 import { cleanText, clipText, isConnectionError } from "./log-clean";
 import { LOG_LABEL_KEY } from "./log-message";
+import { appTextLabel } from "./log-legacy";
 import { notePresence } from "./presence";
 import { maskSecretPaths } from "./secret-path";
 import { renderLabelEs, type Label, type Params } from "./undo-label";
@@ -112,10 +113,11 @@ function storedLabel(label: Label, depth = 0): Label {
 
 /**
  * Texto para una variable de la plantilla que se traduce si es del diccionario (los errores de AppError, los motivos
- * fijos) y sale tal cual si no (el mensaje de un error de una biblioteca).
+ * fijos) o reproduce una de sus plantillas (los errores con datos de es-text.ts, ver appTextLabel) y sale tal cual si no
+ * (el mensaje de un error de una biblioteca).
  */
 export function logText(text: string): Label {
-  return { k: text };
+  return appTextLabel(text);
 }
 
 /** El mensaje de un error como variable de la plantilla (ver logText). */

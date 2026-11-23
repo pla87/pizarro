@@ -20,13 +20,36 @@ function validLabel(x: Json, depth = 0): x is Label {
   return Object.values(x.p).every((v) => typeof v === "string" || typeof v === "number" || validLabel(v, depth + 1) || (Array.isArray(v) && v.every((l) => validLabel(l, depth + 1))));
 }
 
+/** Plantilla de una lista («título y tipo», andList). */
+const LIST_KEY = "{list} y {last}";
+/** Texto de reserva de una lista que llegó sin sus elementos. */
+const LIST_FALLBACK: Label = { k: "varios campos" };
+
+/**
+ * Lo que versiones anteriores guardaron recortado: una lista cuyos elementos se quedaron en «[…]» (el tope de
+ * profundidad de los detalles) o «…» (el de las plantillas) se leía «Modificó «X»: […] y […]». Ahora, «varios campos».
+ */
+function repairLabel(label: Label): Label {
+  if (!label.p) return label;
+  if (label.k === LIST_KEY && ((!isObject(label.p.list) && !Array.isArray(label.p.list)) || !isObject(label.p.last))) return LIST_FALLBACK;
+  const p: Record<string, unknown> = {};
+  for (const [name, v] of Object.entries(label.p)) p[name] = Array.isArray(v) ? v.map(repairLabel) : isObject(v) ? repairLabel(v as Label) : v;
+  return { k: label.k, p: p as Label["p"] };
+}
+
 /**
  * Mensaje en el idioma de `t`: la plantilla guardada si la hay y es válida; si no, el texto guardado, traducido si es
  * un texto fijo del diccionario (los errores de las acciones, «OK») y tal cual si no (texto libre con datos dentro).
+ * `legacy` (log-legacy.ts, solo para leer en inglés): la plantilla que reproduce el texto de una fila antigua sin ella.
  */
-export function logMessageText(row: { message: string; details: Json }, t: T): string {
+export function logMessageText(row: { message: string; details: Json }, t: T, legacy?: (message: string) => Label | null): string {
   const label = isObject(row.details) ? row.details[LOG_LABEL_KEY] : undefined;
-  return label !== undefined && validLabel(label) ? renderLabel(label, t) : row.message && t(row.message);
+  if (label !== undefined && validLabel(label)) return renderLabel(repairLabel(label), t);
+  if (!row.message) return row.message;
+  const fixed = t(row.message);
+  if (fixed !== row.message || !legacy) return fixed;
+  const found = legacy(row.message);
+  return found ? renderLabel(found, t) : fixed;
 }
 
 /** Detalles sin la plantilla del mensaje (null si no queda nada). */

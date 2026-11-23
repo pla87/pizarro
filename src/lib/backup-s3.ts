@@ -8,6 +8,7 @@
 import { createHash, createHmac } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
+import { esText } from "./es-text";
 
 interface S3Config {
   endpoint: string;
@@ -204,7 +205,7 @@ export class S3Client {
         },
         resolve,
       );
-      req.setTimeout(TIMEOUT_MS, () => req.destroy(new Error(`Sin respuesta de S3 en ${TIMEOUT_MS / 1000} s.`)));
+      req.setTimeout(TIMEOUT_MS, () => req.destroy(new Error(esText("Sin respuesta de S3 en {s} s.", { s: TIMEOUT_MS / 1000 }))));
       req.on("error", reject);
       if (body === undefined) req.end();
       else if (Buffer.isBuffer(body)) req.end(body);
@@ -219,7 +220,7 @@ export class S3Client {
               // S3 puede responder (403…) y cerrar antes de terminar: también se deja de esperar entonces.
               if (!req.write(chunk)) await new Promise<void>((r) => { req.once("drain", r); req.once("close", r); });
             }
-            if (sent !== size) throw new Error(`El fichero cambió de tamaño durante la subida (${sent} de ${size} bytes).`);
+            if (sent !== size) throw new Error(esText("El fichero cambió de tamaño durante la subida ({sent} de {size} bytes).", { sent, size }));
             req.end();
           } catch (err) {
             req.destroy(err instanceof Error ? err : new Error(String(err)));

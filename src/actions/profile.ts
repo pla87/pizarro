@@ -34,6 +34,7 @@ export async function updateProfileName(name: string) {
     // Solo al cambiarlo: quien ya se llamaba así (de antes de la regla) puede seguir guardando su nombre.
     if (!sameName(next, user.name) && isReservedName(next)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
     await db.user.update({ where: { id: user.id }, data: { name: next } });
+    describeAction("Cambió su nombre a «{name}»", { name: next });
   });
 }
 
@@ -109,7 +110,9 @@ export async function deleteReleaseTemplate(templateId: string) {
 export async function updateCardStyle(style: "STRIPE" | "FILLED") {
   return runAction({ name: "profile.updateCardStyle", args: [style] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { cardStyle: z.enum(["STRIPE", "FILLED"]).parse(style) } });
+    const cardStyle = z.enum(["STRIPE", "FILLED"]).parse(style);
+    await db.user.update({ where: { id: user.id }, data: { cardStyle } });
+    describeAction("Cambió el aspecto de las tarjetas a «{style}»", { style: { k: cardStyle === "STRIPE" ? "Franja a la izquierda" : "Tarjeta entera del color" } });
   });
 }
 
@@ -117,7 +120,9 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
 export async function updateEditorMode(mode: "MARKDOWN" | "WYSIWYG") {
   return runAction({ name: "profile.updateEditorMode", args: [mode] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { editorMode: z.enum(["MARKDOWN", "WYSIWYG"]).parse(mode) } });
+    const editorMode = z.enum(["MARKDOWN", "WYSIWYG"]).parse(mode);
+    await db.user.update({ where: { id: user.id }, data: { editorMode } });
+    describeAction("Cambió el editor de las descripciones a «{mode}»", { mode: { k: editorMode === "MARKDOWN" ? "Markdown" : "Con barra de formato" } });
     revalidatePath("/", "layout");
   });
 }
@@ -126,7 +131,9 @@ export async function updateEditorMode(mode: "MARKDOWN" | "WYSIWYG") {
 export async function updateClearDraftsOnLogout(enabled: boolean) {
   return runAction({ name: "profile.updateClearDraftsOnLogout", args: [enabled] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { clearDraftsOnLogout: z.boolean().parse(enabled) } });
+    const on = z.boolean().parse(enabled);
+    await db.user.update({ where: { id: user.id }, data: { clearDraftsOnLogout: on } });
+    describeAction(on ? "Activó «{option}»" : "Desactivó «{option}»", { option: { k: "Borrar los borradores al cerrar sesión" } });
     // El usuario actual llega al AppShell desde el layout.
     revalidatePath("/", "layout");
   });
@@ -136,17 +143,26 @@ export async function updateClearDraftsOnLogout(enabled: boolean) {
 export async function updateTheme(theme: "SYSTEM" | "LIGHT" | "DARK") {
   return runAction({ name: "profile.updateTheme", args: [theme] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { theme: z.enum(["SYSTEM", "LIGHT", "DARK"]).parse(theme) } });
+    const value = z.enum(["SYSTEM", "LIGHT", "DARK"]).parse(theme);
+    await db.user.update({ where: { id: user.id }, data: { theme: value } });
+    describeAction("Cambió el tema a «{theme}»", { theme: { k: THEME_NAMES[value] } });
     // El atributo data-theme se pinta en el layout raíz.
     revalidatePath("/", "layout");
   });
 }
 
+// Nombres de Mi perfil → Apariencia, para el mensaje de Logs (se traducen al leerlo).
+const THEME_NAMES = { SYSTEM: "Sistema", LIGHT: "Claro", DARK: "Oscuro" } as const;
+const ACCENT_NAMES = { BLUE: "Azul", FOREST: "Verde bosque", SIENNA: "Siena", MUSTARD: "Mostaza", MONO: "Blanco y negro", EVA: "Eva" } as const;
+
 /** Idioma de la interfaz. */
 export async function updateLocale(locale: "ES" | "EN") {
   return runAction({ name: "profile.updateLocale", args: [locale] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { locale: z.enum(["ES", "EN"]).parse(locale) } });
+    const value = z.enum(["ES", "EN"]).parse(locale);
+    await db.user.update({ where: { id: user.id }, data: { locale: value } });
+    // Cada idioma con su propio nombre, como en el selector de Mi perfil.
+    describeAction("Cambió el idioma a {lang}", { lang: value === "EN" ? "English" : "español" });
     // El idioma se aplica en el layout raíz (lang y traducciones).
     revalidatePath("/", "layout");
   });
@@ -156,7 +172,9 @@ export async function updateLocale(locale: "ES" | "EN") {
 export async function updateAccent(accent: "BLUE" | "FOREST" | "SIENNA" | "MUSTARD" | "MONO" | "EVA") {
   return runAction({ name: "profile.updateAccent", args: [accent] }, async () => {
     const user = await requireUser();
-    await db.user.update({ where: { id: user.id }, data: { accent: z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO", "EVA"]).parse(accent) } });
+    const value = z.enum(["BLUE", "FOREST", "SIENNA", "MUSTARD", "MONO", "EVA"]).parse(accent);
+    await db.user.update({ where: { id: user.id }, data: { accent: value } });
+    describeAction("Cambió el tema de color a «{accent}»", { accent: { k: ACCENT_NAMES[value] } });
     // El atributo data-accent se pinta en el layout raíz.
     revalidatePath("/", "layout");
   });
@@ -232,6 +250,7 @@ export async function revokeSession(sessionId: string) {
     const { count } = await db.session.deleteMany({ where: { id, userId: user.id } });
     // También se corta su canal en vivo del tablero.
     if (count) cutSessionStreams(id);
+    describeAction(count ? "Cerró una de sus sesiones abiertas" : "La sesión ya estaba cerrada");
     revalidatePath("/settings");
   });
 }
@@ -245,6 +264,7 @@ export async function revokeOtherSessions() {
     const others = await db.session.findMany({ where, select: { id: true } });
     await db.session.deleteMany({ where });
     for (const s of others) cutSessionStreams(s.id);
+    describeAction("Cerró {n} sesión(es) en otros dispositivos", { n: others.length });
     revalidatePath("/settings");
   });
 }
@@ -253,6 +273,7 @@ export async function disconnectGoogle() {
   return runAction({ name: "profile.disconnectGoogle", args: [] }, async () => {
     const user = await requireUser();
     await disconnectGoogleAccount(user.id);
+    describeAction("Desconectó su cuenta de Google");
   });
 }
 
