@@ -4,7 +4,7 @@
 // previa de espacio en el disco.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { copyFile, mkdtemp, open, readdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer, type Server, type Socket } from "node:net";
@@ -219,6 +219,26 @@ describe("copias: una sola a la vez y copias cortadas", () => {
       assert.notEqual(last?.at, before, "se ha hecho la copia diaria");
       assert.equal(last?.ok, true, last?.error);
       assert.equal((await listBackups()).length, 2);
+    });
+  });
+});
+
+describe("nombres de las copias", () => {
+  test("una copia nunca reutiliza la raíz de otra (dos en el mismo segundo): toma el segundo siguiente libre", async () => {
+    const { createBackup } = await import("../../src/lib/backup");
+    const { backupFileName } = await import("../../src/lib/backup-core");
+    await withBackupEnv({}, async (uploads) => {
+      const backups = path.join(uploads, "backups");
+      await mkdir(backups, { recursive: true });
+      // Raíces ya usadas desde este segundo hasta dentro de 5 (por el volcado o por el manifiesto).
+      const base = Math.floor(Date.now() / 1000) * 1000;
+      for (let i = 0; i <= 5; i++) {
+        const name = backupFileName(new Date(base + i * 1000));
+        await writeFile(path.join(backups, i % 2 ? name : name.replace(/\.pzbak$/, ".pzman")), "");
+      }
+      const run = await createBackup();
+      assert.equal(run.ok, true, run.error);
+      assert.equal(run.file, backupFileName(new Date(base + 6000)));
     });
   });
 });

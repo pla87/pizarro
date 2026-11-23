@@ -319,7 +319,7 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     await assertDiskRoom(backupsDir(), estimate.dump + estimate.files).catch((err) => {
       throw Object.assign(err as Error, { estimate });
     });
-    const name = backupFileName(new Date());
+    const name = await freshBackupName();
     const stem = name.replace(/\.pzbak$/, "");
     file = path.join(backupsDir(), name);
     // El volcado se escribe como temporal (no cuenta como copia) y solo pasa a llamarse .pzbak justo antes de escribir
@@ -402,6 +402,19 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
     return { ...s, lastBackup: run, copies: known, shrink: shrink ? { ...shrink, at } : undefined };
   }).catch((err) => console.error("[backup] no se pudo guardar el estado", err));
   return run;
+}
+
+/**
+ * Nombre de la copia nueva (por la hora, al segundo) que no use ya otra: dos copias en el mismo segundo (una base pequeña,
+ * «Crear copia ahora» justo después de la programada) compartirían raíz y la segunda pisaría el volcado de la primera, que
+ * quizá ya está en el destino externo; con un bloqueo de retención en el bucket, sobrescribirlo falla. Se usa el segundo
+ * siguiente libre.
+ */
+async function freshBackupName(): Promise<string> {
+  const taken = (n: string) => Promise.all([n, manifestKey(n.replace(/\.pzbak$/, ""))].map((f) => stat(path.join(backupsDir(), f)).then(() => true, () => false))).then((r) => r.some(Boolean));
+  let at = new Date();
+  while (await taken(backupFileName(at))) at = new Date(at.getTime() + 1000);
+  return backupFileName(at);
 }
 
 interface CopyHealth {
