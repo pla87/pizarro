@@ -137,6 +137,21 @@
       "src/actions/tasks.ts",
       "src/lib/task-positions.ts"
     ],
+    "tablero-asignacion-e2e": [
+      "src/lib/column-assign*.ts",
+      "src/lib/form-sections.ts",
+      "src/components/board/AssignColumn.tsx",
+      "src/components/board/ColumnActionButton.tsx",
+      "src/components/board/columnDownload.ts",
+      "src/components/board/ColumnView.tsx",
+      "src/components/board/NewTaskDialog.tsx",
+      "src/app/api/projects/[projectId]/columns/[columnId]/plan/**",
+      "src/lib/column-route.ts",
+      "src/lib/report-build.ts",
+      "src/lib/report-pdf.tsx",
+      "src/actions/columns.ts",
+      "src/actions/tasks.ts"
+    ],
     "tablero-compartir-e2e": [
       "src/app/api/share/**",
       "src/app/(app)/share/**",

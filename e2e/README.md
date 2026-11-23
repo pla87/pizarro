@@ -21,7 +21,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **449** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
-| **Tablero** | | **830** | |
+| **Tablero** | | **912** | |
 | Tablero | `e2e/tablero-e2e.mjs` | 374 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 132 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
@@ -29,6 +29,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 111 | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
+| Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Generar plan» (PDF descargado, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 82 | ~1 min |
 | **Detalle de la tarea** | | **56** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
 | **Copias de tareas** | | **120** | |
@@ -70,7 +71,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3341** | |
+| **Total** | | **3423** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -277,6 +278,34 @@ tarea» trae el título y avisa de que el archivo no se guardó. Misma base y se
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-e2e.mjs
+```
+
+### Columna «Asignación a persona» (ronda 64)
+
+En un proyecto privado propio con tres personas (lo crea y lo borra la suite, con sus personas, `asig64_*`):
+
+- `rol`: menú «⋯» → *Rol de la columna* → *Asignación a persona*, persona y «Vence en 5 días»; la cabecera los muestra y
+  el submenú marca la opción. Con tres personas el diálogo ofrece «Añadir personas al proyecto», que lleva a *Ajustes del
+  proyecto → General* en los miembros (`#members`, a la vista); con cuatro ya no.
+- `entrar`: con el «+» de la columna la nota de «Nueva tarea» dice persona y plazo y la tarea nace de esa persona,
+  venciendo hoy + 5; cambiando «Columna» en el detalle, con «Mover a…» de la selección y con Alt+→, la tarea pasa a la
+  persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
+- `cambiar`: cambiar solo el plazo no pregunta ni toca las tarjetas; cambiar la persona pide confirmación con cuántas
+  tarjetas cambian («Las 2 tarjetas…») y las reasigna.
+- `plan`: «Generar plan», bajo la cabecera, descarga el PDF sin salir del tablero (`plan-…pdf`, `Content-Disposition:
+  attachment`); con la respuesta retrasada (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled) y otro
+  clic no lanza otra descarga; con un 429 simulado sale el aviso. El texto (`pdftotext`) va por vencimiento (Vencidas,
+  Hoy, Más adelante, Sin fecha), con lo rellenado de la descripción sin los apartados vacíos, las etiquetas y el aviso de
+  la tarjeta de otra persona.
+- `tipo`: «Tipo por defecto…» del menú: el «+» de la columna lo preselecciona; con «Ninguno» vuelve el último usado.
+- `quitar`: «Sin rol» quita persona, plazo y «Generar plan»; las tarjetas conservan su responsable y su fecha.
+- `movil`: a 390 px (nombre largo) la cabecera, el botón y el diálogo caben, sin scroll horizontal.
+- `en`: cabecera, menú, diálogo, nota de «New task» y PDF en inglés.
+
+Misma base y servidor (necesita `pdftotext`):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-asignacion-e2e.mjs   # PART=rol,entrar,cambiar,plan,tipo,quitar,movil,en
 ```
 
 ## Detalle de la tarea
