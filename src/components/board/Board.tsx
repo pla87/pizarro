@@ -1111,6 +1111,8 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
     const skipped = mine([...before].filter(([id]) => !moved.has(id)));
     if (skipped.size) restoreTasks(skipped);
     res.data.spawned.forEach(upsertTask);
+    // Columna «Asignación a persona»: responsable y fecha que les ha puesto el servidor.
+    for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
     const n = res.data.moved.length;
     toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
@@ -1236,6 +1238,7 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
     const server = new Map(res.data.moved.map((m) => [m.id, m.position]));
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
     res.data.spawned.forEach(upsertTask);
+    for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
@@ -1613,7 +1616,10 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
     } else if (latest && res.data.position !== position) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, position: res.data.position } : t)));
     }
-    if (res.ok) res.data.spawned.forEach(upsertTask);
+    if (res.ok) {
+      res.data.spawned.forEach(upsertTask);
+      for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
+    }
   };
 
   // Dos modales a la vez (escritorio): el «+» del abierto crea un segundo de nueva tarea (columna «Backlog» si existe, si no la primera; no hay rol BACKLOG).

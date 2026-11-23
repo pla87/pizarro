@@ -1,0 +1,133 @@
+// Columna «Asignación a persona»: reglas puras (sin base de datos), que usan el servidor, el tablero y las pruebas.
+//
+// No es un valor de ColumnRole (un valor de enum nuevo rompe la lectura en la versión anterior): la columna tiene rol NONE
+// y la marcan dos campos, `assigneeId` (la persona) y `assignDueDays` (plazo opcional en días). Toda tarea que entra en
+// ella pasa a la persona y, si la columna tiene plazo y la tarea no tiene fecha límite, vence hoy + N días. Elegir otro
+// rol (o «Sin rol») quita los dos campos. Una plantilla de proyecto conserva el plazo pero no la persona: esa columna
+// sigue siendo «Asignación a persona», sin persona hasta que se elija (y mientras, no asigna).
+import { addDaysIso, isoWeekday } from "./dates";
+
+/** Plazo máximo de «Vence en N días». */
+export const MAX_ASSIGN_DUE_DAYS = 365;
+
+/** ¿Es una columna «Asignación a persona» (con persona o, venida de una plantilla, solo con el plazo)? */
+export function isAssignColumn(c: { assigneeId?: string | null; assignDueDays?: number | null }): boolean {
+  return c.assigneeId != null || c.assignDueDays != null;
+}
+
+/** ¿Vale como plazo? Entero de 1 a MAX_ASSIGN_DUE_DAYS. */
+export function isValidAssignDays(n: unknown): n is number {
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= MAX_ASSIGN_DUE_DAYS;
+}
+
+/** Texto del campo «Vence en N días»: vacío = sin plazo (null); un plazo válido; undefined si no vale. */
+export function parseAssignDays(raw: string): number | null | undefined {
+  const s = raw.trim();
+  if (!s) return null;
+  if (!/^\d+$/.test(s)) return undefined;
+  const n = Number(s);
+  return isValidAssignDays(n) ? n : undefined;
+}
+
+/**
+ * Fecha límite (YYYY-MM-DD) que recibe una tarea al entrar: la suya si ya tiene; si no, hoy + `days` (con plazo) o
+ * ninguna (sin plazo). `today` es el día de hoy en la zona de la app.
+ */
+export function assignedDueDate(current: string | null, days: number | null | undefined, today: string): string | null {
+  if (current) return current;
+  return days ? addDaysIso(today, days) : null;
+}
+
+/** Grupo del plan: vencidas, hoy, esta semana, este mes, más adelante y sin fecha (en ese orden). */
+export type AssignPlanBucket = "overdue" | "today" | "week" | "month" | "later" | "none";
+export const ASSIGN_PLAN_BUCKETS: readonly AssignPlanBucket[] = ["overdue", "today", "week", "month", "later", "none"];
+
+/** Encabezado de cada grupo (clave de traducción). */
+export const ASSIGN_PLAN_LABEL: Record<AssignPlanBucket, string> = {
+  overdue: "Vencidas",
+  today: "Hoy",
+  week: "Esta semana",
+  month: "Este mes",
+  later: "Más adelante",
+  none: "Sin fecha",
+};
+
+/**
+ * Último día de «Esta semana» y de «Este mes» desde `today`. La semana empieza en `weekStart` (1 = lunes, 7 = domingo;
+ * la de la cuadrícula del calendario en el idioma de quien lee: calendarWeekStart). «Este mes» es lo que queda del mes
+ * después de esta semana: si la semana ya llega al mes siguiente, el mes no añade nada.
+ */
+export function assignPlanBounds(today: string, weekStart: number): { weekEnd: string; monthEnd: string } {
+  const offset = (isoWeekday(today) - weekStart + 7) % 7;
+  const weekEnd = addDaysIso(today, 6 - offset);
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  return { weekEnd, monthEnd };
+}
+
+/** Grupo de una fecha límite (YYYY-MM-DD o null). */
+export function assignPlanBucket(due: string | null, today: string, bounds: { weekEnd: string; monthEnd: string }): AssignPlanBucket {
+  if (!due) return "none";
+  if (due < today) return "overdue";
+  if (due === today) return "today";
+  if (due <= bounds.weekEnd) return "week";
+  if (due <= bounds.monthEnd) return "month";
+  return "later";
+}
+
+/**
+ * Tareas del plan agrupadas (solo los grupos con alguna), cada grupo ordenado por fecha límite y, a igual fecha, en el
+ * orden en que llegan (el de la columna). Los grupos vacíos no salen.
+ */
+export function buildAssignPlan<T extends { dueDate: string | null }>(tasks: readonly T[], today: string, weekStart: number): { bucket: AssignPlanBucket; tasks: T[] }[] {
+  const bounds = assignPlanBounds(today, weekStart);
+  const groups = new Map<AssignPlanBucket, T[]>(ASSIGN_PLAN_BUCKETS.map((b) => [b, []]));
+  for (const task of tasks) groups.get(assignPlanBucket(task.dueDate, today, bounds))!.push(task);
+  return ASSIGN_PLAN_BUCKETS.flatMap((bucket) => {
+    // sort es estable: a igual fecha se conserva el orden de la columna.
+    const list = groups.get(bucket)!.sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
+    return list.length ? [{ bucket, tasks: list }] : [];
+  });
+}
+
+/** Primera línea con texto de una descripción en Markdown, sin marcas de formato y recortada a `max` caracteres. */
+export function firstDescriptionLine(markdown: string, max = 140): string {
+  for (const raw of markdown.split(/\r?\n/)) {
+    const line = raw
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)/, "")
+      .replace(/[*_`~]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!line || /^(-{3,}|={3,})$/.test(line)) continue;
+    return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+  }
+  return "";
+}
+
+/** Tarea tal como sale en el PDF del plan. */
+export interface AssignPlanTask {
+  title: string;
+  kind: string;
+  /** Clave de PRIORITY_LABEL (BAJA, MEDIA…) o null (sin prioridad, o el proyecto no usa el campo). */
+  priority: string | null;
+  /** YYYY-MM-DD */
+  dueDate: string | null;
+  /** Primera línea de la descripción (vacía si no tiene). */
+  firstLine: string;
+  /** Títulos de las subtareas sin marcar, en su orden. */
+  pendingSubtasks: string[];
+}
+
+/** Datos del PDF «Plan de <persona>» (los prepara report-build.ts; los pinta el worker). */
+export interface AssignPlanPdfInput {
+  project: string;
+  column: string;
+  person: string;
+  today: string;
+  /** Grupos ya hechos (buildAssignPlan): el worker solo los pinta. */
+  groups: { bucket: AssignPlanBucket; tasks: AssignPlanTask[] }[];
+  /** Tarjetas de la columna que son de otras personas (no salen en el plan). */
+  others: number;
+}

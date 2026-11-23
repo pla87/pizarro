@@ -640,6 +640,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
     if (latest) board.patchTask(task.id, { position: res.data.position });
     res.data.spawned.forEach(board.upsertTask);
+    // Columna «Asignación a persona»: responsable y fecha que le ha puesto el servidor.
+    for (const a of res.data.assigned) board.patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
   };
 
   /** Cambio de la repetición; al activar semanal o mensual el día sale de la fecha límite (o de hoy). */

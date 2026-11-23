@@ -79,6 +79,9 @@ const columnSchema = z.object({
   wipLimit: z.number().int().min(1).max(999).nullable().optional(),
   /** Planes de trabajo guardados desde la columna (ritmo de sus tareas fijas; rol AI_PLAN). Opcional: los archivos anteriores no lo traen. */
   planCount: z.number().int().min(0).max(1_000_000).optional(),
+  /** «Asignación a persona»: su persona (ref de `users`) y el plazo en días. Opcionales: los archivos anteriores no los traen. */
+  assignee: person.optional(),
+  assignDueDays: z.number().int().min(1).max(365).nullable().optional(),
 });
 
 const kindSchema = z.object({

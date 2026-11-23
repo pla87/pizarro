@@ -150,7 +150,7 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
       name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true, programVersion: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
       releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
-      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true } },
+      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true } },
       kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } },
       hiddenKinds: { select: { kind: { select: { name: true } } } },
       labels: { orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true } },
@@ -258,6 +258,8 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
     for (const c of t.comments) addMentions(c.body);
   }
   for (const r of releaseRows) addUser(r.createdById);
+  // La persona de cada columna «Asignación a persona».
+  for (const c of project.columns) addUser(c.assigneeId);
   for (const d of documentRows) for (const id of [d.createdById, d.deletedById]) addUser(id);
   for (const e of eventRows) addUser(e.userId);
   const userRows = userIds.size ? await db.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true, email: true } }) : [];
@@ -274,6 +276,8 @@ type Snapshot = Awaited<ReturnType<typeof readSnapshot>>;
 async function assembleExport(snapshot: Snapshot, options: ExportOptions, exporter: ProjectExporter, now: Date, onFile?: () => void | Promise<void>): Promise<ProjectExport> {
   const { project, orderedIds, generalUsed, taskRows, releaseRows, documentRows, eventRows, userRows } = snapshot;
   const users = new UserRefs();
+  // Antes de la lista de personas (userList): la persona de cada columna «Asignación a persona» también va en ella.
+  const columnAssignee = new Map(project.columns.map((c) => [c.id, users.ref(c.assigneeId)]));
   const files = new Map<string, FileInfo>();
   let missingFiles = 0;
 
@@ -460,6 +464,8 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
       routineTargetRef: c.routineTargetColumnId ? (columnRef.get(c.routineTargetColumnId) ?? null) : null,
       wipLimit: c.wipLimit,
       planCount: c.planCount,
+      assignee: columnAssignee.get(c.id) ?? null,
+      assignDueDays: c.assignDueDays,
     })),
     kinds: kindList.map((k) => ({
       ref: kindRef.get(k.id)!, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate,

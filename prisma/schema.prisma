@@ -99,6 +99,7 @@ model User {
   projectPicks      AdminProjectPick[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
+  assignedColumns   Column[]          @relation("ColumnAssignee")
   createdTasks      Task[]            @relation("TaskCreator")
   attachments       TaskAttachment[]
   documentsCreated  ProjectDocument[] @relation("DocumentCreatedBy")
@@ -327,10 +328,16 @@ model Column {
   wipLimit  Int?
   /// Solo rol AI_PLAN: planes de trabajo guardados desde esta columna. Marca el ritmo («cada dos», «cada tres») de sus tareas fijas; el número de versión del documento (_vN) sigue siendo por proyecto (Project.aiPlanCount).
   planCount Int        @default(0)
+  /// «Asignación a persona» (con rol NONE): toda tarea que entra en la columna pasa a esta persona. Si la persona deja de poder tener tareas del proyecto, la columna deja de asignar (y lo avisa) hasta que se elija otra.
+  assigneeId String?
+  assignee   User?     @relation("ColumnAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  /// «Asignación a persona»: fecha límite = hoy + N días (1-365) para la tarea que entra sin fecha (null = no pone fecha).
+  assignDueDays Int?
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
   @@index([projectId, position])
+  @@index([assigneeId])
 }
 
 enum Recurrence {
