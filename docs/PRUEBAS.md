@@ -775,7 +775,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 17.4 Informe semanal con un destinatario rechazado (solo si tienes SMTP configurado)
 
-1. Configura el informe semanal de un proyecto de prueba a «Otra dirección…» con un buzón que no exista en tu dominio (por ejemplo, `no-existe@example.com` cambiado a tu dominio) para dentro de unos minutos.
+1. Configura el informe semanal de un proyecto de prueba a «Otra dirección…» con un buzón que no exista en tu propio dominio (`no-existe@` y tu dominio) para dentro de unos minutos.
 2. A la hora: en *Logs* (busca `scheduledRejected`) queda un error con el rechazo del servidor de correo, y en la hora siguiente no se reintenta (`report.scheduledFailed` sería un fallo de la configuración del correo, que sí se reintenta cada hora). Vuelve a poner un destinatario real.
 
 ### 17.5 Usuarios y miembros
