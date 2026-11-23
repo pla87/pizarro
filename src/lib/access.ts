@@ -4,7 +4,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
 import { AppError, forbidden, notFound } from "./errors";
-import * as v from "./validation";
 import { isRowId } from "./row-id";
 import type { CurrentUser } from "./session";
 
