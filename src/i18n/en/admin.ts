@@ -480,6 +480,12 @@ export const admin: Record<string, string> = {
   "Calendario suscrito: enlace no válido (regenerado, desactivado o de un usuario inactivo)":
     "Subscribed calendar: invalid link (regenerated, turned off, or belonging to an inactive user)",
   "Calendario suscrito consultado ({tasks} tareas, {deliverables} entregables)": "Subscribed calendar fetched ({tasks} tasks, {deliverables} deliverables)",
+  // Errores del navegador: frase llana (el texto técnico va en los detalles). Las cuatro con «{error}» son de las filas
+  // guardadas hasta la v1.67 (textos guardados por versiones anteriores: se traducen al leerlas).
+  "Error en el navegador en {path}": "Browser error on {path}",
+  "Error en el navegador": "Browser error",
+  "Error en el navegador (sin sesión) en {path}": "Browser error (signed out) on {path}",
+  "Error en el navegador (sin sesión)": "Browser error (signed out)",
   "Error en el navegador en {path}: {error}": "Browser error on {path}: {error}",
   "Error en el navegador: {error}": "Browser error: {error}",
   "Error en el navegador (sin sesión) en {path}: {error}": "Browser error (signed out) on {path}: {error}",
