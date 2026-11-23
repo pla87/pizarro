@@ -534,7 +534,7 @@ changes the database needs are applied automatically. If the update is interrupt
 stays intact.
 
 **On Railway** you don't need to do anything: if the service follows the `stable` branch, it updates itself every time
-a version is published.
+a version is published. If it already follows it and the version hasn't arrived, press ⌘K (Ctrl+K) in the service → *Deploy Latest Commit*.
 
 **On Render,** when a version comes out, click *Manual Deploy → Deploy latest reference* in Pizarro's service: it
 downloads the latest one and starts it.

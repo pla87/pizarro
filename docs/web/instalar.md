@@ -532,7 +532,7 @@ cambios que necesite la base de datos se aplican solos. Si la actualización se 
 sigue intacta.
 
 **En Railway** no tienes que hacer nada: si el servicio sigue la rama `stable`, se actualiza solo cada vez que se
-publica una versión.
+publica una versión. Si ya la sigue y la versión no ha llegado, en el servicio pulsa ⌘K (Ctrl+K) → *Deploy Latest Commit*.
 
 **En Render,** cuando salga una versión, en el servicio de Pizarro pulsa *Manual Deploy → Deploy latest reference*:
 descarga la última y la arranca.
