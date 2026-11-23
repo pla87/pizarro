@@ -541,6 +541,9 @@ downloads the latest one and starts it.
 
 **On Fly.io,** in the folder where you saved `fly.toml`, type `fly deploy` again.
 
+**With `npm start`** (without Docker), stop the server, get the new version's code (`stable` branch) and, in Pizarro's
+folder, run `npm ci`, `npx prisma migrate deploy` and `npm run build`; then start it again with `npm start`.
+
 **Going back to an earlier version** (or installing a specific one): add `--version` with its number.
 
 ```bash

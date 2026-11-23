@@ -64,7 +64,7 @@ export function OutsideListNotice({ projectId }: { projectId: string }) {
 function AddToMineItem({ projectId }: { projectId: string }) {
   const t = useT();
   const { add, pending } = useAddToMine(projectId);
-  return <MenuItem icon={FolderPlus} className="rounded-lg text-brand-600" disabled={pending} onClick={add}>{t("Añadir a mis proyectos")}</MenuItem>;
+  return <MenuItem icon={FolderPlus} className="rounded-lg text-brand-600 dark:text-brand-300" disabled={pending} onClick={add}>{t("Añadir a mis proyectos")}</MenuItem>;
 }
 
 /** Destino al cambiar de proyecto: la misma página (ajustes, releases, tablero…) en el proyecto elegido. */

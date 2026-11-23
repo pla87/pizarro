@@ -141,7 +141,9 @@
   --color-brand-200: #f2d675;
   --color-brand-300: #e9c24a;
   --color-brand-500: #d4a017;
-  --color-brand-600: #9a7209;
+  /* Botones y enlaces: #8c6807 da 5,1:1 con texto blanco y sobre blanco, y 4,8:1 sobre slate-50 (con #9a7209, 4,4 y 4,1).
+     El icono de la app y la muestra de Mi perfil conservan #9a7209. */
+  --color-brand-600: #8c6807;
   --color-brand-700: #7d5c06;
   --color-progress: #2563eb;
   @variant dark {
@@ -602,7 +604,7 @@ select:not([multiple], [size]) {
     }
   }
   /* Lo mismo para el rojo de errores y opciones de borrar (red-600: 3,8:1 en oscuro) y el acento de enlaces y opciones
-     como «Nuevo proyecto» (brand-600: 2,9:1): en oscuro, red-400 y brand-300, como los que ya traen su dark:. */
+     que no traigan su dark: (brand-600: 2,9:1): en oscuro, red-400 y brand-300, como los que ya traen su dark:. */
   .text-red-600:where(:not([class*="dark:text-"])) {
     @variant dark {
       color: var(--color-red-400);

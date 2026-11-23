@@ -504,7 +504,6 @@ export const TaskCard = memo(function TaskCard({ task, overlay = false, lazy = f
   );
 });
 
-/** Título editable en la tarjeta: Enter guarda, Esc cancela y al salir del campo también se guarda. */
 /** Título de la tarjeta (y de la fila en la vista de lista); el código de release del principio («R3F1: …») se explica al pasar el ratón. */
 export function CardTitle({ title }: { title: string }) {
   const t = useT();
@@ -519,6 +518,7 @@ export function CardTitle({ title }: { title: string }) {
   );
 }
 
+/** Título editable en la tarjeta: Enter guarda, Esc cancela y al salir del campo también se guarda. */
 function RenameInput({ title, onDone }: { title: string; onDone: (value: string, save: boolean, refocus: boolean) => void }) {
   const t = useT();
   const ref = useRef<HTMLInputElement>(null);

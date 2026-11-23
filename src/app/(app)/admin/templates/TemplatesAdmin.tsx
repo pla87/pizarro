@@ -216,6 +216,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
           {t("Con qué columnas, tipos y etiquetas arranca un proyecto nuevo.")}
           <InfoTip topic={t("Plantillas de proyecto")}>{t("Se elige una al crear el proyecto. Cambiar una plantilla no afecta a los proyectos ya creados.")}</InfoTip>
         </p>
+        <p className="text-sm text-slate-500">{t("Todas las personas pueden usar las plantillas propias para sus proyectos privados.")}</p>
       </div>
 
       {templates.length > 0 && (
@@ -288,7 +289,6 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
         >
           {/* Lo editado sigue en el formulario; «Recargar» lo cierra y trae la lista con lo que guardó la otra persona. */}
           {!!editing.conflict && <div ref={conflictRef} className="mb-4 scroll-mt-2"><EditConflictNotice onReload={() => { setEditing(null); router.refresh(); }} /></div>}
-          <p className="mb-4 text-sm text-slate-500">{t("Todas las personas pueden usar las plantillas propias para sus proyectos privados.")}</p>
           <form id="template-form" className="space-y-6" onSubmit={(e) => { e.preventDefault(); save(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>

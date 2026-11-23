@@ -259,7 +259,6 @@ describe("asignación a persona: exportar, importar y plantillas", () => {
 
 describe("asignación a persona: aplicar plantilla", () => {
   test("las tareas que se unen a la columna pasan a su persona; con otro rol deja de asignar; deshacer lo devuelve todo", async () => {
-    // Las plantillas propias solo las usan los administradores.
     const owner = await makeUser({ role: "ADMIN" });
     const ana = await makeUser();
     const f = await makeProject({ visibility: "PRIVATE", owner, members: [ana] });

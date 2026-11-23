@@ -269,7 +269,7 @@ describe("mensajes traducibles", () => {
       "Apagado ordenado (SIGTERM): 2 conexión(es) con peticiones sin terminar y 1 envío(s) de email sin terminar tras 10 s",
       "Graceful shutdown (SIGTERM): 2 connection(s) with unfinished requests and 1 unfinished email send(s) after 10 s",
     ]);
-    assert.deepEqual(both("mail"), ["Email enviado: aviso de contraseña cambiada", "Email sent: notice of password changed"]);
+    assert.deepEqual(both("mail"), ["Email enviado: aviso de contraseña cambiada", "Email sent: password change notice"]);
     assert.deepEqual(both("pdf"), ["Informe PDF generado de «Casa» (120 KB)", "PDF report generated for “Casa” (120 KB)"]);
     assert.deepEqual(both("import"), ["Proyecto «Casa» importado desde un CSV (3 tareas, 2 KB)", "Project “Casa” imported from a CSV (3 tasks, 2 KB)"]);
     assert.deepEqual(both("raw"), ["Fallo al servir el calendario suscrito: ECONNRESET en /api/calendar/…", "Failed to serve the subscribed calendar: ECONNRESET en /api/calendar/…"]);
