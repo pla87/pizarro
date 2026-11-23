@@ -27,6 +27,7 @@ import * as v from "@/lib/validation";
 import { dateToIso, isoToDate } from "@/lib/dates";
 import type { LabelOption } from "@/lib/types";
 import { revokeProject } from "@/lib/revoke";
+import { invitePendingFrom } from "@/lib/user-entered";
 import { GOOGLE_SHARE_MODES, isDomainMode } from "@/lib/google-share";
 import { googleWorkspaceDomain } from "@/lib/google-config";
 import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapacity, assertLabelCreateRate } from "@/lib/caps";
@@ -261,7 +262,7 @@ export async function addProjectMember(projectId: string, userId: string) {
     const project = await findManageableProject(user, projectId);
     const target = await db.user.findFirst({
       where: { id: v.id.parse(userId), active: true },
-      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true },
+      select: { id: true, name: true, email: true, locale: true, role: true, notifyEmail: true, mustChangePassword: true, googleSub: true, _count: { select: { sessions: true, knownDevices: true } } },
     });
     if (!target) throw new AppError("Usuario no válido.");
     const pick = !project.isPrivate && target.role === "ADMIN";
@@ -286,7 +287,13 @@ export async function addProjectMember(projectId: string, userId: string) {
       mail: emailed ? { k: " (avisado por email)" } : "",
     });
     revalidatePath("/", "layout");
-    return { link, emailed };
+    // Quien aún no ha aceptado su invitación no puede abrir el tablero: a un administrador (el único que gestiona las
+    // invitaciones) se le dice si su invitación sigue valiendo o ha caducado, para darle un enlace de invitación nuevo.
+    if (user.role === "ADMIN" && invitePendingFrom(target)) {
+      const token = await db.authToken.findFirst({ where: { userId: target.id, purpose: "INVITE", expiresAt: { gt: new Date() } }, select: { expiresAt: true } });
+      return { link, emailed, invite: { userId: target.id, expiresAt: token?.expiresAt.toISOString() ?? null } };
+    }
+    return { link, emailed, invite: null };
   });
 }
 

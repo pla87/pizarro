@@ -29,9 +29,7 @@ export const proyectos: Record<string, string> = {
   "Asignar": "Assign",
   "Proyectos": "Projects",
   "Equipo": "Team",
-  "Los usuarios asignados y todos los administradores.": "Assigned users and all administrators.",
   "Miembros": "Members",
-  "Usuarios asignados": "Assigned users",
   "Proyectos en los que trabajo": "Projects I work on",
   "Solo estos salen en tus selectores y menús.": "Only these appear in your pickers and menus.",
   "Privado, siempre aparece": "Private, always shown",
@@ -163,8 +161,6 @@ export const proyectos: Record<string, string> = {
   // Textos guardados por versiones anteriores: los errores de importar guardados en TransferJob (se traducen al leerlos)
   "El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Export the project without attachments or with “Board only”.",
   // Miembros de un proyecto: administradores asignados, «Invitar por email» y «Copiar enlace»
-  "Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.":
-    "Administrators see all team projects. If you assign one, the project shows up in their pickers and they count as assigned, like everyone else.",
   "Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos: se les puede asignar como a cualquiera y, si no están asignados, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
     "Members only see the projects they are assigned to. Administrators see them all: they can be assigned like anyone else and, if they are not, they choose which ones they work on by clicking their name (or in their profile).",
   "¿Quitar a {name} de los asignados de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the people assigned to “{project}”? As an administrator, they still see it and keep their cards.",
@@ -192,4 +188,12 @@ export const proyectos: Record<string, string> = {
   "Modificó la etiqueta «{name}»": "Edited the label “{name}”",
   "Cambió el nombre de la etiqueta «{from}» a «{name}»": "Renamed the label “{from}” to “{name}”",
   "Borró la etiqueta «{name}»": "Deleted the label “{name}”",
+  // Ajustes del proyecto → General: «Miembros» en los dos tipos de proyecto y enlace de invitación para quien no la ha aceptado
+  "Sus miembros y todos los administradores.": "Its members and all admins.",
+  "Tampoco los administradores. Sus miembros lo siguen siendo y tú también pasas a serlo.": "Not even admins. Its members stay members, and you become one too.",
+  "Los administradores ven todos los proyectos de equipo. Si añades a uno como miembro, el proyecto le sale en sus selectores y cuenta como miembro, igual que el resto.": "Admins see every team project. If you add one as a member, the project shows up in their pickers and counts as a member, like everyone else.",
+  "Sin miembros.": "No members.",
+  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, generate a new link (the previous one will stop working).",
+  "La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: generate a new invitation link to send them.",
+  "¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? Its current members ({n}, including you) keep access and their cards. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
 };

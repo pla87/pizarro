@@ -184,8 +184,6 @@ export const settings: Record<string, string> = {
   "Sus {n} tareas en este proyecto pasarán al tipo:": "Its {n} tasks in this project will move to the type:",
   "Dejar de usarlo": "Stop using it",
   "Privado: solo sus miembros": "Private: members only",
-  "Tampoco los administradores. Las personas asignadas y tú pasáis a ser miembros.": "Not even administrators. The assigned people and you become members.",
-  "¿Hacer el proyecto privado? Seguirán teniendo acceso como miembros las personas asignadas ahora ({n}, contándote a ti) y conservan sus tarjetas. Los administradores que no estén asignados (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? The people currently assigned will keep access as members ({n}, counting you) and keep their cards. Administrators who are not assigned (those who saw it only because it is in \"Projects I work on\") will stop seeing it and their cards will be unassigned. You can remove members afterwards.",
   "Privado: solo lo ven sus miembros (tampoco los administradores). Cualquiera de ellos añade o quita miembros.": "Private: only its members can see it (not even administrators). Any of them can add or remove members.",
   "(desactivado)": "(deactivated)",
   "Eres el último miembro: si ya no lo necesitas, borra el proyecto.": "You are the last member: if you no longer need it, delete the project.",

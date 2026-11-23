@@ -175,7 +175,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               <UsersIcon size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Equipo")}
-                <span className="block text-xs text-slate-500">{t("Los usuarios asignados y todos los administradores.")}</span>
+                <span className="block text-xs text-slate-500">{t("Sus miembros y todos los administradores.")}</span>
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm">
@@ -183,15 +183,15 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Privado: solo sus miembros")}
-                <span className="block text-xs text-slate-500">{t("Tampoco los administradores. Las personas asignadas y tú pasáis a ser miembros.")}</span>
+                <span className="block text-xs text-slate-500">{t("Tampoco los administradores. Sus miembros lo siguen siendo y tú también pasas a serlo.")}</span>
               </span>
             </label>
           </div>
           {visibility === project.visibility && (
             <div className="mt-3">
               <div className="mb-1 flex items-center gap-1 text-xs font-medium text-slate-500">
-                {isPrivateProject ? t("Miembros") : t("Usuarios asignados")}
-                {!isPrivateProject && <InfoTip topic={t("Usuarios asignados")}>{t("Los administradores ven todos los proyectos de equipo. Si asignas a uno, el proyecto le sale en sus selectores y cuenta como asignado, igual que el resto.")}</InfoTip>}
+                {t("Miembros")}
+                {!isPrivateProject && <InfoTip topic={t("Miembros")}>{t("Los administradores ven todos los proyectos de equipo. Si añades a uno como miembro, el proyecto le sale en sus selectores y cuenta como miembro, igual que el resto.")}</InfoTip>}
               </div>
               <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate={isPrivateProject} canInvite canResend={emailAvailable} />
             </div>
@@ -201,7 +201,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               className="btn-primary mt-4"
               disabled={pending}
               onClick={async () => {
-                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso como miembros las personas asignadas ahora ({n}, contándote a ti) y conservan sus tarjetas. Los administradores que no estén asignados (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
+                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
                 run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"));
               }}
             >
@@ -494,7 +494,11 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (!res.ok) return toast(res.error, "error");
       toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
-      setShared({ kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
+      // Con la invitación sin aceptar, el enlace al tablero no le sirve: lo que necesita es el de invitación.
+      const invite = res.data.invite;
+      setShared(invite
+        ? { kind: "pending", name, link: "", emailed: false, userId: invite.userId, expiresAt: invite.expiresAt }
+        : { kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
     });
   };
   const invite = () =>
@@ -515,7 +519,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       else toast(t("Invitación enviada"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: !res.data.mailFailed });
     });
-  const freshLink = async (m: MemberRow) => {
+  const freshLink = async (m: { id: string; name: string }) => {
     // El enlace que ya se le pasó deja de valer: no se hace sin confirmarlo (antes, «Copiar…» parecía inofensivo).
     if (!(await confirm({
       title: t("Generar enlace de invitación nuevo"),
@@ -594,7 +598,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           );
         })}
       </ul>
-      {members.length === 0 && <p className="text-sm text-slate-500">{t("Nadie asignado.")}</p>}
+      {members.length === 0 && <p className="text-sm text-slate-500">{t("Sin miembros.")}</p>}
       <div className="flex gap-2">
         <select className="input min-w-0 max-w-xs flex-1" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
           <option value="">{t("Añadir miembro…")}</option>
@@ -627,12 +631,13 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           <InfoTip topic={t("Invitar por email")}>{t("Para alguien que aún no tiene cuenta: se crea como invitación, entra en este proyecto y elige su contraseña con un enlace de un solo uso (72 horas). Después llega directamente al tablero.")}</InfoTip>
         </form>
       )}
-      {shared && <SharedLinkNote shared={shared} onClose={() => setShared(null)} />}
+      {shared && <SharedLinkNote shared={shared} onClose={() => setShared(null)} onFreshLink={(userId, name) => void freshLink({ id: userId, name })} />}
     </div>
   );
 }
 
-type SharedLink = { kind: "board" | "invite"; name: string; link: string; emailed: boolean };
+/** «pending»: se ha añadido a alguien con la invitación sin aceptar (solo administradores; sin enlace a la vista). */
+type SharedLink = { kind: "board" | "invite" | "pending"; name: string; link: string; emailed: boolean; userId?: string; expiresAt?: string | null };
 
 /**
  * Sin APP_URL el servidor compone los enlaces con http://localhost:3000, que no sirve a nadie más: en ese caso se usa la
@@ -648,10 +653,31 @@ function shareableLink(link: string): string {
   }
 }
 
-/** El enlace del último alta, para pasarlo por otro canal (WhatsApp…): el del tablero o el de la invitación. */
-function SharedLinkNote({ shared, onClose }: { shared: SharedLink; onClose: () => void }) {
+/**
+ * El enlace del último alta, para pasarlo por otro canal (WhatsApp…): el del tablero o el de la invitación. A quien aún no
+ * ha aceptado su invitación no le sirve el del tablero: si su invitación sigue valiendo, se dice hasta cuándo (el enlace
+ * no se guarda, solo su huella: no se puede volver a mostrar) y se ofrece uno nuevo; si caducó, el nuevo directamente.
+ */
+function SharedLinkNote({ shared, onClose, onFreshLink }: { shared: SharedLink; onClose: () => void; onFreshLink: (userId: string, name: string) => void }) {
   const t = useT();
   const toast = useToast();
+  const locale = useIntlLocale();
+  if (shared.kind === "pending") {
+    const until = shared.expiresAt ? new Date(shared.expiresAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : null;
+    return (
+      <div className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800" data-testid="member-link-note">
+        <div className="flex items-start gap-2">
+          <p className="min-w-0 flex-1">
+            {until
+              ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
+              : t("La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })}
+          </p>
+          <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
+        </div>
+        <button type="button" className="btn-secondary" onClick={() => onFreshLink(shared.userId!, shared.name)}>{t("Generar enlace de invitación nuevo")}</button>
+      </div>
+    );
+  }
   const text = shared.kind === "board"
     ? t("Enlace al tablero para pasárselo a {name}:", { name: shared.name })
     : shared.emailed
