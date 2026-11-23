@@ -736,4 +736,7 @@ export const admin: Record<string, string> = {
   "Cambió la configuración del acceso con Google": "Changed the Google sign-in settings",
   "Cambió la configuración del envío de emails": "Changed the email sending settings",
   "Consultó las tareas archivadas": "Viewed the archived tasks",
+  // Logs: copias pedidas a mano (antes solo «OK»)
+  "Creó una copia de seguridad a mano": "Created a backup manually",
+  "Empezó a subir la última copia a los destinos externos": "Started uploading the latest backup to the external destinations",
 };

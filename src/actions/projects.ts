@@ -129,6 +129,7 @@ export async function updateProject(projectId: string, input: { name: string; de
     const data = z.object({ name: v.name, description: z.string().max(2000) }).parse(input);
     await findManageableProject(user, projectId);
     await db.project.update({ where: { id: projectId }, data });
+    describeAction("Cambió el nombre y la descripción del proyecto «{name}»", { name: data.name });
     revalidatePath("/", "layout");
   });
 }
@@ -396,6 +397,9 @@ export async function createLabel(projectId: string, input: { name: string; colo
     return db.$transaction(async (tx) => {
       await assertLabelCapacity(tx, projectId);
       return tx.label.create({ data: { projectId, ...data }, select: { id: true, name: true, color: true } });
+    }).then((created) => {
+      describeAction("Creó la etiqueta «{name}»", { name: created.name });
+      return created;
     });
   });
 }
@@ -404,7 +408,7 @@ async function findLabel(labelId: string) {
   const user = await requireUser();
   const label = await db.label.findFirst({
     where: { id: v.id.parse(labelId), project: visibleProjectsWhere(user) },
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, name: true },
   });
   if (!label) throw notFound();
   noteProject(label.projectId);
@@ -418,6 +422,7 @@ export async function updateLabel(labelId: string, input: { name: string; color:
     const dup = await db.label.count({ where: { projectId: label.projectId, name: data.name, id: { not: label.id } } });
     if (dup) throw new AppError("Ya existe una etiqueta con ese nombre.");
     await db.label.update({ where: { id: label.id }, data });
+    describeAction(label.name === data.name ? "Modificó la etiqueta «{name}»" : "Cambió el nombre de la etiqueta «{from}» a «{name}»", { from: label.name, name: data.name });
   });
 }
 
@@ -425,6 +430,7 @@ export async function deleteLabel(labelId: string) {
   return runAction({ name: "projects.deleteLabel", args: [labelId] }, async () => {
     const label = await findLabel(labelId);
     await db.label.delete({ where: { id: label.id } });
+    describeAction("Borró la etiqueta «{name}»", { name: label.name });
   });
 }
 

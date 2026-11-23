@@ -242,4 +242,17 @@ export const settings: Record<string, string> = {
   "Dirección externa": "External address",
   "No hay ninguna sección «{tab}»: se muestra «{shown}».": "There is no “{tab}” section: showing “{shown}”.",
   "«{tab}» solo la ve quien gestiona el proyecto: se muestra «{shown}».": "“{tab}” is only for those who manage the project: showing “{shown}”.",
+  // Logs: cambios de Mi perfil (antes solo «OK»)
+  "Cambió su nombre a «{name}»": "Changed their name to “{name}”",
+  "Cambió el aspecto de las tarjetas a «{style}»": "Changed the card style to “{style}”",
+  "Cambió el editor de las descripciones a «{mode}»": "Changed the description editor to “{mode}”",
+  "Activó «{option}»": "Turned on “{option}”",
+  "Desactivó «{option}»": "Turned off “{option}”",
+  "Cambió el tema a «{theme}»": "Changed the theme to “{theme}”",
+  "Cambió el idioma a {lang}": "Changed the language to {lang}",
+  "Cambió el tema de color a «{accent}»": "Changed the color theme to “{accent}”",
+  "Cerró una de sus sesiones abiertas": "Signed out one of their sessions",
+  "La sesión ya estaba cerrada": "The session was already closed",
+  "Cerró {n} sesión(es) en otros dispositivos": "Signed out {n} session(s) on other devices",
+  "Desconectó su cuenta de Google": "Disconnected their Google account",
 };

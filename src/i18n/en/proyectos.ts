@@ -186,4 +186,10 @@ export const proyectos: Record<string, string> = {
   "La estructura de la plantilla (columnas, tipos, etiquetas y campos), con tarjetas de muestra que puedes borrar.": "The template's structure (columns, types, labels and fields), with sample cards you can delete.",
   // Proyecto recién creado desde una plantilla: su descripción, una vez, encima de las columnas
   "Descripción del proyecto": "Project description",
+  // Logs: datos y etiquetas del proyecto (antes solo «OK»)
+  "Cambió el nombre y la descripción del proyecto «{name}»": "Changed the name and description of the project “{name}”",
+  "Creó la etiqueta «{name}»": "Created the label “{name}”",
+  "Modificó la etiqueta «{name}»": "Edited the label “{name}”",
+  "Cambió el nombre de la etiqueta «{from}» a «{name}»": "Renamed the label “{from}” to “{name}”",
+  "Borró la etiqueta «{name}»": "Deleted the label “{name}”",
 };
