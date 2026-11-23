@@ -296,6 +296,8 @@ try {
     await L.checkEventually("PLAN: con un 429 sale el aviso", async () => (await page.getByText("Demasiadas peticiones, espera un momento.").count()) > 0);
     L.eq("PLAN: y no descarga nada", downloads - before, 1);
     await page.unroute("**/columns/*/plan");
+    // El 429 lo pone la prueba: Chromium lo anota en la consola («Failed to load resource…»), no es un error de la app.
+    s.errors.splice(0, s.errors.length, ...s.errors.filter((x) => !/status of 429/.test(x)));
     await L.eqEventually("PLAN: el botón vuelve a estar libre", () => btn.getAttribute("aria-busy"), null);
   }
 
