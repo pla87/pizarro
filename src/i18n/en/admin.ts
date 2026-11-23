@@ -54,7 +54,7 @@ export const admin: Record<string, string> = {
   "Páginas vistas, tareas abiertas, informes y descargas": "Page views, opened tasks, reports and downloads",
   "Incluir consultas": "Include reads",
   // El mensaje se guarda en español (en inglés se ve traducido): la búsqueda lo encuentra por el texto en español.
-  "Buscar (acción, mensaje, ruta)": "Search (action, message in Spanish, path)",
+  "Buscar (acción, mensaje, ruta)": "Search (action, message, path)",
   "Filtrar": "Filter",
   "Limpiar": "Clear",
   "← Volver a los más recientes": "← Back to the most recent",
@@ -739,4 +739,6 @@ export const admin: Record<string, string> = {
   // Logs: copias pedidas a mano (antes solo «OK»)
   "Creó una copia de seguridad a mano": "Created a backup manually",
   "Empezó a subir la última copia a los destinos externos": "Started uploading the latest backup to the external destinations",
+  // Logs: nota «i» del buscador (la búsqueda mira el texto en español)
+  "Los mensajes se guardan en español: busca con palabras en español (p. ej. «Borró» para lo borrado). La acción y la ruta son iguales en todos los idiomas.": "Messages are stored in Spanish, so search with Spanish words (e.g. “Borró” for deletions). The action and the path are the same in every language.",
 };
