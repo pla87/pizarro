@@ -156,7 +156,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
   if (!project) return null;
 
   const today = todayIso(appTimeZone());
-  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts] = await Promise.all([
+  const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts, subtaskGroups] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
@@ -172,7 +172,6 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
         assignee: { select: { name: true } },
         updatedAt: true,
         evergreen: true,
-        subtasks: { select: { done: true } },
         cost: true, costPaid: true, estimatedHours: true, actualHours: true, priority: true, client: true, startDate: true,
       },
     }),
@@ -191,7 +190,16 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
       }),
     ]),
     reportCounts(projectId, today, opts.locale),
+    // Solo los recuentos de subtareas (hechas/total), agrupados en la BD: leer cada fila eran hasta 100 por tarea.
+    db.subtask.groupBy({ by: ["taskId", "done"], where: { task: { projectId, archivedAt: null } }, _count: { _all: true } }),
   ]);
+  const subtaskCounts = new Map<string, { total: number; done: number }>();
+  for (const g of subtaskGroups) {
+    const c = subtaskCounts.get(g.taskId) ?? { total: 0, done: 0 };
+    c.total += g._count._all;
+    if (g.done) c.done += g._count._all;
+    subtaskCounts.set(g.taskId, c);
+  }
   const doneAt = new Map<string, string>();
   const noteDone = (taskId: string | null, at: Date | null | undefined) => {
     const iso = at?.toISOString();
@@ -220,8 +228,8 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
       assigneeName: task.assignee?.name ?? null,
       dueDate: dateToIso(task.dueDate),
       deliverableId: task.deliverableId,
-      subtaskTotal: task.subtasks.length,
-      subtaskDone: task.subtasks.filter((x) => x.done).length,
+      subtaskTotal: subtaskCounts.get(task.id)?.total ?? 0,
+      subtaskDone: subtaskCounts.get(task.id)?.done ?? 0,
       updatedAt: task.updatedAt.toISOString(),
       doneAt: doneAt.get(task.id) ?? null,
       evergreen: task.evergreen,
