@@ -171,8 +171,20 @@ export class S3Destination implements BackupDestination {
   get label() {
     return `S3 ${this.client.label}`;
   }
-  put(key: string, body: UploadBody) {
-    return this.client.put(key, body);
+  /**
+   * Con un bloqueo de retención en el bucket (Bucket Lock de R2, Object Lock), sobrescribir un objeto existente falla. Solo
+   * se sube lo que falta (syncBackup mira antes qué hay), pero si se pierde la respuesta de una subida que sí llegó, el
+   * reintento escribe sobre ella y el bucket lo rechaza: si el objeto ya está con el tamaño esperado (las claves son por
+   * contenido, y la raíz de cada copia es única), vale como subido.
+   */
+  async put(key: string, body: UploadBody) {
+    try {
+      await this.client.put(key, body);
+    } catch (err) {
+      const size = Buffer.isBuffer(body) ? body.length : body.size;
+      if (isDeleteRefused(err) && (await this.client.head(key).catch(() => null)) === size) return;
+      throw err;
+    }
   }
   get(key: string) {
     return this.client.get(key);

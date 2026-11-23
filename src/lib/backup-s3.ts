@@ -126,7 +126,7 @@ class S3Error extends Error {
 }
 
 /**
- * ¿Ha rechazado S3 un borrado porque el objeto está protegido? Un bloqueo de retención del bucket (Cloudflare R2: *Bucket
+ * ¿Ha rechazado S3 un borrado (o la sobrescritura de un objeto que ya existe) porque el objeto está protegido? Un bloqueo de retención del bucket (Cloudflare R2: *Bucket
  * Lock Rules*; Object Lock en otros proveedores) o una clave de acceso sin permiso para borrar: 403 AccessDenied, o un
  * código o mensaje que hable de bloqueo o retención. Los errores de firma o de credenciales (que también son 403) no
  * cuentan: fallarían igual en las subidas.

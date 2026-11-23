@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyAppUrlFallback } from "@/lib/app-url";
 import { db } from "@/lib/db";
+import { configWarnings } from "@/lib/doctor-core";
 import { LOG_LABEL_KEY } from "@/lib/log-message";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
@@ -15,6 +16,8 @@ import { retireBuiltinTemplates, seedBuiltinTemplates, upgradeBuiltinTemplates }
 async function main() {
   // Sin APP_URL, la dirección pública de Railway (lib/app-url.ts): la usa el enlace de /setup que se imprime abajo.
   applyAppUrlFallback(process.env, (m) => console.log(`[boot] ${m}`));
+  // Los mismos avisos de configuración que el diagnóstico (p. ej. NODE_OPTIONS con --max-old-space-size), en el log del arranque.
+  for (const w of configWarnings()) console.warn(`[boot] Aviso: ${w.text}`);
   try {
     const { version } = (await import("../package.json")) as { version: string };
     await db.appLog.create({

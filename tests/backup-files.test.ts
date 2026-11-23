@@ -442,6 +442,13 @@ test("bloqueo de retención en el bucket (Bucket Lock de R2): la poda salta lo r
     const again = await syncBackup(s3dest, b3.manifest, b3.bytes, dumpOf(b3.manifest, b3.dumpFile), { key, uploadRoot: root });
     assert.deepEqual([again.uploaded, again.skipped], [0, 1]);
     assert.ok(!s3.log.some((r) => r.method === "PUT"), "nada se sobrescribe");
+    // Una subida que llegó pero cuya respuesta se perdió se reintenta sobre el objeto ya escrito: el bucket la rechaza,
+    // pero el objeto está entero (mismo tamaño), así que vale. Con otro tamaño sí es un error.
+    const [objKey] = [...s3.objects.keys()].filter((k) => k.startsWith("pizarro/files/"));
+    const obj = s3.objects.get(objKey!)!;
+    await s3dest.put(objKey!.slice("pizarro/".length), Buffer.from(obj));
+    await assert.rejects(s3dest.put(objKey!.slice("pizarro/".length), Buffer.concat([obj, Buffer.from("x")])), /AccessDenied/);
+    assert.ok(s3.objects.get(objKey!)!.equals(obj), "el objeto retenido no cambia");
 
     // Solo b1 sigue bloqueada (con el código de error de otro proveedor): b2 se borra, b1 se cuenta y sus ficheros se
     // conservan.
