@@ -253,12 +253,12 @@ const SLASH_DAY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})\b/;
 const DOTTED_DAY = /^\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/;
 
 /** Orden con el que se lee una fecha con barras, puntos o guiones: el del fichero (`order`), salvo con puntos (día/mes). */
-export function dayOrderFor(raw: string, order: DayOrder): DayOrder {
+function dayOrderFor(raw: string, order: DayOrder): DayOrder {
   return DOTTED_DAY.test(raw.trim()) ? "dmy" : order;
 }
 
 /** Día y mes de «a/b/año» según el orden: si en ese orden el mes pasa de 12, se lee al revés (la única lectura posible). */
-export function slashDayMonth(a: number, b: number, order: DayOrder): [month: number, day: number] {
+function slashDayMonth(a: number, b: number, order: DayOrder): [month: number, day: number] {
   if (order === "mdy") return a <= 12 ? [a, b] : [b, a];
   return b <= 12 ? [b, a] : [a, b];
 }
