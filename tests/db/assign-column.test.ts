@@ -5,7 +5,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
+import pg from "pg";
+import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, waitForLockWaiter } from "./helpers";
 import { archiveTask, createTask, createTasks, moveTask, moveTasks, restoreTask } from "../../src/actions/tasks";
 import { setColumnAssignee, setColumnRole, setColumnWaitingDays } from "../../src/actions/columns";
 import { removeProjectMember } from "../../src/actions/projects";
@@ -18,6 +19,7 @@ import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile } from "../../src/lib/project-export/import";
 import { streamZip } from "../../src/lib/zip-stream";
 import { generateAssignPlanPdf } from "../../src/lib/report-build";
+import { flushLogs } from "../../src/lib/log";
 import { stopPdfWorker } from "../../src/lib/report-render";
 
 process.env.UPLOAD_DIR ??= await mkdtemp(path.join(tmpdir(), "pz-assign-"));
@@ -259,8 +261,7 @@ describe("asignación a persona: exportar, importar y plantillas", () => {
 
 describe("asignación a persona: aplicar plantilla", () => {
   test("las tareas que se unen a la columna pasan a su persona; con otro rol deja de asignar; deshacer lo devuelve todo", async () => {
-    // Las plantillas propias solo las usan los administradores.
-    const owner = await makeUser({ role: "ADMIN" });
+    const owner = await makeUser();
     const ana = await makeUser();
     const f = await makeProject({ visibility: "PRIVATE", owner, members: [ana] });
     await loginAs(owner);
@@ -295,5 +296,140 @@ describe("asignación a persona: aplicar plantilla", () => {
     assert.deepEqual([col.role, col.assigneeId, col.assignDueDays], ["NONE", ana.id, 2]);
     // Otras pruebas cuentan las plantillas de la instalación.
     await db.projectTemplate.delete({ where: { id: tpl.id } });
+  });
+});
+
+// Lecturas de la tabla Column que traen el plazo de «Asignación a persona» (las de la regla), mientras `fn` se ejecuta.
+let watching = false;
+let ruleReads = 0;
+const origQuery = pg.Client.prototype.query;
+pg.Client.prototype.query = function (this: pg.Client, ...args: unknown[]) {
+  const q = args[0];
+  const text = typeof q === "string" ? q : (q as { text?: string } | undefined)?.text ?? "";
+  if (watching && /FROM "public"\."Column"/.test(text) && /"assignDueDays"/.test(text)) ruleReads++;
+  return (origQuery as (...a: unknown[]) => unknown).apply(this, args);
+} as typeof pg.Client.prototype.query;
+async function ruleReadsOf<T>(fn: () => Promise<T>): Promise<{ value: T; reads: number }> {
+  ruleReads = 0;
+  watching = true;
+  try {
+    return { value: await fn(), reads: ruleReads };
+  } finally {
+    watching = false;
+  }
+}
+
+describe("asignación a persona: carreras, versión anterior, plazo y consultas", () => {
+  for (const many of [false, true]) {
+    test(`carrera: una tarjeta que entra (${many ? "moveTasks" : "moveTask"}) mientras la columna se convierte también pasa a la persona`, async () => {
+      const me = await makeUser();
+      const ana = await makeUser();
+      const f = await makeProject({ members: [me, ana] });
+      await loginAs(me);
+      const t = await makeTask(f, { columnId: f.columns.doing });
+      // Como setColumnAssignee: escribe la persona y toma el candado de posiciones de la columna, sin confirmar aún.
+      const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(`UPDATE "Column" SET "assigneeId" = $1 WHERE "id" = $2`, [ana.id, f.columns.todo]);
+        await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`task-position:${f.columns.todo}`]);
+        // El movimiento lee la columna (todavía sin persona) y espera el candado.
+        const moving = many ? moveTasks([t.id], f.columns.todo) : moveTask(t.id, f.columns.todo, null, null);
+        await waitForLockWaiter();
+        await client.query("COMMIT");
+        const { assigned } = expectOk<{ assigned: { id: string; assigneeId: string }[] }>(await moving);
+        assert.deepEqual(assigned.map((a) => [a.id, a.assigneeId]), [[t.id, ana.id]]);
+        assert.equal((await taskRow(t.id)).assigneeId, ana.id);
+      } finally {
+        await client.end();
+      }
+    });
+  }
+
+  test("rol cambiado en la versión anterior con la persona aún guardada: se comporta como la de su rol", async () => {
+    const { me, f } = await setup({ dueDays: 2 });
+    // Lo que hace setColumnRole en la v1.66: solo cambia el rol (no conoce la persona ni el plazo).
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "WAITING", waitingDays: 3 } });
+    const t = await makeTask(f, { columnId: f.columns.doing });
+    const res = expectOk(await moveTask(t.id, f.columns.todo, null, null));
+    assert.deepEqual(res.assigned, []);
+    assert.deepEqual(await taskRow(t.id), { assigneeId: null, dueDate: null, columnId: f.columns.todo });
+    const u = await makeTask(f, { columnId: f.columns.doing });
+    assert.deepEqual(expectOk(await moveTasks([u.id], f.columns.todo)).assigned, []);
+    const created = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: "Nueva", kindId: f.kindId, assigneeId: me.id }));
+    assert.equal(created.assigneeId, me.id);
+    assert.equal(created.dueDate, null);
+    assert.equal(await generateAssignPlanPdf(f.project.id, f.columns.todo, { locale: "es" }), null, "sin plan");
+    // Elegir «Sin rol» la deja como una columna normal (sin persona ni plazo).
+    expectOk(await setColumnRole(f.columns.todo, "NONE"));
+    const col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual([col.role, col.assigneeId, col.assignDueDays], ["NONE", null, null]);
+  });
+
+  test("con la misma persona, cambiar solo el plazo no toca las tarjetas que ya están; deshacer lo devuelve", async () => {
+    const { me, ana, f } = await setup({ dueDays: 3 });
+    const t = await makeTask(f, { columnId: f.columns.todo });
+    // Pasada a mano a otra persona dentro de la columna.
+    await db.task.update({ where: { id: t.id }, data: { assigneeId: me.id } });
+    const notices = (await assignedNotices(ana.id)).length;
+    const since = new Date();
+    assert.deepEqual(expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: 10 })), { reassigned: 0 });
+    assert.deepEqual(await taskRow(t.id), { assigneeId: me.id, dueDate: null, columnId: f.columns.todo });
+    assert.equal((await assignedNotices(ana.id)).length, notices);
+    let col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual([col.assigneeId, col.assignDueDays], [ana.id, 10]);
+    expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: 1 }));
+    expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: null }));
+    await flushLogs();
+    const logs = await db.appLog.findMany({ where: { action: "columns.setColumnAssignee", projectId: f.project.id, createdAt: { gte: since } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { message: true } });
+    assert.deepEqual(logs.map((l) => l.message), [
+      "Cambió el plazo de la columna «Por hacer» a 10 días",
+      "Cambió el plazo de la columna «Por hacer» a 1 día",
+      "Quitó el plazo de la columna «Por hacer»",
+    ]);
+    expectOk(await undoLast(f.project.id));
+    col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual([col.assigneeId, col.assignDueDays], [ana.id, 1]);
+    // Una tarjeta que entra después recibe el plazo nuevo.
+    const u = await makeTask(f, { columnId: f.columns.doing });
+    expectOk(await moveTask(u.id, f.columns.todo, null, null));
+    assert.equal(dateToIso((await taskRow(u.id)).dueDate), inDays(1));
+    // Cambiar la persona sigue reasignando todas.
+    assert.equal(expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: me.id, dueDays: 1 })).reassigned, 1);
+    assert.equal((await taskRow(u.id)).assigneeId, me.id);
+  });
+
+  test("la siguiente aparición de una repetición que nace en la columna pasa a su persona", async () => {
+    const { ana, f } = await setup({ dueDays: null });
+    const a = await makeTask(f, { title: "Diaria", columnId: f.columns.doing, recurrence: "DAILY", dueDate: new Date("2026-01-10T00:00:00Z") });
+    const res = expectOk(await moveTask(a.id, f.columns.done, null, null));
+    assert.equal(res.spawned.length, 1);
+    const next = await db.task.findFirstOrThrow({ where: { recurrenceFromId: a.id } });
+    assert.deepEqual([next.columnId, next.assigneeId], [f.columns.todo, ana.id]);
+  });
+
+  test("en columnas normales la regla no gasta consultas: se decide con la lectura de la columna que ya se hace", async () => {
+    const { f } = await setup();
+    const normal = f.columns.doing;
+    const create = await ruleReadsOf(() => createTask({ projectId: f.project.id, columnId: normal, title: "Una", kindId: f.kindId }));
+    expectOk(create.value);
+    assert.equal(create.reads, 1, "crear");
+    const many = await ruleReadsOf(() => createTasks({ projectId: f.project.id, columnId: normal, tasks: [{ title: "A", kindId: f.kindId }, { title: "B", kindId: f.kindId }] }));
+    expectOk(many.value);
+    assert.equal(many.reads, 1, "crear varias");
+    const t = await makeTask(f, { columnId: f.columns.done });
+    const move = await ruleReadsOf(() => moveTask(t.id, normal, null, null));
+    expectOk(move.value);
+    assert.equal(move.reads, 1, "mover");
+    expectOk(await archiveTask(t.id));
+    const restore = await ruleReadsOf(() => restoreTask(t.id));
+    expectOk(restore.value);
+    assert.equal(restore.reads, 1, "recuperar");
+    // Repetición que nace en una columna normal: una sola lectura de las columnas de destino.
+    const r = await makeTask(f, { columnId: normal, recurrence: "DAILY", dueDate: new Date("2026-01-10T00:00:00Z") });
+    const spawn = await ruleReadsOf(() => moveTask(r.id, f.columns.done, null, null));
+    assert.equal(expectOk(spawn.value).spawned.length, 1);
+    assert.equal(spawn.reads, 2, "mover a terminada (la columna destino) + repetición (sus columnas de destino)");
   });
 });

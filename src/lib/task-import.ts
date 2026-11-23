@@ -230,9 +230,9 @@ export async function importTasks(projectId: string, text: string, opts: z.input
         const last = new Map<string, number | null>();
         const rules = new Map<string, ColumnAssignment | null>();
         for (const [columnId, n] of perColumn) {
-          await assertColumnRoom(tx, columnId, n);
+          const room = await assertColumnRoom(tx, columnId, n);
           last.set(columnId, await lastPositionIn(tx, columnId));
-          rules.set(columnId, await columnAssignment(tx, columnId));
+          rules.set(columnId, await columnAssignment(tx, room));
         }
         const created = await tx.task.createManyAndReturn({
           data: items.map((it, i) => {

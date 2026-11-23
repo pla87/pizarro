@@ -6,7 +6,7 @@ import { intlLocale, makeT, type Locale, type T } from "@/i18n/core";
 import { weekRangeEnds } from "./calendar";
 import { formatDay } from "./dates";
 import type { ChecklistGroup, ChecklistGroupBy } from "./checklist";
-import { ASSIGN_PLAN_LABEL, type AssignPlanPdfInput, type AssignPlanTask } from "./column-assign-core";
+import { ASSIGN_PLAN_LABEL, PLAN_SUBTASKS_SHOWN, type AssignPlanPdfInput, type AssignPlanTask } from "./column-assign-core";
 import { programBlocks, type ProgramPdfDocument, type ProgramPdfInput } from "./course-program";
 import type { PdfBlock, PdfRun } from "./pdf-markdown";
 import type { WeekPlanGroupBy, WeekPlanSection, WeekPlanTask } from "./week-plan";
@@ -700,14 +700,11 @@ function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
 
 // --- Plan de una columna «Asignación a persona» --------------------------------------------------------------------------
 
-/** Subtareas pendientes que se listan por tarea; las demás, en una línea «y N más». */
-const PLAN_SUBTASKS_SHOWN = 15;
-
 /** Tamaño de una tarea del plan: título, línea de datos, primera línea de la descripción y subtareas pendientes. */
 const planTaskUnits = (x: AssignPlanTask) =>
   2 + textUnits(x.title, 85) + (x.firstLine ? textUnits(x.firstLine, 110) : 0)
   + x.pendingSubtasks.slice(0, PLAN_SUBTASKS_SHOWN).reduce((n, title) => n + textUnits(`[ ] ${title}`, 105), 0)
-  + (x.pendingSubtasks.length > PLAN_SUBTASKS_SHOWN ? 1 : 0);
+  + (x.pendingCount > PLAN_SUBTASKS_SHOWN ? 1 : 0);
 
 function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
   const total = r.groups.reduce((n, g) => n + g.tasks.length, 0);
@@ -724,7 +721,7 @@ function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
         {x.firstLine ? <Text style={{ color: C.muted, marginTop: 2 }}>{x.firstLine}</Text> : null}
       </>
     );
-    const more = x.pendingSubtasks.length - PLAN_SUBTASKS_SHOWN;
+    const more = x.pendingCount - PLAN_SUBTASKS_SHOWN;
     return (
       <View style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={!unbroken}>
         {unbroken ? head : <View wrap={false} minPresenceAhead={36}>{head}</View>}

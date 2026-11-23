@@ -13,7 +13,7 @@ import "server-only";
 // movida. Si así una columna queda por encima, el tablero lo muestra (el contador de la cabecera, «103/100», en ámbar
 // como al llegar al tope), los «+» siguen desactivados (el de la cabecera y el flotante del móvil), no entra nada más
 // hasta bajar del tope y el PDF solo incluye las primeras PROGRAM_MAX_SESSIONS (con aviso).
-import type { Prisma } from "@/generated/prisma/client";
+import type { ColumnRole, Prisma } from "@/generated/prisma/client";
 import { AppError } from "./errors";
 import { PROGRAM_MAX_SESSIONS } from "./program-limit";
 import { lockColumns } from "./task-positions";
@@ -31,22 +31,44 @@ interface ColumnRoomProblem {
 }
 
 /**
- * ¿Caben en la columna las tareas que llegan? null si caben (o si la columna no tiene tope). `incoming` es cuántas tareas
- * nuevas se crean en ella o, para las que ya existen (mover, recuperar), sus ids: cuentan solo las que aún no son tareas
- * activas de esa columna (reordenar dentro de la misma columna no suma, aunque esté por encima del tope por datos
- * antiguos). Llamar dentro de la transacción y con la columna bloqueada (lockColumns).
+ * Lo que se lee de la columna destino al comprobar el tope (con la columna bloqueada). Lleva también su «Asignación a
+ * persona» (column-assign.ts: columnAssignment / assignOnEnter), para decidirla con esta misma lectura: sin otra consulta
+ * y sin la carrera de leerla antes del candado (una columna que se convierte mientras entra una tarea).
  */
-export async function columnRoomProblem(tx: Tx, columnId: string, incoming: number | readonly string[]): Promise<ColumnRoomProblem | null> {
-  if (typeof incoming === "number" ? incoming <= 0 : !incoming.length) return null;
-  const column = await tx.column.findUnique({ where: { id: columnId }, select: { role: true, name: true } });
-  if (!column || column.role !== "PROGRAM") return null;
+interface RoomColumn {
+  id: string;
+  projectId: string;
+  name: string;
+  role: ColumnRole;
+  assigneeId: string | null;
+  assignDueDays: number | null;
+}
+
+const ROOM_COLUMN_SELECT = { id: true, projectId: true, name: true, role: true, assigneeId: true, assignDueDays: true } as const;
+
+/**
+ * ¿Caben en la columna las tareas que llegan? `problem` es null si caben (o si la columna no tiene tope); `column`, la
+ * columna leída (null si no llega nada o no existe). `incoming` es cuántas tareas nuevas se crean en ella o, para las que
+ * ya existen (mover, recuperar), sus ids: cuentan solo las que aún no son tareas activas de esa columna (reordenar dentro
+ * de la misma columna no suma, aunque esté por encima del tope por datos antiguos). Llamar dentro de la transacción y con
+ * la columna bloqueada (lockColumns).
+ */
+async function readColumnRoom(tx: Tx, columnId: string, incoming: number | readonly string[]): Promise<{ column: RoomColumn | null; problem: ColumnRoomProblem | null }> {
+  if (typeof incoming === "number" ? incoming <= 0 : !incoming.length) return { column: null, problem: null };
+  const column = await tx.column.findUnique({ where: { id: columnId }, select: ROOM_COLUMN_SELECT });
+  if (!column || column.role !== "PROGRAM") return { column, problem: null };
   const adding = typeof incoming === "number"
     ? incoming
     : await tx.task.count({ where: { id: { in: [...new Set(incoming)] }, NOT: { columnId, archivedAt: null } } });
-  if (adding <= 0) return null;
+  if (adding <= 0) return { column, problem: null };
   const active = await tx.task.count({ where: { columnId, archivedAt: null } });
-  if (active + adding <= PROGRAM_MAX_SESSIONS) return null;
-  return { columnId, name: column.name, active, adding, max: PROGRAM_MAX_SESSIONS };
+  if (active + adding <= PROGRAM_MAX_SESSIONS) return { column, problem: null };
+  return { column, problem: { columnId, name: column.name, active, adding, max: PROGRAM_MAX_SESSIONS } };
+}
+
+/** El problema de readColumnRoom (null si caben). */
+export async function columnRoomProblem(tx: Tx, columnId: string, incoming: number | readonly string[]): Promise<ColumnRoomProblem | null> {
+  return (await readColumnRoom(tx, columnId, incoming)).problem;
 }
 
 /** El mensaje para quien lo intenta: «La columna «X» admite como mucho 100 sesiones» (y cuántas tiene, si aún caben algunas). */
@@ -57,10 +79,11 @@ async function columnRoomMessage(problem: ColumnRoomProblem): Promise<string> {
   return t("La columna «{name}» admite como mucho {max} sesiones.", { name, max });
 }
 
-/** Como columnRoomProblem, pero lanza el error con su mensaje. */
-export async function assertColumnRoom(tx: Tx, columnId: string, incoming: number | readonly string[]): Promise<void> {
-  const problem = await columnRoomProblem(tx, columnId, incoming);
+/** Como readColumnRoom, pero lanza el error con su mensaje; si caben, devuelve la columna leída (para columnAssignment). */
+export async function assertColumnRoom(tx: Tx, columnId: string, incoming: number | readonly string[]): Promise<RoomColumn | null> {
+  const { column, problem } = await readColumnRoom(tx, columnId, incoming);
   if (problem) throw new AppError(await columnRoomMessage(problem));
+  return column;
 }
 
 /** Mensaje de una columna que no puede ser (o seguir siendo) «Programa del curso» por tener demasiadas tareas. */
