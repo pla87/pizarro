@@ -5,6 +5,7 @@ import { logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
+import { isRowId } from "@/lib/row-id";
 import { getT } from "@/i18n/server";
 import { toLocale } from "@/i18n/core";
 import { logSize } from "@/lib/format-size";
@@ -19,6 +20,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   if (!rateLimit(`project-report:${user.id}`, 5, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId } = await ctx.params;
+  // Un id mal formado (el carácter nulo, p. ej.) no existe: 404 sin llegar a PostgreSQL, que fallaba con un 500.
+  if (!isRowId(projectId)) return new Response(t("No encontrado"), { status: 404 });
   const project = await db.project.findFirst({
     where: { id: projectId, ...visibleProjectsWhere(user) },
     select: { id: true, name: true },

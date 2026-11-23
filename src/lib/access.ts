@@ -5,6 +5,7 @@ import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
 import { AppError, forbidden, notFound } from "./errors";
 import * as v from "./validation";
+import { isRowId } from "./row-id";
 import type { CurrentUser } from "./session";
 
 /**
@@ -62,7 +63,9 @@ export async function assertProjectAccess(user: CurrentUser, projectId: string):
  * consultas ya filtran por visibilidad, así que un privado ajeno no existe para nadie).
  */
 export async function findManageableProject(user: CurrentUser, projectId: string) {
-  const project = await db.project.findFirst({ where: { id: v.id.parse(projectId), ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
+  // Un id mal formado es «no encontrado» (404), no un ZodError que la ruta de exportar trataba como fallo (500).
+  if (!isRowId(projectId)) throw notFound();
+  const project = await db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true } });
   if (!project) throw notFound();
   noteProject(project.id, project.isPrivate);
   if (user.role !== "ADMIN" && !project.isPrivate) throw forbidden();
