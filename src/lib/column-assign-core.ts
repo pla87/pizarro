@@ -6,6 +6,7 @@
 // rol (o «Sin rol») quita los dos campos. Una plantilla de proyecto conserva el plazo pero no la persona: esa columna
 // sigue siendo «Asignación a persona», sin persona hasta que se elija (y mientras, no asigna).
 import { addDaysIso, isoWeekday } from "./dates";
+import { FORM_LABEL_ONLY, withoutEmptyFormSections } from "./form-sections";
 
 /** Plazo máximo de «Vence en N días». */
 export const MAX_ASSIGN_DUE_DAYS = 365;
@@ -94,14 +95,50 @@ export function buildAssignPlan<T extends { dueDate: string | null }>(tasks: rea
   });
 }
 
+/** Líneas y caracteres del resumen de la descripción que lleva cada tarea del plan. */
+export const PLAN_SUMMARY_LINES = 6;
+export const PLAN_SUMMARY_CHARS = 400;
+/** De cada descripción solo se lee (y se procesa) su comienzo: el resumen nunca llega más lejos. */
+export const PLAN_DESCRIPTION_READ = 4000;
+
+/** Una línea de Markdown en texto: sin imágenes, enlaces (su texto), marcas de título, cita o lista, ni negritas. */
+function plainLine(raw: string): string {
+  return raw
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)/, "")
+    .replace(/[*_`~]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const clip = (line: string, max: number) => (line.length > max ? `${line.slice(0, Math.max(0, max - 1)).trimEnd()}…` : line);
+
 /**
- * Primera línea con texto de una descripción en Markdown, sin marcas de formato y recortada a `max` caracteres. Los
- * bloques de código (de ``` o ~~~ a la línea que los cierra) se saltan enteros.
+ * Resumen de una descripción en Markdown para el plan: las líneas con texto, sin marcas de formato y sin los apartados del
+ * formulario del tipo que siguen vacíos (withoutEmptyFormSections, el mismo filtro que el plan para IA). Una etiqueta
+ * sola en su línea («**Quién:**») se une a su respuesta («Quién: Ana»). Los bloques de código (de ``` o ~~~ a la línea que
+ * los cierra) se saltan enteros. Como mucho `maxLines` líneas y `maxChars` caracteres en total; si queda algo fuera, la
+ * última acaba en «…».
  */
-export function firstDescriptionLine(markdown: string, max = 140): string {
+export function descriptionSummary(markdown: string, maxLines = PLAN_SUMMARY_LINES, maxChars = PLAN_SUMMARY_CHARS): string[] {
+  const out: string[] = [];
+  let used = 0;
+  let cut = false;
+  /** Etiqueta sola pendiente de su respuesta. */
+  let label: string | null = null;
+  const push = (line: string): boolean => {
+    if (out.length >= maxLines || used >= maxChars) return !(cut = true);
+    const room = maxChars - used;
+    const text = clip(line, room);
+    if (text !== line) cut = true;
+    out.push(text);
+    used += text.length;
+    return true;
+  };
   /** Valla del bloque de código abierto («```», «~~~~»…) o null fuera de uno. */
   let fence: string | null = null;
-  for (const raw of markdown.split(/\r?\n/)) {
+  for (const raw of withoutEmptyFormSections(markdown.split(/\r?\n/))) {
     const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(raw)?.[1];
     if (fence) {
       // Lo cierra una valla del mismo carácter y al menos igual de larga, sin nada detrás.
@@ -112,17 +149,19 @@ export function firstDescriptionLine(markdown: string, max = 140): string {
       fence = mark;
       continue;
     }
-    const line = raw
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+(\[[ xX]\]\s+)?|\d+[.)]\s+)/, "")
-      .replace(/[*_`~]+/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const line = plainLine(raw);
     if (!line || /^(-{3,}|={3,})$/.test(line)) continue;
-    return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+    if (FORM_LABEL_ONLY.test(raw.trim())) {
+      if (label !== null && !push(label)) break;
+      label = line;
+      continue;
+    }
+    if (!push(label !== null ? `${label} ${line}` : line)) break;
+    label = null;
   }
-  return "";
+  if (label !== null && !cut) push(label);
+  if (cut && out.length && !out.at(-1)!.endsWith("…")) out[out.length - 1] = `${out.at(-1)!}…`;
+  return out;
 }
 
 /** Subtareas pendientes que el plan lista por tarea; las demás, en una línea «y N más». */
@@ -136,8 +175,10 @@ export interface AssignPlanTask {
   priority: string | null;
   /** YYYY-MM-DD */
   dueDate: string | null;
-  /** Primera línea de la descripción (vacía si no tiene). */
-  firstLine: string;
+  /** Resumen de la descripción (descriptionSummary): líneas con texto, sin los apartados vacíos; vacío si no tiene. */
+  summary: string[];
+  /** Nombres de las etiquetas de la tarea («Urgente»…), en orden alfabético. */
+  labels: string[];
   /** Títulos de las primeras PLAN_SUBTASKS_SHOWN subtareas sin marcar, en su orden (solo se leen esas). */
   pendingSubtasks: string[];
   /** Cuántas subtareas sin marcar tiene en total (las que no salen van en una línea «y N más»). */

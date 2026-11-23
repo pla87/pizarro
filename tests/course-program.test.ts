@@ -5,7 +5,7 @@ import { buildProgramSessions, programBlocks, programDateLabel, programDocumentN
 import { markdownToPdfBlocks } from "../src/lib/pdf-markdown";
 import { canonicalTemplate } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole } from "../src/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole, SELECTABLE_COLUMN_ROLES } from "../src/lib/constants";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS, programColumnsOverLimit } from "../src/lib/program-limit";
 import { pdfRuns } from "./pdf-runs";
 import { assertFast } from "./timing";
@@ -132,7 +132,7 @@ describe("sesiones del programa", () => {
   test("rol PROGRAM: repetible, con nombre y explicación", () => {
     assert.ok(COLUMN_ROLES.includes("PROGRAM"));
     assert.equal(isUniqueColumnRole("PROGRAM"), false);
-    for (const r of COLUMN_ROLES) assert.ok(COLUMN_ROLE_LABEL[r] && COLUMN_ROLE_HINT[r], r);
+    for (const r of SELECTABLE_COLUMN_ROLES) assert.ok(COLUMN_ROLE_LABEL[r] && COLUMN_ROLE_HINT[r], r);
   });
 });
 

@@ -11,7 +11,9 @@ import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/l
 import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
 import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
-import { DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
+import { listKinds } from "@/lib/board";
+import { logText } from "@/lib/log";
+import { COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
 import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
@@ -22,7 +24,7 @@ import * as v from "@/lib/validation";
 import type { BoardColumn } from "@/lib/types";
 import { getT } from "@/i18n/server";
 
-const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true } as const;
+const columnSelect = { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } as const;
 
 async function findColumn(columnId: string) {
   const user = await requireUser();
@@ -74,7 +76,9 @@ export async function setColumnRole(columnId: string, role: string) {
     // Elegir el rol que ya tiene no cambia nada: ni entrada en el historial ni deshacer. «Sin rol» en una columna
     // «Asignación a persona» (rol NONE con persona o plazo) sí: deja de asignar.
     if (value === column.role && !isAssignColumn(column)) return { costEnabled: false };
-    describeAction("Cambió el rol de la columna «{name}»", { name: column.name });
+    // De qué rol a qué rol: los nombres van como plantilla anidada (se traducen al leer el registro).
+    const from = isAssignColumn(column) ? "Asignación a persona" : COLUMN_ROLE_LABEL[column.role as ColumnRoleValue];
+    describeAction("Cambió el rol de la columna «{name}» de «{from}» a «{to}»", { name: column.name, from: logText(from), to: logText(COLUMN_ROLE_LABEL[value]) });
     return changeColumnRole(column, value, null);
   });
 }
@@ -259,6 +263,24 @@ export async function setColumnRoutineTarget(columnId: string, targetId: string 
   });
 }
 
+/**
+ * «Tipo por defecto…»: el tipo con el que se abre «Nueva tarea» desde esta columna (uno de los visibles del proyecto), o
+ * null para volver al último que usó cada persona. Se puede deshacer.
+ */
+export async function setColumnDefaultKind(columnId: string, kindId: string | null) {
+  return runAction({ name: "columns.setColumnDefaultKind", args: [columnId, kindId] }, async () => {
+    const column = await findColumn(columnId);
+    const value = kindId === null ? null : v.id.parse(kindId);
+    if (value === column.defaultKindId) return;
+    const kind = value ? (await listKinds(column.projectId)).find((k) => k.id === value) : undefined;
+    if (value && !kind) throw notFound();
+    addUndo({ t: "column.set", id: column.id, data: { defaultKindId: column.defaultKindId } });
+    if (kind) describeAction("Puso el tipo por defecto «{kind}» a la columna «{name}»", { kind: kind.name, name: column.name });
+    else describeAction("Quitó el tipo por defecto de la columna «{name}»", { name: column.name });
+    await db.column.update({ where: { id: columnId }, data: { defaultKindId: value } });
+  });
+}
+
 /** Marca si las tarjetas de la columna cuentan como terminadas (informe y plazos). */
 export async function setColumnDone(columnId: string, isDone: boolean) {
   return runAction({ name: "columns.setColumnDone", args: [columnId, isDone] }, async () => {
@@ -310,7 +332,7 @@ export async function deleteColumn(columnId: string) {
     addUndo(
       ...pointing.map((c) => ({ t: "column.set" as const, id: c.id, data: { routineTargetColumnId: column.id } })),
       ...archived.map((t) => ({ t: "task.set" as const, id: t.id, data: { columnId: column.id } })),
-      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit, planCount: column.planCount, assigneeId: column.assigneeId, assignDueDays: column.assignDueDays } },
+      { t: "column.restore", row: { id: column.id, projectId: column.projectId, name: column.name, position: column.position, role: column.role, isDone: column.isDone, waitingDays: column.waitingDays, routineTargetColumnId: column.routineTargetColumnId, wipLimit: column.wipLimit, planCount: column.planCount, assigneeId: column.assigneeId, assignDueDays: column.assignDueDays, defaultKindId: column.defaultKindId } },
     );
     await db.$transaction(async (tx) => {
       // Bloqueo de las columnas del proyecto (el de createColumn) y la otra columna, otra vez dentro: borrar a la vez las

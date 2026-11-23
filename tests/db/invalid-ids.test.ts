@@ -10,11 +10,10 @@ import { resetRateLimit } from "../../src/lib/rate-limit";
 import { deleteLabel } from "../../src/actions/projects";
 import { markNotificationRead } from "../../src/actions/notifications";
 import { GET as reportGet } from "../../src/app/api/projects/[projectId]/report/route";
-import { GET as icsGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/ics/route";
 import { GET as weekGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/week/route";
 import { GET as checklistGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/checklist/route";
-import { GET as deliveryGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/delivery/route";
 import { GET as programGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/program/route";
+import { GET as planGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/plan/route";
 import { POST as exportPost } from "../../src/app/api/projects/[projectId]/export/route";
 
 test("un id con el carácter nulo se rechaza como no encontrado y no deja un error en el registro", async () => {
@@ -57,7 +56,7 @@ test("descargas: informe, columnas y exportar con un id mal formado dan 404, no 
   await loginAs(admin);
   const since = new Date();
   const get = (path: string) => new Request(`http://localhost${path}`);
-  const routes = { ics: icsGet, week: weekGet, checklist: checklistGet, delivery: deliveryGet, program: programGet };
+  const routes = { week: weekGet, checklist: checklistGet, program: programGet, plan: planGet };
   for (const bad of ["abc\u0000def", "abc.def", "x".repeat(41)]) {
     // Sin topar con los límites de descargas por minuto (no son lo que se prueba).
     for (const key of [...Object.keys(routes).map((k) => `column-${k}`), "column-pdf", "project-report", "project-export"]) resetRateLimit(`${key}:${admin.id}`);

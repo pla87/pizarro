@@ -581,6 +581,13 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });
         }
         if (kindRows.length) await tx.taskKind.createMany({ data: kindRows });
+        // Tipo por defecto de cada columna, por nombre (los propios importados antes que los generales); si no hay ninguno
+        // con ese nombre, la columna se queda sin él. Después de crear los tipos (clave foránea).
+        for (const c of data.columns) {
+          const lower = c.defaultKindName?.toLowerCase();
+          const defaultKindId = lower ? (ownKindByName.get(lower) ?? generalByName.get(lower)) : undefined;
+          if (defaultKindId) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { defaultKindId } });
+        }
         if (hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
         if (data.labels.length) await tx.label.createMany({ data: data.labels.map((l) => ({ id: labelIds.get(l.ref)!, projectId, name: l.name, color: l.color })) });
         if (data.deliverables.length) {

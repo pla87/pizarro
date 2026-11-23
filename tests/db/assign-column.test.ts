@@ -159,9 +159,9 @@ describe("asignación a persona: configurar la columna", () => {
     assert.deepEqual([col.role, col.waitingDays, col.assigneeId, col.assignDueDays], ["WAITING", 9, null, null]);
 
     expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: 2 }));
-    expectOk(await setColumnRole(f.columns.todo, "AGENDA"));
+    expectOk(await setColumnRole(f.columns.todo, "CHECKLIST"));
     col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
-    assert.deepEqual([col.role, col.assigneeId, col.assignDueDays], ["AGENDA", null, null]);
+    assert.deepEqual([col.role, col.assigneeId, col.assignDueDays], ["CHECKLIST", null, null]);
     expectOk(await undoLast(f.project.id));
     col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
     assert.deepEqual([col.role, col.assigneeId, col.assignDueDays], ["NONE", ana.id, 2]);

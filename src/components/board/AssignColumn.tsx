@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useState } from "react";
 import { AlertTriangle, FileDown } from "lucide-react";
 import { setColumnAssignee } from "@/actions/columns";
@@ -10,13 +11,12 @@ import { Avatar } from "../ui/Avatar";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { ColumnActionButton } from "./ColumnActionButton";
+import { downloadFile, useDownloadBusy } from "./columnDownload";
 import { useBoard } from "./context";
 
 // Columna «Asignación a persona» (reglas en lib/column-assign-core.ts): la persona y el plazo en la cabecera, el diálogo
-// para elegirlos y el botón «Generar plan» del pie. La columna tiene rol NONE: la marcan su persona y su plazo.
-
-/** «Generar plan»: el PDF con el plan de la persona en esta columna (se abre en otra pestaña, como los demás PDF de columna). */
-export const assignPlanPdf = (projectId: string, columnId: string) => window.open(`/api/projects/${projectId}/columns/${columnId}/plan`, "_blank", "noopener");
+// para elegirlos y el botón «Generar plan» (bajo la cabecera). La columna tiene rol NONE: la marcan su persona y su plazo.
 
 /**
  * Cabecera: la persona (avatar y nombre) y el plazo, si lo hay; pulsando se cambian. Si la columna no tiene persona (venía
@@ -57,28 +57,46 @@ export function AssignHeader({ column, onEdit }: { column: BoardColumn; onEdit: 
   );
 }
 
-/** Pie: «Generar plan» (PDF del plan de la persona en esta columna). Apagado sin tarjetas o sin persona, con el motivo. */
-export function AssignPlanButton({ column, cardCount }: { column: BoardColumn; cardCount: number }) {
+/**
+ * «Generar plan»: el PDF con el plan de la persona en esta columna. Se descarga sin salir del tablero (columnDownload.ts):
+ * mientras se genera, el botón está ocupado y otro clic (aquí o en el menú) no pide otro. `reason`: por qué no se puede
+ * (sin persona o sin tarjetas), o null.
+ */
+export function useAssignPlan(column: BoardColumn, cardCount: number): { reason: string | null; busy: boolean; run: () => void } {
   const t = useT();
   const toast = useToast();
   const { users, project } = useBoard();
+  const key = `plan:${column.id}`;
+  const busy = useDownloadBusy(key);
   const reason = !column.assigneeId || !users.some((u) => u.id === column.assigneeId)
     ? t("Elige antes la persona de la columna")
     : cardCount === 0 ? t("No hay tarjetas en esta columna") : null;
+  const run = () => void downloadFile(key, `/api/projects/${project.id}/columns/${column.id}/plan`, {
+    fallbackName: "plan.pdf",
+    failed: t("No se pudo generar el plan."),
+    offline: t("Sin conexión: no se ha podido generar el plan."),
+  }, t, toast);
+  return { reason, busy, run };
+}
+
+/** Botón «Generar plan», bajo la cabecera como los de las demás columnas especiales. Apagado sin tarjetas o sin persona, con el motivo. */
+export function AssignPlanButton({ column, cardCount }: { column: BoardColumn; cardCount: number }) {
+  const t = useT();
+  const { reason, busy, run } = useAssignPlan(column, cardCount);
   return (
-    <div className="px-2 pt-1 pb-2 max-md:pr-16" data-assign-plan>
-      <button
-        type="button"
-        className="btn-secondary w-full py-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-        onClick={reason ? () => toast(reason, "error") : () => assignPlanPdf(project.id, column.id)}
-        aria-disabled={reason ? true : undefined}
-        title={reason ?? t("PDF con las tareas de la persona en esta columna, por vencimiento")}
-      >
-        <FileDown size={15} /> {t("Generar plan")}
-      </button>
-    </div>
+    <ColumnActionButton
+      icon={FileDown}
+      label={busy ? t("Generando plan…") : t("Generar plan")}
+      onClick={run}
+      disabled={reason != null}
+      busy={busy}
+      title={reason ?? t("PDF con las tareas de la persona en esta columna, por vencimiento")}
+    />
   );
 }
+
+/** Hasta cuántas personas la lista se considera corta (el diálogo ofrece añadir más al proyecto). */
+const SHORT_LIST = 3;
 
 /**
  * Elegir la persona (las que pueden tener tareas del proyecto, como el selector de «Responsable») y, opcional, «Vence en
@@ -89,7 +107,7 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
   const t = useT();
   const toast = useToast();
   const confirm = useConfirm();
-  const { users, currentUserId, getTasks, track, refresh } = useBoard();
+  const { users, currentUserId, getTasks, track, refresh, project, canManageMembers } = useBoard();
   const id = useId();
   // Con otro rol, la persona y el plazo que pueda conservar (de una versión anterior) no cuentan: se empieza de cero.
   const current = isAssignColumn(column) ? { assigneeId: column.assigneeId, dueDays: column.assignDueDays } : { assigneeId: null, dueDays: null };
@@ -139,6 +157,12 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
         {!personId && <option value="">{t("Elige una persona")}</option>}
         {users.map((u) => <option key={u.id} value={u.id}>{u.id === currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
       </select>
+      {/* Con pocas personas, quizá falta la que se busca: quien puede, la añade al proyecto (Ajustes → General). */}
+      {canManageMembers && users.length <= SHORT_LIST && (
+        <p className="mt-1 text-xs">
+          <Link className="text-brand-600 underline dark:text-brand-300" href={`/p/${project.id}/settings?tab=general`} data-assign-add-people>{t("Añadir personas al proyecto")}</Link>
+        </p>
+      )}
       <label className="label mt-3" htmlFor={`${id}-days`}>{t("Vence en (días, opcional)")}</label>
       <input
         id={`${id}-days`}

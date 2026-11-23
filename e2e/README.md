@@ -397,8 +397,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-
 «Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
 crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
 tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
-`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda (desde la ronda 57, su botón lo descarga sin
-salir del tablero y un error, como un 429, sale en un aviso), y lo mismo a 390 px. Misma base y servidor:
+`RRULE` en la suscripción `.ics`, y lo mismo a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node calendario-repetir-e2e.mjs   # PART=new,cal,ics,mobile
@@ -446,9 +445,9 @@ El paso 2 del plan ofrece «Descargar adjuntos (n)»: un ZIP con los adjuntos de
 (`adjuntos/03-titulo-de-la-tarea/plano.webp`; con la app en inglés, `attachments/03-task-title/…`, parte `en`), por la misma ruta, con los mismos topes y permisos que el de la release; el
 texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la descripción) y por su enlace a Pizarro, y a
 Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
-del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Exportar a calendario»,
-«Resumen para el cliente», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón
-y en el menú de la columna; el .ics, sin fechas límite, y la lista, sin subtareas, también). Con el texto del paso 2 cambiado,
+del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Ver lista»,
+«Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón y en el menú de la columna; la lista,
+sin subtareas, también). Con el texto del paso 2 cambiado,
 un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
 (por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
 

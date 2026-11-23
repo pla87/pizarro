@@ -23,12 +23,12 @@ const NAME = "Web r51";
 const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
 const COLS = [
   ["r51_pend", "Pendiente", "NONE"], ["r51_plan", "Plan IA", "AI_PLAN"], ["r51_curso", "En curso", "NONE"], ["r51_salto", "Salto", "NEXT_RELEASE"],
-  ["r51_prog", "Temario", "PROGRAM"], ["r51_sem", "Semana", "WEEKLY_PLAN"], ["r51_lista", "Lista", "CHECKLIST"], ["r51_agenda", "Agenda", "AGENDA"],
-  ["r51_entrega", "Entrega", "DELIVERY"], ["r51_presu", "Presupuesto", "BUDGET"],
+  ["r51_prog", "Temario", "PROGRAM"], ["r51_sem", "Semana", "WEEKLY_PLAN"], ["r51_lista", "Lista", "CHECKLIST"],
+  ["r51_presu", "Presupuesto", "BUDGET"],
 ];
 const ACTION = {
   NEXT_RELEASE: "Generar release", AI_PLAN: "Generar plan de trabajo", PROGRAM: "Publicar programa (PDF)", WEEKLY_PLAN: "PDF de la semana",
-  CHECKLIST: "Ver lista", AGENDA: "Exportar a calendario (.ics)", DELIVERY: "Resumen para el cliente (PDF)", BUDGET: "Resumen de presupuesto",
+  CHECKLIST: "Ver lista", BUDGET: "Resumen de presupuesto",
 };
 
 /** Proyecto privado con una columna de cada rol especial, cuatro tareas en «Plan IA» (dos fijas, una cada dos planes) y una en «Salto». */

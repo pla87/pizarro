@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import type { EditorModeValue } from "@/lib/types";
-import { COLUMN_ROLES, isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, type ColumnRoleValue } from "@/lib/constants";
+import { isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, SELECTABLE_COLUMN_ROLES, type ColumnRoleValue, type SelectableColumnRole } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
 import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
@@ -26,7 +26,8 @@ import { isEditConflict } from "@/lib/edit-conflict-core";
 import { MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
-const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", AGENDA: "Agenda", ROUTINES: "Rutinas", DELIVERY: "Entrega al cliente", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
+// Solo los roles que se pueden elegir (sin los retirados: Agenda, Entrega al cliente).
+const ROLE_LABEL: Record<SelectableColumnRole, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", ROUTINES: "Rutinas", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
 
 /** Valor del selector de rol para una columna «Asignación a persona» (rol NONE con plazo). */
 const ASSIGN = "ASSIGN";
@@ -352,7 +353,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                         onChange={(e) => setCol(e.target.value === ASSIGN ? { role: "NONE", assignDueDays: assignDays ?? DEFAULT_TEMPLATE_ASSIGN_DAYS } : { role: e.target.value as ColumnRoleValue, assignDueDays: null })}
                         aria-label={t("Rol especial")}
                       >
-                        {COLUMN_ROLES.flatMap((r) => [
+                        {SELECTABLE_COLUMN_ROLES.flatMap((r) => [
                           <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>,
                           ...(r === "NONE" ? [
                             // Solo el nombre: el plazo va en el campo de al lado (con él dentro, el selector partía la fila).

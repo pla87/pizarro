@@ -232,7 +232,6 @@
       "src/components/board/recurrence-ui.ts",
       "src/components/board/NewTaskDialog.tsx",
       "src/components/board/ColumnView.tsx",
-      "src/app/api/projects/[projectId]/columns/[columnId]/ics/**",
       "src/lib/calendar*.ts",
       "src/lib/ics.ts",
       "src/lib/recurrence*.ts",

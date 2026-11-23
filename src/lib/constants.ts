@@ -12,6 +12,20 @@ export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET", "PROGRAM", "AI_PLAN"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
+/**
+ * Roles retirados (v1.68): «Agenda» (el calendario suscrito ya da las fechas) y «Entrega al cliente». Siguen en el enum
+ * hasta la versión siguiente (expandir y contraer), pero no se ofrecen ni se escriben: lo que aún los traiga (un proyecto
+ * exportado, una plantilla antigua, la base tras volver a una versión anterior) queda como «Sin rol» (liveColumnRole).
+ */
+const RETIRED_COLUMN_ROLES = ["AGENDA", "DELIVERY"] as const satisfies readonly ColumnRoleValue[];
+export type SelectableColumnRole = Exclude<ColumnRoleValue, (typeof RETIRED_COLUMN_ROLES)[number]>;
+/** Los roles que se pueden elegir (menú de la columna, editor de plantillas). */
+export const SELECTABLE_COLUMN_ROLES = COLUMN_ROLES.filter((r): r is SelectableColumnRole => !(RETIRED_COLUMN_ROLES as readonly string[]).includes(r));
+/** El rol tal como se guarda ahora: uno retirado pasa a NONE. */
+export function liveColumnRole(role: ColumnRoleValue): SelectableColumnRole {
+  return (RETIRED_COLUMN_ROLES as readonly string[]).includes(role) ? "NONE" : (role as SelectableColumnRole);
+}
+
 /** Roles que solo puede tener una columna por proyecto (el resto de roles pueden repetirse). */
 export const UNIQUE_COLUMN_ROLES: readonly ColumnRoleValue[] = ["NEXT_RELEASE", "IN_PRODUCTION"];
 export const isUniqueColumnRole = (role: string): boolean => (UNIQUE_COLUMN_ROLES as readonly string[]).includes(role);
@@ -45,6 +59,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   WEEKLY_PLAN: "Planificación semanal",
   CHECKLIST: "Lista consolidada",
   REVIEW: "Revisión con requisitos",
+  // Los retirados (AGENDA, DELIVERY) conservan su nombre: lo usan los registros y una columna que aún lo tenga.
   AGENDA: "Agenda",
   ROUTINES: "Rutinas",
   DELIVERY: "Entrega al cliente",
@@ -54,7 +69,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
 };
 
 /** Explicación de una línea de cada rol (se ve al pasar por encima en el menú de la columna). */
-export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
+export const COLUMN_ROLE_HINT: Record<SelectableColumnRole, string> = {
   NONE: "Columna normal, sin funciones especiales.",
   NEXT_RELEASE: "Sus tarjetas forman la siguiente release (botón «Generar release»).",
   IN_PRODUCTION: "Las tarjetas de una release publicada pasan aquí.",
@@ -62,9 +77,7 @@ export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
   WEEKLY_PLAN: "PDF de las tareas de la semana, por día o por persona.",
   CHECKLIST: "Reúne las subtareas de todas sus tarjetas en una sola lista.",
   REVIEW: "Avisa al sacar una tarjeta con subtareas sin marcar.",
-  AGENDA: "Exporta sus tareas con fecha a un calendario (.ics).",
   ROUTINES: "Tareas que se repiten: elige dónde aparece la siguiente.",
-  DELIVERY: "PDF de resumen para el cliente, sin comentarios ni personas.",
   BUDGET: "Suma el coste de sus tarjetas y activa el campo Coste.",
   PROGRAM: "Cada tarjeta es una sesión del curso: publica el programa en PDF.",
   AI_PLAN: "Sus tarjetas forman un plan de trabajo en Markdown para una IA (botón «Generar plan de trabajo»).",

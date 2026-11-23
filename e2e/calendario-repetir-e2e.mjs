@@ -179,44 +179,8 @@ if (only.includes("ics")) {
   L.eq("ICS: una sola serie (ni copias por semana ni la de la tarea sin fecha)", ics.split("\r\n").filter((l) => l.startsWith("RRULE:")).length, 1);
   L.eq("ICS: ningún evento suelto de la serie", (ics.match(new RegExp(`UID:${taskId}-repeat-`, "g")) ?? []).length, 0);
 
-  // Columna Agenda: el mismo VEVENT de serie en su .ics.
-  const cols = await L.columnIds();
-  await L.q(`UPDATE "Column" SET role='AGENDA' WHERE id=$1`, [cols[L.COL.backlog]]);
-  const r2 = await page.request.get(`${L.BASE}/api/projects/${p.id}/columns/${cols[L.COL.backlog]}/ics`);
-  const agenda = (await r2.text()).replace(/\r\n /g, "");
-  L.eq("ICS: el .ics de la columna Agenda responde", r2.status(), 200);
-  L.check("ICS: y lleva la misma serie", agenda.includes(`UID:${taskId}-repeat@pizarro\r\n`) && agenda.includes(`RRULE:FREQ=WEEKLY;BYDAY=${BYDAY}\r\n`));
-  // Desde el tablero (ronda 57): se descarga sin salir del tablero, y un error sale en un aviso (antes la página se
-  // sustituía por el texto de la respuesta).
-  await page.goto(`${L.BASE}/p/${p.id}`);
-  await L.board(page);
-  const icsBtn = L.colLoc(page, L.COL.backlog).getByRole("button", { name: "Exportar a calendario (.ics)" });
-  const [download] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), icsBtn.click()]);
-  L.check("ICS: el botón de la columna descarga el .ics con su nombre", download.suggestedFilename().endsWith(".ics"), download.suggestedFilename());
-  L.check("ICS: …sin salir del tablero", page.url().endsWith(`/p/${p.id}`), page.url());
-  // Red lenta: tres clics seguidos mientras llega la respuesta bajan un solo fichero (antes, uno por clic).
-  let icsRequests = 0, icsDownloads = 0;
-  const onDownload = () => icsDownloads++;
-  page.on("download", onDownload);
-  await page.route(/\/columns\/[^/]+\/ics$/, async (route) => {
-    icsRequests++;
-    await sleep(1500);
-    await route.continue();
-  });
-  for (let i = 0; i < 3; i++) await icsBtn.click();
-  await L.eqEventually("ICS: con la red lenta, tres clics bajan un solo .ics", () => icsDownloads, 1, { timeout: 10000 });
-  await sleep(1000);
-  L.eq("ICS: …y piden el fichero una sola vez", [icsRequests, icsDownloads], [1, 1]);
-  page.off("download", onDownload);
-  await page.unroute(/\/columns\/[^/]+\/ics$/);
+  // (El .ics de la columna «Agenda» ya no existe: el rol se retiró y las fechas llegan por la suscripción de arriba.)
   L.assertNoErrors("ICS", [s]);
-  // Después de comprobar la consola: el 429 simulado deja su «Failed to load resource» (esperado).
-  await page.route(/\/columns\/[^/]+\/ics$/, (route) => route.fulfill({ status: 429, body: "Demasiadas peticiones" }));
-  await icsBtn.click();
-  await L.checkEventually("ICS: con un 429, aviso emergente", async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes("Demasiadas peticiones, espera un momento."), { timeout: 5000 });
-  L.check("ICS: …y el tablero sigue a la vista", page.url().endsWith(`/p/${p.id}`) && (await L.colLoc(page, L.COL.backlog).isVisible()));
-  await page.unroute(/\/columns\/[^/]+\/ics$/);
-  await L.q(`UPDATE "Column" SET role='NONE' WHERE id=$1`, [cols[L.COL.backlog]]);
   await s.ctx.close();
 }
 

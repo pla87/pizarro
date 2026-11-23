@@ -3,18 +3,17 @@ import type { BoardTask } from "@/lib/types";
 import type { Store } from "./stores";
 
 /**
- * Por qué no se puede usar la acción de una columna Lista de comprobación o Agenda («Ver lista», «Exportar a calendario»):
- * sin tarjetas, o sin ninguna con lo que la acción necesita (subtareas, fecha límite). Un código, no el texto: es un
- * valor primitivo, así que sirve de instantánea para useSyncExternalStore (solo cambia cuando cambia el motivo).
+ * Por qué no se puede usar la acción de una columna Lista de comprobación («Ver lista»): sin tarjetas, o sin ninguna con
+ * lo que la acción necesita (subtareas). Un código, no el texto: es un valor primitivo, así que sirve de instantánea para
+ * useSyncExternalStore (solo cambia cuando cambia el motivo).
  */
-export type ColumnGate = "empty" | "noDueDate" | "noSubtasks";
+export type ColumnGate = "empty" | "noSubtasks";
 
-type GateTask = Pick<BoardTask, "columnId" | "dueDate" | "subtaskTotal">;
+type GateTask = Pick<BoardTask, "columnId" | "subtaskTotal">;
 
 /** El motivo (o null si la acción se puede usar). `cardCount`: tarjetas que se ven en la columna. */
 export function columnGate(tasks: readonly GateTask[], columnId: string, role: ColumnRoleValue, cardCount: number): ColumnGate | null {
   if (cardCount === 0) return "empty";
-  if (role === "AGENDA") return tasks.some((x) => x.columnId === columnId && x.dueDate) ? null : "noDueDate";
   if (role === "CHECKLIST") return tasks.some((x) => x.columnId === columnId && x.subtaskTotal > 0) ? null : "noSubtasks";
   return null;
 }

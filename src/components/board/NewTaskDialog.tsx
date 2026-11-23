@@ -95,6 +95,15 @@ function captureTitle(t: T, locale: string): string {
 }
 
 /**
+ * «Tipo por defecto» de la columna (menú «⋯» de la columna), si sigue entre los tipos visibles del proyecto; si no (sin él,
+ * borrado u oculto), undefined y vale el último usado.
+ */
+function columnDefaultKind(f: Pick<ProjectFormData, "columns" | "kinds">, columnId: string): string | undefined {
+  const id = f.columns.find((c) => c.id === columnId)?.defaultKindId;
+  return id && f.kinds.some((k) => k.id === id) ? id : undefined;
+}
+
+/**
  * Persona de una columna «Asignación a persona» (si la tiene y puede tener tareas del proyecto): el servidor le asigna toda
  * tarea que nazca ahí, así que el diálogo la propone como «Responsable» y lo dice bajo el selector.
  */
@@ -137,12 +146,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const titleRef = useRef<HTMLInputElement>(null);
   // Archivos de entrada (pegar / soltar sobre «Nueva tarea»): mismos límites que al añadirlos dentro del diálogo.
   const [initialPlan] = useState(() => planUploads(initialFiles ?? [], { fileMaxBytes: board.project.fileMaxMb * 1024 * 1024, remainingBytes: board.project.attachMaxMb * 1024 * 1024 }));
-  // Tipo: el del borrador; si no, el último con el que esta persona creó una tarea en el proyecto (lastKind.ts); si no, el primero.
+  // Tipo: el del borrador; si no, el «tipo por defecto» de la columna; si no, el último con el que esta persona creó una
+  // tarea en el proyecto (lastKind.ts); si no, el primero.
   // Sin borrador, el tipo inicial trae su automatización (título y descripción de plantilla y subtareas), como al elegirlo
   // en el selector: antes solo se aplicaba al cambiar de tipo y el preseleccionado se quedaba sin ella. Un borrador
   // recuperado se queda como estaba (no se le añade nada).
   const [init] = useState(() => {
-    const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : initialKindId(board.currentUserId, board.project.id, board.kinds);
+    const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? "") ?? initialKindId(board.currentUserId, board.project.id, board.kinds));
     const title = d?.title ?? initialTitle ?? (initialPlan.accepted.length ? captureTitle(t, locale) : "");
     const description = d?.description ?? initialDescription ?? "";
     const subtasks = d?.subtasks ?? [];
@@ -156,6 +166,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   });
   const [title, setTitle] = useState(init.title);
   const [kindId, setKindId] = useState(init.kindId);
+  // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna.
+  const kindPicked = useRef(false);
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? columnPerson(board, columnId)?.id ?? ""));
   /**
@@ -164,6 +176,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
    */
   const changeColumn = (id: string) => {
     setColumnId(id);
+    // La columna nueva tiene tipo por defecto y el tipo no se eligió a mano: se cambia (con su automatización, como al elegirlo).
+    const kind = kindPicked.current ? undefined : columnDefaultKind(form, id);
+    if (kind && kind !== kindId) applyKind(kind, form.kinds);
     const person = columnPerson(form, id);
     if (person) setAssigneeId(person.id);
     else if (assigneeId && assigneeId === columnPerson(form, columnId)?.id) setAssigneeId("");
@@ -356,6 +371,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // La release y los planes de trabajo para IA tienen tareas fijas («Siempre en la release» / «Siempre en el plan»).
   const columnRole = form.columns.find((c) => c.id === columnId)?.role;
   const assignPerson = columnPerson(form, columnId);
+  // Plazo de la columna «Asignación a persona»: lo dice la nota, sin precargar la fecha (la pone el servidor si se deja vacía).
+  const assignDays = assignPerson ? form.columns.find((c) => c.id === columnId)?.assignDueDays : null;
   const isReleaseColumn = hasEvergreenTasks(columnRole);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -649,6 +666,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
           <div className="label">{t("Tipo")}</div>
           <TypeSelector kinds={form.kinds} value={kindId} onChange={(id) => {
             if (loading) return;
+            kindPicked.current = true;
             applyKind(id, form.kinds);
           }} />
         </div>
@@ -715,7 +733,15 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <option value="">{t("Sin responsable")}</option>
               {form.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
             </select>
-            {assignPerson && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-column-assigns>{t("Esta columna asigna sus tarjetas a {name}", { name: assignPerson.name })}</p>}
+            {assignPerson && (
+              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-column-assigns>
+                {!assignDays
+                  ? t("Esta columna asigna sus tarjetas a {name}", { name: assignPerson.name })
+                  : assignDays === 1
+                    ? t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en 1 día", { name: assignPerson.name })
+                    : t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en {n} días", { name: assignPerson.name, n: assignDays })}
+              </p>
+            )}
           </div>
           <div className="min-w-0">
             <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite")}</label>

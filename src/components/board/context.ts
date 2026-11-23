@@ -25,6 +25,8 @@ export interface BoardApi {
   dragHandle: boolean;
   google: { enabled: boolean; connected: boolean };
   today: string;
+  /** Puede añadir personas al proyecto (Ajustes del proyecto → General): administradores y, si es privado, sus miembros. */
+  canManageMembers: boolean;
   setLabels: React.Dispatch<React.SetStateAction<LabelOption[]>>;
   /** Almacenes del estado rápido (tareas y selección); se leen con los hooks del final de este archivo. */
   stores: BoardStores;

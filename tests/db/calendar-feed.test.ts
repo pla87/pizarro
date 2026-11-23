@@ -9,14 +9,11 @@ import { createProject, removeProjectMember } from "../../src/actions/projects";
 import { cachedFeedIcs, defaultFeedScope, EMPTY_FEED_ICS, FEED_CACHE_MAX, FEED_CACHE_MAX_BYTES, FEED_CACHE_MS, feedCacheForTests, feedMaxAgeSec, resolveFeedToken } from "../../src/lib/calendar-feed";
 import { revokeUser } from "../../src/lib/revoke";
 import pg from "pg";
-import { buildColumnIcs } from "../../src/lib/column-views";
 import { flushLogs } from "../../src/lib/log";
 import { appTimeZone } from "../../src/lib/board";
 import { dateToIso, isoWeekday, todayIso } from "../../src/lib/dates";
 import { firstOccurrence } from "../../src/lib/recurrence-series";
-import { FEED_MAX_REPEATS } from "../../src/lib/calendar-feed-core";
 import { seedBuiltinTemplates } from "../../src/lib/template-store";
-import { makeT } from "../../src/i18n/core";
 
 let n = 0;
 /**
@@ -476,7 +473,7 @@ describe("calendario suscrito", () => {
     assert.equal((await fetchFeed(token, undefined, { "if-none-match": 'W/"otro"' })).res.status, 200);
   });
 
-  test("descripciones enormes: el calendario y el .ics de la columna Agenda recortan antes de convertir", async () => {
+  test("descripciones enormes: el calendario recorta antes de convertir", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });
     const huge = "**a ".repeat(60_000);
@@ -499,15 +496,6 @@ describe("calendario suscrito", () => {
     assert.ok(emojiDesc.endsWith("😀…"));
     assert.ok(!emojiDesc.includes("�"));
     assert.equal(Array.from(emojiDesc.split("\\n").at(-1)!).length, 300);
-
-    // Columna Agenda: la descripción del .ics se recorta a 1500 caracteres antes de convertirla.
-    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
-    const t3 = performance.now();
-    const col = await buildColumnIcs(f.project.id, f.columns.todo);
-    assert.ok(performance.now() - t3 < 2000);
-    assert.ok(col);
-    const colDesc = /DESCRIPTION:(.*)\r\n/.exec(col.ics.replace(/\r\n /g, "").split("BEGIN:VEVENT").find((b) => b.includes(t1.id))!)![1]!;
-    assert.ok(colDesc.length <= 1600);
   });
 
   test("si la ruta falla: 500 genérico y el error se registra sin el token", async () => {
@@ -624,58 +612,8 @@ describe("tareas que se repiten en el calendario suscrito", () => {
     assert.ok(block(text, `${mine.id}-repeat@pizarro`));
     assert.equal(block(text, `${theirs.id}-repeat@pizarro`), undefined);
   });
-
-  test(".ics de la columna Agenda: la serie de cada tarea que se repite (con la nota si se pasa el idioma)", async () => {
-    const f = await makeProject();
-    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
-    const t = await makeTask(f, { title: "Riego", recurrence: "MONTHLY", dueDate: inDays(3) });
-    await db.task.update({ where: { id: t.id }, data: { recurrenceDay: 31 } });
-    const col = await buildColumnIcs(f.project.id, f.columns.todo);
-    assert.ok(col);
-    const serie = block(col.ics, `${t.id}-repeat@pizarro`);
-    assert.ok(serie?.includes("RRULE:FREQ=MONTHLY;BYMONTHDAY=-1\r\n"));
-    assert.ok(block(col.ics, `${t.id}@pizarro`));
-    assert.ok(!serie!.includes("Repetición prevista"));
-    const en = await buildColumnIcs(f.project.id, f.columns.todo, { t: makeT("en"), locale: "en" });
-    assert.match(block(en!.ics, `${t.id}-repeat@pizarro`)!, /DESCRIPTION:Upcoming repeat \(Every month \(day 31\)\)/);
-    // En una columna Agenda que cuenta como terminada no hay serie.
-    await db.column.update({ where: { id: f.columns.todo }, data: { isDone: true } });
-    assert.equal(block((await buildColumnIcs(f.project.id, f.columns.todo))!.ics, `${t.id}-repeat@pizarro`), undefined);
-  });
-
-  test(".ics de la columna Agenda: las series no multiplican descripciones largas ni pasan del tope de tareas que se repiten", async () => {
-    const f = await makeProject();
-    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
-    // Mensual el día 30 (sin RRULE fiel): un evento por mes, y cada uno repetía la descripción de la tarea (hasta 1.500
-    // caracteres): con 2.000 tareas así, unos 80 MB por petición.
-    const long = Array.from({ length: 400 }, (_, i) => `palabra${i}`).join(" ");
-    const m30 = await makeTask(f, { title: "Cierre", recurrence: "MONTHLY", dueDate: inDays(4) });
-    await db.task.update({ where: { id: m30.id }, data: { recurrenceDay: 30, description: long } });
-    const col = (await buildColumnIcs(f.project.id, f.columns.todo))!;
-    const unfolded = col.ics.replace(/\r\n /g, "");
-    const events = unfolded.split("BEGIN:VEVENT").filter((b) => new RegExp(`UID:${m30.id}-repeat-\\d{4}-\\d{2}-\\d{2}@pizarro`).test(b));
-    assert.ok(events.length >= 11, `eventos mensuales: ${events.length}`);
-    // La tarea conserva su descripción (hasta 1.500 caracteres); las apariciones previstas, un extracto (como la suscripción).
-    assert.ok(block(unfolded, `${m30.id}@pizarro`)!.includes("palabra100 "), "descripción larga en la tarea");
-    for (const e of events) {
-      const desc = /DESCRIPTION:(.*)/.exec(e)?.[1] ?? "";
-      assert.ok(desc.startsWith("palabra0 ") && desc.length <= 320, `descripción de la aparición: ${desc.length}`);
-    }
-
-    // Muchas tareas que se repiten: solo las primeras FEED_MAX_REPEATS llevan serie (como la suscripción).
-    const many = FEED_MAX_REPEATS + 20;
-    await db.task.createMany({
-      data: Array.from({ length: many }, (_, i) => ({
-        projectId: f.project.id, columnId: f.columns.todo, kindId: f.kindId, title: `Diaria ${i}`, position: 10_000 + i, recurrence: "DAILY" as const, dueDate: inDays(10),
-      })),
-    });
-    const big = (await buildColumnIcs(f.project.id, f.columns.todo))!;
-    const series = big.ics.split("\r\n").filter((l) => /^UID:.+-repeat(-\d{4}-\d{2}-\d{2})?@pizarro$/.test(l));
-    const sources = new Set(series.map((l) => l.replace(/-repeat.*$/, "")));
-    assert.equal(sources.size, FEED_MAX_REPEATS);
-    assert.equal(big.count, many + 1);
-  });
 });
+
 
 /** Cuenta las consultas SQL y los bytes que devuelven mientras corre `fn`. */
 async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; sql: string[]; bytes: number }> {
@@ -844,15 +782,9 @@ describe("memoria del calendario suscrito", () => {
     const unfolded = m.result.text.replace(/\r\n /g, "");
     assert.ok(unfolded.includes("Inicio de la descripción. palabra"));
     assert.ok(m.bytes < 40_000, `leídos ${m.bytes} bytes con descripciones de ${long.length}`);
-    // .ics de la columna Agenda: tampoco lee la descripción entera, y lleva LAST-MODIFIED y SEQUENCE como la suscripción.
-    await db.column.update({ where: { id: f.columns.todo }, data: { role: "AGENDA" } });
-    const col = await countQueries(() => buildColumnIcs(f.project.id, f.columns.todo));
-    assert.ok(col.result);
-    assert.ok(col.bytes < 40_000, `columna: leídos ${col.bytes} bytes con descripciones de ${long.length}`);
-    const colUnfolded = col.result.ics.replace(/\r\n /g, "");
-    assert.ok(colUnfolded.includes("Inicio de la descripción. palabra"));
-    const own = colUnfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}@pizarro`))!;
-    const serie = colUnfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}-repeat@pizarro`))!;
+    // La tarea y su serie llevan LAST-MODIFIED y SEQUENCE (el cliente que lo vuelve a leer sabe qué ha cambiado).
+    const own = unfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}@pizarro`))!;
+    const serie = unfolded.split("BEGIN:VEVENT").find((b) => b.includes(`UID:${t1.id}-repeat@pizarro`))!;
     for (const block of [own, serie]) {
       assert.match(block, /\r\nLAST-MODIFIED:\d{8}T\d{6}Z\r\n/);
       assert.match(block, /\r\nSEQUENCE:\d+\r\n/);

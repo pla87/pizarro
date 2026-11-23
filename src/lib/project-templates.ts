@@ -1,7 +1,7 @@
 // Plantillas de proyecto: esquemas de validación y ayudas puras (sin acceso a base de datos).
 import "./zod-config";
 import { z } from "zod";
-import { COLUMN_ROLES, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
+import { MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, UNIQUE_COLUMN_ROLES, defaultColumns, PALETTE, type ColumnRoleValue } from "./constants";
 import { POSITION_STEP } from "./positions";
 import * as v from "./validation";
 import { MAX_KIND_SUBTASKS } from "./kinds-special";
@@ -20,7 +20,8 @@ const itemName = v.name.max(40, "Máximo 40 caracteres.");
 
 const templateColumnSchema = z.object({
   name: v.name,
-  role: z.enum(COLUMN_ROLES),
+  // Uno retirado (Agenda, Entrega al cliente) pasa a «Sin rol» al leerlo.
+  role: v.columnRole,
   isDone: z.boolean(),
   /** Límite orientativo de tarjetas de la columna (1-999); opcional. */
   wipLimit: z.number().int().min(1).max(999).nullable().optional(),

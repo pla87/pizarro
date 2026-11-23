@@ -700,9 +700,9 @@ function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
 
 // --- Plan de una columna «Asignación a persona» --------------------------------------------------------------------------
 
-/** Tamaño de una tarea del plan: título, línea de datos, primera línea de la descripción y subtareas pendientes. */
+/** Tamaño de una tarea del plan: título, línea de datos (con las etiquetas), resumen de la descripción y subtareas pendientes. */
 const planTaskUnits = (x: AssignPlanTask) =>
-  2 + textUnits(x.title, 85) + (x.firstLine ? textUnits(x.firstLine, 110) : 0)
+  2 + textUnits(x.title, 85) + (x.labels.length ? textUnits(x.labels.join(", "), 110) - 1 : 0) + x.summary.reduce((n, line) => n + textUnits(line, 110), 0)
   + x.pendingSubtasks.slice(0, PLAN_SUBTASKS_SHOWN).reduce((n, title) => n + textUnits(`[ ] ${title}`, 105), 0)
   + (x.pendingCount > PLAN_SUBTASKS_SHOWN ? 1 : 0);
 
@@ -710,7 +710,7 @@ function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
   const total = r.groups.reduce((n, g) => n + g.tasks.length, 0);
   const card = (x: AssignPlanTask, overdue: boolean, units: number) => {
     const unbroken = units <= DELIVERY_UNBROKEN_UNITS;
-    const meta = [x.kind, x.priority ? `${t("Prioridad")}: ${t(PRIORITY_LABEL[x.priority as keyof typeof PRIORITY_LABEL] ?? x.priority)}` : null].filter(Boolean).join(" · ");
+    const meta = [x.kind, x.priority ? `${t("Prioridad")}: ${t(PRIORITY_LABEL[x.priority as keyof typeof PRIORITY_LABEL] ?? x.priority)}` : null, x.labels.length ? x.labels.join(", ") : null].filter(Boolean).join(" · ");
     const head = (
       <>
         <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
@@ -718,7 +718,7 @@ function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
           {meta}
           {x.dueDate ? <Text style={overdue ? { color: C.red, fontFamily: "Helvetica-Bold" } : undefined}>{`${meta ? " · " : ""}${t("Vence el {date}", { date: formatDay(x.dueDate, r.today, locale) })}`}</Text> : null}
         </Text>
-        {x.firstLine ? <Text style={{ color: C.muted, marginTop: 2 }}>{x.firstLine}</Text> : null}
+        {x.summary.length ? <View style={{ marginTop: 2 }}>{x.summary.map((line, j) => <Text key={j} style={{ color: C.muted }}>{line}</Text>)}</View> : null}
       </>
     );
     const more = x.pendingCount - PLAN_SUBTASKS_SHOWN;
