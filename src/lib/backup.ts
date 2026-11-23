@@ -14,7 +14,7 @@ import { buildManifest, decodeManifest, encodeManifest, fileNameKey, hashFiles, 
 import { dumpDatabaseOwnConnection, withDatabase } from "./backup-pg";
 import { checkObjects, findMigrationsDir, restoreDatabaseFromDump } from "./backup-restore";
 import { db } from "./db";
-import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, type DiskRoom } from "./disk-space";
+import { assertDiskRoom, backupMarginBytes, isNoSpaceError, NO_SPACE_MESSAGE, type DiskRoom } from "./disk-space";
 import { AppError } from "./errors";
 import { withAdvisoryLock, type JobSkip } from "./jobs";
 import { logEvent, logText } from "./log";
@@ -309,11 +309,11 @@ async function createBackupLocked(key: Buffer): Promise<BackupRun> {
   let dumpTmp: string | null = null;
   try {
     await mkdir(backupsDir(), { recursive: true, mode: 0o700 });
-    // Antes de escribir nada: si no cabe el volcado estimado (más el margen común de disco), falla con «disco lleno» sin
-    // empezar. La tarea lo reintenta cada hora (ver dailyBackupJob), pero cada intento solo mira el disco.
+    // Antes de escribir nada: si no cabe el volcado estimado (más el margen de la copia, 100 MB: backupMarginBytes), falla
+    // con «disco lleno» sin empezar. La tarea lo reintenta cada hora (ver dailyBackupJob); cada intento solo mira el disco.
     const estimate = await estimateDumpBytes(prevStatus);
     if (estimate !== null) {
-      await assertDiskRoom(backupsDir(), estimate).catch((err) => {
+      await assertDiskRoom(backupsDir(), estimate, undefined, undefined, undefined, () => backupMarginBytes()).catch((err) => {
         throw Object.assign(err as Error, { estimate });
       });
     }

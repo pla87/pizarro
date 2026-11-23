@@ -274,6 +274,34 @@ describe("copia diaria con el disco lleno", () => {
     });
   });
 
+  test("el margen libre de la copia es de 100 MB (no el común de hasta 1 GB); DISK_MIN_FREE_MB sigue mandando", async () => {
+    const { createBackup, readStatus } = await import("../../src/lib/backup");
+    const { assertDiskRoom, backupMarginBytes, diskMarginBytes, NO_SPACE_MESSAGE } = await import("../../src/lib/disk-space");
+    const { flushLogs } = await import("../../src/lib/log");
+    const MB = 1024 * 1024;
+    assert.equal(backupMarginBytes(undefined), 100 * MB);
+    assert.equal(backupMarginBytes(""), 100 * MB);
+    assert.equal(backupMarginBytes("2048"), 2048 * MB);
+    // 50 GB de disco con 600 MB libres: el margen común (1 GB) no deja volcar 300 MB; el de la copia, sí.
+    const free = async () => 600 * MB;
+    const total = async () => 50 * 1024 * MB;
+    await assert.rejects(assertDiskRoom("/x", 300 * MB, free, total, undefined, (t) => diskMarginBytes(t, "")), { message: NO_SPACE_MESSAGE });
+    await assertDiskRoom("/x", 300 * MB, free, total, undefined, () => backupMarginBytes(""));
+    // createBackup lo usa: con un volcado anterior imposible, el registro dice que el margen exigido era de 100 MB.
+    await withBackupEnv({ DISK_MIN_FREE_MB: "" }, async (uploads) => {
+      const ok = await createBackup();
+      assert.equal(ok.ok, true, ok.error);
+      const file = path.join(uploads, "backups", "status.json");
+      const status = await readStatus();
+      await writeFile(file, JSON.stringify({ ...status, lastBackup: { ...status.lastBackup, bytes: 1e15 } }));
+      const full = await createBackup();
+      assert.equal(full.error, NO_SPACE_MESSAGE);
+      await flushLogs();
+      const row = await db.appLog.findFirst({ where: { action: "backup.failed" }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { details: true } });
+      assert.equal((row?.details as { marginBytes?: number } | undefined)?.marginBytes, 100 * MB);
+    });
+  });
+
   test("la primera copia (sin copia anterior) no se comprueba de antemano: el tamaño de la base en PostgreSQL no la bloquea", async () => {
     const { createBackup } = await import("../../src/lib/backup");
     await withBackupEnv({ DISK_MIN_FREE_MB: String(1e12) }, async () => {
