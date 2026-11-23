@@ -91,6 +91,18 @@ export function configWarnings(env: Env = process.env): { code: string; text: st
       text: "SMTP_HOST apunta a otro servidor con un puerto distinto de 465: ahora se exige STARTTLS. Si el servidor no lo ofrece, los emails no salen; usa el puerto 465 (TLS directo) o, para un relay de la red privada sin TLS, SMTP_ALLOW_PLAINTEXT=1 (todo irá en claro).",
     });
   }
+  // --max-old-space-size vale para todo el proceso: anula el resourceLimits del worker de PDF (report-render.ts), y un PDF
+  // demasiado grande ya no falla solo, sino que puede tumbar la app. Node ya ajusta su montón al límite del contenedor.
+  if (/--max-old-space-size/.test(env.NODE_OPTIONS ?? "")) {
+    out.push({
+      code: "node_options_heap",
+      text: "NODE_OPTIONS lleva --max-old-space-size: vale para todo el proceso y anula el techo de memoria del generador de PDF (PDF_WORKER_MAX_MB), así que un PDF demasiado grande puede tumbar la app. Quítalo: Node ajusta su memoria al límite del contenedor.",
+    });
+  }
+  // Docker Compose la pasaba como --max-old-space-size (hasta la 1.66); ya no se usa.
+  if (env.APP_HEAP_MB?.trim()) {
+    out.push({ code: "app_heap_mb_unused", text: "APP_HEAP_MB ya no se usa: Node ajusta su memoria al límite del contenedor (APP_MEM_LIMIT). Puedes borrarla de deploy/.env." });
+  }
   return out;
 }
 
