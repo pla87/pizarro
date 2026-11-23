@@ -167,7 +167,7 @@ export async function setAttachmentLimits(projectId: string, fileMb: number, tas
     if (zip < file) throw new AppError("El paquete ZIP de una release no puede ser menor que el tamaño máximo de un adjunto.");
     await findManageableProject(user, projectId);
     await db.project.update({ where: { id: projectId }, data: { fileMaxMb: file, taskAttachMaxMb: task, releaseZipMaxMb: zip } });
-    describeAction(`Cambió el máximo por archivo a ${file} MB, el de adjuntos por tarea a ${task} MB y el de cada ZIP de release a ${zip} MB`);
+    describeAction("Cambió el máximo por archivo a {file} MB, el de adjuntos por tarea a {task} MB y el de cada ZIP de release a {zip} MB", { file, task, zip });
     revalidatePath(`/p/${projectId}/settings`);
   });
 }
@@ -228,7 +228,7 @@ export async function setProjectVisibility(projectId: string, mode: "TEAM" | "PR
       ]);
     }
     revokeProject(id);
-    describeAction(`Cambió la visibilidad del proyecto a ${visibility === "TEAM" ? "equipo" : "privada"}`);
+    describeAction(visibility === "TEAM" ? "Cambió la visibilidad del proyecto a equipo" : "Cambió la visibilidad del proyecto a privada");
     revalidatePath("/", "layout");
   });
 }
@@ -279,7 +279,11 @@ export async function addProjectMember(projectId: string, userId: string) {
       && rateLimit(`project-added-mail:${user.id}`, 40, 60 * 60_000)
       && rateLimit(pairKey, 1, 24 * 60 * 60_000);
     if (emailed) sendMailInBackground("aviso de proyecto añadido", () => sendProjectAddedMail(target, user.name, project.name, link));
-    describeAction(`Añadió a «${target.name}» al proyecto ${project.isPrivate ? "privado " : ""}«${project.name}»${emailed ? " (avisado por email)" : ""}`);
+    describeAction(project.isPrivate ? "Añadió a «{name}» al proyecto privado «{project}»{mail}" : "Añadió a «{name}» al proyecto «{project}»{mail}", {
+      name: target.name,
+      project: project.name,
+      mail: emailed ? { k: " (avisado por email)" } : "",
+    });
     revalidatePath("/", "layout");
     return { link, emailed };
   });
@@ -314,8 +318,12 @@ export async function removeProjectMember(projectId: string, userId: string) {
     });
     // Quien sale deja de ver el tablero en vivo al momento (los demás se reconectan solos).
     if (!keepsAccess) revokeProject(project.id);
-    const kind = project.isPrivate ? "privado " : "";
-    describeAction(targetId === user.id ? `Salió del proyecto ${kind}«${project.name}»` : `Quitó a «${member.user.name}» del proyecto ${kind}«${project.name}»`);
+    describeAction(
+      targetId === user.id
+        ? project.isPrivate ? "Salió del proyecto privado «{project}»" : "Salió del proyecto «{project}»"
+        : project.isPrivate ? "Quitó a «{name}» del proyecto privado «{project}»" : "Quitó a «{name}» del proyecto «{project}»",
+      { project: project.name, name: member.user.name },
+    );
     revalidatePath("/", "layout");
   });
 }
@@ -334,7 +342,7 @@ export async function setMyProjectPicks(projectIds: string[]) {
       db.adminProjectPick.deleteMany({ where: { userId: user.id } }),
       db.adminProjectPick.createMany({ data: valid.map((p) => ({ projectId: p.id, userId: user.id })) }),
     ]);
-    describeAction(`Eligió ${valid.length} proyecto(s) en los que trabaja`);
+    describeAction("Eligió {n} proyecto(s) en los que trabaja", { n: valid.length });
     revalidatePath("/", "layout");
   });
 }
@@ -363,7 +371,12 @@ export async function setAdminProjectPick(projectId: string, adminId: string, pi
     } else {
       await db.adminProjectPick.deleteMany({ where: { projectId: project.id, userId: target.id } });
     }
-    describeAction(`${want ? "Añadió" : "Quitó"} «${project.name}» ${want ? "a" : "de"} los proyectos en los que trabaja ${target.id === user.id ? "(él mismo)" : `«${target.name}»`}`);
+    describeAction(
+      target.id === user.id
+        ? want ? "Añadió «{project}» a los proyectos en los que trabaja (él mismo)" : "Quitó «{project}» de los proyectos en los que trabaja (él mismo)"
+        : want ? "Añadió «{project}» a los proyectos en los que trabaja «{name}»" : "Quitó «{project}» de los proyectos en los que trabaja «{name}»",
+      { project: project.name, name: target.name },
+    );
     revalidatePath("/", "layout");
   });
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { visibleProjectsWhere } from "@/lib/access";
 import { runAction } from "@/lib/action";
+import { describeAction } from "@/lib/action-context";
 import { MAX_RELEASE_TEMPLATES_PER_KIND, PALETTE } from "@/lib/constants";
 import { db } from "@/lib/db";
 import { EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE } from "@/lib/edit-conflict-core";
@@ -49,6 +50,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
         if (!(await db.projectTemplate.count({ where: { id } }))) throw notFound();
         throw new AppError(EDIT_CONFLICT_MESSAGE, 409, EDIT_CONFLICT_CODE);
       }
+      describeAction("Modificó la plantilla de proyecto «{name}»", { name: data.name });
       revalidatePath("/admin/templates");
       const saved = await db.projectTemplate.findUnique({ where: { id }, select: { updatedAt: true } });
       return { id, version: saved?.updatedAt.toISOString() };
@@ -63,6 +65,7 @@ export async function saveTemplate(input: TemplateInput, templateId?: string | n
       const last = await tx.projectTemplate.findFirst({ orderBy: { position: "desc" }, select: { position: true } });
       return tx.projectTemplate.create({ data: { ...row, position: (last?.position ?? 0) + POSITION_STEP }, select: { id: true, updatedAt: true } });
     });
+    describeAction("Creó la plantilla de proyecto «{name}»", { name: data.name });
     revalidatePath("/admin/templates");
     return { id: created.id, version: created.updatedAt.toISOString() };
   });

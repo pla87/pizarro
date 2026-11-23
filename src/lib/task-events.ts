@@ -16,7 +16,7 @@ const TASK_HISTORY_LIMIT = 200;
 const EVENTS_PER_ACTION = 500;
 
 /** Acciones con etiqueta que no merecen una línea de historial. */
-const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast", "undo.redoLast"]);
+const IGNORED = new Set(["tasks.reorderSubtask", "undo.undoLast", "undo.redoLast", "undo.undoEntry"]);
 
 const CODES: Record<string, string> = {
   "tasks.createTask": "create",

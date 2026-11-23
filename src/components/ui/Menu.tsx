@@ -121,9 +121,10 @@ export function MenuSub({ icon: Icon, label, summary, className, children }: {
         }}
       >
         {Icon && <Icon size={15} />}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {summary != null && <span className="max-w-[45%] truncate text-xs text-slate-500 dark:text-slate-400">{summary}</span>}
-        <ChevronRight size={15} aria-hidden className={cn("shrink-0 text-slate-400 transition-transform", open && "rotate-90")} />
+        {/* La etiqueta entera; si no cabe todo, solo se recorta el valor actual («Rol de la columna  Asignación a…»). */}
+        <span className="shrink-0 whitespace-nowrap">{label}</span>
+        {summary != null && <span className="min-w-0 flex-1 truncate text-right text-xs text-slate-500 dark:text-slate-400">{summary}</span>}
+        <ChevronRight size={15} aria-hidden className={cn("ml-auto shrink-0 text-slate-400 transition-transform", open && "rotate-90")} />
       </button>
       {open && (
         <div

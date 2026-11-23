@@ -150,7 +150,9 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
         placeholder={t("Sin plazo")}
         value={days}
         onChange={(e) => { setDays(e.target.value); setError(null); }}
-        onKeyDown={(e) => { if (e.key === "Enter") void save(); }}
+        // Sin preventDefault, el Intro llega (keypress) al botón que recibe el foco al cerrar (la cabecera o «Opciones de
+        // columna») y lo vuelve a pulsar: el diálogo se abría otra vez con el plazo anterior.
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void save(); } }}
         aria-describedby={`${id}-help`}
       />
       <p id={`${id}-help`} className="mt-1 text-xs text-slate-600 dark:text-slate-400">{t("Las tarjetas que entren sin fecha límite vencerán ese número de días después. Las que ya tienen fecha la conservan.")}</p>

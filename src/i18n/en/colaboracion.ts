@@ -132,4 +132,6 @@ export const colaboracion: Record<string, string> = {
   "El envío de emails aún no está configurado en el servidor: de momento no se envía ningún email. Lo que marques aquí se guarda y valdrá cuando se configure.":
     "Email sending is not configured on the server yet: no emails are sent for now. What you check here is saved and will apply once it is configured.",
   "Configurar el email": "Set up email",
+  // Logs: volver a activar el informe semanal tras darse de baja
+  "Volvió a activar para sí el informe semanal por email del que se había dado de baja": "Turned the weekly email report they had unsubscribed from back on for themselves",
 };

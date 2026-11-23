@@ -14,6 +14,7 @@ import { AppError } from "@/lib/errors";
 import { appTimeZone } from "@/lib/format";
 import { quotaError } from "@/lib/quota-message";
 import { requireUser } from "@/lib/session";
+import { tasksN } from "@/lib/undo-label";
 import * as v from "@/lib/validation";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
@@ -80,7 +81,7 @@ export async function getAiPlanTaskDetails(input: z.input<typeof detailsSchema>)
     const user = await requireUser();
     const data = detailsSchema.parse(input);
     await assertProjectAccess(user, data.projectId);
-    describeAction(`Generó un plan de trabajo para IA con ${data.taskIds.length === 1 ? "1 tarea" : `${data.taskIds.length} tareas`}`);
+    describeAction("Generó un plan de trabajo para IA con {count}", { count: tasksN(data.taskIds.length) });
     return db.task.findMany({
       where: { id: { in: data.taskIds }, projectId: data.projectId },
       select: {
