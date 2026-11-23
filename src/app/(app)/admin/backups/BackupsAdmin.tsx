@@ -165,6 +165,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       router.refresh();
     });
 
+  // Cifras con el separador de miles del idioma («12.345 filas» / "12,345 rows").
+  const num = (n = 0) => n.toLocaleString(locale);
   const run = (r: (BackupRun & Partial<RestoreTestRun>) | undefined, what: "backup" | "test") => {
     if (!r) return <p className="text-sm text-slate-500">{what === "backup" ? t("Aún no se ha hecho ninguna copia.") : t("Aún no se ha hecho ninguna prueba de restauración.")}</p>;
     return (
@@ -175,10 +177,10 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         </p>
         {r.ok ? (
           <p className="mt-1 text-slate-500">
-            {r.file} · {r.rows} {t("filas")} · {r.tables} {t("tablas")}
+            {r.file} · {r.rows === 1 ? t("1 fila") : t("{n} filas", { n: num(r.rows) })} · {r.tables === 1 ? t("1 tabla") : t("{n} tablas", { n: num(r.tables) })}
             {r.bytes ? ` · ${sizeText(r.bytes, locale)}` : ""}
-            {r.files !== undefined && ` · ${r.files === 1 ? t("1 fichero") : t("{n} ficheros", { n: r.files })}${r.filesBytes ? ` (${sizeText(r.filesBytes, locale)})` : ""}`}
-            {what === "backup" && r.filesNew ? ` · ${r.filesNew === 1 ? t("1 nuevo") : t("{n} nuevos", { n: r.filesNew })}` : ""}
+            {r.files !== undefined && ` · ${r.files === 1 ? t("1 fichero") : t("{n} ficheros", { n: num(r.files) })}${r.filesBytes ? ` (${sizeText(r.filesBytes, locale)})` : ""}`}
+            {what === "backup" && r.filesNew ? ` · ${r.filesNew === 1 ? t("1 nuevo") : t("{n} nuevos", { n: num(r.filesNew) })}` : ""}
           </p>
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>

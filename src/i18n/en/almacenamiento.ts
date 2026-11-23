@@ -97,4 +97,9 @@ export const almacenamiento: Record<string, string> = {
   "Debe ser un número entero de MB, entre {min} y {max}.": "Must be a whole number of MB, between {min} and {max}.",
   // Disco: el porcentaje dice que es lo usado (detrás de «libres» parecía el espacio libre)
   "({pct} usado)": "({pct} used)",
+  // Logs: las cuotas antiguas y nuevas, en el idioma de quien lee
+  "sin límite": "no limit",
+  "la predeterminada (10 GB)": "the default (10 GB)",
+  "sin cuota total": "no total quota",
+  "la general": "the default",
 };

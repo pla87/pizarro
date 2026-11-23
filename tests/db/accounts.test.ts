@@ -160,9 +160,21 @@ describe("contraseñas y cambio forzado", () => {
 
   // Antes la invitación pendiente seguía valiendo hasta 72 h: quien la tuviera elegía la contraseña y entraba, aunque la
   // pantalla dice que se anulan los enlaces pendientes.
-  test("forcePasswordChange anula también la invitación pendiente", async () => {
+  // Una invitación sin aceptar no tiene contraseña que forzar: la interfaz no lo ofrece y el servidor tampoco lo acepta.
+  test("forcePasswordChange rechaza una invitación pendiente y la deja como estaba", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const target = await makeUser({ mustChangePassword: true });
+    const invite = await issueAuthToken(target.id, "INVITE");
+    await loginAs(admin);
+    expectFail(await forcePasswordChange(target.id, { copyLink: true }), /aún no ha aceptado la invitación/);
+    assert.ok(await findUsableToken(invite, ["INVITE"]), "la invitación sigue valiendo");
+    assert.equal(await db.authToken.count({ where: { userId: target.id, purpose: "PASSWORD_RESET" } }), 0);
+  });
+
+  test("forcePasswordChange anula también un enlace de invitación que quedara pendiente", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    // Ya ha entrado (no es una invitación pendiente), pero le quedaba un enlace de invitación sin usar.
+    const target = await makeUser();
     const invite = await issueAuthToken(target.id, "INVITE");
     await loginAs(admin);
     assert.ok(await findUsableToken(invite, ["INVITE"]), "la invitación vale antes de forzar el cambio");

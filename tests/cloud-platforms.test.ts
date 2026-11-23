@@ -63,4 +63,12 @@ test("deploy/fly.toml: imagen oficial, volumen en UPLOAD_DIR, /api/health y una 
   assert.equal(value(/^\s*auto_stop_machines\s*=\s*"([^"]+)"/m), "off");
   assert.equal(value(/^\s*min_machines_running\s*=\s*(\d+)/m), "1");
   assert.match(toml, /^\s*\[\[http_service\.checks\]\][^[]*path\s*=\s*"\/api\/health"/m);
+  // Fly corta a los 5 s por defecto; el apagado ordenado (shutdown.ts) necesita hasta GRACE_MS + FLUSH_MS + 1 s.
+  const shutdown = code("src/lib/shutdown.ts");
+  const ms = (name: string) => Number(new RegExp(`const ${name} = ([\\d_]+);`).exec(shutdown)?.[1]?.replace(/_/g, ""));
+  const needed = ms("GRACE_MS") + ms("FLUSH_MS") + 1_000;
+  assert.ok(needed > 5_000, "constantes leídas de shutdown.ts");
+  // Clave de primer nivel (antes de la primera tabla), en segundos.
+  const kill = /^kill_timeout\s*=\s*"(\d+)s"/m.exec(toml.slice(0, toml.indexOf("\n[")));
+  assert.ok(kill && Number(kill[1]) * 1000 > needed, `kill_timeout por encima de ${needed} ms`);
 });
