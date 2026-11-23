@@ -323,9 +323,8 @@ export const server: Record<string, string> = {
   "Se muestran las primeras {n} de {total} tareas en los listados; el avance y los recuentos incluyen todas.": "The lists show the first {n} of {total} tasks; progress and counts include all of them.",
   // Informe semanal por email: listados recortados en proyectos enormes
   "Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.": "This report shows at most {n} tasks per list; progress and counts include all of them.",
-  // Historial de las tareas (TaskEvent, un año) y deshacer (7 días): guardan la clave de antes de «Restaurar».
-  // Textos guardados por versiones anteriores (se traducen al leerlos)
-  // Cambiar el rol de una columna (hasta la v1.67, sin decir de qué rol a qué rol)
+  // Logs, historial de las tareas (un año) y deshacer: el rol de una columna (hasta la v1.67, sin decir de qué a qué) y
+  // «Recuperó» (antes de «Restaurar»). Textos guardados por versiones anteriores (se traducen al leerlos)
   "Cambió el rol de la columna «{name}»": "Changed the role of the column “{name}”",
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
   // Logs: lista guardada sin sus elementos por versiones anteriores

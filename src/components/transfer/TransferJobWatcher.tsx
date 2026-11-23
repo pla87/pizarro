@@ -44,7 +44,9 @@ export function TransferJobWatcher() {
         if (stopped) return;
         ackJob(job.id);
         if (job.status === "FAILED") {
-          toast(job.kind === "EXPORT" ? t("No se pudo exportar el proyecto.") + (job.error ? ` ${job.error}` : "") : t("No se pudo importar el proyecto.") + (job.error ? ` ${job.error}` : ""), "error");
+          // Un fallo inesperado guarda como error el mismo texto del aviso: no se repite.
+          const head = job.kind === "EXPORT" ? t("No se pudo exportar el proyecto.") : t("No se pudo importar el proyecto.");
+          toast(job.error && job.error !== head ? `${head} ${job.error}` : head, "error");
         } else if (job.kind === "EXPORT") {
           toast(t("Exportación lista: ya puedes descargarla."), "success", { label: t("Descargar"), onClick: () => { window.location.href = downloadUrl(job.id); } });
         } else {

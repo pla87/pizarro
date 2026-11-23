@@ -8,6 +8,9 @@
 app = "pizarro-example"
 # Región de la máquina: la misma que la base de datos (o la más cercana). fra = Fráncfort; `fly platform regions` las lista.
 primary_region = "fra"
+# Margen para el apagado ordenado (src/lib/shutdown.ts: hasta ~9 s esperando peticiones y guardando los registros). Sin
+# esto Fly corta a los 5 s.
+kill_timeout = "15s"
 
 [build]
   # Imagen ya construida y probada de cada versión; «latest» es la última publicada. Para quedarte en una versión, pon su
