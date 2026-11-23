@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate, templateFromProject } from "@/actions/templates";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
+import { cn } from "@/components/ui/cn";
 import { ColorPicker } from "@/components/ui/ColorPicker";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DescriptionField } from "@/components/ui/DescriptionField";
@@ -38,7 +39,7 @@ function AssignDaysInput({ value, onChange, label }: { value: number; onChange: 
   const invalid = typeof parseAssignDays(text) !== "number";
   return (
     <input
-      className="input w-20"
+      className="input w-16"
       type="number"
       inputMode="numeric"
       min={1}
@@ -342,7 +343,8 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                   const assignDays = c.role === "NONE" ? (c.assignDueDays ?? null) : null;
                   return (
                     <li key={c.key} className="flex flex-wrap items-center gap-2">
-                      <input className="input min-w-0 flex-1 basis-40" value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
+                      {/* Con el plazo al lado, el nombre cede algo de ancho en escritorio para que la fila no se parta. */}
+                      <input className={cn("input min-w-0 flex-1 basis-40", assignDays != null && "sm:basis-28")} value={c.name} onChange={(e) => setCol({ name: e.target.value })} maxLength={80} placeholder={t("Nombre")} aria-label={t("Nombre de la columna {n}", { n: i + 1 })} />
                       <select
                         className="input w-auto"
                         value={assignDays != null ? ASSIGN : c.role}
@@ -353,13 +355,17 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                         {COLUMN_ROLES.flatMap((r) => [
                           <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>,
                           ...(r === "NONE" ? [
-                            <option key={ASSIGN} value={ASSIGN}>
-                              {assignDays == null ? t("Asignación a persona") : assignDays === 1 ? t("Asignación a persona (vence en 1 día)") : t("Asignación a persona (vence en {n} días)", { n: assignDays })}
-                            </option>,
+                            // Solo el nombre: el plazo va en el campo de al lado (con él dentro, el selector partía la fila).
+                            <option key={ASSIGN} value={ASSIGN}>{t("Asignación a persona")}</option>,
                           ] : []),
                         ])}
                       </select>
-                      {assignDays != null && <AssignDaysInput value={assignDays} onChange={(n) => setCol({ assignDueDays: n })} label={t("Días del plazo de la columna {n}", { n: i + 1 })} />}
+                      {assignDays != null && (
+                        <span className="flex items-center gap-1 whitespace-nowrap text-sm">
+                          <AssignDaysInput value={assignDays} onChange={(n) => setCol({ assignDueDays: n })} label={t("Días del plazo de la columna {n}", { n: i + 1 })} />
+                          {assignDays === 1 ? t("día") : t("días")}
+                        </span>
+                      )}
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>

@@ -131,7 +131,8 @@
   --color-slate-400: #aea072;
   /* Texto secundario: #7a6f4a da 5:1 sobre blanco (con #8b7f55 se quedaba en 3,99:1). */
   --color-slate-500: #7a6f4a;
-  --color-slate-600: #6d6342;
+  /* #665c3d: 4,9:1 sobre slate-200 (el contador de tarjetas de la cabecera de columna; con #6d6342, 4,43:1). */
+  --color-slate-600: #665c3d;
   --color-slate-700: #554d34;
   --color-slate-800: #393423;
   --color-slate-900: #242116;
@@ -152,6 +153,8 @@
     --color-slate-100: #ffffff;
     /* En oscuro se queda el tono anterior: el nuevo bajaría de 4:1 a 3,2:1 sobre slate-900. */
     --color-slate-500: #8b7f55;
+    /* En oscuro, el de antes: ahí slate-600 es fondo o borde, no texto. */
+    --color-slate-600: #6d6342;
     --color-brand-500: #e8b931;
     --color-progress: #5b9bff;
   }

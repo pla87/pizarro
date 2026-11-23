@@ -45,7 +45,9 @@ export const asignacion: Record<string, string> = {
   "Cambió el plazo de la columna «{col}» a {n} días": "Changed the deadline of the column “{col}” to {n} days",
   "Quitó el plazo de la columna «{col}»": "Removed the deadline of the column “{col}”",
   // Editor de plantillas: columna «Asignación a persona» (solo el plazo)
-  "Asignación a persona (vence en 1 día)": "Assign to person (due in 1 day)",
-  "Asignación a persona (vence en {n} días)": "Assign to person (due in {n} days)",
+  "día": "day",
+  "días": "days",
   "Días del plazo de la columna {n}": "Deadline days for column {n}",
+  // «Nueva tarea» en una columna «Asignación a persona»
+  "Esta columna asigna sus tarjetas a {name}": "This column assigns its cards to {name}",
 };

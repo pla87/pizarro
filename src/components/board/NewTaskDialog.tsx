@@ -49,6 +49,7 @@ import { actionThrowResult } from "@/lib/stale-action";
 import { fetchErrorMessage, loadWhenOnline } from "@/lib/connection";
 import { subtasksDidNotFit } from "./count-texts";
 import { RecurrencePicker } from "./RecurrencePicker";
+import { isAssignColumn } from "@/lib/column-assign-core";
 import { defaultRecurrenceDay, RECURRENCES, type RecurrenceRule } from "@/lib/recurrence-date";
 
 interface Props {
@@ -91,6 +92,15 @@ const subtaskItem = (text: string): SubtaskItem => ({ key: `s${++subtaskSeq}`, t
 
 function captureTitle(t: T, locale: string): string {
   return t("Captura") + " " + formatDate(new Date(), "dateTime", locale);
+}
+
+/**
+ * Persona de una columna «Asignación a persona» (si la tiene y puede tener tareas del proyecto): el servidor le asigna toda
+ * tarea que nazca ahí, así que el diálogo la propone como «Responsable» y lo dice bajo el selector.
+ */
+function columnPerson(f: Pick<ProjectFormData, "columns" | "users">, columnId: string) {
+  const col = f.columns.find((c) => c.id === columnId);
+  return col && isAssignColumn(col) && col.assigneeId ? f.users.find((u) => u.id === col.assigneeId) : undefined;
 }
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, initialTitle, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
@@ -147,7 +157,17 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [title, setTitle] = useState(init.title);
   const [kindId, setKindId] = useState(init.kindId);
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
-  const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? ""));
+  const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? columnPerson(board, columnId)?.id ?? ""));
+  /**
+   * Cambia de columna: si la nueva asigna a una persona, la propone como responsable; si se sale de una que asignaba y el
+   * responsable era el que ella proponía, vuelve a «Sin responsable».
+   */
+  const changeColumn = (id: string) => {
+    setColumnId(id);
+    const person = columnPerson(form, id);
+    if (person) setAssigneeId(person.id);
+    else if (assigneeId && assigneeId === columnPerson(form, columnId)?.id) setAssigneeId("");
+  };
   const [dueDate, setDueDate] = useState(d?.dueDate ?? "");
   // Repetir (como en el detalle). Mientras no se elija a mano, el día de la semana o del mes sigue a la fecha límite.
   const [recurrence, setRecurrence] = useState<RecurrenceRule>(() => (d?.recurrence && RECURRENCES.includes(d.recurrence) ? d.recurrence : "NONE"));
@@ -224,8 +244,9 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     if (f.kinds.some((k) => k.id === keep.kindId)) setKindId(keep.kindId);
     else if (keep.restoring) setKindId(initialKindId(board.currentUserId, f.project.id, f.kinds));
     else applyKind(initialKindId(board.currentUserId, f.project.id, f.kinds), f.kinds, keep.prevKind);
-    setColumnId(f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? ""));
-    setAssigneeId(f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : "");
+    const col = f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? "");
+    setColumnId(col);
+    setAssigneeId(columnPerson(f, col)?.id ?? (f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : ""));
     setDeliverableId(f.deliverables.some((x) => x.id === keep.deliverableId) ? keep.deliverableId : "");
     if (f.project.id !== board.project.id) setEvergreen(false);
   };
@@ -334,6 +355,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   }, [lostColumn, toast, t]);
   // La release y los planes de trabajo para IA tienen tareas fijas («Siempre en la release» / «Siempre en el plan»).
   const columnRole = form.columns.find((c) => c.id === columnId)?.role;
+  const assignPerson = columnPerson(form, columnId);
   const isReleaseColumn = hasEvergreenTasks(columnRole);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -676,7 +698,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
         <div className="grid grid-cols-2 gap-x-3 gap-y-3">
           <div className="min-w-0">
             <label className="label" htmlFor={`${uid}-column`}>{t("Columna")}</label>
-            <select id={`${uid}-column`} className="input" value={columnId} disabled={loading} onChange={(e) => setColumnId(e.target.value)}>
+            <select id={`${uid}-column`} className="input" value={columnId} disabled={loading} onChange={(e) => changeColumn(e.target.value)}>
               {form.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -693,6 +715,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <option value="">{t("Sin responsable")}</option>
               {form.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
             </select>
+            {assignPerson && <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-column-assigns>{t("Esta columna asigna sus tarjetas a {name}", { name: assignPerson.name })}</p>}
           </div>
           <div className="min-w-0">
             <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite")}</label>
