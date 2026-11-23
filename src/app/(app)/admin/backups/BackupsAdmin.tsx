@@ -335,8 +335,9 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         ))}
         {destinations.external.length === 0 ? (
           destinations.errors.length === 0 && (
-            <p className="text-sm text-amber-700 dark:text-amber-300">
-              {t("Sin destino externo: las copias están en el mismo disco que protegen. Configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
+            // Instrucciones en gris: el aviso (copias solo en el disco de este servidor) ya va destacado arriba, una sola vez.
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {t("Ninguno configurado. Para tener las copias fuera de este servidor, configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
               {railway && <>{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}{" "}</>}
               <a href={installSectionUrl("backups", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
