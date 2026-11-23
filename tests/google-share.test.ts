@@ -102,6 +102,9 @@ test("compartir con Drive colgado: un plazo para todo el reparto; lo que queda s
     calls++;
     return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)));
   }) as typeof fetch;
+  // Los plazos son AbortSignal.timeout, que no mantienen vivo el proceso: sin otro temporizador en marcha (en CI no hay
+  // nada más), Node se queda sin tareas antes de que salten y cancela la prueba. En el servidor siempre hay algo vivo.
+  const keepAlive = setInterval(() => {}, 1000);
   try {
     const emails = Array.from({ length: 12 }, (_, i) => `p${i}@example.com`);
     const started = Date.now();
@@ -110,6 +113,7 @@ test("compartir con Drive colgado: un plazo para todo el reparto; lo que queda s
     assert.equal(calls, 5, "solo la primera tanda llega a pedirse");
     assert.deepEqual(out, { status: "NOT_SHARED", failed: 12 });
   } finally {
+    clearInterval(keepAlive);
     globalThis.fetch = realFetch;
   }
 });
