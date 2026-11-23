@@ -129,7 +129,8 @@
   --color-slate-200: #e5dec3;
   --color-slate-300: #d0c59f;
   --color-slate-400: #aea072;
-  --color-slate-500: #8b7f55;
+  /* Texto secundario: #7a6f4a da 5:1 sobre blanco (con #8b7f55 se quedaba en 3,99:1). */
+  --color-slate-500: #7a6f4a;
   --color-slate-600: #6d6342;
   --color-slate-700: #554d34;
   --color-slate-800: #393423;
@@ -147,6 +148,8 @@
     /* Los tonos más claros de texto (títulos y cuerpo) son blanco puro, no un tinte del tema. */
     --color-slate-50: #ffffff;
     --color-slate-100: #ffffff;
+    /* En oscuro se queda el tono anterior: el nuevo bajaría de 4:1 a 3,2:1 sobre slate-900. */
+    --color-slate-500: #8b7f55;
     --color-brand-500: #e8b931;
     --color-progress: #5b9bff;
   }
