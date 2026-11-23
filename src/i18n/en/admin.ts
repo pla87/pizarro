@@ -491,6 +491,7 @@ export const admin: Record<string, string> = {
   "Inicio de la conexión con Google": "Google connection started",
   "PDF de la lista consolidada generado de «{project}» ({size})": "Consolidated checklist PDF generated for “{project}” ({size})",
   "PDF de entrega al cliente generado de «{project}» ({size})": "Client delivery PDF generated for “{project}” ({size})",
+  "Plan de una columna de asignación generado de «{project}» ({size})": "Assignment column plan generated for “{project}” ({size})",
   "Calendario .ics generado de «{project}» ({count})": ".ics calendar generated for “{project}” ({count})",
   "Programa PDF generado de «{project}» ({size})": "Program PDF generated for “{project}” ({size})",
   "Documento «{name}» guardado desde «Publicar programa» ({size})": "Document “{name}” saved from “Publish program” ({size})",
