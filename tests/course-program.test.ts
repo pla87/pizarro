@@ -68,6 +68,15 @@ describe("Markdown de la descripción → bloques del PDF", () => {
     const json = JSON.stringify(markdownToPdfBlocks(md));
     for (let i = 0; i < 12; i++) assert.ok(json.includes(`nivel ${i}`), `nivel ${i}`);
   });
+
+  test("miles de citas anidadas (agotan la pila de marked): la descripción sale como texto plano", () => {
+    for (const md of ["> ".repeat(10_000) + "fin", ">".repeat(20_000)]) {
+      const out = markdownToPdfBlocks(md);
+      assert.equal(out.length, 1);
+      assert.equal(out[0]!.t, "p");
+      assert.equal((out[0] as { runs: { text: string }[] }).runs[0]!.text, md.trim());
+    }
+  });
 });
 
 describe("sesiones del programa", () => {
@@ -194,6 +203,13 @@ describe("PDF del programa", () => {
     const text = pdfRuns(pdf).join("");
     for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación", "Tuesday, January 12, 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
     assert.ok(!text.includes("Profesora Uno"));
+  });
+
+  test("una sesión con miles de citas anidadas no impide el PDF: va como texto y las demás salen", async () => {
+    const odd = buildProgramSessions([{ title: "Rara", description: `${"> ".repeat(10_000)}fin`, startDate: null, dueDate: null, assignee: null }], { locale: "es-ES", t: es, withAssignee: false, useStartDate: false });
+    const pdf = await renderInWorker({ kind: "program", locale: "es", input: { project: "Citas", today: "2026-11-13", withAssignee: false, sessions: [...sessions(es, "es-ES"), ...odd] } });
+    const text = pdfRuns(pdf).join("");
+    for (const s of ["Sesión 1: Presentación", "Objetivos:", "Sesión 3: Cierre", "Rara", "fin"]) assert.ok(text.includes(s), `falta «${s}»`);
   });
 
   test("sin sesiones: el PDF lo dice", async () => {
