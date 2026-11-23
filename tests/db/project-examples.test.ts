@@ -7,6 +7,7 @@ import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { dateToIso, todayIso } from "../../src/lib/dates";
 import { appTimeZone } from "../../src/lib/format";
+import { MAX_LABELS_PER_PROJECT } from "../../src/lib/constants";
 import { EXAMPLE_LABEL, PROJECT_EXAMPLES, type ExampleLocale } from "../../src/lib/project-examples";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { seedBuiltinTemplates } from "../../src/lib/template-store";
@@ -138,6 +139,17 @@ describe("plantillas de serie con tarjetas de ejemplo", () => {
     const q = expectOk(await createProject("Propia", { templateId: own.id, withExamples: true }));
     assert.equal(await db.task.count({ where: { projectId: q.id } }), 0);
     await db.projectTemplate.delete({ where: { id: own.id } });
+  });
+
+  test("plantilla con el máximo de etiquetas: no añade «Ejemplo» y las tarjetas salen sin ella", async () => {
+    const ids = await freshBuiltins();
+    const labels = Array.from({ length: MAX_LABELS_PER_PROJECT }, (_, i) => ({ name: `Etiqueta ${i}`, color: "#a855f7" }));
+    await db.projectTemplate.update({ where: { id: ids["casa-familia"] }, data: { labels } });
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const p = expectOk(await createProject("Casa llena", { templateId: ids["casa-familia"], withExamples: true }));
+    assert.equal(await db.label.count({ where: { projectId: p.id } }), MAX_LABELS_PER_PROJECT);
+    assert.equal(await db.task.count({ where: { projectId: p.id } }), PROJECT_EXAMPLES.find((e) => e.key === "casa-familia")!.es.tasks.length);
   });
 
   test("en blanco sigue igual: columnas por defecto y ninguna tarjeta", async () => {

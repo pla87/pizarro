@@ -4,6 +4,7 @@ import { BUILTIN_KEYS, canonicalTemplate } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { EXAMPLE_LABEL, hasExamples, PROJECT_EXAMPLES, resolveExamples, validateExample, type ExampleLocale } from "../src/lib/project-examples";
 import { buildTemplateApplication } from "../src/lib/project-templates";
+import { MAX_LABELS_PER_PROJECT } from "../src/lib/constants";
 
 const LOCALES: ExampleLocale[] = ["es", "en"];
 const canon = (key: string, locale: ExampleLocale) => (locale === "en" ? canonicalTemplateEn(key)! : canonicalTemplate(key)!);
@@ -90,6 +91,11 @@ test("resolveExamples: idioma de las tarjetas según la plantilla, etiqueta «Ej
   // Si ya tiene la etiqueta, no se repite.
   const labelled = { ...es, labels: [...es.labels, { name: "ejemplo", color: "#a855f7" as const }] };
   assert.equal(resolveExamples("casa-familia", labelled, "es")!.template.labels.length, labelled.labels.length);
+  // Con la plantilla ya en el tope de etiquetas de un proyecto no se añade (el proyecto no nace con una de más).
+  const full = { ...es, labels: Array.from({ length: MAX_LABELS_PER_PROJECT }, (_, i) => ({ name: `E${i}`, color: "#a855f7" as const })) };
+  const capped = resolveExamples("casa-familia", full, "es")!;
+  assert.equal(capped.template.labels.length, MAX_LABELS_PER_PROJECT);
+  assert.ok(!capped.template.labels.some((l) => l.name === "Ejemplo"));
   assert.equal(resolveExamples("negocio", es, "es"), null);
   // Se aplica como cualquier plantilla.
   const app = buildTemplateApplication(a.template, [{ id: "g1", name: "Funcionalidad" }, { id: "g2", name: "Corrección" }, { id: "g3", name: "Respuesta" }]);
