@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { EDIT_CONFLICT_CODE, EDIT_CONFLICT_MESSAGE } from "@/lib/edit-conflict-core";
 import { AppError, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
+import { COLUMN_ORDER } from "@/lib/task-positions";
 import { templateInputSchema, type TemplateInput } from "@/lib/project-templates";
 import { MAX_TEMPLATE_COLUMNS, MAX_TEMPLATES } from "@/lib/project-templates-core";
 import { lockTemplates, resetBuiltinTemplate, restoreBuiltinTemplates } from "@/lib/template-store";
@@ -105,7 +106,7 @@ export async function templateFromProject(projectId: string) {
       select: {
         name: true,
         description: true,
-        columns: { orderBy: { position: "asc" }, select: { name: true, role: true, isDone: true, wipLimit: true, assignDueDays: true } },
+        columns: { orderBy: COLUMN_ORDER, select: { name: true, role: true, isDone: true, wipLimit: true, assignDueDays: true } },
         kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },

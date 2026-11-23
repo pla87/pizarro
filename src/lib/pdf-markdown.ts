@@ -133,5 +133,11 @@ export function markdownToPdfBlocks(markdown: string): PdfBlock[] {
   const source = underlineToLink(mentionsToPlain(markdown ?? "")).replace(/(?:\s|&nbsp;)+$/, "");
   if (!source.trim()) return [];
   const lexer = new Marked({ gfm: true, breaks: false });
-  return blocks(lexer.lexer(source), 0);
+  try {
+    return blocks(lexer.lexer(source), 0);
+  } catch {
+    // Entrada patológica (miles de citas anidadas, «> > > …») que agota la pila de marked: esta descripción va como
+    // texto plano para que el resto del PDF salga.
+    return [{ t: "p", runs: [{ text: mentionsToPlain(markdown).trim() }] }];
+  }
 }

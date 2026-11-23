@@ -2,7 +2,7 @@
 // compartían `report:<usuario>` con 5/min, así que bajar unas cuantas veces un PDF dejaba sin los demás.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { loginAs, makeProject, makeUser } from "./helpers";
+import { db, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { columnRateKey } from "../../src/lib/column-route";
 import { rateLimit, resetRateLimit } from "../../src/lib/rate-limit";
 import { GET as weekGet } from "../../src/app/api/projects/[projectId]/columns/[columnId]/week/route";
@@ -28,5 +28,26 @@ describe("topes de ritmo de las descargas", () => {
     const report = await reportGet(req(`/api/projects/${f.project.id}/report`), { params: Promise.resolve({ projectId: f.project.id }) });
     assert.notEqual(report.status, 429, "el informe del proyecto tiene su propio contador");
     await report.body?.cancel();
+  });
+});
+
+// El tablero las pide con fetch y las guarda sin abrir otra pestaña (columnDownload.ts): el servidor las sirve como descarga.
+describe("PDF de la semana y de la lista consolidada: se descargan", () => {
+  test("Content-Disposition attachment", async () => {
+    const me = await makeUser();
+    await loginAs(me);
+    const f = await makeProject({ members: [me] });
+    for (const k of ["week", "checklist"] as const) resetRateLimit(columnRateKey(k, me.id));
+    resetRateLimit(`column-pdf:${me.id}`);
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "WEEKLY_PLAN" } });
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "CHECKLIST" } });
+    await makeTask(f, { columnId: f.columns.todo });
+    await makeTask(f, { columnId: f.columns.doing, subtasks: ["Pan"] });
+    for (const [get, columnId, query] of [[weekGet, f.columns.todo, "?by=person"], [checklistGet, f.columns.doing, "?by=kind"]] as const) {
+      const res = await get(req(`/x${query}`), colParams(f.project.id, columnId));
+      assert.equal(res.status, 200, await res.clone().text().catch(() => ""));
+      assert.match(res.headers.get("Content-Disposition") ?? "", /^attachment; filename=".+\.pdf"$/);
+      await res.body?.cancel();
+    }
   });
 });

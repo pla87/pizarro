@@ -162,13 +162,13 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
       )}
 
       {!isAdmin && isPrivateProject && (
-        <Section title="Visibilidad" description="Privado: solo lo ven sus miembros (tampoco los administradores). Cualquiera de ellos añade o quita miembros.">
+        <Section id="members" title="Visibilidad" description="Privado: solo lo ven sus miembros (tampoco los administradores). Cualquiera de ellos añade o quita miembros.">
           <MemberManager projectId={project.id} currentUserId={currentUserId} members={project.members} users={users} isPrivate />
         </Section>
       )}
 
       {isAdmin && (
-        <Section title="Visibilidad">
+        <Section id="members" title="Visibilidad">
           <div className="space-y-2">
             <label className="flex items-start gap-2 text-sm">
               <input type="radio" className="mt-1" checked={visibility === "TEAM"} onChange={() => setVisibility("TEAM")} />

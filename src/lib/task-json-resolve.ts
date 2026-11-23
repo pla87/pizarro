@@ -7,6 +7,7 @@ import "server-only";
 // También está aquí el lado de copiar: las tareas como objetos «pizarro.task» (taskJsonObjects, para copiar y exportar).
 import { z } from "zod";
 import { db } from "./db";
+import { COLUMN_ORDER } from "./task-positions";
 import { lockProject } from "./caps";
 import { listKinds } from "./board";
 import { projectUsersWhere } from "./access";
@@ -133,7 +134,7 @@ export class TaskJsonResolver {
     return this.once("kinds", () => listKinds(this.projectId));
   }
   columns() {
-    return this.once("columns", () => db.column.findMany({ where: { projectId: this.projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, role: true } }));
+    return this.once("columns", () => db.column.findMany({ where: { projectId: this.projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, role: true } }));
   }
   enabled(): Promise<TaskFieldKey[]> {
     return this.once("enabled", () => enabledTaskFields(this.projectId));

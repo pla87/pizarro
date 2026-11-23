@@ -6,6 +6,7 @@ import { addDaysIso, dateToIso, isoToDate, todayIso, weekBoundsIso } from "./dat
 import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
+import { COLUMN_ORDER } from "./task-positions";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { slugify } from "./search-accents";
@@ -160,7 +161,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
 
   const today = todayIso(appTimeZone());
   const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts, subtaskGroups] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
+    db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],

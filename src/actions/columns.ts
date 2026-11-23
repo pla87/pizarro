@@ -15,7 +15,7 @@ import { listKinds } from "@/lib/board";
 import { logText } from "@/lib/log";
 import { COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { COLUMN_ORDER, lastPositionIn, lockColumns, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { requireUser } from "@/lib/session";
 import { isValidWipLimit, WIP_MAX, WIP_MIN } from "@/lib/wip";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -298,7 +298,7 @@ export async function moveColumn(columnId: string, direction: number) {
     const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
     const columns = await db.column.findMany({
       where: { projectId: column.projectId },
-      orderBy: { position: "asc" },
+      orderBy: COLUMN_ORDER,
       select: { id: true, position: true },
     });
     const idx = columns.findIndex((c) => c.id === columnId);
@@ -320,7 +320,7 @@ export async function deleteColumn(columnId: string) {
     const column = await findColumn(columnId);
     const other = await db.column.findFirst({
       where: { projectId: column.projectId, id: { not: columnId } },
-      orderBy: { position: "asc" },
+      orderBy: COLUMN_ORDER,
       select: { id: true },
     });
     if (!other) throw new AppError("Un proyecto necesita al menos una columna.");
@@ -340,7 +340,7 @@ export async function deleteColumn(columnId: string) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
       const target = await tx.column.findFirst({
         where: { projectId: column.projectId, id: { not: columnId } },
-        orderBy: { position: "asc" },
+        orderBy: COLUMN_ORDER,
         select: { id: true },
       });
       if (!target) throw new AppError("Un proyecto necesita al menos una columna.");

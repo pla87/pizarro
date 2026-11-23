@@ -160,7 +160,7 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
       {/* Con pocas personas, quizá falta la que se busca: quien puede, la añade al proyecto (Ajustes → General). */}
       {canManageMembers && users.length <= SHORT_LIST && (
         <p className="mt-1 text-xs">
-          <Link className="text-brand-600 underline dark:text-brand-300" href={`/p/${project.id}/settings?tab=general`} data-assign-add-people>{t("Añadir personas al proyecto")}</Link>
+          <Link className="text-brand-600 underline dark:text-brand-300" href={`/p/${project.id}/settings?tab=general#members`} data-assign-add-people>{t("Añadir personas al proyecto")}</Link>
         </p>
       )}
       <label className="label mt-3" htmlFor={`${id}-days`}>{t("Vence en (días, opcional)")}</label>

@@ -20,6 +20,7 @@ import { Menu, MenuItem, MenuSeparator, MenuSub } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { AssignDialog, AssignHeader, AssignPlanButton, useAssignPlan } from "./AssignColumn";
+import { downloadFile, useDownloadBusy } from "./columnDownload";
 import { columnGateSnapshot } from "./columnGate";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { cardsReserve } from "./deferredCards";
@@ -66,8 +67,34 @@ const roleHint = (role: ColumnRoleValue): string | undefined => COLUMN_ROLE_HINT
 type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget" | "assign" | "kind";
 
 const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
-/** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
-const weekPdf = (projectId: string, columnId: string, by: "day" | "person") => window.open(columnUrl(projectId, columnId, `week?by=${by}`), "_blank", "noopener");
+/**
+ * Rol «Planificación semanal»: PDF de la semana, por día o por persona. Se descarga sin salir del tablero
+ * (columnDownload.ts): uno a la vez por columna (botón y menú comparten el estado) y un error sale en un aviso.
+ */
+function useWeekPdf(projectId: string, columnId: string): { busy: boolean; run: (by: "day" | "person") => void } {
+  const t = useT();
+  const toast = useToast();
+  const key = `week:${columnId}`;
+  const busy = useDownloadBusy(key);
+  const run = (by: "day" | "person") => void downloadFile(key, columnUrl(projectId, columnId, `week?by=${by}`), {
+    fallbackName: "semana.pdf",
+    failed: t("No se pudo generar el PDF de la semana."),
+    offline: t("Sin conexión: no se ha podido generar el PDF de la semana."),
+  }, t, toast);
+  return { busy, run };
+}
+
+/** Botón «PDF de la semana» (por día o por persona), con el icono girando mientras se genera. */
+function WeekPdfButton({ column, projectId, empty, hint }: { column: BoardColumn; projectId: string; empty: boolean; hint: string }) {
+  const t = useT();
+  const { busy, run } = useWeekPdf(projectId, column.id);
+  return (
+    <ColumnActionMenu icon={CalendarRange} label={busy ? t("Generando PDF…") : t("PDF de la semana")} disabled={empty} busy={busy} title={empty ? t("No hay tarjetas en esta columna") : hint} items={[
+      { label: t("PDF de la semana (por día)"), icon: CalendarDays, onClick: () => run("day") },
+      { label: t("PDF de la semana (por persona)"), icon: Users, onClick: () => run("person") },
+    ]} />
+  );
+}
 /**
  * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
  * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
@@ -437,12 +464,7 @@ function roleAction(
     case "PROGRAM":
       return <ColumnActionButton icon={GraduationCap} label={t("Publicar programa (PDF)")} onClick={() => open("program")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "WEEKLY_PLAN":
-      return (
-        <ColumnActionMenu icon={CalendarRange} label={t("PDF de la semana")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} items={[
-          { label: t("PDF de la semana (por día)"), icon: CalendarDays, onClick: () => weekPdf(projectId, column.id, "day") },
-          { label: t("PDF de la semana (por persona)"), icon: Users, onClick: () => weekPdf(projectId, column.id, "person") },
-        ]} />
-      );
+      return <WeekPdfButton column={column} projectId={projectId} empty={empty} hint={hint} />;
     case "CHECKLIST":
       return <GatedActionButton column={column} cardCount={cardCount} icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} />;
     case "BUDGET":
@@ -456,6 +478,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
   const { setColumns, track, refresh, project, columns, kinds } = useBoard();
   const assign = isAssignColumn(column);
   const plan = useAssignPlan(column, cardCount);
+  const week = useWeekPdf(project.id, column.id);
   // Tipo por defecto: solo cuenta si sigue entre los tipos visibles del proyecto (borrado u oculto: «último usado»).
   const defaultKind = kinds.find((k) => k.id === column.defaultKindId);
   const toast = useToast();
@@ -633,8 +656,8 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       )}
       {column.role === "WEEKLY_PLAN" && (
         <>
-          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "day")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por día)")}</ReasonMenuItem>
-          <ReasonMenuItem icon={FileDown} onClick={() => weekPdf(project.id, column.id, "person")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por persona)")}</ReasonMenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => week.run("day")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por día)")}</ReasonMenuItem>
+          <ReasonMenuItem icon={FileDown} onClick={() => week.run("person")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("PDF de la semana (por persona)")}</ReasonMenuItem>
         </>
       )}
       {column.role === "CHECKLIST" && <GatedMenuItem column={column} cardCount={cardCount} icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</GatedMenuItem>}

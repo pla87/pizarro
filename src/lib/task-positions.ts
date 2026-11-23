@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { needOwnRefresh } from "./action-context";
+import { columnsLockName } from "./advisory-locks";
 import { db } from "./db";
 import { blockNeedsRebalance, needsRebalance, positionBetween, POSITION_STEP, spreadPositions } from "./positions";
 
@@ -17,6 +18,9 @@ type Tx = Prisma.TransactionClient;
 
 /** Orden de las tareas en el servidor: el mismo que compareTaskOrder en el cliente. */
 export const TASK_ORDER = [{ position: "asc" }, { id: "asc" }] satisfies Prisma.TaskOrderByWithRelationInput[];
+
+/** Orden de las columnas de un proyecto: por posición y, si dos empatan, por id (un orden fijo entre refrescos). */
+export const COLUMN_ORDER = [{ position: "asc" }, { id: "asc" }] satisfies Prisma.ColumnOrderByWithRelationInput[];
 
 /**
  * Bloquea la ordenación de esas columnas hasta el final de la transacción: dos acciones a la vez
@@ -234,4 +238,28 @@ function isForeignKeyViolation(err: unknown): boolean {
   if (err.code === "P2003") return true;
   const meta = err.meta as { code?: string; driverAdapterError?: { cause?: { kind?: string; originalCode?: string } } } | undefined;
   return meta?.code === "23503" || meta?.driverAdapterError?.cause?.originalCode === "23503" || meta?.driverAdapterError?.cause?.kind === "ForeignKeyConstraintViolation";
+}
+
+/**
+ * Después de devolver columnas a una posición guardada (deshacer un borrado o un movimiento), otra columna creada
+ * entretanto puede ocupar la misma: si hay algún empate en el proyecto, se renumeran todas sus columnas. En un empate
+ * va antes la que vuelve (`returning`; estaba allí antes) y, entre las demás, decide el id. Con el candado de las
+ * columnas del proyecto, el de crear y borrar columnas.
+ */
+export async function resolveColumnPositionTies(projectId: string, returning: string[]): Promise<void> {
+  if (!returning.length) return;
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
+    const columns = await tx.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, position: true } });
+    if (new Set(columns.map((c) => c.position)).size === columns.length) return;
+    const first = new Set(returning);
+    const order = columns
+      .map((c, i) => ({ ...c, i }))
+      .sort((a, b) => a.position - b.position || Number(first.has(b.id)) - Number(first.has(a.id)) || a.i - b.i);
+    needOwnRefresh();
+    for (const [i, c] of order.entries()) {
+      const position = (i + 1) * POSITION_STEP;
+      if (c.position !== position) await tx.column.update({ where: { id: c.id }, data: { position }, select: { id: true } });
+    }
+  });
 }
