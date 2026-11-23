@@ -16,7 +16,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import { projectUsersWhere } from "./access";
 import { recordTaskEvent } from "./action-context";
 import { db } from "./db";
-import { addDaysIso, dateToIso, isoToDate, todayIso } from "./dates";
+import { assignedDueDate } from "./column-assign-core";
+import { dateToIso, isoToDate, todayIso } from "./dates";
 import { appTimeZone } from "./format";
 import { excerpt as makeExcerpt } from "./mentions";
 import { assignedBatchExcerpt } from "./notification-text";
@@ -34,7 +35,7 @@ export interface ColumnAssignment {
 }
 
 /** ¿Puede esta persona tener tareas del proyecto? (activa y con acceso: lo mismo que assertAssignable). */
-export async function canBeAssigned(client: Tx | typeof db, projectId: string, userId: string): Promise<boolean> {
+async function canBeAssigned(client: Tx | typeof db, projectId: string, userId: string): Promise<boolean> {
   const project = await client.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
   if (!project) return false;
   return (await client.user.count({ where: { id: userId, active: true, ...projectUsersWhere(project, projectId) } })) > 0;
@@ -50,8 +51,8 @@ export async function columnAssignment(client: Tx | typeof db, columnId: string)
 
 /** Fecha límite del plazo (hoy + N días), o null si la columna no tiene plazo o la tarea empieza después de esa fecha. */
 function ruleDue(rule: ColumnAssignment, startDate: Date | null | undefined, today: string): string | null {
-  if (!rule.dueDays) return null;
-  const due = addDaysIso(today, rule.dueDays);
+  const due = assignedDueDate(null, rule.dueDays, today);
+  if (!due) return null;
   // Con «Fecha de inicio» posterior, la fecha límite quedaría antes del inicio: no se pone (se elige a mano).
   return startDate && dateToIso(startDate)! > due ? null : due;
 }
@@ -92,7 +93,7 @@ export async function assignOnEnter(tx: Tx, columnId: string, taskIds: readonly 
   if (!rule) return null;
   const rows = await tx.task.findMany({ where: { id: { in: [...new Set(taskIds)] }, columnId, archivedAt: null }, select: { id: true, assigneeId: true, dueDate: true, startDate: true, title: true } });
   const today = todayIso(appTimeZone());
-  const dueDate = !opts.assigneeOnly && rule.dueDays ? addDaysIso(today, rule.dueDays) : null;
+  const dueDate = opts.assigneeOnly ? null : assignedDueDate(null, rule.dueDays, today);
   const newlyAssigned = rows.filter((r) => r.assigneeId !== rule.assigneeId).map((r) => r.id);
   const dated = dueDate ? rows.filter((r) => !r.dueDate && ruleDue(rule, r.startDate, today)).map((r) => r.id) : [];
   if (!newlyAssigned.length && !dated.length) return null;

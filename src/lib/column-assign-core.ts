@@ -39,8 +39,8 @@ export function assignedDueDate(current: string | null, days: number | null | un
 }
 
 /** Grupo del plan: vencidas, hoy, esta semana, este mes, más adelante y sin fecha (en ese orden). */
-export type AssignPlanBucket = "overdue" | "today" | "week" | "month" | "later" | "none";
-export const ASSIGN_PLAN_BUCKETS: readonly AssignPlanBucket[] = ["overdue", "today", "week", "month", "later", "none"];
+type AssignPlanBucket = "overdue" | "today" | "week" | "month" | "later" | "none";
+const ASSIGN_PLAN_BUCKETS: readonly AssignPlanBucket[] = ["overdue", "today", "week", "month", "later", "none"];
 
 /** Encabezado de cada grupo (clave de traducción). */
 export const ASSIGN_PLAN_LABEL: Record<AssignPlanBucket, string> = {
@@ -66,7 +66,7 @@ export function assignPlanBounds(today: string, weekStart: number): { weekEnd: s
 }
 
 /** Grupo de una fecha límite (YYYY-MM-DD o null). */
-export function assignPlanBucket(due: string | null, today: string, bounds: { weekEnd: string; monthEnd: string }): AssignPlanBucket {
+function assignPlanBucket(due: string | null, today: string, bounds: { weekEnd: string; monthEnd: string }): AssignPlanBucket {
   if (!due) return "none";
   if (due < today) return "overdue";
   if (due === today) return "today";
