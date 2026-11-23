@@ -296,21 +296,29 @@ export async function moveColumn(columnId: string, direction: number) {
   return runAction({ name: "columns.moveColumn", args: [columnId, direction] }, async () => {
     const column = await findColumn(columnId);
     const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
-    const columns = await db.column.findMany({
-      where: { projectId: column.projectId },
-      orderBy: COLUMN_ORDER,
-      select: { id: true, position: true },
+    // Se leen y renumeran dentro de la transacción, con el bloqueo de las columnas del proyecto (el de crear y borrar):
+    // dos movimientos a la vez ya no parten de las mismas posiciones ni se pisan.
+    const before = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
+      const columns = await tx.column.findMany({
+        where: { projectId: column.projectId },
+        orderBy: COLUMN_ORDER,
+        select: { id: true, position: true },
+      });
+      const idx = columns.findIndex((c) => c.id === columnId);
+      const target = idx + dir;
+      // Ya en el extremo (o borrada entretanto): no hay nada que mover, ni que deshacer, ni que anotar.
+      if (idx < 0 || target < 0 || target >= columns.length) return null;
+      const order = [...columns];
+      [order[idx], order[target]] = [order[target]!, order[idx]!];
+      for (const [i, c] of order.entries()) {
+        await tx.column.update({ where: { id: c.id }, data: { position: (i + 1) * POSITION_STEP }, select: { id: true } });
+      }
+      return columns;
     });
-    const idx = columns.findIndex((c) => c.id === columnId);
-    const target = idx + dir;
-    // Ya en el extremo: no hay nada que mover, ni que deshacer, ni que anotar.
-    if (idx < 0 || target < 0 || target >= columns.length) return;
-    addUndo(...columns.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
+    if (!before) return;
+    addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
     describeAction(dir < 0 ? "Movió la columna «{name}» a la izquierda" : "Movió la columna «{name}» a la derecha", { name: column.name });
-    [columns[idx], columns[target]] = [columns[target]!, columns[idx]!];
-    await db.$transaction(
-      columns.map((c, i) => db.column.update({ where: { id: c.id }, data: { position: (i + 1) * POSITION_STEP } })),
-    );
   });
 }
 
