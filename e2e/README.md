@@ -279,6 +279,34 @@ tarea» trae el título y avisa de que el archivo no se guardó. Misma base y se
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-e2e.mjs
 ```
 
+### Columna «Asignación a persona» (ronda 64)
+
+En un proyecto privado propio con tres personas (lo crea y lo borra la suite, con sus personas, `asig64_*`):
+
+- `rol`: menú «⋯» → *Rol de la columna* → *Asignación a persona*, persona y «Vence en 5 días»; la cabecera los muestra y
+  el submenú marca la opción. Con tres personas el diálogo ofrece «Añadir personas al proyecto», que lleva a *Ajustes del
+  proyecto → General* en los miembros (`#members`, a la vista); con cuatro ya no.
+- `entrar`: con el «+» de la columna la nota de «Nueva tarea» dice persona y plazo y la tarea nace de esa persona,
+  venciendo hoy + 5; cambiando «Columna» en el detalle, con «Mover a…» de la selección y con Alt+→, la tarea pasa a la
+  persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
+- `cambiar`: cambiar solo el plazo no pregunta ni toca las tarjetas; cambiar la persona pide confirmación con cuántas
+  tarjetas cambian («Las 2 tarjetas…») y las reasigna.
+- `plan`: «Generar plan», bajo la cabecera, descarga el PDF sin salir del tablero (`plan-…pdf`, `Content-Disposition:
+  attachment`); con la respuesta retrasada (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled) y otro
+  clic no lanza otra descarga; con un 429 simulado sale el aviso. El texto (`pdftotext`) va por vencimiento (Vencidas,
+  Hoy, Más adelante, Sin fecha), con lo rellenado de la descripción sin los apartados vacíos, las etiquetas y el aviso de
+  la tarjeta de otra persona.
+- `tipo`: «Tipo por defecto…» del menú: el «+» de la columna lo preselecciona; con «Ninguno» vuelve el último usado.
+- `quitar`: «Sin rol» quita persona, plazo y «Generar plan»; las tarjetas conservan su responsable y su fecha.
+- `movil`: a 390 px (nombre largo) la cabecera, el botón y el diálogo caben, sin scroll horizontal.
+- `en`: cabecera, menú, diálogo, nota de «New task» y PDF en inglés.
+
+Misma base y servidor (necesita `pdftotext`):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-asignacion-e2e.mjs   # PART=rol,entrar,cambiar,plan,tipo,quitar,movil,en
+```
+
 ## Detalle de la tarea
 
 ### Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
