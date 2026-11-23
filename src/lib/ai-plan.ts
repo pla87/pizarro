@@ -4,7 +4,7 @@
 // Sin enlaces a Pizarro (a la tarea, al proyecto, a los adjuntos ni los de las descripciones): la IA no puede abrirlos
 // (piden la sesión iniciada). Los adjuntos se citan por su ruta en el ZIP que va con el plan, o por su nombre.
 
-import { BARE_MARKER, BOLD_LABEL } from "./kinds-special";
+import { BARE_MARKER } from "./kinds-special";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { plainAttachmentFileNames, releaseTemplateText } from "./release";
@@ -230,6 +230,8 @@ function withoutAppLinks(line: string, origin: string | null | undefined, paths:
 
 /** Etiqueta de formulario sola en su línea («**Por qué:**» o «**Por qué**:»), como las de los tipos. */
 const FORM_LABEL_ONLY = /^\*\*[^*\n]+(?::\*\*|\*\*:)$/;
+/** Etiqueta de formulario, sola o con la respuesta detrás («**Riesgo:** ninguno»); no una negrita sin «:» («**1.** Abrir»). */
+const FORM_LABEL = /^\*\*[^*\n]+(?::\*\*|\*\*:)/;
 
 /**
  * Sin los apartados del formulario del tipo que siguen sin responder: una línea que es solo una etiqueta en negrita
@@ -256,8 +258,9 @@ function withoutEmptyFormSections(lines: readonly string[]): string[] {
         out.push(raw);
         continue;
       }
-      // La siguiente etiqueta cierra el apartado vacío (se quita); cualquier otra cosa es su respuesta.
-      if (BOLD_LABEL.test(l)) out.length = pending;
+      // La siguiente etiqueta cierra el apartado vacío (se quita); cualquier otra cosa (también un texto que empieza en
+      // negrita, «**1.** Abrir ajustes») es su respuesta.
+      if (FORM_LABEL.test(l)) out.length = pending;
       pending = null;
     }
     const open = FENCE_OPEN.exec(raw);
@@ -329,6 +332,15 @@ export function planDescription(description: string | null | undefined, origin?:
   return out.join("\n");
 }
 
+/** Primera línea que, tras una lista de datos, se uniría a ella: una viñeta, un número de lista o sangría. */
+const LIST_OR_INDENT_START = /^(?:\s|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/;
+
+/**
+ * Una descripción que va justo después de una lista de datos («- **Tipo:** …»): sin rótulo, salvo si empieza con una
+ * lista (o con sangría). La línea en blanco no las separa: en Markdown sus viñetas pasarían a ser datos de la tarea.
+ */
+const afterFacts = (description: string, t: T) => (LIST_OR_INDENT_START.test(description) ? `**${t("Descripción")}:**\n\n${description}` : description);
+
 function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   const facts: string[] = [];
   const fact = (label: string, value: string) => facts.push(`- **${label}:** ${value}`);
@@ -352,8 +364,9 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
   const parts = [`### ${index}. ${oneLine(task.title)}`];
   if (facts.length) parts.push(facts.join("\n"));
   const description = planDescription(task.description, origin, paths);
-  // La descripción va sin rótulo (sigue a los datos) y la checklist sin «criterios de aceptación» (lo dice la cabecera).
-  if (description) parts.push(description);
+  // La descripción va sin rótulo (sigue a los datos; ver afterFacts) y la checklist sin «criterios de aceptación» (lo dice
+  // la cabecera).
+  if (description) parts.push(facts.length ? afterFacts(description, t) : description);
   if (task.subtasks?.length) {
     parts.push(`**${t("Checklist")}:**`, task.subtasks.map((s) => `- [${s.done ? "x" : " "}] ${oneLine(s.title)}`).join("\n"));
   }
@@ -381,7 +394,7 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   if (namesOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.")}`);
   if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
-  if (description) context.push("", description);
+  if (description) context.push("", afterFacts(description, t));
   const pathById = new Map(zipped.filter((a) => a.id).map((a) => [a.id!, a.path!]));
   const tasks = input.tasks.length
     ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin, pathById))
