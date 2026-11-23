@@ -21,6 +21,7 @@ export function stubBoard(form: ProjectFormData, currentUserId: string, editorMo
     dragHandle: false,
     google: { enabled: false, connected: false },
     today: "",
+    canManageMembers: false,
     stores,
     getTask: () => undefined,
     getTasks: () => [],

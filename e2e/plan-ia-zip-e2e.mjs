@@ -7,9 +7,9 @@
 //    letras, «NN-task»); el servidor admite las dos raíces, con la misma forma estricta, y no deja mezclarlas.
 //  - ritmo: las tareas fijas «cada dos» cuentan los planes guardados en SU columna (guardar en una no adelanta a las demás),
 //    mientras la versión del documento (_vN) sigue siendo del proyecto.
-//  - vacias: «Publicar programa», «Exportar a calendario», «Resumen para el cliente», «Ver lista», «Resumen de presupuesto»
-//    y «PDF de la semana» se desactivan sin tarjetas (botón y menú de la columna), con el título «No hay tarjetas en esta
-//    columna»; el .ics sin fechas y la lista sin subtareas, también, con su motivo.
+//  - vacias: «Publicar programa», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas
+//    (botón y menú de la columna), con el título «No hay tarjetas en esta columna»; la lista sin subtareas, también, con su
+//    motivo.
 //  - salir: con el texto del paso 2 cambiado, un enlace del pie («tus plantillas») pide confirmar como cerrar; sin cambios
 //    navega directo. En el plan y en la release.
 // Misma base y servidor que tablero-e2e.mjs (el servidor y este script comparten UPLOAD_DIR; por defecto ../uploads):
@@ -32,7 +32,7 @@ const NAME = "Web r52";
 const [adm] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
 const COLS = [
   ["r52_a", "Plan A", "AI_PLAN"], ["r52_b", "Plan B", "AI_PLAN"], ["r52_salto", "Salto", "NEXT_RELEASE"], ["r52_prog", "Temario", "PROGRAM"],
-  ["r52_sem", "Semana", "WEEKLY_PLAN"], ["r52_lista", "Lista", "CHECKLIST"], ["r52_agenda", "Agenda", "AGENDA"], ["r52_entrega", "Entrega", "DELIVERY"],
+  ["r52_sem", "Semana", "WEEKLY_PLAN"], ["r52_lista", "Lista", "CHECKLIST"],
   ["r52_presu", "Presupuesto", "BUDGET"],
 ];
 const IMG = Buffer.from("R52-IMAGEN-FALSA-PARA-EL-ZIP");
@@ -258,7 +258,7 @@ if (only.includes("vacias")) {
   const { page } = s;
   await openBoard(page);
   const EMPTY = "No hay tarjetas en esta columna";
-  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Agenda: "Exportar a calendario (.ics)", Entrega: "Resumen para el cliente (PDF)", Presupuesto: "Resumen de presupuesto", Salto: "Generar release", "Plan A": "Generar plan de trabajo" };
+  const LABEL = { Temario: "Publicar programa (PDF)", Semana: "PDF de la semana", Lista: "Ver lista", Presupuesto: "Resumen de presupuesto", Salto: "Generar release", "Plan A": "Generar plan de trabajo" };
   const state = async (col) => {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     return [await b.isDisabled(), await b.getAttribute("title")];
@@ -280,31 +280,27 @@ if (only.includes("vacias")) {
     return out;
   };
   for (const [col, names] of Object.entries({
-    Temario: ["Publicar programa (PDF)"], Semana: ["PDF de la semana (por día)", "PDF de la semana (por persona)"], Lista: ["Ver lista"], Agenda: ["Exportar a calendario (.ics)"],
-    Entrega: ["Resumen para el cliente (PDF)"], Presupuesto: ["Resumen de presupuesto"], "Plan A": ["Generar plan de trabajo"],
+    Temario: ["Publicar programa (PDF)"], Semana: ["PDF de la semana (por día)", "PDF de la semana (por persona)"], Lista: ["Ver lista"],
+    Presupuesto: ["Resumen de presupuesto"], "Plan A": ["Generar plan de trabajo"],
   })) L.eq(`VACIAS: «${col}» vacía: su opción del menú también`, await menuItems(col, names), names.map((n) => [n, true, EMPTY]));
   await page.screenshot({ path: `${SHOTS}/r52-vacias.png` });
 
-  // Con una tarjeta se activan (el .ics y la lista piden además fecha límite o subtareas).
+  // Con una tarjeta se activan (la lista pide además subtareas).
   const add = (id, col, title, extra = "") => L.q(`INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,"createdById","updatedAt"${extra ? ",\"dueDate\"" : ""}) VALUES ($1,$2,$3,$4,'kind_funcionalidad',1024,$5,NOW()${extra ? `,'${extra}'` : ""})`, [id, PID, col, title, adm.id]);
-  for (const [id, col, title] of [["r52_v1", "r52_prog", "Sesión"], ["r52_v2", "r52_sem", "Lunes"], ["r52_v3", "r52_entrega", "Entregable"], ["r52_v4", "r52_presu", "Partida"], ["r52_v5", "r52_a", "Plan"]]) await add(id, col, title);
-  await add("r52_ag1", "r52_agenda", "Sin fecha");
+  for (const [id, col, title] of [["r52_v1", "r52_prog", "Sesión"], ["r52_v2", "r52_sem", "Lunes"], ["r52_v4", "r52_presu", "Partida"], ["r52_v5", "r52_a", "Plan"]]) await add(id, col, title);
   await add("r52_li1", "r52_lista", "Sin subtareas");
   await page.reload();
   await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
   await sleep(600);
-  for (const col of ["Temario", "Semana", "Entrega", "Presupuesto", "Plan A"]) L.eq(`VACIAS: «${col}» con una tarjeta se activa`, (await state(col))[0], false);
-  L.eq("VACIAS: «Agenda» con tarjetas sin fecha límite sigue desactivada, con su motivo", await state("Agenda"), [true, "Ninguna tarjeta tiene fecha límite"]);
+  for (const col of ["Temario", "Semana", "Presupuesto", "Plan A"]) L.eq(`VACIAS: «${col}» con una tarjeta se activa`, (await state(col))[0], false);
   L.eq("VACIAS: «Lista» con tarjetas sin subtareas sigue desactivada, con su motivo", await state("Lista"), [true, "Ninguna tarjeta tiene subtareas"]);
-  L.eq("VACIAS: y su opción del menú también", (await menuItems("Agenda", ["Exportar a calendario (.ics)"]))[0].slice(1), [true, "Ninguna tarjeta tiene fecha límite"]);
-  await L.q(`UPDATE "Task" SET "dueDate"='2026-12-31' WHERE id='r52_ag1'`);
+  L.eq("VACIAS: y su opción del menú también", (await menuItems("Lista", ["Ver lista"]))[0].slice(1), [true, "Ninguna tarjeta tiene subtareas"]);
   await L.q(`INSERT INTO "Subtask"(id,"taskId",title,done,position) VALUES ('r52_su1','r52_li1','Paso',false,1000)`);
   await page.reload();
   await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
   await sleep(600);
-  L.eq("VACIAS: «Agenda» con una tarjeta con fecha se activa", (await state("Agenda"))[0], false);
   L.eq("VACIAS: «Lista» con una tarjeta con subtareas se activa", (await state("Lista"))[0], false);
-  L.eq("VACIAS: y sus opciones del menú", [(await menuItems("Agenda", ["Exportar a calendario (.ics)"]))[0][1], (await menuItems("Lista", ["Ver lista"]))[0][1]], [false, false]);
+  L.eq("VACIAS: y su opción del menú", (await menuItems("Lista", ["Ver lista"]))[0][1], false);
   // «Ver lista» abre su diálogo.
   await L.colLoc(page, "Lista").getByRole("button", { name: "Ver lista" }).click();
   L.check("VACIAS: «Ver lista» abre la lista con su subtarea", await page.getByRole("dialog").getByText("Paso", { exact: true }).first().waitFor({ timeout: 8000 }).then(() => true, () => false));

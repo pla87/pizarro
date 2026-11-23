@@ -225,7 +225,6 @@ export const server: Record<string, string> = {
   "Máximo 365 días.": "At most 365 days.",
   "Cambió el plazo de espera de la columna «{name}» a {days} d": "Changed the waiting period of the column “{name}” to {days} d",
   "Los roles «Siguiente salto» y «En producción» solo pueden usarse en una columna.": "The “Next release” and “In production” roles can only be used in one column.",
-  "Cambió el rol de la columna «{name}»": "Changed the role of the column “{name}”",
   "Marcó la columna «{name}» como terminada": "Marked the column “{name}” as done",
   "Desmarcó la columna «{name}» como terminada": "Unmarked the column “{name}” as done",
   "Movió la columna «{name}» a la izquierda": "Moved the column “{name}” to the left",
@@ -326,5 +325,7 @@ export const server: Record<string, string> = {
   "Este informe muestra como mucho {n} tareas por listado; el avance y los recuentos incluyen todas.": "This report shows at most {n} tasks per list; progress and counts include all of them.",
   // Historial de las tareas (TaskEvent, un año) y deshacer (7 días): guardan la clave de antes de «Restaurar».
   // Textos guardados por versiones anteriores (se traducen al leerlos)
+  // Cambiar el rol de una columna (hasta la v1.67, sin decir de qué rol a qué rol)
+  "Cambió el rol de la columna «{name}»": "Changed the role of the column “{name}”",
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
 };

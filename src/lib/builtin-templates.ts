@@ -97,7 +97,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
   {
     // Casa y familia (también mudanzas y reformas): lo de esta semana se imprime por persona (Planificación semanal), lo
     // que depende de otros avisa si tarda (Esperando), la compra es una lista única (Lista consolidada: cada producto es
-    // una subtarea), las citas van al calendario (Agenda) y lo que se repite, a Rutinas.
+    // una subtarea), las citas tienen su columna (con fecha, salen en el calendario) y lo que se repite, a Rutinas.
     key: "casa-familia",
     data: {
       name: "Casa y familia",
@@ -107,7 +107,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Esta semana", false, "WEEKLY_PLAN"),
         col("Esperando", false, "WAITING"),
         col("Lista de la compra", false, "CHECKLIST"),
-        col("Citas", false, "AGENDA"),
+        col("Citas"),
         col("Rutinas", false, "ROUTINES"),
         col("Hecho", true),
       ],
@@ -134,7 +134,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
   },
   {
     // Evento o viaje: lo pedido a proveedores avisa si no responden (Esperando), lo reservado suma su coste con pagado y
-    // pendiente (Presupuesto), el programa o el itinerario va al calendario (Agenda) y lo del día, maleta incluida, se ve
+    // pendiente (Presupuesto), el programa o el itinerario tiene su columna (con fecha, sale en el calendario) y lo del día, maleta incluida, se ve
     // como una sola lista (Lista consolidada).
     key: "eventos-viajes",
     data: {
@@ -145,7 +145,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Por confirmar", false, "WAITING"),
         col("Reservado", false, "BUDGET"),
         col("Preparando"),
-        col("Agenda", false, "AGENDA"),
+        col("Agenda"),
         col("Lista del día y maleta", false, "CHECKLIST"),
         col("Hecho", true),
       ],

@@ -235,7 +235,7 @@ export async function getProjectFormData(projectId: string) {
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
     const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
-      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true } }),
+      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),

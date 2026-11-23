@@ -79,6 +79,41 @@ describe("rol que la columna ya tiene", () => {
   });
 });
 
+describe("registro del cambio de rol y roles retirados", () => {
+  test("el registro dice de qué rol a qué rol (plantilla traducible)", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    const since = new Date();
+    expectOk(await setColumnRole(f.columns.todo, "WAITING"));
+    expectOk(await setColumnRole(f.columns.todo, "CHECKLIST"));
+    await flushLogs();
+    const logs = await db.appLog.findMany({ where: { projectId: f.project.id, action: "columns.setColumnRole", createdAt: { gte: since } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { message: true, details: true } });
+    assert.deepEqual(logs.map((l) => l.message), [
+      "Cambió el rol de la columna «Por hacer» de «Sin rol» a «Esperando (avisa si tarda)»",
+      "Cambió el rol de la columna «Por hacer» de «Esperando (avisa si tarda)» a «Lista consolidada»",
+    ]);
+    const label = (logs[1]!.details as Record<string, { k: string; p: Record<string, unknown> }>)["$msg"]!;
+    assert.equal(label.k, "Cambió el rol de la columna «{name}» de «{from}» a «{to}»");
+    assert.deepEqual([label.p.from, label.p.to], [{ k: "Esperando (avisa si tarda)" }, { k: "Lista consolidada" }]);
+  });
+
+  test("Agenda y Entrega al cliente ya no se escriben: pedirlos deja «Sin rol», y deshacer no los devuelve", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    expectOk(await setColumnRole(f.columns.todo, "WAITING"));
+    expectOk(await setColumnRole(f.columns.todo, "AGENDA"));
+    assert.equal((await roles(f))[f.columns.todo], "NONE");
+    // Una columna que aún lo tiene (de antes de la migración o tras volver a una versión anterior) y un deshacer guardado
+    // con ese rol: vuelve como «Sin rol».
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "DELIVERY" } });
+    expectOk(await setColumnRole(f.columns.doing, "CHECKLIST"));
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await roles(f))[f.columns.doing], "NONE");
+  });
+});
+
 /** Dos personas con acceso a un proyecto nuevo. */
 async function twoPeople(): Promise<{ a: { id: string }; b: { id: string }; f: Fixture }> {
   const a = await makeUser();

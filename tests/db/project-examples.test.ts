@@ -105,8 +105,8 @@ describe("plantillas de serie con tarjetas de ejemplo", () => {
   test("plantilla modificada: las tarjetas van a la columna del mismo nombre o del mismo rol, y si no, a la primera", async () => {
     const ids = await freshBuiltins();
     const canon = canonicalTemplate("casa-familia")!;
-    // El administrador renombró «Citas» (rol Agenda) y quitó «Rutinas»; la persona usa el inglés, pero la plantilla está en español.
-    const columns = canon.columns.filter((c) => c.role !== "ROUTINES").map((c) => (c.role === "AGENDA" ? { ...c, name: "Médicos" } : c));
+    // El administrador renombró «Lista de la compra» (rol Lista consolidada) y quitó «Rutinas»; la persona usa el inglés, pero la plantilla está en español.
+    const columns = canon.columns.filter((c) => c.role !== "ROUTINES").map((c) => (c.role === "CHECKLIST" ? { ...c, name: "Súper" } : c));
     await db.projectTemplate.update({ where: { id: ids["casa-familia"] }, data: { columns } });
     const admin = await makeUser({ role: "ADMIN" });
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
@@ -116,9 +116,9 @@ describe("plantillas de serie con tarjetas de ejemplo", () => {
     assert.equal(tasks.length, PROJECT_EXAMPLES.find((e) => e.key === "casa-familia")!.es.tasks.length);
     assert.ok(tasks.every((t) => t.labels.some((l) => l.label.name === "Ejemplo")), "tarjetas en el idioma de la plantilla");
     const at = (title: string) => tasks.find((t) => t.title === title)!.column.name;
-    assert.equal(at("Revisión del dentista"), "Médicos");
+    assert.equal(at("Revisión del dentista"), "Citas");
     assert.equal(at("Sacar la basura"), "Por hacer");
-    assert.equal(at("Lista de la compra"), "Lista de la compra");
+    assert.equal(at("Lista de la compra"), "Súper");
   });
 
   test("quien no es administrador usa las de serie (en privado), con o sin ejemplos, y también las propias", async () => {

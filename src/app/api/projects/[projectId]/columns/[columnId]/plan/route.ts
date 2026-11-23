@@ -21,5 +21,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
     userId: user.id, userName: user.name, projectId, path: `/api/projects/${projectId}/columns/${columnId}/plan`, ip: clientIp(req.headers), durationMs: performance.now() - start,
     details: { tasks: report.taskCount, bytes: report.pdf.length },
   });
-  return pdfResponse(report.pdf, report.filename);
+  // Se descarga (el tablero lo pide con fetch y lo guarda: columnDownload.ts).
+  return pdfResponse(report.pdf, report.filename, { download: true });
 }

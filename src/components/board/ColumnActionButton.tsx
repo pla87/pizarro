@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { Menu, MenuItem } from "../ui/Menu";
 import { useToast } from "../ui/Toast";
 
@@ -17,18 +17,27 @@ const CLASS = "btn-primary w-full py-1.5";
  */
 const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
-export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title }: {
+/** `busy`: la acción está en curso (p. ej. generando un PDF): el icono gira y el botón no hace nada hasta que acabe. */
+export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title, busy }: {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   title?: string;
+  busy?: boolean;
 }) {
   const toast = useToast();
   return (
     <div className="px-2 pb-1.5" data-column-action>
-      <button type="button" className={`${CLASS} ${OFF}`} onClick={disabled ? () => title && toast(title, "error") : onClick} aria-disabled={disabled ? true : undefined} title={title}>
-        <Icon size={15} /> {label}
+      <button
+        type="button"
+        className={`${CLASS} ${OFF} aria-busy:cursor-progress`}
+        onClick={busy ? undefined : disabled ? () => title && toast(title, "error") : onClick}
+        aria-disabled={disabled || busy ? true : undefined}
+        aria-busy={busy || undefined}
+        title={title}
+      >
+        {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Icon size={15} />} {label}
       </button>
     </div>
   );

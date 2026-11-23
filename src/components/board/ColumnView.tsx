@@ -3,9 +3,9 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Send, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
-import { deleteColumn, moveColumn, renameColumn, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
+import { deleteColumn, moveColumn, renameColumn, setColumnDefaultKind, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, SELECTABLE_COLUMN_ROLES, type ColumnRoleValue, type SelectableColumnRole } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
@@ -19,7 +19,7 @@ import { usePrompt } from "../ui/PromptDialog";
 import { Menu, MenuItem, MenuSeparator, MenuSub } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
-import { AssignDialog, AssignHeader, AssignPlanButton, assignPlanPdf } from "./AssignColumn";
+import { AssignDialog, AssignHeader, AssignPlanButton, useAssignPlan } from "./AssignColumn";
 import { columnGateSnapshot } from "./columnGate";
 import { useBoard, useSelectedCount, useTasks } from "./context";
 import { cardsReserve } from "./deferredCards";
@@ -54,51 +54,20 @@ const NO_IDS: string[] = [];
 const EAGER_CARDS = 15;
 
 /** Icono de cada rol en el selector del menú de la columna (la explicación sale al pasar por encima: COLUMN_ROLE_HINT). */
-const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
+const ROLE_ICON: Record<SelectableColumnRole, LucideIcon> = {
   NONE: Minus, NEXT_RELEASE: Rocket, IN_PRODUCTION: Flag, WAITING: Hourglass, WEEKLY_PLAN: CalendarRange, CHECKLIST: ListChecks,
-  REVIEW: ClipboardCheck, AGENDA: CalendarDays, ROUTINES: Repeat, DELIVERY: Send, BUDGET: Wallet, PROGRAM: GraduationCap, AI_PLAN: Bot,
+  REVIEW: ClipboardCheck, ROUTINES: Repeat, BUDGET: Wallet, PROGRAM: GraduationCap, AI_PLAN: Bot,
 };
 
+/** Explicación del rol (los retirados no tienen: una columna que aún lo conserve se comporta como sin rol). */
+const roleHint = (role: ColumnRoleValue): string | undefined => COLUMN_ROLE_HINT[role as SelectableColumnRole];
+
 /** Diálogos de una columna: los abre su menú o el botón de acción de su rol (ColumnActionButton). */
-type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget" | "assign";
+type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget" | "assign" | "kind";
 
 const columnUrl = (projectId: string, columnId: string, path: string) => `/api/projects/${projectId}/columns/${columnId}/${path}`;
 /** Rol «Planificación semanal»: PDF de la semana, por día o por persona. */
 const weekPdf = (projectId: string, columnId: string, by: "day" | "person") => window.open(columnUrl(projectId, columnId, `week?by=${by}`), "_blank", "noopener");
-/** Columnas cuyo .ics se está descargando. */
-const icsInFlight = new Set<string>();
-/**
- * Rol «Agenda»: descarga el .ics sin salir del tablero (fetch → blob → <a download>). Antes se navegaba a la ruta y, con
- * un 429, 401 o 404, el tablero se sustituía por una página de texto; ahora el motivo sale en un aviso.
- */
-async function agendaIcs(projectId: string, columnId: string, t: ReturnType<typeof useT>, toast: ReturnType<typeof useToast>) {
-  // Una descarga por columna a la vez (botón y menú): con la red lenta, cada clic bajaba otro fichero igual.
-  if (icsInFlight.has(columnId)) return;
-  icsInFlight.add(columnId);
-  try {
-    const res = await fetch(columnUrl(projectId, columnId, "ics"), { cache: "no-store" });
-    if (!res.ok) {
-      const text = (await res.text().catch(() => "")).trim();
-      return toast(res.status === 429 ? t("Demasiadas peticiones, espera un momento.") : text && text.length < 300 ? text : t("No se pudo exportar el calendario."), "error");
-    }
-    const blob = await res.blob();
-    const name = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "agenda.ics";
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch {
-    toast(t("Sin conexión: no se ha podido exportar el calendario."), "error");
-  } finally {
-    icsInFlight.delete(columnId);
-  }
-}
-const deliveryPdf = (projectId: string, columnId: string) => window.open(columnUrl(projectId, columnId, "delivery"), "_blank", "noopener");
-
 /**
  * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
  * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
@@ -107,19 +76,19 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   const { openNewTask, openRelease, setSelectedMany, project } = useBoard();
   const t = useT();
   const sc = useShortcut();
-  const toast = useToast();
   const selectedHere = useSelectedCount(taskIds);
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
   const isNextRelease = column.role === "NEXT_RELEASE";
   // La release y los planes para IA acaban en su panel de tareas fijas («Siempre en la release» / «… en el plan»).
   const withFixed = hasEvergreenTasks(column.role);
-  // «Asignación a persona» (rol NONE con persona o plazo): persona en la cabecera y «Generar plan» al pie.
+  // «Asignación a persona» (rol NONE con persona o plazo): «Generar plan» bajo la cabecera (como los botones de los demás
+  // roles) y la persona debajo.
   const assign = isAssignColumn(column);
-  // Columnas que acaban en algo fijo al pie (panel de fijas o «Generar plan»).
-  const withFooter = withFixed || assign;
+  // Columnas que acaban en algo fijo al pie (el panel de fijas).
+  const withFooter = withFixed;
   const [dialog, setDialog] = useState<ColumnDialog | null>(null);
-  const action = roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc, toast);
+  const action = assign ? <AssignPlanButton column={column} cardCount={cardCount} /> : roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
   const wipOver = wipExceeded(cardCount, column.wipLimit);
   // «Programa del curso»: tope de PROGRAM_MAX_SESSIONS sesiones (el servidor lo impone; aquí, el contador y el «+»).
@@ -227,6 +196,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
       {dialog === "program" && <ProgramDialog column={column} onClose={() => setDialog(null)} />}
       {dialog === "budget" && <BudgetSummaryDialog column={column} onClose={() => setDialog(null)} />}
       {dialog === "plan" && <AiPlanDialog column={column} onClose={() => setDialog(null)} />}
+      {dialog === "kind" && <DefaultKindDialog column={column} onClose={() => setDialog(null)} />}
       {/* La lista lleva el id de la columna: la detección de colisiones (lib/collision.ts) solo repasa las tarjetas de la columna bajo el puntero. */}
       <SortableContext id={droppableId} items={taskIds} strategy={verticalListSortingStrategy}>
         <div
@@ -277,7 +247,6 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           </div>
         </div>
       </SortableContext>
-      {assign && <AssignPlanButton column={column} cardCount={cardCount} />}
       {withFixed && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} kind={isNextRelease ? "release" : "plan"} />}
     </section>
   );
@@ -413,10 +382,9 @@ function BudgetTotal({ columnId }: { columnId: string }) {
 }
 
 /**
- * «Ver lista» (rol Lista de comprobación) y «Exportar a calendario (.ics)» (rol Agenda) se apoyan en datos de las tarjetas,
- * no solo en que las haya: la lista muestra las subtareas (sin ninguna queda vacía) y el .ics solo lleva las tareas con
- * fecha límite (sin ninguna, un calendario sin eventos). Se desactivan también en ese caso, con su motivo. Devuelve el motivo
- * por el que la acción no se puede usar, o null si se puede.
+ * «Ver lista» (rol Lista de comprobación) se apoya en datos de las tarjetas, no solo en que las haya: la lista muestra las
+ * subtareas (sin ninguna queda vacía). Se desactiva también en ese caso, con su motivo. Devuelve el motivo por el que la
+ * acción no se puede usar, o null si se puede.
  *
  * Se suscribe al almacén de tareas con una instantánea que es el motivo (columnGateSnapshot): el botón solo se redibuja
  * cuando cambia el motivo de SU columna, no con cada cambio de cualquier tarea del tablero (como hacía con useTasks).
@@ -428,7 +396,6 @@ function useGate(column: BoardColumn, cardCount: number): string | null {
   const gate = useSyncExternalStore(stores.tasks.subscribe, snapshot, snapshot);
   switch (gate) {
     case "empty": return t("No hay tarjetas en esta columna");
-    case "noDueDate": return t("Ninguna tarjeta tiene fecha límite");
     case "noSubtasks": return t("Ninguna tarjeta tiene subtareas");
     default: return null;
   }
@@ -437,7 +404,7 @@ function useGate(column: BoardColumn, cardCount: number): string | null {
 function GatedActionButton({ column, cardCount, icon, label, onClick }: { column: BoardColumn; cardCount: number; icon: LucideIcon; label: string; onClick: () => void }) {
   const t = useT();
   const reason = useGate(column, cardCount);
-  return <ColumnActionButton icon={icon} label={label} onClick={onClick} disabled={reason != null} title={reason ?? t(COLUMN_ROLE_HINT[column.role])} />;
+  return <ColumnActionButton icon={icon} label={label} onClick={onClick} disabled={reason != null} title={reason ?? t(roleHint(column.role) ?? "")} />;
 }
 
 function GatedMenuItem({ column, cardCount, icon, onClick, children }: { column: BoardColumn; cardCount: number; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
@@ -457,10 +424,10 @@ function ReasonMenuItem({ reason, onClick, ...rest }: { reason: string | null; i
  */
 function roleAction(
   column: BoardColumn, projectId: string, cardCount: number, open: (d: ColumnDialog) => void, openRelease: (columnId: string) => void,
-  t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>, toast: ReturnType<typeof useToast>,
+  t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>,
 ): React.ReactNode {
   const empty = cardCount === 0;
-  const hint = t(COLUMN_ROLE_HINT[column.role]);
+  const hint = t(roleHint(column.role) ?? "");
   switch (column.role) {
     case "NEXT_RELEASE":
       // Solo se desactiva sin tarjetas (las fijas cuentan): el motivo dice qué hacer, al pasar el ratón y al tocarlo.
@@ -478,10 +445,6 @@ function roleAction(
       );
     case "CHECKLIST":
       return <GatedActionButton column={column} cardCount={cardCount} icon={ListChecks} label={t("Ver lista")} onClick={() => open("checklist")} />;
-    case "AGENDA":
-      return <GatedActionButton column={column} cardCount={cardCount} icon={CalendarDays} label={t("Exportar a calendario (.ics)")} onClick={() => void agendaIcs(projectId, column.id, t, toast)} />;
-    case "DELIVERY":
-      return <ColumnActionButton icon={FileDown} label={t("Resumen para el cliente (PDF)")} onClick={() => deliveryPdf(projectId, column.id)} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     case "BUDGET":
       return <ColumnActionButton icon={Wallet} label={t("Resumen de presupuesto")} onClick={() => open("budget")} disabled={empty} title={empty ? t("No hay tarjetas en esta columna") : hint} />;
     default:
@@ -490,8 +453,11 @@ function roleAction(
 }
 
 function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; cardCount: number; openDialog: (d: ColumnDialog) => void }) {
-  const { setColumns, track, refresh, project, columns, users } = useBoard();
+  const { setColumns, track, refresh, project, columns, kinds } = useBoard();
   const assign = isAssignColumn(column);
+  const plan = useAssignPlan(column, cardCount);
+  // Tipo por defecto: solo cuenta si sigue entre los tipos visibles del proyecto (borrado u oculto: «último usado»).
+  const defaultKind = kinds.find((k) => k.id === column.defaultKindId);
   const toast = useToast();
   const confirm = useConfirm();
   const prompt = usePrompt();
@@ -626,9 +592,9 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
       <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
       <MenuSeparator />
-      {/* Los 13 roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
+      {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
       <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
-        {COLUMN_ROLES.map((r) => {
+        {SELECTABLE_COLUMN_ROLES.map((r) => {
           // «Asignación a persona» tiene rol NONE: entonces «Sin rol» no es el elegido (y elegirlo la deja sin persona).
           const current = column.role === r && !(assign && r === "NONE");
           return (
@@ -672,24 +638,17 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
         </>
       )}
       {column.role === "CHECKLIST" && <GatedMenuItem column={column} cardCount={cardCount} icon={ListChecks} onClick={() => setDialog("checklist")}>{t("Ver lista")}</GatedMenuItem>}
-      {column.role === "AGENDA" && <GatedMenuItem column={column} cardCount={cardCount} icon={CalendarDays} onClick={() => void agendaIcs(project.id, column.id, t, toast)}>{t("Exportar a calendario (.ics)")}</GatedMenuItem>}
       {column.role === "ROUTINES" && (
         <MenuItem icon={Repeat} onClick={() => setDialog("routine")}>{t("Destino de la siguiente aparición: {name}…", { name: routineTarget?.name ?? t("esta columna") })}</MenuItem>
       )}
-      {column.role === "DELIVERY" && <ReasonMenuItem icon={FileDown} onClick={() => deliveryPdf(project.id, column.id)} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen para el cliente (PDF)")}</ReasonMenuItem>}
       {column.role === "BUDGET" && <ReasonMenuItem icon={Wallet} onClick={() => setDialog("budget")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Resumen de presupuesto")}</ReasonMenuItem>}
       {column.role === "PROGRAM" && <ReasonMenuItem icon={GraduationCap} onClick={() => setDialog("program")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Publicar programa (PDF)")}</ReasonMenuItem>}
-      {assign && (
-        <ReasonMenuItem
-          icon={FileDown}
-          onClick={() => assignPlanPdf(project.id, column.id)}
-          reason={!users.some((u) => u.id === column.assigneeId) ? t("Elige antes la persona de la columna") : empty ? t("No hay tarjetas en esta columna") : null}
-        >
-          {t("Generar plan")}
-        </ReasonMenuItem>
-      )}
+      {assign && <ReasonMenuItem icon={FileDown} onClick={plan.run} reason={plan.reason}>{t("Generar plan")}</ReasonMenuItem>}
       {column.role === "AI_PLAN" && <ReasonMenuItem icon={Bot} onClick={() => setDialog("plan")} reason={empty ? t("No hay tarjetas en esta columna") : null}>{t("Generar plan de trabajo")}</ReasonMenuItem>}
       <MenuSeparator />
+      <MenuItem icon={Shapes} onClick={() => setDialog("kind")} title={t("Tipo con el que se abre «Nueva tarea» desde esta columna")}>
+        {defaultKind ? t("Tipo por defecto: {name}…", { name: defaultKind.name }) : t("Tipo por defecto…")}
+      </MenuItem>
       <MenuItem icon={Gauge} onClick={editWipLimit}>
         {column.wipLimit != null ? t("Límite de tarjetas: {limit}…", { limit: column.wipLimit }) : t("Límite de tarjetas…")}
       </MenuItem>
@@ -702,6 +661,53 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       </MenuItem>
     </Menu>
     </>
+  );
+}
+
+/**
+ * «Tipo por defecto…»: el tipo con el que se abre «Nueva tarea» desde esta columna (el «+» o la columna elegida en el
+ * diálogo), o «Ninguno» para seguir con el último que usó cada persona.
+ */
+function DefaultKindDialog({ column, onClose }: { column: BoardColumn; onClose: () => void }) {
+  const { kinds, setColumns, track, refresh } = useBoard();
+  const toast = useToast();
+  const t = useT();
+  const current = kinds.some((k) => k.id === column.defaultKindId) ? column.defaultKindId! : "";
+  const [value, setValue] = useState(current);
+
+  const save = async () => {
+    onClose();
+    const kindId = value || null;
+    if (kindId === (current || null)) return;
+    const before = column.defaultKindId;
+    setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, defaultKindId: kindId } : c)));
+    const res = await track(setColumnDefaultKind(column.id, kindId));
+    if (!res.ok) {
+      setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, defaultKindId: before } : c)));
+      toast(res.error, "error");
+      refresh();
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={t("Tipo por defecto")}
+      footer={
+        <>
+          <button className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>
+          <button className="btn-primary" onClick={save}>{t("Guardar")}</button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-400">{t("Las tareas nuevas de «{name}» empiezan con este tipo. Con «Ninguno», con el último que hayas usado.", { name: column.name })}</p>
+      <select className="input w-full" value={value} onChange={(e) => setValue(e.target.value)} aria-label={t("Tipo por defecto")}>
+        <option value="">{t("Ninguno")}</option>
+        {kinds.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+      </select>
+    </Modal>
   );
 }
 

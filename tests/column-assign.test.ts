@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { pdfRuns } from "./pdf-runs";
 import { calendarWeekStart } from "../src/lib/calendar";
 import {
-  assignedDueDate, assignPlanBounds, buildAssignPlan, firstDescriptionLine, isAssignColumn, isValidAssignDays, parseAssignDays,
+  assignedDueDate, assignPlanBounds, buildAssignPlan, descriptionSummary, isAssignColumn, isValidAssignDays, parseAssignDays,
   type AssignPlanTask,
 } from "../src/lib/column-assign-core";
 
@@ -43,7 +43,7 @@ test("fecha límite al entrar: la que ya tenía se respeta; sin fecha, hoy + N d
 
 // 2026-11-25 es miércoles. En español la semana va de lunes 23 a domingo 29; en inglés, de domingo 22 a sábado 28.
 const today = "2026-11-25";
-const task = (title: string, dueDate: string | null): AssignPlanTask => ({ title, kind: "Tarea", priority: null, dueDate, firstLine: "", pendingSubtasks: [], pendingCount: 0 });
+const task = (title: string, dueDate: string | null): AssignPlanTask => ({ title, kind: "Tarea", priority: null, dueDate, summary: [], labels: [], pendingSubtasks: [], pendingCount: 0 });
 const tasks = [
   task("Sin fecha", null),
   task("Domingo 29", "2026-11-29"),
@@ -88,33 +88,54 @@ test("plan: los grupos vacíos no salen y, si la semana ya llega al mes siguient
   assert.deepEqual(plan.map((g) => [g.bucket, g.tasks.map((x) => x.title)]), [["week", ["2 ene"]], ["later", ["10 ene"]]]);
 });
 
-test("primera línea de la descripción, sin marcas de Markdown y recortada", () => {
-  assert.equal(firstDescriptionLine(""), "");
-  assert.equal(firstDescriptionLine("\n\n## Objetivo **claro**\nResto"), "Objetivo claro");
-  assert.equal(firstDescriptionLine("![foto](/api/attachments/x)\n- [ ] Ver [el plano](https://example.com/p)"), "Ver el plano");
+test("resumen de la descripción: líneas sin marcas de Markdown, sin bloques de código y recortadas", () => {
+  const first = (md: string, max = 140) => descriptionSummary(md, 1, max)[0] ?? "";
+  assert.deepEqual(descriptionSummary(""), []);
+  assert.equal(first("\n\n## Objetivo **claro**\nResto"), "Objetivo claro…");
+  assert.equal(first("![foto](/api/attachments/x)\n- [ ] Ver [el plano](https://example.com/p)"), "Ver el plano");
   // Los bloques de código se saltan enteros (ni la etiqueta del lenguaje ni el código).
-  assert.equal(firstDescriptionLine("```\ncódigo\n```"), "");
-  assert.equal(firstDescriptionLine("```js\nconst x = 1;\n```\nTexto"), "Texto");
-  assert.equal(firstDescriptionLine("```\nconst x = 1;\n\n```\n\nTexto"), "Texto");
-  assert.equal(firstDescriptionLine("~~~\ncode\n~~~\nTexto"), "Texto");
+  assert.deepEqual(descriptionSummary("```\ncódigo\n```"), []);
+  assert.equal(first("```js\nconst x = 1;\n```\nTexto"), "Texto");
+  assert.equal(first("```\nconst x = 1;\n\n```\n\nTexto"), "Texto");
+  assert.equal(first("~~~\ncode\n~~~\nTexto"), "Texto");
   // Solo cierra una valla del mismo carácter y al menos igual de larga.
-  assert.equal(firstDescriptionLine("````md\n```\nno\n````\nTexto"), "Texto");
-  assert.equal(firstDescriptionLine("```\n~~~\nno\n```\nTexto"), "Texto");
+  assert.equal(first("````md\n```\nno\n````\nTexto"), "Texto");
+  assert.equal(first("```\n~~~\nno\n```\nTexto"), "Texto");
   // Código en línea (en la misma línea) no abre un bloque.
-  assert.equal(firstDescriptionLine("```x``` y más"), "x y más");
-  assert.equal(firstDescriptionLine("---\n> cita"), "cita");
-  const long = firstDescriptionLine("a".repeat(300), 20);
+  assert.equal(first("```x``` y más"), "x y más");
+  assert.equal(first("---\n> cita"), "cita");
+  const long = first("a".repeat(300), 20);
   assert.equal(long.length, 20);
   assert.ok(long.endsWith("…"));
+});
+
+test("resumen de la descripción: sin los apartados vacíos de la plantilla del tipo, cada etiqueta con su respuesta", () => {
+  // La plantilla del tipo «Cita» con solo un apartado relleno: antes salía «Quién:» (la primera línea) y nada más.
+  const cita = "**Quién:**\n\n**Dónde y cuándo:**\nCentro de salud, a las 10\n\n**Qué preguntar o llevar:**\n- \n";
+  assert.deepEqual(descriptionSummary(cita), ["Dónde y cuándo: Centro de salud, a las 10"]);
+  // Respuesta en la misma línea, varias líneas de respuesta y una lista.
+  const md = "**Riesgo:** ninguno\n\n**Pasos:**\n- Abrir ajustes\n- [ ] Guardar\n\n**Notas:**\n\nTexto libre.";
+  assert.deepEqual(descriptionSummary(md), ["Riesgo: ninguno", "Pasos: Abrir ajustes", "Guardar", "Notas: Texto libre."]);
+  // Como mucho 6 líneas y 400 caracteres: lo que queda fuera se nota con «…».
+  const many = Array.from({ length: 10 }, (_, i) => `Línea ${i + 1}`).join("\n");
+  const six = descriptionSummary(many);
+  assert.equal(six.length, 6);
+  assert.equal(six.at(-1), "Línea 6…");
+  const big = descriptionSummary(Array.from({ length: 5 }, () => "x".repeat(150)).join("\n"));
+  assert.ok(big.join("").length <= 401, `caracteres: ${big.join("").length}`);
+  assert.ok(big.at(-1)!.endsWith("…"));
+  assert.equal(big.length, 3);
+  // Dentro de un bloque de código no se toca nada (y el bloque no sale en el resumen).
+  assert.deepEqual(descriptionSummary("```\n**Vacía:**\n```\n**Hecho:** sí"), ["Hecho: sí"]);
 });
 
 test("PDF: título con la persona, columna y proyecto, grupos traducidos y fechas en cada idioma", async () => {
   const groups = buildAssignPlan(
     [
-      { title: "Revisar el contrato", kind: "Tarea", priority: "ALTA", dueDate: "2026-11-20", firstLine: "Con el cliente", pendingSubtasks: ["Leer", "Firmar"], pendingCount: 2 },
-      { title: "Llamar", kind: "Tarea", priority: null, dueDate: "2026-11-26", firstLine: "", pendingSubtasks: [], pendingCount: 0 },
+      { title: "Revisar el contrato", kind: "Tarea", priority: "ALTA", dueDate: "2026-11-20", summary: ["Con el cliente", "Quién: Ana y Luis"], labels: ["Urgente"], pendingSubtasks: ["Leer", "Firmar"], pendingCount: 2 },
+      { title: "Llamar", kind: "Tarea", priority: null, dueDate: "2026-11-26", summary: [], labels: [], pendingSubtasks: [], pendingCount: 0 },
       // Solo se leen las 15 que salen y cuántas son.
-      { title: "Algún día", kind: "Idea", priority: null, dueDate: null, firstLine: "", pendingSubtasks: Array.from({ length: 15 }, (_, i) => `Paso ${i + 1}`), pendingCount: 17 },
+      { title: "Algún día", kind: "Idea", priority: null, dueDate: null, summary: [], labels: [], pendingSubtasks: Array.from({ length: 15 }, (_, i) => `Paso ${i + 1}`), pendingCount: 17 },
     ],
     today, 1,
   );
@@ -123,7 +144,7 @@ test("PDF: título con la persona, columna y proyecto, grupos traducidos y fecha
     return pdfRuns(pdf).join("").replace(/\s+/g, " ");
   };
   const es = await text("es");
-  for (const s of ["Plan de Ana", "De Ana · Obra", "Vencidas", "Esta semana", "Sin fecha", "Prioridad: Alta", "Vence el 20 nov", "Con el cliente", "[ ]", "Firmar", "y 2 subtareas más", "2 tarjetas de la columna son de otras personas"]) {
+  for (const s of ["Plan de Ana", "De Ana · Obra", "Vencidas", "Esta semana", "Sin fecha", "Prioridad: Alta", "Vence el 20 nov", "Con el cliente", "Quién: Ana y Luis", "Urgente", "[ ]", "Firmar", "y 2 subtareas más", "2 tarjetas de la columna son de otras personas"]) {
     assert.ok(es.includes(s), `${s} en: ${es}`);
   }
   assert.ok(!es.includes("Hoy"), "sin tareas de hoy, no sale el grupo");
