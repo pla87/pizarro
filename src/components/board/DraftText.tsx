@@ -170,12 +170,14 @@ export function TemplatePickers({ own, project, builtin, headerId, footerId, onC
 }
 
 /**
- * «Cabecera y pie salen de tus plantillas y de las plantillas del proyecto.», con los enlaces a cada sitio. `confirmLeave`:
+ * «Cabecera y pie salen de tus plantillas y de las plantillas del proyecto.», con los enlaces a cada sitio: el mismo texto
+ * en la release y en el plan (antes la release solo nombraba las del proyecto si ya había alguna, y quien no las tenía no
+ * sabía que existen; la pestaña «Plantillas» de los ajustes del proyecto la ve todo el equipo). `confirmLeave`:
  * si hay algo que perder (el texto del paso 2 cambiado), devuelve la pregunta de descartarlo; un clic normal en un enlace
  * (que navega fuera del diálogo) solo sigue si se responde que sí. `false` = nada que perder. Un clic con Ctrl, Mayús o
  * el botón central (nueva pestaña o ventana) no sale de la página y no pregunta.
  */
-export function TemplateSourceNote({ projectId, projectTab, withProject, confirmLeave }: { projectId: string; projectTab: string; withProject: boolean; confirmLeave?: () => false | Promise<boolean> }) {
+export function TemplateSourceNote({ projectId, projectTab, confirmLeave }: { projectId: string; projectTab: string; confirmLeave?: () => false | Promise<boolean> }) {
   const t = useT();
   const router = useRouter();
   const guard = (href: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -192,7 +194,7 @@ export function TemplateSourceNote({ projectId, projectTab, withProject, confirm
   return (
     <span className="mr-auto text-xs text-slate-500" data-template-source>
       {t("Cabecera y pie salen de")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={own} onClick={guard(own)}>{t("tus plantillas")}</Link>
-      {withProject && <> {t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={proj} onClick={guard(proj)}>{t("plantillas del proyecto")}</Link></>}.
+      {" "}{t("y de las")} <Link className="text-brand-600 dark:text-brand-300 hover:underline" href={proj} onClick={guard(proj)}>{t("plantillas del proyecto")}</Link>.
     </span>
   );
 }

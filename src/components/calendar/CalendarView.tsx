@@ -814,7 +814,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
             <li>
               <button type="button" role="checkbox" aria-checked={draftPeople.length === 0} onClick={() => setDraftPeople([])} className={optionCls}>
                 <CheckBox on={draftPeople.length === 0} />
-                <span className="font-medium">{t("Todos")}</span>
+                {/* El mismo texto que el botón cuando no hay ninguna persona elegida. */}
+                <span className="font-medium">{t("Cualquier persona")}</span>
               </button>
             </li>
             {personOptions.map((o) => (

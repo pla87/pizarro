@@ -218,7 +218,7 @@ export async function run() {
   const d4 = U.dialog(p);
   await d4.getByText("Paso 1 de 2").waitFor();
   await L.sleep(500);
-  L.check("segunda release del día: el título propuesto lleva «(2)»", /^Release \d{4}-\d{2}-\d{2} \(2\) · /.test(await d4.locator("#rel-title").inputValue()), await d4.locator("#rel-title").inputValue());
+  L.check("segunda release del día: el título propuesto lleva «(2)»", /^Release \d{1,2} \S+ \d{4} \(2\) · /.test(await d4.locator("#rel-title").inputValue()), await d4.locator("#rel-title").inputValue());
   await d4.getByRole("button", { name: "Cancelar" }).click();
 
   // --- tareas fijas (manual 3.6): se marcan en el diálogo, dejan de serlo al moverse o archivarse, y el deshacer las restaura ---

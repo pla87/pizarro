@@ -74,10 +74,13 @@ test("cambiar de cabecera o pie en un texto ya editado", () => {
 });
 
 test("título por defecto con ordinal si ya hay releases ese día", () => {
-  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto"), "Release 2026-10-18 · Proyecto");
-  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 0), "Release 2026-10-18 · Proyecto");
-  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 1), "Release 2026-10-18 (2) · Proyecto");
-  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 2), "Release 2026-10-18 (3) · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto"), "Release 18 oct 2026 · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 0), "Release 18 oct 2026 · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 1), "Release 18 oct 2026 (2) · Proyecto");
+  assert.equal(defaultReleaseTitle("2026-10-18", "Proyecto", 2), "Release 18 oct 2026 (3) · Proyecto");
+  // En el idioma de la persona, con el mismo formato de fecha que el resto de la app (formatDay).
+  assert.equal(defaultReleaseTitle("2026-10-18", "Project", 0, "en-US"), "Release Oct 18, 2026 · Project");
+  assert.equal(defaultReleaseTitle("2026-01-05", "Proyecto", 1, "es-ES"), "Release 5 ene 2026 (2) · Proyecto");
 });
 
 test("rango del día local en una zona horaria", () => {

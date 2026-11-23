@@ -271,3 +271,14 @@ test("el Calendario no cuenta tareas en cada visita para «Suscribirse» y las f
   const jobs = readFileSync("src/components/transfer/TransferJobs.tsx", "utf8");
   assert.ok(!/toLocale(String|DateString|TimeString)\(/.test(jobs), "TransferJobs: formatDate (con timeZone), no toLocaleString");
 });
+
+test("Calendario: con el filtro de responsable, solo los entregables con alguna tarea de esas personas", () => {
+  const page = readFileSync("src/app/(app)/calendar/page.tsx", "utf8");
+  // La consulta de entregables va después de calcular `personWhere` y lo usa como condición de sus tareas.
+  const at = page.indexOf("db.deliverable.findMany(");
+  assert.ok(page.indexOf("const personWhere") < at, "personWhere antes de la consulta de entregables");
+  assert.match(page.slice(at, at + 800), /personIds\.length \? \{ tasks: \{ some: personWhere \} \} : \{\}/);
+  // El desplegable dice lo mismo en el botón y en su primera opción.
+  const view = readFileSync("src/components/calendar/CalendarView.tsx", "utf8");
+  assert.equal((view.match(/t\("Cualquier persona"\)/g) ?? []).length, 2);
+});

@@ -61,26 +61,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const range = { gte: isoToDate(grid.start), lte: isoToDate(grid.end) };
   const base: Prisma.TaskWhereInput = { project: projectWhere, archivedAt: null, dueDate: range };
 
-  const [assigneeGroups, deliverableRows] = await Promise.all([
-    // Personas con tareas en el rango (para el filtro): solo las que ya se ven en este calendario.
-    db.task.groupBy({ by: ["assigneeId"], where: base }),
-    db.deliverable.findMany({
-      // La banda de un entregable cubre la semana previa a su fecha: se cargan también los del mes siguiente que la tocan.
-      where: { project: projectWhere, dueDate: { gte: range.gte, lte: isoToDate(addDaysIso(grid.end, BAND_DAYS - 1)) } },
-      take: MAX_DELIVERABLES,
-      orderBy: [{ dueDate: "asc" }, { position: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        dueDate: true,
-        project: { select: { id: true, name: true } },
-      },
-    }),
-  ]);
-
-  // Total y hechas por entregable, con el mismo criterio que el informe PDF (archivadas = hechas; las fijas no cuentan),
-  // contadas en la BD sin traer las tareas.
-  const progressBy = await deliverableProgressByIds(deliverableRows.map((d) => d.id));
+  // Personas con tareas en el rango (para el filtro): solo las que ya se ven en este calendario.
+  const assigneeGroups = await db.task.groupBy({ by: ["assigneeId"], where: base });
   // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
   // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
   const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
@@ -120,7 +102,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         db.task.count({ where: overdueWhere }),
       ])
     : Promise.resolve([[] as OverdueRow[], 0] as const);
-  const [rows, repeatRows, [overdueRows, overdueTotal]] = await Promise.all([
+  const [rows, repeatRows, [overdueRows, overdueTotal], deliverableRows] = await Promise.all([
     db.task.findMany({
       where: { AND: [{ OR: [base, overlapsEnd] }, personWhere, hideDone ? { column: { isDone: false } } : {}] },
       take: MAX_TASKS,
@@ -154,7 +136,24 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       },
     }),
     overduePromise,
+    db.deliverable.findMany({
+      // La banda de un entregable cubre la semana previa a su fecha: se cargan también los del mes siguiente que la tocan.
+      // Con el filtro de responsable, solo los que tienen alguna tarea de esas personas (o sin responsable, si se eligió):
+      // un entregable no tiene persona, y sin esto salían los de todos los proyectos aunque no hubiera nada suyo.
+      where: { project: projectWhere, dueDate: { gte: range.gte, lte: isoToDate(addDaysIso(grid.end, BAND_DAYS - 1)) }, ...(personIds.length ? { tasks: { some: personWhere } } : {}) },
+      take: MAX_DELIVERABLES,
+      orderBy: [{ dueDate: "asc" }, { position: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        dueDate: true,
+        project: { select: { id: true, name: true } },
+      },
+    }),
   ]);
+  // Total y hechas por entregable, con el mismo criterio que el informe PDF (archivadas = hechas; las fijas no cuentan),
+  // contadas en la BD sin traer las tareas. El total es el de todo el entregable, no solo el de la persona filtrada.
+  const progressBy = await deliverableProgressByIds(deliverableRows.map((d) => d.id));
   const repeatFrom = addDaysIso(today, 1) > grid.start ? addDaysIso(today, 1) : grid.start;
   const repeats: CalendarRepeat[] = [];
   let repeatsCut = repeatRows.length >= MAX_REPEAT_SOURCES;
