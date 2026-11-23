@@ -263,9 +263,10 @@ async function estimateBackupBytes(local: DirDestination, prev: BackupStatus): P
     const [latest] = await localStemsByName();
     if (latest) dump = await stat(path.join(local.root, dumpKey(latest.stem))).then((s) => s.size, () => 0);
   }
-  if (!dump) {
+  if (dump) dump = Math.ceil(dump * DUMP_GROWTH);
+  else {
     const rows = await db.$queryRawUnsafe<{ n: bigint | number }[]>("SELECT pg_database_size(current_database()) AS n").catch(() => []);
-    dump = Number(rows[0]?.n ?? 0) / DUMP_GROWTH;
+    dump = Number(rows[0]?.n ?? 0);
   }
   let files = 0;
   if (local.files) {
@@ -275,7 +276,7 @@ async function estimateBackupBytes(local: DirDestination, prev: BackupStatus): P
       if (!cached || cached[0] !== f.size || cached[1] !== f.mtimeMs) files += objectSize(f.size);
     }
   }
-  return { dump: Math.ceil(dump * DUMP_GROWTH), files };
+  return { dump, files };
 }
 
 const BUSY = "Ya hay una copia en curso.";
