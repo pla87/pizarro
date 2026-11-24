@@ -51,11 +51,15 @@ const kindKey = (name: string | null | undefined) => (name ?? "").trim().toLower
  * nombre nuevo (pasarlas con `orphans` cuando `from` está vacío).
  */
 export function followKindRename<C extends DefaultKindColumn>(columns: C[], from: string, to: string, others: readonly string[], orphans: readonly string[] = []): { columns: C[]; orphans: string[] } {
-  const next = to.trim() || null;
-  if (!kindKey(from)) {
-    if (!next || !orphans.length) return { columns, orphans: [...orphans] };
+  // Un nombre a medio escribir que coincide con otro tipo («Bug crítico» → «Bug » con un tipo «Bug») cuenta como vacío: si
+  // no, las columnas pasaban a ese otro tipo y ahí se quedaban.
+  const typed = to.trim() || null;
+  const next = typed && others.some((n) => kindKey(n) === kindKey(typed)) ? null : typed;
+  if (orphans.length) {
+    if (!next) return { columns, orphans: [...orphans] };
     return { columns: columns.map((c) => (orphans.includes(c.key) && !c.defaultKind ? { ...c, defaultKind: next } : c)), orphans: [] };
   }
+  if (!kindKey(from)) return { columns, orphans: [] };
   if (kindKey(from) === kindKey(to) && next === from.trim()) return { columns, orphans: [] };
   if (others.some((n) => kindKey(n) === kindKey(from))) return { columns, orphans: [] };
   const hit = columns.filter((c) => kindKey(c.defaultKind) === kindKey(from)).map((c) => c.key);

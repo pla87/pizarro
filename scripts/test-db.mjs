@@ -11,7 +11,7 @@
 //   npm run test:db -- --verbose                      la salida completa de cada fichero, también si pasa
 //   npm run test:db -- tests/db/x.test.ts --test-name-pattern="deshacer"   (lo que empiece por --test- va a node --test)
 //
-// Una prueba que pasa de 3 minutos falla sola (--test-timeout; se cambia pasando otro). Con Ctrl+C se enseña qué
+// Un fichero que pasa de 10 minutos falla solo (--test-timeout cuenta por fichero, no por prueba; se cambia pasando otro). Con Ctrl+C se enseña qué
 // ficheros estaban en marcha y lo que llevaban escrito.
 //
 // Cada fichero corre en su propio proceso (como con node --test): las variables de entorno que cambia una prueba
@@ -72,8 +72,8 @@ const size = (f) => statSync(f).size;
 const parallel = all.filter((f) => !SERIAL.includes(f)).sort((a, b) => size(b) - size(a));
 const serial = all.filter((f) => SERIAL.includes(f));
 jobs = Math.max(1, Math.min(jobs, parallel.length || 1));
-// Una prueba colgada falla sola, con su nombre y su salida, en vez de dejar la tanda parada (se cambia con --test-timeout=…).
-const timeoutArg = nodeTestArgs.some((a) => a.startsWith("--test-timeout")) ? [] : ["--test-timeout=180000"];
+// Un fichero colgado falla solo, con su nombre y su salida, en vez de dejar la tanda parada (se cambia con --test-timeout=…).
+const timeoutArg = nodeTestArgs.some((a) => a.startsWith("--test-timeout")) ? [] : ["--test-timeout=600000"];
 
 // --- Bases de datos --------------------------------------------------------------------------------------------------
 

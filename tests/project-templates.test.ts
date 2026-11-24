@@ -140,3 +140,18 @@ test("quitar un tipo propio: las columnas que lo usaban se quedan sin tipo por d
   assert.equal(dropColumnDefaultKind(cols, " ", []), cols);
 });
 
+
+test("tipo por defecto: un nombre a medio escribir que coincide con otro tipo no se lleva las columnas", () => {
+  let cols = [{ key: "c1", defaultKind: "Bug crítico" as string | null }];
+  let orphans: string[] = [];
+  const others = ["Bug"];
+  let from = "Bug crítico";
+  for (const typed of ["Bug crític", "Bug ", "Bug u", "Bug urgente"]) {
+    const r = followKindRename(cols, from, typed, others, orphans);
+    cols = r.columns;
+    orphans = r.orphans;
+    from = typed;
+    if (typed === "Bug ") assert.equal(cols[0].defaultKind, null, "con el nombre de otro tipo la columna queda sin tipo, a la espera");
+  }
+  assert.equal(cols[0].defaultKind, "Bug urgente");
+});

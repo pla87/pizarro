@@ -360,7 +360,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Guardas de tiempo en las pruebas: con `assertFast`/`bestTime` de `tests/timing.ts` (la mejor de tres medidas, o una
   cota proporcional a una medida de referencia), nunca una sola medida contra un tope fijo; deben pasar con la CPU
   cargada. Las esperas a otra transacción, con `waitForLockWaiter()` (`tests/db/helpers.ts`), no con pausas. `npm test`
-  corta cada prueba a los 120 s (`--test-timeout`); un intervalo o un temporizador que siga vivo al terminar deja el
+  corta cada fichero de pruebas a los 120 s (`--test-timeout` cuenta por fichero; `test:db`, a los 10 min); un intervalo o un temporizador que siga vivo al terminar deja el
   proceso colgado, así que se paran en un `finally`. No uses `--test-force-exit` en `npm test`: con la CPU cargada se
   pierden pruebas en silencio (se vio 891 → 862, sin ningún fallo).
 - Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
