@@ -9,6 +9,7 @@ import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { plainAttachmentFileNames, releaseTemplateText } from "./release";
 import { esT, type T } from "@/i18n/shared";
+import { MAX_RELEASE_CONTENT } from "./constants";
 
 export interface AiPlanTask {
   id: string;
@@ -165,6 +166,14 @@ export const AI_PLAN_DEFAULTS: Record<"es" | "en", { headerName: string; header:
  * si cambia, cámbialo también allí (src/actions/ai-plan.ts y AiPlanDialog.tsx).
  */
 export const AI_PLAN_MAX_TASKS = 500;
+
+/** Lo más largo que se puede guardar en Documentación (el mismo tope que el texto de una release). */
+export const AI_PLAN_SAVE_MAX = MAX_RELEASE_CONTENT;
+/** Por qué un plan de `n` caracteres no se guarda y qué hacer: lo dicen el botón apagado del paso 2 y el servidor. */
+export function aiPlanTooLong(t: T, n: number, locale: string): string {
+  const nf = new Intl.NumberFormat(locale);
+  return t("El plan tiene {n} caracteres y en Documentación caben como mucho {max}: cópialo con «Copiar todo» o descárgalo en .md, o genera uno con menos tareas.", { n: nf.format(n), max: nf.format(AI_PLAN_SAVE_MAX) });
+}
 
 /** Id de las plantillas de serie en el selector de cabecera y pie (no son filas de la base de datos). */
 export const AI_PLAN_BUILTIN_ID = "builtin";
