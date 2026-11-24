@@ -136,4 +136,9 @@ export const colaboracion: Record<string, string> = {
   "Volvió a activar para sí el informe semanal por email del que se había dado de baja": "Turned the weekly email report they had unsubscribed from back on for themselves",
   // Logs: avisos por email de Mi perfil (antes solo «OK»)
   "Cambió sus avisos por email": "Changed their email notifications",
+  // Informe semanal: aviso a quien lo configuró cuando el servidor de correo rechaza al destinatario
+  "El informe semanal del proyecto «{project}» no se ha enviado esta vez: el servidor de correo no acepta la dirección de {recipient}.": "The weekly report for the project “{project}” was not sent this time: the mail server doesn't accept the address of {recipient}.",
+  "Comprueba el destinatario en los ajustes del proyecto (Informe semanal por email). Si no cambia, se volverá a intentar el día y a la hora de siempre.": "Check the recipient in the project settings (Weekly report by email). If it stays the same, it will be attempted again on the usual day and time.",
+  "Aviso a {name}: el servidor de correo rechaza al destinatario del informe semanal de «{project}»": "Notice to {name}: the mail server rejects the recipient of the weekly report for “{project}”",
+  "Fallo al avisar a {name} del destinatario rechazado: {error}": "Failed to notify {name} about the rejected recipient: {error}",
 };
