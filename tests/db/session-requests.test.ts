@@ -169,10 +169,10 @@ describe("sesión: una sola consulta a la BD", () => {
 
   test("mismas comprobaciones: cuenta desactivada, contraseña por cambiar y datos del usuario", async () => {
     const user = await makeUser({ name: "Carla" });
-    await db.user.update({ where: { id: user.id }, data: { theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true } });
+    await db.user.update({ where: { id: user.id }, data: { theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true, projectOrder: "ALPHABETICAL" } });
     await loginAs(user);
     assert.deepEqual(await inRequest(() => getCurrentUser()), {
-      id: user.id, email: user.email, name: "Carla", role: "MEMBER", theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true,
+      id: user.id, email: user.email, name: "Carla", role: "MEMBER", theme: "DARK", accent: "FOREST", locale: "EN", clearDraftsOnLogout: true, projectOrder: "ALPHABETICAL",
     });
     await db.user.update({ where: { id: user.id }, data: { mustChangePassword: true } });
     assert.equal(await inRequest(() => getCurrentUser()), null, "con la contraseña por cambiar, getCurrentUser no la da");
