@@ -2,6 +2,42 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.69.0 — 2026-11-24 20:11
+
+Botones siempre visibles sobre los diálogos, Historial de versiones más ligero, Mis tareas con resumen por grupos, Logs que se buscan en inglés, subtareas que siguen al tipo, tipo por defecto en plantillas y Varias tareas, roles Agenda y Entrega fuera de la base, pruebas más rápidas, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Al cambiar el tipo de una tarea en el detalle, sus subtareas sin tocar se sustituyen por las del tipo nuevo, con aviso y «Deshacer».
+- Tipo por defecto de columna también en las plantillas de proyecto, en «Varias tareas» y al importar tareas.
+- Logs se buscan en el idioma de quien los lee (también en inglés).
+- Si el servidor de correo rechaza para siempre al destinatario del informe semanal, quien lo configuró recibe un aviso por email.
+- «Reenviar invitación» desde Ajustes del proyecto, que lleva a ese proyecto.
+
+### Mejoras
+
+- El botón de informar de un error y la copia de «Nueva tarea» se ven enteros por encima de un diálogo abierto, como Deshacer; «Nueva tarea» ya no cambia de texto.
+- Historial de versiones: las 10 últimas con «Ver más» y buscador en todas; la página pesa unas 3,5 veces menos.
+- Mis tareas: una línea de resumen con enlaces a cada grupo en lugar de filtros que repetían lo mismo.
+- Plan para IA: el tipo se dice una sola vez si todas las tareas son del mismo tipo (hasta un 40 % menos de texto); «Guardar en Documentación» explica el límite de tamaño.
+- Administración → Proyectos dice «miembros»; WhatsApp muestra el último error si Meta rechaza el token.
+- Los errores de extensiones del navegador ya no llenan Logs.
+
+### Correcciones
+
+- Deshacer un cambio de plantilla aplicado sobre columnas con roles antiguos ya no falla.
+- «Marcar como desplegado» se rechaza si una tarea cambió de tipo tras generar la release.
+- Un tipo usado solo como tipo por defecto viaja al exportar el proyecto; renombrar un tipo en el editor de plantillas actualiza las columnas.
+- Las descargas de Documentación llevan la extensión de su tipo y ya no cortan los nombres con puntos.
+- Mis tareas con más de 500 tareas da recuentos correctos; marcar una subtarea mientras otra persona cambia el tipo ya no la borra.
+
+### Cambios técnicos / DB
+
+- Migración que quita AGENDA y DELIVERY del enum ColumnRole (las entradas antiguas se convierten en «Sin rol»); migración que añade AppLog.messageEn.
+- npm run test:db en 3 bases en paralelo (~10 → ~2,5 min); «Comprobaciones» solo en las PR y la Release pasa antes tipos, lint y pruebas.
+- Retirados reencryptIfStale, parseTaskLines y el PDF de entrega al cliente.
+- Documentación de desarrollo en un núcleo corto con anexos (unos 120.000 tokens menos al empezar cada sesión).
+
 ## v1.68.0 — 2026-11-24 01:15
 
 «Tipo por defecto» por columna, «Generar plan» y los PDF de columna que se descargan, roles Agenda y Entrega al cliente retirados, prefijos de tipo que no se acumulan, Logs y copias más claros, importar CSV grandes sin agotar la memoria, y revisión y caza de bugs
