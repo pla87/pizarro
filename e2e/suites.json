@@ -124,7 +124,8 @@
       "src/components/board/drag-a11y.ts",
       "src/actions/tasks.ts",
       "src/lib/task-positions.ts",
-      "src/lib/realtime.ts"
+      "src/lib/realtime.ts",
+      "src/lib/collision.ts"
     ],
     "tablero-fijas-e2e": [
       "src/components/board/Board.tsx",
@@ -135,7 +136,8 @@
       "src/components/board/nearCards.ts",
       "src/components/board/drag-a11y.ts",
       "src/actions/tasks.ts",
-      "src/lib/task-positions.ts"
+      "src/lib/task-positions.ts",
+      "src/lib/collision.ts"
     ],
     "tablero-asignacion-e2e": [
       "src/lib/column-assign*.ts",
@@ -150,7 +152,9 @@
       "src/lib/report-build.ts",
       "src/lib/report-pdf.tsx",
       "src/actions/columns.ts",
-      "src/actions/tasks.ts"
+      "src/actions/tasks.ts",
+      "src/components/board/assignNotice.ts",
+      "src/lib/column-role-choices.ts"
     ],
     "tablero-compartir-e2e": [
       "src/app/api/share/**",
@@ -276,7 +280,10 @@
       "src/actions/ai-plan.ts",
       "src/lib/ai-plan*.ts",
       "src/lib/kinds-special.ts",
-      "src/lib/week-plan.ts"
+      "src/lib/week-plan.ts",
+      "src/components/useUnsavedChangesGuard.ts",
+      "src/components/ReleaseTemplateList.tsx",
+      "src/lib/column-role-choices.ts"
     ],
     "plan-ia-zip-e2e": [
       "src/components/board/AiPlanDialog.tsx",
@@ -389,7 +396,8 @@
       "src/app/(app)/projects/**",
       "src/app/(app)/admin/projects/**",
       "src/app/(app)/admin/users/**",
-      "src/app/api/auth/google/**"
+      "src/app/api/auth/google/**",
+      "src/lib/project-order.ts"
     ],
     "interfaz-carga-e2e": [
       "src/app/(app)/**/loading.tsx",
@@ -464,7 +472,9 @@
       "src/components/BugReportLink.tsx",
       "src/lib/feedback*.ts",
       "src/lib/bug-report-core.ts",
-      "src/app/api/feedback/route.ts"
+      "src/app/api/feedback/route.ts",
+      "src/app/(app)/notifications/**",
+      "src/lib/my-tasks-server.ts"
     ],
     "interfaz-textos-e2e": [
       "src/i18n/**",
@@ -472,7 +482,12 @@
       "src/actions/collab-prefs.ts",
       "src/components/ui/InfoTip.tsx",
       "src/components/board/ReleaseDialog.tsx",
-      "src/components/board/NewTaskDialog.tsx"
+      "src/components/board/NewTaskDialog.tsx",
+      "src/app/(app)/admin/logs/**",
+      "src/app/api/admin/logs/**",
+      "src/lib/log-query.ts",
+      "src/lib/log-range.ts",
+      "src/lib/log-csv.ts"
     ],
     "accesibilidad-columnas-e2e": [
       "src/components/board/ColumnActionButton.tsx",
@@ -515,7 +530,8 @@
       "src/app/terms/**",
       "src/app/privacy/**",
       "src/app/login/**",
-      "src/app/(app)/admin/legal/**"
+      "src/app/(app)/admin/legal/**",
+      "src/actions/auth.ts"
     ],
     "red-sin-conexion-e2e": [
       "src/components/ConnectionNotice.tsx",

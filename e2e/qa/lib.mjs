@@ -219,6 +219,9 @@ export async function throttle(page) {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_THROTTLE });
 }
 export async function login(page, email) {
+  // Sin aperturas anotadas («Usados recientemente», el orden de serie): «/» lleva al proyecto de QA, el primero por posición,
+  // y no al último que haya abierto otro escenario (un contexto nuevo no tiene la cookie del último proyecto).
+  await q(`DELETE FROM "ProjectVisit" WHERE "userId" IN (SELECT id FROM "User" WHERE email = $1)`, [email]);
   await page.goto(BASE + "/login");
   await page.fill("#email", email); await page.fill("#password", PASSWORD);
   await page.click("button[type=submit]");

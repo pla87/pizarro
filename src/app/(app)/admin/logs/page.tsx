@@ -165,7 +165,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
         ))}
       </div>
 
-      <form method="get" action="/admin/logs" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
+      <form key={logQuery(filters)} method="get" action="/admin/logs" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
         <LogPeriodField
           ranges={LOG_RANGES.map((r) => ({ value: r.value, label: t(r.label) }))}
           customValue={CUSTOM_RANGE}

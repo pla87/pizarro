@@ -62,6 +62,22 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     });
   }, [open]);
 
+  // Al cambiar de paso, el botón pulsado desaparece: el foco va a lo principal del paso nuevo (crear, o «Volver») o, al
+  // volver, a «Organizar por personas»; sin esto caía en <body> y el lector de pantalla no anunciaba nada.
+  const stepShown = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      stepShown.current = false;
+      return;
+    }
+    if (!byPeople && !stepShown.current) return;
+    stepShown.current = true;
+    const target = byPeople
+      ? document.querySelector<HTMLElement>("[data-people-columns] .btn-primary") ?? document.querySelector<HTMLElement>("[data-people-columns] .btn-secondary")
+      : document.querySelector<HTMLElement>("[data-people-columns-open]");
+    target?.focus();
+  }, [byPeople, open]);
+
   const close = () => {
     setOpen(false);
     setByPeople(false);

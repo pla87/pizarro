@@ -12,15 +12,15 @@ export const columnas: Record<string, string> = {
   "La columna «{title}» irá al sitio de {place}.": "The column “{title}” will take the place of {place}.",
   "Has soltado la columna «{title}» en el sitio de {place}.": "You dropped the column “{title}” in the place of {place}.",
   "Has soltado la columna «{title}»: no se mueve.": "You dropped the column “{title}”: it does not move.",
-  "Arrastre cancelado: la columna «{title}» vuelve a su sitio.": "Drag cancelled: the column “{title}” goes back to its place.",
+  "Arrastre cancelado: la columna «{title}» vuelve a su sitio.": "Drag canceled: the column “{title}” goes back to its place.",
   "Movió la columna «{name}» a la posición {n}": "Moved the column “{name}” to position {n}",
 
   // Tipo por defecto en la cabecera
   "Tipo por defecto: {name}": "Default type: {name}",
 
   // Organizar por personas («Casa y familia»)
-  "Organizar por personas": "Organise by person",
-  "Organizar por personas: una columna para cada una": "Organise by person: one column for each",
+  "Organizar por personas": "Organize by person",
+  "Organizar por personas: una columna para cada una": "Organize by person: one column for each",
   "En el proyecto solo hay una persona: añade antes a las demás.": "There is only one person in the project: add the others first.",
   "Todas las personas ya tienen su columna.": "Everyone already has their own column.",
   "Se creará una columna «Asignación a persona» para {names}: lo que entre en ella será de esa persona.":

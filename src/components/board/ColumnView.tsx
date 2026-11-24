@@ -678,7 +678,8 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
   const [moreRoles, setMoreRoles] = useState(false);
   const pickRole = (choice: ColumnRoleChoice | null) => {
     // La que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
-    if (choice === currentChoice) return;
+    // «Asignación a persona» otra vez: abre su diálogo (cambiar la persona o el plazo), como antes del submenú nuevo.
+    if (choice === currentChoice && choice !== "ASSIGN") return;
     if (choice === "ASSIGN") setDialog("assign");
     else setRole(choice ?? "NONE");
   };

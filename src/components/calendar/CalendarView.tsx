@@ -898,6 +898,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           {b.endsHere && <Flag size={11} className="relative shrink-0" aria-hidden />}
                           <span dir="auto" className="relative truncate font-medium">{d.name}</span>
                           <span className="relative ml-auto shrink-0 tabular-nums">{d.total ? `${d.done}/${d.total}` : t(status)}</span>
+                          {/* El estado también para el lector de pantalla (a la vista solo lo dice el color). */}
+                          {d.total > 0 && <span className="sr-only">{` · ${t(status)}`}</span>}
                         </Link>
                       );
                     })}
