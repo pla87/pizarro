@@ -243,6 +243,33 @@ describe("Invitar por email desde un proyecto", () => {
     assert.equal(expectOk(await addProjectMember(priv.project.id, user.id)).invite, null);
   });
 
+  // El aviso de la invitación pendiente (al añadirla a otro proyecto) solo ofrecía «Generar enlace de invitación nuevo»:
+  // con email, también «Reenviar invitación», la misma acción que en Administración → Usuarios.
+  test("añadir a quien tiene la invitación pendiente y reenviársela desde el aviso: email con un enlace nuevo, el anterior ya no vale", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const first = await makeProject({ members: [] });
+    const second = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = address("reenviar-aviso");
+    expectOk(await inviteToProject(first.project.id, to));
+    const [invitation] = await mailsTo(to);
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    const added = expectOk(await addProjectMember(second.project.id, user.id));
+    assert.equal(added.invite?.userId, user.id, "el aviso de la invitación pendiente (no el enlace al tablero)");
+    const res = expectOk(await resendInvite(added.invite!.userId));
+    assert.equal(res.mailFailed, false);
+    const invites = (await mailsTo(to)).filter((m) => tokenOf(m.text));
+    assert.equal(invites.length, 2, "la invitación y el reenvío");
+    const fresh = tokenOf(invites[1]!.text);
+    assert.ok(res.link.endsWith(`/reset/${fresh}`), "el enlace que queda a la vista es el del email");
+    assert.equal(await findUsableToken(tokenOf(invitation!.text), ["INVITE"]), null, "el anterior deja de valer");
+    assert.ok(await findUsableToken(fresh, ["INVITE"]));
+    // Quien no es administrador no puede reenviarla (la interfaz no se lo ofrece).
+    const member = await makeUser();
+    await loginAs(member);
+    expectFail(await resendInvite(user.id));
+  });
+
   test("crea la invitación ya dentro del proyecto, envía el email y devuelve el enlace (que lleva el proyecto)", async () => {
     const admin = await makeUser({ role: "ADMIN", name: "Ana Admin" });
     const f = await makeProject({ members: [] });

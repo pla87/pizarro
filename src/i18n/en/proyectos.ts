@@ -193,4 +193,7 @@ export const proyectos: Record<string, string> = {
   "{n} miembros": "{n} members",
   "¿Quitar a {name} de los miembros de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the members of “{project}”? As an administrator, they still see it and keep their cards.",
   "No queda nadie por añadir": "Nobody left to add",
+  // Ajustes del proyecto: invitación pendiente al añadir a alguien, con «Reenviar invitación» si hay email
+  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, resend it by email or generate a new link (the previous one will stop working).",
+  "La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: resend it by email or generate a new invitation link to send them.",
 };
