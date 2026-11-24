@@ -151,7 +151,7 @@ test("tipo por defecto: un nombre a medio escribir que coincide con otro tipo no
     cols = r.columns;
     orphans = r.orphans;
     from = typed;
-    if (typed === "Bug ") assert.equal(cols[0].defaultKind, null, "con el nombre de otro tipo la columna queda sin tipo, a la espera");
+    if (typed === "Bug ") assert.equal(cols[0]!.defaultKind, null, "con el nombre de otro tipo la columna queda sin tipo, a la espera");
   }
-  assert.equal(cols[0].defaultKind, "Bug urgente");
+  assert.equal(cols[0]!.defaultKind, "Bug urgente");
 });
