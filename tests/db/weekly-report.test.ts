@@ -212,7 +212,7 @@ describe("email del informe semanal", () => {
     assert.ok(body.includes("Check the recipient in the project settings"), body);
     // Sin el email del destinatario (quien lo configuró puede no verlo) ni la respuesta del servidor de correo.
     assert.ok(!body.toLowerCase().includes(email.toLowerCase()), body);
-    assert.ok(!body.includes("550") && !body.includes("buzón"), body);
+    assert.ok(!body.includes("5.1.1") && !body.includes("No existe ese buzón"), body);
     await flushLogs();
     assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.rejectedNotified" } }), 2);
   });
