@@ -5,7 +5,8 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDefaultKind, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
+import { currentRoleChoice, splitRoleChoices, type ColumnRoleChoice } from "@/lib/column-role-choices";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
@@ -588,6 +589,17 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, isDone: !c.isDone } : c))),
     );
 
+  // Submenú del rol: «Asignación a persona» abre su diálogo; «Sin rol» y los demás cambian el rol.
+  const currentChoice = currentRoleChoice({ role: column.role, assign });
+  const roleChoices = splitRoleChoices(project.suggestedRoles, currentChoice);
+  const [moreRoles, setMoreRoles] = useState(false);
+  const pickRole = (choice: ColumnRoleChoice | null) => {
+    // La que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
+    if (choice === currentChoice) return;
+    if (choice === "ASSIGN") setDialog("assign");
+    else setRole(choice ?? "NONE");
+  };
+
   const remove = async () => {
     if (!empty) return toast(t("Solo se pueden borrar columnas vacías."), "error");
     const ok = await confirm({ title: t("Borrar columna"), message: t("¿Borrar la columna «{name}»?", { name: column.name }), confirmLabel: t("Borrar"), danger: true });
@@ -612,39 +624,28 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuItem icon={ArrowLeft} onClick={() => move(-1)} disabled={index === 0}>{t("Mover a la izquierda")}</MenuItem>
       <MenuItem icon={ArrowRight} onClick={() => move(1)} disabled={index === total - 1}>{t("Mover a la derecha")}</MenuItem>
       <MenuSeparator />
-      {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
+      {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). Primero los que encajan
+          con la plantilla del proyecto; el resto tras «Más roles…» (column-role-choices.ts). */}
       <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
-        {COLUMN_ROLES.map((r) => {
-          // «Asignación a persona» tiene rol NONE: entonces «Sin rol» no es el elegido (y elegirlo la deja sin persona).
-          const current = column.role === r && !(assign && r === "NONE");
-          return (
-            <MenuItem
-              key={r}
-              role="menuitemradio"
-              aria-checked={current}
-              onClick={() => {
-                // El rol que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
-                if (!current) setRole(r);
-              }}
-              icon={ROLE_ICON[r]}
-              title={t(COLUMN_ROLE_HINT[r])}
-              className={cn("py-1.5 text-xs", current && "font-semibold text-brand-600 dark:text-brand-300")}
-            >
-              {current ? "● " : ""}{t(COLUMN_ROLE_LABEL[r])}
-            </MenuItem>
-          );
-        })}
-        {/* No es un valor del rol (la columna queda con rol NONE): abre el diálogo de la persona y el plazo. */}
-        <MenuItem
-          role="menuitemradio"
-          aria-checked={assign}
-          onClick={() => setDialog("assign")}
-          icon={UserCheck}
-          title={t("Todo lo que entra se asigna a una persona (y, opcional, con un plazo): botón «Generar plan».")}
-          className={cn("py-1.5 text-xs", assign && "font-semibold text-brand-600 dark:text-brand-300")}
-        >
-          {assign ? "● " : ""}{t("Asignación a persona")}
-        </MenuItem>
+        <RoleItem choice={null} current={currentChoice} onPick={pickRole} />
+        {roleChoices.first.map((r) => <RoleItem key={r} choice={r} current={currentChoice} onPick={pickRole} />)}
+        {roleChoices.more.length > 0 && !moreRoles && (
+          <MenuItem
+            data-keep-open
+            icon={MoreHorizontal}
+            className="py-1.5 text-xs text-slate-600 dark:text-slate-400"
+            title={t("Roles pensados para otro tipo de proyecto")}
+            onClick={(e) => {
+              setMoreRoles(true);
+              // El foco pasa a la primera de las que aparecen (el botón desaparece).
+              const list = e.currentTarget.closest('[role="menu"]');
+              requestAnimationFrame(() => list?.querySelector<HTMLElement>("[data-more-role]")?.focus());
+            }}
+          >
+            {t("Más roles…")}
+          </MenuItem>
+        )}
+        {moreRoles && roleChoices.more.map((r, i) => <RoleItem key={r} choice={r} current={currentChoice} onPick={pickRole} more={i === 0} />)}
       </MenuSub>
       {column.role === "WAITING" && (
         <MenuItem icon={Hourglass} onClick={editWaitingDays}>
@@ -681,6 +682,28 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       </MenuItem>
     </Menu>
     </>
+  );
+}
+
+/** Una opción del submenú «Rol de la columna» (`choice` null: «Sin rol»). `more`: la primera de las de «Más roles…». */
+function RoleItem({ choice, current, onPick, more }: { choice: ColumnRoleChoice | null; current: ColumnRoleChoice | null; onPick: (c: ColumnRoleChoice | null) => void; more?: boolean }) {
+  const t = useT();
+  const on = choice === current;
+  const label = choice === "ASSIGN" ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[choice ?? "NONE"]);
+  // «Asignación a persona» no es un valor del rol (la columna queda con rol NONE): abre el diálogo de la persona y el plazo.
+  const hint = choice === "ASSIGN" ? t("Todo lo que entra se asigna a una persona (y, opcional, con un plazo): botón «Generar plan».") : t(COLUMN_ROLE_HINT[choice ?? "NONE"]);
+  return (
+    <MenuItem
+      role="menuitemradio"
+      aria-checked={on}
+      data-more-role={more || undefined}
+      onClick={() => onPick(choice)}
+      icon={choice === "ASSIGN" ? UserCheck : ROLE_ICON[choice ?? "NONE"]}
+      title={hint}
+      className={cn("py-1.5 text-xs", on && "font-semibold text-brand-600 dark:text-brand-300")}
+    >
+      {on ? "● " : ""}{label}
+    </MenuItem>
   );
 }
 

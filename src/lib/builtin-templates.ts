@@ -1,6 +1,7 @@
 // Plantillas de proyecto incluidas de serie. La definición canónica vive aquí; en la base de datos cada
 // una es una fila normal de ProjectTemplate con su `builtinKey`, que el administrador puede editar o borrar.
 import { templateInputSchema, type TemplateData, type TemplateInput } from "./project-templates";
+import { GENERAL_ROLE_CHOICES, ROLE_CHOICES, type ColumnRoleChoice } from "./column-role-choices";
 
 type Col = TemplateInput["columns"][number];
 type Kind = NonNullable<TemplateInput["kinds"]>[number];
@@ -330,4 +331,40 @@ export function comparable(t: TemplateData): string {
 export function isBuiltinModified(stored: TemplateData, key: string | null | undefined): boolean {
   const canon = key ? canonicalTemplate(key) : null;
   return canon ? comparable(stored) !== comparable(canon) : false;
+}
+
+/**
+ * Roles de columna que encajan con cada plantilla de serie: el submenú «Rol de la columna» los enseña primero y el resto
+ * va tras «Más roles…» (column-role-choices.ts). En «Casa y familia» no pinta nada «Siguiente salto (genera releases)».
+ * «ASSIGN» es «Asignación a persona». Una plantilla de serie nueva sin entrada aquí enseña todos los roles.
+ */
+const TEMPLATE_COLUMN_ROLES: Record<string, readonly ColumnRoleChoice[]> = {
+  vibecoding: ["NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "REVIEW", "AI_PLAN", "CHECKLIST", "ASSIGN"],
+  "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES", "WEEKLY_PLAN", "CHECKLIST", "BUDGET", "ASSIGN"],
+  "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "ROUTINES", "BUDGET", "ASSIGN"],
+  "eventos-viajes": ["WAITING", "BUDGET", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],
+  "estudios-tesis": ["ROUTINES", "WAITING", "REVIEW", "WEEKLY_PLAN", "CHECKLIST", "AI_PLAN"],
+  "curso-master": ["PROGRAM", "AI_PLAN", "REVIEW", "WAITING", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],
+};
+
+/** `Project.templateKey` de un proyecto que sale de una plantilla propia (las de serie guardan su clave). */
+export const CUSTOM_TEMPLATE_KEY = "custom";
+
+/**
+ * Roles sugeridos para el tablero de un proyecto según la plantilla de la que salió: los de su plantilla de serie o, si fue
+ * una propia, los que ya tienen sus columnas más los generales. null (todos a la vista): en blanco, importado, anterior a
+ * guardar la plantilla o con una clave que ya no existe.
+ */
+export function suggestedColumnRoles(templateKey: string | null | undefined, columns: readonly { role: string; assigneeId?: string | null; assignDueDays?: number | null }[]): ColumnRoleChoice[] | null {
+  if (!templateKey) return null;
+  if (templateKey === CUSTOM_TEMPLATE_KEY) {
+    const own = new Set<string>(GENERAL_ROLE_CHOICES);
+    for (const c of columns) {
+      if (c.role !== "NONE") own.add(c.role);
+      else if (c.assigneeId || c.assignDueDays != null) own.add("ASSIGN");
+    }
+    return ROLE_CHOICES.filter((r) => own.has(r));
+  }
+  const list = TEMPLATE_COLUMN_ROLES[templateKey];
+  return list ? [...list] : null;
 }

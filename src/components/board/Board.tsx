@@ -51,7 +51,7 @@ import { activeFilterCount, EMPTY_FILTERS, filtersKey, parseStoredFilters, sanit
 import { Presence, setLivePresence, setLiveProject } from "./Presence";
 import { setLiveStream } from "./taskPresence";
 import { ListView } from "./ListView";
-import { ProjectIntroNotice } from "./ProjectIntroNotice";
+import { ProjectIntroNotice, useProjectIntro } from "./ProjectIntroNotice";
 import { replaceUrlKeepingState } from "@/lib/replace-url";
 import { parseStoredView, parseViewParam, viewStorageKey, type BoardView } from "./listSort";
 import { ViewToggle } from "./ViewToggle";
@@ -254,7 +254,7 @@ function findContainer(items: Items, id: string): string | undefined {
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
-export function Board({ data: page, initialTaskId = null, intro = "" }: { data: BoardPageData; initialTaskId?: string | null; /** Descripción del proyecto recién creado (ProjectIntroNotice). */ intro?: string }) {
+export function Board({ data: page, initialTaskId = null }: { data: BoardPageData; initialTaskId?: string | null }) {
   // Las tarjetas llegan sin sus campos por defecto (board-task-wire.ts): se completan una vez por dato recibido.
   const data: BoardData = useMemo(() => ({ ...page, tasks: page.tasks.map(unpackBoardTask) }), [page]);
   const router = useRouter();
@@ -263,8 +263,8 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  // El de la primera carga: ProjectIntroNotice quita `?nuevo=1` y los refrescos siguientes ya llegan sin él.
-  const [introText] = useState(intro);
+  // Descripción del proyecto recién creado desde una plantilla (ProjectIntroNotice), una sola vez.
+  const introText = useProjectIntro(page.project.id);
   useBlockStrayFileDrops();
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [columns, setColumns] = useState(data.columns);

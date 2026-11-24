@@ -1,4 +1,5 @@
 // Tipos serializables que viajan del servidor al cliente.
+import type { ColumnRoleChoice } from "./column-role-choices";
 import type { ColumnRoleValue } from "./constants";
 import type { GoogleFileKind } from "./google-files";
 import type { TaskFieldKey, TaskFieldValues } from "./task-fields";
@@ -104,7 +105,13 @@ export interface LabelOption {
 
 export interface BoardData {
   /** `attachMaxMb`: tope de adjuntos por tarea (y por paquete de release) del proyecto; `fileMaxMb`: tope por archivo. */
-  project: { id: string; name: string; attachMaxMb: number; fileMaxMb: number; taskFields: TaskFieldKey[] };
+  project: {
+    id: string; name: string; attachMaxMb: number; fileMaxMb: number; taskFields: TaskFieldKey[];
+    /** Plantilla de la que salió (Project.templateKey): «casa-familia» ofrece «Organizar por personas». Solo en el tablero. */
+    templateKey?: string | null;
+    /** Roles que el menú de la columna enseña primero (suggestedColumnRoles); sin ellos, todos. Solo en el tablero. */
+    suggestedRoles?: ColumnRoleChoice[] | null;
+  };
   columns: BoardColumn[];
   tasks: BoardTask[];
   users: UserOption[];
