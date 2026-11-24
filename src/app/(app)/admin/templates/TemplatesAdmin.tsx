@@ -19,7 +19,7 @@ import type { EditorModeValue } from "@/lib/types";
 import { isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, SELECTABLE_COLUMN_ROLES, type ColumnRoleValue, type SelectableColumnRole } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
-import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
+import { dropColumnDefaultKind, followKindRename, generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 import { isEditConflict } from "@/lib/edit-conflict-core";
@@ -162,6 +162,9 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
   const draft = editing?.draft;
   const patch = (p: Partial<Draft>) => setEditing((e) => (e ? { ...e, draft: { ...e.draft, ...p } } : e));
+  // Columnas que se quedaron sin «Tipo por defecto» al borrar entero el nombre de un tipo (por la clave del tipo): lo
+  // recuperan al escribir el nombre nuevo.
+  const orphanColumns = useRef(new Map<string, string[]>());
 
   const toDraft = (tpl: TemplateInput): Draft => ({
     name: tpl.name,
@@ -405,13 +408,25 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <ul className="space-y-3">
                 {draft.kinds.map((k, i) => {
                   const setKind = (p: Partial<typeof k>) => patch({ kinds: draft.kinds.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+                  // Los otros tipos que tendrá el proyecto: si alguno se llama como este, las columnas siguen con él.
+                  const others = [...draft.kinds.filter((_, j) => j !== i).map((x) => x.name), ...generalKinds.filter((n) => generalKindUsed(draft, n))];
+                  const rename = (name: string) => {
+                    const r = followKindRename(draft.columns, k.name, name, others, orphanColumns.current.get(k.key));
+                    if (r.orphans.length) orphanColumns.current.set(k.key, r.orphans);
+                    else orphanColumns.current.delete(k.key);
+                    patch({ kinds: draft.kinds.map((x, j) => (j === i ? { ...x, name } : x)), columns: r.columns });
+                  };
+                  const remove = () => {
+                    orphanColumns.current.delete(k.key);
+                    patch({ kinds: draft.kinds.filter((_, j) => j !== i), columns: dropColumnDefaultKind(draft.columns, k.name, others) });
+                  };
                   return (
                     <li key={k.key} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                       <div className="flex items-center gap-2">
-                        <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => setKind({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
+                        <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => rename(e.target.value)} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
                         <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ kinds: move(draft.kinds, i, -1) })} aria-label={t("Subir el tipo {n}", { n: i + 1 })}><ArrowUp size={15} /></button>
                         <button type="button" className="btn-icon" disabled={i === draft.kinds.length - 1} onClick={() => patch({ kinds: move(draft.kinds, i, 1) })} aria-label={t("Bajar el tipo {n}", { n: i + 1 })}><ArrowDown size={15} /></button>
-                        <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ kinds: draft.kinds.filter((_, j) => j !== i) })} aria-label={t("Quitar el tipo {n}", { n: i + 1 })}><Trash2 size={15} /></button>
+                        <button type="button" className="btn-icon hover:text-red-600" onClick={remove} aria-label={t("Quitar el tipo {n}", { n: i + 1 })}><Trash2 size={15} /></button>
                       </div>
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />

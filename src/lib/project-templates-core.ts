@@ -36,3 +36,35 @@ export function setGeneralKindUsed(tpl: GeneralKindsChoice, generals: readonly s
   }
   return { hideAllGeneralKinds: false, hiddenGeneralKinds: tpl.hiddenGeneralKinds.filter((n) => n !== name) };
 }
+
+// --- «Tipo por defecto» de las columnas al renombrar o quitar un tipo propio ---
+// Las columnas guardan el nombre del tipo: sin esto, al renombrar «Bug» a «Fallo» la columna seguía con «Bug» (un nombre
+// que ya no existe y que al aplicar la plantilla se ignoraba sin aviso).
+
+type DefaultKindColumn = { key: string; defaultKind?: string | null };
+const kindKey = (name: string | null | undefined) => (name ?? "").trim().toLowerCase();
+
+/**
+ * Renombrar un tipo propio de `from` a `to`: las columnas que lo tenían por defecto pasan al nombre nuevo, salvo que otro
+ * tipo (`others`: los demás propios y los generales que se usan) se siga llamando como el anterior. Al borrar el nombre
+ * entero, esas columnas se quedan sin tipo por defecto y se devuelven en `orphans`, para dárselo de nuevo al escribir el
+ * nombre nuevo (pasarlas con `orphans` cuando `from` está vacío).
+ */
+export function followKindRename<C extends DefaultKindColumn>(columns: C[], from: string, to: string, others: readonly string[], orphans: readonly string[] = []): { columns: C[]; orphans: string[] } {
+  const next = to.trim() || null;
+  if (!kindKey(from)) {
+    if (!next || !orphans.length) return { columns, orphans: [...orphans] };
+    return { columns: columns.map((c) => (orphans.includes(c.key) && !c.defaultKind ? { ...c, defaultKind: next } : c)), orphans: [] };
+  }
+  if (kindKey(from) === kindKey(to) && next === from.trim()) return { columns, orphans: [] };
+  if (others.some((n) => kindKey(n) === kindKey(from))) return { columns, orphans: [] };
+  const hit = columns.filter((c) => kindKey(c.defaultKind) === kindKey(from)).map((c) => c.key);
+  if (!hit.length) return { columns, orphans: [] };
+  return { columns: columns.map((c) => (hit.includes(c.key) ? { ...c, defaultKind: next } : c)), orphans: next ? [] : hit };
+}
+
+/** Quitar un tipo propio: las columnas que lo tenían por defecto se quedan sin él (salvo que otro tipo se llame igual). */
+export function dropColumnDefaultKind<C extends DefaultKindColumn>(columns: C[], name: string, others: readonly string[]): C[] {
+  if (!kindKey(name) || others.some((n) => kindKey(n) === kindKey(name))) return columns;
+  return columns.map((c) => (kindKey(c.defaultKind) === kindKey(name) ? { ...c, defaultKind: null } : c));
+}
