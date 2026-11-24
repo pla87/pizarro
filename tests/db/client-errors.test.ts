@@ -7,7 +7,7 @@ import { CHALLENGE_COOKIE } from "../../src/lib/two-factor";
 import { CHALLENGE_COOKIE_NAME } from "../../src/lib/reset-cookies";
 import { flushLogs } from "../../src/lib/log";
 import { resetRateLimit } from "../../src/lib/rate-limit";
-import { rejectionFromApp } from "../../src/lib/client-error-origin";
+import { rejectionFromApp, windowErrorFromApp } from "../../src/lib/client-error-origin";
 import { logWhere, parseLogFilters } from "../../src/lib/log-query";
 
 const jar = (globalThis as unknown as { __pzTestRequest: { jar: Map<string, string> } }).__pzTestRequest.jar;
@@ -118,6 +118,27 @@ describe("/api/client-errors", () => {
     await flushLogs();
     const rows = await db.appLog.findMany({ where: { category: "client", path: "/admin" }, select: { details: true } });
     assert.deepEqual(rows.map((r) => (r.details as { digest?: string }).digest), ["3891245"]);
+  });
+});
+
+describe("errores de ventana sin capturar (client.window)", () => {
+  const origin = "https://pizarro.example.com";
+  const appError = (where: string) => Object.assign(new Error("fallo"), { stack: `Error: fallo\n    at save (${where}:1:200)` });
+  test("los de una extensión o un script ajeno se descartan; los de la app, no", () => {
+    // De la app: en sus scripts de /_next/ o en un script en línea de la página.
+    assert.equal(windowErrorFromApp({ filename: `${origin}/_next/static/chunks/app-1234.js`, error: appError(`${origin}/_next/static/chunks/app-1234.js`) }, origin), true);
+    assert.equal(windowErrorFromApp({ filename: `${origin}/p/abc`, error: null }, origin), true);
+    // Saltó en un script de otro origen al que llamó la app: la pila pasa por la app.
+    assert.equal(windowErrorFromApp({ filename: "https://cdn.example.net/lib.js", error: Object.assign(new Error("x"), { stack: `Error: x\n    at f (https://cdn.example.net/lib.js:1:1)\n    at g (${origin}/_next/static/chunks/a.js:2:3)` }) }, origin), true);
+    // Extensiones de Chrome, Firefox y Safari (aunque su pila mencione la app).
+    for (const file of ["chrome-extension://abcdef/content.js", "moz-extension://1234-5678/inject.js", "safari-web-extension://ABCD/script.js"]) {
+      assert.equal(windowErrorFromApp({ filename: file, error: appError(file) }, origin), false, file);
+    }
+    assert.equal(windowErrorFromApp({ filename: "chrome-extension://abcdef/content.js", error: appError(`${origin}/_next/static/chunks/a.js`) }, origin), false);
+    // Sin fichero («Script error.» de un script de otro origen, la consola) ni pila de la app.
+    assert.equal(windowErrorFromApp({ filename: "", error: null }, origin), false);
+    assert.equal(windowErrorFromApp({ filename: "https://otra.example.com/_next/static/chunks/a.js", error: appError("https://otra.example.com/_next/static/chunks/a.js") }, origin), false);
+    assert.equal(windowErrorFromApp({}, origin), false);
   });
 });
 

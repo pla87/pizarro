@@ -35,6 +35,12 @@ beforeEach(async () => {
   await db.reportSchedule.updateMany({ data: { enabled: false } });
 });
 
+/** Texto de un mensaje SMTP en bruto con quoted-printable (el de nodemailer con tildes o comillas tipográficas). */
+function decodeQuotedPrintable(raw: string): string {
+  const joined = raw.replace(/=\r?\n/g, "");
+  return Buffer.from(joined.replace(/=([0-9A-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16))), "latin1").toString("utf8");
+}
+
 type Mail = { to: string; subject: string; text: string; html: string; attachments?: { filename: string }[]; headers?: Record<string, string> };
 async function mails(): Promise<Mail[]> {
   const files = (await readdir(outbox)).filter((f) => f.endsWith(".json")).sort();
@@ -170,6 +176,61 @@ describe("email del informe semanal", () => {
     const log = await db.appLog.findFirst({ where: { projectId: f.project.id, action: "report.scheduledRejected" } });
     assert.ok(log, "deja un error en Logs");
   });
+  // Antes nadie se enteraba (solo quedaba en Logs): el informe dejaba de llegar cada semana sin aviso.
+  test("con el destinatario rechazado se avisa a quien lo configuró, en su idioma y como mucho una vez por semana", async () => {
+    const creator = await makeUser({ role: "ADMIN", name: "Carla Configura" });
+    await db.user.update({ where: { id: creator.id }, data: { locale: "EN" } });
+    const reader = await makeUser({ name: "Bob Buzón" });
+    const f = await makeProject({ members: [creator, reader] });
+    const { email } = await db.user.findUniqueOrThrow({ where: { id: reader.id }, select: { email: true } });
+    const creatorEmail = (await db.user.findUniqueOrThrow({ where: { id: creator.id }, select: { email: true } })).email;
+    await schedule(f, creator, email);
+    const calls: string[] = [];
+    const now = new Date();
+    const again = async (at: Date) => {
+      await flushLogs();
+      await db.reportSchedule.update({ where: { projectId: f.project.id }, data: { lastSentAt: null } });
+      assert.equal(await sendDueReports(at, { generate: fakePdf(calls) }), 0);
+    };
+    const only = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+    const delivered = await withSmtpRejecting(async (delivered) => {
+      assert.equal(await sendDueReports(now, { generate: fakePdf(calls) }), 0);
+      // Otro rechazo en la misma semana (p. ej. tras cambiar el día del informe): sin otro aviso.
+      await again(new Date(now.getTime() + 3_600_000));
+      assert.equal(delivered.length, 1);
+      // Pasada una semana desde el aviso, otro.
+      await flushLogs();
+      await db.appLog.updateMany({ where: { projectId: f.project.id, action: "report.rejectedNotified" }, data: { createdAt: new Date(now.getTime() - 8 * 86_400_000) } });
+      await again(new Date(now.getTime() + 2 * 3_600_000));
+      return [...delivered];
+    }, "RCPT TO", { only });
+    assert.equal(calls.length, 3);
+    assert.equal(delivered.length, 2);
+    assert.deepEqual(delivered[0]!.to, [creatorEmail]);
+    const body = decodeQuotedPrintable(delivered[0]!.data);
+    assert.ok(body.includes(`The weekly report for the project “${f.project.name}” was not sent this time: the mail server doesn't accept the address of Bob Buzón.`), body);
+    assert.ok(body.includes("Check the recipient in the project settings"), body);
+    // Sin el email del destinatario (quien lo configuró puede no verlo) ni la respuesta del servidor de correo.
+    assert.ok(!body.toLowerCase().includes(email.toLowerCase()), body);
+    assert.ok(!body.includes("5.1.1") && !body.includes("No existe ese buzón"), body);
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.rejectedNotified" } }), 2);
+  });
+
+  test("a una dirección externa rechazada, el aviso dice la dirección (solo la pone un administrador)", async () => {
+    const creator = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [creator] });
+    const external = `externa-${Date.now()}@example.com`;
+    await schedule(f, creator, external);
+    const delivered = await withSmtpRejecting(async (delivered) => {
+      assert.equal(await sendDueReports(new Date(), { generate: fakePdf([]) }), 0);
+      return [...delivered];
+    }, "RCPT TO", { only: /^externa-/ });
+    assert.equal(delivered.length, 1);
+    const body = decodeQuotedPrintable(delivered[0]!.data);
+    assert.ok(body.includes(`el servidor de correo no acepta la dirección de ${external}.`), body);
+  });
+
   // Antes también se daba por perdido el informe de la semana si el servidor rechazaba el remitente (un SMTP_FROM que no
   // admite) o el mensaje: son fallos de la instalación y, arreglados, el informe debe salir en el reintento de la hora.
   for (const at of ["MAIL FROM", "DATA"] as const) {

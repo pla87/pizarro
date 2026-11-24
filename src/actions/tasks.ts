@@ -1155,7 +1155,6 @@ export async function getTaskDetail(taskId: string) {
     noteTask(id);
     const oldest = task.comments.at(-1);
     const olderComments = oldest && task.comments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
-    describeAction("Abrió la tarea «{title}»", { title: task.title }, { taskId });
     return {
       id: task.id,
       description: task.description,

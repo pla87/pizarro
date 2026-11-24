@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import type { Locale } from "@/i18n/shared";
 import { db } from "./db";
 import { logRetentionDays } from "./log";
 import { cleanText, clipText } from "./log-clean";
@@ -22,6 +23,8 @@ interface LogFilters {
   reads: boolean;
   /** Solo la descarga CSV: intervalo explícito que sustituye al periodo. */
   period?: { gte: Date; lt: Date };
+  /** Idioma de quien mira: en inglés, el texto se busca en el mensaje en inglés (o en el español si la fila no lo tiene). */
+  locale?: Locale;
 }
 
 /** Acciones que solo consultan datos: se ocultan salvo que se pidan las consultas. */
@@ -107,7 +110,9 @@ export function logWhere(f: LogFilters, memberProjectIds: readonly string[], wit
     and.push({
       OR: [
         { action: { contains: q, mode: "insensitive" } },
-        { message: { contains: q, mode: "insensitive" } },
+        ...(f.locale === "en"
+          ? [{ messageEn: { contains: q, mode: "insensitive" as const } }, { messageEn: null, message: { contains: q, mode: "insensitive" as const } }]
+          : [{ message: { contains: q, mode: "insensitive" as const } }]),
         { path: { contains: q, mode: "insensitive" } },
         // Errores del navegador: su texto técnico va en los detalles, no en el mensaje (api/client-errors). Aquí Prisma no
         // admite «insensitive»: distingue mayúsculas.

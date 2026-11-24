@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { issueAuthToken } from "./auth-token-issue";
-import { LOG_LABEL_KEY } from "./log-message";
+import { englishLogMessage, LOG_LABEL_KEY } from "./log-message";
 import { renderLabelEs } from "./undo-label";
 
 // Enlace de restablecimiento sin email (node dist/reset-link.mjs). Sin «server-only»: lo usa el script de línea de órdenes.
@@ -23,12 +23,14 @@ export async function createResetLink(email: string, opts: { appUrl: string; res
     k: opts.reset2fa ? "Enlace de restablecimiento generado desde la consola para «{name}» y verificación en dos pasos reiniciada" : "Enlace de restablecimiento generado desde la consola para «{name}»",
     p: { name: user.name },
   };
+  const message = renderLabelEs(label);
   const audit = db.appLog.create({
     data: {
       level: "info",
       category: "auth",
       action: "auth.resetLinkCli",
-      message: renderLabelEs(label),
+      message,
+      messageEn: englishLogMessage({ message, details: { [LOG_LABEL_KEY]: label } }),
       userId: user.id,
       userName: user.name,
       details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared, [LOG_LABEL_KEY]: label },

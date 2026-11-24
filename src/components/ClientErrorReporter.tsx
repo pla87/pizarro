@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { reportClientError } from "./clientErrors";
 import { NEW_VERSION_EVENT, STALE_ACTION } from "@/lib/stale-action";
 import { busy, reloadForNewVersion } from "./VersionWatcher";
-import { rejectionFromApp } from "@/lib/client-error-origin";
+import { rejectionFromApp, windowErrorFromApp } from "@/lib/client-error-origin";
 
 /** Pestaña antigua: se recarga sola si no hay nada a medias; si lo hay, se muestra el aviso con el botón. */
 function staleTab(): boolean {
@@ -20,6 +20,8 @@ export function ClientErrorReporter() {
   useEffect(() => {
     const onError = (e: ErrorEvent) => {
       if (STALE_ACTION.test(String(e.message ?? "")) && staleTab()) return;
+      // De una extensión o de un script ajeno: no son de la app (ver client-error-origin.ts).
+      if (!windowErrorFromApp(e, window.location.origin)) return;
       reportClientError("window", e.error ?? e.message);
     };
     const onRejection = (e: PromiseRejectionEvent) => {

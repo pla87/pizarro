@@ -1,6 +1,6 @@
 // Miembros de un proyecto (ronda 59): un administrador asigna a otro administrador en *Ajustes del proyecto → General*
 // (sale con la marca «admin», queda elegido y el enlace al tablero se copia con «Copiar enlace») y en *Administración →
-// Proyectos* («Asignar usuario…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
+// Proyectos* («Añadir miembro…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
 // (servidor sin email: el enlace de invitación se pasa a mano) en el idioma de quien invita, sale marcada como «Invitación
 // pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»; sí «Copiar enlace
 // de invitación», que emite uno nuevo y deja sin valor el anterior), elige su contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
@@ -23,7 +23,7 @@ await L.q(`DELETE FROM "Project" WHERE id IN ($1,$2)`, [TEAM, PRIV]);
 await L.q(`DELETE FROM "User" WHERE email LIKE 'inv59%'`);
 const [admin] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
 const [second] = await L.q(`SELECT id,name FROM "User" WHERE email=$1`, [L.USER2]);
-// Un proyecto de equipo sin asignados y un privado de la segunda persona.
+// Un proyecto de equipo sin miembros y un privado de la segunda persona.
 await L.q(`INSERT INTO "Project"(id,name,description,"isPrivate",position,"updatedAt") VALUES ($1,$2,'',false,999970,NOW())`, [TEAM, TEAM_NAME]);
 await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ('inv59_col',$1,'Pendiente',1000)`, [TEAM]);
 await L.q(`INSERT INTO "Project"(id,name,description,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Privado invitar r59','',true,$2,999971,NOW())`, [PRIV, second.id]);
@@ -67,15 +67,15 @@ if (only.includes("assign")) {
   await note.getByRole("button", { name: "Copiar enlace" }).click();
   await L.checkEventually("ASSIGN: «Copiar enlace» lo deja en el portapapeles", async () => (await page.evaluate(() => navigator.clipboard.readText())) === `${L.BASE}/p/${TEAM}`);
   await page.screenshot({ path: `${SHOTS}/r59-asignar-admin.png` });
-  // Quitarlo de asignados: sigue con el proyecto elegido (es administrador y lo ve igual).
+  // Quitarlo de los miembros: sigue con el proyecto elegido (es administrador y lo ve igual).
   await row.getByRole("button", { name: `Quitar a ${second.name}` }).click();
-  await L.checkEventually("ASSIGN: quitado de asignados", async () => !(await isMember(TEAM, second.id)));
+  await L.checkEventually("ASSIGN: quitado de los miembros", async () => !(await isMember(TEAM, second.id)));
   L.check("ASSIGN: conserva la elección", await isPicked(TEAM, second.id));
   L.assertNoErrors("ASSIGN", [s]);
   await s.ctx.close();
 }
 
-// --- Administración → Proyectos: «Asignar usuario…» con administradores ---------------------------------------------------
+// --- Administración → Proyectos: «Añadir miembro…» con administradores --------------------------------------------------
 if (only.includes("admin")) {
   L.scenario("admin: Administración → Proyectos");
   const s = await adminSession();
@@ -83,15 +83,15 @@ if (only.includes("admin")) {
   await L.goto(page, `${L.BASE}/admin/projects`);
   const card = page.locator("li.card").filter({ has: page.getByRole("link", { name: TEAM_NAME, exact: true }) });
   await card.waitFor({ timeout: 20000 });
-  const select = card.getByLabel("Asignar usuario");
+  const select = card.getByLabel("Añadir miembro", { exact: true });
   const options = await select.locator("option").allInnerTexts();
-  L.check("ADMIN: «Asignar usuario…» ofrece administradores", options.includes(second.name), options.join(" | "));
+  L.check("ADMIN: «Añadir miembro…» ofrece administradores", options.includes(second.name), options.join(" | "));
   await select.selectOption({ label: second.name });
-  await card.getByRole("button", { name: "Asignar", exact: true }).click();
-  await L.checkEventually("ADMIN: queda asignado", () => isMember(TEAM, second.id));
+  await card.getByRole("button", { name: "Añadir", exact: true }).click();
+  await L.checkEventually("ADMIN: queda como miembro", () => isMember(TEAM, second.id));
   const chip = card.locator("li").filter({ has: page.getByRole("button", { name: `Quitar a ${second.name}` }) });
   await chip.waitFor({ timeout: 15000 });
-  L.check("ADMIN: sale como asignado, con la marca «admin»", /admin/.test(await chip.innerText()), await chip.innerText());
+  L.check("ADMIN: sale como miembro, con la marca «admin»", /admin/.test(await chip.innerText()), await chip.innerText());
   L.eq("ADMIN: ya no sale como botón «elegido / no elegido»", await card.getByRole("button", { name: new RegExp(`^${second.name}`) }).count(), 0);
   L.assertNoErrors("ADMIN", [s]);
   await s.ctx.close();
@@ -118,7 +118,7 @@ if (only.includes("invite")) {
   L.check("INVITE: ya está en el proyecto", !!invited && (await isMember(TEAM, invited.id)));
   const [inviter] = await L.q(`SELECT locale FROM "User" WHERE id=$1`, [admin.id]);
   L.eq("INVITE: con el idioma de quien invita", invited?.locale, inviter.locale);
-  await L.checkEventually("INVITE: sale en la lista de asignados", async () => (await memberRows(page).innerText()).includes("Inv59 Nueva Persona"));
+  await L.checkEventually("INVITE: sale en la lista de miembros", async () => (await memberRows(page).innerText()).includes("Inv59 Nueva Persona"));
   const invitedRow = memberRows(page).locator("li").filter({ hasText: "Inv59 Nueva Persona" });
   L.check("INVITE: marcada como «Invitación pendiente»", (await invitedRow.innerText()).includes("Invitación pendiente"), await invitedRow.innerText());
   L.eq("INVITE: sin email no hay «Reenviar invitación»", await invitedRow.getByRole("button", { name: /^Reenviar invitación/ }).count(), 0);

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { logsAfter, logWhere, parseLogFilters } from "../../src/lib/log-query";
-import { flushLogs } from "../../src/lib/log";
+import { flushLogs, logEvent } from "../../src/lib/log";
 import { logDetailsShown, logMessageText } from "../../src/lib/log-message";
 import { updateAccent, updateLocale, updateTheme } from "../../src/actions/profile";
 import { makeT } from "../../src/i18n/core";
@@ -52,6 +52,43 @@ describe("búsqueda de texto en los logs", () => {
     assert.deepEqual(await found("a_b"), ["a_b literal"]);
     assert.deepEqual(await found("%"), ["al 50% de carga"]);
     assert.deepEqual(await found("\\"), []);
+  });
+});
+
+describe("búsqueda en el idioma de quien mira", () => {
+  test("en inglés se busca en el mensaje en inglés; en las filas sin él (anteriores a la columna), en el español", async () => {
+    const tag = `en${Date.now()}`;
+    logEvent({ category: tag, action: `${tag}.label`, label: { k: "{name} ha iniciado sesión", p: { name: "Ana" } } });
+    logEvent({ category: tag, action: `${tag}.fixed`, message: "Error inesperado. Inténtalo de nuevo." });
+    logEvent({ category: tag, action: `${tag}.free`, message: "Texto libre sin traducción" });
+    await flushLogs();
+    // Fila de una versión anterior: sin messageEn.
+    await db.appLog.create({ data: { level: "info", category: tag, action: `${tag}.old`, message: "Ana ha iniciado sesión (antigua)" } });
+    const stored = await db.appLog.findMany({ where: { category: tag }, orderBy: { action: "asc" }, select: { action: true, message: true, messageEn: true } });
+    assert.deepEqual(stored.map((r) => [r.action.slice(tag.length + 1), r.messageEn]), [
+      ["fixed", "Unexpected error. Please try again."],
+      ["free", null],
+      ["label", "Ana signed in"],
+      ["old", null],
+    ]);
+    const found = async (q: string, locale: "es" | "en") =>
+      (await db.appLog.findMany({ where: logWhere({ ...parseLogFilters({ category: tag, q, consultas: "1" }), locale }, []), orderBy: { action: "asc" } })).map((r) => r.action.slice(tag.length + 1));
+    assert.deepEqual(await found("signed in", "en"), ["label"]);
+    assert.deepEqual(await found("SIGNED", "en"), ["label"]);
+    assert.deepEqual(await found("signed in", "es"), []);
+    // En inglés, el español de una fila con su traducción ya no casa; el de las que no la tienen, sí.
+    assert.deepEqual(await found("iniciado sesión", "en"), ["old"]);
+    assert.deepEqual(await found("iniciado sesión", "es"), ["label", "old"]);
+    assert.deepEqual(await found("unexpected", "en"), ["fixed"]);
+    assert.deepEqual(await found("texto libre", "en"), ["free"]);
+    // La descarga CSV en inglés usa el mismo filtro.
+    const admin = await makeUser({ role: "ADMIN" });
+    await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
+    await loginAs(admin);
+    const res = await logsCsv(new Request(`http://localhost/api/admin/logs?category=${tag}&q=signed&consultas=1`));
+    const text = await res.text();
+    assert.match(text, /Ana signed in/);
+    assert.doesNotMatch(text, /antigua/);
   });
 });
 

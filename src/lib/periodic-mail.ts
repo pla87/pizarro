@@ -231,6 +231,28 @@ ${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
   return { subject, text, html };
 }
 
+/**
+ * Aviso a quien configuró el informe de que el servidor de correo rechaza al destinatario: el nombre de la persona de
+ * Pizarro si lo es (quien lo configuró puede no ver su email) y, si no, la dirección (externa: solo la pone un
+ * administrador). Sin la respuesta del servidor de correo.
+ */
+function reportRejectedMail(opts: { name: string; projectName: string; recipient: string; url: string }, t: T) {
+  const subject = t("No se ha podido enviar el informe semanal de «{project}»", { project: opts.projectName });
+  const paragraphs = [
+    t("Hola, {name}:", { name: opts.name }),
+    t("El informe semanal del proyecto «{project}» no se ha enviado esta vez: el servidor de correo no acepta la dirección de {recipient}.", { project: opts.projectName, recipient: opts.recipient }),
+    t("Comprueba el destinatario en los ajustes del proyecto (Informe semanal por email). Si no cambia, se volverá a intentar el día y a la hora de siempre."),
+  ];
+  const open = t("Abrir el proyecto");
+  const noReply = noReplyNote(t);
+  const text = `${paragraphs.join("\n\n")}\n\n${open}: ${opts.url}\n\n${noReply}\n`;
+  const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
+${paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("\n")}
+<p><a href="${escapeHtml(opts.url)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:9px 16px;border-radius:8px;text-decoration:none">${escapeHtml(open)}</a></p>
+<p style="color:#64748b;font-size:12px">${escapeHtml(noReply)}</p></div>`;
+  return { subject, text, html };
+}
+
 /** ¿Falló el PDF porque el generador se quedó sin memoria? (report-render.ts) */
 function pdfOutOfMemory(err: unknown): boolean {
   const e = err as { message?: unknown; cause?: { code?: unknown } } | null;
@@ -321,6 +343,7 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
       // el PDF para nada hasta medianoche. Como sin memoria para el PDF, se deja la reserva hasta el próximo envío.
       clearReportFailure(s.projectId);
       logEvent({ ...base, level: "error", action: "report.scheduledRejected", label: { k: "Informe semanal no enviado a {to}: el servidor de correo lo rechaza ({error}). No se reintenta hasta el próximo envío", p: { to: maskEmail(s.recipient), error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient) } });
+      await notifyReportRejected(s, creator, url, now);
       return false;
     }
     noteReportFailure(s.projectId, now);
@@ -340,5 +363,31 @@ async function notifyReportTooLarge(projectId: string, creator: Creator, url: st
     logEvent({ ...base, action: "report.tooLargeNotified", label: { k: "Aviso a {name}: el informe semanal de «{project}» es demasiado grande", p: { name: creator.name, project: project.name } }, details: { to: maskEmail(creator.email) } });
   } catch (err) {
     logEvent({ ...base, level: "error", action: "report.tooLargeNotifyFailed", label: { k: "Fallo al avisar a {name} del informe demasiado grande: {error}", p: { name: creator.name, error: logText(maskEmailsIn((err as Error).message)) } } });
+  }
+}
+
+/** Como mucho un aviso de destinatario rechazado por proyecto y semana. */
+const REJECTED_NOTICE_GAP_MS = 7 * DAY_MS;
+
+/**
+ * Email a quien configuró el informe de que el servidor de correo rechaza a su destinatario (en su idioma), como mucho
+ * una vez por semana y proyecto: el último aviso se busca en los Logs («report.rejectedNotified»; con LOG_RETENTION_DAYS
+ * por debajo de 7 podría repetirse antes si se cambia el día del informe). Un fallo solo se registra.
+ */
+async function notifyReportRejected(s: Schedule, creator: Creator, url: string, now: Date): Promise<void> {
+  const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
+  try {
+    const recent = await db.appLog.count({ where: { action: "report.rejectedNotified", projectId: s.projectId, createdAt: { gt: new Date(now.getTime() - REJECTED_NOTICE_GAP_MS) } } });
+    if (recent) return;
+    const [project, person] = await Promise.all([
+      db.project.findUnique({ where: { id: s.projectId }, select: { name: true } }),
+      db.user.findFirst({ where: { email: { equals: s.recipient, mode: "insensitive" } }, select: { name: true } }),
+    ]);
+    if (!project) return;
+    const t = makeT(toLocale(creator.locale));
+    await sendMail({ to: creator.email, ...reportRejectedMail({ name: creator.name, projectName: project.name, recipient: person?.name ?? s.recipient, url }, t) });
+    logEvent({ ...base, action: "report.rejectedNotified", label: { k: "Aviso a {name}: el servidor de correo rechaza al destinatario del informe semanal de «{project}»", p: { name: creator.name, project: project.name } }, details: { to: maskEmail(creator.email) } });
+  } catch (err) {
+    logEvent({ ...base, level: "error", action: "report.rejectedNotifyFailed", label: { k: "Fallo al avisar a {name} del destinatario rechazado: {error}", p: { name: creator.name, error: logText(maskEmailsIn((err as Error).message)) } } });
   }
 }

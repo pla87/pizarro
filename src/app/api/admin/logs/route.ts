@@ -93,8 +93,8 @@ export async function GET(req: Request) {
     release();
     throw err;
   }
-  const where = logWhere({ ...filters, period: { gte: range.gte, lt: range.lt } }, mine);
   const locale = await getLocale();
+  const where = logWhere({ ...filters, period: { gte: range.gte, lt: range.lt }, locale }, mine);
   const sep = csvSeparator(locale);
   const truncatedLine = t("Recortado a {n} filas: acorta el intervalo.", { n: MAX_ROWS.toLocaleString(intlLocale(locale)) });
   const maskedLine = t("Actividad en un proyecto privado");

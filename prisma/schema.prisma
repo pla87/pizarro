@@ -754,6 +754,9 @@ model AppLog {
   /// Nombre del evento, p. ej. «tasks.createTask» o «auth.login».
   action     String
   message    String   @default("")
+  /// El mensaje en inglés (lo que busca «Buscar» en inglés), si el evento trae plantilla y su texto cambia al traducirlo.
+  /// Null en las filas anteriores a la columna: el buscador en inglés mira entonces el mensaje en español.
+  messageEn  String?
   userId     String?
   /// Nombre en el momento del evento (se conserva aunque el usuario cambie o se borre).
   userName   String?

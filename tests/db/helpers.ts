@@ -222,9 +222,16 @@ export async function withSmtpDown<T>(fn: () => Promise<T>): Promise<T> {
  * Ejecuta `fn` con un servidor de correo de prueba (en esta máquina) que acepta la conexión y rechaza para siempre cada
  * envío en la fase `at`: por defecto cada destinatario con «550 5.1.1» (un buzón que no existe; nodemailer falla con
  * EENVELOPE, `command` «RCPT TO» y responseCode 550); con «MAIL FROM», el remitente (553); con «DATA», el mensaje (554).
+ * Con `only` (solo en «RCPT TO»), solo los destinatarios que casan: los demás correos se aceptan y `fn` los recibe en
+ * `delivered` (destinatarios y mensaje en bruto, al terminar cada uno).
  */
-export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" | "MAIL FROM" | "DATA" = "RCPT TO"): Promise<T> {
+export async function withSmtpRejecting<T>(
+  fn: (delivered: { to: string[]; data: string }[]) => Promise<T>,
+  at: "RCPT TO" | "MAIL FROM" | "DATA" = "RCPT TO",
+  opts: { only?: RegExp } = {},
+): Promise<T> {
   const sockets = new Set<Socket>();
+  const delivered: { to: string[]; data: string }[] = [];
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -232,6 +239,8 @@ export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" |
     socket.write("220 prueba ESMTP\r\n");
     let buf = "";
     let inData = false;
+    let rcpts: string[] = [];
+    let data: string[] = [];
     socket.on("data", (chunk: string) => {
       buf += chunk;
       let nl: number;
@@ -241,17 +250,32 @@ export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" |
         if (inData) {
           if (raw === ".") {
             inData = false;
-            socket.write("554 5.7.1 Mensaje rechazado\r\n");
-          }
+            if (at === "DATA") socket.write("554 5.7.1 Mensaje rechazado\r\n");
+            else {
+              delivered.push({ to: rcpts, data: data.join("\n") });
+              socket.write("250 2.0.0 Ok\r\n");
+            }
+            rcpts = [];
+            data = [];
+          } else data.push(raw.startsWith("..") ? raw.slice(1) : raw);
           continue;
         }
         const line = raw.trim().toUpperCase();
         if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 prueba\r\n");
         else if (line.startsWith("MAIL FROM")) socket.write(at === "MAIL FROM" ? "553 5.7.1 Remitente no admitido\r\n" : "250 2.1.0 Ok\r\n");
-        else if (line.startsWith("RCPT TO")) socket.write(at === "RCPT TO" ? "550 5.1.1 No existe ese buzón\r\n" : "250 2.1.5 Ok\r\n");
-        else if (line === "DATA") {
+        else if (line.startsWith("RCPT TO")) {
+          const addr = /<([^>]*)>/.exec(raw)?.[1] ?? "";
+          if (at === "RCPT TO" && (!opts.only || opts.only.test(addr))) socket.write("550 5.1.1 No existe ese buzón\r\n");
+          else {
+            rcpts.push(addr);
+            socket.write("250 2.1.5 Ok\r\n");
+          }
+        } else if (line === "DATA") {
           inData = true;
           socket.write("354 Adelante\r\n");
+        } else if (line.startsWith("RSET")) {
+          rcpts = [];
+          socket.write("250 Ok\r\n");
         } else if (line.startsWith("QUIT")) socket.end("221 Adiós\r\n");
         else socket.write("250 Ok\r\n");
       }
@@ -265,7 +289,7 @@ export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" |
   delete process.env.MAIL_OUTBOX_DIR;
   Object.assign(process.env, { SMTP_HOST: "127.0.0.1", SMTP_PORT: String(port), SMTP_FROM: "pizarro@example.com" });
   try {
-    return await fn();
+    return await fn(delivered);
   } finally {
     for (const k of keys) {
       if (prev[k] === undefined) delete process.env[k];
