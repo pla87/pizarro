@@ -7,7 +7,6 @@ export const columnas: Record<string, string> = {
 
   // Mover la columna arrastrando su cabecera o con Alt+flechas
   "{name} (arrastra la cabecera o pulsa Alt+flechas para moverla)": "{name} (drag the header or press Alt+arrows to move it)",
-  "columna que se puede mover": "movable column",
   "«{name}» movida a la posición {n}": "“{name}” moved to position {n}",
   "Has cogido la columna «{title}».": "You picked up the column “{title}”.",
   "La columna «{title}» irá al sitio de {place}.": "The column “{title}” will take the place of {place}.",

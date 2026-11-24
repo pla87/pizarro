@@ -200,7 +200,6 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           title={dragEnabled ? t("{name} (arrastra la cabecera o pulsa Alt+flechas para moverla)", { name: column.name }) : column.name}
           // Alternativa de teclado al arrastre: con el foco en el nombre, Alt+← / Alt+→ la mueven (como las tarjetas).
           tabIndex={dragEnabled ? 0 : undefined}
-          aria-roledescription={dragEnabled ? t("columna que se puede mover") : undefined}
           aria-keyshortcuts={dragEnabled ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
           data-column-handle
           onKeyDown={dragEnabled ? (e) => {
