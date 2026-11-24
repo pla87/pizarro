@@ -38,3 +38,17 @@ export function groupByDue<T extends { dueDate: string | null }>(tasks: T[], tod
     tasks: groups.get(bucket)!.sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")),
   })).filter((g) => g.tasks.length > 0);
 }
+
+/**
+ * Con más tareas de las que se pintan, el grupo que queda cortado: el de la primera que no se pinta (`firstHidden`, la
+ * siguiente en el orden por fecha). Su recuento sale con «+» en el resumen y en su encabezado: antes decía, p. ej.,
+ * «Más adelante 60» cuando había 1.500. Los grupos de después no se pintan (el aviso de arriba da el total).
+ */
+export function cutBucket(firstHidden: { dueDate: string | null } | undefined, today: string): TaskBucket | null {
+  return firstHidden ? bucketOf(firstHidden.dueDate, today) : null;
+}
+
+/** Recuento de un grupo tal como se escribe: «60», o «60+» si es el grupo cortado. */
+export function bucketCount(group: { bucket: TaskBucket; tasks: unknown[] }, cut: TaskBucket | null): string {
+  return `${group.tasks.length}${group.bucket === cut ? "+" : ""}`;
+}

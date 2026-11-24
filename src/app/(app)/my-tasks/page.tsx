@@ -12,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { MidnightRefresh } from "@/components/useMidnightRefresh";
 import { appTimeZone } from "@/lib/board";
 import { dateToIso, dueStatus, formatDay, todayIso } from "@/lib/dates";
-import { bucketAnchor, groupByDue, type TaskBucket } from "@/lib/my-tasks";
+import { bucketAnchor, bucketCount, cutBucket, groupByDue, type TaskBucket } from "@/lib/my-tasks";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -67,6 +67,8 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   // La consulta ya excluye las columnas «hechas»: cada tarea se agrupa por su fecha límite.
   const tasks = rows.map((task) => ({ ...task, due: dateToIso(task.dueDate), dueDate: dateToIso(task.dueDate) }));
   const groups = groupByDue(tasks, today);
+  const fetchedHidden = fetched[MAX_TASKS];
+  const cut = cutBucket(fetchedHidden && { dueDate: dateToIso(fetchedHidden.dueDate) }, today);
 
   const heading: Record<TaskBucket, string> = {
     overdue: t("Vencidas"),
@@ -99,7 +101,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
                   href={`#${bucketAnchor(group.bucket)}`}
                   className={cn("rounded px-1 py-0.5 hover:underline", group.bucket === "overdue" ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-300")}
                 >
-                  {heading[group.bucket]} <span className="font-semibold">{group.tasks.length}</span>
+                  {heading[group.bucket]} <span className="font-semibold">{bucketCount(group, cut)}</span>
                 </a>
               </li>
             ))}
@@ -117,7 +119,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
           <section key={group.bucket} id={bucketAnchor(group.bucket)} aria-labelledby={`${bucketAnchor(group.bucket)}-h`} className="scroll-mt-4">
             <h2 id={`${bucketAnchor(group.bucket)}-h`} className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", group.bucket === "overdue" ? "text-red-600" : "text-slate-600 dark:text-slate-300")}>
               {heading[group.bucket]}
-              <span className="text-xs font-normal text-slate-500">{group.tasks.length}</span>
+              <span className="text-xs font-normal text-slate-500">{bucketCount(group, cut)}</span>
             </h2>
             <ul className="card divide-y divide-slate-200 dark:divide-slate-800">
               {group.tasks.map((task) => {
