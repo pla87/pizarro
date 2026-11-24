@@ -29,7 +29,8 @@ export type TemplateRef = { source: "template"; id: string };
 export interface ApplyTemplateShape {
   name: string;
   /** `assignDueDays`: plazo de una columna «Asignación a persona» (rol NONE; la persona no viaja en las plantillas). */
-  columns: { name: string; role: string; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }[];
+  /** `defaultKind`: nombre del «Tipo por defecto» de la columna (se busca por nombre al aplicarla). */
+  columns: { name: string; role: string; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null; defaultKind?: string | null }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }[];
   labels: { name: string; color: string }[];
   hiddenGeneralKinds: string[];

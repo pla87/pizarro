@@ -84,7 +84,8 @@ type Draft = {
   name: string;
   description: string;
   /** `assignDueDays`: columna «Asignación a persona» (rol NONE con plazo; la persona no viaja en las plantillas). */
-  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }>[];
+  /** `defaultKind`: nombre del «Tipo por defecto» de la columna (uno propio de la plantilla o un general que usa). */
+  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null; defaultKind?: string | null }>[];
   kinds: Keyed<{ name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }>[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
@@ -339,6 +340,13 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <h3 className="mb-2 text-sm font-semibold">{t("Columnas")}</h3>
               <ul className="space-y-2">
                 {draft.columns.map((c, i) => {
+                  // Los tipos que tendrá el proyecto: los propios de la plantilla y los generales que usa (y el guardado,
+                  // aunque ya no esté entre ellos, para no perderlo sin querer).
+                  const kindNames = [...new Set([
+                    ...draft.kinds.map((k) => k.name.trim()).filter(Boolean),
+                    ...generalKinds.filter((n) => generalKindUsed(draft, n)),
+                    ...(c.defaultKind ? [c.defaultKind] : []),
+                  ])];
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
                   const assignDays = c.role === "NONE" ? (c.assignDueDays ?? null) : null;
@@ -367,6 +375,16 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                           {assignDays === 1 ? t("día") : t("días")}
                         </span>
                       )}
+                      <select
+                        className="input w-auto max-w-40"
+                        value={c.defaultKind ?? ""}
+                        onChange={(e) => setCol({ defaultKind: e.target.value || null })}
+                        aria-label={t("Tipo por defecto de la columna {n}", { n: i + 1 })}
+                        title={t("Tipo con el que se abre «Nueva tarea» desde esta columna")}
+                      >
+                        <option value="">{t("Sin tipo por defecto")}</option>
+                        {kindNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>

@@ -337,3 +337,30 @@ test("límite: como mucho 5 cambios de plantilla (aplicar o deshacer) por proyec
   expectFail(await undoTemplateChange(f.project.id), /ya ha cambiado de plantilla 5 veces en los últimos 10 minutos/);
   expectFail(await applyTemplateChange(f.project.id, ref, "ADD"), /Vuelve a intentarlo dentro de 10 min/);
 });
+
+test("tipo por defecto de las columnas: añadir lo pone en las nuevas, cambiar de plantilla en las suyas, y se deshace", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  await db.column.update({ where: { id: f.columns.todo }, data: { defaultKindId: f.kindId } });
+  const pick: Record<string, string> = { "Por hacer": "Trámite", Haciendo: "mejora", Revisión: "No existe" };
+  const tpl = await makeTemplate({ ...TEMPLATE, columns: TEMPLATE.columns.map((c) => ({ ...c, defaultKind: pick[c.name] ?? null })) });
+  const ref = { source: "template", id: tpl.id } as const;
+  const defaults = async () => {
+    const rows = await db.column.findMany({ where: { projectId: f.project.id }, orderBy: { position: "asc" }, select: { name: true, defaultKind: { select: { name: true } } } });
+    return Object.fromEntries(rows.map((c) => [c.name, c.defaultKind?.name ?? null]));
+  };
+  const own = (await db.taskKind.findUniqueOrThrow({ where: { id: f.kindId } })).name;
+  await loginAs(admin);
+
+  // Añadir: solo las columnas nuevas, con el tipo de la plantilla recién creado (por nombre, sin mayúsculas).
+  expectOk(await applyTemplateChange(f.project.id, ref, "ADD"));
+  assert.deepEqual(await defaults(), { "Por hacer": own, "En curso": null, Hecho: null, Haciendo: "Mejora", Revisión: null, Listo: null });
+  expectOk(await undoTemplateChange(f.project.id));
+
+  // Cambiar: la columna reutilizada recibe el de la plantilla; al deshacer vuelve el suyo.
+  expectOk(await applyTemplateChange(f.project.id, ref, "REPLACE", { columns: { [f.columns.todo]: "t:0", [f.columns.doing]: "t:1", [f.columns.done]: "t:3" } }));
+  assert.deepEqual(await defaults(), { "Por hacer": "Trámite", Haciendo: "Mejora", Revisión: null, Listo: null });
+  expectOk(await undoTemplateChange(f.project.id));
+  assert.deepEqual(await defaults(), { "Por hacer": own, "En curso": null, Hecho: null });
+});

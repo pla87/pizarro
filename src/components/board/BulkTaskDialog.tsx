@@ -14,6 +14,7 @@ import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { boardClients, useBoard, useTasks } from "./context";
 import { TypeSelector } from "./TaskDialog";
+import { columnDefaultKind } from "./NewTaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
 import { MAX_TASK_LABELS, MAX_TITLE } from "@/lib/constants";
 import { LabelToggles } from "./LabelToggles";
@@ -52,10 +53,14 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const form = pf ?? boardForm;
   const kindById = useMemo(() => new Map(form.kinds.map((k) => [k.id, k])), [form.kinds]);
   const [columnId, setColumnId] = useState(initialColumnId ?? board.columns[0]?.id ?? "");
+  /** Tipo inicial: el tipo por defecto de la columna (como en «Nueva tarea») o, si no hay alternativa, el único. */
+  const startKind = (f: Pick<ProjectFormData, "columns" | "kinds">, colId: string) => columnDefaultKind(f, colId) ?? (f.kinds.length === 1 ? f.kinds[0]!.id : "");
+  // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna.
+  const kindPicked = useRef(false);
   const [text, setText] = useState("");
   const textRef = useRef<HTMLTextAreaElement>(null);
-  // Hay que elegir el tipo; solo se preselecciona si no hay alternativa.
-  const [kindId, setKindId] = useState(board.kinds.length === 1 ? board.kinds[0]!.id : "");
+  // Hay que elegir el tipo; se preselecciona el de la columna o, si no hay alternativa, el único.
+  const [kindId, setKindId] = useState(() => startKind(boardForm, columnId));
   // Tipo distinto para líneas concretas (por título).
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [assigneeId, setAssigneeId] = useState("");
@@ -69,8 +74,10 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
 
   /** Ajusta las opciones al proyecto de `f`: la columna, el tipo, etc. del proyecto anterior no valen. */
   const applyForm = (f: ProjectFormData) => {
-    setColumnId(f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? ""));
-    setKindId(f.kinds.length === 1 ? f.kinds[0]!.id : "");
+    const col = f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? "");
+    setColumnId(col);
+    kindPicked.current = false;
+    setKindId(startKind(f, col));
     setOverrides({});
     setAssigneeId("");
     setDeliverableId("");
@@ -78,6 +85,12 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     setWithSubtasks(false);
     setPriority("");
     setClient("");
+  };
+  /** Otra columna: si tiene tipo por defecto y el tipo no se eligió a mano, pasa a ese (las líneas cambiadas a mano, no). */
+  const changeColumn = (id: string) => {
+    setColumnId(id);
+    const kind = kindPicked.current ? undefined : columnDefaultKind(form, id);
+    if (kind) setKindId(kind);
   };
   const selectProject = async (id: string) => {
     if (id === projectId) return;
@@ -185,7 +198,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
       <form id="bulk-tasks" onSubmit={submit} className="space-y-3">
         <div>
           <label className="label" htmlFor="bt-column">{t("Columna")}</label>
-          <select id="bt-column" className="input" value={columnId} onChange={(e) => setColumnId(e.target.value)}>
+          <select id="bt-column" className="input" value={columnId} onChange={(e) => changeColumn(e.target.value)}>
             {form.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
@@ -225,6 +238,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
                 value={kindId}
                 onChange={(id) => {
                   // El tipo común se aplica a todas las líneas, también a las cambiadas a mano.
+                  kindPicked.current = true;
                   setKindId(id);
                   setOverrides({});
                 }}

@@ -23,7 +23,7 @@ export const PATCH_JITTER_MAX_MS = 500;
  * etiquetas, tipos, plantillas, permisos, deshacer, importar…) recargan el tablero entero.
  */
 const PATCHABLE_ACTIONS: ReadonlySet<string> = new Set([
-  "tasks.createTask", "tasks.updateTask", "tasks.moveTask", "tasks.moveTasks", "tasks.makeEvergreen",
+  "tasks.createTask", "tasks.updateTask", "tasks.changeTaskKind", "tasks.moveTask", "tasks.moveTasks", "tasks.makeEvergreen",
   "tasks.archiveTask", "tasks.archiveTasks", "tasks.deleteTask", "tasks.deleteTasks", "tasks.duplicateTask", "tasks.restoreTask",
   "tasks.addComment", "tasks.editComment", "tasks.deleteComment",
   "tasks.addSubtask", "tasks.addSubtasks", "tasks.updateSubtask", "tasks.reorderSubtask", "tasks.deleteSubtask",

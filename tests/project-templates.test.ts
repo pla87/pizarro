@@ -20,6 +20,18 @@ test("valida plantillas correctas", () => {
   assert.equal(templateInputSchema.safeParse(base).success, true);
 });
 
+test("tipo por defecto de una columna: opcional, por nombre, y uno que no vale se ignora sin perder la columna", () => {
+  const parse = (defaultKind: unknown) => templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], defaultKind }, base.columns[1]] }).columns;
+  assert.equal(templateInputSchema.parse(base).columns[0]!.defaultKind, undefined);
+  assert.equal(parse("  Cita  médica ")[0]!.defaultKind, "Cita médica");
+  assert.equal(parse(42)[0]!.defaultKind, null);
+  assert.equal(parse("x".repeat(200))[0]!.defaultKind, null);
+  assert.equal(buildTemplateApplication(templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], defaultKind: "Cita" }] }), []).columns[0]!.defaultKind, "Cita");
+  // Una versión anterior lee las plantillas con el mismo esquema sin ese campo: zod quita las claves que no conoce (no es
+  // estricto), así que una plantilla guardada con él sigue valiendo allí.
+  assert.equal("futuro" in templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], futuro: 1 }, base.columns[1]] }).columns[0]!, false);
+});
+
 test("rechaza columnas repetidas, roles repetidos y sin columnas", () => {
   const dup = { ...base, columns: [base.columns[0], { ...base.columns[0], name: " todo " }] };
   assert.equal(templateInputSchema.safeParse(dup).success, false);

@@ -106,7 +106,7 @@ export async function templateFromProject(projectId: string) {
       select: {
         name: true,
         description: true,
-        columns: { orderBy: COLUMN_ORDER, select: { name: true, role: true, isDone: true, wipLimit: true, assignDueDays: true } },
+        columns: { orderBy: COLUMN_ORDER, select: { name: true, role: true, isDone: true, wipLimit: true, assignDueDays: true, defaultKind: { select: { name: true } } } },
         kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }], select: { name: true, color: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } },
         hiddenKinds: { select: { kind: { select: { name: true } } } },
         labels: { orderBy: { name: "asc" }, select: { name: true, color: true } },
@@ -122,7 +122,12 @@ export async function templateFromProject(projectId: string) {
       name: cutText(t("Plantilla de {name}", { name: project.name }), 80),
       description: "",
       // «Asignación a persona»: el plazo sí, la persona no (las columnas de plantilla no tienen persona).
-      columns: project.columns.slice(0, MAX_TEMPLATE_COLUMNS).map(({ assignDueDays, ...c }) => (c.role === "NONE" && assignDueDays != null ? { ...c, assignDueDays } : c)),
+      // El tipo por defecto, por su nombre (el guardado, también el de un general).
+      columns: project.columns.slice(0, MAX_TEMPLATE_COLUMNS).map(({ assignDueDays, defaultKind, ...c }) => ({
+        ...c,
+        ...(c.role === "NONE" && assignDueDays != null ? { assignDueDays } : {}),
+        ...(defaultKind ? { defaultKind: defaultKind.name } : {}),
+      })),
       kinds: project.kinds.map((k) => ({ ...k, color: k.color.toLowerCase() })),
       hiddenGeneralKinds: project.hiddenKinds.map((h) => h.kind.name),
       labels: project.labels.map((l) => ({ name: l.name, color: (palette.includes(l.color) ? l.color : PALETTE[0]) as (typeof PALETTE)[number] })),

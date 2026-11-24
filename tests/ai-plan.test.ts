@@ -375,3 +375,32 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     ]) assert.ok(!AI_PLAN_ZIP_FOLDER.test(bad), bad);
   });
 });
+
+describe("plan de trabajo: tipo común", () => {
+  const tasks = (n: number, kind: (i: number) => string | undefined = () => "Corrección") => Array.from({ length: n }, (_, i) => ({ id: `t${i}`, title: `Tarea ${i}`, kind: kind(i) }));
+
+  test("si todas las tareas son del mismo tipo, va una vez en el contexto y no en cada tarea", () => {
+    const same = buildAiPlanMarkdown(base({ tasks: tasks(3) }));
+    assert.ok(same.includes("- **Tareas:** 3\n- **Tipo de todas las tareas:** Corrección\n"), same);
+    assert.ok(!same.includes("- **Tipo:**"), same);
+    // Varios tipos (o alguna sin tipo): como siempre, en cada tarea y nada en el contexto.
+    for (const mixed of [buildAiPlanMarkdown(base({ tasks: tasks(3, (i) => (i ? "Corrección" : "Mejora")) })), buildAiPlanMarkdown(base({ tasks: tasks(3, (i) => (i ? "Corrección" : undefined)) }))]) {
+      assert.ok(!mixed.includes("Tipo de todas las tareas") && mixed.includes("- **Tipo:** Corrección"), mixed);
+    }
+    // Una sola tarea: en la tarea, como antes.
+    assert.ok(buildAiPlanMarkdown(base({ tasks: tasks(1) })).includes("### 1. Tarea 0\n\n- **Tipo:** Corrección"));
+    // En inglés también.
+    assert.ok(buildAiPlanMarkdown(base({ tasks: tasks(2) }), makeT("en")).includes("- **Type of all tasks:** Corrección"));
+  });
+
+  test("ahorro en un plan de 500 tareas del mismo tipo", () => {
+    const now = buildAiPlanMarkdown(base({ tasks: tasks(500) }));
+    // Lo que salía antes: sin la línea del contexto y con «- **Tipo:** …» bajo el título de cada tarea.
+    const before = now.replace("- **Tipo de todas las tareas:** Corrección\n", "").replace(/^(### \d+\. Tarea \d+)$/gm, "$1\n\n- **Tipo:** Corrección");
+    const saved = before.length - now.length;
+    // 24 caracteres por tarea («\n\n- **Tipo:** Corrección») menos los 43 de la línea del contexto: 11 957 de unos 25 000.
+    assert.equal(saved, 500 * "\n\n- **Tipo:** Corrección".length - "- **Tipo de todas las tareas:** Corrección\n".length);
+    assert.equal(saved, 11_957);
+    assert.ok(saved / before.length > 0.4, `${saved} de ${before.length}`);
+  });
+});
