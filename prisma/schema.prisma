@@ -263,6 +263,9 @@ model Project {
   programVersion Int   @default(0)
   /// Último número de versión del plan de trabajo para IA guardado en la Documentación («…_v3.md»); solo crece.
   aiPlanCount Int      @default(0)
+  /// Plantilla de la que salió el proyecto: la clave de una de serie (builtin-templates.ts) o «custom» (una propia); null =
+  /// en blanco, importado o anterior a guardarlo. Ordena los roles del menú de la columna (TEMPLATE_COLUMN_ROLES).
+  templateKey String?
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

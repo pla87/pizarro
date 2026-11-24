@@ -67,4 +67,9 @@ export const asignacion: Record<string, string> = {
   "Las tareas nuevas de «{name}» empiezan con este tipo. Con «Ninguno», con el último que hayas usado.": "New tasks in “{name}” start with this type. With “None”, with the last one you used.",
   "Puso el tipo por defecto «{kind}» a la columna «{name}»": "Set the default type “{kind}” for the column “{name}”",
   "Quitó el tipo por defecto de la columna «{name}»": "Removed the default type of the column “{name}”",
+  // Nombre de la persona como nombre de la columna, Ajustes en otra pestaña y aviso al entrar una tarjeta
+  "Cambiar el nombre de la columna a «{name}»": "Rename the column to “{name}”",
+  "(se abre en otra pestaña)": "(opens in another tab)",
+  "Asignada a {name} · vence el {date}": "Assigned to {name} · due {date}",
+  "Asignada a {name}": "Assigned to {name}",
 };

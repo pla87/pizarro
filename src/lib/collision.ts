@@ -3,6 +3,8 @@ import type { CollisionDetection } from "@dnd-kit/core";
 
 /** Prefijo del id de los droppables de columna (el resto de droppables son tarjetas). */
 const COLUMN_DROPPABLE_PREFIX = "col:";
+/** Prefijo del id de la cabecera de una columna que se arrastra para cambiarla de sitio (no es un droppable). */
+export const COLUMN_DRAG_PREFIX = "colmove:";
 
 /** Lista ordenable (SortableContext) a la que pertenece una tarjeta; el tablero le da el id de su columna («col:…»). */
 function containerOf(container: { data: { current?: unknown } }): string | null {
@@ -52,6 +54,28 @@ class RectSnapshot extends Map<Id, Rect> {
  * de esa columna. Cada lectura de la posición de un droppable consulta el scroll de sus contenedores, y repasar todas
  * las tarjetas en cada movimiento del ratón hacía que el arrastre fuera a tirones.
  */
+/**
+ * Arrastre de una columna (su cabecera): solo cuentan las columnas, y por la horizontal, la que tiene el puntero encima o,
+ * entre dos (en el hueco) o fuera del tablero, la de centro más cercano. Sin puntero (no se arrastra con el teclado), la
+ * de centro más cercano a la columna arrastrada.
+ */
+export const columnDragCollision: CollisionDetection = ({ droppableContainers, droppableRects, pointerCoordinates, collisionRect }) => {
+  const x = pointerCoordinates?.x ?? collisionRect.left + collisionRect.width / 2;
+  let best: (typeof droppableContainers)[number] | null = null;
+  let bestD = Infinity;
+  for (const c of droppableContainers) {
+    if (!String(c.id).startsWith(COLUMN_DROPPABLE_PREFIX)) continue;
+    const r = droppableRects.get(c.id);
+    if (!r || r.width <= 0) continue;
+    const d = x >= r.left && x <= r.left + r.width ? 0 : Math.abs(x - (r.left + r.width / 2));
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best ? [{ id: best.id, data: { droppableContainer: best, value: bestD } }] : [];
+};
+
 export const createBoardCollisionDetection = (algos: {
   closestCorners: CollisionDetection;
   pointerWithin: CollisionDetection;

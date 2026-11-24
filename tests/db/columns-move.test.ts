@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { columnsLockName } from "../../src/lib/advisory-locks";
 import { db, expectOk, loginAs, makeProject, makeUser, waitForLockWaiter } from "./helpers";
-import { moveColumn } from "../../src/actions/columns";
+import { moveColumn, placeColumn } from "../../src/actions/columns";
+import { undoLast } from "../../src/actions/undo";
 
 const names = async (projectId: string) =>
   (await db.column.findMany({ where: { projectId }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { name: true, position: true } }));
@@ -50,5 +51,22 @@ describe("mover columnas a la vez", () => {
       const order = rows.map((r) => r.name).join(" | ");
       assert.ok(["En curso | Hecho | Por hacer", "Hecho | Por hacer | En curso"].includes(order), order);
     }
+  });
+});
+
+describe("arrastrar una columna a otro sitio (placeColumn)", () => {
+  test("la lleva a esa posición, renumera, un solo deshacer; en su sitio no hace nada", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    expectOk(await placeColumn(f.columns.done, 0));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Hecho", "Por hacer", "En curso"]);
+    expectOk(await placeColumn(f.columns.done, 7));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Por hacer", "En curso", "Hecho"]);
+    const entries = await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "UNDO" } });
+    expectOk(await placeColumn(f.columns.done, 2));
+    assert.equal(await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "UNDO" } }), entries, "en su sitio: sin deshacer");
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Hecho", "Por hacer", "En curso"]);
   });
 });

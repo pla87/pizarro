@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useId, useState } from "react";
 import { AlertTriangle, FileDown } from "lucide-react";
 import { setColumnAssignee } from "@/actions/columns";
@@ -8,6 +7,7 @@ import { isAssignColumn, MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/colu
 import type { BoardColumn } from "@/lib/types";
 import { useT } from "@/i18n/client";
 import { Avatar } from "../ui/Avatar";
+import { cn } from "../ui/cn";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
@@ -115,13 +115,21 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
   const [personId, setPersonId] = useState(valid ? current.assigneeId! : "");
   const [days, setDays] = useState(current.dueDays != null ? String(current.dueDays) : "");
   const [error, setError] = useState<string | null>(null);
+  // Proponer el nombre de la persona como nombre de la columna: marcado si la columna sigue con un nombre genérico
+  // («Persona 1», el de otra persona del proyecto); si no, se ofrece sin marcar (nunca se pisa un nombre elegido sin preguntar).
+  const picked = users.find((u) => u.id === personId);
+  // Con la persona que ya tenía y un nombre elegido, no se vuelve a ofrecer cada vez que se abre el diálogo.
+  const generic = genericColumnName(column.name, users);
+  const offerRename = !!picked && picked.name.trim() !== column.name.trim() && (generic || personId !== current.assigneeId);
+  const [renameTo, setRenameTo] = useState<Record<string, boolean>>({});
+  const rename = offerRename && (renameTo[personId] ?? generic);
 
   const save = async () => {
     const dueDays = parseAssignDays(days);
     if (!personId) return setError(t("Elige una persona."));
     if (dueDays === undefined) return setError(t("Indica un número entero de días entre 1 y {max}, o déjalo vacío.", { max: MAX_ASSIGN_DUE_DAYS }));
     onClose();
-    if (personId === current.assigneeId && dueDays === current.dueDays) return;
+    if (personId === current.assigneeId && dueDays === current.dueDays && !rename) return;
     const person = users.find((u) => u.id === personId)!;
     // Las que cambian de manos (las de la persona elegida se quedan como están). Con la misma persona, ninguna.
     const changing = personId === current.assigneeId ? 0 : getTasks().filter((x) => x.columnId === column.id && x.assigneeId !== personId).length;
@@ -132,7 +140,7 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
         : t("Las {n} tarjetas de «{col}» que no son de {name} pasarán a esa persona.", { n: changing, col: column.name, name: person.name }),
       confirmLabel: t("Asignar"),
     }))) return;
-    const res = await track(setColumnAssignee(column.id, { assigneeId: personId, dueDays }));
+    const res = await track(setColumnAssignee(column.id, { assigneeId: personId, dueDays, ...(rename ? { rename: true } : {}) }));
     if (!res.ok) return toast(res.error, "error");
     refresh();
     if (res.data.reassigned) toast(res.data.reassigned === 1 ? t("1 tarjeta asignada a {name}", { name: person.name }) : t("{n} tarjetas asignadas a {name}", { n: res.data.reassigned, name: person.name }));
@@ -158,10 +166,14 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
         {users.map((u) => <option key={u.id} value={u.id}>{u.id === currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
       </select>
       {/* Con pocas personas, quizá falta la que se busca: quien puede, la añade al proyecto (Ajustes → General). */}
-      {canManageMembers && users.length <= SHORT_LIST && (
-        <p className="mt-1 text-xs">
-          <Link className="text-brand-600 underline dark:text-brand-300" href={`/p/${project.id}/settings?tab=general#members`} data-assign-add-people>{t("Añadir personas al proyecto")}</Link>
-        </p>
+      {/* En otra pestaña: aquí no se pierde lo elegido, y al volver la lista ya trae a las personas nuevas (el tablero se
+          refresca al volver a la ventana). */}
+      {canManageMembers && users.length <= SHORT_LIST && <AddPeopleLink projectId={project.id} className="mt-1" />}
+      {offerRename && (
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={rename} onChange={(e) => setRenameTo((m) => ({ ...m, [personId]: e.target.checked }))} data-assign-rename />
+          <span>{t("Cambiar el nombre de la columna a «{name}»", { name: picked.name })}</span>
+        </label>
       )}
       <label className="label mt-3" htmlFor={`${id}-days`}>{t("Vence en (días, opcional)")}</label>
       <input
@@ -182,5 +194,30 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
       <p id={`${id}-help`} className="mt-1 text-xs text-slate-600 dark:text-slate-400">{t("Las tarjetas que entren sin fecha límite vencerán ese número de días después. Las que ya tienen fecha la conservan.")}</p>
       {error && <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
     </Modal>
+  );
+}
+
+/**
+ * ¿El nombre de la columna es de los que no ha elegido nadie? «Persona 1», «Person 2» (los de ejemplo) o el de una persona del
+ * proyecto (la columna era de otra). Entonces «Cambiar el nombre de la columna» sale marcado.
+ */
+function genericColumnName(name: string, users: readonly { name: string }[]): boolean {
+  const n = name.trim().toLowerCase();
+  return /^(persona|person)\s*\d*$/.test(n) || users.some((u) => u.name.trim().toLowerCase() === n);
+}
+
+/**
+ * «Añadir personas al proyecto» (Ajustes → General → Miembros), en otra pestaña: lo que se estaba configurando en el tablero
+ * no se pierde. Al volver a esta, el tablero se refresca y trae a las personas nuevas.
+ */
+export function AddPeopleLink({ projectId, className }: { projectId: string; className?: string }) {
+  const t = useT();
+  return (
+    <p className={cn("text-xs", className)}>
+      <a className="text-brand-600 underline dark:text-brand-300" href={`/p/${projectId}/settings?tab=general#members`} target="_blank" rel="noopener" data-assign-add-people>
+        {t("Añadir personas al proyecto")}
+      </a>
+      <span className="text-slate-500 dark:text-slate-400"> {t("(se abre en otra pestaña)")}</span>
+    </p>
   );
 }

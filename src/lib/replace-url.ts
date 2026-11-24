@@ -1,5 +1,5 @@
 /**
- * Cambia la dirección de la barra sin recargar ni pedir la página (p. ej. quitar `?nuevo=1` o `?task=`), de forma que el
+ * Cambia la dirección de la barra sin recargar ni pedir la página (p. ej. quitar `?task=`), de forma que el
  * enrutador de Next también la tome como la actual. Con el estado de Next del historial (`__NA`), su `replaceState`
  * parcheado no se entera: el siguiente `router.refresh()` (crear una tarea, un cambio en vivo) volvía a escribir la
  * dirección anterior y el parámetro quitado reaparecía (al recargar, el aviso o la tarea salían otra vez). Se conserva el

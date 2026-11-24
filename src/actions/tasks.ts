@@ -839,7 +839,8 @@ async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string
  */
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
-    return applyTaskMove(await requireUser(), taskId, columnId, prevId, nextId);
+    // `undo`: la entrada de deshacer del movimiento (el aviso «Asignada a…» del tablero lleva «Deshacer»).
+    return { ...(await applyTaskMove(await requireUser(), taskId, columnId, prevId, nextId)), undo: trackUndoEntry() };
   });
 }
 
@@ -974,7 +975,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     for (const t of toMove) if (t.columnId !== column.id) recordTaskEvent(t.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
     // Un solo aviso a la persona de la columna por todo el lote (como al crear varias asignadas).
     await finishAssignOnEnter(assigned, user.id, { undo: false });
-    return { columnId: column.id, moved, spawned, assigned: assignedPatches(assigned) };
+    return { columnId: column.id, moved, spawned, assigned: assignedPatches(assigned), undo: trackUndoEntry() };
   });
 }
 

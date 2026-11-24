@@ -385,3 +385,23 @@ test("deshacer un cambio de plantilla cuya instantánea trae un rol retirado: la
   const cols = await db.column.findMany({ where: { projectId: f.project.id }, select: { role: true } });
   assert.deepEqual(cols.map((c) => c.role), ["NONE", "NONE", "NONE"]);
 });
+
+test("la plantilla queda apuntada en el proyecto (Project.templateKey): cambiarla la pone, añadir solo si no había, deshacer la devuelve", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  await loginAs(admin);
+  const key = async () => (await db.project.findUniqueOrThrow({ where: { id: f.project.id }, select: { templateKey: true } })).templateKey;
+  assert.equal(await key(), null);
+  // Añadir lo que falte de una propia: no tenía ninguna, queda «custom».
+  const tpl = await makeTemplate();
+  expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "ADD"));
+  assert.equal(await key(), "custom");
+  expectOk(await undoTemplateChange(f.project.id));
+  assert.equal(await key(), null);
+  // Cambiar a una de serie: su clave; añadir después lo de otra no la cambia.
+  expectOk(await applyTemplateChange(f.project.id, await builtinRef("casa-familia"), "REPLACE"));
+  assert.equal(await key(), "casa-familia");
+  expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "ADD"));
+  assert.equal(await key(), "casa-familia");
+});

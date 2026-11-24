@@ -8,11 +8,11 @@ import { after, describe, test } from "node:test";
 import pg from "pg";
 import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, waitForLockWaiter } from "./helpers";
 import { archiveTask, createTask, createTasks, moveTask, moveTasks, restoreTask } from "../../src/actions/tasks";
-import { setColumnAssignee, setColumnRole, setColumnWaitingDays } from "../../src/actions/columns";
+import { createPersonColumns, setColumnAssignee, setColumnRole, setColumnWaitingDays } from "../../src/actions/columns";
 import { removeProjectMember } from "../../src/actions/projects";
 import { templateFromProject } from "../../src/actions/templates";
 import { applyTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
-import { undoLast } from "../../src/actions/undo";
+import { undoEntry, undoLast } from "../../src/actions/undo";
 import { addDaysIso, dateToIso, isoToDate, todayIso } from "../../src/lib/dates";
 import { appTimeZone } from "../../src/lib/format";
 import { buildProjectExport } from "../../src/lib/project-export/export";
@@ -431,5 +431,61 @@ describe("asignación a persona: carreras, versión anterior, plazo y consultas"
     const spawn = await ruleReadsOf(() => moveTask(r.id, f.columns.done, null, null));
     assert.equal(expectOk(spawn.value).spawned.length, 1);
     assert.equal(spawn.reads, 2, "mover a terminada (la columna destino) + repetición (sus columnas de destino)");
+  });
+});
+
+describe("asignación a persona: nombre de la columna, columnas por persona y deshacer desde el aviso", () => {
+  test("«Cambiar el nombre de la columna»: pone el de la persona en el mismo paso de deshacer (también con la misma persona)", async () => {
+    const { ana, f } = await setup({ dueDays: null });
+    const bea = await makeUser();
+    await db.projectMember.create({ data: { projectId: f.project.id, userId: bea.id } });
+    const name = async () => (await db.column.findUniqueOrThrow({ where: { id: f.columns.todo }, select: { name: true } })).name;
+    // Misma persona, solo el nombre.
+    expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: null, rename: true }));
+    assert.equal(await name(), ana.name);
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await name(), "Por hacer");
+    // Otra persona y el nombre: un deshacer devuelve las dos cosas.
+    expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: bea.id, dueDays: 2, rename: true }));
+    const col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual([col.name, col.assigneeId, col.assignDueDays], [bea.name, bea.id, 2]);
+    expectOk(await undoLast(f.project.id));
+    const back = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual([back.name, back.assigneeId, back.assignDueDays], ["Por hacer", ana.id, null]);
+  });
+
+  test("«Organizar por personas»: una columna por cada persona sin la suya, con su nombre y sin plazo; un deshacer las quita", async () => {
+    // Privado: las personas son sus miembros (en uno de equipo también cuentan todos los administradores).
+    const me = await makeUser();
+    const ana = await makeUser();
+    const f = await makeProject({ visibility: "PRIVATE", owner: me, members: [me, ana] });
+    await loginAs(me);
+    expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: null }));
+    const before = await db.column.count({ where: { projectId: f.project.id } });
+    const created = expectOk(await createPersonColumns(f.project.id));
+    // Ana ya tenía la suya («Por hacer»): solo la de quien gestiona.
+    assert.deepEqual(created.map((c) => [c.name, c.assigneeId, c.assignDueDays, c.role]), [[me.name, me.id, null, "NONE"]]);
+    assert.equal(await db.column.count({ where: { projectId: f.project.id } }), before + 1);
+    // Otra vez: nada que crear.
+    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)), []);
+    expectOk(await undoLast(f.project.id));
+    assert.equal(await db.column.count({ where: { projectId: f.project.id } }), before);
+    assert.equal((await db.column.count({ where: { projectId: f.project.id, assigneeId: ana.id } })), 1);
+    // Sin sitio para todas: ninguna.
+    await db.column.createMany({ data: Array.from({ length: 30 - before }, (_, i) => ({ projectId: f.project.id, name: `C${i}`, position: 10_000 + i })) });
+    expectFail(await createPersonColumns(f.project.id));
+    assert.equal(await db.column.count({ where: { projectId: f.project.id } }), 30);
+  });
+
+  test("mover a la columna devuelve la entrada de deshacer: el «Deshacer» del aviso la deshace entera", async () => {
+    const { me, f } = await setup();
+    const t = await makeTask(f, { columnId: f.columns.doing });
+    await db.task.update({ where: { id: t.id }, data: { assigneeId: me.id } });
+    const res = expectOk(await moveTask(t.id, f.columns.todo, null, null));
+    assert.ok(res.undo.id);
+    expectOk(await undoEntry(res.undo.id!));
+    assert.deepEqual(await taskRow(t.id), { assigneeId: me.id, dueDate: null, columnId: f.columns.doing });
+    const many = expectOk(await moveTasks([t.id], f.columns.todo));
+    assert.ok(many.undo.id);
   });
 });

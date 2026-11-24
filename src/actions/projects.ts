@@ -15,6 +15,7 @@ import { getLocale } from "@/i18n/server";
 import { AppError, forbidden, notFound } from "@/lib/errors";
 import { POSITION_STEP } from "@/lib/positions";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
+import { CUSTOM_TEMPLATE_KEY } from "@/lib/builtin-templates";
 import { createExampleContent } from "@/lib/project-example-apply";
 import { resolveExamples } from "@/lib/project-examples";
 import { listStartTemplates } from "@/lib/template-store";
@@ -99,6 +100,8 @@ export async function createProject(name: string, options?: { templateId?: strin
           name: projectName,
           // La descripción de la plantilla (en su idioma): sin ella, el proyecto nuevo quedaba sin ninguna.
           ...(template?.description.trim() ? { description: template.description.trim() } : {}),
+          // De qué plantilla sale: ordena los roles del menú de la columna (suggestedColumnRoles).
+          ...(templateRow ? { templateKey: templateRow.builtinKey ?? CUSTOM_TEMPLATE_KEY } : {}),
           position: (last?.position ?? 0) + POSITION_STEP,
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,

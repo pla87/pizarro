@@ -250,6 +250,8 @@ export const projectDataSchema = z.object({
     storageQuotaMb: z.number().int().min(QUOTA_MIN_MB).max(QUOTA_MAX_MB).nullable().optional(),
     /** Última versión guardada del programa del curso (los PDF «Programa – fecha_vN.pdf»). Opcional: los anteriores no la traen. */
     programVersion: z.number().int().min(0).max(1_000_000_000).optional(),
+    /** Plantilla de la que salió (ordena los roles del menú de la columna). Opcional: los anteriores no la traen. */
+    templateKey: z.string().regex(/^[a-z0-9-]{1,40}$/).optional(),
   }),
   /** Informe semanal: sin destinatario (al importar lo recibe quien importa). */
   reportSchedule: z.object({ enabled: z.boolean(), weekday: z.number().int().min(1).max(7), hour: z.number().int().min(0).max(23) }).nullable(),

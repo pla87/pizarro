@@ -178,8 +178,8 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-
 En un proyecto privado propio con tres personas (lo crea y lo borra la suite, con sus personas, `asig64_*`):
 
 - `rol`: menú «⋯» → *Rol de la columna* → *Asignación a persona*, persona y «Vence en 5 días»; la cabecera los muestra y
-  el submenú marca la opción. Con tres personas el diálogo ofrece «Añadir personas al proyecto», que lleva a *Ajustes del
-  proyecto → General* en los miembros (`#members`, a la vista); con cuatro ya no.
+  el submenú marca la opción. Con tres personas el diálogo ofrece «Añadir personas al proyecto», que abre en otra pestaña *Ajustes del
+  proyecto → General* en los miembros (`#members`, a la vista) y el diálogo sigue abierto; con cuatro ya no.
 - `entrar`: con el «+» de la columna la nota de «Nueva tarea» dice persona y plazo y la tarea nace de esa persona,
   venciendo hoy + 5; cambiando «Columna» en el detalle, con «Mover a…» de la selección y con Alt+→, la tarea pasa a la
   persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
