@@ -12,7 +12,7 @@ import { columnsLockName } from "./advisory-locks";
 import { lockProject } from "./caps";
 import { assertProgramColumnsFit } from "./column-capacity";
 import { markTemplateChangeSpent } from "./template-apply-rate";
-import { EVERGREEN_COLUMN_ROLES, releaseTemplateRows, UNIQUE_COLUMN_ROLES } from "./constants";
+import { EVERGREEN_COLUMN_ROLES, liveColumnRole, releaseTemplateRows, UNIQUE_COLUMN_ROLES, type ColumnRoleValue } from "./constants";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { lockKindScope } from "./kind-lock";
@@ -466,7 +466,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
       await tx.column.update({
         where: { id: c.id },
         data: {
-          name: c.name, position: c.position, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
+          name: c.name, position: c.position, role: liveColumnRole(c.role as ColumnRoleValue) as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
           // La persona de una columna «Asignación a persona» (si aún existe) y su plazo; instantáneas antiguas no los traen.
           ...(c.assigneeId !== undefined ? { assigneeId: c.assigneeId && (await tx.user.count({ where: { id: c.assigneeId } })) ? c.assigneeId : null, assignDueDays: c.assignDueDays ?? null } : {}),
           routineTargetColumnId: c.routineTargetColumnId && allIds.has(c.routineTargetColumnId) ? c.routineTargetColumnId : null,
