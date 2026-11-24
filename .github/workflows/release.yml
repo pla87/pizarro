@@ -10,7 +10,7 @@
 #      siguen «stable»: así nadie recibe commits sueltos de main, solo versiones publicadas.
 # La release se crea al final: si la imagen falla, no se anuncia una versión que no se puede instalar.
 # Las acciones van fijadas a un commit exacto (SHA de 40 caracteres, con su versión en el comentario); Dependabot
-# propone las actualizaciones (.github/dependabot.yml, revisión en docs/HANDOFF.md).
+# propone las actualizaciones (.github/dependabot.yml, revisión en docs/handoff/PUBLICAR.md).
 # También se puede lanzar a mano (Actions → Release → Run workflow, rama main): publica la versión de
 # package.json de ese commit y crea la etiqueta vX.Y.Z junto con la release. A mano solo desde main: lanzado desde
 # otra rama, los jobs no se ejecutan (no se publica nada). Si esa versión ya tiene etiqueta vX.Y.Z, se para con un
@@ -307,7 +307,7 @@ jobs:
       # (GitHub lo rechaza: «refusing to allow a GitHub App to create or update workflow … without `workflows`
       # permission», y `permissions:` no admite `workflows`). Para esas versiones hace falta el secreto opcional
       # STABLE_PUSH_TOKEN: un token fine-grained solo de este repositorio con Contents y Workflows en lectura y escritura
-      # (docs/HANDOFF.md, «Cerrar una versión»). Sin él se usa GITHUB_TOKEN, que basta mientras no cambien los workflows.
+      # (docs/handoff/PUBLICAR.md, «Cerrar una versión paso a paso»). Sin él se usa GITHUB_TOKEN, que basta mientras no cambien los workflows.
       # Este paso comprueba el token (sin mostrarlo) y, si no vale, dice por qué y cómo crearlo bien.
       - name: Comprobar STABLE_PUSH_TOKEN
         env:

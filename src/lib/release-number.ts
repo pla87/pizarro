@@ -13,7 +13,7 @@ const floorKey = (projectId: string) => `release-number:${projectId}`;
 
 /** Número de la siguiente release del proyecto. Dentro del despliegue, con el proyecto bloqueado (lockProject). */
 export async function nextReleaseNumber(client: Client, projectId: string): Promise<number> {
-  // En fila, no con Promise.all: dentro de una transacción comparten conexión (ver HANDOFF, aviso de pg).
+  // En fila, no con Promise.all: dentro de una transacción comparten conexión (ver docs/handoff/GUARDAS.md, «Base de datos», aviso de pg).
   const last = await client.release.findFirst({ where: { projectId }, orderBy: { number: "desc" }, select: { number: true } });
   const floor = await client.appState.findUnique({ where: { key: floorKey(projectId) }, select: { value: true } });
   const deleted = Number(floor?.value);

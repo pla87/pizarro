@@ -63,7 +63,7 @@ export async function soloPrivateProjectIdsByUser(): Promise<Map<string, string[
 export async function deletionBlock(userId: string, client: Prisma.TransactionClient | typeof db = db): Promise<DeletionBlockInfo | null> {
   const user = await client.user.findUnique({ where: { id: userId }, select: { role: true, active: true } });
   if (!user) throw notFound();
-  // En fila: dentro de una transacción interactiva no se lanzan consultas a la vez (ver HANDOFF, aviso de pg).
+  // En fila: dentro de una transacción interactiva no se lanzan consultas a la vez (ver docs/handoff/GUARDAS.md, «Base de datos», aviso de pg).
   const users = await client.user.count({ where: { id: { not: userId } } });
   const others = { id: { not: userId }, role: "ADMIN" as const, active: true };
   const activeAdmins = await client.user.count({ where: { ...others, ...HAS_ENTERED } });

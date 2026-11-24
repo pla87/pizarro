@@ -155,7 +155,7 @@ move() {
       if [ -n "$pat" ]; then
         msg="GitHub rechaza mover stable porque cambian ficheros de .github/workflows/ y el secreto STABLE_PUSH_TOKEN no tiene el permiso Workflows (lectura y escritura) en este repositorio. $how_to"
       else
-        msg="GitHub rechaza mover stable con GITHUB_TOKEN porque esta versión cambia ficheros de .github/workflows/. Crea el secreto STABLE_PUSH_TOKEN (token fine-grained solo de este repositorio con Contents y Workflows en lectura y escritura; pasos en docs/HANDOFF.md). $how_to"
+        msg="GitHub rechaza mover stable con GITHUB_TOKEN porque esta versión cambia ficheros de .github/workflows/. Crea el secreto STABLE_PUSH_TOKEN (token fine-grained solo de este repositorio con Contents y Workflows en lectura y escritura; pasos en docs/handoff/PUBLICAR.md). $how_to"
       fi
     elif grep -qiE "could not read Username|Authentication failed|Permission to .* denied|403|401" "$err"; then
       msg="GitHub rechaza las credenciales de $token_name al mover stable. $how_to"

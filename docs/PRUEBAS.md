@@ -323,7 +323,7 @@ Cómo está hoy el código:
 
 ### 6.3 Rama `stable` y «Mover stable»
 
-**Necesitas:** permisos de mantenedor en el repositorio y el secreto `STABLE_PUSH_TOKEN` (pasos en `docs/HANDOFF.md`, sección 5).
+**Necesitas:** permisos de mantenedor en el repositorio y el secreto `STABLE_PUSH_TOKEN` (pasos en `docs/handoff/PUBLICAR.md`, «Cerrar una versión paso a paso»).
 
 1. Publica una versión (**Actions → Release**) y espera a que termine.
 2. Mira el job **Rama stable** y comprueba que la rama `stable` apunta al commit de la etiqueta `vX.Y.Z` recién publicada.
