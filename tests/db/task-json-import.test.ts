@@ -160,6 +160,34 @@ describe("importTasks", () => {
     expectFail(await importTasks(f.project.id, text, { columnId: other.columns.todo }), /La columna no existe/);
   });
 
+  test("sin tipo (o con uno que no existe), el «Tipo por defecto» de su columna; si no tiene o está oculto, el primero", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const first = (await db.taskKind.findUniqueOrThrow({ where: { id: f.kindId } })).name;
+    const compra = await db.taskKind.create({ data: { name: "Compra", color: "#22c55e", position: 9, projectId: f.project.id } });
+    await db.column.update({ where: { id: f.columns.doing }, data: { defaultKindId: compra.id } });
+    const text = lines({ title: "A" }, { title: "B", type: first }, { title: "C", type: "No existe" });
+    const kindOf = (res: { tasks: { title: string; kindId: string }[] }, title: string) => res.tasks.find((t) => t.title === title)!.kindId;
+
+    const forced = expectOk(await importTasks(f.project.id, text, { columnId: f.columns.doing }));
+    assert.deepEqual(["A", "B", "C"].map((x) => kindOf(forced, x)), [compra.id, f.kindId, compra.id]);
+    // Sin forzar: la columna de cada tarea (aquí «En curso» por nombre); la primera columna no tiene tipo por defecto.
+    const free = expectOk(await importTasks(f.project.id, lines({ title: "D", column: "En curso" }, { title: "E" })));
+    assert.equal(kindOf(free, "D"), compra.id);
+    assert.notEqual(kindOf(free, "E"), compra.id);
+    // Lo de otro Kanban (aquí un CSV de Jira) nunca trae un tipo de Pizarro: también toma el de la columna.
+    const csv = expectOk(await importTasks(f.project.id, "Summary,Issue key,Status\nDel CSV,WEB-1,To Do\n", { columnId: f.columns.doing }));
+    assert.equal(kindOf(csv, "Del CSV"), compra.id);
+    // Un tipo general oculto en el proyecto no vale como tipo por defecto al importar.
+    const general = await db.taskKind.create({ data: { name: "General oculto", color: "#64748b", position: 9, projectId: null } });
+    await db.projectHiddenKind.create({ data: { projectId: f.project.id, kindId: general.id } });
+    await db.column.update({ where: { id: f.columns.done }, data: { defaultKindId: general.id } });
+    const hidden = expectOk(await importTasks(f.project.id, lines({ title: "F" }), { columnId: f.columns.done }));
+    assert.notEqual(kindOf(hidden, "F"), general.id);
+    await db.taskKind.delete({ where: { id: general.id } });
+  });
+
   test("tipos de serie entre idiomas: exportado en inglés («Bug fix», «Reply») se importa en español, y al revés", async () => {
     const user = await makeUser();
     const f = await makeProject({ members: [user] });

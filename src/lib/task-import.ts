@@ -113,6 +113,10 @@ export async function importTasks(projectId: string, text: string, opts: z.input
     if (!columns.length || !kinds.length) throw new AppError("La columna no existe.");
     const forced = o.columnId ? columns.find((c) => c.id === o.columnId) : undefined;
     if (o.columnId && !forced) throw new AppError("La columna no existe.");
+    // Una tarea sin tipo (o con uno que no existe aquí; las de Trello, Jira o un CSV nunca lo traen) toma el «Tipo por
+    // defecto» de su columna, como «Nueva tarea» y «Varias tareas»; si la columna no tiene (o es un tipo oculto), el primero.
+    const visibleKinds = new Set(kinds.map((k) => k.id));
+    const columnKind = new Map(columns.flatMap((c) => (c.defaultKindId && visibleKinds.has(c.defaultKindId) ? [[c.id, c.defaultKindId] as const] : [])));
 
     const failed: ImportNotice[] = read.failed.map((f) => ({ n: f.n, title: null, text: t(TASK_READ_FAILURE[f.reason]) }));
     const items: ImportItem[] = [];
@@ -139,12 +143,13 @@ export async function importTasks(projectId: string, text: string, opts: z.input
         docs = docs.slice(0, MAX_TASK_DOCS);
         skip(t("documentos de Google (máximo {max} por tarea)", { max: MAX_TASK_DOCS }));
       }
+      columnId ??= columns[0]!.id;
       items.push({
         n: one.n,
         title: title.data,
         fields,
-        columnId: columnId ?? columns[0]!.id,
-        kindId: fields.kindId ?? kinds[0]!.id,
+        columnId,
+        kindId: fields.kindId ?? columnKind.get(columnId) ?? kinds[0]!.id,
         labelNames: json.labels ? r.labelNames(json.labels, skip) : [],
         subtasks: json.subtasks ? r.subtasks(json.subtasks, skip) : [],
         docs,

@@ -134,7 +134,7 @@ export class TaskJsonResolver {
     return this.once("kinds", () => listKinds(this.projectId));
   }
   columns() {
-    return this.once("columns", () => db.column.findMany({ where: { projectId: this.projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, role: true } }));
+    return this.once("columns", () => db.column.findMany({ where: { projectId: this.projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, role: true, defaultKindId: true } }));
   }
   enabled(): Promise<TaskFieldKey[]> {
     return this.once("enabled", () => enabledTaskFields(this.projectId));
