@@ -329,4 +329,7 @@ export const server: Record<string, string> = {
   "Recuperó «{title}» en «{col}»": "Restored “{title}” in “{col}”",
   // Logs: lista guardada sin sus elementos por versiones anteriores
   "varios campos": "several fields",
+  // Ronda 66: nombre del PDF de la semana según el modo
+  "por día": "by day",
+  "por persona": "by person",
 };

@@ -12,6 +12,7 @@ import { consumeToken, findUsableToken, issueAuthToken } from "@/lib/auth-token"
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { logEvent } from "@/lib/log";
+import { maskEmail } from "@/lib/mask-email";
 import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { completeLogin } from "@/lib/login";
 import { requestContext } from "@/lib/request-context";
@@ -61,14 +62,18 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   const ip = clientIp(await headers());
   // Límite por IP (todas las peticiones) y por cuenta (los intentos sin acierto, desde cualquier conexión).
   const keys = loginRateKeys(ip, email);
-  // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada).
-  const shownEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "[no es un email]";
+  // En los logs solo se anota si parece un email (si alguien pega ahí su contraseña, no queda guardada). Entero solo si es
+  // el de una cuenta; si no lo es, o aún no se ha mirado (bloqueo por intentos, «solo Google»), enmascarado
+  // («a***@example.com»): es un dato personal de alguien que quizá no es usuario, y la inicial y el dominio bastan para
+  // reconocer un ataque.
+  const looksLikeEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const shownEmail = (account: boolean) => (!looksLikeEmail ? "[no es un email]" : account ? email : maskEmail(email));
   // En la plantilla del mensaje, el aviso de «no es un email» se traduce; el email, tal cual.
-  const emailParam = shownEmail === email ? email : { k: shownEmail };
+  const emailParam = (account: boolean) => (looksLikeEmail ? shownEmail(account) : { k: shownEmail(account) });
   if (!rateLimit(keys.ip, 60, 15 * 60_000) || !(await reserveAccountAttempt(keys.account, email))) {
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión bloqueado por demasiados intentos ({email})", p: { email: emailParam } },
-      path: "/login", ip, details: { email: shownEmail, reason: "rate_limited" },
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión bloqueado por demasiados intentos ({email})", p: { email: emailParam(false) } },
+      path: "/login", ip, details: { email: shownEmail(false), reason: "rate_limited" },
     });
     return { error: t("Demasiados intentos. Espera unos minutos.") };
   }
@@ -80,8 +85,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   if (!passwordLoginAllowed("ADMIN", policy)) {
     // Nadie entra con contraseña: la misma respuesta para todos, sin buscar siquiera la cuenta (tampoco delata si existe).
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión con contraseña rechazado ({email}): solo se admite Google", p: { email: emailParam } },
-      path: "/login", ip, details: { email: shownEmail, reason: "google_only" },
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión con contraseña rechazado ({email}): solo se admite Google", p: { email: emailParam(false) } },
+      path: "/login", ip, details: { email: shownEmail(false), reason: "google_only" },
     });
     return { error: t("El acceso con contraseña está desactivado en este servidor. Entra con Google.") };
   }
@@ -104,8 +109,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     const reason = !user ? "unknown_email" : googleOnlyRole ? "google_only" : !valid ? "wrong_password" : "inactive";
     const why = { unknown_email: "email desconocido", google_only: "solo se admite Google", wrong_password: "contraseña incorrecta", inactive: "usuario desactivado" }[reason];
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión fallido ({email}): {why}", p: { email: emailParam, why: { k: why } } },
-      userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail, reason },
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión fallido ({email}): {why}", p: { email: emailParam(!!user), why: { k: why } } },
+      userId: user?.id ?? null, userName: user?.name ?? null, path: "/login", ip, details: { email: shownEmail(!!user), reason },
     });
     return {
       error: googleOnly(policy)

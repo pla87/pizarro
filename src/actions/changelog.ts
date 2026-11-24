@@ -11,8 +11,8 @@ import { getLocale } from "@/i18n/server";
  */
 export async function getOlderVersions(from: number) {
   return runAction({ name: "changelog.getOlderVersions", args: [from] }, async () => {
-    await requireUser();
+    const user = await requireUser();
     const start = Number.isSafeInteger(from) && from > 0 ? from : 0;
-    return changelogVersions((await getLocale()) === "en", start);
+    return changelogVersions({ en: (await getLocale()) === "en", admin: user.role === "ADMIN" }, start);
   });
 }

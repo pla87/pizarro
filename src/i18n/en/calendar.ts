@@ -35,4 +35,7 @@ export const calendar: Record<string, string> = {
   "Se muestran las {shown} más antiguas.": "Showing the {shown} oldest.",
   // Móvil: con vencidas no se baja solo hasta hoy; el aviso lleva este botón
   "Ir a hoy": "Go to today",
+  // Ronda 66: leyenda de las siglas de proyecto y de los entregables
+  "Siglas del proyecto": "Project initials",
+  "Entregable: tareas hechas de su total; el color indica si va en plazo": "Deliverable: tasks done out of its total; the color shows whether it is on track",
 };

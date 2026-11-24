@@ -42,4 +42,6 @@ test("el aviso de descarga fallida quita sus parámetros de la dirección y deja
   assert.equal(withoutCsvParams("/admin/logs", "?csv=busy&desde=2026-10-01&hasta=2026-10-02"), "/admin/logs");
   assert.equal(withoutCsvParams("/admin/logs", "?level=error&csv=rate&q=a%20b", "#x"), "/admin/logs?level=error&q=a+b#x");
   assert.equal(withoutCsvParams("/admin/logs", ""), "/admin/logs");
+  // Con el periodo personalizado de la lista, «desde» y «hasta» son sus fechas: se quedan (solo se quita el aviso).
+  assert.equal(withoutCsvParams("/admin/logs", "?range=custom&desde=2026-10-01&hasta=2026-10-02&csv=rate"), "/admin/logs?range=custom&desde=2026-10-01&hasta=2026-10-02");
 });

@@ -6,14 +6,15 @@ import { logDetailsShown, logMessageText } from "@/lib/log-message";
 import { legacyLogLabel } from "@/lib/log-legacy";
 import { db } from "@/lib/db";
 import { flushLogs, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
-import { addDays, dayInZone } from "@/lib/log-range";
+import { CUSTOM_RANGE, isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { addDays, dayInZone, logDayOptions, parseExportRange } from "@/lib/log-range";
 import { csvDateParam, parseLogCsvError } from "@/lib/log-csv";
 import { requireAdminPage } from "@/lib/session";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { EmailSafe } from "@/components/ui/EmailSafe";
 import { CsvErrorNotice } from "./CsvErrorNotice";
+import { LogPeriodField } from "./LogPeriodField";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -62,9 +63,13 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const appLocale = await getLocale();
   const locale = intlLocale(appLocale);
   const sp = await searchParams;
-  const filters = { ...parseLogFilters(sp), locale: appLocale };
+  const parsed = parseLogFilters(sp);
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
+  const days = logRetentionDays();
+  // Periodo personalizado: los días enteros elegidos (si no valen, el aviso y las últimas 24 h).
+  const custom = parsed.range === CUSTOM_RANGE ? parseExportRange(parsed.from, parsed.to, { tz, retentionDays: days }) : null;
+  const filters = { ...parsed, locale: appLocale, ...(custom?.ok ? { from: custom.from, to: custom.to, period: { gte: custom.gte, lt: custom.lt } } : {}) };
   // Compacta y con segundos, en el formato del idioma («22 nov 21:49:12»; «Nov 22 9:49:12 PM»). El CSV sigue en
   // AAAA-MM-DD HH:MM:SS (lo lee bien Excel).
   const formatTime = logTimeFormatter(locale);
@@ -92,20 +97,22 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const hasMore = rows.length > PAGE_SIZE;
   const items = rows.slice(0, PAGE_SIZE);
   const counts = Object.fromEntries(levelCounts.map((c) => [c.level, c._count._all]));
-  const days = logRetentionDays();
   const today = dayInZone(new Date(), tz);
   const filtered = filters.range !== "24h" || !!filters.level || !!filters.category || !!filters.userId || !!filters.q || filters.reads;
   // Vuelta de una descarga que no se pudo hacer (tope, otra en curso, fechas): el aviso y las fechas que se eligieron.
   const csvError = parseLogCsvError(sp.csv);
+  const rangeMessage = (code: "order" | "too_long" | "invalid") =>
+    code === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
+    : code === "too_long" ? t("El intervalo no puede superar {days} días (lo que se conservan los logs).", { days })
+    : t("Fechas no válidas.");
   const csvMessage =
     csvError === "busy" ? t("Ya tienes una descarga de logs en curso. Espera a que termine.")
     : csvError === "rate" ? t("Demasiadas descargas de logs. Espera unos minutos.")
-    : csvError === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
-    : csvError === "too_long" ? t("El intervalo no puede superar {days} días (lo que se conservan los logs).", { days })
-    : csvError === "invalid" ? t("Fechas no válidas.")
+    : csvError ? rangeMessage(csvError)
     : null;
-  const csvFrom = (csvError && csvDateParam(sp.desde)) || addDays(today, -1);
-  const csvTo = (csvError && csvDateParam(sp.hasta)) || today;
+  // Días del periodo personalizado: los elegidos; si no, los de una descarga que volvió con error; si no, de ayer a hoy.
+  const pickFrom = parsed.from || (csvError && csvDateParam(sp.desde)) || addDays(today, -1);
+  const pickTo = parsed.to || (csvError && csvDateParam(sp.hasta)) || today;
 
   return (
     <div className="space-y-4">
@@ -114,26 +121,20 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {days === 1 ? t("Se conserva 1 día de actividad.") : t("Se conservan {days} días de actividad.", { days })}
           {!filters.reads && <>{" "}{t("Se muestran solo los cambios.")} <InfoTip topic={t("Incluir consultas")}>{t("Marca «Incluir consultas» para ver también páginas vistas, tareas abiertas y descargas.")}</InfoTip></>}
         </p>
-        <form id="logs-csv" method="get" action="/api/admin/logs" className="flex flex-wrap items-end gap-2">
-          {/* Mismos filtros que la lista; el periodo lo sustituye el intervalo de fechas (se manda para volver a esta
-              misma vista si la descarga no se puede hacer). */}
-          {filters.range !== "24h" && <input type="hidden" name="range" value={filters.range} />}
+        <form id="logs-csv" method="get" action="/api/admin/logs">
+          {/* Lo mismo que muestra la lista: sus filtros y su periodo (el fijo siempre se manda, también «Últimas 24 h»: sin
+              periodo la descarga sería de ayer a hoy, como los enlaces de antes). */}
+          <input type="hidden" name="range" value={filters.range} />
+          {filters.range === CUSTOM_RANGE && <input type="hidden" name="desde" value={filters.from || pickFrom} />}
+          {filters.range === CUSTOM_RANGE && <input type="hidden" name="hasta" value={filters.to || pickTo} />}
           {filters.level && <input type="hidden" name="level" value={filters.level} />}
           {filters.category && <input type="hidden" name="category" value={filters.category} />}
           {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           {filters.reads && <input type="hidden" name="consultas" value="1" />}
-          <label className="flex flex-col gap-1 text-xs text-slate-500">
-            {t("Desde")}
-            <input type="date" name="desde" defaultValue={csvFrom} min={addDays(today, -days)} max={today} required className={field} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-slate-500">
-            {t("Hasta")}
-            <input type="date" name="hasta" defaultValue={csvTo} min={addDays(today, -days)} max={today} required className={field} />
-          </label>
           <button
             type="submit"
-            title={t("Máximo {days} días", { days })}
+            title={t("Con el periodo y los filtros de la lista")}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
@@ -142,6 +143,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       </div>
 
       {csvMessage && <CsvErrorNotice formId="logs-csv">{t("No se ha descargado el CSV: {reason}", { reason: csvMessage })}</CsvErrorNotice>}
+      {custom && !custom.ok && !csvMessage && (
+        <p role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          {t("Periodo personalizado: {reason} Se muestran las últimas 24 h.", { reason: rangeMessage(custom.error) })}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2 text-sm">
         {LEVELS.map((l) => (
@@ -156,14 +162,16 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
       </div>
 
       <form method="get" action="/admin/logs" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-end">
-        <label className="flex flex-col gap-1 text-xs text-slate-500">
-          {t("Periodo")}
-          <select name="range" defaultValue={filters.range} className={field}>
-            {LOG_RANGES.map((r) => (
-              <option key={r.value} value={r.value}>{t(r.label)}</option>
-            ))}
-          </select>
-        </label>
+        <LogPeriodField
+          ranges={LOG_RANGES.map((r) => ({ value: r.value, label: t(r.label) }))}
+          customValue={CUSTOM_RANGE}
+          value={filters.range}
+          days={logDayOptions(today, days, locale)}
+          from={pickFrom}
+          to={pickTo}
+          labels={{ period: t("Periodo"), custom: t("Personalizado…"), from: t("Desde"), to: t("Hasta") }}
+          className={field}
+        />
         <label className="flex flex-col gap-1 text-xs text-slate-500">
           {t("Nivel")}
           <select name="level" defaultValue={filters.level} className={field}>

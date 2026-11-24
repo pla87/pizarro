@@ -5,6 +5,7 @@
 // (piden la sesión iniciada). Los adjuntos se citan por su ruta en el ZIP que va con el plan, o por su nombre.
 
 import { FENCE_CLOSE, FENCE_OPEN, withoutEmptyFormSections } from "./form-sections";
+import { formatDay } from "./dates";
 import { decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
 import { plainAttachmentFileNames, releaseTemplateText } from "./release";
@@ -46,6 +47,11 @@ export interface AiPlanInput {
   column?: string | null;
   /** Fecha del plan (YYYY-MM-DD, zona de la app). */
   date: string;
+  /**
+   * Idioma de Intl del plan (es-ES, en-US): la fecha del contexto se escribe como en el resto de la app y en el título de
+   * las releases («24 nov 2026», «Nov 24, 2026»). Por defecto, es-ES.
+   */
+  intlLocale?: string;
   tasks: AiPlanTask[];
   /**
    * Origen de la app (https://pizarro.example.com): un enlace de las descripciones que empieza por él (o por «/», relativo a
@@ -351,7 +357,7 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   const projectName = oneLine(input.project.name);
   context.push(`- **${t("Proyecto")}:** ${projectName}`);
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
-  context.push(`- **${t("Fecha")}:** ${input.date}`);
+  context.push(`- **${t("Fecha")}:** ${formatDay(input.date, undefined, input.intlLocale ?? "es-ES")}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
   // Todas del mismo tipo: se dice una vez aquí y no en cada tarea (en un plan de cientos, una línea menos por tarea).
   const kinds = new Set(input.tasks.map((x) => (x.kind ? oneLine(x.kind) : "")));
