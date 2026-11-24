@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, loginAs, makeProject, makeUser } from "./helpers";
+import { db, expectFail, expectOk, freeUserNames, loginAs, makeProject, makeUser } from "./helpers";
 import { importTasks } from "../../src/lib/task-import";
 import { undoLast } from "../../src/actions/undo";
 
@@ -20,6 +20,7 @@ const loadTasks = (projectId: string) =>
 
 describe("importTasks desde otros Kanban", () => {
   test("tablero de Trello: tarjetas abiertas, lista → columna por nombre, etiquetas, checklists y responsable por nombre; se deshace de una vez", async () => {
+    await freeUserNames("Ana Ejemplo");
     const ana = await makeUser({ name: "Ana Ejemplo" });
     const f = await makeProject({ members: [ana] });
     await loginAs(ana);
@@ -43,6 +44,7 @@ describe("importTasks desde otros Kanban", () => {
   });
 
   test("CSV de Jira: columnas que no existen van a la primera con aviso, etiquetas repetidas juntas, subtareas por «Parent summary»", async () => {
+    await freeUserNames("Luis Muestra");
     const user = await makeUser({ name: "Luis Muestra" });
     const f = await makeProject({ members: [user] });
     await loginAs(user);

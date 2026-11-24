@@ -5,7 +5,7 @@ import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, loginAs, logout, makeKind, makeUser } from "./helpers";
+import { db, freeUserNames, loginAs, logout, makeKind, makeUser } from "./helpers";
 import { makeT } from "../../src/i18n/core";
 import { POST as importRoute } from "../../src/app/api/projects/import/route";
 import { createProjectFromBoard, importForeignFile } from "../../src/lib/foreign-import/create";
@@ -39,6 +39,8 @@ async function load(projectId: string) {
 describe("Trello JSON", () => {
   test("crea el proyecto con el nombre del tablero, las listas como columnas y las tarjetas como tareas", async () => {
     await makeKind(null);
+    // Ana se empareja por su nombre; Luis, que no está, debe quedar sin emparejar.
+    await freeUserNames("Ana Ejemplo", "Luis Muestra");
     const admin = await makeUser({ role: "ADMIN" });
     const ana = await makeUser({ name: "Ana Ejemplo" });
     const s = await importForeignFile(await file("t.json", trello), "trello", asImporter(admin), { isPrivate: false, t, fileName: "otro" });

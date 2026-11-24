@@ -9,7 +9,7 @@
 // Las personas se guardan como {nombre, email}; al importar se emparejan por email con usuarios activos. El email de las
 // demás personas solo va si exporta un administrador; si no, va vacío y esa persona no se empareja (queda como texto).
 import { z } from "zod";
-import { COLUMN_ROLES, HEX_COLOR_RE, liveColumnRole, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS, TEMPLATE_KINDS } from "../constants";
+import { HEX_COLOR_RE, INPUT_COLUMN_ROLES, liveColumnRole, MAX_DESCRIPTION, MAX_RELEASE_CONTENT, MAX_TEMPLATE, MAX_TITLE_UNITS, TEMPLATE_KINDS } from "../constants";
 import { GOOGLE_FILE_KINDS } from "../google-files";
 import { GOOGLE_SHARE_MODES } from "../google-share";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB } from "../quota";
@@ -71,7 +71,7 @@ const columnSchema = z.object({
   name: text(80),
   position: z.number().finite(),
   // Uno retirado (Agenda, Entrega al cliente) pasa a «Sin rol» al leerlo.
-  role: z.enum(COLUMN_ROLES).transform(liveColumnRole),
+  role: z.enum(INPUT_COLUMN_ROLES).transform(liveColumnRole),
   isDone: z.boolean(),
   waitingDays: z.number().int().min(1).max(365).nullable(),
   /** Columna a la que va la siguiente aparición de una tarea recurrente (solo rol ROUTINES). */

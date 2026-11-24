@@ -306,8 +306,6 @@ export const board: Record<string, string> = {
   " y {n} más": " and {n} more",
   "Falta 1 subtarea": "1 subtask is missing",
   "lista": "list",
-  "Resumen para el cliente": "Client summary",
-  "{done} de {total} subtareas hechas": "{done} of {total} subtasks done",
   "Revisión con requisitos": "Review with requirements",
   "Agenda": "Agenda",
   "Rutinas": "Routines",

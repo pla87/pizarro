@@ -481,3 +481,13 @@ describe("workflow de release: versión ya publicada", () => {
     assert.match(wf, /^concurrency:\n {2}group: release\n {2}cancel-in-progress: false$/m);
   });
 });
+
+test("workflow Comprobaciones: en cada PR contra main (también Dependabot) y a mano; no repite la pasada al hacer push a main", () => {
+  const wf = readFileSync(".github/workflows/ci.yml", "utf8");
+  const on = wf.match(/^on:\n((?: {2}.*\n)+)/m)?.[1] ?? "";
+  assert.match(on, /^ {2}pull_request:\n {4}branches: \[main\]$/m);
+  // Solo la PR y a mano: ni push ni otros disparadores.
+  assert.deepEqual([...on.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]), ["pull_request", "workflow_dispatch"]);
+  // Un push nuevo a la misma PR cancela la pasada anterior.
+  assert.match(wf, /group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n {2}cancel-in-progress: true/);
+});

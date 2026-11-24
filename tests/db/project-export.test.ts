@@ -326,6 +326,15 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     assert.deepEqual([s.counts.documents, s.counts.trashedDocuments], [1, 0]);
   });
 
+  test("una exportación de la v1.67 con columnas «Agenda» o «Entrega al cliente» se importa con esas columnas «Sin rol»", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const base = minimal().columns[0]!;
+    const old = { ...minimal(), columns: [{ ...base, role: "AGENDA" }, { ...base, ref: "c2", name: "Entrega", position: 2000, role: "DELIVERY" }, { ...base, ref: "c3", name: "Lista", position: 3000, role: "CHECKLIST" }] };
+    const s = await importProjectFile(await craft(old), asImporter(admin), { isPrivate: true });
+    const cols = await db.column.findMany({ where: { projectId: s.projectId }, orderBy: { position: "asc" }, select: { role: true } });
+    assert.deepEqual(cols.map((c) => c.role), ["NONE", "NONE", "CHECKLIST"]);
+  });
+
   test("programa de un curso: más de 100 sesiones en una columna «Programa» se rechaza; la versión del programa va y vuelve", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const before = await db.project.count();

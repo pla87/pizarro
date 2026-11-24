@@ -82,6 +82,14 @@ export async function asUser<T>(user: UserRow | { id: string }, fn: () => Promis
   return fn();
 }
 
+/**
+ * Deja libres estos nombres de persona: las pruebas que emparejan por nombre (importar de Trello o Jira) necesitan que sea
+ * único en la base, y otro fichero que pasó antes en la misma base pudo crear a alguien que se llama igual.
+ */
+export async function freeUserNames(...names: string[]): Promise<void> {
+  await db.user.updateMany({ where: { name: { in: names } }, data: { name: `Otra persona ${uid()}` } });
+}
+
 export async function makeKind(projectId: string | null = null) {
   return db.taskKind.create({ data: { name: `Tipo ${uid()}`, color: "#3b82f6", position: 1, projectId } });
 }
