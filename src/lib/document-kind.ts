@@ -207,9 +207,28 @@ export function documentMime(kind: DocumentKindName, clientMime: string): string
   }
 }
 
-/** Nombre de descarga: las imágenes se guardan como WebP, así que cambian de extensión. */
+/** Extensiones de imagen que se quitan del nombre al descargar como WebP (las admitidas y otras habituales). */
+const IMAGE_NAME_EXT = new Set([...IMAGE_EXT, "bmp", "tif", "tiff", "heic", "heif"]);
+
+/** Extensiones de cada tipo (`add`: la que se pone si el nombre no trae ninguna de `known`). */
+const KIND_EXT: Partial<Record<DocumentKindName, { add: string; known: ReadonlySet<string> }>> = {
+  TEXT: { add: "txt", known: TEXT_EXT },
+  MARKDOWN: { add: "md", known: MARKDOWN_EXT },
+  HTML: { add: "html", known: HTML_EXT },
+  PDF: { add: "pdf", known: new Set(["pdf"]) },
+};
+
+/**
+ * Nombre de descarga. Las imágenes se guardan como WebP: se quita solo una extensión de imagen (no lo que va tras un
+ * punto cualquiera: «Plano v1.2 final» → «Plano v1.2 final.webp») y se pone «.webp». Los demás tipos que se pueden ver
+ * llevan su extensión si el nombre no trae una suya (un documento renombrado sin ella: «Acta» → «Acta.pdf»; sin ella,
+ * en Windows no se abre con doble clic). OTHER, tal cual.
+ */
 export function documentDownloadName(name: string, kind: DocumentKindName): string {
-  return kind === "IMAGE" ? name.replace(/\.[^.]+$/, "") + ".webp" : name;
+  const base = name.trim();
+  if (kind === "IMAGE") return (IMAGE_NAME_EXT.has(extensionOf(base)) ? base.replace(/\.[^.]+$/, "") : base) + ".webp";
+  const ext = KIND_EXT[kind];
+  return ext && !ext.known.has(extensionOf(base)) ? `${base}.${ext.add}` : name;
 }
 
 /** ¿Se puede ver en el visor? (el resto: solo descarga). */

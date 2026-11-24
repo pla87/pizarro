@@ -1919,8 +1919,9 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
                 onClick={() => !secondOpen && addSecond()}
                 aria-disabled={secondOpen}
                 // Nombre accesible propio: con el texto visible («Nueva tarea») se confundiría con el botón de la cabecera.
+                // Con las dos abiertas, el `title` (también su descripción accesible) dice por qué no hace nada: no se abre una tercera.
                 aria-label={t("Abrir otra tarea nueva al lado")}
-                title={t("Abrir otra tarea nueva al lado")}
+                title={secondOpen ? t("Ya hay dos tareas abiertas") : t("Abrir otra tarea nueva al lado")}
               >
                 {/* Mismo texto que el botón original, según el modo de la cabecera (useHeaderFit): «Nueva tarea», «Nueva» o
                     solo el icono. Antes se deducía del ancho, y «Nueva tarea» (unos 120 px) salía como «Nueva». */}

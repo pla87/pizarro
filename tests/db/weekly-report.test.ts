@@ -217,6 +217,24 @@ describe("email del informe semanal", () => {
     assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.rejectedNotified" } }), 2);
   });
 
+  // Antes, quien se programaba el informe a sí mismo recibía el aviso en la misma dirección rechazada: volvía a fallar y
+  // dejaba un error en Logs cada semana.
+  test("si el destinatario rechazado es quien lo configuró, no se le avisa a esa misma dirección", async () => {
+    const creator = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [creator] });
+    const { email } = await db.user.findUniqueOrThrow({ where: { id: creator.id }, select: { email: true } });
+    await schedule(f, creator, ` ${email.toUpperCase()} `.trim());
+    const delivered = await withSmtpRejecting(async (delivered) => {
+      assert.equal(await sendDueReports(new Date(), { generate: fakePdf([]) }), 0);
+      return [...delivered];
+    }, "RCPT TO");
+    assert.equal(delivered.length, 0);
+    await flushLogs();
+    const actions = (await db.appLog.findMany({ where: { projectId: f.project.id, action: { startsWith: "report." } }, select: { action: true } })).map((l) => l.action);
+    assert.ok(actions.includes("report.scheduledRejected"));
+    assert.ok(!actions.includes("report.rejectedNotified") && !actions.includes("report.rejectedNotifyFailed"), actions.join());
+  });
+
   test("a una dirección externa rechazada, el aviso dice la dirección (solo la pone un administrador)", async () => {
     const creator = await makeUser({ role: "ADMIN" });
     const f = await makeProject({ members: [creator] });

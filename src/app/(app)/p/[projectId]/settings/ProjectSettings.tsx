@@ -512,7 +512,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
     });
   const resend = (m: { id: string; name: string }) =>
     start(async () => {
-      const res = await resendInvite(m.id);
+      const res = await resendInvite(m.id, projectId);
       if (!res.ok) return toast(res.error, "error");
       // Si el email no sale, el enlace nuevo (el anterior ya no vale) queda a la vista para pasárselo a mano.
       if (res.data.mailFailed) toast(t("No se pudo enviar el email: pásale el enlace."), "error");
@@ -527,7 +527,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       confirmLabel: t("Generar enlace nuevo"),
     }))) return;
     start(async () => {
-      const res = await generateInviteLink(m.id);
+      const res = await generateInviteLink(m.id, projectId);
       if (!res.ok) return toast(res.error, "error");
       toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
@@ -685,7 +685,7 @@ function SharedLinkNote({ shared, onClose, onFreshLink, onResend, busy = false }
           <p className="min-w-0 flex-1">
             {until
               ? onResend
-                ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
+                ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).", { name: shared.name, date: until })
                 : t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
               : onResend
                 ? t("La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })
