@@ -602,7 +602,7 @@ const kindChangeSchema = z.object({ kindId: v.id, title: v.taskTitle.optional(),
  * Cambio de tipo desde el detalle (con el título y la descripción que deja la plantilla del nuevo, si cambian): como
  * updateTask y, en la misma transacción, las subtareas del tipo anterior que siguen sin marcar y sin cambiar se
  * sustituyen por las del nuevo que falten (switchKindSubtaskRows). Un solo «Deshacer» devuelve tipo, título, descripción
- * y subtareas. `subtasks`: la lista que queda, solo si ha cambiado alguna (`changed`: cuántas, para el aviso).
+ * y subtareas. `kindSubtasks`: la lista que queda, solo si ha cambiado alguna (con cuántas se quitan y se añaden).
  */
 export async function changeTaskKind(taskId: string, patch: z.input<typeof kindChangeSchema>, since?: string | null | TextSince) {
   return runAction({ name: "tasks.changeTaskKind", args: [taskId, patch, since] }, async () => {
@@ -611,11 +611,12 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     let swap: { removed: SubtaskInfo[]; added: SubtaskInfo[]; subtasks: SubtaskInfo[] } | null = null;
     await applyTaskUpdate(user, taskId, data, since, async (tx, prev) => {
       if (prev.kindId === data.kindId) return;
-      // Con la tarea bloqueada (como al añadir subtareas): nadie añade ni marca a la vez una de las que se cambian.
-      await lockTaskRow(tx, taskId);
+      // La tarea ya está bloqueada (el UPDATE de arriba): nadie añade subtareas a la vez. Las subtareas se leen con su
+      // propio candado: quien marca, renombra o borra una a la vez espera, y lo marcado justo antes ya se ve aquí y se
+      // queda (si no, se borraba aunque ya estuviera marcada).
       const [kinds, subs] = await Promise.all([
         tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, subtaskTemplate: true } }),
-        tx.subtask.findMany({ where: { taskId }, orderBy: { position: "asc" }, select: { id: true, taskId: true, title: true, done: true, position: true } }),
+        tx.$queryRaw<{ id: string; taskId: string; title: string; done: boolean; position: number }[]>`SELECT "id", "taskId", "title", "done", "position" FROM "Subtask" WHERE "taskId" = ${taskId} ORDER BY "position" ASC FOR UPDATE`,
       ]);
       const next = kinds.find((k) => k.id === data.kindId);
       if (!next) return;
@@ -644,8 +645,9 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
         ...done.added.map((s) => ({ t: "subtask.remove" as const, id: s.id })),
       );
     }
-    const task = withClip(await loadBoardTask(taskId), clipOf(data.title));
-    return { ...task, ...(done ? { kindSubtasks: { subtasks: done.subtasks, changed: Math.max(done.removed.length, done.added.length) } } : {}) };
+    const task = withClip(await loadBoardTask(taskId), clipOf(patch.title));
+    // `removed`/`added`: cuántas se han quitado y añadido (para el aviso); `undo`: la entrada que deshace todo el cambio.
+    return { ...task, ...(done ? { kindSubtasks: { subtasks: done.subtasks, removed: done.removed.length, added: done.added.length, undo: trackUndoEntry() } } : {}) };
   });
 }
 
@@ -751,12 +753,17 @@ async function applyTaskUpdate(
         // cambios a la vez creaban las mismas filas y el segundo fallaba con «Los datos han cambiado mientras tanto».
         await lockTaskRow(tx, taskId);
       }
+      // El tipo de antes, leído aquí con la fila bloqueada: otro cambio de tipo que acaba de confirmarse ya cuenta (si no,
+      // dos cambios seguidos A → B → C quitaban las subtareas de A, no las de B, y la tarea quedaba con las de B y C).
+      const kindBefore = alsoInTx
+        ? (await tx.$queryRaw<{ kindId: string }[]>`SELECT "kindId" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`)[0]?.kindId ?? task.kindId
+        : task.kindId;
       await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
       }
-      if (alsoInTx) await alsoInTx(tx, { kindId: task.kindId });
+      if (alsoInTx) await alsoInTx(tx, { kindId: kindBefore });
       return added;
     });
     describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges({ ...data, ...optional }) }, { taskId });

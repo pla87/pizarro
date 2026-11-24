@@ -630,8 +630,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
     if (kindSubtasks) {
       setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
-      const n = kindSubtasks.changed;
-      toast(n === 1 ? t("Cambiada 1 subtarea") : t("Cambiadas {n} subtareas", { n }));
+      const { removed, added, undo } = kindSubtasks;
+      const n = Math.max(removed, added);
+      const text = !removed
+        ? n === 1 ? t("Añadida 1 subtarea del tipo") : t("Añadidas {n} subtareas del tipo", { n })
+        : !added
+          ? n === 1 ? t("Quitada 1 subtarea del tipo") : t("Quitadas {n} subtareas del tipo", { n })
+          : n === 1 ? t("Cambiada 1 subtarea") : t("Cambiadas {n} subtareas", { n });
+      // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
+      toast(text, "undo", undo.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
     }
     return true;
   };

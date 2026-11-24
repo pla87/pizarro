@@ -57,4 +57,10 @@ export const detalle: Record<string, string> = {
   // Cambiar de tipo en el detalle: subtareas de la plantilla del anterior sustituidas por las del nuevo
   "Cambiada 1 subtarea": "1 subtask changed",
   "Cambiadas {n} subtareas": "{n} subtasks changed",
+
+  // Cambiar de tipo en el detalle: aviso según lo que pasó con las subtareas de la plantilla
+  "Añadida 1 subtarea del tipo": "1 subtask from the type added",
+  "Añadidas {n} subtareas del tipo": "{n} subtasks from the type added",
+  "Quitada 1 subtarea del tipo": "1 subtask from the type removed",
+  "Quitadas {n} subtareas del tipo": "{n} subtasks from the type removed",
 };
