@@ -9,6 +9,8 @@
 //   npm run test:db -- tests/db/x.test.ts [otro…]     solo esos ficheros
 //   npm run test:db -- --jobs 1                       en serie, en una sola base (o TEST_DB_JOBS=1)
 //   npm run test:db -- --verbose                      la salida completa de cada fichero, también si pasa
+//   npm run test:db -- --shuffle                      los ficheros en orden al azar (dice la semilla; la PR lo usa siempre)
+//   npm run test:db -- --shuffle=1234                 el mismo orden que una pasada anterior con esa semilla
 //   npm run test:db -- tests/db/x.test.ts --test-name-pattern="deshacer"   (lo que empiece por --test- va a node --test)
 //
 // Un fichero que pasa de 10 minutos falla solo (--test-timeout cuenta por fichero, no por prueba; se cambia pasando otro). Con Ctrl+C se enseña qué
@@ -24,7 +26,11 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
 import pg from "pg";
+
+// La CLI de Prisma con el mismo Node (sin npx: en Windows es un .cmd que spawn no encuentra sin shell).
+const PRISMA_CLI = createRequire(import.meta.url).resolve("prisma/build/index.js");
 
 if (existsSync(".env")) process.loadEnvFile(".env"); // no pisa variables ya definidas
 
@@ -42,6 +48,8 @@ const SERIAL = [];
 const args = process.argv.slice(2);
 let jobs = Number(process.env.TEST_DB_JOBS) || 3;
 let verbose = false;
+/** Semilla del orden al azar (--shuffle); null: el orden de siempre (los más grandes primero). */
+let seed = null;
 const picked = [];
 const nodeTestArgs = [];
 for (let i = 0; i < args.length; i++) {
@@ -49,14 +57,20 @@ for (let i = 0; i < args.length; i++) {
   if (a === "--jobs" || a === "-j") jobs = Number(args[++i]);
   else if (a.startsWith("--jobs=")) jobs = Number(a.slice(7));
   else if (a === "--verbose" || a === "-v") verbose = true;
+  else if (a === "--shuffle") seed = randomBytes(4).readUInt32BE(0);
+  else if (a.startsWith("--shuffle=")) seed = /^\d+$/.test(a.slice(10)) ? Number(a.slice(10)) : NaN;
   else if (a.startsWith("--test-")) nodeTestArgs.push(a);
   else if (a.startsWith("-")) {
-    console.error(`Opción desconocida: ${a}. Uso: npm run test:db -- [ficheros…] [--jobs N] [--verbose] [--test-…]`);
+    console.error(`Opción desconocida: ${a}. Uso: npm run test:db -- [ficheros…] [--jobs N] [--verbose] [--shuffle[=semilla]] [--test-…]`);
     process.exit(1);
   } else picked.push(a);
 }
 if (!Number.isInteger(jobs) || jobs < 1 || jobs > 16) {
   console.error("--jobs (o TEST_DB_JOBS) debe ser un número entre 1 y 16.");
+  process.exit(1);
+}
+if (seed !== null && !(Number.isInteger(seed) && seed <= 0xffffffff)) {
+  console.error("--shuffle=N necesita un entero entre 0 y 4294967295.");
   process.exit(1);
 }
 for (const f of picked) {
@@ -70,6 +84,21 @@ const all = picked.length ? picked : readdirSync("tests/db").filter((f) => f.end
 // Los más grandes primero (aproximan a los más lentos): así ninguna tanda se queda al final con uno largo.
 const size = (f) => statSync(f).size;
 const parallel = all.filter((f) => !SERIAL.includes(f)).sort((a, b) => size(b) - size(a));
+// --shuffle: los ficheros de una tanda comparten base, así que otro orden destapa pruebas que dependen de lo que dejó
+// (o no dejó) un fichero anterior. Fisher-Yates con un generador sencillo (mulberry32) para repetir el orden con la semilla.
+if (seed !== null) {
+  let t = seed;
+  const rand = () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = parallel.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [parallel[i], parallel[j]] = [parallel[j], parallel[i]];
+  }
+}
 const serial = all.filter((f) => SERIAL.includes(f));
 jobs = Math.max(1, Math.min(jobs, parallel.length || 1));
 // Un fichero colgado falla solo, con su nombre y su salida, en vez de dejar la tanda parada (se cambia con --test-timeout=…).
@@ -242,14 +271,14 @@ try {
   const template = newName();
   await admin(`CREATE DATABASE "${template}"`);
   created.push(template);
-  const migrated = await run("prisma migrate deploy", "npx", ["prisma", "migrate", "deploy"], envFor(template));
+  const migrated = await run("prisma migrate deploy", process.execPath, [PRISMA_CLI, "migrate", "deploy"], envFor(template));
   if (migrated.code !== 0 && !interrupted) {
     process.stderr.write(migrated.out);
     throw new Error("prisma migrate deploy falló en la base plantilla");
   }
   const dbs = [];
   for (let i = 0; i < jobs && !interrupted; i++) dbs.push(await copyOf(template));
-  if (!interrupted) console.log(`${all.length} ficheros en ${jobs} ${jobs === 1 ? "base" : "bases a la vez"} (plantilla ${template}, migrada en ${secs(performance.now() - t0)}).`);
+  if (!interrupted) console.log(`${all.length} ficheros en ${jobs} ${jobs === 1 ? "base" : "bases a la vez"} (plantilla ${template}, migrada en ${secs(performance.now() - t0)})${seed !== null ? `; orden al azar con semilla ${seed}` : ""}.`);
 
   const queue = [...parallel];
   await Promise.all(dbs.map(async (db) => {
@@ -263,6 +292,7 @@ try {
     if (totals.skipped) parts.push(`${totals.skipped} omitidas`);
     if (totals.todo) parts.push(`${totals.todo} pendientes`);
     console.log(`\n${totals.files} ficheros, ${totals.tests} pruebas: ${parts.join(", ")}. ${secs(performance.now() - t0)} en total.`);
+    if (failed.length && seed !== null) console.log(`Orden al azar: repítelo con npm run test:db -- --shuffle=${seed}`);
     if (failed.length) console.log(`Fallan:\n${failed.map((f) => `  ${f}`).join("\n")}`);
     code = failed.length || totals.files < all.length ? 1 : 0;
   }
