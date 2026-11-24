@@ -319,7 +319,8 @@ Guardas que conviene conocer:
   (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
 - Capas sobre un diálogo (ronda 56): con un `Modal` abierto, `inertBackground` deja `inert` todo lo que cuelga de
   `<body>` salvo las regiones `aria-live`, lo marcado con `data-pz-layer` y los otros modales de la pareja. Un botón
-  portado que deba seguir usable encima del diálogo (Deshacer/Rehacer, la copia flotante de «Nueva tarea», el
+  portado que deba seguir usable encima del diálogo (Deshacer/Rehacer, la copia flotante de «Nueva tarea», la del botón
+  de informar del pie del menú —ronda 65, con `useAnyModalOpen` de `Modal.tsx` y `data-pz-no-capture`—, el
   `<input type=file>` de importar) lleva `data-pz-layer=""`; si no, el clic lo atraviesa y cierra el diálogo.
 - Presencia (ronda 56): `src/lib/presence.ts`, en memoria y por proceso. El canal en vivo manda `event: ping` cada 25 s
   y `presence` (JSON calculado una vez por proyecto) al cambiar; el detalle anuncia la tarea con

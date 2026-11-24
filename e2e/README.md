@@ -21,13 +21,13 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **449** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
-| **Tablero** | | **912** | |
+| **Tablero** | | **924** | |
 | Tablero | `e2e/tablero-e2e.mjs` | 374 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 132 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
-| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 111 | ~1,5 min |
+| Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos (ronda 65: copia del botón de informar y «Nueva tarea» entera con la pareja), CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 123 | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
 | Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Generar plan» (PDF descargado, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 82 | ~1 min |
 | **Detalle de la tarea** | | **56** | |
@@ -71,7 +71,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3400** | |
+| **Total** | | **3412** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -261,6 +261,12 @@ sitio. Misma base y servidor:
 Desde la ronda 60 (`PART=parche`): mover, editar y archivar desde otra sesión piden solo esas tarjetas a `/board-tasks`
 sin recargar el tablero entero (la selección y la búsqueda siguen) y renombrar una columna sí lo recarga; en `cls`, una
 columna de 180 tarjetas llega con 50 o menos en el HTML, después todas, sin CLS, y la búsqueda encuentra la última.
+
+Desde la ronda 65 (`PART=capas`, escritorio de 1440 × 1300 para que el panel de la pareja no tape el botón de la
+cabecera): la copia flotante de «Nueva tarea» dice lo mismo que el botón («Nueva tarea») y, con la pareja abierta, se ve
+entera (opaca y sin nada encima); con la confirmación de descartar encima no se ve. El botón de informar del pie del menú
+tiene su copia encima del fondo, en el mismo sitio, y abre el informe sin cerrar la tarea (solo con una build oficial,
+como en `interfaz-auditoria-e2e.mjs`; si no, una nota); a 390 y 900 px no hay copia.
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe,parche

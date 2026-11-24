@@ -330,6 +330,8 @@ if (only.includes("capas")) {
     await sleep(500);
     L.eq(`CAPAS ${label}: con la tarea abierta no hay botones flotantes del tablero`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 0);
     L.eq(`CAPAS ${label}: nada tapa los botones del diálogo`, await covered(page), []);
+    // Ronda 65: la copia del botón de informar es solo de escritorio (con el menú cerrado no aparece flotando).
+    L.eq(`CAPAS ${label}: sin copia flotante del botón de informar`, await page.locator("body > button[data-feedback-copy]").count(), 0);
     // Sin cambios, «Descartar cambios» cierra sin preguntar.
     await U.dialog(page).getByRole("button", { name: "Descartar cambios" }).tap();
     await U.dialog(page).waitFor({ state: "detached" });
@@ -337,7 +339,9 @@ if (only.includes("capas")) {
     await s.ctx.close();
   }
   // Escritorio: deshacer y «Nueva tarea» siguen a mano por encima del fondo (motivo de setBoardModalOpen), sin tapar el diálogo.
-  const d = await L.session();
+  // Alta (ronda 65): con 900 px el panel de «Nueva tarea» de la pareja llega arriba y tapa el botón de la cabecera, y entonces
+  // la copia no se pinta (useFloatingRect); con más alto queda libre, como en la pantalla del propietario.
+  const d = await L.session({ viewport: { width: 1440, height: 1300 } });
   await U.openTask(d.page, "Alfa r56");
   await sleep(600);
   L.check("CAPAS escritorio: copia de «Nueva tarea» encima del fondo (abre otra al lado)", (await d.page.locator("button[aria-label='Abrir otra tarea nueva al lado']:visible").count()) >= 1);
@@ -350,9 +354,50 @@ if (only.includes("capas")) {
   await floating("Deshacer la última acción en la tarea").click();
   await L.eqEventually("CAPAS escritorio: «Deshacer» flotante deshace con la tarea abierta", async () => (await L.dbTask("Alfa r56")).columnName, COL.backlog);
   L.eq("CAPAS escritorio: y el detalle sigue abierto", await d.page.locator("[role=dialog]").count(), 1);
+  // Ronda 65: la copia lleva el mismo texto que el botón de la cabecera (antes, «Nueva» por su ancho).
+  const headerNew = await d.page.locator("button[aria-label='Nueva tarea']:not([data-pz-layer])").first().innerText();
+  L.eq("CAPAS escritorio: la copia dice lo mismo que el botón de la cabecera («Nueva tarea»)", [(await floating("Abrir otra tarea nueva al lado").innerText()).trim(), headerNew.trim()], ["Nueva tarea", "Nueva tarea"]);
+  // Entera y encima de todo: opaca y es lo que hay en su centro (no la tapa ningún fondo).
+  const onTop = (loc) => loc.evaluate((b) => {
+    const r = b.getBoundingClientRect();
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    let o = 1;
+    for (let e = b; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+    return [o, !!top && b.contains(top), getComputedStyle(b).display !== "none"];
+  });
+  // Ronda 65: el botón de informar (pie del menú lateral) también se copia encima del fondo, como Deshacer.
+  const bug = d.page.locator("body > button[data-feedback-copy]");
+  if ((await d.page.locator("[data-feedback-button]").count()) === 0) L.note("CAPAS escritorio: build no oficial, sin botón de informar (compila con OFFICIAL_BUILD=1, ver interfaz-auditoria-e2e.mjs)");
+  else {
+    await L.eqEventually("CAPAS escritorio: copia del botón de informar encima del fondo, opaca y sin nada encima", () => bug.count().then((n) => (n === 1 ? onTop(bug) : n)), [1, true, true]);
+    const orig = await d.page.locator("aside [data-feedback-button]").first().boundingBox();
+    const copy = await bug.boundingBox();
+    L.eq("CAPAS escritorio: en el mismo sitio que el del menú", [Math.round(copy.x), Math.round(copy.y)], [Math.round(orig.x), Math.round(orig.y)]);
+    await bug.click();
+    const fb = d.page.getByRole("dialog", { name: "Informar de un error o enviar una sugerencia" });
+    await fb.waitFor({ timeout: 10000 });
+    L.eq("CAPAS escritorio: pulsarla abre el informe sin cerrar la tarea", await d.page.locator("[role=dialog]").count(), 2);
+    L.eq("CAPAS escritorio: con el informe abierto, sin copias flotantes visibles", await d.page.locator("body > button[data-pz-layer]:visible").count(), 0);
+    await d.page.keyboard.press("Escape");
+    await fb.waitFor({ state: "detached" });
+    L.eq("CAPAS escritorio: al cerrar el informe sigue la tarea", await d.page.locator("[role=dialog]").count(), 1);
+  }
   await floating("Abrir otra tarea nueva al lado").click();
   await L.eqEventually("CAPAS escritorio: la copia de «Nueva tarea» abre la segunda al lado", () => d.page.locator("[role=dialog]").count(), 2);
   L.check("CAPAS escritorio: con la tarea aún abierta", await d.page.locator("[role=dialog]", { hasText: "Nueva tarea" }).count() === 1);
+  await sleep(400);
+  L.eq("CAPAS escritorio: con la pareja abierta, la copia de «Nueva tarea» sigue diciendo «Nueva tarea»", (await floating("Abrir otra tarea nueva al lado").innerText()).trim(), "Nueva tarea");
+  L.eq("CAPAS escritorio: y se ve entera (opaca y sin nada encima)", await onTop(floating("Abrir otra tarea nueva al lado")), [1, true, true]);
+  // Una confirmación centrada encima (ronda 64) sí las oculta; al volver, otra vez enteras.
+  const second = d.page.locator("[role=dialog]", { hasText: "Nueva tarea" });
+  await second.locator("input").first().fill("Borrador r65");
+  await second.getByRole("button", { name: /^Cerrar$/ }).first().click();
+  const ask = d.page.getByRole("dialog").filter({ hasText: "Descartar la nueva tarea" });
+  await ask.waitFor({ timeout: 5000 });
+  L.eq("CAPAS escritorio: con la confirmación de descartar encima, sin copias flotantes visibles", await d.page.locator("body > button[data-pz-layer]:visible").count(), 0);
+  await ask.getByRole("button", { name: "Cancelar" }).click();
+  await ask.waitFor({ state: "detached" });
+  L.eq("CAPAS escritorio: al cancelar, la copia vuelve entera", await onTop(floating("Abrir otra tarea nueva al lado")), [1, true, true]);
   L.assertNoErrors("capas escritorio", [d]);
   await d.ctx.close();
   // Documentación en el móvil: «Nueva tarea» y «Varias tareas» van en el pie de la hoja, no flotando sobre la vista previa.
