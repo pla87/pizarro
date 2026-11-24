@@ -365,6 +365,13 @@ export function suggestedColumnRoles(templateKey: string | null | undefined, col
     }
     return ROLE_CHOICES.filter((r) => own.has(r));
   }
-  const list = TEMPLATE_COLUMN_ROLES[templateKey];
+  // hasOwn: una clave como «constructor» (un .pizarro.zip fabricado) no debe dar lo que hereda el objeto.
+  const list = Object.hasOwn(TEMPLATE_COLUMN_ROLES, templateKey) ? TEMPLATE_COLUMN_ROLES[templateKey] : undefined;
   return list ? [...list] : null;
+}
+
+/** La clave que se guarda al importar un proyecto: una plantilla de serie conocida o «custom»; cualquier otra, null. */
+export function knownTemplateKey(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return key === CUSTOM_TEMPLATE_KEY || BUILTIN_KEYS.includes(key) ? key : null;
 }

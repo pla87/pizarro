@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, CUSTOM_TEMPLATE_KEY, isBuiltinModified, RETIRED_BUILTINS, suggestedColumnRoles } from "../src/lib/builtin-templates";
+import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, CUSTOM_TEMPLATE_KEY, isBuiltinModified, knownTemplateKey, RETIRED_BUILTINS, suggestedColumnRoles } from "../src/lib/builtin-templates";
 import { currentRoleChoice, GENERAL_ROLE_CHOICES, ROLE_CHOICES, splitRoleChoices, type ColumnRoleChoice } from "../src/lib/column-role-choices";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
@@ -225,6 +225,14 @@ test("roles sugeridos por plantilla: claves de serie, propias y sin plantilla", 
   // Sin plantilla conocida: todos (null).
   assert.equal(suggestedColumnRoles(null, []), null);
   assert.equal(suggestedColumnRoles("ya-no-existe", []), null);
+  // Claves heredadas de Object (un .pizarro.zip fabricado con «constructor»): sin plantilla, no un fallo del tablero.
+  for (const k of ["constructor", "tostring", "hasownproperty", "__proto__"]) assert.equal(suggestedColumnRoles(k, []), null, k);
+  assert.equal(suggestedColumnRoles("toString", []), null);
+  // Al importar solo se guarda una clave conocida.
+  assert.equal(knownTemplateKey("casa-familia"), "casa-familia");
+  assert.equal(knownTemplateKey(CUSTOM_TEMPLATE_KEY), CUSTOM_TEMPLATE_KEY);
+  assert.equal(knownTemplateKey("constructor"), null);
+  assert.equal(knownTemplateKey(undefined), null);
   // Propia: los de sus columnas más los generales.
   const own = suggestedColumnRoles(CUSTOM_TEMPLATE_KEY, [{ role: "BUDGET" }, { role: "NONE", assigneeId: "u1" }])!;
   assert.deepEqual(own, ROLE_CHOICES.filter((r) => [...GENERAL_ROLE_CHOICES, "BUDGET"].includes(r)));

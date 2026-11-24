@@ -49,6 +49,14 @@ describe("aperturas de proyecto (ProjectVisit)", () => {
     assert.equal(projectVisitDue("u", "q", 7 * MIN + 1, memory), true);
     // Reloj hacia atrás: se anota (no se queda callado para siempre).
     assert.equal(projectVisitDue("u", "q", 0, memory), true);
+    // Dos pestañas (A y B) que se refrescan: sin escribir en cada refresco; pasar de verdad a otro proyecto, sí (cada 30 s).
+    const tabs = new Map<string, { projectId: string; at: number }>();
+    assert.equal(projectVisitDue("v", "a", 0, tabs), true);
+    assert.equal(projectVisitDue("v", "b", 1000, tabs), true);
+    assert.equal(projectVisitDue("v", "a", 2000, tabs), false);
+    assert.equal(projectVisitDue("v", "b", 3000, tabs), false);
+    assert.equal(projectVisitDue("v", "a", 40_000, tabs), true);
+    assert.equal(projectVisitDue("v", "a", 50_000, tabs), false);
     for (let i = 0; i < 10_050; i++) projectVisitDue(`x${i}`, "p", 0, memory);
     assert.ok(memory.size <= 10_000);
   });
