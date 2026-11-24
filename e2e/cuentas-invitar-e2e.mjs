@@ -23,7 +23,7 @@ await L.q(`DELETE FROM "Project" WHERE id IN ($1,$2)`, [TEAM, PRIV]);
 await L.q(`DELETE FROM "User" WHERE email LIKE 'inv59%'`);
 const [admin] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
 const [second] = await L.q(`SELECT id,name FROM "User" WHERE email=$1`, [L.USER2]);
-// Un proyecto de equipo sin asignados y un privado de la segunda persona.
+// Un proyecto de equipo sin miembros y un privado de la segunda persona.
 await L.q(`INSERT INTO "Project"(id,name,description,"isPrivate",position,"updatedAt") VALUES ($1,$2,'',false,999970,NOW())`, [TEAM, TEAM_NAME]);
 await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ('inv59_col',$1,'Pendiente',1000)`, [TEAM]);
 await L.q(`INSERT INTO "Project"(id,name,description,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Privado invitar r59','',true,$2,999971,NOW())`, [PRIV, second.id]);
@@ -67,9 +67,9 @@ if (only.includes("assign")) {
   await note.getByRole("button", { name: "Copiar enlace" }).click();
   await L.checkEventually("ASSIGN: «Copiar enlace» lo deja en el portapapeles", async () => (await page.evaluate(() => navigator.clipboard.readText())) === `${L.BASE}/p/${TEAM}`);
   await page.screenshot({ path: `${SHOTS}/r59-asignar-admin.png` });
-  // Quitarlo de asignados: sigue con el proyecto elegido (es administrador y lo ve igual).
+  // Quitarlo de los miembros: sigue con el proyecto elegido (es administrador y lo ve igual).
   await row.getByRole("button", { name: `Quitar a ${second.name}` }).click();
-  await L.checkEventually("ASSIGN: quitado de asignados", async () => !(await isMember(TEAM, second.id)));
+  await L.checkEventually("ASSIGN: quitado de los miembros", async () => !(await isMember(TEAM, second.id)));
   L.check("ASSIGN: conserva la elección", await isPicked(TEAM, second.id));
   L.assertNoErrors("ASSIGN", [s]);
   await s.ctx.close();
@@ -118,7 +118,7 @@ if (only.includes("invite")) {
   L.check("INVITE: ya está en el proyecto", !!invited && (await isMember(TEAM, invited.id)));
   const [inviter] = await L.q(`SELECT locale FROM "User" WHERE id=$1`, [admin.id]);
   L.eq("INVITE: con el idioma de quien invita", invited?.locale, inviter.locale);
-  await L.checkEventually("INVITE: sale en la lista de asignados", async () => (await memberRows(page).innerText()).includes("Inv59 Nueva Persona"));
+  await L.checkEventually("INVITE: sale en la lista de miembros", async () => (await memberRows(page).innerText()).includes("Inv59 Nueva Persona"));
   const invitedRow = memberRows(page).locator("li").filter({ hasText: "Inv59 Nueva Persona" });
   L.check("INVITE: marcada como «Invitación pendiente»", (await invitedRow.innerText()).includes("Invitación pendiente"), await invitedRow.innerText());
   L.eq("INVITE: sin email no hay «Reenviar invitación»", await invitedRow.getByRole("button", { name: /^Reenviar invitación/ }).count(), 0);
