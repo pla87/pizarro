@@ -24,17 +24,16 @@ export async function createResetLink(email: string, opts: { appUrl: string; res
     p: { name: user.name },
   };
   const message = renderLabelEs(label);
-  const details = { reset2fa: Boolean(opts.reset2fa), twoFactorCleared, [LOG_LABEL_KEY]: label };
   const audit = db.appLog.create({
     data: {
       level: "info",
       category: "auth",
       action: "auth.resetLinkCli",
       message,
-      messageEn: englishLogMessage({ message, details }),
+      messageEn: englishLogMessage({ message, details: { [LOG_LABEL_KEY]: label } }),
       userId: user.id,
       userName: user.name,
-      details,
+      details: { reset2fa: Boolean(opts.reset2fa), twoFactorCleared, [LOG_LABEL_KEY]: label },
     },
   });
   try {

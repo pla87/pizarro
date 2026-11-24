@@ -21,9 +21,9 @@ async function main() {
   try {
     const { version } = (await import("../package.json")) as { version: string };
     const message = `Arranque de Pizarro v${version}`;
-    const details = { version, node: process.version, [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version } } };
+    const label = { k: "Arranque de Pizarro v{version}", p: { version } };
     await db.appLog.create({
-      data: { level: "info", category: "system", action: "system.boot", message, messageEn: englishLogMessage({ message, details }), details },
+      data: { level: "info", category: "system", action: "system.boot", message, messageEn: englishLogMessage({ message, details: { [LOG_LABEL_KEY]: label } }), details: { version, node: process.version, [LOG_LABEL_KEY]: label } },
     });
   } catch (err) {
     console.error("[boot] No se pudo registrar el arranque:", err);
