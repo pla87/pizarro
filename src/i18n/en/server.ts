@@ -332,4 +332,6 @@ export const server: Record<string, string> = {
   // Ronda 66: nombre del PDF de la semana según el modo
   "por día": "by day",
   "por persona": "by person",
+  "por tarjeta": "by card",
+  "por tipo": "by type",
 };
