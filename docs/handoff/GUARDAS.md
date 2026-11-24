@@ -137,7 +137,172 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   si una versión nueva de Prisma necesita algo podado, falla la construcción, no el arranque. 257 → 109 MB sin comprimir.
 - (Ronda 64) Roles de columna retirados (`RETIRED_COLUMN_ROLES`, `SELECTABLE_COLUMN_ROLES`, `liveColumnRole` en `constants.ts`):
   *Agenda* y *Entrega al cliente* ya no se ofrecen y todo lo que entra (validación, importar, plantillas, deshacer) los
-  lee como `NONE`. **Fase 2 (hecha en la v1.69, `20261130100000`):** los valores ya no están en el enum; `INPUT_COLUMN_ROLES` + `liveColumnRole` convierten el texto que entra (ZIP/JSON de la v1.67, plantillas, deshacer y su instantánea). La v1.68 funciona sobre esta base; con la v1.67 fallan elegir esos roles y crear proyectos con «Casa y familia» o «Eventos y viajes».
+  lee como `NONE`. **Fase 2 (hecha en la v1.69, `20261130100000`):** los valores ya no están en el
+  enum; `INPUT_COLUMN_ROLES` + `liveColumnRole` convierten el texto que entra (ZIP/JSON de la v1.67, plantillas,
+  deshacer y su instantánea). La v1.68 funciona sobre esta base; con la v1.67 fallan elegir esos roles y crear proyectos
+  con «Casa y familia» o «Eventos y viajes».
+
+## Base de datos
+
+- Aviso de pg «DeprecationWarning: Calling client.query() when the client is already executing a query»: pg 8.23 lo
+  da cuando un mismo `pg.Client` recibe una tercera consulta con otras dos en curso (en pg 9 será un error). Buscado con
+  `NODE_OPTIONS=--trace-deprecation` y con `e2e/warn-hook.mjs` (anota cada aviso de Node con su pila en `WARN_LOG`) en:
+  `npm start` y `node dist/boot.mjs` sobre una base vacía y sobre una ya instalada, `prisma migrate deploy` con y sin
+  migraciones pendientes, la primera pasada de las tareas de fondo (copia cifrada con `BACKUP_KEY` incluida), el asistente
+  completo y las suites QA, tablero e instalación. No sale en ningún caso: ni la app ni Prisma (`@prisma/adapter-pg` usa
+  el pool, y en las transacciones interactivas no hay `Promise.all` sobre `tx`; `PgSql` de las copias encadena sus
+  consultas). El que se veía venía del arnés de las pruebas (`L.q` en paralelo en `e2e/qa/lib.mjs`, ya en fila desde la
+  caza de bugs anterior). `e2e/install-e2e.mjs` arranca el servidor con `warn-hook.mjs` y falla si vuelve a aparecer.
+  Para localizarlo en otro proceso: `WARN_LOG=/ruta/avisos.log NODE_OPTIONS="--import file://$PWD/e2e/warn-hook.mjs"`.
+  Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
+  Excepción hallada después: Prisma 7 sí provoca este aviso con relaciones anidadas dentro de `$transaction` (p. ej.
+  `buildProjectExport`). No subas `pg` a la 9 sin revisarlo antes: allí será un error.
+- Pool de PostgreSQL (`src/lib/db.ts`): tope de 20 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
+  esperaba sin límite) y `DATABASE_POOL_SIZE` validado (`src/lib/db-pool.ts`: un valor raro avisa y usa 10). El pool
+  (`LoggedPool`, subclase de `pg.Pool` que se pasa a `PrismaPg` con `disposeExternalPool`) anota «[db] No se puede
+  conectar con PostgreSQL (servidor, base): motivo» como mucho cada 30 s.
+- Otra copia en la misma base (`src/lib/instance-lock*.ts`): `pg_try_advisory_lock(LOCK_INSTANCE)` en una conexión propia
+  (`application_name` `pizarro-instance:<id>`), aviso tras 2 min; con PgBouncer no se comprueba.
+- Releases: la búsqueda usa `search_fold()` (función SQL IMMUTABLE de la migración `20261127103000`, mismas letras que
+  `search-accents.ts`) con índices trigram si `pg_trgm` se pudo crear; `wipeDatabase` la borra y la migración la recrea.
+- Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
+  sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
+
+## PDF y descargas
+
+- PDF largos (ronda 58, `src/lib/pdf-chunks.ts`): más de ~20 páginas se maquetan en tramos de varios `<Page>` cortados donde
+  el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
+  él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
+  de @react-pdf, pasa `tests/report-pages.test.ts` y `tests/report-pages-iguales.test.ts`.
+- (Ronda 64) PDF de columna (plan por persona, semana, lista consolidada): se descargan con `columnDownload.ts` (un clic a la vez,
+  `busy` en `ColumnActionButton` sin `aria-disabled`) y sus rutas responden `attachment`. Un PDF de columna nuevo, igual.
+- Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
+  un vale (`POST …/release-attachments?plan=1`; `src/lib/zip-ticket.ts`, en memoria, por persona y proyecto), cada
+  paquete se baja con `GET ?ticket=&part=&v=` y la página consulta su estado. Un POST sin `?plan=1` responde 400 (el
+  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe), y un paquete sin `?part=` o sin `?v=`
+  también (`zipPartRequired`; desde la ronda 59 no hay «primer paquete sin número» ni enlaces sin token). El `Content-Length` lo pone
+  `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera interna
+  `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
+- (Ronda 63) Memoria: nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el `resourceLimits` del worker de PDF): ni en Compose ni
+  en `render.yaml`; Node ajusta su montón al límite del contenedor.
+
+## Subidas y Compartir
+
+- Subidas (ronda 55): `acquireUploadSlot(userId, waitMs, { declaredBytes })` reparte los 3 huecos del servidor; con más
+  de una persona activa (`user-activity.ts`, en memoria, la anota `querySessionUser`) cada una tiene uno. Las rutas de
+  subida envuelven su `POST` con `withUploadCapHeader` (cabecera `X-Pizarro-Upload-Per-User`) y el navegador ajusta la cola
+  (`uploadCap`, `uploadGate` y `runQueue({ limit })` en `upload-queue.ts`). Una ruta de subida nueva debe hacer lo mismo.
+- «Compartir → Pizarro» (ronda 57): el manifiesto declara `share_target` (POST multipart a `/api/share`, fuera del proxy
+  como las demás subidas). La ruta solo guarda lo compartido en `UPLOAD_DIR/shared/<usuario>/<envío>/`
+  (`src/lib/share-inbox.ts`: 30 min, 3 envíos por persona, fuera de las copias, limpieza en el mantenimiento
+  `sharedFiles`) y redirige a `/share`, que abre «Nueva tarea» (`ShareTarget.tsx`, con `stubBoard`). CSRF: el navegador
+  manda el envío como navegación suya (`Sec-Fetch-Site: none`, sin `Origin`); `shareRequestAllowed` rechaza `cross-site`,
+  `same-site`, un `Origin` ajeno y la ausencia de ambas cabeceras, y guardar no tiene efectos: la tarea y sus adjuntos solo
+  se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
+  la dirección de vuelta del acceso).
+
+## Importar y exportar
+
+- Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
+  `parseTasksText` lineal, `strictJsonFormat` para Ctrl+V), resolución de nombres común a pegar e importar en
+  `src/lib/task-json-resolve.ts`, importación en `src/lib/task-import.ts` servida por la ruta
+  `POST /api/projects/[projectId]/import-tasks` (fuera del proxy, con su propio tope: las acciones de servidor admiten
+  1 MB, `next.config.ts`). Ningún `route.ts` importa `src/actions` (`tests/route-handlers.test.ts`): Next reenviaba las
+  llamadas a la acción a la ruta. Deshacer usa `label.remove`/`label.restore` para las etiquetas creadas.
+- Importar tareas de otros Kanban: `src/lib/foreign-import/tasks.ts` detecta por contenido Trello (tablero, tarjeta,
+  lista), Jira (JSON de la API y CSV), GitHub Issues, Asana (JSON y CSV) y CSV genéricos (reutiliza `parseTrello` y
+  `parseCsvRows` de la importación de proyectos) y devuelve el mismo `TaskJsonInput` que el JSON propio: tipos, columnas
+  por nombre, etiquetas, topes, permisos y deshacer son los de siempre. Lo llama `parseTasksText`.
+- Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
+  huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
+  (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
+
+## i18n
+
+- `npm run i18n:unused` (solo informa): traducciones sin uso, repetidas o que solo usan las pruebas. Antes de
+  borrar una, comprueba que no puede venir del historial de las tareas (un año), del deshacer (7 días) ni de los
+  errores de exportar/importar, que se traducen al leerlos. Las que se conservan por eso van bajo el comentario
+  «Textos guardados por versiones anteriores».
+- Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
+  cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
+  vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar
+  (el asistente volvía al paso 1). El layout raíz no se repinta en la navegación de cliente: un enlace de una pantalla
+  sin sesión que puede ir en otro idioma (`/reset`, `/confirm`, `/login/verify`, `/setup` → `/login`) es un `<a href>`
+  con recarga completa, no un `Link`.
+
+## Fechas y zona horaria
+
+- Zona horaria: `appTimeZone()` (`src/lib/format.ts`) ignora una `APP_TIMEZONE` (o una zona guardada, o `data-tz`) que
+  Intl no acepte, con un aviso en el log; `envTimeZone()` es la variable solo si vale (lo que fija la zona en `/setup` y
+  Ajustes) y el diagnóstico la marca `invalid`.
+- «Hoy» a medianoche fuera del tablero: `useMidnightRefresh(today, refresh)` / `<MidnightRefresh today>`
+  (`src/components/useMidnightRefresh.ts`, regla pura `midnightStep` en `dates.ts`), en el Calendario y Mis tareas.
+
+## Servidor, arranque y red
+
+- Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
+  se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
+  emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en
+  `system.shutdown`. Con Telegram en modo sondeo, al apagarse confirma a Telegram los mensajes ya procesados.
+- `npm start` fuera de Docker (`scripts/start-local.mjs`): carga el `.env` y `scripts/server.env`, convierte en
+  absolutas las rutas de datos relativas (`UPLOAD_DIR`, `MAIL_OUTBOX_DIR`, `BACKUP_EXTERNAL_DIR`; lógica en
+  `scripts/local-paths.mjs`, probada en `tests/local-paths.test.ts`) y después carga `.next/standalone/server.js`.
+  Sin eso, una ruta relativa acababa dentro de `.next/standalone/` y cada compilación la borraba. `postbuild.mjs`
+  quita del standalone las subidas, las copias y los `.env` que Next copiaba allí. El contenedor no usa este script
+  (`scripts/start.sh`). El script `start` no lleva `exec` (cmd.exe no lo entiende y en Windows `npm start` no
+  arrancaba): al parar npm, el `sh -c` de npm muere con el SIGTERM sin pasarlo a node, y `scripts/parent-watch.mjs`
+  detecta que ha desaparecido el proceso padre (también si npm muere de golpe) y lanza el apagado ordenado en ~1 s
+  (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts` (arranca `npm start` de verdad con un servidor de
+  prueba, lo para con SIGTERM al pid de npm y comprueba que no queda huérfano).
+  Antes de cargar `server.js`, `start-local.mjs` importa `dist/boot.mjs` y espera a `runBoot()`: las mismas tareas de
+  arranque que el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y
+  plantillas de serie), en el mismo proceso y sin abrir otro servidor. Sin `dist/boot.mjs` o si fallan, no arranca.
+  `boot.ts` solo se ejecuta por sí mismo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
+  de Prisma y lo quita de `globalThis` para que el servidor no herede uno cerrado. `start.sh` y `start-local.mjs` fijan
+  `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
+  (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
+  `e2e/install-e2e.mjs`.
+- IP del cliente: una sola función, `clientIp` / `clientIpOrNull` (`src/lib/request.ts`, regla pura en
+  `src/lib/client-ip.ts`), para los límites de intentos, el registro y las sesiones. `X-Real-IP` / `X-Forwarded-For` solo
+  cuentan con `TRUST_PROXY` (sin definir: sí en Docker, `PIZARRO_LAUNCHER=docker`, y en Railway; no con `npm start`,
+  `next start` ni `node server.js` a mano). Sin proxy de confianza vale la dirección de la conexión: Next no la da a las
+  rutas, así que `src/lib/peer-ip.ts` (instalado en `instrumentation.ts`) la escribe en la cabecera interna
+  `x-pz-peer-ip` de cada petición, sustituyendo la que mande el cliente. `tests/client-ip.test.ts` falla si otro módulo
+  lee esas cabeceras. `npm run test:db` fija `TRUST_PROXY=1` (las pruebas ponen la IP con `X-Real-IP`).
+- (Ronda 62) IP del cliente en Render/Fly.io: `platformIpHeader()` (`CF-Connecting-IP` / `Fly-Client-IP`) solo si existen
+  `RENDER`/`RENDER_SERVICE_ID` o `FLY_APP_NAME`/`FLY_MACHINE_ID`; `resolveAppUrl()` deduce `APP_URL` también de
+  `RENDER_EXTERNAL_URL` y `FLY_APP_NAME`. `tests/cloud-platforms.test.ts` comprueba `render.yaml` y `deploy/fly.toml`
+  contra el Dockerfile y que no vuelva `railway.json`.
+- `APP_URL` (ronda 60): siempre con `resolveAppUrl()` (`src/lib/app-url.ts`; sin la variable, `https://` +
+  `RAILWAY_PUBLIC_DOMAIN`), también en scripts (`reset-link`, `doctor`, `boot`). No leas `process.env.APP_URL` directamente.
+- (Ronda 63) Ids de la URL: `isRowId` (`src/lib/row-id.ts`, sin zod) antes de tocar la base; mal formados → 404.
+- Cachés en memoria con tope: `memo` y `boundedMemo` (`src/lib/memo.ts`, en `globalThis`). `boundedMemo` barre lo
+  caducado al leer (como mucho una vez por plazo) y admite un tope de bytes (`maxBytes` + `sizeOf`). El calendario suscrito
+  guarda 60 s el .ics (en bytes UTF-8) y su ETag por enlace (`cachedFeedIcs`, `FEED_CACHE_MAX` = 200,
+  `FEED_CACHE_MAX_BYTES` = 64 MB) pero comprueba el token en cada petición; `revokeProject`/`revokeUser` la vacían
+  (`clearBoundedMemo(FEED_CACHE_NAME)`) y la ruta manda `max-age` = lo que le queda en la memoria (≤ 60 s): un cambio se
+  ve como mucho al minuto. `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
+
+## Seguridad y límites
+
+- Informar de un error (`src/lib/feedback*.ts`, `src/components/feedback/`, `POST /api/feedback`): solo en builds oficiales;
+  sus límites van en el mapa de seguridad del limitador (`SECURITY_KEY_PREFIXES`); la captura (`modern-screenshot`, cargada
+  al pulsar) excluye lo marcado con `data-pz-no-capture`: **un secreto nuevo que se muestre en pantalla (código, enlace con
+  token) debe llevar ese atributo**.
+- (Ronda 64) Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
+  `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
+
+## Emails y mensajería
+
+- Baja de emails (`src/lib/unsubscribe*.ts`, rutas `/unsubscribe/<token>` y `/api/unsubscribe/<token>`): token HMAC con
+  `TOKEN_SECRET` (etiqueta propia), el GET nunca da de baja, `List-Unsubscribe` solo con https. `/unsubscribe/` está en
+  `SECRET_PATH_PREFIXES` y en `redactPath` (el token no llega a los logs): una ruta nueva con token en la URL, igual.
+- (Ronda 62) Correo caído: `periodic-mail.ts` corta la pasada solo por errores del envío (`sending`) y aparta una hora a quien falló
+  (`failureMemory`, igual que los informes).
+- Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Integraciones → Avisos por
+  Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`;
+  manual §3.9, §3.16 y §4.7b). Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa
+  WhatsApp en su instalación (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
   - Código: `src/lib/messaging-core.ts` (lógica pura: textos, topes de 30/h por Telegram y 10/h por WhatsApp por
     persona, clasificación de errores), `src/lib/messaging-config.ts` (Ajustes en `AppState`, tokens cifrados con
     `ENCRYPTION_KEY`; `rotate-keys` los cubre), `src/lib/telegram.ts`, `src/lib/whatsapp.ts`, `src/lib/notify.ts`
