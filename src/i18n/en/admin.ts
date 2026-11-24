@@ -736,8 +736,6 @@ export const admin: Record<string, string> = {
   // Logs: copias pedidas a mano (antes solo «OK»)
   "Creó una copia de seguridad a mano": "Created a backup manually",
   "Empezó a subir la última copia a los destinos externos": "Started uploading the latest backup to the external destinations",
-  // Logs: nota «i» del buscador (la búsqueda mira el texto en español)
-  "Los mensajes se guardan en español: busca con palabras en español (p. ej. «Borró» para lo borrado). La acción y la ruta son iguales en todos los idiomas.": "Messages are stored in Spanish, so search with Spanish words (e.g. “Borró” for deletions). The action and the path are the same in every language.",
   // Copias de seguridad: errores que se guardan en español (estado, tareas de fondo, Logs) y se traducen al leerlos
   "BACKUP_KEY no está configurada.": "BACKUP_KEY is not set.",
   "DATABASE_URL no está definida.": "DATABASE_URL is not set.",

@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { applyAppUrlFallback } from "@/lib/app-url";
 import { db } from "@/lib/db";
 import { configWarnings } from "@/lib/doctor-core";
-import { LOG_LABEL_KEY } from "@/lib/log-message";
+import { englishLogMessage, LOG_LABEL_KEY } from "@/lib/log-message";
 import { syncChangelog } from "@/lib/changelog-sync";
 import { seed } from "@/lib/seed";
 import { announceSetup } from "@/lib/setup";
@@ -20,8 +20,10 @@ async function main() {
   for (const w of configWarnings()) console.warn(`[boot] Aviso: ${w.text}`);
   try {
     const { version } = (await import("../package.json")) as { version: string };
+    const message = `Arranque de Pizarro v${version}`;
+    const details = { version, node: process.version, [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version } } };
     await db.appLog.create({
-      data: { level: "info", category: "system", action: "system.boot", message: `Arranque de Pizarro v${version}`, details: { version, node: process.version, [LOG_LABEL_KEY]: { k: "Arranque de Pizarro v{version}", p: { version } } } },
+      data: { level: "info", category: "system", action: "system.boot", message, messageEn: englishLogMessage({ message, details }), details },
     });
   } catch (err) {
     console.error("[boot] No se pudo registrar el arranque:", err);
