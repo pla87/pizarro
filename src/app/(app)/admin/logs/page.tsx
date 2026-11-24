@@ -68,7 +68,11 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const tz = appTimeZone();
   const days = logRetentionDays();
   // Periodo personalizado: los días enteros elegidos (si no valen, el aviso y las últimas 24 h).
-  const custom = parsed.range === CUSTOM_RANGE ? parseExportRange(parsed.from, parsed.to, { tz, retentionDays: days }) : null;
+  const asked = parsed.range === CUSTOM_RANGE ? parseExportRange(parsed.from, parsed.to, { tz, retentionDays: days }) : null;
+  // Solo los días que ofrecen Desde/Hasta (de hoy hacia atrás, lo que guarda la retención): un enlace guardado con días más
+  // viejos (o futuros) enseñaría en los selectores otras fechas que las de la lista.
+  const logToday = dayInZone(new Date(), tz);
+  const custom = asked?.ok && (asked.from < addDays(logToday, -days) || asked.to > logToday) ? ({ ok: false, error: "invalid" } as const) : asked;
   const filters = { ...parsed, locale: appLocale, ...(custom?.ok ? { from: custom.from, to: custom.to, period: { gte: custom.gte, lt: custom.lt } } : {}) };
   // Compacta y con segundos, en el formato del idioma («22 nov 21:49:12»; «Nov 22 9:49:12 PM»). El CSV sigue en
   // AAAA-MM-DD HH:MM:SS (lo lee bien Excel).

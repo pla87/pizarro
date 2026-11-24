@@ -71,9 +71,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   // En la plantilla del mensaje, el aviso de «no es un email» se traduce; el email, tal cual.
   const emailParam = (account: boolean) => (looksLikeEmail ? shownEmail(account) : { k: shownEmail(account) });
   if (!rateLimit(keys.ip, 60, 15 * 60_000) || !(await reserveAccountAttempt(keys.account, email))) {
+    // Si el bloqueo es sobre una cuenta que existe, su email entero y su usuario: es la señal más útil de un ataque a
+    // esa cuenta (una consulta por el índice único del email, solo en los intentos bloqueados).
+    const target = looksLikeEmail ? await db.user.findUnique({ where: { email }, select: { id: true, name: true } }).catch(() => null) : null;
     logEvent({
-      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión bloqueado por demasiados intentos ({email})", p: { email: emailParam(false) } },
-      path: "/login", ip, details: { email: shownEmail(false), reason: "rate_limited" },
+      level: "warn", category: "auth", action: "auth.loginFailed", label: { k: "Inicio de sesión bloqueado por demasiados intentos ({email})", p: { email: emailParam(!!target) } },
+      userId: target?.id ?? null, userName: target?.name ?? null, path: "/login", ip, details: { email: shownEmail(!!target), reason: "rate_limited" },
     });
     return { error: t("Demasiados intentos. Espera unos minutos.") };
   }

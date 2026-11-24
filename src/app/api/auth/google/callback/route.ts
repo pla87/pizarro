@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { maskEmail } from "@/lib/mask-email";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -91,7 +92,8 @@ export async function GET(req: Request) {
   const user = await findUserForGoogle(result.identity);
   if (user === "relink_blocked") return fail("google_unlinked", "cuenta desvinculada por un administrador", { email: result.identity.email });
   // Mensaje neutro: no se distingue «no existe», «desactivada» o «enlazada a otra cuenta de Google».
-  if (!user) return fail("google_noaccount", "sin cuenta asociada", { email: result.identity.email });
+  // Sin cuenta: el email es de alguien que quizá no es usuario, enmascarado (como el acceso con contraseña).
+  if (!user) return fail("google_noaccount", "sin cuenta asociada", { email: maskEmail(result.identity.email) });
 
   const next = safeNextPath(Buffer.from(nextB64 ?? "", "base64url").toString("utf8"));
   // Los administradores pasan también por la verificación en dos pasos de Pizarro (la de Google no basta para administrar):
