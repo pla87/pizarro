@@ -11,6 +11,9 @@
 //   npm run test:db -- --verbose                      la salida completa de cada fichero, también si pasa
 //   npm run test:db -- tests/db/x.test.ts --test-name-pattern="deshacer"   (lo que empiece por --test- va a node --test)
 //
+// Una prueba que pasa de 3 minutos falla sola (--test-timeout; se cambia pasando otro). Con Ctrl+C se enseña qué
+// ficheros estaban en marcha y lo que llevaban escrito.
+//
 // Cada fichero corre en su propio proceso (como con node --test): las variables de entorno que cambia una prueba
 // (TRUST_PROXY, APP_URL, SMTP_*, UPLOAD_DIR…) no llegan a las demás. Lo que comparten las tandas es el servidor de
 // PostgreSQL (cada una con su base: los bloqueos consultivos y pg_stat_activity se miran por base) y la máquina. Un
@@ -69,6 +72,8 @@ const size = (f) => statSync(f).size;
 const parallel = all.filter((f) => !SERIAL.includes(f)).sort((a, b) => size(b) - size(a));
 const serial = all.filter((f) => SERIAL.includes(f));
 jobs = Math.max(1, Math.min(jobs, parallel.length || 1));
+// Una prueba colgada falla sola, con su nombre y su salida, en vez de dejar la tanda parada (se cambia con --test-timeout=…).
+const timeoutArg = nodeTestArgs.some((a) => a.startsWith("--test-timeout")) ? [] : ["--test-timeout=180000"];
 
 // --- Bases de datos --------------------------------------------------------------------------------------------------
 
@@ -90,22 +95,30 @@ const admin = async (sql, params) => {
   }
 };
 
+/** Bases creadas que aún no se han borrado. */
 const created = [];
-let dropping = null;
-/** Borra las bases creadas y las que hayan creado las pruebas con su nombre como prefijo (backup-restore, start-migrate). */
+let dropping = Promise.resolve();
+/**
+ * Borra las bases creadas y las que hayan creado las pruebas con su nombre como prefijo (backup-restore, start-migrate).
+ * Se puede llamar más de una vez: cada llamada borra lo que se haya creado desde la anterior (una copia que terminaba de
+ * crearse al pulsar Ctrl+C) y espera a las que estén en curso.
+ */
 function dropAll() {
-  dropping ??= (async () => {
-    for (const name of created) {
+  dropping = dropping.then(async () => {
+    const gone = [];
+    while (created.length) {
+      const name = created.shift();
       try {
         const extra = await admin("SELECT datname FROM pg_database WHERE starts_with(datname, $1)", [`${name}_`]);
         for (const { datname } of extra.rows) await admin(`DROP DATABASE IF EXISTS "${datname}" WITH (FORCE)`);
         await admin(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+        gone.push(name);
       } catch (err) {
         console.error(`No se pudo eliminar ${name}: ${err.message}`);
       }
     }
-    if (created.length) console.log(`Bases de pruebas eliminadas: ${created.join(", ")}.`);
-  })();
+    if (gone.length) console.log(`Bases de pruebas eliminadas: ${gone.join(", ")}.`);
+  });
   return dropping;
 }
 
@@ -118,7 +131,7 @@ async function copyOf(template) {
       created.push(name);
       return name;
     } catch (err) {
-      if (err.code !== "55006" || attempt >= 20) throw err;
+      if (err.code !== "55006" || attempt >= 20 || interrupted) throw err;
       await new Promise((r) => setTimeout(r, 250));
     }
   }
@@ -126,33 +139,56 @@ async function copyOf(template) {
 
 // --- Procesos --------------------------------------------------------------------------------------------------------
 
-const children = new Set();
+/** Procesos en marcha, con lo que llevan escrito: si se interrumpe, se enseña en qué fichero estaba cada uno. */
+const children = new Map();
 
 /** Lanza un proceso; devuelve su código y su salida (stdout y stderr juntos). */
-const run = (cmd, cmdArgs, env) =>
+const run = (label, cmd, cmdArgs, env) =>
   new Promise((resolve) => {
     const child = spawn(cmd, cmdArgs, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...env } });
-    children.add(child);
-    let out = "";
-    for (const s of [child.stdout, child.stderr]) s.on("data", (d) => (out += d));
+    const state = { label, started: performance.now(), out: "" };
+    children.set(child, state);
+    for (const s of [child.stdout, child.stderr]) s.on("data", (d) => (state.out += d));
     child.on("close", (code, signal) => {
       children.delete(child);
-      resolve({ code: code ?? (signal ? 1 : 0), out });
+      resolve({ code: code ?? (signal ? 1 : 0), out: state.out });
     });
     child.on("error", (err) => {
       children.delete(child);
-      resolve({ code: 1, out: `${out}${err.stack ?? err}\n` });
+      resolve({ code: 1, out: `${state.out}${err.stack ?? err}\n` });
     });
   });
 
+const TAIL_LINES = 40;
+/** Lo que estaba en marcha y las últimas líneas de su salida (sin esto, una prueba colgada no dejaría ni su nombre). */
+function reportRunning() {
+  if (!children.size) return;
+  process.stderr.write("En marcha al interrumpir:\n");
+  for (const { label, started, out } of children.values()) {
+    const lines = out.trimEnd().split("\n");
+    const tail = lines.length > TAIL_LINES ? ["…", ...lines.slice(-TAIL_LINES)] : lines;
+    process.stderr.write(`\n── ${label} (${secs(performance.now() - started)}) ${"─".repeat(Math.max(3, 90 - label.length))}\n${tail.join("\n")}\n`);
+  }
+  process.stderr.write("\n");
+}
+
+// Ctrl+C (o SIGTERM): se enseña lo que estaba en marcha, se paran los procesos y el programa principal termina por su
+// cuenta (deja de lanzar ficheros y copias, y su `finally` borra las bases, también la que estuviera creándose). Un
+// segundo Ctrl+C no espera a los procesos.
 let interrupted = false;
 for (const sig of ["SIGINT", "SIGTERM"]) {
   process.on(sig, () => {
-    if (interrupted) return;
+    if (interrupted) {
+      for (const c of children.keys()) c.kill("SIGKILL");
+      void dropAll().finally(() => process.exit(130));
+      return;
+    }
     interrupted = true;
     console.error(`\nInterrumpido (${sig}): parando las pruebas y borrando las bases…`);
-    for (const c of children) c.kill("SIGTERM");
-    void dropAll().finally(() => process.exit(130));
+    reportRunning();
+    for (const c of children.keys()) c.kill("SIGTERM");
+    // Por si un proceso no atiende a SIGTERM.
+    setTimeout(() => { for (const c of children.keys()) c.kill("SIGKILL"); }, 5000).unref();
   });
 }
 
@@ -181,8 +217,9 @@ const secs = (ms) => `${(ms / 1000).toFixed(1)} s`;
 async function runFile(file, dbName) {
   const started = performance.now();
   const { code, out } = await run(
+    file,
     process.execPath,
-    ["--conditions=react-server", "--import", "tsx", "--import", "./tests/db/register.mjs", "--test", "--test-concurrency=1", "--test-reporter=spec", "--test-force-exit", ...nodeTestArgs, file],
+    ["--conditions=react-server", "--import", "tsx", "--import", "./tests/db/register.mjs", "--test", "--test-concurrency=1", "--test-reporter=spec", "--test-force-exit", ...timeoutArg, ...nodeTestArgs, file],
     envFor(dbName),
   );
   if (interrupted) return;
@@ -205,14 +242,14 @@ try {
   const template = newName();
   await admin(`CREATE DATABASE "${template}"`);
   created.push(template);
-  const migrated = await run("npx", ["prisma", "migrate", "deploy"], envFor(template));
-  if (migrated.code !== 0) {
+  const migrated = await run("prisma migrate deploy", "npx", ["prisma", "migrate", "deploy"], envFor(template));
+  if (migrated.code !== 0 && !interrupted) {
     process.stderr.write(migrated.out);
     throw new Error("prisma migrate deploy falló en la base plantilla");
   }
   const dbs = [];
-  for (let i = 0; i < jobs; i++) dbs.push(await copyOf(template));
-  console.log(`${all.length} ficheros en ${jobs} ${jobs === 1 ? "base" : "bases a la vez"} (plantilla ${template}, migrada en ${secs(performance.now() - t0)}).`);
+  for (let i = 0; i < jobs && !interrupted; i++) dbs.push(await copyOf(template));
+  if (!interrupted) console.log(`${all.length} ficheros en ${jobs} ${jobs === 1 ? "base" : "bases a la vez"} (plantilla ${template}, migrada en ${secs(performance.now() - t0)}).`);
 
   const queue = [...parallel];
   await Promise.all(dbs.map(async (db) => {
