@@ -53,4 +53,8 @@ export const detalle: Record<string, string> = {
   // Botón de la descripción en edición (el pie tiene otro «Guardar») y aviso tras cambiar de tipo con ella abierta
   "Guardar descripción": "Save description",
   "Tipo cambiado; falta guardar la descripción": "Type changed; description not saved yet",
+
+  // Cambiar de tipo en el detalle: subtareas de la plantilla del anterior sustituidas por las del nuevo
+  "Cambiada 1 subtarea": "1 subtask changed",
+  "Cambiadas {n} subtareas": "{n} subtasks changed",
 };

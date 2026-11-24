@@ -22,6 +22,7 @@ describe("liveUpdatePlan: tarjetas sueltas o tablero entero", () => {
     assert.deepEqual(liveUpdatePlan([
       { action: "tasks.moveTask", taskIds: ["a"] },
       { action: "tasks.updateTask", taskIds: ["b", "a"] },
+      { action: "tasks.changeTaskKind", taskIds: ["a"] },
       { action: "tasks.addComment", taskIds: ["c"] },
       { action: "attachments.upload", taskIds: ["d"] },
       { action: "tasks.deleteTasks", taskIds: ["e", "f"] },

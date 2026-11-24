@@ -303,6 +303,39 @@ export function switchKindSubtasks(prev: { subtaskTemplate: readonly string[] } 
   return mergeSubtasks(base, [...next.subtaskTemplate]);
 }
 
+/**
+ * Subtareas al cambiar el tipo de una tarea ya creada (el detalle): se quitan las de la plantilla del anterior que siguen
+ * sin marcar y con su texto original (cada una de la plantilla, una vez) y se añaden al final las del nuevo que falten
+ * (sin distinguir mayúsculas), hasta `max` en total. Lo marcado, lo renombrado y lo añadido a mano se queda. A diferencia
+ * de «Nueva tarea» (switchKindSubtasks), aquí cada subtarea cuenta por sí misma: una ya hecha no impide cambiar las demás.
+ */
+export function switchKindSubtaskRows<S extends { title: string; done: boolean }>(
+  prev: { subtaskTemplate: readonly string[] } | null | undefined,
+  next: { subtaskTemplate: readonly string[] },
+  subtasks: readonly S[],
+  max: number,
+): { remove: S[]; add: string[] } {
+  const old = mergeSubtasks([], [...(prev?.subtaskTemplate ?? [])]);
+  const fresh = mergeSubtasks([], [...next.subtaskTemplate]);
+  if (prev && old.length === fresh.length && old.every((x, i) => sameSubtask(x, fresh[i]!))) return { remove: [], add: [] };
+  const pending = [...old];
+  const remove: S[] = [];
+  for (const s of subtasks) {
+    const i = s.done ? -1 : pending.indexOf(s.title);
+    if (i < 0) continue;
+    pending.splice(i, 1);
+    // También está en la plantilla del nuevo: se queda donde está (quitarla y volver a ponerla la llevaría al final).
+    if (!fresh.some((x) => sameSubtask(x, s.title))) remove.push(s);
+  }
+  const kept = subtasks.filter((s) => !remove.includes(s)).map((s) => s.title);
+  const add: string[] = [];
+  for (const title of fresh) {
+    if (kept.length + add.length >= max) break;
+    if (!kept.some((x) => sameSubtask(x, title)) && !add.some((x) => sameSubtask(x, title))) add.push(title);
+  }
+  return { remove, add };
+}
+
 /** Título, descripción y subtareas al pasar del tipo `prev` (null: ninguno con plantilla puesta) al tipo `next`. */
 export function switchKindText(
   prev: KindTemplate | null | undefined,
