@@ -3,7 +3,7 @@
 // emails del HTML (como la «Email Address Obfuscation» de Cloudflare, que daba el #418 en Mi perfil y Administración →
 // Usuarios); (2) pestañas con alias (`?tab=plantillas`) y aviso de una desconocida; (3) informe semanal: el destinatario se
 // elige por nombre y a un miembro no se le enseña el email de otro; (4) calendario: vencidas en rojo, «N vencidas de antes de
-// este mes» y, en el móvil, «Ir a hoy» en el aviso (sin vencidas, se baja solo hasta hoy); (5) Mis tareas: singular/plural y borde rojo solo en las vencidas; (6) Usuarios
+// este mes» y, en el móvil, «Ir a hoy» en el aviso (sin vencidas, se baja solo hasta hoy); (5) Mis tareas: singular/plural, borde rojo solo en las vencidas y línea de resumen con enlaces a cada grupo (sin filtros; ?filter= redirige); (6) Usuarios
 // a 393 px con menú «⋯», indicador de desplazamiento en las pestañas y pie del menú lateral entero; (7) theme-color con el
 // tema elegido; (8) accesibilidad: «Ver como lista» con aria-pressed, «Abrir menú» con aria-expanded, fondo inert con un
 // modal abierto (también diálogo dentro de diálogo, y los avisos emergentes siguen fuera) y nombres de los controles (axe);
@@ -12,16 +12,17 @@
 // y GIT_SHA=<commit>, ver src/lib/bug-report-core.ts), el botón junto a «Cerrar sesión» (también en el móvil, donde cierra
 // el menú), el diálogo con la captura de la página sin el diálogo (con la CSP de la app), el formulario de GitHub con lo
 // escrito y, con una versión publicada más nueva en la caché del aviso, el botón desactivado. El envío por email lo prueba
-// tests/db/feedback.test.ts (aquí no hay SMTP: sale «Enviar por email» desde el programa de correo, con GitHub de alternativa).
+// tests/db/feedback.test.ts (aquí no hay SMTP: sale «Enviar por email» desde el programa de correo, con GitHub de alternativa);
+// (10) Historial de versiones (PART=hist): solo las 10 últimas en la página; «Ver más», el buscador y #vX.Y.Z traen el resto.
 // Misma base y servidor que tablero-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,hist,movil,tema,a11y
 import fs from "node:fs";
 import os from "node:os";
 import { createRequire } from "node:module";
 import * as L from "./qa/lib.mjs";
 const { sleep, COL } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "feedback,hyd,tabs,informe,cal,mis,movil,tema,a11y").split(",");
+const only = (process.env.PART || "feedback,hyd,tabs,informe,cal,mis,hist,movil,tema,a11y").split(",");
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
 
 await L.prepareUsers();
@@ -421,9 +422,82 @@ if (only.includes("mis")) {
   await L.goto(s.page, `${L.BASE}/my-tasks`);
   await s.page.getByText("2 tareas en todos tus proyectos.").waitFor({ timeout: 15000 });
   L.eq("MIS: la vencida sí lleva el borde rojo", await s.page.locator("li[data-overdue]", { hasText: "Vencida r56" }).count(), 1);
-  L.assertNoErrors("MIS", [s]);
+  // Ronda 65: sin filtros; una línea de resumen enlaza a cada grupo con tareas (anclas en la página).
+  const summary = s.page.getByRole("navigation", { name: "Grupos de mis tareas" });
+  L.eq("MIS: la línea de resumen solo lleva los grupos con tareas", (await summary.getByRole("link").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Vencidas 1", "Más adelante 1"]);
+  L.eq("MIS: sin los filtros de antes", await s.page.getByRole("link", { name: /Todas|Vencidas y próximos 7 días/ }).count(), 0);
+  L.eq("MIS: «Vencidas» solo es el título del grupo (y su enlace en el resumen)", await s.page.getByRole("heading", { name: /^Vencidas/ }).count(), 1);
+  L.eq("MIS: cada enlace lleva a su grupo", await summary.getByRole("link", { name: /Más adelante/ }).getAttribute("href"), "#tareas-later");
+  L.eq("MIS: el grupo es una región con su título", await s.page.getByRole("region", { name: /Más adelante/ }).getAttribute("id"), "tareas-later");
+  // Un marcador antiguo con ?filter= va a la página limpia.
+  await L.goto(s.page, `${L.BASE}/my-tasks?filter=overdue`);
+  await s.page.getByText("2 tareas en todos tus proyectos.").waitFor({ timeout: 15000 });
+  L.eq("MIS: /my-tasks?filter=overdue redirige a /my-tasks", new URL(s.page.url()).pathname + new URL(s.page.url()).search, "/my-tasks");
+  // Móvil a 390 px: con un grupo más abajo de la pantalla, el enlace lo trae a la vista sin desbordar a lo ancho.
+  const extra = await L.seedTasks(COL.backlog, Array.from({ length: 14 }, (_, i) => `Sin fecha r65 ${i}`));
+  await L.q(`UPDATE "Task" SET "assigneeId"=$2 WHERE id = ANY($1::text[])`, [extra, admin.id]);
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  await L.goto(m.page, `${L.BASE}/my-tasks`);
+  const mSummary = m.page.getByRole("navigation", { name: "Grupos de mis tareas" });
+  await mSummary.waitFor({ timeout: 15000 });
+  L.eq("MÓVIL mis: el resumen cuenta los tres grupos", (await mSummary.getByRole("link").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim()), ["Vencidas 1", "Más adelante 1", "Sin fecha 14"]);
+  L.check("MÓVIL mis: sin desbordar a lo ancho", await m.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+  const box = await mSummary.boundingBox();
+  L.check("MÓVIL mis: el resumen cabe en la pantalla", !!box && box.x >= 0 && box.x + box.width <= 390, JSON.stringify(box));
+  await mSummary.getByRole("link", { name: /Sin fecha/ }).click();
+  await L.checkEventually("MÓVIL mis: el enlace baja hasta su grupo", async () => {
+    const r = await m.page.locator("#tareas-none").boundingBox();
+    return !!r && r.y >= 0 && r.y < 300;
+  });
+  L.assertNoErrors("MIS", [s, m]);
+  await m.ctx.close();
   await s.ctx.close();
   await L.cleanBoard();
+}
+
+// --- (10) Historial de versiones: las 10 últimas, «Ver más», buscador y enlace a una antigua ------------------------------
+if (only.includes("hist")) {
+  L.scenario("hist: la página trae las 10 últimas; «Ver más», el buscador y #vX.Y.Z traen el resto");
+  await asMember();
+  const all = (await L.q(`SELECT version FROM "AppVersionLog"`)).map((r) => r.version)
+    .sort((a, b) => { const pa = a.split(".").map(Number), pb = b.split(".").map(Number); return pb[0] - pa[0] || pb[1] - pa[1] || pb[2] - pa[2]; });
+  const oldest = all.at(-1);
+  const s = await L.session();
+  // Peso de la página (HTML con el payload RSC dentro) y del payload RSC de una navegación en la app.
+  const html = await s.page.evaluate(async () => (await (await fetch("/changelog")).text()).length);
+  const rsc = await s.page.evaluate(async () => (await (await fetch("/changelog", { headers: { RSC: "1" } })).text()).length);
+  L.note("HIST: tamaño", `HTML ${Math.round(html / 1024)} KB · RSC ${Math.round(rsc / 1024)} KB · ${all.length} versiones`);
+  await L.goto(s.page, `${L.BASE}/changelog`);
+  const items = s.page.locator("main ol > li[id^='v']");
+  await items.first().waitFor({ timeout: 15000 });
+  L.eq("HIST: de entrada, las 10 más recientes en orden", await items.evaluateAll((els) => els.map((e) => e.id)), all.slice(0, 10).map((v) => `v${v}`));
+  L.check("HIST: sin el texto de las antiguas en el HTML", !(await s.page.content()).includes(`id="v${oldest}"`));
+  const more = s.page.getByRole("button", { name: "Ver más" });
+  await more.click();
+  await L.eqEventually("HIST: «Ver más» trae todas las demás", () => items.count(), all.length);
+  L.eq("HIST: … y el foco pasa a la primera de las nuevas", await s.page.evaluate(() => document.activeElement?.id), `v${all[10]}`);
+  L.eq("HIST: sin «Ver más» cuando ya están todas", await more.count(), 0);
+  // El buscador: la primera vez que se escribe se traen las que faltan y se busca en todas.
+  await s.page.reload();
+  await items.first().waitFor({ timeout: 15000 });
+  await s.page.getByLabel("Buscar en el historial").fill(`v${oldest}`);
+  await L.eqEventually("HIST: buscar la más antigua la encuentra aunque no estuviera cargada", () => items.evaluateAll((els) => els.map((e) => e.id)), [`v${oldest}`]);
+  L.check("HIST: … con la cuenta sobre todas", (await s.page.getByText(`1 de ${all.length} versiones`).count()) === 1);
+  // Enlace directo a una versión antigua: se traen las demás y se baja hasta ella.
+  await L.goto(s.page, `${L.BASE}/changelog#v${oldest}`);
+  await L.checkEventually("HIST: /changelog#vX.Y.Z de una antigua la muestra en pantalla", async () => {
+    const r = await s.page.locator(`[id="v${oldest}"]`).boundingBox();
+    return !!r && r.y >= 0 && r.y < 900;
+  });
+  // Móvil a 390 px: el botón cabe y no hay desbordamiento a lo ancho.
+  const m = await L.session({ viewport: { width: 390, height: 844 }, mobile: true });
+  await L.goto(m.page, `${L.BASE}/changelog`);
+  const mMore = m.page.getByRole("button", { name: "Ver más" });
+  await mMore.waitFor({ timeout: 15000 });
+  L.check("MÓVIL hist: sin desbordar a lo ancho", await m.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+  L.assertNoErrors("HIST", [s, m]);
+  await m.ctx.close();
+  await s.ctx.close();
 }
 
 // --- (6) Móvil: Usuarios, pestañas y pie del menú ----------------------------------------------------------------------

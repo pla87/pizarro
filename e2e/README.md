@@ -59,19 +59,19 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |
 | Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 38 | ~40 s |
-| **Interfaz y textos** | | **309** | |
+| **Interfaz y textos** | | **330** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 39 | ~1 min |
-| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas», Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 70 | ~3 min |
+| Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas» (línea de resumen con enlaces a cada grupo y `?filter=` antiguo, ronda 65), Historial de versiones con las 10 últimas, «Ver más», buscador y `#vX.Y.Z` (ronda 65), Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 91 | ~3 min |
 | **Accesibilidad** | | **108** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 36 | ~40 s |
 | Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 74 | ~30 s |
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3412** | |
+| **Total** | | **3433** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -756,7 +756,11 @@ enmascarado) y sin «Otra dirección…»; guarda eligiendo a otra persona y un 
 **cal**: «1 vencida de antes de este mes» con su enlace; una vencida del mes lleva el mismo rojo que «Mis tareas»; a
 393 px, con vencidas de antes el aviso queda a la vista y «Ir a hoy» deja hoy arriba; sin ellas, el mes actual se abre
 con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una tarea roja de
-«Más adelante» sin marca de vencida (su color, en un punto) y la vencida con el borde rojo. **movil**: en Usuarios a
+«Más adelante» sin marca de vencida (su color, en un punto) y la vencida con el borde rojo; sin filtros, una línea de resumen
+con un enlace a cada grupo con tareas, `?filter=overdue` redirige a `/my-tasks` y, a 390 px, el enlace baja hasta su grupo sin
+desbordar. **hist**: Historial de versiones con las 10 últimas (anota el peso del HTML y del payload RSC), «Ver más» trae
+el resto y lleva el foco a la primera nueva, el buscador encuentra la más antigua, `#vX.Y.Z` de una antigua baja hasta
+ella y, a 390 px, sin desbordar. **movil**: en Usuarios a
 393 px el nombre y el email tienen sitio, las acciones están en «⋯» (y abren su diálogo) y en el escritorio siguen los
 iconos; en las pestañas de Administración, el indicador de que hay más a la derecha (y a la izquierda al final); el pie
 del menú lateral se ve entero. **tema**: con el sistema claro y Pizarro oscuro, theme-color oscuro, y cambia al momento
@@ -766,7 +770,7 @@ emergentes, con la confirmación de descartar encima también «Nueva tarea», y
 sin botones ni enlaces sin nombre; «Abrir menú» con aria-expanded.
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=hyd,tabs,informe,cal,mis,movil,tema,a11y
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-auditoria-e2e.mjs   # PART=feedback,hyd,tabs,informe,cal,mis,hist,movil,tema,a11y
 ```
 
 ## Accesibilidad

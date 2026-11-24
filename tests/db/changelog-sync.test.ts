@@ -4,9 +4,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { db } from "./helpers";
+import { db, expectFail, expectOk, loginAs, logout, makeUser, SESSION_EXPIRED } from "./helpers";
 
 const { syncChangelog } = await import("../../src/lib/changelog-sync");
+const { changelogVersions } = await import("../../src/lib/changelog-page");
+const { getOlderVersions } = await import("../../src/actions/changelog");
 
 const dir = await mkdtemp(path.join(tmpdir(), "pz-changelog-"));
 after(() => rm(dir, { recursive: true, force: true }));
@@ -56,4 +58,29 @@ test("syncChangelog: inserta las que faltan y solo reescribe las que cambian", a
   await syncChangelog(db, await write(edited));
   assert.equal((await db.appVersionLog.findUniqueOrThrow({ where: { version: "900.0.3" } })).changesEn, null);
   await db.appVersionLog.deleteMany({ where: { version: { in: VERSIONS } } });
+});
+
+test("Historial de versiones: la página trae las más recientes en orden SemVer y getOlderVersions el resto, con sesión", async () => {
+  const mine = ["900.0.9", "900.0.10", "900.1.0", "900.0.2"];
+  for (const v of mine) {
+    await db.appVersionLog.create({ data: { version: v, releasedAt: new Date("2026-01-01T00:00:00Z"), summary: `S ${v}`, changes: changes(v), summaryEn: `E ${v}`, changesEn: changes(`${v}-en`) } });
+  }
+  // 900.x es mayor que cualquier versión real: son las primeras. 900.0.10 va antes que 900.0.9 (no es orden de texto).
+  const first = await changelogVersions(false, 0, 3);
+  assert.deepEqual(first.versions.map((v) => v.version), ["900.1.0", "900.0.10", "900.0.9"]);
+  assert.equal(first.versions[0]!.summary, "S 900.1.0");
+  const en = await changelogVersions(true, 1, 1);
+  assert.deepEqual([en.versions[0]!.summary, en.versions[0]!.changes.nuevas], ["E 900.0.10", ["900.0.10-en"]]);
+  assert.equal(first.total, en.total);
+
+  logout();
+  expectFail(await getOlderVersions(3), SESSION_EXPIRED);
+  await loginAs(await makeUser());
+  const rest = expectOk(await getOlderVersions(3));
+  assert.equal(rest.versions[0]!.version, "900.0.2");
+  assert.equal(rest.versions.length, first.total - 3);
+  // Un valor raro empieza por la primera (no rompe ni se salta versiones).
+  assert.equal(expectOk(await getOlderVersions(-5)).versions.length, first.total);
+  logout();
+  await db.appVersionLog.deleteMany({ where: { version: { in: mine } } });
 });

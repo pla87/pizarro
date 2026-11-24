@@ -46,7 +46,7 @@ interface ActionMeta {
 }
 
 /** Consultas que no se anotan en el registro cuando salen bien (los errores sí): abrir una tarea o desplegar una release del histórico. */
-const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments", "releases.getReleaseContent"]);
+const UNLOGGED_READS: ReadonlySet<string> = new Set(["tasks.getTaskDetail", "tasks.getTaskHistory", "tasks.getOlderComments", "tasks.getRecentComments", "releases.getReleaseContent", "changelog.getOlderVersions"]);
 
 /** Ejecuta una acción, la registra en los logs y convierte los errores en un resultado serializable. */
 export async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>>;
