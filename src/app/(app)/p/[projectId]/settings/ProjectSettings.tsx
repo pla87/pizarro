@@ -558,7 +558,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   className="btn-icon shrink-0"
                   disabled={pending}
                   aria-label={t("Reenviar invitación a {name}", { name: m.name })}
-                  title={t("Reenviar invitación")}
+                  title={t("Reenviar invitación por email (el enlace anterior deja de valer)")}
                   onClick={() => resend(m)}
                 >
                   <MailPlus size={16} />
@@ -570,7 +570,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   className="btn-icon shrink-0"
                   disabled={pending}
                   aria-label={t("Generar enlace de invitación nuevo para {name}", { name: m.name })}
-                  title={t("Genera un enlace de invitación nuevo; el anterior deja de valer")}
+                  title={t("Sin email configurado: genera un enlace de invitación nuevo para pasárselo; el anterior deja de valer")}
                   onClick={() => void freshLink(m)}
                 >
                   <Link2 size={16} />
@@ -598,7 +598,15 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           );
         })}
       </ul>
-      {members.length === 0 && <p className="text-sm text-slate-500">{t("Sin miembros.")}</p>}
+      {/* De equipo: quien lo creó (un administrador) no es miembro y aun así lo ve; un «Sin miembros.» seco no lo explicaba. */}
+      {members.length === 0 && <p className="text-sm text-slate-500">{isPrivate ? t("Sin miembros.") : t("Sin miembros. Los administradores lo ven sin ser miembros.")}</p>}
+      {canInvite && members.some((m) => m.invitePending && m.active) && (
+        <p className="text-xs text-slate-500" data-testid="invite-pending-hint">
+          {canResend
+            ? t("Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).")
+            : t("Sin email configurado: «Generar enlace de invitación nuevo» crea uno para que se lo pases tú (el anterior deja de valer).")}
+        </p>
+      )}
       <div className="flex gap-2">
         <select className="input min-w-0 max-w-xs flex-1" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)}>
           <option value="">{t("Añadir miembro…")}</option>

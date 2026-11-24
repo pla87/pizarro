@@ -256,4 +256,16 @@ export const settings: Record<string, string> = {
   // Historial de versiones: la página trae las más recientes y el resto se pide
   "Ver más": "Show more",
   "Buscando en todas las versiones…": "Searching all versions…",
+  // Mi perfil → Preferencias: orden de los proyectos
+  "Orden de los proyectos": "Project order",
+  "En el selector de proyectos y en las listas de proyectos.": "In the project picker and in project lists.",
+  "Usados recientemente": "Recently used",
+  "Arriba el último que has abierto.": "The one you opened last comes first.",
+  "Alfabético": "Alphabetical",
+  "Por nombre, de la A a la Z.": "By name, from A to Z.",
+  "Cambió el orden de los proyectos a «{order}»": "Changed the project order to “{order}”",
+  // Avisos: sin avisos nuevos pero con tareas vencidas en «Mis tareas»
+  "No tienes avisos nuevos": "No new notifications",
+  "1 tarea vencida en Mis tareas": "1 overdue task in My tasks",
+  "{n} tareas vencidas en Mis tareas": "{n} overdue tasks in My tasks",
 };

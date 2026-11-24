@@ -24,6 +24,8 @@ export interface CurrentUser {
   locale: "ES" | "EN";
   /** Preferencia: borrar los borradores locales al cerrar sesión (lo hace el cliente antes de enviar el cierre). */
   clearDraftsOnLogout: boolean;
+  /** Orden de sus proyectos en el selector y las listas (Mi perfil → Preferencias). */
+  projectOrder: "RECENT" | "ALPHABETICAL";
 }
 
 // Solo SESSION_SECRET: rotarla cierra todas las sesiones y nada más (los tokens y el cifrado usan sus propias claves).
@@ -100,7 +102,8 @@ interface SessionRow extends SessionUser {
 async function readSession(id: string): Promise<{ expiresAt: Date; lastSeenAt: Date; user: SessionUser & { active: boolean } } | null> {
   const rows = await db.$queryRaw<SessionRow[]>`
     SELECT s."expiresAt", s."lastSeenAt", u.id, u.email, u.name, u.role::text AS role, u.theme::text AS theme,
-           u.accent::text AS accent, u.locale::text AS locale, u."clearDraftsOnLogout", u.active, u."mustChangePassword"
+           u.accent::text AS accent, u.locale::text AS locale, u."clearDraftsOnLogout",
+           u."projectOrder"::text AS "projectOrder", u.active, u."mustChangePassword"
     FROM "Session" s JOIN "User" u ON u.id = s."userId"
     WHERE s.id = ${id}
     LIMIT 1`;

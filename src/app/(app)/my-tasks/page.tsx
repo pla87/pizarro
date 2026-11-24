@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ExternalLink, Folder, ListChecks } from "lucide-react";
-import { visibleProjectsWhere } from "@/lib/access";
+import { myOpenTasksWhere } from "@/lib/my-tasks-server";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { requireUserPage } from "@/lib/session";
@@ -31,7 +31,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   const t = await getT();
   const uiLocale = await getLocale();
   const locale = intlLocale(uiLocale);
-  const where = { assigneeId: user.id, archivedAt: null, column: { isDone: false }, project: visibleProjectsWhere(user) };
+  const where = myOpenTasksWhere(user);
   const fetched = await db.task.findMany({
     // Bandeja de lo pendiente: sin las ya terminadas (columnas «hechas») y con un tope razonable.
     where,

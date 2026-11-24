@@ -1,12 +1,12 @@
 "use client";
 
 import { PasswordInput } from "@/components/ui/PasswordInput";
-import { Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
+import { ArrowDownUp, Check, Link2, Monitor, Moon, Palette, PenLine, Sun, Languages } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   changePassword, createReleaseTemplate, deleteReleaseTemplate, disconnectGoogle, moveReleaseTemplate, updateCardStyle,
-  updateAccent, updateEditorMode, updateProfileName, updateReleaseTemplate, updateTheme, updateLocale,
+  updateAccent, updateEditorMode, updateProfileName, updateProjectOrder, updateReleaseTemplate, updateTheme, updateLocale,
 } from "@/actions/profile";
 import { cn } from "@/components/ui/cn";
 import { InfoTip } from "@/components/ui/InfoTip";
@@ -24,6 +24,7 @@ import { useActionTransition } from "@/components/useActionTransition";
 import { actionThrowResult } from "@/lib/stale-action";
 import { EmailSafe } from "@/components/ui/EmailSafe";
 import { applyThemeColor } from "@/lib/theme-color";
+import type { ProjectOrderValue } from "@/lib/project-order";
 
 const USER_TEMPLATE_ACTIONS = { create: createReleaseTemplate, update: updateReleaseTemplate, move: moveReleaseTemplate, remove: deleteReleaseTemplate };
 
@@ -48,6 +49,8 @@ interface Props {
   planTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   cardStyle: CardStyleValue;
   editorMode: EditorModeValue;
+  /** Orden de los proyectos en el selector y las listas. */
+  projectOrder: ProjectOrderValue;
   clearDraftsOnLogout: boolean;
   theme: ThemeValue;
   accent: AccentValue;
@@ -92,6 +95,7 @@ export function ProfileSettings(props: Props) {
         <LanguageSection initial={props.locale} />
         <AppearanceSection initial={props.cardStyle} initialTheme={props.theme} initialAccent={props.accent} />
         <EditorModeSection initial={props.editorMode} />
+        <ProjectOrderSection initial={props.projectOrder} />
         <DictationSection />
         <DraftsSection initial={props.clearDraftsOnLogout} />
         {props.preferencesExtra}
@@ -271,6 +275,49 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
             onClick={() => choose(value)}
             className="choice-card rounded-xl p-3 text-left"
             aria-pressed={mode === value}
+          >
+            <div className="text-sm font-medium">{t(label)}</div>
+            <div className="mt-1 text-xs text-slate-500">{t(hint)}</div>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Orden de los proyectos en el selector de la barra lateral y en las listas de proyectos. */
+function ProjectOrderSection({ initial }: { initial: ProjectOrderValue }) {
+  const t = useT();
+  const router = useRouter();
+  const toast = useToast();
+  const [order, setOrder] = useState(initial);
+  const choose = async (value: ProjectOrderValue) => {
+    if (value === order) return;
+    const previous = order;
+    setOrder(value);
+    const res = await updateProjectOrder(value).catch((e) => actionThrowResult(e, t));
+    if (!res.ok) {
+      setOrder(previous);
+      return toast(res.error, "error");
+    }
+    // El selector de la barra lateral lo pinta el servidor: así sale ya en el orden nuevo.
+    router.refresh();
+  };
+  return (
+    <section className="card p-5">
+      <h2 className="flex items-center gap-2 font-semibold"><ArrowDownUp size={17} /> {t("Orden de los proyectos")}</h2>
+      <p className="mt-0.5 text-sm text-slate-500">{t("En el selector de proyectos y en las listas de proyectos.")}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {([
+          ["RECENT", "Usados recientemente", "Arriba el último que has abierto."],
+          ["ALPHABETICAL", "Alfabético", "Por nombre, de la A a la Z."],
+        ] as const).map(([value, label, hint]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => void choose(value)}
+            className="choice-card rounded-xl p-3 text-left"
+            aria-pressed={order === value}
           >
             <div className="text-sm font-medium">{t(label)}</div>
             <div className="mt-1 text-xs text-slate-500">{t(hint)}</div>
