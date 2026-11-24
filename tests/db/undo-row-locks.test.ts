@@ -13,6 +13,23 @@ import { archiveTasks, moveTasks } from "../../src/actions/tasks";
 import { lockTaskRows } from "../../src/lib/task-positions";
 
 /**
+ * Espera a que alguna conexión de ESTA base quede esperando un candado de fila. Los `transactionid` no llevan base en
+ * pg_locks: sin cruzar con pg_stat_activity se verían las esperas de las otras tandas de `npm run test:db`. Falla si no
+ * llega a esperar (una prueba que no ve la espera no comprueba nada).
+ */
+async function waitRowLock(probe: pg.Client, what: string): Promise<void> {
+  for (let i = 0; i < 250; i++) {
+    const { rows } = await probe.query(
+      `SELECT count(*)::int AS n FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+       WHERE a.datname = current_database() AND l.locktype IN ('transactionid', 'tuple') AND NOT l.granted`,
+    );
+    if (rows[0].n > 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.fail(what);
+}
+
+/**
  * Otra conexión bloquea la tarea de id menor y `run` se queda esperándola. Con el bloqueo en orden de id aún no ha
  * tocado la de id mayor; sin él, podría tenerla ya bloqueada (la recorre antes) y cruzarse con otra acción en bloque.
  * Devuelve si la de id mayor estaba bloqueada mientras `run` esperaba.
@@ -26,13 +43,7 @@ async function locksHigherFirst([low, high]: [string, string], run: () => Promis
     await holder.query("BEGIN");
     await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR UPDATE`, [low]);
     const pending = run();
-    let waited = false;
-    for (let i = 0; i < 250; i++) {
-      const { rows } = await probe.query(`SELECT count(*)::int AS n FROM pg_locks WHERE locktype IN ('transactionid', 'tuple') AND NOT granted`);
-      if (rows[0].n > 0) { waited = true; break; }
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    assert.ok(waited, "la operación debería esperar a la fila bloqueada");
+    await waitRowLock(probe, "la operación debería esperar a la fila bloqueada");
     let highLocked = false;
     await probe.query("BEGIN");
     try {
@@ -93,13 +104,7 @@ describe("deshacer en bloque: filas bloqueadas en orden de id", () => {
       await holder.query("BEGIN");
       await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR KEY SHARE`, [high]);
       const pending = applyUndo(f.project.id, [{ t: "task.remove", id: low }, { t: "task.remove", id: high }]);
-      let waited = false;
-      for (let i = 0; i < 250 && !waited; i++) {
-        const { rows } = await probe.query(`SELECT count(*)::int AS n FROM pg_locks WHERE locktype IN ('transactionid', 'tuple') AND NOT granted`);
-        waited = rows[0].n > 0;
-        if (!waited) await new Promise((r) => setTimeout(r, 20));
-      }
-      assert.ok(waited, "el deshacer debería esperar a la alta en curso");
+      await waitRowLock(probe, "el deshacer debería esperar a la alta en curso");
       // Mientras espera, la de id menor ya está bloqueada para borrarla: otra alta sobre ella tiene que esperar.
       let blocked = false;
       await probe.query("BEGIN");
@@ -156,11 +161,7 @@ describe("acciones en bloque: filas bloqueadas en orden de id", () => {
       await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR UPDATE`, [low]);
       const pending = run([high, low]);
       // Hasta que la acción esté esperando la fila bloqueada.
-      for (let i = 0; i < 200; i++) {
-        const { rows } = await probe.query(`SELECT count(*)::int AS n FROM pg_locks WHERE locktype IN ('transactionid', 'tuple') AND NOT granted`);
-        if (rows[0].n > 0) break;
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      await waitRowLock(probe, "la acción debería esperar a la fila bloqueada");
       let highLocked = false;
       await probe.query("BEGIN");
       try {

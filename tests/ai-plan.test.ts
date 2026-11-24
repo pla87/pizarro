@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
-import { AI_PLAN_DEFAULTS, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanZipRoot, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
+import { AI_PLAN_DEFAULTS, AI_PLAN_SAVE_MAX, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanTooLong, aiPlanZipRoot, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
 import {
   COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, releaseTemplateRows, TEMPLATE_KINDS,
 } from "../src/lib/constants";
@@ -403,4 +403,10 @@ describe("plan de trabajo: tipo común", () => {
     assert.equal(saved, 11_957);
     assert.ok(saved / before.length > 0.4, `${saved} de ${before.length}`);
   });
+});
+
+test("plan demasiado largo para Documentación: el aviso dice cuánto tiene, el tope y qué hacer, en los dos idiomas", () => {
+  assert.equal(AI_PLAN_SAVE_MAX, 200_000);
+  assert.match(aiPlanTooLong(makeT("es"), 230_500, "es-ES"), /^El plan tiene 230\.500 caracteres y en Documentación caben como mucho 200\.000: cópialo con «Copiar todo» o descárgalo en \.md/);
+  assert.match(aiPlanTooLong(makeT("en"), 230_500, "en-US"), /^The plan has 230,500 characters and Documentation holds at most 200,000: copy it with “Copy all” or download it as \.md/);
 });

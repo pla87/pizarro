@@ -91,6 +91,24 @@ describe("tipo por defecto de una columna", () => {
     assert.deepEqual(byName.get("Por hacer")!.defaultKind, { name: "Cita médica", projectId: imported.projectId });
     assert.equal(byName.get("En curso")!.defaultKind, null);
   });
+
+  test("un tipo general usado solo como tipo por defecto también viaja: donde no existe, se crea como tipo del proyecto", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    const general = await makeKind(null);
+    expectOk(await setColumnDefaultKind(f.columns.doing, general.id));
+    assert.equal(await db.task.count({ where: { projectId: f.project.id, kindId: general.id } }), 0);
+    const parts: Buffer[] = [];
+    for await (const c of streamZip((await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT)).entries)) parts.push(c);
+    const file = path.join(work, "exp-general.zip");
+    await writeFile(file, Buffer.concat(parts));
+    // La otra instalación no tiene ese tipo general.
+    await db.taskKind.delete({ where: { id: general.id } });
+    const imported = await importProjectFile(file, { id: admin.id, name: admin.name, email: admin.email, role: "ADMIN" }, { isPrivate: false });
+    const col = await db.column.findFirstOrThrow({ where: { projectId: imported.projectId, name: "En curso" }, select: { defaultKind: { select: { name: true, projectId: true, color: true } } } });
+    assert.deepEqual(col.defaultKind, { name: general.name, projectId: imported.projectId, color: general.color });
+  });
 });
 
 describe("«Generar plan»: el PDF se descarga", () => {

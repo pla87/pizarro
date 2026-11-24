@@ -30,7 +30,7 @@ test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64 en máquinas n
   assert.match(wf, /push-by-digest=true/);
   assert.match(wf, /docker buildx imagetools create/);
   assert.doesNotMatch(wf, /setup-qemu-action/);
-  assert.match(wf, /needs: \[version, build, pdf\]/);
+  assert.match(wf, /needs: \[version, build, pdf, checks\]/);
   assert.match(wf, /ghcr\.io\/pla87\/pizarro:\$\{VERSION\}/);
   assert.match(wf, /pizarro:latest/);
   // Sin caché de Docker: subirla costaba ~3 min por arquitectura y casi no se reutilizaba (la versión cambia
@@ -74,7 +74,7 @@ test("workflow de release: genera MANUAL.pdf y PRUEBAS.pdf con el Chrome del run
   assert.match(pdf, /node scripts\/build-manual-pdf\.mjs pruebas\n/);
   assert.match(pdf, /uses: actions\/upload-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales\n\s+path: \|\n\s+MANUAL\.pdf\n\s+PRUEBAS\.pdf/);
   // Sin los PDF no se etiqueta la imagen (ni, por tanto, se crea la release).
-  assert.match(releaseJob("image"), /needs: \[version, build, pdf\]/);
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks\]/);
   const release = releaseJob("release");
   assert.match(release, /uses: actions\/download-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales/);
   // Los dos `gh release create` (a mano y con etiqueta) llevan los dos PDF.
@@ -490,4 +490,22 @@ test("workflow Comprobaciones: en cada PR contra main (también Dependabot) y a 
   assert.deepEqual([...on.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]), ["pull_request", "workflow_dispatch"]);
   // Un push nuevo a la misma PR cancela la pasada anterior.
   assert.match(wf, /group: ci-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n {2}cancel-in-progress: true/);
+});
+
+// Lo que se publica pasa antes las mismas comprobaciones que una PR (ci.yml): si main avanzó tras la última pasada de la
+// PR, nadie más lo probaría. La imagen (y tras ella la release y stable) espera al job.
+test("workflow de release: «Comprobaciones» con los mismos pasos que ci.yml antes de etiquetar la imagen", () => {
+  const steps = (job: string) => [...job.matchAll(/^ {8}run: (.+)$/gm)].map((m) => m[1]);
+  const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+  const ciChecks = ci.slice(ci.indexOf("\n  checks:\n"), ci.indexOf("\n  caddyfile:\n"));
+  const checks = releaseJob("checks");
+  assert.deepEqual(steps(checks), ["npm ci --no-audit --no-fund", "npx prisma generate", "npx tsc --noEmit", "npm run lint", "npm test", "npm run i18n:check"]);
+  assert.deepEqual(steps(checks), steps(ciChecks));
+  assert.match(checks, /needs: version\n/);
+  assert.match(checks, /permissions:\n {6}contents: read\n/);
+  assert.match(checks, /cache: npm/);
+  assert.doesNotMatch(checks, /secrets\./);
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks\]/);
+  assert.match(releaseJob("release"), /needs: image\n/);
+  assert.match(releaseJob("stable"), /needs: release\n/);
 });

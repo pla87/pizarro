@@ -603,6 +603,37 @@ describe("WhatsApp: código de verificación y topes", () => {
     assert.equal(graphCalls().length, 1);
   });
 
+  test("token caducado o revocado: Integraciones lo dice (no solo «Activo») hasta que un envío sale bien o se guarda otro token", async () => {
+    await cleanConfig();
+    await whatsappOn();
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { notifyEmail: false } });
+    const f = await makeProject({ members: [user] });
+    // Un aviso nuevo (otra tarea) cada vez: dos a la misma persona por la misma tarea no se repiten en 10 minutos.
+    const mention = async () => deliver([await notice("MENTION", { userId: user.id, taskId: (await makeTask(f)).id })]);
+    await db.userChannel.create({ data: { userId: user.id, channel: "WHATSAPP", address: "+34611000009", consentAt: new Date(), verifiedAt: new Date() } });
+    assert.equal((await getMessagingAdminView()).whatsapp.authError, null);
+    replies.graph = () => new Response(JSON.stringify({ error: { message: "Error validating access token: Session has expired", code: 190 } }), { status: 401 });
+    await mention();
+    const view = (await getMessagingAdminView()).whatsapp;
+    assert.equal(view.active, true);
+    assert.match(view.authError?.message ?? "", /^WhatsApp 401 \(190\): Error validating access token/);
+    assert.equal(JSON.stringify(view).includes(WA_TOKEN), false);
+    // Otro fallo (un 5xx) no lo borra; un envío bien, sí.
+    replies.graph = () => new Response(JSON.stringify({ error: { message: "Service Unavailable", code: 1 } }), { status: 503 });
+    await mention();
+    assert.ok((await getMessagingAdminView()).whatsapp.authError);
+    replies.graph = () => new Response(JSON.stringify({ messages: [{ id: "wamid.2" }] }));
+    await mention();
+    assert.equal((await getMessagingAdminView()).whatsapp.authError, null);
+    // Guardar otro token también lo borra.
+    replies.graph = () => new Response(JSON.stringify({ error: { message: "Permissions error", code: 10 } }), { status: 403 });
+    await mention();
+    assert.ok((await getMessagingAdminView()).whatsapp.authError);
+    expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", token: `${WA_TOKEN}X` }));
+    assert.equal((await getMessagingAdminView()).whatsapp.authError, null);
+  });
+
   test("Mi perfil: un número de una versión anterior sin consentimiento se ve, pero no recibe nada hasta confirmarlo", async () => {
     await cleanConfig();
     await whatsappOn();

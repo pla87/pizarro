@@ -220,4 +220,7 @@ export const mensajeria: Record<string, string> = {
   "Confirmó su número de WhatsApp": "Confirmed their WhatsApp number",
   // Logs: preferencias de un canal (antes solo «OK»)
   "Cambió sus avisos por {channel}": "Changed their {channel} notifications",
+  // Integraciones → WhatsApp: token caducado o revocado (Meta responde 401/403 o el código 190)
+  "Meta ha rechazado el token y los avisos no salen: {error}. Pon un token permanente (paso 2 de «Qué necesitas de Meta») y guarda.":
+    "Meta rejected the token and notifications are not going out: {error}. Set a permanent token (step 2 of “What you need from Meta”) and save.",
 };

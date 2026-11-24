@@ -23,7 +23,7 @@ after(() => rm(dir, { recursive: true, force: true }));
 async function backupConnections(): Promise<number> {
   // Un instante para que el servidor retire la sesión cerrada.
   await new Promise((r) => setTimeout(r, 100));
-  const [row] = await db.$queryRawUnsafe<{ n: number }[]>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name = 'pizarro-backup'");
+  const [row] = await db.$queryRawUnsafe<{ n: number }[]>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND application_name = 'pizarro-backup'");
   return row!.n;
 }
 

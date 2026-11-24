@@ -364,3 +364,24 @@ test("tipo por defecto de las columnas: añadir lo pone en las nuevas, cambiar d
   expectOk(await undoTemplateChange(f.project.id));
   assert.deepEqual(await defaults(), { "Por hacer": own, "En curso": null, Hecho: null });
 });
+
+// Una instantánea guardada con la v1.67 puede traer un rol retirado (AGENDA, DELIVERY): deshacer la lee como «Sin rol»
+// en vez de fallar entero con un valor que ya no está en el enum.
+test("deshacer un cambio de plantilla cuya instantánea trae un rol retirado: la columna vuelve sin rol", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const f = await makeProject();
+  await loginAs(admin);
+  const tpl = await makeTemplate();
+  expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "ADD"));
+  const row = await db.projectTemplateChange.findUniqueOrThrow({ where: { projectId: f.project.id } });
+  const snap = row.snapshot as { columns: { id: string; role: string }[] };
+  for (const c of snap.columns) {
+    if (c.id === f.columns.todo) c.role = "AGENDA";
+    if (c.id === f.columns.doing) c.role = "DELIVERY";
+  }
+  await db.projectTemplateChange.update({ where: { projectId: f.project.id }, data: { snapshot: snap } });
+
+  expectOk(await undoTemplateChange(f.project.id));
+  const cols = await db.column.findMany({ where: { projectId: f.project.id }, select: { role: true } });
+  assert.deepEqual(cols.map((c) => c.role), ["NONE", "NONE", "NONE"]);
+});

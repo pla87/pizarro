@@ -7,7 +7,7 @@ process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
 const { followerIds, isFollowing } = await import("../src/lib/followers");
 const { digestDue, localParts, reportDue } = await import("../src/lib/schedule");
-const { bucketAnchor, bucketOf, groupByDue } = await import("../src/lib/my-tasks");
+const { bucketAnchor, bucketCount, bucketOf, cutBucket, groupByDue } = await import("../src/lib/my-tasks");
 const { buildDigest, digestEmail, digestPeriod, emptyDigestInput, DIGEST_MAX_ITEMS } = await import("../src/lib/digest");
 const { dueChangeExcerpt, dueChangeText, parseDueChange } = await import("../src/lib/notification-text");
 const { splitMentions, mentionToken } = await import("../src/lib/mentions");
@@ -124,6 +124,19 @@ test("mis tareas: los grupos vacíos no salen y cada grupo tiene su ancla", () =
   assert.deepEqual(groupByDue(tasks, today).map((g) => g.bucket), ["overdue", "today", "later", "none"]);
   assert.deepEqual(groupByDue([], today), []);
   assert.equal(bucketAnchor("overdue"), "tareas-overdue");
+});
+
+test("mis tareas con más de las que se pintan: el grupo cortado sale con «+», los completos con su número", () => {
+  const today = "2026-10-23";
+  const shown = [{ dueDate: "2026-10-01" }, { dueDate: "2026-11-30" }, { dueDate: "2026-12-01" }];
+  const groups = groupByDue(shown, today);
+  // La siguiente (no pintada) es de «Más adelante»: ese grupo está cortado.
+  const cut = cutBucket({ dueDate: "2026-12-02" }, today);
+  assert.deepEqual(groups.map((g) => bucketCount(g, cut)), ["1", "2+"]);
+  // La siguiente es «Sin fecha»: «Más adelante» está completo (y «Sin fecha» no se pinta; lo dice el aviso del total).
+  assert.deepEqual(groups.map((g) => bucketCount(g, cutBucket({ dueDate: null }, today))), ["1", "2"]);
+  // Sin más tareas, ninguno.
+  assert.deepEqual(groups.map((g) => bucketCount(g, cutBucket(undefined, today))), ["1", "2"]);
 });
 
 test("mis tareas: sin filtros; un ?filter= antiguo (marcadores) redirige a la página limpia", () => {

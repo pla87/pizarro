@@ -20,7 +20,7 @@ import { rateLimit, rateLimitReached } from "@/lib/rate-limit";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { createTelegramLinkCode, disconnectTelegramChat, getBot, releaseTelegramBot, sendTelegramMessage, syncTelegram } from "@/lib/telegram";
 import * as v from "@/lib/validation";
-import { sendWhatsappCode, sendWhatsappNotice, whatsappLocale } from "@/lib/whatsapp";
+import { clearWhatsappAuthError, sendWhatsappCode, sendWhatsappNotice, whatsappLocale } from "@/lib/whatsapp";
 import { codeTemplateAdminText, codeTemplateUserText } from "@/lib/whatsapp-code-text";
 import { getT } from "@/i18n/server";
 import { makeT, toLocale, type T } from "@/i18n/core";
@@ -150,6 +150,8 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
     const before = await loadMessagingConfig({ fresh: true });
     const enabled = before.whatsappSettings.enabled === null ? before.whatsapp.active : undefined;
     const change = await persistWhatsapp(checked.value, { token, clearToken: Boolean(form.clearToken), enabled });
+    // Otro token: el rechazo del anterior ya no vale (si el nuevo tampoco sirve, lo dirá el próximo envío).
+    if (token || form.clearToken) clearWhatsappAuthError();
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     describeAction("Cambió la configuración de WhatsApp", {
       template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, codeTemplate: cfg.codeTemplateName, codeLang: cfg.codeTemplateLang,
