@@ -293,10 +293,11 @@ const LIST_OR_INDENT_START = /^(?:\s|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/;
  */
 const afterFacts = (description: string, t: T) => (LIST_OR_INDENT_START.test(description) ? `**${t("Descripción")}:**\n\n${description}` : description);
 
-function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
+/** `sharedKind`: todas las tareas son de ese tipo y ya lo dice el contexto: no se repite en cada una. */
+function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null, paths?: ReadonlyMap<string, string>, sharedKind?: string | null): string {
   const facts: string[] = [];
   const fact = (label: string, value: string) => facts.push(`- **${label}:** ${value}`);
-  if (task.kind) fact(t("Tipo"), oneLine(task.kind));
+  if (task.kind && !sharedKind) fact(t("Tipo"), oneLine(task.kind));
   if (task.priority) fact(t("Prioridad"), task.priority);
   if (task.labels?.length) fact(t("Etiquetas"), task.labels.map(oneLine).join(", "));
   if (task.startDate) fact(t("Fecha de inicio"), task.startDate);
@@ -343,13 +344,17 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
   context.push(`- **${t("Fecha")}:** ${input.date}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
+  // Todas del mismo tipo: se dice una vez aquí y no en cada tarea (en un plan de cientos, una línea menos por tarea).
+  const kinds = new Set(input.tasks.map((x) => (x.kind ? oneLine(x.kind) : "")));
+  const sharedKind = input.tasks.length > 1 && kinds.size === 1 ? [...kinds][0] || null : null;
+  if (sharedKind) context.push(`- **${t("Tipo de todas las tareas")}:** ${sharedKind}`);
   if (namesOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.")}`);
   if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", afterFacts(description, t));
   const pathById = new Map(zipped.filter((a) => a.id).map((a) => [a.id!, a.path!]));
   const tasks = input.tasks.length
-    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin, pathById))
+    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin, pathById, sharedKind))
     : [`_${t("Sin tareas seleccionadas.")}_`];
   return [
     `# ${t("Plan de trabajo")} – ${projectName}`,
