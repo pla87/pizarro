@@ -272,6 +272,9 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
       ) : (
         <Status active={false}>{view.complete ? t("Desactivado: la configuración está completa, pero no se envían avisos.") : t("Inactivo: faltan el token, el identificador del número o la plantilla.")}</Status>
       )}
+      {view.authError && (
+        <ErrorBox>{t("Meta ha rechazado el token y los avisos no salen: {error}. Pon un token permanente (paso 2 de «Qué necesitas de Meta») y guarda.", { error: view.authError.message })}</ErrorBox>
+      )}
       <p className="text-xs text-slate-500">
         {t("Meta cobra cada aviso entregado (plantilla de utilidad: unos céntimos por mensaje según el país).")}{" "}
         <a className="underline" href={view.pricingUrl} target="_blank" rel="noopener noreferrer">{t("Precios de Meta")}</a>
