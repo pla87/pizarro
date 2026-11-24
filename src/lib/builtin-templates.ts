@@ -5,7 +5,8 @@ import { templateInputSchema, type TemplateData, type TemplateInput } from "./pr
 type Col = TemplateInput["columns"][number];
 type Kind = NonNullable<TemplateInput["kinds"]>[number];
 
-export const col = (name: string, isDone = false, role: Col["role"] = "NONE"): Col => ({ name, role, isDone });
+/** Columna de una plantilla de serie; `defaultKind`, el nombre de su «Tipo por defecto» (de la misma plantilla). */
+export const col = (name: string, isDone = false, role: Col["role"] = "NONE", defaultKind?: string): Col => ({ name, role, isDone, ...(defaultKind ? { defaultKind } : {}) });
 export const kind = (name: string, color: string, titleTemplate: string, descriptionTemplate: string, subtaskTemplate: string[] = []): Kind => ({
   name,
   color,
@@ -106,8 +107,8 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Por hacer"),
         col("Esta semana", false, "WEEKLY_PLAN"),
         col("Esperando", false, "WAITING"),
-        col("Lista de la compra", false, "CHECKLIST"),
-        col("Citas"),
+        col("Lista de la compra", false, "CHECKLIST", "Compras"),
+        col("Citas", false, "NONE", "Cita"),
         col("Rutinas", false, "ROUTINES"),
         col("Hecho", true),
       ],
@@ -139,14 +140,14 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
     key: "eventos-viajes",
     data: {
       name: "Eventos y viajes",
-      description: "Organizar un evento o un viaje: lugar o alojamiento, transporte, proveedores, invitados y programa, con el presupuesto de lo reservado, la agenda y una lista única para el día o la maleta.",
+      description: "Organizar un evento o un viaje: lugar o alojamiento, transporte, proveedores, invitados y programa, con el presupuesto de lo reservado, las fechas en el calendario y una lista única para el día o la maleta.",
       columns: [
         col("Ideas"),
-        col("Por confirmar", false, "WAITING"),
-        col("Reservado", false, "BUDGET"),
+        col("Por confirmar", false, "WAITING", "Proveedor"),
+        col("Reservado", false, "BUDGET", "Proveedor"),
         col("Preparando"),
-        col("Agenda"),
-        col("Lista del día y maleta", false, "CHECKLIST"),
+        col("Agenda", false, "NONE", "Actividad o programa"),
+        col("Lista del día y maleta", false, "CHECKLIST", "Maleta y material"),
         col("Hecho", true),
       ],
       kinds: [
@@ -183,7 +184,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Estudiando"),
         col("Repasos", false, "ROUTINES"),
         col("Esperando corrección", false, "WAITING"),
-        col("Corrigiendo", false, "REVIEW"),
+        col("Corrigiendo", false, "REVIEW", "Correcciones"),
         col("Hecho", true),
       ],
       kinds: [
@@ -220,11 +221,11 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
       description: "Preparar un curso, un máster o una charla con ayuda de un agente de IA: plan de trabajo para el agente, programa por sesiones publicable en PDF, materiales, ejercicios y exámenes, y seguimiento de alumnos.",
       columns: [
         col("Ideas"),
-        col("Materiales"),
+        col("Materiales", false, "NONE", "Preparar material"),
         col("Ejercicios y exámenes"),
         col("Plan de trabajo para IA", false, "AI_PLAN"),
-        col("Programa", false, "PROGRAM"),
-        col("Seguimiento de alumnos"),
+        col("Programa", false, "PROGRAM", "Sesión"),
+        col("Seguimiento de alumnos", false, "NONE", "Revisar perfil de alumno"),
         col("Publicado", true),
       ],
       kinds: [
@@ -323,6 +324,9 @@ export function comparable(t: TemplateData): string {
     ...(t.releaseTemplates?.length ? { releases: t.releaseTemplates.map((r) => [r.kind, r.name, r.content]) } : {}),
     // Igual con los campos de tarea: una plantilla sin campos conserva la huella que tenía antes de existir esta opción.
     ...(t.taskFields?.length ? { fields: t.taskFields } : {}),
+    // Y con el tipo por defecto de las columnas: las de serie sin ninguno (las sembradas antes) conservan su huella, así que
+    // las sin modificar reciben los nuevos al arrancar (upgradeBuiltinTemplates) y poner uno a mano cuenta como modificarla.
+    ...(t.columns.some((c) => c.defaultKind) ? { defaults: t.columns.map((c) => c.defaultKind ?? null) } : {}),
   });
 }
 

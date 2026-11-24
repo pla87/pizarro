@@ -264,7 +264,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{tpl.name}</span>
-                  {tpl.builtinKey && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("Por defecto")}</span>}
+                  {tpl.builtinKey && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{t("De serie")}</span>}
                   {tpl.builtinModified && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-300">{t("modificada")}</span>}
                 </div>
                 {tpl.description && <div className="truncate text-sm text-slate-500">{tpl.description}</div>}

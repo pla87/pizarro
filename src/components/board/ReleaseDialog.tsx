@@ -301,7 +301,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         <div className="space-y-3">
           {/* Qué hace, como en «Generar plan de trabajo»: sobre todo, que desplegar cambia el título de las tareas. */}
           <p className="text-sm text-slate-600 dark:text-slate-400" data-release-intro>
-            {t("Notas de versión en Markdown con estas tareas, agrupadas por tipo. Al marcarla como desplegada se guarda en el histórico y el título de cada tarea (salvo las fijas) pasa a empezar por su código, p. ej. «R{number}F1: …».", { number: releaseNumber ?? 1 })}
+            {t("Notas de versión por tipo. Al desplegarla, va al histórico y cada tarea (salvo las fijas) pasa a empezar por su código: «R{number}F1: …».", { number: releaseNumber ?? 1 })}
           </p>
           <div>
             <label className="label" htmlFor="rel-title">{t("Título de la release")}</label>

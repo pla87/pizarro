@@ -337,7 +337,9 @@ export function generateWeekPlanPdf(
       today, opts.groupBy, t, locale,
     );
     const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, weekStart: week.start, weekEnd: week.end, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
-    return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
+    // Con el modo en el nombre: los dos PDF del mismo día no se llaman igual («semana-por-dia-…», «week-by-person-…»).
+    const mode = slugify(opts.groupBy === "person" ? t("por persona") : t("por día"));
+    return { pdf, filename: `${t("semana")}-${mode}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
 

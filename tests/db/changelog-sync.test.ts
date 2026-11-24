@@ -66,10 +66,10 @@ test("Historial de versiones: la página trae las más recientes en orden SemVer
     await db.appVersionLog.create({ data: { version: v, releasedAt: new Date("2026-01-01T00:00:00Z"), summary: `S ${v}`, changes: changes(v), summaryEn: `E ${v}`, changesEn: changes(`${v}-en`) } });
   }
   // 900.x es mayor que cualquier versión real: son las primeras. 900.0.10 va antes que 900.0.9 (no es orden de texto).
-  const first = await changelogVersions(false, 0, 3);
+  const first = await changelogVersions({ en: false, admin: true }, 0, 3);
   assert.deepEqual(first.versions.map((v) => v.version), ["900.1.0", "900.0.10", "900.0.9"]);
   assert.equal(first.versions[0]!.summary, "S 900.1.0");
-  const en = await changelogVersions(true, 1, 1);
+  const en = await changelogVersions({ en: true, admin: true }, 1, 1);
   assert.deepEqual([en.versions[0]!.summary, en.versions[0]!.changes.nuevas], ["E 900.0.10", ["900.0.10-en"]]);
   assert.equal(first.total, en.total);
 
@@ -83,4 +83,25 @@ test("Historial de versiones: la página trae las más recientes en orden SemVer
   assert.equal(expectOk(await getOlderVersions(-5)).versions.length, first.total);
   logout();
   await db.appVersionLog.deleteMany({ where: { version: { in: mine } } });
+});
+
+test("Historial de versiones: «Cambios técnicos / DB» solo llega a quien administra (desde el servidor)", async () => {
+  const v = "900.2.0";
+  const withTech = { nuevas: ["Nueva"], mejoras: [], correcciones: [], tecnicos: ["hasTaskCapacity en e2e"] };
+  await db.appVersionLog.create({ data: { version: v, releasedAt: new Date("2026-01-01T00:00:00Z"), summary: "S", changes: withTech, summaryEn: "E", changesEn: withTech } });
+  try {
+    const member = await changelogVersions({ en: false, admin: false }, 0, 1);
+    assert.equal(member.versions[0]!.version, v);
+    assert.deepEqual(member.versions[0]!.changes, { ...withTech, tecnicos: [] });
+    assert.deepEqual((await changelogVersions({ en: true, admin: false }, 0, 1)).versions[0]!.changes.tecnicos, []);
+    assert.deepEqual((await changelogVersions({ en: false, admin: true }, 0, 1)).versions[0]!.changes.tecnicos, withTech.tecnicos);
+    // La acción de «Ver más» mira el rol de la sesión.
+    await loginAs(await makeUser());
+    assert.ok(expectOk(await getOlderVersions(0)).versions.every((x) => x.changes.tecnicos.length === 0));
+    await loginAs(await makeUser({ role: "ADMIN" }));
+    assert.deepEqual(expectOk(await getOlderVersions(0)).versions.find((x) => x.version === v)!.changes.tecnicos, withTech.tecnicos);
+  } finally {
+    logout();
+    await db.appVersionLog.deleteMany({ where: { version: v } });
+  }
 });

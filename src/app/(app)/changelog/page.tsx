@@ -13,10 +13,10 @@ export async function generateMetadata() {
 }
 
 export default async function ChangelogPage() {
-  await requireUserPage();
+  const user = await requireUserPage();
   const t = await getT();
   // Solo las más recientes: con todas, la página pesaba cientos de KB. Las demás se piden desde la lista.
-  const { versions, total } = await changelogVersions((await getLocale()) === "en", 0, CHANGELOG_FIRST_PAGE);
+  const { versions, total } = await changelogVersions({ en: (await getLocale()) === "en", admin: user.role === "ADMIN" }, 0, CHANGELOG_FIRST_PAGE);
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-6">

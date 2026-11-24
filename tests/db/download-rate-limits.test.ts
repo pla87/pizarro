@@ -49,5 +49,16 @@ describe("PDF de la semana y de la lista consolidada: se descargan", () => {
       assert.match(res.headers.get("Content-Disposition") ?? "", /^attachment; filename=".+\.pdf"$/);
       await res.body?.cancel();
     }
+    // Los dos PDF de la semana no se llaman igual: el nombre lleva el modo («semana-por-dia-…», «semana-por-persona-…»).
+    const names: string[] = [];
+    for (const by of ["day", "person"]) {
+      resetRateLimit(columnRateKey("week", me.id));
+      resetRateLimit(`column-pdf:${me.id}`);
+      const res = await weekGet(req(`/x?by=${by}`), colParams(f.project.id, f.columns.todo));
+      names.push(/filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "");
+      await res.body?.cancel();
+    }
+    assert.match(names[0]!, /^semana-por-dia-.+-\d{4}-\d{2}-\d{2}\.pdf$/);
+    assert.match(names[1]!, /^semana-por-persona-.+-\d{4}-\d{2}-\d{2}\.pdf$/);
   });
 });

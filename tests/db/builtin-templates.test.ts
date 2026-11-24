@@ -367,4 +367,31 @@ describe("plantillas de proyecto de serie", () => {
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();
   });
+  test("tipo por defecto de las columnas: llega a las de serie sin tocar (también sin otro cambio) y al proyecto nuevo", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    for (const key of ["casa-familia", "curso-master"]) {
+      const canon = canonicalTemplate(key)!;
+      // Lo que sembraron las versiones anteriores: las mismas columnas sin tipo por defecto.
+      const old: TemplateData = { ...canon, columns: canon.columns.map((c) => ({ ...c, defaultKind: null })) };
+      await db.projectTemplate.update({ where: { builtinKey: key }, data: { columns: old.columns } });
+      await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+    }
+    assert.deepEqual((await upgradeBuiltinTemplates(db)).sort(), ["casa-familia", "curso-master"]);
+    const cols = (await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "casa-familia" } })).columns as { name: string; defaultKind?: string | null }[];
+    assert.equal(cols.find((c) => c.name === "Lista de la compra")!.defaultKind, "Compras");
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`project-create:${admin.id}`);
+    const tpl = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "eventos-viajes" } });
+    const created = expectOk(await createProject(`Viaje ${Date.now()}`, { templateId: tpl.id }));
+    const pc = await db.column.findMany({ where: { projectId: created.id }, select: { name: true, defaultKind: { select: { name: true } } } });
+    const byName = Object.fromEntries(pc.map((c) => [c.name, c.defaultKind?.name ?? null]));
+    assert.deepEqual([byName["Por confirmar"], byName["Reservado"], byName["Lista del día y maleta"], byName["Ideas"]], ["Proveedor", "Proveedor", "Maleta y material", null]);
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+  });
 });

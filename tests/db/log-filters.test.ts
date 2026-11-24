@@ -257,6 +257,50 @@ describe("CSV de logs para Excel", () => {
   });
 });
 
+describe("periodo de Logs: uno fijo o «Personalizado…», el mismo en la lista y en el CSV", () => {
+  test("range=custom con desde/hasta: días enteros; los enlaces de siempre (range=7d, desde/hasta sueltos) siguen valiendo", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    const tag = `periodo${Date.now()}`;
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000);
+    // Una de hace 30 minutos y otra de hace 30 horas.
+    await db.appLog.create({ data: { level: "warn", category: tag, action: "prueba.reciente", message: "reciente", createdAt: hoursAgo(0.5) } });
+    await db.appLog.create({ data: { level: "warn", category: tag, action: "prueba.antigua", message: "antigua", createdAt: hoursAgo(30) } });
+    const listed = async (p: Record<string, string>) =>
+      (await db.appLog.findMany({ where: logWhere(parseLogFilters({ category: tag, ...p }), []), orderBy: { action: "asc" } })).map((r) => r.action);
+    assert.deepEqual(await listed({ range: "1h" }), ["prueba.reciente"]);
+    assert.deepEqual(await listed({ range: "7d" }), ["prueba.antigua", "prueba.reciente"]);
+    // Personalizado: el filtro guarda los días (los convierte en periodo la página) y los enlaces los conservan.
+    const custom = parseLogFilters({ range: "custom", desde: "2026-01-01", hasta: "2026-01-02", category: tag });
+    assert.deepEqual([custom.range, custom.from, custom.to], ["custom", "2026-01-01", "2026-01-02"]);
+    const { logQuery } = await import("../../src/lib/log-query");
+    assert.equal(logQuery(custom), `?range=custom&desde=2026-01-01&hasta=2026-01-02&category=${tag}`);
+    // Sin periodo (fechas que no valen), las últimas 24 h; desde/hasta sin «custom» no cuentan para la lista.
+    assert.deepEqual(await listed({ range: "custom", desde: "mal" }), ["prueba.reciente"]);
+    assert.deepEqual(parseLogFilters({ desde: "2026-01-01" }).from, "");
+
+    const csv = async (query: string) => {
+      resetRateLimit(`logs-csv:${admin.id}`);
+      const res = await logsCsv(new Request(`http://localhost/api/admin/logs?category=${tag}&${query}`));
+      assert.equal(res.status, 200, query);
+      return (await res.text()).match(/prueba\.\w+/g) ?? [];
+    };
+    try {
+      // Periodo fijo: lo mismo que la lista.
+      assert.deepEqual(await csv("range=1h"), ["prueba.reciente"]);
+      assert.deepEqual((await csv("range=7d")).sort(), ["prueba.antigua", "prueba.reciente"]);
+      assert.deepEqual(await csv("range=24h"), ["prueba.reciente"]);
+      // Personalizado: de un día a otro, enteros.
+      const { appTimeZone } = await import("../../src/lib/board");
+      const { addDays, dayInZone } = await import("../../src/lib/log-range");
+      const today = dayInZone(new Date(), appTimeZone());
+      assert.deepEqual((await csv(`range=custom&desde=${addDays(today, -3)}&hasta=${today}`)).sort(), ["prueba.antigua", "prueba.reciente"]);
+    } finally {
+      resetRateLimit(`logs-csv:${admin.id}`);
+    }
+  });
+});
+
 describe("registro de una acción que falla antes de saber su proyecto", () => {
   test("validación en un proyecto privado: solo los nombres de los campos y el motivo, sin los valores", async () => {
     const owner = await makeUser();

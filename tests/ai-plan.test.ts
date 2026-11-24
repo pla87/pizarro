@@ -48,7 +48,9 @@ describe("texto del plan de trabajo para IA", () => {
     const md = buildAiPlanMarkdown(base());
     assert.match(md, /- \*\*Proyecto:\*\* Web\n/);
     assert.match(md, /- \*\*Columna:\*\* Plan de trabajo para IA/);
-    assert.match(md, /- \*\*Fecha:\*\* 2026-11-23/);
+    // La fecha del plan, como en el resto de la app y en el título de las releases (no AAAA-MM-DD).
+    assert.match(md, /- \*\*Fecha:\*\* 23 nov 2026\n/);
+    assert.match(buildAiPlanMarkdown({ ...base(), intlLocale: "en-US" }), /- \*\*Fecha:\*\* Nov 23, 2026\n/);
     assert.match(md, /- \*\*Tareas:\*\* 3/);
     assert.match(md, /Tienda en línea\.\n\n##### Stack\n\nNext\.js\. Tablero: aquí\./);
   });
