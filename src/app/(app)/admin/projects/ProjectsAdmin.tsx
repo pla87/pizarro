@@ -22,21 +22,21 @@ interface AdminUser {
 interface Row {
   id: string;
   name: string;
-  /** Usuarios asignados al proyecto (administradores incluidos). */
+  /** Miembros del proyecto (administradores incluidos). */
   memberIds: string[];
   /** Administradores que lo tienen entre sus proyectos de trabajo. */
   pickedAdminIds: string[];
 }
 
-/** «Proyectos»: quién está asignado a cada proyecto de equipo. Los administradores los ven todos. */
+/** «Proyectos»: los miembros de cada proyecto de equipo (como en Ajustes del proyecto). Los administradores los ven todos. */
 export function ProjectsAdmin({ projects, users }: { projects: Row[]; users: AdminUser[] }) {
   const t = useT();
   const byId = new Map(users.map((u) => [u.id, u]));
   return (
     <div className="space-y-4">
       <p className="flex items-center gap-1 text-sm text-slate-500">
-        {t("Proyectos de equipo y quién está asignado. Los privados no salen aquí.")}
-        <InfoTip topic={t("Proyectos")}>{t("Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos: se les puede asignar como a cualquiera y, si no están asignados, eligen en cuáles trabajan pulsando su nombre (o en su perfil).")}</InfoTip>
+        {t("Proyectos de equipo y sus miembros. Los privados no salen aquí.")}
+        <InfoTip topic={t("Proyectos")}>{t("Quien no es administrador solo ve los proyectos de los que es miembro. Los administradores ven todos: se les puede añadir como miembros igual que a cualquiera y, si no lo son, eligen en cuáles trabajan pulsando su nombre (o en su perfil).")}</InfoTip>
       </p>
       {projects.length === 0 && <p className="card p-5 text-sm text-slate-500">{t("No hay proyectos de equipo.")}</p>}
       <ul className="space-y-3">
@@ -55,11 +55,11 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
   const confirm = useConfirm();
   const [pending, start] = useActionTransition();
   const [candidate, setCandidate] = useState("");
-  const assigned = new Set(project.memberIds);
-  const candidates = users.filter((u) => !assigned.has(u.id));
+  const memberSet = new Set(project.memberIds);
+  const candidates = users.filter((u) => !memberSet.has(u.id));
   const members = project.memberIds.map((id) => byId.get(id)).filter((u): u is AdminUser => !!u);
-  // Los administradores sin asignar ven el proyecto igualmente: su botón lo añade o quita de sus proyectos de trabajo.
-  const admins = users.filter((u) => u.role === "ADMIN" && !assigned.has(u.id));
+  // Los administradores que no son miembros ven el proyecto igualmente: su botón lo añade o quita de sus proyectos de trabajo.
+  const admins = users.filter((u) => u.role === "ADMIN" && !memberSet.has(u.id));
   const pickedAdmins = new Set(project.pickedAdminIds);
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -75,7 +75,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
     <li className="card p-4">
       <div className="flex items-center justify-between gap-3">
         <Link href={`/p/${project.id}`} className="min-w-0 truncate font-semibold hover:underline">{project.name}</Link>
-        <span className="shrink-0 text-xs text-slate-500">{members.length === 1 ? t("1 asignado") : t("{n} asignados", { n: members.length })}</span>
+        <span className="shrink-0 text-xs text-slate-500">{members.length === 1 ? t("1 miembro") : t("{n} miembros", { n: members.length })}</span>
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {members.map((u) => (
@@ -90,10 +90,10 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
               aria-label={t("Quitar a {name}", { name: u.name })}
               onClick={async () => {
                 const message = u.role === "ADMIN"
-                  ? t("¿Quitar a {name} de los asignados de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.", { name: u.name, project: project.name })
+                  ? t("¿Quitar a {name} de los miembros de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.", { name: u.name, project: project.name })
                   : t("¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.", { name: u.name, project: project.name });
                 if (!(await confirm({ title: t("Quitar del proyecto"), message, confirmLabel: t("Quitar"), danger: true }))) return;
-                run(() => removeProjectMember(project.id, u.id), t("Asignación quitada"));
+                run(() => removeProjectMember(project.id, u.id), t("Miembro quitado"));
               }}
             >
               <X size={13} />
@@ -118,20 +118,20 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
             </li>
           );
         })}
-        {members.length === 0 && admins.length === 0 && <li className="text-sm text-slate-500">{t("Nadie asignado.")}</li>}
+        {members.length === 0 && admins.length === 0 && <li className="text-sm text-slate-500">{t("Sin miembros.")}</li>}
       </ul>
       <div className="mt-3 flex gap-2">
-        <select className="input min-w-0 flex-1" aria-label={t("Asignar usuario")} value={candidate} onChange={(e) => setCandidate(e.target.value)} disabled={candidates.length === 0}>
-          <option value="">{candidates.length === 0 ? t("No queda nadie por asignar") : t("Asignar usuario…")}</option>
+        <select className="input min-w-0 flex-1" aria-label={t("Añadir miembro")} value={candidate} onChange={(e) => setCandidate(e.target.value)} disabled={candidates.length === 0}>
+          <option value="">{candidates.length === 0 ? t("No queda nadie por añadir") : t("Añadir miembro…")}</option>
           {candidates.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <button
           type="button"
           className="btn-primary shrink-0"
           disabled={pending || !candidate}
-          onClick={() => run(() => addProjectMember(project.id, candidate), t("Usuario asignado"), () => setCandidate(""))}
+          onClick={() => run(() => addProjectMember(project.id, candidate), t("Miembro añadido"), () => setCandidate(""))}
         >
-          {t("Asignar")}
+          {t("Añadir")}
         </button>
       </div>
     </li>

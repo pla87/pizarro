@@ -6,7 +6,6 @@ export const textos: Record<string, string> = {
   "Tendrá que configurar uno nuevo al entrar.": "They will have to set up a new one when they sign in.",
   "Podrá volver a activarla en «Mi perfil».": "They can turn it on again in “My profile”.",
   "También deja de ser miembro de los proyectos privados que comparte con otras personas.": "They also stop being a member of the private projects they share with other people.",
-  "No queda nadie por asignar": "Nobody left to assign",
   "Se elige una al crear el proyecto. Cambiar una plantilla no afecta a los proyectos ya creados.": "You pick one when creating the project. Changing a template doesn't affect projects already created.",
   "Cada tipo es una sección de las release notes, en este orden. Los tipos propios de cada proyecto se gestionan en sus ajustes y van detrás.": "Each type is a section of the release notes, in this order. Each project's own types are managed in its settings and come after.",
   "Una tarea que llega al máximo no admite más. No cuentan los comentarios borrados que conservan respuestas, y bajarlo no borra nada.": "A task that reaches the maximum takes no more. Deleted comments that keep replies don't count, and lowering it deletes nothing.",

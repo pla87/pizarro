@@ -1,6 +1,6 @@
 // Miembros de un proyecto (ronda 59): un administrador asigna a otro administrador en *Ajustes del proyecto → General*
 // (sale con la marca «admin», queda elegido y el enlace al tablero se copia con «Copiar enlace») y en *Administración →
-// Proyectos* («Asignar usuario…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
+// Proyectos* («Añadir miembro…» ofrece también administradores); «Invitar por email» da de alta a alguien sin cuenta
 // (servidor sin email: el enlace de invitación se pasa a mano) en el idioma de quien invita, sale marcada como «Invitación
 // pendiente» en los miembros y en *Administración → Proyectos* (sin email no hay «Reenviar invitación»; sí «Copiar enlace
 // de invitación», que emite uno nuevo y deja sin valor el anterior), elige su contraseña con ese enlace y, al iniciar sesión, llega al tablero del proyecto y pierde la marca; quien no es
@@ -75,7 +75,7 @@ if (only.includes("assign")) {
   await s.ctx.close();
 }
 
-// --- Administración → Proyectos: «Asignar usuario…» con administradores ---------------------------------------------------
+// --- Administración → Proyectos: «Añadir miembro…» con administradores --------------------------------------------------
 if (only.includes("admin")) {
   L.scenario("admin: Administración → Proyectos");
   const s = await adminSession();
@@ -83,15 +83,15 @@ if (only.includes("admin")) {
   await L.goto(page, `${L.BASE}/admin/projects`);
   const card = page.locator("li.card").filter({ has: page.getByRole("link", { name: TEAM_NAME, exact: true }) });
   await card.waitFor({ timeout: 20000 });
-  const select = card.getByLabel("Asignar usuario");
+  const select = card.getByLabel("Añadir miembro", { exact: true });
   const options = await select.locator("option").allInnerTexts();
-  L.check("ADMIN: «Asignar usuario…» ofrece administradores", options.includes(second.name), options.join(" | "));
+  L.check("ADMIN: «Añadir miembro…» ofrece administradores", options.includes(second.name), options.join(" | "));
   await select.selectOption({ label: second.name });
-  await card.getByRole("button", { name: "Asignar", exact: true }).click();
-  await L.checkEventually("ADMIN: queda asignado", () => isMember(TEAM, second.id));
+  await card.getByRole("button", { name: "Añadir", exact: true }).click();
+  await L.checkEventually("ADMIN: queda como miembro", () => isMember(TEAM, second.id));
   const chip = card.locator("li").filter({ has: page.getByRole("button", { name: `Quitar a ${second.name}` }) });
   await chip.waitFor({ timeout: 15000 });
-  L.check("ADMIN: sale como asignado, con la marca «admin»", /admin/.test(await chip.innerText()), await chip.innerText());
+  L.check("ADMIN: sale como miembro, con la marca «admin»", /admin/.test(await chip.innerText()), await chip.innerText());
   L.eq("ADMIN: ya no sale como botón «elegido / no elegido»", await card.getByRole("button", { name: new RegExp(`^${second.name}`) }).count(), 0);
   L.assertNoErrors("ADMIN", [s]);
   await s.ctx.close();

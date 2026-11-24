@@ -1,13 +1,9 @@
 // Traducciones al inglés (asignación de proyectos: pestaña Proyectos de administración, proyectos de trabajo, visibilidad Equipo/Privado). Clave: texto exacto en español.
 export const proyectos: Record<string, string> = {
-  "Proyectos de equipo y quién está asignado. Los privados no salen aquí.": "Team projects and who is assigned. Private ones are not listed here.",
   "No hay proyectos de equipo.": "There are no team projects.",
-  "1 asignado": "1 assigned",
-  "{n} asignados": "{n} assigned",
   "Quitar a {name}": "Remove {name}",
   "Quitar del proyecto": "Remove from project",
   "¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.": "Remove {name} from “{project}”? They will no longer see it and their cards will be unassigned.",
-  "Asignación quitada": "Assignment removed",
   "(admin, ve todos; elegido)": "(admin, sees all; selected)",
   "(admin, ve todos; no elegido)": "(admin, sees all; not selected)",
   "Quitar «{project}» de los proyectos en los que trabaja {name}": "Remove “{project}” from {name}'s work projects",
@@ -22,10 +18,6 @@ export const proyectos: Record<string, string> = {
   "Quitar de mis proyectos": "Remove from my projects",
   "Proyecto añadido a tus proyectos": "Project added to your projects",
   "Proyecto quitado de tus proyectos": "Project removed from your projects",
-  "Nadie asignado.": "Nobody assigned.",
-  "Asignar usuario": "Assign user",
-  "Asignar usuario…": "Assign user…",
-  "Usuario asignado": "User assigned",
   "Asignar": "Assign",
   "Proyectos": "Projects",
   "Equipo": "Team",
@@ -161,9 +153,6 @@ export const proyectos: Record<string, string> = {
   // Textos guardados por versiones anteriores: los errores de importar guardados en TransferJob (se traducen al leerlos)
   "El contenido del proyecto (project.json) supera el máximo de 64 MB. Exporta el proyecto sin adjuntos o con «Solo el tablero».": "The project content (project.json) exceeds the 64 MB maximum. Export the project without attachments or with “Board only”.",
   // Miembros de un proyecto: administradores asignados, «Invitar por email» y «Copiar enlace»
-  "Los miembros solo ven los proyectos a los que están asignados. Los administradores ven todos: se les puede asignar como a cualquiera y, si no están asignados, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
-    "Members only see the projects they are assigned to. Administrators see them all: they can be assigned like anyone else and, if they are not, they choose which ones they work on by clicking their name (or in their profile).",
-  "¿Quitar a {name} de los asignados de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the people assigned to “{project}”? As an administrator, they still see it and keep their cards.",
   "admin": "admin",
   "Miembro añadido y avisado por email": "Member added and notified by email",
   "Invitación creada, pero no se pudo enviar el email: pásale el enlace.": "Invitation created, but the email could not be sent: share the link with them.",
@@ -196,4 +185,12 @@ export const proyectos: Record<string, string> = {
   "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, generate a new link (the previous one will stop working).",
   "La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: generate a new invitation link to send them.",
   "¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? Its current members ({n}, including you) keep access and their cards. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
+  // Administración → Proyectos: «miembros» en lugar de «asignados», como en Ajustes del proyecto
+  "Proyectos de equipo y sus miembros. Los privados no salen aquí.": "Team projects and their members. Private ones are not listed here.",
+  "Quien no es administrador solo ve los proyectos de los que es miembro. Los administradores ven todos: se les puede añadir como miembros igual que a cualquiera y, si no lo son, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
+    "Anyone who isn't an administrator only sees the projects they are a member of. Administrators see them all: they can be added as members like anyone else and, if they aren't, they choose which ones they work on by clicking their name (or in their profile).",
+  "1 miembro": "1 member",
+  "{n} miembros": "{n} members",
+  "¿Quitar a {name} de los miembros de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the members of “{project}”? As an administrator, they still see it and keep their cards.",
+  "No queda nadie por añadir": "Nobody left to add",
 };
