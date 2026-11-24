@@ -288,7 +288,6 @@ function EditorModeSection({ initial }: { initial: EditorModeValue }) {
 /** Orden de los proyectos en el selector de la barra lateral y en las listas de proyectos. */
 function ProjectOrderSection({ initial }: { initial: ProjectOrderValue }) {
   const t = useT();
-  const router = useRouter();
   const toast = useToast();
   const [order, setOrder] = useState(initial);
   const choose = async (value: ProjectOrderValue) => {
@@ -300,8 +299,8 @@ function ProjectOrderSection({ initial }: { initial: ProjectOrderValue }) {
       setOrder(previous);
       return toast(res.error, "error");
     }
-    // El selector de la barra lateral lo pinta el servidor: así sale ya en el orden nuevo.
-    router.refresh();
+    // El selector de la barra lateral lo pinta el servidor: la acción revalida el layout y su respuesta ya lo trae en el
+    // orden nuevo (sin router.refresh(), que volvería a pintar la página entera otra vez).
   };
   return (
     <section className="card p-5">
