@@ -478,7 +478,7 @@ if (only.includes("hist")) {
   L.eq("HIST: … y el foco pasa a la primera de las nuevas", await s.page.evaluate(() => document.activeElement?.id), `v${all[10]}`);
   L.eq("HIST: sin «Ver más» cuando ya están todas", await more.count(), 0);
   // El buscador: la primera vez que se escribe se traen las que faltan y se busca en todas.
-  await L.reload(s.page);
+  await s.page.reload();
   await items.first().waitFor({ timeout: 15000 });
   await s.page.getByLabel("Buscar en el historial").fill(`v${oldest}`);
   await L.eqEventually("HIST: buscar la más antigua la encuentra aunque no estuviera cargada", () => items.evaluateAll((els) => els.map((e) => e.id)), [`v${oldest}`]);
