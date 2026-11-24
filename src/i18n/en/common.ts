@@ -169,4 +169,7 @@ export const common: Record<string, string> = {
   "Más acciones": "More actions",
   // Informe PDF sin red (en vez del texto del navegador)
   "Sin conexión: no se ha podido generar el informe.": "Offline: the report could not be generated.",
+
+  // Copia flotante de «Nueva tarea» con dos tareas abiertas lado a lado (no abre una tercera)
+  "Ya hay dos tareas abiertas": "Two tasks are already open",
 };
