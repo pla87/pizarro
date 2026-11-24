@@ -11,6 +11,7 @@ import { useConfirm } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { isTypingTarget, useShortcut } from "./board/shortcuts";
 import { boardRefreshFor, UNDONE_EVENT, useBoardModalOpen, useUndoTask } from "./undo-context";
+import { undoneText } from "./undo-text";
 import { useFloatingRect } from "./ui/useFloatingRect";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 
@@ -51,13 +52,7 @@ export function UndoButton({ projectId, shortcut = false, inDialog = false, clas
         if (!res.ok) return toast(res.error, "error");
       }
       if (!res.data.applied) return;
-      const { label, skipped } = res.data.applied;
-      toast(
-        redo
-          ? skipped ? t("Rehecho: {label} (parte ya no existía)", { label }) : t("Rehecho: {label}", { label })
-          : skipped ? t("Deshecho: {label} (parte ya no existía)", { label }) : t("Deshecho: {label}", { label }),
-        "undo",
-      );
+      toast(undoneText(t, res.data.applied, redo), "undo");
       // Con una tarea abierta se recarga su detalle también tras un Alt+Z (puede haber deshecho algo suyo).
       if (taskId) window.dispatchEvent(new CustomEvent(UNDONE_EVENT, { detail: { taskId } }));
       // En el tablero, por su recarga (Board.tsx, doRefresh): un router.refresh() suelto no le dice cuándo se pidió.

@@ -76,3 +76,16 @@ describe("createTask y createTasks: orden de los errores con las comprobaciones 
     expectFail(await createTask({ ...base(f), columnId: foreignColumn }), /No encontrado o sin acceso/);
   });
 });
+
+describe("createTasks: texto inicial del tipo", () => {
+  test("cada tarea recibe la descripción de plantilla de su tipo, como en «Nueva tarea»", async () => {
+    const { f } = await setup();
+    const form = await db.taskKind.create({ data: { name: "Con formulario", color: "#3b82f6", position: 2, projectId: f.project.id, descriptionTemplate: "**Qué:**\n\n**Dónde:**\n" } });
+    const rows = expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, tasks: [{ title: "Con plantilla", kindId: form.id }, { title: "Sin plantilla", kindId: f.kindId }] }));
+    const saved = await db.task.findMany({ where: { id: { in: rows.map((r) => r.id) } }, select: { title: true, description: true } });
+    const by = new Map(saved.map((x) => [x.title, x.description]));
+    assert.equal(by.get("Con plantilla"), "**Qué:**\n\n**Dónde:**\n");
+    assert.equal(by.get("Sin plantilla"), "");
+    assert.equal(rows.find((r) => r.title === "Con plantilla")?.hasDescription, true);
+  });
+});

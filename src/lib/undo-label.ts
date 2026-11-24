@@ -112,3 +112,29 @@ export function tasksN(n: number): Label {
 export function subtasksN(n: number): Label {
   return n === 1 ? { k: "1 subtarea" } : { k: "{n} subtareas", p: { n } };
 }
+
+/**
+ * Textos del usuario entre comillas como lista: «a», «a» y «b», «a», «b» y «c»; con más de `max`, los primeros y
+ * «y N más». Los textos no se traducen (son contenido); las comillas y la «y», sí.
+ */
+export function quotedList(items: readonly string[], max = 3): Param {
+  const q: Label[] = items.map((title) => ({ k: "«{title}»", p: { title } }));
+  if (q.length > max) return { k: "{names} y {n} más", p: { names: q.slice(0, max), n: q.length - max } };
+  if (q.length <= 1) return q[0] ?? "";
+  return { k: "{list} y {last}", p: { list: q.slice(0, -1), last: q.at(-1)! } };
+}
+
+/**
+ * Texto del aviso tras deshacer o rehacer una acción, si su plantilla tiene uno más natural que «Deshecho: {etiqueta}»
+ * («Deshecho el cambio de tipo de «X»» en vez de «Deshecho: Cambió el tipo de «X» a «Y»»). null si no lo tiene.
+ */
+export function undoneLabel(label: Label, redo: boolean): Label | null {
+  const p = label.p ?? {};
+  if (label.k === "Cambió el tipo de «{title}» a «{kind}»" && p.title !== undefined) {
+    return { k: redo ? "Rehecho el cambio de tipo de «{title}»" : "Deshecho el cambio de tipo de «{title}»", p: { title: p.title } };
+  }
+  if (label.k === "Modificó «{title}»: {changes}" && p.title !== undefined && p.changes !== undefined && !(isLabel(p.changes) && p.changes.k === "sin cambios")) {
+    return { k: redo ? "Rehecho el cambio de {changes} en «{title}»" : "Deshecho el cambio de {changes} en «{title}»", p: { title: p.title, changes: p.changes } };
+  }
+  return null;
+}

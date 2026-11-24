@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeKindAutomation, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
+import { describeKindAutomation, kindChangeNotice, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
 
 const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
@@ -336,4 +336,39 @@ test("detalle: al cambiar de tipo se cambian las subtareas sin marcar y sin toca
   assert.deepEqual(switchKindSubtaskRows({ subtaskTemplate: [] }, NEW, [row("comparar")], 2), { remove: [], add: ["Solicitar permiso"] });
   // Una repetida a mano: se quita una sola vez por cada una de la plantilla.
   assert.deepEqual(switchKindSubtaskRows(OLD, { subtaskTemplate: [] }, [row("Elegir"), { ...row("Elegir"), id: "x" }], 100).remove.map((r) => r.id), ["Elegir"]);
+});
+
+test("aviso del cambio de tipo: cuenta por separado lo añadido, lo quitado y la plantilla de la descripción", async () => {
+  const { makeT } = await import("../src/i18n/core");
+  const es = makeT("es");
+  const en = makeT("en");
+  assert.equal(kindChangeNotice(es, { added: 3, removed: 2 }), "Tipo cambiado: 3 subtareas añadidas y 2 quitadas");
+  assert.equal(kindChangeNotice(es, { added: 1, removed: 0 }), "Tipo cambiado: 1 subtarea añadida");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 1 }), "Tipo cambiado: 1 subtarea quitada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 2, description: true }), "Tipo cambiado: 2 subtareas quitadas y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 3, removed: 1, description: true }), "Tipo cambiado: 3 subtareas añadidas, 1 quitada y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: true }), "Tipo cambiado: plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0 }), null);
+  assert.equal(kindChangeNotice(en, { added: 3, removed: 2 }), "Type changed: 3 subtasks added and 2 removed");
+});
+
+test("la descripción a medio editar: al cambiar de tipo no se pierde nada de lo escrito", () => {
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  const OBRA = { titleTemplate: "Obra: ", descriptionTemplate: "**Estancia o zona:**\n\n**Qué hay que hacer:**\n\n**Fechas previstas:**\n" };
+  const NADA = { titleTemplate: "", descriptionTemplate: "" };
+  // Lo escrito por la persona en cada caso (respuestas a medias, notas sueltas, texto sin formulario).
+  const cases: [typeof CASA | null, typeof CASA, string, string[]][] = [
+    [CASA, OBRA, "**Qué hay que hacer:** pintar la pared\n\n**Material necesario:**\n", ["pintar la pared"]],
+    [CASA, OBRA, "**Qué hay que hacer:**\n\n**Material necesario:** rodillo y pintu", ["rodillo y pintu"]],
+    [CASA, OBRA, "**Qué hay que hacer:** pintar\n\n**Material necesario:** rodillo\n\nNotas: llamar antes", ["pintar", "rodillo", "Notas: llamar antes"]],
+    [CASA, NADA, "**Qué hay que hacer:** pintar\n\n**Material necesario:**\n", ["pintar"]],
+    [NADA, OBRA, "Texto libre a medias", ["Texto libre a medias"]],
+    [CASA, OBRA, "Ojo: antes de nada\n**Qué hay que hacer:** x", ["Ojo: antes de nada", "x"]],
+  ];
+  for (const [prev, next, typed, kept] of cases) {
+    const out = switchKindDescription(prev, next, typed);
+    for (const piece of kept) assert.ok(out.includes(piece), `«${piece}» se ha perdido: ${JSON.stringify(out)}`);
+    // Y de vuelta al tipo anterior, tampoco.
+    if (prev) for (const piece of kept) assert.ok(switchKindDescription(next, prev, out).includes(piece), `«${piece}» se ha perdido al volver`);
+  }
 });
