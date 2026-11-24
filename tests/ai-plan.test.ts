@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { makeT } from "../src/i18n/core";
 import { EN } from "../src/i18n/en";
-import { AI_PLAN_DEFAULTS, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanZipRoot, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
+import { AI_PLAN_DEFAULTS, AI_PLAN_SAVE_MAX, AI_PLAN_ZIP_FOLDER, aiPlanDownloadName, aiPlanTooLong, aiPlanZipRoot, aiPlanFileName, buildAiPlanMarkdown, highestPlanVersion, planAttachmentPaths, planDescription, type AiPlanInput } from "../src/lib/ai-plan";
 import {
   COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, releaseTemplateRows, TEMPLATE_KINDS,
 } from "../src/lib/constants";
@@ -374,4 +374,39 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
       `attachments/01-${"a".repeat(41)}`, "Attachments/01-x", "attachment/01-x", "anexos/01-x", "/attachments/01-x", "attachments//01-x", "attachments/01-x\n", " attachments/01-x", "adjuntos/attachments/01-x", "attachments",
     ]) assert.ok(!AI_PLAN_ZIP_FOLDER.test(bad), bad);
   });
+});
+
+describe("plan de trabajo: tipo común", () => {
+  const tasks = (n: number, kind: (i: number) => string | undefined = () => "Corrección") => Array.from({ length: n }, (_, i) => ({ id: `t${i}`, title: `Tarea ${i}`, kind: kind(i) }));
+
+  test("si todas las tareas son del mismo tipo, va una vez en el contexto y no en cada tarea", () => {
+    const same = buildAiPlanMarkdown(base({ tasks: tasks(3) }));
+    assert.ok(same.includes("- **Tareas:** 3\n- **Tipo de todas las tareas:** Corrección\n"), same);
+    assert.ok(!same.includes("- **Tipo:**"), same);
+    // Varios tipos (o alguna sin tipo): como siempre, en cada tarea y nada en el contexto.
+    for (const mixed of [buildAiPlanMarkdown(base({ tasks: tasks(3, (i) => (i ? "Corrección" : "Mejora")) })), buildAiPlanMarkdown(base({ tasks: tasks(3, (i) => (i ? "Corrección" : undefined)) }))]) {
+      assert.ok(!mixed.includes("Tipo de todas las tareas") && mixed.includes("- **Tipo:** Corrección"), mixed);
+    }
+    // Una sola tarea: en la tarea, como antes.
+    assert.ok(buildAiPlanMarkdown(base({ tasks: tasks(1) })).includes("### 1. Tarea 0\n\n- **Tipo:** Corrección"));
+    // En inglés también.
+    assert.ok(buildAiPlanMarkdown(base({ tasks: tasks(2) }), makeT("en")).includes("- **Type of all tasks:** Corrección"));
+  });
+
+  test("ahorro en un plan de 500 tareas del mismo tipo", () => {
+    const now = buildAiPlanMarkdown(base({ tasks: tasks(500) }));
+    // Lo que salía antes: sin la línea del contexto y con «- **Tipo:** …» bajo el título de cada tarea.
+    const before = now.replace("- **Tipo de todas las tareas:** Corrección\n", "").replace(/^(### \d+\. Tarea \d+)$/gm, "$1\n\n- **Tipo:** Corrección");
+    const saved = before.length - now.length;
+    // 24 caracteres por tarea («\n\n- **Tipo:** Corrección») menos los 43 de la línea del contexto: 11 957 de unos 25 000.
+    assert.equal(saved, 500 * "\n\n- **Tipo:** Corrección".length - "- **Tipo de todas las tareas:** Corrección\n".length);
+    assert.equal(saved, 11_957);
+    assert.ok(saved / before.length > 0.4, `${saved} de ${before.length}`);
+  });
+});
+
+test("plan demasiado largo para Documentación: el aviso dice cuánto tiene, el tope y qué hacer, en los dos idiomas", () => {
+  assert.equal(AI_PLAN_SAVE_MAX, 200_000);
+  assert.match(aiPlanTooLong(makeT("es"), 230_500, "es-ES"), /^El plan tiene 230\.500 caracteres y en Documentación caben como mucho 200\.000: cópialo con «Copiar todo» o descárgalo en \.md/);
+  assert.match(aiPlanTooLong(makeT("en"), 230_500, "en-US"), /^The plan has 230,500 characters and Documentation holds at most 200,000: copy it with “Copy all” or download it as \.md/);
 });

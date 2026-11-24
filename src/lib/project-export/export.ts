@@ -9,7 +9,6 @@ import { dateToIso, todayIso } from "../dates";
 import { db } from "../db";
 import { AppError } from "../errors";
 import { appTimeZone } from "../format";
-import { liveColumnRole } from "../constants";
 import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, releaseAttachmentStream } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
@@ -151,7 +150,7 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
       name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true, programVersion: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
       releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
-      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKind: { select: { name: true } } } },
+      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKindId: true, defaultKind: { select: { name: true } } } },
       kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } },
       hiddenKinds: { select: { kind: { select: { name: true } } } },
       labels: { orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true } },
@@ -166,8 +165,10 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
     await db.task.findMany({ where: taskWhere, orderBy: [{ column: { position: "asc" } }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true } })
   ).map((t) => t.id);
 
-  // Tipos: los del proyecto y los generales que usan sus tareas.
+  // Tipos: los del proyecto y los generales que usan sus tareas o que una columna tiene como «Tipo por defecto» (aunque
+  // ninguna tarea lo use todavía: si no viajara, la columna lo perdería al importar en otra instalación).
   const usedKindIds = new Set((await db.task.groupBy({ by: ["kindId"], where: taskWhere })).map((g) => g.kindId));
+  for (const c of project.columns) if (c.defaultKindId) usedKindIds.add(c.defaultKindId);
   const generalUsed = usedKindIds.size
     ? await db.taskKind.findMany({
         where: { id: { in: [...usedKindIds] }, projectId: null },
@@ -461,8 +462,7 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
     reportSchedule: project.reportSchedule,
     releaseTemplates: project.releaseTemplates.map((r) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, createdAt: iso(r.createdAt) })),
     columns: project.columns.map((c) => ({
-      // Un rol retirado (que quedara tras volver a una versión anterior) sale como «Sin rol».
-      ref: columnRef.get(c.id)!, name: c.name, position: c.position, role: liveColumnRole(c.role), isDone: c.isDone, waitingDays: c.waitingDays,
+      ref: columnRef.get(c.id)!, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays,
       routineTargetRef: c.routineTargetColumnId ? (columnRef.get(c.routineTargetColumnId) ?? null) : null,
       wipLimit: c.wipLimit,
       planCount: c.planCount,

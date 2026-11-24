@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseTaskLines } from "../src/lib/bulk";
+import { parseTaskLinesInfo } from "../src/lib/bulk";
+
+// Lo que usa el diálogo de alta en bloque (BulkTaskDialog).
+const parseTaskLines = (text: string) => parseTaskLinesInfo(text).lines;
 
 test("una tarea por línea, sin vacías ni viñetas", () => {
   const text = "- Primera\r\n\n* Segunda  con   espacios\n  3. Tercera\n• Cuarta\n- [ ] Quinta\n[x] Sexta\n2) Séptima\n   \n";

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTemplateApplication, summarizeTemplate, templateInputSchema } from "../src/lib/project-templates";
 import { POSITION_STEP } from "../src/lib/positions";
-import { generalKindUsed, MAX_TEMPLATE_COLUMNS, setGeneralKindUsed } from "../src/lib/project-templates-core";
+import { dropColumnDefaultKind, followKindRename, generalKindUsed, MAX_TEMPLATE_COLUMNS, setGeneralKindUsed } from "../src/lib/project-templates-core";
 
 const base = {
   name: "Web",
@@ -18,6 +18,18 @@ const base = {
 
 test("valida plantillas correctas", () => {
   assert.equal(templateInputSchema.safeParse(base).success, true);
+});
+
+test("tipo por defecto de una columna: opcional, por nombre, y uno que no vale se ignora sin perder la columna", () => {
+  const parse = (defaultKind: unknown) => templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], defaultKind }, base.columns[1]] }).columns;
+  assert.equal(templateInputSchema.parse(base).columns[0]!.defaultKind, undefined);
+  assert.equal(parse("  Cita  médica ")[0]!.defaultKind, "Cita médica");
+  assert.equal(parse(42)[0]!.defaultKind, null);
+  assert.equal(parse("x".repeat(200))[0]!.defaultKind, null);
+  assert.equal(buildTemplateApplication(templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], defaultKind: "Cita" }] }), []).columns[0]!.defaultKind, "Cita");
+  // Una versión anterior lee las plantillas con el mismo esquema sin ese campo: zod quita las claves que no conoce (no es
+  // estricto), así que una plantilla guardada con él sigue valiendo allí.
+  assert.equal("futuro" in templateInputSchema.parse({ ...base, columns: [{ ...base.columns[0], futuro: 1 }, base.columns[1]] }).columns[0]!, false);
 });
 
 test("rechaza columnas repetidas, roles repetidos y sin columnas", () => {
@@ -93,4 +105,53 @@ test("editor de plantillas: tipos generales en positivo sobre el formato guardad
   // Lo guardado da el mismo resultado al crear el proyecto que lo que muestra el editor.
   const app = buildTemplateApplication({ ...base, kinds: [{ name: "Propio", color: "#000000", titleTemplate: "", descriptionTemplate: "", subtaskTemplate: [] }], hiddenGeneralKinds: one.hiddenGeneralKinds, hideAllGeneralKinds: one.hideAllGeneralKinds, labels: [] } as never, generals.map((name) => ({ id: name, name })));
   assert.deepEqual(app.hiddenKindIds, ["Funcionalidad", "Corrección"]);
+});
+
+// Editor de plantillas: antes, al renombrar o quitar un tipo propio, el «Tipo por defecto» de la columna seguía con el
+// nombre anterior (y al aplicar la plantilla se ignoraba sin aviso).
+test("renombrar un tipo propio: las columnas que lo usaban pasan al nombre nuevo", () => {
+  const cols = [{ key: "a", defaultKind: "Bug" }, { key: "b", defaultKind: "Tarea" }, { key: "c", defaultKind: null }];
+  assert.deepEqual(followKindRename(cols, "Bug", "Fallo", ["Tarea"]).columns.map((c) => c.defaultKind), ["Fallo", "Tarea", null]);
+  // Sin distinguir mayúsculas ni espacios; el nombre nuevo, sin los espacios de los extremos.
+  assert.deepEqual(followKindRename([{ key: "a", defaultKind: " bug " }], "Bug", "Fallo ", []).columns[0]!.defaultKind, "Fallo");
+  // Si otro tipo se sigue llamando como el anterior (otro propio o un general que se usa), la columna se queda con él.
+  assert.equal(followKindRename(cols, "Bug", "Fallo", ["bug"]).columns, cols);
+});
+
+test("borrar el nombre entero y escribir otro: la columna recupera el tipo con el nombre nuevo", () => {
+  let cols = [{ key: "a", defaultKind: "Bug" as string | null }, { key: "b", defaultKind: null as string | null }];
+  let name = "Bug";
+  let orphans: string[] = [];
+  for (const next of ["Bu", "B", "", "F", "Fallo"]) {
+    const r = followKindRename(cols, name, next, [], orphans);
+    cols = r.columns;
+    orphans = r.orphans;
+    name = next;
+    if (next === "") assert.deepEqual([cols[0]!.defaultKind, orphans], [null, ["a"]]);
+  }
+  assert.deepEqual(cols.map((c) => c.defaultKind), ["Fallo", null]);
+  assert.deepEqual(orphans, []);
+});
+
+test("quitar un tipo propio: las columnas que lo usaban se quedan sin tipo por defecto", () => {
+  const cols = [{ key: "a", defaultKind: "Bug" }, { key: "b", defaultKind: "Tarea" }];
+  assert.deepEqual(dropColumnDefaultKind(cols, "BUG", ["Tarea"]).map((c) => c.defaultKind), [null, "Tarea"]);
+  assert.equal(dropColumnDefaultKind(cols, "Bug", ["Bug"]), cols, "otro tipo se llama igual");
+  assert.equal(dropColumnDefaultKind(cols, " ", []), cols);
+});
+
+
+test("tipo por defecto: un nombre a medio escribir que coincide con otro tipo no se lleva las columnas", () => {
+  let cols = [{ key: "c1", defaultKind: "Bug crítico" as string | null }];
+  let orphans: string[] = [];
+  const others = ["Bug"];
+  let from = "Bug crítico";
+  for (const typed of ["Bug crític", "Bug ", "Bug u", "Bug urgente"]) {
+    const r = followKindRename(cols, from, typed, others, orphans);
+    cols = r.columns;
+    orphans = r.orphans;
+    from = typed;
+    if (typed === "Bug ") assert.equal(cols[0]!.defaultKind, null, "con el nombre de otro tipo la columna queda sin tipo, a la espera");
+  }
+  assert.equal(cols[0]!.defaultKind, "Bug urgente");
 });

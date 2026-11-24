@@ -31,7 +31,7 @@ export default async function ProjectsAdminPage() {
   ]);
   return (
     <ProjectsAdmin
-      // «Invitación pendiente» (el criterio de Administración → Usuarios), para marcarla entre los asignados.
+      // «Invitación pendiente» (el criterio de Administración → Usuarios), para marcarla entre los miembros.
       users={users.map((u) => ({ id: u.id, name: u.name, role: u.role, invitePending: invitePendingFrom(u) }))}
       projects={projects.map((p) => ({ id: p.id, name: p.name, memberIds: p.members.map((m) => m.userId), pickedAdminIds: p.adminPicks.map((a) => a.userId) }))}
     />

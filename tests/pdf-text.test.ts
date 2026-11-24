@@ -47,19 +47,12 @@ describe("texto de los PDF (fuentes estándar, solo WinAnsi)", () => {
 });
 
 describe("PDF generado", () => {
-  test("entrega al cliente: emojis fuera y el título largo partido en líneas que caben", async () => {
+  test("plan de una persona: emojis fuera y el título largo partido en líneas que caben", async () => {
+    const task = (title: string) => ({ title, kind: "Funcionalidad", priority: null, dueDate: null, summary: [], labels: [], pendingSubtasks: [], pendingCount: 0 });
     const job: PdfJob = {
-      kind: "delivery",
+      kind: "assignPlan",
       locale: "en",
-      input: {
-        project: "Proyecto",
-        column: "Entrega",
-        today: "2026-11-02",
-        tasks: [
-          { title: LONG, kind: "Funcionalidad", dueDate: null, subtaskTotal: 0, doneSubtasks: [] },
-          { title: "Fiesta 🎉 hecha 😀 ok", kind: "Funcionalidad", dueDate: null, subtaskTotal: 0, doneSubtasks: [] },
-        ],
-      },
+      input: { project: "Proyecto", column: "De Ana", person: "Ana", today: "2026-11-02", groups: [{ bucket: "none", tasks: [task(LONG), task("Fiesta 🎉 hecha 😀 ok")] }], others: 0 },
     };
     const runs = pdfRuns(await renderInWorker(job));
     const text = runs.join("|");

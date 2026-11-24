@@ -62,7 +62,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
   const appLocale = await getLocale();
   const locale = intlLocale(appLocale);
   const sp = await searchParams;
-  const filters = parseLogFilters(sp);
+  const filters = { ...parseLogFilters(sp), locale: appLocale };
   const cursor = typeof sp.cursor === "string" && /^[a-z0-9]{1,40}$/i.test(sp.cursor) ? sp.cursor : null;
   const tz = appTimeZone();
   // Compacta y con segundos, en el formato del idioma («22 nov 21:49:12»; «Nov 22 9:49:12 PM»). El CSV sigue en
@@ -196,11 +196,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {t("Incluir consultas")}
         </label>
         <div className="col-span-2 flex flex-col gap-1 text-xs text-slate-500 sm:min-w-48 sm:flex-1">
-          <span className="flex items-center gap-1">
-            <label htmlFor="logs-q">{t("Buscar (acción, mensaje, ruta)")}</label>
-            {/* El mensaje se guarda en español y la búsqueda solo mira ese texto: en otro idioma se explica aquí. */}
-            {appLocale !== "es" && <InfoTip topic={t("Buscar")}>{t("Los mensajes se guardan en español: busca con palabras en español (p. ej. «Borró» para lo borrado). La acción y la ruta son iguales en todos los idiomas.")}</InfoTip>}
-          </span>
+          <label htmlFor="logs-q">{t("Buscar (acción, mensaje, ruta)")}</label>
           <input id="logs-q" type="search" name="q" defaultValue={filters.q} maxLength={100} className={field} />
         </div>
         <div className="col-span-2 flex gap-2">

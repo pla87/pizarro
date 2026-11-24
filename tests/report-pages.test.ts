@@ -1,7 +1,7 @@
 // Paginación de los PDF largos (src/lib/pdf-chunks.ts y pagedPdf en src/lib/report-pdf.tsx). Un documento largo va en
 // tramos (varios <Page>) para que el tiempo crezca en línea y no con el cuadrado de su longitud; cada tramo se corta donde
 // el documento entero saltaría de página, así que debe salir con las mismas páginas que en un solo <Page>.
-// Las pruebas de «mismas páginas» de la lista, el informe y el resumen están en report-pages-iguales.test.ts (en paralelo).
+// Las pruebas de «mismas páginas» de la lista, el informe y el plan de una persona están en report-pages-iguales.test.ts (en paralelo).
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { pdfPageRuns } from "./pdf-runs";
@@ -98,21 +98,23 @@ describe("PDF largos en tramos", () => {
     runs.slice(0, -1).forEach((r, i) => assert.ok(r.length > 30, `página ${i + 1} casi vacía: ${JSON.stringify(r)}`));
   });
 
-  test("resumen para el cliente: una tarjeta con 100 subtareas se parte entre páginas (antes se aplastaba sobre la primera)", async () => {
-    const subs = Array.from({ length: 100 }, (_, j) => `Subtarea hecha número ${j} con un texto razonablemente largo para ocupar casi una línea`);
-    const pages = await pagesText({ kind: "delivery", locale: "es", input: { project: "P", column: "Entrega", today: "2026-11-20", tasks: [
-      { title: "Corta", kind: "F", dueDate: null, subtaskTotal: 1, doneSubtasks: ["x"] },
-      { title: "Larga", kind: "F", dueDate: null, subtaskTotal: 100, doneSubtasks: subs },
-      { title: "Después", kind: "F", dueDate: null, subtaskTotal: 1, doneSubtasks: ["y"] },
-    ] } });
+  test("plan de una persona: una tarjeta larga que no cabe al pie se parte entre páginas (antes se aplastaba sobre la primera)", async () => {
+    const card = (title: string, subs: string[], summary: string[] = []) => ({ title, kind: "F", priority: null, dueDate: null, summary, labels: [], pendingSubtasks: subs, pendingCount: subs.length });
+    const subs = Array.from({ length: 15 }, (_, j) => `Subtarea pendiente número ${j} con un texto bastante largo, ${lorem}, ${lorem.slice(0, 40)}`);
+    const pages = await pagesText({ kind: "assignPlan", locale: "es", input: { project: "P", column: "C", person: "Ana", today: "2026-11-20", others: 0, groups: [{ bucket: "none", tasks: [
+      // Diez tarjetas cortas antes: «Larga» empieza a media página y no cabe entera.
+      ...Array.from({ length: 10 }, (_, i) => card(`Corta ${i}`, ["x"])),
+      card("Larga", subs, Array.from({ length: 6 }, (_, k) => `Resumen ${k} ${words(k, 18)}`)),
+      card("Después", ["y"]),
+    ] }] } });
     assert.equal(pages.length, 2);
     assertFooters(pages);
     assert.ok(pages[0]!.includes("Larga") && pages[0]!.includes("número 0 con"));
-    assert.ok(!pages[0]!.includes("número 99 con") && pages[1]!.includes("número 99 con") && pages[1]!.includes("Después"));
+    assert.ok(!pages[0]!.includes("número 14 con") && pages[1]!.includes("número 14 con") && pages[1]!.includes("Después"));
     // Cada subtarea una sola vez y en orden.
     const all = pages.join("");
     let from = 0;
-    for (let j = 0; j < 100; j++) {
+    for (let j = 0; j < 15; j++) {
       const at = all.indexOf(`número ${j} con`, from);
       assert.ok(at >= from, `subtarea ${j}`);
       from = at;
@@ -120,8 +122,8 @@ describe("PDF largos en tramos", () => {
   });
 
   test("una tarjeta corta que no cabe al pie pasa entera a la página siguiente (como siempre)", async () => {
-    const tasks = Array.from({ length: 40 }, (_, i) => ({ title: `Tarjeta ${i}`, kind: "F", dueDate: null, subtaskTotal: 4, doneSubtasks: ["a", "b", "c", "d"].map((s) => `Sub ${s} de ${i}`) }));
-    const pages = await pagesText({ kind: "delivery", locale: "es", input: { project: "P", column: "Entrega", today: "2026-11-20", tasks } });
+    const tasks = Array.from({ length: 40 }, (_, i) => ({ title: `Tarjeta ${i}`, kind: "F", priority: null, dueDate: null, summary: [], labels: [], pendingSubtasks: ["a", "b", "c", "d"].map((s) => `Sub ${s} de ${i}`), pendingCount: 4 }));
+    const pages = await pagesText({ kind: "assignPlan", locale: "es", input: { project: "P", column: "C", person: "Ana", today: "2026-11-20", others: 0, groups: [{ bucket: "none", tasks }] } });
     assert.ok(pages.length >= 2);
     for (let i = 0; i < tasks.length; i++) {
       const page = pages.findIndex((p) => p.includes(`Tarjeta ${i}F`));

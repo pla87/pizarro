@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   addSubtask, addSubtasks, archiveTask, deleteAttachment, deleteSubtask, deleteTask, deleteTaskLink, getTaskDetail,
-  getTaskJson, moveTask, pasteTaskJson, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
+  changeTaskKind, getTaskJson, moveTask, pasteTaskJson, reorderSubtask, restoreTaskSnapshot, updateSubtask, updateTask,
 } from "@/actions/tasks";
 import { undoEntry, undoLast } from "@/actions/undo";
 import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -574,22 +574,25 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
-    const done = saveNow(patch, optimistic);
+  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind).
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange = false): Promise<boolean> => {
+    const done = saveNow(patch, optimistic, kindChange);
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
     return done;
   };
-  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>): Promise<boolean> => {
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange = false): Promise<boolean> => {
     const before = board.getTask(task.id);
+    const send = (since: ReturnType<typeof textSince> | undefined): Promise<Awaited<ReturnType<typeof changeTaskKind>>> =>
+      kindChange && patch.kindId ? changeTaskKind(task.id, { kindId: patch.kindId, title: patch.title, description: patch.description }, since) : updateTask(task.id, patch, since);
     board.patchTask(task.id, optimistic);
     // Título y descripción: se envía qué versión se estaba editando para no pisar a otra persona ni lo guardado desde otra
     // pestaña o dispositivo. Los de esta pestaña van de uno en uno y cada uno envía la versión que devolvió el anterior:
     // guardar el título y enseguida la descripción no es un conflicto.
     const editsText = patch.title !== undefined || patch.description !== undefined;
-    let res: Awaited<ReturnType<typeof updateTask>>;
+    let res: Awaited<ReturnType<typeof changeTaskKind>>;
     if (editsText) {
       if (patch.title !== undefined) titleSaves.current++;
-      const call = textSaves.current.then(() => tracked(updateTask(task.id, patch, textSince())));
+      const call = textSaves.current.then(() => tracked(send(textSince())));
       textSaves.current = call.then((r) => {
         if (patch.title !== undefined) titleSaves.current--;
         if (!r.ok) return;
@@ -601,7 +604,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         if (patch.title !== undefined) titleSaves.current--;
       });
       res = await call;
-    } else res = await tracked(updateTask(task.id, patch, undefined));
+    } else res = await tracked(send(undefined));
     if (!res.ok) {
       if (before) board.upsertTask(before);
       // Sesión caducada o sin conexión: lo escrito se queda en el campo (y en el borrador local) para guardarlo luego; el
@@ -622,8 +625,23 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return false;
     }
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
-    board.upsertTask(res.data);
-    if (editsText) setDetail((d) => (d ? { ...d, textVersion: res.data.textVersion } : d));
+    const { kindSubtasks, titleClipped, ...saved } = res.data;
+    board.upsertTask(saved);
+    // El servidor recortó el título (p. ej. la plantilla de título del tipo nuevo lo alarga): se dice, como en el tablero.
+    if (titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped }));
+    if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
+    if (kindSubtasks) {
+      setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
+      const { removed, added, undo } = kindSubtasks;
+      const n = Math.max(removed, added);
+      const text = !removed
+        ? n === 1 ? t("Añadida 1 subtarea del tipo") : t("Añadidas {n} subtareas del tipo", { n })
+        : !added
+          ? n === 1 ? t("Quitada 1 subtarea del tipo") : t("Quitadas {n} subtareas del tipo", { n })
+          : n === 1 ? t("Cambiada 1 subtarea") : t("Cambiadas {n} subtareas", { n });
+      // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
+      toast(text, "undo", undo.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
+    }
     return true;
   };
 
@@ -1032,20 +1050,21 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       descReplace.current?.(switchKindDescription(prev, kind, typed));
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
-      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept });
+      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, true);
       // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
       // Más rato que «Guardado»: el aviso de la cabecera queda lejos del selector de tipo y se pasaba por alto.
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
       return saved;
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
-    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId });
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, true);
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
     save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
+      true,
     );
   };
 

@@ -149,6 +149,9 @@ describe("generar y guardar el plan", () => {
 
     // Vacío, columna que no es de plan, proyecto ajeno: no.
     expectFail(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.todo, content: "   " }), /vacío/);
+    // Demasiado largo: el mensaje dice el tope y qué hacer, y no se gasta la versión.
+    expectFail(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.todo, content: "x".repeat(200_001) }), /200\.001 caracteres y en Documentación caben como mucho 200\.000: cópialo con «Copiar todo» o descárgalo en \.md/);
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: f.project.id } })).aiPlanCount, 8);
     expectFail(await saveAiPlan({ projectId: f.project.id, columnId: f.columns.doing, content: "x" }), /ya no es un plan/);
     const outsider = await makeUser();
     await loginAs(outsider);

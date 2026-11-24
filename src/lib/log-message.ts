@@ -1,7 +1,9 @@
-// Mensajes del registro (Administración → Logs) en el idioma de quien los lee. El mensaje se guarda en español (es lo que
-// se busca con «Buscar» y lo que sale en los registros del servidor); si el evento trae una plantilla traducible (la de
-// describeAction en las acciones, o `label` en logEvent), se guarda también en los detalles con la clave LOG_LABEL_KEY y
-// la página la pinta traducida. Los eventos sin plantilla (texto libre, versiones anteriores) salen tal cual.
+// Mensajes del registro (Administración → Logs) en el idioma de quien los lee. El mensaje se guarda en español (lo que
+// sale en los registros del servidor y lo que busca «Buscar» en español); si el evento trae una plantilla traducible (la
+// de describeAction en las acciones, o `label` en logEvent), se guarda también en los detalles con la clave LOG_LABEL_KEY
+// y la página la pinta traducida, y el texto en inglés va en `messageEn` (lo que busca «Buscar» en inglés; ver
+// englishLogMessage). Los eventos sin plantilla (texto libre, versiones anteriores) salen tal cual.
+import { makeT } from "@/i18n/core";
 import type { T } from "@/i18n/shared";
 import { renderLabel, type Label } from "./undo-label";
 
@@ -58,4 +60,16 @@ export function logDetailsShown(details: Json): Json {
   const rest = { ...details };
   delete rest[LOG_LABEL_KEY];
   return Object.keys(rest).length ? rest : null;
+}
+
+const enT = makeT("en");
+
+/**
+ * Texto en inglés que se guarda en `AppLog.messageEn` (el que busca «Buscar» en inglés): el mismo que pinta la página
+ * (logMessageText sin las filas antiguas). Null si coincide con el español (texto libre sin traducción): el buscador mira
+ * entonces el mensaje en español, igual que en las filas anteriores a la columna.
+ */
+export function englishLogMessage(row: { message: string; details: Json }): string | null {
+  const en = logMessageText(row, enT);
+  return en && en !== row.message ? en : null;
 }

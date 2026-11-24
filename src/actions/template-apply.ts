@@ -57,7 +57,7 @@ const refSchema = z.object({ source: z.literal("template"), id: v.id });
 function shapeOf(t: TemplateData): ApplyTemplateShape {
   return {
     name: t.name,
-    columns: t.columns.map((c) => ({ name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, assignDueDays: c.role === "NONE" ? (c.assignDueDays ?? null) : null })),
+    columns: t.columns.map((c) => ({ name: c.name, role: c.role, isDone: c.isDone, wipLimit: c.wipLimit ?? null, assignDueDays: c.role === "NONE" ? (c.assignDueDays ?? null) : null, defaultKind: c.defaultKind ?? null })),
     kinds: t.kinds.map((k) => ({ name: k.name, color: k.color, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate })),
     labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
     hiddenGeneralKinds: t.hiddenGeneralKinds,

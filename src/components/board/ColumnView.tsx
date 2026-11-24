@@ -5,7 +5,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDefaultKind, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, SELECTABLE_COLUMN_ROLES, type ColumnRoleValue, type SelectableColumnRole } from "@/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, COLUMN_ROLES, type ColumnRoleValue } from "@/lib/constants";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
@@ -55,13 +55,10 @@ const NO_IDS: string[] = [];
 const EAGER_CARDS = 15;
 
 /** Icono de cada rol en el selector del menú de la columna (la explicación sale al pasar por encima: COLUMN_ROLE_HINT). */
-const ROLE_ICON: Record<SelectableColumnRole, LucideIcon> = {
+const ROLE_ICON: Record<ColumnRoleValue, LucideIcon> = {
   NONE: Minus, NEXT_RELEASE: Rocket, IN_PRODUCTION: Flag, WAITING: Hourglass, WEEKLY_PLAN: CalendarRange, CHECKLIST: ListChecks,
   REVIEW: ClipboardCheck, ROUTINES: Repeat, BUDGET: Wallet, PROGRAM: GraduationCap, AI_PLAN: Bot,
 };
-
-/** Explicación del rol (los retirados no tienen: una columna que aún lo conserve se comporta como sin rol). */
-const roleHint = (role: ColumnRoleValue): string | undefined => COLUMN_ROLE_HINT[role as SelectableColumnRole];
 
 /** Diálogos de una columna: los abre su menú o el botón de acción de su rol (ColumnActionButton). */
 type ColumnDialog = "checklist" | "routine" | "program" | "plan" | "budget" | "assign" | "kind";
@@ -431,7 +428,7 @@ function useGate(column: BoardColumn, cardCount: number): string | null {
 function GatedActionButton({ column, cardCount, icon, label, onClick }: { column: BoardColumn; cardCount: number; icon: LucideIcon; label: string; onClick: () => void }) {
   const t = useT();
   const reason = useGate(column, cardCount);
-  return <ColumnActionButton icon={icon} label={label} onClick={onClick} disabled={reason != null} title={reason ?? t(roleHint(column.role) ?? "")} />;
+  return <ColumnActionButton icon={icon} label={label} onClick={onClick} disabled={reason != null} title={reason ?? t(COLUMN_ROLE_HINT[column.role])} />;
 }
 
 function GatedMenuItem({ column, cardCount, icon, onClick, children }: { column: BoardColumn; cardCount: number; icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
@@ -454,7 +451,7 @@ function roleAction(
   t: ReturnType<typeof useT>, sc: ReturnType<typeof useShortcut>,
 ): React.ReactNode {
   const empty = cardCount === 0;
-  const hint = t(roleHint(column.role) ?? "");
+  const hint = t(COLUMN_ROLE_HINT[column.role]);
   switch (column.role) {
     case "NEXT_RELEASE":
       // Solo se desactiva sin tarjetas (las fijas cuentan): el motivo dice qué hacer, al pasar el ratón y al tocarlo.
@@ -617,7 +614,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuSeparator />
       {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). */}
       <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
-        {SELECTABLE_COLUMN_ROLES.map((r) => {
+        {COLUMN_ROLES.map((r) => {
           // «Asignación a persona» tiene rol NONE: entonces «Sin rol» no es el elegido (y elegirlo la deja sin persona).
           const current = column.role === r && !(assign && r === "NONE");
           return (

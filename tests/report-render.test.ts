@@ -7,14 +7,17 @@ const { PDF_OUT_OF_MEMORY_MESSAGE, pdfWorkerMaxMb, pdfWorkerSpec, renderInWorker
 const { queuedRender, PdfTimeoutError } = await import("../src/lib/report-build");
 type PdfJob = import("../src/lib/report-pdf").PdfJob;
 
-const delivery = (n: number, title = "Tarea"): PdfJob => ({
-  kind: "delivery",
+/** Plan de una columna «Asignación a persona» con n tareas (un PDF de tarjetas cualquiera). */
+const plan = (n: number, title = "Tarea"): PdfJob => ({
+  kind: "assignPlan",
   locale: "es",
   input: {
     project: "Proyecto de prueba",
-    column: "Entrega",
+    column: "De Ana",
+    person: "Ana",
     today: "2026-11-02",
-    tasks: Array.from({ length: n }, (_, i) => ({ title: `${title} ${i}`, kind: "Funcionalidad", dueDate: "2026-11-10", subtaskTotal: 2, doneSubtasks: ["Hecha"] })),
+    groups: [{ bucket: "week", tasks: Array.from({ length: n }, (_, i) => ({ title: `${title} ${i}`, kind: "Funcionalidad", priority: null, dueDate: "2026-11-05", summary: [], labels: [], pendingSubtasks: ["Pendiente"], pendingCount: 2 })) }],
+    others: 0,
   },
 });
 
@@ -29,25 +32,25 @@ describe("worker de PDF", () => {
   });
 
   test("genera el PDF fuera del proceso y reutiliza el mismo worker", async () => {
-    const a = await renderInWorker(delivery(3));
-    const b = await renderInWorker({ ...delivery(1), locale: "en" });
+    const a = await renderInWorker(plan(3));
+    const b = await renderInWorker({ ...plan(1), locale: "en" });
     assert.ok(a instanceof Uint8Array && isPdf(a) && a.length > 1000);
     assert.ok(isPdf(b));
   });
 
   test("un error del render llega como error y el worker sigue sirviendo", async () => {
     await assert.rejects(renderInWorker({ kind: "nada", locale: "es", input: {} } as unknown as PdfJob), /Tipo de PDF desconocido: nada/);
-    assert.ok(isPdf(await renderInWorker(delivery(1))));
+    assert.ok(isPdf(await renderInWorker(plan(1))));
   });
 
   test("al agotarse el tiempo se termina el worker (504) y el siguiente PDF arranca otro", async () => {
     const started = performance.now();
     await assert.rejects(
-      queuedRender((signal) => renderInWorker(delivery(3000, "Tarea larga"), signal), 300),
+      queuedRender((signal) => renderInWorker(plan(3000, "Tarea larga"), signal), 300),
       (err: Error) => err instanceof PdfTimeoutError && (err as InstanceType<typeof PdfTimeoutError>).status === 504,
     );
     assert.ok(performance.now() - started < 5000);
-    assert.ok(isPdf(await queuedRender((signal) => renderInWorker(delivery(2), signal))));
+    assert.ok(isPdf(await queuedRender((signal) => renderInWorker(plan(2), signal))));
   });
 
   test("tope de memoria del worker: 256 MB por defecto, ajustable con PDF_WORKER_MAX_MB (64–4096)", () => {
@@ -64,7 +67,7 @@ describe("worker de PDF", () => {
     process.env.PDF_WORKER_MAX_MB = "64";
     try {
       // Unas 4000 tarjetas con títulos de miles de caracteres: el maquetado pasa de 64 MB enseguida.
-      await assert.rejects(renderInWorker(delivery(4000, "Tarea larga ".repeat(200))), (err: Error) => {
+      await assert.rejects(renderInWorker(plan(4000, "Tarea larga ".repeat(200))), (err: Error) => {
         assert.ok(err.message.startsWith(PDF_OUT_OF_MEMORY_MESSAGE), err.message);
         assert.equal((err.cause as { code?: string }).code, "ERR_WORKER_OUT_OF_MEMORY");
         return true;
@@ -73,12 +76,12 @@ describe("worker de PDF", () => {
       if (prev === undefined) delete process.env.PDF_WORKER_MAX_MB;
       else process.env.PDF_WORKER_MAX_MB = prev;
     }
-    assert.ok(isPdf(await renderInWorker(delivery(2))));
+    assert.ok(isPdf(await renderInWorker(plan(2))));
   });
 
   test("con la señal ya abortada no se arranca nada", async () => {
     const ctrl = new AbortController();
     ctrl.abort(new Error("cancelado"));
-    await assert.rejects(renderInWorker(delivery(1), ctrl.signal), /cancelado/);
+    await assert.rejects(renderInWorker(plan(1), ctrl.signal), /cancelado/);
   });
 });

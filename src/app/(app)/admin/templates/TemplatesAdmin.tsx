@@ -16,18 +16,18 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import type { T } from "@/i18n/core";
 import type { EditorModeValue } from "@/lib/types";
-import { isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, PALETTE, SELECTABLE_COLUMN_ROLES, type ColumnRoleValue, type SelectableColumnRole } from "@/lib/constants";
+import { isUniqueColumnRole, MAX_DESCRIPTION, MAX_RELEASE_TEMPLATES_PER_KIND, MAX_TEMPLATE, COLUMN_ROLES, liveColumnRole, PALETTE, type ColumnRoleValue } from "@/lib/constants";
 import { parseSubtaskLines } from "@/lib/kinds-special";
 import { normalizeTaskFields, type TaskFieldKey } from "@/lib/task-fields";
-import { generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
+import { dropColumnDefaultKind, followKindRename, generalKindUsed, MAX_TEMPLATE_COLUMNS, MAX_TEMPLATE_KINDS, MAX_TEMPLATE_LABELS, MAX_TEMPLATES, setGeneralKindUsed } from "@/lib/project-templates-core";
 import type { TemplateDto, TemplateInput } from "@/lib/project-templates";
 import { useActionTransition } from "@/components/useActionTransition";
 import { isEditConflict } from "@/lib/edit-conflict-core";
 import { MAX_ASSIGN_DUE_DAYS, parseAssignDays } from "@/lib/column-assign-core";
 
 const KIND_COLORS = [...PALETTE, "#84cc16", "#06b6d4", "#d946ef", "#78716c"];
-// Solo los roles que se pueden elegir (sin los retirados: Agenda, Entrega al cliente).
-const ROLE_LABEL: Record<SelectableColumnRole, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", ROUTINES: "Rutinas", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
+// Nombre corto de cada rol en el editor de plantillas.
+const ROLE_LABEL: Record<ColumnRoleValue, string> = { NONE: "Ninguno", NEXT_RELEASE: "Siguiente salto", IN_PRODUCTION: "En producción", WAITING: "Esperando", WEEKLY_PLAN: "Planificación semanal", CHECKLIST: "Lista consolidada", REVIEW: "Revisión con requisitos", ROUTINES: "Rutinas", BUDGET: "Presupuesto", PROGRAM: "Programa", AI_PLAN: "Plan de trabajo para IA" };
 
 /** Valor del selector de rol para una columna «Asignación a persona» (rol NONE con plazo). */
 const ASSIGN = "ASSIGN";
@@ -84,7 +84,8 @@ type Draft = {
   name: string;
   description: string;
   /** `assignDueDays`: columna «Asignación a persona» (rol NONE con plazo; la persona no viaja en las plantillas). */
-  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null }>[];
+  /** `defaultKind`: nombre del «Tipo por defecto» de la columna (uno propio de la plantilla o un general que usa). */
+  columns: Keyed<{ name: string; role: ColumnRoleValue; isDone: boolean; wipLimit?: number | null; assignDueDays?: number | null; defaultKind?: string | null }>[];
   kinds: Keyed<{ name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[] }>[];
   hiddenGeneralKinds: string[];
   hideAllGeneralKinds: boolean;
@@ -161,11 +162,14 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
   const draft = editing?.draft;
   const patch = (p: Partial<Draft>) => setEditing((e) => (e ? { ...e, draft: { ...e.draft, ...p } } : e));
+  // Columnas que se quedaron sin «Tipo por defecto» al borrar entero el nombre de un tipo (por la clave del tipo): lo
+  // recuperan al escribir el nombre nuevo.
+  const orphanColumns = useRef(new Map<string, string[]>());
 
   const toDraft = (tpl: TemplateInput): Draft => ({
     name: tpl.name,
     description: tpl.description ?? "",
-    columns: tpl.columns.map(withKey),
+    columns: tpl.columns.map((c) => withKey({ ...c, role: liveColumnRole(c.role) })),
     kinds: (tpl.kinds ?? []).map((k) => withKey({ name: k.name, color: k.color, titleTemplate: k.titleTemplate ?? "", descriptionTemplate: k.descriptionTemplate ?? "", subtaskTemplate: k.subtaskTemplate ?? [] })),
     hiddenGeneralKinds: tpl.hiddenGeneralKinds,
     hideAllGeneralKinds: tpl.hideAllGeneralKinds ?? false,
@@ -339,6 +343,13 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <h3 className="mb-2 text-sm font-semibold">{t("Columnas")}</h3>
               <ul className="space-y-2">
                 {draft.columns.map((c, i) => {
+                  // Los tipos que tendrá el proyecto: los propios de la plantilla y los generales que usa (y el guardado,
+                  // aunque ya no esté entre ellos, para no perderlo sin querer).
+                  const kindNames = [...new Set([
+                    ...draft.kinds.map((k) => k.name.trim()).filter(Boolean),
+                    ...generalKinds.filter((n) => generalKindUsed(draft, n)),
+                    ...(c.defaultKind ? [c.defaultKind] : []),
+                  ])];
                   const setCol = (p: Partial<typeof c>) => patch({ columns: draft.columns.map((x, j) => (j === i ? { ...x, ...p } : x)) });
                   const taken = (r: ColumnRoleValue) => isUniqueColumnRole(r) && draft.columns.some((x, j) => j !== i && x.role === r);
                   const assignDays = c.role === "NONE" ? (c.assignDueDays ?? null) : null;
@@ -353,7 +364,7 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                         onChange={(e) => setCol(e.target.value === ASSIGN ? { role: "NONE", assignDueDays: assignDays ?? DEFAULT_TEMPLATE_ASSIGN_DAYS } : { role: e.target.value as ColumnRoleValue, assignDueDays: null })}
                         aria-label={t("Rol especial")}
                       >
-                        {SELECTABLE_COLUMN_ROLES.flatMap((r) => [
+                        {COLUMN_ROLES.flatMap((r) => [
                           <option key={r} value={r} disabled={taken(r)}>{t(ROLE_LABEL[r])}</option>,
                           ...(r === "NONE" ? [
                             // Solo el nombre: el plazo va en el campo de al lado (con él dentro, el selector partía la fila).
@@ -367,6 +378,16 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
                           {assignDays === 1 ? t("día") : t("días")}
                         </span>
                       )}
+                      <select
+                        className="input w-auto max-w-40"
+                        value={c.defaultKind ?? ""}
+                        onChange={(e) => setCol({ defaultKind: e.target.value || null })}
+                        aria-label={t("Tipo por defecto de la columna {n}", { n: i + 1 })}
+                        title={t("Tipo con el que se abre «Nueva tarea» desde esta columna")}
+                      >
+                        <option value="">{t("Sin tipo por defecto")}</option>
+                        {kindNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
                       <label className="flex items-center gap-1 text-sm">
                         <input type="checkbox" checked={c.isDone} onChange={(e) => setCol({ isDone: e.target.checked })} /> {t("Cuenta como terminada")}
                       </label>
@@ -387,13 +408,25 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
               <ul className="space-y-3">
                 {draft.kinds.map((k, i) => {
                   const setKind = (p: Partial<typeof k>) => patch({ kinds: draft.kinds.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+                  // Los otros tipos que tendrá el proyecto: si alguno se llama como este, las columnas siguen con él.
+                  const others = [...draft.kinds.filter((_, j) => j !== i).map((x) => x.name), ...generalKinds.filter((n) => generalKindUsed(draft, n))];
+                  const rename = (name: string) => {
+                    const r = followKindRename(draft.columns, k.name, name, others, orphanColumns.current.get(k.key));
+                    if (r.orphans.length) orphanColumns.current.set(k.key, r.orphans);
+                    else orphanColumns.current.delete(k.key);
+                    patch({ kinds: draft.kinds.map((x, j) => (j === i ? { ...x, name } : x)), columns: r.columns });
+                  };
+                  const remove = () => {
+                    orphanColumns.current.delete(k.key);
+                    patch({ kinds: draft.kinds.filter((_, j) => j !== i), columns: dropColumnDefaultKind(draft.columns, k.name, others) });
+                  };
                   return (
                     <li key={k.key} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                       <div className="flex items-center gap-2">
-                        <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => setKind({ name: e.target.value })} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
+                        <input className="input min-w-0 flex-1" value={k.name} onChange={(e) => rename(e.target.value)} maxLength={40} placeholder={t("Nombre")} aria-label={t("Nombre del tipo {n}", { n: i + 1 })} />
                         <button type="button" className="btn-icon" disabled={i === 0} onClick={() => patch({ kinds: move(draft.kinds, i, -1) })} aria-label={t("Subir el tipo {n}", { n: i + 1 })}><ArrowUp size={15} /></button>
                         <button type="button" className="btn-icon" disabled={i === draft.kinds.length - 1} onClick={() => patch({ kinds: move(draft.kinds, i, 1) })} aria-label={t("Bajar el tipo {n}", { n: i + 1 })}><ArrowDown size={15} /></button>
-                        <button type="button" className="btn-icon hover:text-red-600" onClick={() => patch({ kinds: draft.kinds.filter((_, j) => j !== i) })} aria-label={t("Quitar el tipo {n}", { n: i + 1 })}><Trash2 size={15} /></button>
+                        <button type="button" className="btn-icon hover:text-red-600" onClick={remove} aria-label={t("Quitar el tipo {n}", { n: i + 1 })}><Trash2 size={15} /></button>
                       </div>
                       <ColorField value={k.color} onChange={(color) => setKind({ color })} colors={KIND_COLORS} />
                       <input className="input" value={k.titleTemplate} onChange={(e) => setKind({ titleTemplate: e.target.value })} maxLength={200} placeholder={t("Título automático (opcional)")} aria-label={t("Título automático")} />

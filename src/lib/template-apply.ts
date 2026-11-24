@@ -12,7 +12,7 @@ import { columnsLockName } from "./advisory-locks";
 import { lockProject } from "./caps";
 import { assertProgramColumnsFit } from "./column-capacity";
 import { markTemplateChangeSpent } from "./template-apply-rate";
-import { EVERGREEN_COLUMN_ROLES, releaseTemplateRows, UNIQUE_COLUMN_ROLES } from "./constants";
+import { EVERGREEN_COLUMN_ROLES, liveColumnRole, releaseTemplateRows, UNIQUE_COLUMN_ROLES, type ColumnRoleValue } from "./constants";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { lockKindScope } from "./kind-lock";
@@ -34,7 +34,7 @@ import { dateToIso, isoToDate } from "./dates";
 type Tx = Prisma.TransactionClient;
 type Client = Tx | typeof db;
 
-interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null; planCount?: number; assigneeId?: string | null; assignDueDays?: number | null }
+interface ColumnSnap { id: string; name: string; position: number; role: string; isDone: boolean; waitingDays: number | null; routineTargetColumnId: string | null; wipLimit: number | null; planCount?: number; assigneeId?: string | null; assignDueDays?: number | null; defaultKindId?: string | null }
 interface KindSnap { id: string; name: string; color: string; position: number; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; createdAt: string }
 /**
  * Tarea que el cambio tocó: lo que tenía (columna, posición, tipo, fija) y adónde fue (null = no cambió eso). Si al unirse a
@@ -56,6 +56,30 @@ interface TemplateChangeSnapshot {
   createdReleaseTemplates: string[];
   taskFields: string[];
   tasks: TaskSnap[];
+}
+
+/**
+ * «Tipo por defecto» de las columnas de una plantilla (por el nombre del tipo, sin distinguir mayúsculas): un tipo propio
+ * del proyecto o, si no hay, uno general que el proyecto usa (por su nombre guardado o el traducido). Si no hay ninguno, la
+ * columna se queda como estaba. Lo usan crear un proyecto con plantilla y «Aplicar plantilla».
+ */
+export async function setColumnDefaultKinds(tx: Tx, projectId: string, wanted: { columnId: string; kind: string | null | undefined }[], locale: Locale): Promise<void> {
+  const list = wanted.filter((w): w is { columnId: string; kind: string } => !!w.kind?.trim());
+  if (!list.length) return;
+  const kinds = await tx.taskKind.findMany({
+    where: { OR: [{ projectId }, { projectId: null, hiddenIn: { none: { projectId } } }] },
+    orderBy: [{ projectId: { sort: "asc", nulls: "last" } }, { position: "asc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, projectId: true },
+  });
+  const key = (n: string) => n.trim().toLowerCase();
+  const byName = new Map<string, string>();
+  // Primero los propios (ganan a un general del mismo nombre); después los generales por su nombre y por el traducido.
+  for (const k of kinds) if (!byName.has(key(k.name))) byName.set(key(k.name), k.id);
+  for (const k of kinds) if (k.projectId === null && !byName.has(key(localizeGeneralKind(k, locale).name))) byName.set(key(localizeGeneralKind(k, locale).name), k.id);
+  for (const w of list) {
+    const kindId = byName.get(key(w.kind));
+    if (kindId) await tx.column.update({ where: { id: w.columnId }, data: { defaultKindId: kindId }, select: { id: true } });
+  }
 }
 
 /** Candados del cambio de plantilla y de su deshacer: columnas, tipos y la fila del proyecto (etiquetas), en este orden. */
@@ -103,7 +127,7 @@ export async function loadProjectShape(client: Client, projectId: string, locale
 
 /** Instantánea de lo que hay ahora (antes de tocar nada). */
 async function takeSnapshot(tx: Tx, projectId: string): Promise<TemplateChangeSnapshot> {
-  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true } });
+  const columns = await tx.column.findMany({ where: { projectId }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKindId: true } });
   const kinds = await tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } });
   const hidden = await tx.projectHiddenKind.findMany({ where: { projectId }, select: { kindId: true } });
   const labels = await tx.label.findMany({ where: { projectId }, select: { id: true, name: true, color: true } });
@@ -158,7 +182,7 @@ export async function applyTemplateToProject(opts: {
     // Desde aquí el cambio ya se ejecuta: un error (aunque sea un aviso) gasta la reserva del límite (template-apply-rate.ts).
     try {
       const snap = await takeSnapshot(tx, projectId);
-      const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap) : await executeReplace(tx, projectId, plan, template, shape, snap);
+      const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap, opts.locale) : await executeReplace(tx, projectId, plan, template, shape, snap, opts.locale);
       await addCommon(tx, projectId, plan, snap);
       // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
       await assertProgramColumnsFit(tx, projectId, shape.columns);
@@ -195,15 +219,23 @@ async function addCommon(tx: Tx, projectId: string, plan: AddPlan | ReplacePlan,
   if (plan.addedFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: plan.taskFields } });
 }
 
-async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: ApplyTemplateShape, snap: TemplateChangeSnapshot): Promise<Omit<ApplyResult, "addedLabels">> {
+async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: ApplyTemplateShape, snap: TemplateChangeSnapshot, locale: Locale): Promise<Omit<ApplyResult, "addedLabels">> {
+  const defaults: { columnId: string; kind: string | null | undefined }[] = [];
   if (plan.addColumns.length) {
     const last = await tx.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
     const base = last?.position ?? 0;
     const created = await tx.column.createManyAndReturn({
       data: plan.addColumns.map((c, i) => ({ projectId, name: c.name, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, assignDueDays: c.role === "NONE" ? c.assignDueDays : null, position: base + (i + 1) * POSITION_STEP })),
-      select: { id: true },
+      select: { id: true, position: true },
     });
     snap.createdColumns = created.map((c) => c.id);
+    // Su tipo por defecto, cuando ya existan los tipos de la plantilla (abajo). Por la posición: el orden de las filas
+    // devueltas no está garantizado.
+    const byPosition = new Map(created.map((c) => [c.position, c.id]));
+    plan.addColumns.forEach((c, i) => {
+      const columnId = byPosition.get(base + (i + 1) * POSITION_STEP);
+      if (columnId) defaults.push({ columnId, kind: template.columns[c.index]?.defaultKind });
+    });
   }
   if (plan.addKinds.length) {
     const last = await tx.taskKind.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
@@ -219,10 +251,11 @@ async function executeAdd(tx: Tx, projectId: string, plan: AddPlan, template: Ap
   }
   // Los generales que usa la plantilla vuelven a verse (la instantánea guarda los ocultos: el deshacer los vuelve a ocultar).
   if (plan.showGenerals.length) await tx.projectHiddenKind.deleteMany({ where: { projectId, kindId: { in: plan.showGenerals } } });
+  await setColumnDefaultKinds(tx, projectId, defaults, locale);
   return { mode: "ADD", movedTasks: 0, retypedTasks: 0, addedColumns: plan.addColumns.length, removedColumns: 0, addedKinds: plan.addKinds.length, shownGenerals: plan.showGenerals.length, unpinnedTasks: 0 };
 }
 
-async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, template: ApplyTemplateShape, shape: ProjectShape, snap: TemplateChangeSnapshot): Promise<Omit<ApplyResult, "addedLabels">> {
+async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, template: ApplyTemplateShape, shape: ProjectShape, snap: TemplateChangeSnapshot, locale: Locale): Promise<Omit<ApplyResult, "addedLabels">> {
   const now = new Date();
   const tasks = new Map<string, TaskSnap>();
   const note = (rows: { id: string; columnId: string; position: number; kindId: string; evergreen: boolean; evergreenEvery: number }[]) => {
@@ -364,6 +397,8 @@ async function executeReplace(tx: Tx, projectId: string, plan: ReplacePlan, temp
     await tx.projectHiddenKind.upsert({ where: { projectId_kindId: { projectId, kindId } }, create: { projectId, kindId }, update: {} });
   }
   await ensureUsableKind(tx, projectId);
+  // Tipo por defecto de cada columna de la plantilla que lo trae (las que no, conservan el suyo, como el límite).
+  await setColumnDefaultKinds(tx, projectId, plan.columns.map((c, i) => ({ columnId: targetId[i]!, kind: template.columns[c.index]?.defaultKind })), locale);
 
   snap.tasks = [...tasks.values()];
   return {
@@ -431,7 +466,7 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
       await tx.column.update({
         where: { id: c.id },
         data: {
-          name: c.name, position: c.position, role: c.role as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
+          name: c.name, position: c.position, role: liveColumnRole(c.role as ColumnRoleValue) as ColumnRole, isDone: c.isDone, wipLimit: c.wipLimit, planCount: c.planCount, waitingDays: c.waitingDays,
           // La persona de una columna «Asignación a persona» (si aún existe) y su plazo; instantáneas antiguas no los traen.
           ...(c.assigneeId !== undefined ? { assigneeId: c.assigneeId && (await tx.user.count({ where: { id: c.assigneeId } })) ? c.assigneeId : null, assignDueDays: c.assignDueDays ?? null } : {}),
           routineTargetColumnId: c.routineTargetColumnId && allIds.has(c.routineTargetColumnId) ? c.routineTargetColumnId : null,
@@ -452,6 +487,12 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     const labelNames = new Set(labelsNow.filter((l) => !snap.createdLabels.includes(l.id)).map((l) => l.name.toLowerCase()));
     const missingLabels = snap.labels.filter((l) => !labelIds.has(l.id) && !labelNames.has(l.name.toLowerCase()));
     if (missingLabels.length) await tx.label.createMany({ data: missingLabels.map((l) => ({ ...l, projectId })), skipDuplicates: true });
+    // Tipo por defecto de cada columna de antes, ya con sus tipos de vuelta (si el tipo ya no existe, sin él). Las
+    // instantáneas anteriores a guardarlo no lo traen: se deja como esté.
+    for (const c of snap.columns) {
+      if (c.defaultKindId === undefined) continue;
+      await tx.column.update({ where: { id: c.id }, data: { defaultKindId: c.defaultKindId && kindIds.has(c.defaultKindId) ? c.defaultKindId : null }, select: { id: true } });
+    }
 
     // 3. Tareas: vuelven a su columna, posición, tipo y marca de fija, solo si siguen donde las dejó el cambio.
     if (snap.tasks.length) {

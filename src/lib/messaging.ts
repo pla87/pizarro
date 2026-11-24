@@ -4,6 +4,7 @@ import { appUrl } from "./mail";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import { DEFAULT_CHANNEL_PREFS, DEFAULT_WHATSAPP_CODE_TEMPLATE, DEFAULT_WHATSAPP_TEMPLATE, telegramMode, WHATSAPP_CODE_ATTEMPTS, WHATSAPP_PRICING_URL, WHATSAPP_TEMPLATE_BODY, type ChannelPrefs, type Source } from "./messaging-core";
 import { telegramStatus, webhookInfo } from "./telegram";
+import { whatsappAuthError } from "./whatsapp";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 
 // Lo que ven las pantallas de Telegram y WhatsApp: Administración → Integraciones («Telegram y WhatsApp») y Mi perfil → Avisos.
@@ -44,6 +45,8 @@ export interface MessagingAdminView {
     defaultCodeTemplate: string;
     /** Meta rechazó la plantilla de verificación la última vez que se envió un código (se olvida al enviar uno bien o al guardar). */
     codeTemplateError: { problem: CodeTemplateProblem; code: number; name: string; lang: string; at: string } | null;
+    /** Meta rechazó el token en el último envío (caducado, revocado o sin permiso): solo mientras está activo. */
+    authError: { message: string; at: string } | null;
     enabled: boolean;
     complete: boolean;
     active: boolean;
@@ -108,6 +111,7 @@ export async function getMessagingAdminView(): Promise<MessagingAdminView> {
       codeTemplateLangEn: ws.codeTemplateLangEn,
       defaultCodeTemplate: DEFAULT_WHATSAPP_CODE_TEMPLATE,
       codeTemplateError: codeError(ws.codeTemplateError),
+      authError: w.active ? whatsappAuthError() : null,
       enabled: w.enabled,
       complete: w.complete,
       active: w.active,

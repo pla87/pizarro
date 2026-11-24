@@ -14,6 +14,7 @@ import { cutText } from "@/lib/graphemes";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
+import { switchKindSubtaskRows } from "@/lib/kinds-special";
 import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -595,11 +596,73 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
   });
 }
 
+const kindChangeSchema = z.object({ kindId: v.id, title: v.taskTitle.optional(), description: v.description.optional() }).strict();
+
+/**
+ * Cambio de tipo desde el detalle (con el título y la descripción que deja la plantilla del nuevo, si cambian): como
+ * updateTask y, en la misma transacción, las subtareas del tipo anterior que siguen sin marcar y sin cambiar se
+ * sustituyen por las del nuevo que falten (switchKindSubtaskRows). Un solo «Deshacer» devuelve tipo, título, descripción
+ * y subtareas. `kindSubtasks`: la lista que queda, solo si ha cambiado alguna (con cuántas se quitan y se añaden).
+ */
+export async function changeTaskKind(taskId: string, patch: z.input<typeof kindChangeSchema>, since?: string | null | TextSince) {
+  return runAction({ name: "tasks.changeTaskKind", args: [taskId, patch, since] }, async () => {
+    const user = await requireUser();
+    const data = kindChangeSchema.parse(patch);
+    let swap: { removed: SubtaskInfo[]; added: SubtaskInfo[]; subtasks: SubtaskInfo[] } | null = null;
+    await applyTaskUpdate(user, taskId, data, since, async (tx, prev) => {
+      if (prev.kindId === data.kindId) return;
+      // La tarea ya está bloqueada (el UPDATE de arriba): nadie añade subtareas a la vez. Las subtareas se leen con su
+      // propio candado: quien marca, renombra o borra una a la vez espera, y lo marcado justo antes ya se ve aquí y se
+      // queda (si no, se borraba aunque ya estuviera marcada).
+      const [kinds, subs] = await Promise.all([
+        tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, subtaskTemplate: true } }),
+        tx.$queryRaw<{ id: string; taskId: string; title: string; done: boolean; position: number }[]>`SELECT "id", "taskId", "title", "done", "position" FROM "Subtask" WHERE "taskId" = ${taskId} ORDER BY "position" ASC FOR UPDATE`,
+      ]);
+      const next = kinds.find((k) => k.id === data.kindId);
+      if (!next) return;
+      const { remove, add } = switchKindSubtaskRows(kinds.find((k) => k.id === prev.kindId), next, subs, MAX_SUBTASKS);
+      if (!remove.length && !add.length) return;
+      if (remove.length) await tx.subtask.deleteMany({ where: { id: { in: remove.map((s) => s.id) } } });
+      let position = subs.at(-1)?.position;
+      const rows = add.length
+        ? await tx.subtask.createManyAndReturn({
+          data: add.map((title) => ({ taskId, title, position: (position = positionBetween(position, null)) })),
+          select: { id: true, title: true, done: true, position: true },
+        })
+        : [];
+      const gone = new Set(remove.map((s) => s.id));
+      const strip = ({ taskId: _t, ...s }: (typeof subs)[number]): SubtaskInfo => s;
+      swap = {
+        removed: remove.map(strip),
+        added: rows,
+        subtasks: [...subs.filter((s) => !gone.has(s.id)).map(strip), ...rows].sort((a, b) => a.position - b.position),
+      };
+    });
+    const done = swap as { removed: SubtaskInfo[]; added: SubtaskInfo[]; subtasks: SubtaskInfo[] } | null;
+    if (done) {
+      addUndo(
+        ...done.removed.map((s) => ({ t: "subtask.restore" as const, row: { ...s, taskId } })),
+        ...done.added.map((s) => ({ t: "subtask.remove" as const, id: s.id })),
+      );
+    }
+    const task = withClip(await loadBoardTask(taskId), clipOf(patch.title));
+    // `removed`/`added`: cuántas se han quitado y añadido (para el aviso); `undo`: la entrada que deshace todo el cambio.
+    return { ...task, ...(done ? { kindSubtasks: { subtasks: done.subtasks, removed: done.removed.length, added: done.added.length, undo: trackUndoEntry() } } : {}) };
+  });
+}
+
 /**
  * El cuerpo de updateTask (permiso, validaciones, conflicto de texto, escritura, deshacer, historial y avisos), para
  * usarlo también desde pasteTaskJson dentro de su misma acción (una sola entrada de deshacer).
  */
-async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>, since?: string | null | TextSince): Promise<void> {
+async function applyTaskUpdate(
+  user: CurrentUser,
+  taskId: string,
+  patch: z.input<typeof updateSchema> & z.input<typeof taskFieldSchema>,
+  since?: string | null | TextSince,
+  /** Algo más que hacer en la misma transacción, tras escribir la tarea (con `prev`, los valores de antes). */
+  alsoInTx?: (tx: Prisma.TransactionClient, prev: { kindId: string }) => Promise<void>,
+): Promise<void> {
   {
     since = sinceSchema.parse(since);
     const data = updateSchema.parse(patch);
@@ -690,11 +753,17 @@ async function applyTaskUpdate(user: CurrentUser, taskId: string, patch: z.input
         // cambios a la vez creaban las mismas filas y el segundo fallaba con «Los datos han cambiado mientras tanto».
         await lockTaskRow(tx, taskId);
       }
+      // El tipo de antes, leído aquí con la fila bloqueada: otro cambio de tipo que acaba de confirmarse ya cuenta (si no,
+      // dos cambios seguidos A → B → C quitaban las subtareas de A, no las de B, y la tarea quedaba con las de B y C).
+      const kindBefore = alsoInTx
+        ? (await tx.$queryRaw<{ kindId: string }[]>`SELECT "kindId" FROM "Task" WHERE "id" = ${taskId} FOR NO KEY UPDATE`)[0]?.kindId ?? task.kindId
+        : task.kindId;
       await tx.task.update({ where: { id: taskId }, data: fields, select: { id: true } });
       if (labelIds) {
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
       }
+      if (alsoInTx) await alsoInTx(tx, { kindId: kindBefore });
       return added;
     });
     describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges({ ...data, ...optional }) }, { taskId });
@@ -1093,7 +1162,6 @@ export async function getTaskDetail(taskId: string) {
     noteTask(id);
     const oldest = task.comments.at(-1);
     const olderComments = oldest && task.comments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
-    describeAction("Abrió la tarea «{title}»", { title: task.title }, { taskId });
     return {
       id: task.id,
       description: task.description,

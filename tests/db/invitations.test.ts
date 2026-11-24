@@ -209,6 +209,29 @@ describe("Reenviar invitación", () => {
     expectOk(await resendInvite(pending.id));
   });
 
+  // Antes, al añadirla a otro proyecto y reenviar desde sus ajustes, la invitación seguía llevando al primero.
+  test("desde Ajustes de otro proyecto, la invitación lleva a ese proyecto (si es miembro)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const a = await makeProject({ members: [] });
+    const b = await makeProject({ members: [] });
+    const outside = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = email("otro-proyecto");
+    expectOk(await inviteToProject(a.project.id, to));
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    await db.projectMember.create({ data: { projectId: b.project.id, userId: user.id } });
+    const projectOf = async () => (await db.authToken.findFirstOrThrow({ where: { userId: user.id, purpose: "INVITE" }, select: { data: true } })).data;
+
+    expectOk(await resendInvite(user.id, b.project.id));
+    assert.match((await mailsTo(to)).at(-1)!.subject, new RegExp(`«${b.project.name}»`));
+    assert.deepEqual(await projectOf(), { projectId: b.project.id });
+    // Un proyecto del que no es miembro no cuenta: sigue con el de la última invitación.
+    expectOk(await generateInviteLink(user.id, outside.project.id));
+    assert.deepEqual(await projectOf(), { projectId: b.project.id });
+    expectOk(await generateInviteLink(user.id, a.project.id));
+    assert.deepEqual(await projectOf(), { projectId: a.project.id });
+  });
+
   test("solo administradores", async () => {
     const member = await makeUser();
     const pending = await makeUser();

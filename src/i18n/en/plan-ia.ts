@@ -76,4 +76,9 @@ export const planIa: Record<string, string> = {
   "Los adjuntos no se guardan con el plan: van en el ZIP de «Descargar adjuntos» y el texto cita su ruta.": "Attachments are not saved with the plan: they go in the “Download attachments” ZIP and the text cites their path.",
   // Plan más corto: rótulo de las subtareas de cada tarea
   "Checklist": "Checklist",
+  // Plan de trabajo para IA: con todas las tareas del mismo tipo, el tipo va una vez en el contexto
+  "Tipo de todas las tareas": "Type of all tasks",
+  // Plan para IA demasiado largo para Documentación: botón apagado con el motivo (y el mismo aviso del servidor)
+  "El plan tiene {n} caracteres y en Documentación caben como mucho {max}: cópialo con «Copiar todo» o descárgalo en .md, o genera uno con menos tareas.":
+    "The plan has {n} characters and Documentation holds at most {max}: copy it with “Copy all” or download it as .md, or generate one with fewer tasks.",
 };

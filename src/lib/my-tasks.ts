@@ -1,8 +1,7 @@
-// «Mis tareas» como bandeja diaria: reparto por vencimiento y filtros. Funciones puras.
+// «Mis tareas» como bandeja diaria: reparto por vencimiento. Funciones puras.
 import { daysBetween } from "./dates";
 
 export type TaskBucket = "overdue" | "today" | "week" | "later" | "none";
-export type TaskFilter = "all" | "overdue" | "week";
 
 const BUCKET_ORDER: TaskBucket[] = ["overdue", "today", "week", "later", "none"];
 
@@ -19,31 +18,37 @@ export function bucketOf(dueDate: string | null, today: string): TaskBucket {
   return "later";
 }
 
-export function parseFilter(value: string | string[] | undefined): TaskFilter {
-  const v = Array.isArray(value) ? value[0] : value;
-  return v === "overdue" || v === "week" ? v : "all";
-}
-
-/** ¿Entra la tarea en el filtro? «Vencidas» solo las atrasadas; «Vencidas y próximos 7 días», vencidas, de hoy y de los próximos 7 días. */
-export function matchesFilter(bucket: TaskBucket, filter: TaskFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "overdue") return bucket === "overdue";
-  return bucket === "overdue" || bucket === "today" || bucket === "week";
+/** Ancla del grupo en la página (la línea de resumen enlaza a cada grupo). */
+export function bucketAnchor(bucket: TaskBucket): string {
+  return `tareas-${bucket}`;
 }
 
 /**
  * Reparte las tareas en grupos (vencidas, hoy, próximos 7 días, más adelante, sin fecha), cada grupo
  * ordenado por fecha y, a igual fecha, por el orden recibido. Los grupos vacíos no salen.
  */
-export function groupByDue<T extends { dueDate: string | null }>(tasks: T[], today: string, filter: TaskFilter = "all"): { bucket: TaskBucket; tasks: T[] }[] {
+export function groupByDue<T extends { dueDate: string | null }>(tasks: T[], today: string): { bucket: TaskBucket; tasks: T[] }[] {
   const groups = new Map<TaskBucket, T[]>(BUCKET_ORDER.map((b) => [b, []]));
   for (const task of tasks) {
-    const bucket = bucketOf(task.dueDate, today);
-    if (matchesFilter(bucket, filter)) groups.get(bucket)!.push(task);
+    groups.get(bucketOf(task.dueDate, today))!.push(task);
   }
   return BUCKET_ORDER.map((bucket) => ({
     bucket,
     // sort es estable: el orden recibido se conserva dentro de la misma fecha.
     tasks: groups.get(bucket)!.sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")),
   })).filter((g) => g.tasks.length > 0);
+}
+
+/**
+ * Con más tareas de las que se pintan, el grupo que queda cortado: el de la primera que no se pinta (`firstHidden`, la
+ * siguiente en el orden por fecha). Su recuento sale con «+» en el resumen y en su encabezado: antes decía, p. ej.,
+ * «Más adelante 60» cuando había 1.500. Los grupos de después no se pintan (el aviso de arriba da el total).
+ */
+export function cutBucket(firstHidden: { dueDate: string | null } | undefined, today: string): TaskBucket | null {
+  return firstHidden ? bucketOf(firstHidden.dueDate, today) : null;
+}
+
+/** Recuento de un grupo tal como se escribe: «60», o «60+» si es el grupo cortado. */
+export function bucketCount(group: { bucket: TaskBucket; tasks: unknown[] }, cut: TaskBucket | null): string {
+  return `${group.tasks.length}${group.bucket === cut ? "+" : ""}`;
 }

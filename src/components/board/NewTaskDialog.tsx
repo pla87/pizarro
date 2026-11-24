@@ -98,7 +98,7 @@ function captureTitle(t: T, locale: string): string {
  * «Tipo por defecto» de la columna (menú «⋯» de la columna), si sigue entre los tipos visibles del proyecto; si no (sin él,
  * borrado u oculto), undefined y vale el último usado.
  */
-function columnDefaultKind(f: Pick<ProjectFormData, "columns" | "kinds">, columnId: string): string | undefined {
+export function columnDefaultKind(f: Pick<ProjectFormData, "columns" | "kinds">, columnId: string): string | undefined {
   const id = f.columns.find((c) => c.id === columnId)?.defaultKindId;
   return id && f.kinds.some((k) => k.id === id) ? id : undefined;
 }

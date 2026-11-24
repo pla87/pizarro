@@ -3,7 +3,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { db } from "./db";
 import { cleanText, clipText, isConnectionError } from "./log-clean";
-import { LOG_LABEL_KEY } from "./log-message";
+import { englishLogMessage, LOG_LABEL_KEY } from "./log-message";
 import { appTextLabel } from "./log-legacy";
 import { notePresence } from "./presence";
 import { maskSecretPaths } from "./secret-path";
@@ -136,12 +136,16 @@ export function logEvent(e: LogEvent): void {
     // El projectId puede venir de los argumentos del cliente (ver lib/action.ts), así que también.
     const message = clipText(maskSecretPaths(e.message ?? (e.label ? renderLabelEs(e.label) : "")), 1000);
     const projectId = optText(e.projectId ?? store?.projectId, 100);
+    const details = withLabel(e.details === undefined ? undefined : sanitize(e.details), e.label);
+    // En inglés, para el buscador de Logs en inglés (ver log-message.ts); null si es el mismo texto.
+    const english = englishLogMessage({ message, details });
     state.queue.push({
       createdAt: new Date(),
       level: e.level ?? "info",
       category: clipText(e.category, 60),
       action: clipText(e.action, 120),
       message,
+      messageEn: english && clipText(maskSecretPaths(english), 1000),
       userId: optText(e.userId, 100),
       userName: optText(e.userName, 200),
       // Sin proyecto explícito, el de la acción en curso (si lo hay): lo usan los logs para ocultar los privados ajenos.
@@ -150,7 +154,7 @@ export function logEvent(e: LogEvent): void {
       path: e.path ? clipText(maskSecretPaths(e.path), 500) : null,
       durationMs: e.durationMs == null ? null : Math.round(e.durationMs),
       ip: optText(e.ip, 100),
-      details: withLabel(e.details === undefined ? undefined : sanitize(e.details), e.label),
+      details,
     });
     // Presencia en el tablero: cualquier acción. Las visitas de página no (el tablero se refresca solo): abrir el tablero o
     // una tarea lo anotan sus propios sondeos (rutas de presence y viewers).

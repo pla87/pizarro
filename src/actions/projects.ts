@@ -19,6 +19,7 @@ import { createExampleContent } from "@/lib/project-example-apply";
 import { resolveExamples } from "@/lib/project-examples";
 import { listStartTemplates } from "@/lib/template-store";
 import { buildTemplateApplication, parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
+import { setColumnDefaultKinds } from "@/lib/template-apply";
 import { requireUser } from "@/lib/session";
 import { normalizeTaskFields, TASK_FIELDS } from "@/lib/task-fields";
 import { purgeProject } from "@/lib/project-delete";
@@ -36,9 +37,12 @@ import { assertDeliverableCapacity, assertDeliverableCreateRate, assertLabelCapa
 async function applyTemplate(tx: Prisma.TransactionClient, projectId: string, template: TemplateData, locale: "es" | "en") {
   const general = await tx.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true, name: true } });
   const app = buildTemplateApplication(template, general, locale);
-  await tx.column.createMany({ data: app.columns.map((c) => ({ ...c, projectId })) });
+  const columns = await tx.column.createManyAndReturn({ data: app.columns.map(({ defaultKind: _k, ...c }) => ({ ...c, projectId })), select: { id: true, position: true } });
   if (app.kinds.length) await tx.taskKind.createMany({ data: app.kinds.map((k) => ({ ...k, projectId })) });
   if (app.hiddenKindIds.length) await tx.projectHiddenKind.createMany({ data: app.hiddenKindIds.map((kindId) => ({ projectId, kindId })) });
+  // «Tipo por defecto» de cada columna, por el nombre del tipo, ya con los tipos creados y los generales ocultos.
+  const byPosition = new Map(columns.map((c) => [c.position, c.id]));
+  await setColumnDefaultKinds(tx, projectId, app.columns.flatMap((c) => (byPosition.has(c.position) ? [{ columnId: byPosition.get(c.position)!, kind: c.defaultKind }] : [])), locale);
   if (app.labels.length) await tx.label.createMany({ data: app.labels.map((l) => ({ ...l, projectId })) });
   if (app.releaseTemplates.length) await tx.projectReleaseTemplate.createMany({ data: app.releaseTemplates.map((r) => ({ ...r, projectId })) });
   if (app.taskFields.length) await tx.project.update({ where: { id: projectId }, data: { taskFields: app.taskFields } });

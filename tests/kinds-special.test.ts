@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeKindAutomation, parseSubtaskLines, switchKindDescription, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
+import { describeKindAutomation, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
 
 const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
@@ -319,4 +319,21 @@ test("la descripción: con un tipo sin plantilla en medio, el formulario no se r
   assert.equal(back.match(/Qué mejora/g)?.length, 1);
   // Lo escrito en el tipo general (sin forma de formulario) sigue yendo debajo de la plantilla, como antes.
   assert.equal(switchKindDescription(CORRECCION, MEJORA, "Falla al entrar"), `${MEJORA.descriptionTemplate.trim()}\n\nFalla al entrar`);
+});
+
+test("detalle: al cambiar de tipo se cambian las subtareas sin marcar y sin tocar del anterior", () => {
+  const OLD = { subtaskTemplate: ["Pedir presupuesto", "Comparar", "Elegir"] };
+  const NEW = { subtaskTemplate: ["Solicitar permiso", "comparar", "Pagar tasa"] };
+  const row = (title: string, done = false) => ({ id: title, title, done });
+  const rows = [row("Pedir presupuesto", true), row("Comparar"), row("Elegir lo más barato"), row("Elegir"), row("Mía")];
+  const { remove, add } = switchKindSubtaskRows(OLD, NEW, rows, 100);
+  // La marcada y la renombrada se quedan; «Comparar» también, porque el nuevo la tiene (no se mueve al final).
+  assert.deepEqual(remove.map((r) => r.id), ["Elegir"]);
+  assert.deepEqual(add, ["Solicitar permiso", "Pagar tasa"]);
+  // El mismo tipo (o uno con las mismas subtareas): nada.
+  assert.deepEqual(switchKindSubtaskRows(OLD, OLD, rows, 100), { remove: [], add: [] });
+  // Sin tipo anterior con plantilla: solo se añaden; y nunca por encima del máximo de la tarea.
+  assert.deepEqual(switchKindSubtaskRows({ subtaskTemplate: [] }, NEW, [row("comparar")], 2), { remove: [], add: ["Solicitar permiso"] });
+  // Una repetida a mano: se quita una sola vez por cada una de la plantilla.
+  assert.deepEqual(switchKindSubtaskRows(OLD, { subtaskTemplate: [] }, [row("Elegir"), { ...row("Elegir"), id: "x" }], 100).remove.map((r) => r.id), ["Elegir"]);
 });

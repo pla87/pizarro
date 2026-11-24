@@ -704,7 +704,6 @@ export const admin: Record<string, string> = {
   "; su proyecto privado pasa a ser de equipo": "; their private project becomes a team project",
   "; su proyecto privado «{project}» pasa a ser de equipo": "; their private project “{project}” becomes a team project",
   "; sus {n} proyectos privados pasan a ser de equipo": "; their {n} private projects become team projects",
-  "Abrió la tarea «{title}»": "Opened the task “{title}”",
   "Copió la tarea «{title}» como JSON": "Copied the task “{title}” as JSON",
   "Cambió el máximo por archivo a {file} MB, el de adjuntos por tarea a {task} MB y el de cada ZIP de release a {zip} MB":
     "Set the maximum per file to {file} MB, per task attachments to {task} MB and per release ZIP to {zip} MB",
@@ -736,8 +735,6 @@ export const admin: Record<string, string> = {
   // Logs: copias pedidas a mano (antes solo «OK»)
   "Creó una copia de seguridad a mano": "Created a backup manually",
   "Empezó a subir la última copia a los destinos externos": "Started uploading the latest backup to the external destinations",
-  // Logs: nota «i» del buscador (la búsqueda mira el texto en español)
-  "Los mensajes se guardan en español: busca con palabras en español (p. ej. «Borró» para lo borrado). La acción y la ruta son iguales en todos los idiomas.": "Messages are stored in Spanish, so search with Spanish words (e.g. “Borró” for deletions). The action and the path are the same in every language.",
   // Copias de seguridad: errores que se guardan en español (estado, tareas de fondo, Logs) y se traducen al leerlos
   "BACKUP_KEY no está configurada.": "BACKUP_KEY is not set.",
   "DATABASE_URL no está definida.": "DATABASE_URL is not set.",
@@ -802,4 +799,8 @@ export const admin: Record<string, string> = {
   "{n} invitaciones pendientes": "{n} pending invitations",
   "{n} de {max} como máximo": "{n} of {max} maximum",
   "Puede haber como mucho {max} usuarios activos a la vez, contando las invitaciones pendientes. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time, counting pending invitations. Deactivated people don't count.",
+  // Abrir una tarea se anotaba en Logs hasta la v1.41.0 (ahora no se anota: UNLOGGED_READS en lib/action.ts); sus filas
+  // se leen en inglés con log-legacy.ts mientras duren (LOG_RETENTION_DAYS, hasta 90 días).
+  // Textos guardados por versiones anteriores (Logs)
+  "Abrió la tarea «{title}»": "Opened the task “{title}”",
 };

@@ -30,6 +30,13 @@ const templateColumnSchema = z.object({
    * plantillas: el proyecto nuevo tiene la columna sin persona hasta que se elija. Opcional.
    */
   assignDueDays: z.number().int().min(1).max(365).nullable().optional(),
+  /**
+   * «Tipo por defecto» de la columna, por el nombre del tipo (propio de la plantilla o general): al crear el proyecto o
+   * aplicar la plantilla se busca por nombre y, si no hay ninguno, la columna queda sin él. Opcional: las plantillas
+   * guardadas antes no lo traen, y las versiones anteriores lo descartan al leerlo (zod quita las claves que no conoce).
+   * Uno que no valga se ignora sin invalidar la columna.
+   */
+  defaultKind: v.name.nullable().optional().catch(null),
 });
 
 const templateKindSchema = z.object({
@@ -131,7 +138,8 @@ interface GeneralKind {
 }
 
 interface TemplateApplication {
-  columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number; wipLimit: number | null; assignDueDays: number | null }[];
+  /** `defaultKind`: nombre del «Tipo por defecto» (no es una columna de la tabla: se resuelve después de crear los tipos). */
+  columns: { name: string; role: ColumnRoleValue; isDone: boolean; position: number; wipLimit: number | null; assignDueDays: number | null; defaultKind: string | null }[];
   kinds: { name: string; color: string; titleTemplate: string; descriptionTemplate: string; subtaskTemplate: string[]; position: number }[];
   labels: { name: string; color: string }[];
   /** Ids de tipos generales que el proyecto no usará. */
@@ -163,6 +171,7 @@ export function buildTemplateApplication(template: TemplateData, generalKinds: G
       name: c.name, role: c.role, isDone: c.isDone, position: (i + 1) * POSITION_STEP, wipLimit: (c as { wipLimit?: number | null }).wipLimit ?? null,
       // El plazo de una columna «Asignación a persona» (solo con rol NONE: es exclusivo con los demás roles).
       assignDueDays: c.role === "NONE" ? ((c as { assignDueDays?: number | null }).assignDueDays ?? null) : null,
+      defaultKind: (c as { defaultKind?: string | null }).defaultKind ?? null,
     })),
     kinds: template.kinds.filter((k) => !generalNames.has(nameKey(k.name))).map((k, i) => ({
       name: k.name,

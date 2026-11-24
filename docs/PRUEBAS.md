@@ -323,7 +323,7 @@ Cómo está hoy el código:
 
 ### 6.3 Rama `stable` y «Mover stable»
 
-**Necesitas:** permisos de mantenedor en el repositorio y el secreto `STABLE_PUSH_TOKEN` (pasos en `docs/HANDOFF.md`, sección 5).
+**Necesitas:** permisos de mantenedor en el repositorio y el secreto `STABLE_PUSH_TOKEN` (pasos en `docs/handoff/PUBLICAR.md`, «Cerrar una versión paso a paso»).
 
 1. Publica una versión (**Actions → Release**) y espera a que termine.
 2. Mira el job **Rama stable** y comprueba que la rama `stable` apunta al commit de la etiqueta `vX.Y.Z` recién publicada.
@@ -788,3 +788,51 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 1. *Mi perfil → English*. Cambia el tema y el idioma: en *Administration → Logs* las filas dicen qué cambió.
 2. Cambia el rol de una columna: la fila dice de qué rol a qué rol.
 3. Reinicia el servicio (Railway → *Restart*) y vuelve a *Logs*: el apagado y el arranque salen en inglés. Vuelve a español.
+
+## 18. Novedades de la v1.69.0
+
+### 18.1 Botones encima del fondo de un diálogo (ordenador)
+
+1. Abre una tarea: el botón de informar de un error (pie del menú, junto a *Cerrar sesión*) se ve entero por encima del fondo oscurecido. Púlsalo: se abre su diálogo sin cerrar la tarea. Ciérralo.
+2. Con la tarea abierta, pulsa el «+» flotante (*Nueva tarea*): se abre otra al lado. Con las dos abiertas, el «+» sigue visible entero, no abre una tercera y al pasar el ratón dice «Ya hay dos tareas abiertas».
+3. Cambia la descripción de una y ciérrala: mientras sale «Cambios sin guardar», esos botones y *Deshacer* no se ven. Cancela.
+
+### 18.2 Historial de versiones
+
+- Salen las 10 versiones más recientes; **Ver más** carga las anteriores.
+- Busca una palabra de una versión antigua: la primera vez avisa «Buscando en todas las versiones…» y la encuentra.
+- Abre `https://pizarro.example.com/changelog#v1.60.0`: baja a esa versión aunque no esté entre las 10 primeras.
+
+### 18.3 Mis tareas
+
+- Ya no hay filtros. Con tareas en varios grupos, arriba sale una línea como «Vencidas 2 · Hoy 1 · …» (solo los grupos con tareas); cada enlace baja a su grupo. Con un solo grupo, la línea no sale.
+- Una dirección antigua `/my-tasks?filter=overdue` lleva a */my-tasks*.
+
+### 18.4 Cambiar de tipo en el detalle (instalación de prueba, proyecto *Casa y familia*)
+
+1. Crea una tarea de un tipo con subtareas predefinidas. Marca una, renombra otra y añade una a mano.
+2. Ábrela y cámbiala a otro tipo con subtareas: las tres que tocaste se quedan, las demás del tipo anterior se sustituyen por las del nuevo, y el aviso dice cuántas («Añadidas…», «Quitadas…» o «Cambiadas… subtareas del tipo»).
+3. Pulsa **Deshacer** en el aviso: vuelven el tipo, el título, la descripción y las subtareas de antes.
+
+### 18.5 Tipo por defecto en plantillas y en «Varias tareas»
+
+1. *Administración → Tipos y plantillas → Plantillas*: **Crear desde un proyecto…** con una columna que tenga *Tipo por defecto*: en el editor, esa columna lo trae en su selector. Renombra el tipo en el editor: la columna sigue con él. Guarda.
+2. Crea un proyecto con esa plantilla: la columna tiene el tipo por defecto (menú «⋯» → «Tipo por defecto: …»). Prueba también *Aplicar plantilla…* en otro proyecto y deshazlo: el tipo por defecto vuelve a como estaba.
+3. **Varias tareas** eligiendo esa columna: el tipo para todas empieza con el de la columna.
+
+### 18.6 Logs buscando en inglés
+
+- *Mi perfil → English*, haz algo (cambia el tema) y en *Administration → Logs* busca una palabra en inglés del mensaje («theme»): lo encuentra. Los registros anteriores a la v1.69 se siguen encontrando por su texto en español. Vuelve a español.
+
+### 18.7 Reenviar invitación desde Ajustes del proyecto (con email configurado)
+
+1. Invita a una persona de prueba a un proyecto y no aceptes la invitación.
+2. En otro proyecto, *Ajustes del proyecto → General → Miembros*, añádela: en su fila sale **Reenviar invitación**. Púlsalo: llega un email nuevo; el enlace lleva a ese proyecto y el del primer email ya no vale.
+
+### 18.8 Informe semanal rechazado (solo si tienes SMTP configurado)
+
+- Repite 17.4 con una dirección que no exista. Además del error en *Logs*, quien configuró el informe recibe el email «No se ha podido enviar el informe semanal de «…»» (como mucho uno por semana). Vuelve a poner un destinatario real.
+
+### 18.9 WhatsApp con el token caducado (solo si lo usas)
+
+- Si el token de Meta caduca o lo revocas, *Administración → Integraciones → WhatsApp* muestra el último error, como Telegram. Pega un token nuevo, guarda y pulsa **Probar**: el aviso de prueba debe llegar.

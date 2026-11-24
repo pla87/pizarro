@@ -112,6 +112,20 @@ test("documentMime / documentDownloadName / isPreviewable", () => {
   assert.equal(documentMime("OTHER", "application/zip"), "application/zip");
   assert.equal(documentDownloadName("foto.png", "IMAGE"), "foto.webp");
   assert.equal(documentDownloadName("foto.png", "OTHER"), "foto.png");
+  // Renombrado: sin perder lo que va tras un punto que no es extensión, y con la extensión del tipo si falta.
+  assert.equal(documentDownloadName("Plano v1.2 final", "IMAGE"), "Plano v1.2 final.webp");
+  assert.equal(documentDownloadName("Plano v1.2 final.JPEG", "IMAGE"), "Plano v1.2 final.webp");
+  assert.equal(documentDownloadName("foto.webp", "IMAGE"), "foto.webp");
+  assert.equal(documentDownloadName("Acta de noviembre", "PDF"), "Acta de noviembre.pdf");
+  assert.equal(documentDownloadName("Acta 12.11", "PDF"), "Acta 12.11.pdf");
+  assert.equal(documentDownloadName("acta.PDF", "PDF"), "acta.PDF");
+  assert.equal(documentDownloadName("datos.csv", "TEXT"), "datos.csv");
+  assert.equal(documentDownloadName("notas", "TEXT"), "notas.txt");
+  assert.equal(documentDownloadName("guía.markdown", "MARKDOWN"), "guía.markdown");
+  assert.equal(documentDownloadName("guía v2.0", "MARKDOWN"), "guía v2.0.md");
+  assert.equal(documentDownloadName("página.htm", "HTML"), "página.htm");
+  assert.equal(documentDownloadName("página.md", "HTML"), "página.md.html");
+  assert.equal(documentDownloadName("archivo sin extensión", "OTHER"), "archivo sin extensión");
   assert.equal(isPreviewable("OTHER"), false);
   assert.equal(isPreviewable("PDF"), true);
   assert.equal(isPreviewable("HTML"), true);

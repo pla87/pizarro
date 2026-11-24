@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAiPlanSetup, getAiPlanTaskDetails, saveAiPlan } from "@/actions/ai-plan";
 import { moveTasks } from "@/actions/tasks";
-import { useLocale, useT } from "@/i18n/client";
-import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, AI_PLAN_MAX_TASKS, aiPlanDownloadName, aiPlanFileName, buildAiPlanMarkdown, planAttachmentPaths, type AiPlanTask } from "@/lib/ai-plan";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
+import { AI_PLAN_BUILTIN_ID, AI_PLAN_DEFAULTS, AI_PLAN_MAX_TASKS, AI_PLAN_SAVE_MAX, aiPlanDownloadName, aiPlanTooLong, aiPlanFileName, buildAiPlanMarkdown, planAttachmentPaths, type AiPlanTask } from "@/lib/ai-plan";
 import { isNetworkError, loadWhenOnline, reportOffline } from "@/lib/connection";
 import { compareTaskOrder } from "@/lib/positions";
 import { aiPlanZipName, evergreenDue, RELEASE_MAX_ATTACHMENT_TASKS, releasesUntilDue, swapTemplateBlock } from "@/lib/release";
@@ -52,6 +52,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   const board = useBoard();
   const t = useT();
   const locale = useLocale();
+  const intlLocale = useIntlLocale();
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -213,6 +214,10 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
   };
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
+  // Un plan de cientos de tareas largas puede pasar del tope de Documentación: el botón se apaga y dice por qué (copiar y
+  // descargar siguen sirviendo). Con el editor con barra se mira el texto cargado: si se alarga escribiendo, lo dice el servidor.
+  const planLength = step === "edit" ? draft.content.trim().length : 0;
+  const tooLong = planLength > AI_PLAN_SAVE_MAX ? aiPlanTooLong(t, planLength, intlLocale) : null;
   const downloadAttachments = async () => {
     await downloadAttachmentsZip({
       setBusy: setZipping,
@@ -303,7 +308,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
                 {zipping ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />} {t("Descargar adjuntos ({n})", { n: attachmentTotal })}
               </button>
             )}
-            <button className="btn-primary" onClick={save} disabled={busy || draft.empty()} title={t("Guardar en Documentación como «{name}»", { name: docName() })}>
+            <button className="btn-primary" onClick={save} disabled={busy || draft.empty() || !!tooLong} title={tooLong ?? t("Guardar en Documentación como «{name}»", { name: docName() })} aria-describedby={tooLong ? "plan-too-long" : undefined}>
               {busy ? <Loader2 size={15} className="animate-spin" /> : <FolderInput size={15} />} {t("Guardar en Documentación")}
             </button>
           </>
@@ -343,6 +348,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             </select>
             <span className="text-xs text-slate-500">{t("Las fijas se quedan en la columna.")}</span>
           </div>
+          {tooLong && <p id="plan-too-long" className="text-xs text-red-600 dark:text-red-400" role="alert">{tooLong}</p>}
           {zipTooMany && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan admite como mucho 200 tareas con adjuntos en el ZIP: el texto solo cita sus nombres.")}</p>}
           <p className="text-xs text-slate-500">
             {t("Se guardará como «{name}».", { name: docName() })}

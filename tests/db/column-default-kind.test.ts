@@ -81,8 +81,6 @@ describe("tipo por defecto de una columna", () => {
     await loginAs(admin);
     const own = await db.taskKind.create({ data: { name: "Cita médica", color: "#3b82f6", position: 2, projectId: f.project.id } });
     expectOk(await setColumnDefaultKind(f.columns.todo, own.id));
-    // Una columna con un rol retirado (de antes de la migración) sale como «Sin rol».
-    await db.column.update({ where: { id: f.columns.doing }, data: { role: "AGENDA" } });
     const parts: Buffer[] = [];
     for await (const c of streamZip((await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT)).entries)) parts.push(c);
     const file = path.join(work, "exp.zip");
@@ -92,7 +90,24 @@ describe("tipo por defecto de una columna", () => {
     const byName = new Map(cols.map((c) => [c.name, c]));
     assert.deepEqual(byName.get("Por hacer")!.defaultKind, { name: "Cita médica", projectId: imported.projectId });
     assert.equal(byName.get("En curso")!.defaultKind, null);
-    assert.equal(byName.get("En curso")!.role, "NONE");
+  });
+
+  test("un tipo general usado solo como tipo por defecto también viaja: donde no existe, se crea como tipo del proyecto", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [] });
+    await loginAs(admin);
+    const general = await makeKind(null);
+    expectOk(await setColumnDefaultKind(f.columns.doing, general.id));
+    assert.equal(await db.task.count({ where: { projectId: f.project.id, kindId: general.id } }), 0);
+    const parts: Buffer[] = [];
+    for await (const c of streamZip((await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT)).entries)) parts.push(c);
+    const file = path.join(work, "exp-general.zip");
+    await writeFile(file, Buffer.concat(parts));
+    // La otra instalación no tiene ese tipo general.
+    await db.taskKind.delete({ where: { id: general.id } });
+    const imported = await importProjectFile(file, { id: admin.id, name: admin.name, email: admin.email, role: "ADMIN" }, { isPrivate: false });
+    const col = await db.column.findFirstOrThrow({ where: { projectId: imported.projectId, name: "En curso" }, select: { defaultKind: { select: { name: true, projectId: true, color: true } } } });
+    assert.deepEqual(col.defaultKind, { name: general.name, projectId: imported.projectId, color: general.color });
   });
 });
 

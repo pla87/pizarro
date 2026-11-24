@@ -4,9 +4,8 @@ import { z } from "zod";
 import { assertProjectAccess } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
-import { AI_PLAN_MAX_TASKS, aiPlanFileName, highestPlanVersion } from "@/lib/ai-plan";
+import { AI_PLAN_MAX_TASKS, AI_PLAN_SAVE_MAX, aiPlanFileName, aiPlanTooLong, highestPlanVersion } from "@/lib/ai-plan";
 import { projectPlanTemplates, userPlanTemplates } from "@/lib/ai-plan-templates";
-import { MAX_RELEASE_CONTENT } from "@/lib/constants";
 import { todayIso } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { saveGeneratedDocument } from "@/lib/documents";
@@ -98,7 +97,8 @@ export async function getAiPlanTaskDetails(input: z.input<typeof detailsSchema>)
 const saveSchema = z.object({
   projectId: v.id,
   columnId: v.id,
-  content: z.string().trim().min(1, "El contenido está vacío.").max(MAX_RELEASE_CONTENT, "El contenido es demasiado largo."),
+  // El tope (AI_PLAN_SAVE_MAX) se comprueba después, con un mensaje que dice cuánto es y qué hacer.
+  content: z.string().trim().min(1, "El contenido está vacío."),
 });
 
 /**
@@ -115,6 +115,7 @@ export async function saveAiPlan(input: z.input<typeof saveSchema>) {
     await assertProjectAccess(user, data.projectId);
     const column = await planColumn(data.projectId, data.columnId);
     const t = await getT();
+    if (data.content.length > AI_PLAN_SAVE_MAX) throw new AppError(aiPlanTooLong(t, data.content.length, intlLocale(await getLocale())));
     const floor = await highestSavedVersion(data.projectId);
     const [row] = await db.$queryRaw<{ aiPlanCount: number }[]>`
       UPDATE "Project" SET "aiPlanCount" = GREATEST("aiPlanCount", ${floor}) + 1 WHERE "id" = ${data.projectId} RETURNING "aiPlanCount"`;

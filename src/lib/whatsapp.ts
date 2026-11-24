@@ -33,6 +33,22 @@ export function sendWhatsappCode(cfg: WhatsappConfig, to: string, code: string, 
   return trackInFlight(() => withRetries("WHATSAPP", () => post(cfg, whatsappCodePayload(to, code, cfg, english), to), { stopping: isShuttingDown }));
 }
 
+/**
+ * Último rechazo del token por Meta (401, 403 o el código 190: caducado, revocado o sin permiso), en memoria como el
+ * estado de Telegram. Sin él, con un token temporal de 24 h, Integraciones seguía diciendo «Activo» y cada aviso fallaba
+ * solo en Logs. Lo borra el siguiente envío que sale bien (un aviso, un código o «Probar») o guardar otro token.
+ */
+export interface WhatsappAuthError { message: string; at: string }
+const AUTH_GLOBAL = "__pizarroWhatsappAuth";
+const authSlot = () => globalThis as unknown as Record<string, WhatsappAuthError | null | undefined>;
+export function whatsappAuthError(): WhatsappAuthError | null {
+  return authSlot()[AUTH_GLOBAL] ?? null;
+}
+export function clearWhatsappAuthError(): void {
+  authSlot()[AUTH_GLOBAL] = null;
+}
+const isAuthFailure = (status: number, code: number | null | undefined) => status === 401 || status === 403 || code === 190;
+
 async function post(cfg: WhatsappConfig, body: unknown, to: string): Promise<void> {
   let res: Response;
   try {
@@ -51,10 +67,15 @@ async function post(cfg: WhatsappConfig, body: unknown, to: string): Promise<voi
     const cause = (err as { cause?: { message?: string } })?.cause?.message;
     throw new MessagingNetworkError(scrubSecrets(`WhatsApp: ${(err as Error)?.message ?? String(err)}${cause ? ` (${cause})` : ""}`, [cfg.token, to, to.replace(/^\+/, "")]), code);
   }
-  if (res.ok) return;
+  if (res.ok) {
+    clearWhatsappAuthError();
+    return;
+  }
   const json = (await res.json().catch(() => ({}))) as { error?: { message?: string; code?: number; error_data?: { details?: string } } };
   const detail = json.error?.error_data?.details;
   const message = `WhatsApp ${res.status}${json.error?.code ? ` (${json.error.code})` : ""}: ${json.error?.message ?? "error"}${detail ? ` — ${detail}` : ""}`;
   const retryAfter = Number(res.headers.get("retry-after"));
-  throw new MessagingApiError(scrubSecrets(message, [cfg.token, cfg.phoneNumberId, to, to.replace(/^\+/, "")]), res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null, json.error?.code ?? null);
+  const safe = scrubSecrets(message, [cfg.token, cfg.phoneNumberId, to, to.replace(/^\+/, "")]);
+  if (isAuthFailure(res.status, json.error?.code)) authSlot()[AUTH_GLOBAL] = { message: safe, at: new Date().toISOString() };
+  throw new MessagingApiError(safe, res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null, json.error?.code ?? null);
 }

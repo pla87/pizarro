@@ -510,9 +510,9 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       setInviteEmail("");
       setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
     });
-  const resend = (m: MemberRow) =>
+  const resend = (m: { id: string; name: string }) =>
     start(async () => {
-      const res = await resendInvite(m.id);
+      const res = await resendInvite(m.id, projectId);
       if (!res.ok) return toast(res.error, "error");
       // Si el email no sale, el enlace nuevo (el anterior ya no vale) queda a la vista para pasárselo a mano.
       if (res.data.mailFailed) toast(t("No se pudo enviar el email: pásale el enlace."), "error");
@@ -527,7 +527,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       confirmLabel: t("Generar enlace nuevo"),
     }))) return;
     start(async () => {
-      const res = await generateInviteLink(m.id);
+      const res = await generateInviteLink(m.id, projectId);
       if (!res.ok) return toast(res.error, "error");
       toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
       setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
@@ -631,7 +631,15 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           <InfoTip topic={t("Invitar por email")}>{t("Para alguien que aún no tiene cuenta: se crea como invitación, entra en este proyecto y elige su contraseña con un enlace de un solo uso (72 horas). Después llega directamente al tablero.")}</InfoTip>
         </form>
       )}
-      {shared && <SharedLinkNote shared={shared} onClose={() => setShared(null)} onFreshLink={(userId, name) => void freshLink({ id: userId, name })} />}
+      {shared && (
+        <SharedLinkNote
+          shared={shared}
+          onClose={() => setShared(null)}
+          onFreshLink={(userId, name) => void freshLink({ id: userId, name })}
+          onResend={canInvite && canResend ? (userId, name) => resend({ id: userId, name }) : undefined}
+          busy={pending}
+        />
+      )}
     </div>
   );
 }
@@ -657,8 +665,15 @@ function shareableLink(link: string): string {
  * El enlace del último alta, para pasarlo por otro canal (WhatsApp…): el del tablero o el de la invitación. A quien aún no
  * ha aceptado su invitación no le sirve el del tablero: si su invitación sigue valiendo, se dice hasta cuándo (el enlace
  * no se guarda, solo su huella: no se puede volver a mostrar) y se ofrece uno nuevo; si caducó, el nuevo directamente.
+ * Con `onResend` (administradores, con email), también «Reenviar invitación» por email (como en la fila del miembro).
  */
-function SharedLinkNote({ shared, onClose, onFreshLink }: { shared: SharedLink; onClose: () => void; onFreshLink: (userId: string, name: string) => void }) {
+function SharedLinkNote({ shared, onClose, onFreshLink, onResend, busy = false }: {
+  shared: SharedLink;
+  onClose: () => void;
+  onFreshLink: (userId: string, name: string) => void;
+  onResend?: (userId: string, name: string) => void;
+  busy?: boolean;
+}) {
   const t = useT();
   const toast = useToast();
   const locale = useIntlLocale();
@@ -669,12 +684,23 @@ function SharedLinkNote({ shared, onClose, onFreshLink }: { shared: SharedLink; 
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1">
             {until
-              ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
-              : t("La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })}
+              ? onResend
+                ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).", { name: shared.name, date: until })
+                : t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
+              : onResend
+                ? t("La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })
+                : t("La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })}
           </p>
           <button type="button" className="btn-icon h-7 w-7 shrink-0" onClick={onClose} aria-label={t("Cerrar")}><X size={14} /></button>
         </div>
-        <button type="button" className="btn-secondary" onClick={() => onFreshLink(shared.userId!, shared.name)}>{t("Generar enlace de invitación nuevo")}</button>
+        <div className="flex flex-wrap gap-2">
+          {onResend && (
+            <button type="button" className="btn-secondary" disabled={busy} onClick={() => onResend(shared.userId!, shared.name)}>
+              <MailPlus size={16} aria-hidden />{t("Reenviar invitación")}
+            </button>
+          )}
+          <button type="button" className="btn-secondary" disabled={busy} onClick={() => onFreshLink(shared.userId!, shared.name)}>{t("Generar enlace de invitación nuevo")}</button>
+        </div>
       </div>
     );
   }

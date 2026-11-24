@@ -39,9 +39,9 @@ test("motivo: sin tarjetas, sin subtareas (Lista) o ninguno", () => {
   assert.equal(columnGate([...tasks, task("lista", { subtaskTotal: 1 })], "lista", "CHECKLIST", 2), null);
   // Una fecha en la Lista no sirve.
   assert.equal(columnGate([task("lista", { dueDate: "2026-12-02" })], "lista", "CHECKLIST", 1), "noSubtasks");
-  // Un rol sin condición propia (también uno retirado, como la Agenda) solo mira que haya tarjetas.
+  // Un rol sin condición propia solo mira que haya tarjetas.
   assert.equal(columnGate(tasks, "lista", "NONE", 1), null);
-  assert.equal(columnGate(tasks, "lista", "AGENDA", 1), null);
+  assert.equal(columnGate(tasks, "lista", "ROUTINES", 1), null);
 });
 
 /**

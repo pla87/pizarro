@@ -1,47 +1,139 @@
 # Traspaso para una sesión nueva
 
-Documento para retomar el desarrollo de Pizarro en una sesión nueva sin perder el método de trabajo. Léelo entero
-antes de empezar. No contiene datos personales: el repositorio es público y debe seguir sin ellos.
+Documento para retomar el desarrollo de Pizarro en una sesión nueva sin perder el método de trabajo. Este es el
+**núcleo**: léelo entero antes de empezar. El detalle técnico, la historia de decisiones y la publicación paso a paso
+están en anexos que se leen solo cuando hacen falta (índice en la sección 7). No contiene datos personales: el
+repositorio es público y debe seguir sin ellos.
 
 ## 0. Arranque de una sesión nueva
 
-1. Lee este documento entero, `docs/MANUAL.md` por encima y `e2e/README.md`.
+1. Lee este núcleo entero, el índice del manual (`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la
+   ronda, `e2e/README.md` y `docs/PRUEBAS-CHROME.md`. Los anexos (§7), solo cuando toque su tema.
 2. Rama de trabajo: la que indique la sesión, igual que `main` (`git fetch origin main && git checkout -B <rama> origin/main`).
-3. Entorno de la nube (si no está hecho): `pg_ctlcluster 16 main start`; si `postgres` no tiene contraseña,
+3. Entorno. **En el PC del propietario:** sección 0b. **En la nube** (si no está hecho): `pg_ctlcluster 16 main start`;
+   si `postgres` no tiene contraseña,
    `su postgres -c "psql -c \"alter user postgres password 'postgres'\""`; `.env` a partir de `.env.example` con
    `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pizarro"`, un `SESSION_SECRET` aleatorio,
    `APP_URL="http://localhost:3000"`, `UPLOAD_DIR="./uploads"`, `SEED_ADMIN_EMAIL="admin@example.com"`,
    `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y `SEED_ADMIN_NAME="Administrador"`; `npm ci` (comprueba que existe
-   `node_modules/@next/swc-linux-x64-gnu`, ver §6), `createdb pizarro` y `npx prisma migrate deploy`.
+   `node_modules/@next/swc-linux-x64-gnu`, ver `docs/handoff/GUARDAS.md`, «Entorno»), `createdb pizarro` y
+   `npx prisma migrate deploy`.
 4. Añade `.claude/` a `.git/info/exclude` (ahí van los worktrees de los agentes).
 5. Los ZIP de capturas del propietario se extraen en una carpeta temporal fuera del repositorio. Las capturas y las
    auditorías que manda pueden llevar nombres, dominios y datos de su instalación: no se suben ni se copian a los briefs.
 6. Antes de cada fusión en `main`, busca en el diff, en los PDF y en los mensajes de commit los términos personales que
    indique el propietario (no se apuntan aquí: el repositorio es público).
-7. Trampas del entorno de la nube vistas en las rondas 58 y 59:
-   - `createdb`/`dropdb` con `PGPASSWORD=postgres … -h localhost … </dev/null` (sin eso se quedan esperando la contraseña).
-   - `NODE_OPTIONS` trae `--max-old-space-size=8192`: lanza `npm test` y las pruebas de PDF con
-     `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
-   - Las bases de `tests/db/` sueltas deben llamarse `pizarro_test_<hex>` (lo exige `tests/db/helpers.ts`).
-   - Tras borrar una página, `rm -rf .next/types` antes de `tsc` (los tipos viejos de la build la siguen citando).
-   - Los agentes no pueden lanzar `npx --yes knip@5` ni instalar paquetes del sistema (p. ej. Caddy): lo hace la sesión
-     principal o se deja para el VPS.
-   - Las rondas grandes llenan la memoria (15 GB, 4 CPU): no más de 4–5 agentes a la vez y, salvo encargo expreso, que no
-     compilen ni pasen e2e (lo hace la sesión principal al final, con la build de producción).
-   - Rondas 62 y 63: el contenedor puede reiniciarse a mitad de ronda (se pierden los procesos, no los ficheros): al
-     volver, `pg_ctlcluster 16 main start` y recoger el informe final de los agentes que terminaron de sus ficheros de
-     salida. Los agentes tampoco pueden descargar binarios (Caddy): el `Caddyfile` lo valida el job «Caddyfile» de CI.
-   - La PR se fusiona aplastada (squash): después, la rama remota de trabajo conserva la historia vieja. Al empezar la
-     ronda siguiente, `git checkout -B <rama> origin/main` y `git push --force-with-lease` (solo contiene lo ya fusionado);
-     y borra los worktrees de la ronda anterior (`git worktree remove --force` + `git branch -D`), que ya están en `main`.
-   - Publicar desde la sesión: PR con las herramientas de GitHub, esperar sus dos comprobaciones (tipos/lint/pruebas y
-     «Caddyfile»), fusionar aplastando, lanzar *Release* con `actions_run_trigger` (`release.yml`, ref `main`) y comprobar
-     que `origin/stable` y la etiqueta `vX.Y.Z` apuntan al commit fusionado (unos 6 min).
-   - `tests/report-render.test.ts` («sin memoria…») falla a veces con la CPU cargada por varios agentes; sola, y con
-     `NODE_OPTIONS=--use-openssl-ca`, pasa.
+7. Trampas del entorno de la nube (rondas 58–63; `createdb` con `PGPASSWORD`, `NODE_OPTIONS=--use-openssl-ca`, bases
+   `pizarro_test_<hex>`, `rm -rf .next/types`, memoria y número de agentes, reinicios del contenedor):
+   `docs/handoff/GUARDAS.md`, «Entorno». Rama tras la fusión aplastada y publicar desde la sesión:
+   `docs/handoff/PUBLICAR.md`.
 8. Prompts para Claude in Chrome pendientes: `docs/PRUEBAS-CHROME.md` (se actualizan al cerrar cada ronda).
 9. Las capturas, los informes de Claude in Chrome y las auditorías pueden traer el dominio real de la instalación del
    propietario y su email: nunca se copian a ficheros, briefs ni commits (el grep de privacidad antes de cada fusión).
+
+## 0b. Sesión local en el PC del propietario (Claude Code + Claude in Chrome)
+
+Desde la ronda 65 el propietario puede seguir en **Claude Code en el terminal de su PC**, con **Claude in Chrome** (la
+extensión del navegador, herramientas `mcp__claude-in-chrome__*`), en lugar de la nube. El método (§2–§5) es el mismo;
+cambian el entorno, los recursos y cómo se publica.
+
+**Qué leer al empezar en local:** este núcleo (incluida esta sección), el índice del manual
+(`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la ronda, `e2e/README.md` y `docs/PRUEBAS-CHROME.md`.
+Los anexos (§7), cuando toque su tema.
+
+**Requisitos** (cualquier sistema; notas para Windows y macOS):
+
+- **Git.** Windows: Git for Windows, que trae **Git Bash** (los scripts `scripts/*.sh`, como `scripts/e2e-all.sh`, son de
+  bash: lánzalos desde Git Bash o WSL, no desde PowerShell ni cmd). macOS: el de las *Command Line Tools*
+  (`xcode-select --install`) o Homebrew.
+- **Node 22** (`package.json` pide `"engines": { "node": ">=22" }`; no hay `.nvmrc`; las imágenes Docker y las
+  builds usan Node 22). Windows: instalador de nodejs.org (LTS 22) o `nvm-windows`/`fnm`. macOS: `brew install node@22`,
+  `nvm install 22` o `fnm`. Comprueba con `node -v`.
+- **PostgreSQL 16** (ni 15 ni 17: la imagen de Compose usa `postgres:16-alpine`). Instalado (Windows: instalador de
+  EDB; macOS: Postgres.app o `brew install postgresql@16`) con usuario `postgres` y contraseña `postgres`, o con Docker:
+
+  ```sh
+  docker run -d --name pizarro-pg -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+  ```
+
+  Tras reiniciar el PC: `docker start pizarro-pg` (o el servicio de PostgreSQL instalado). El usuario debe poder crear
+  bases (`npm run test:db` crea y borra `pizarro_test_*`; las suites e2e, `pz_qa`).
+- **`gh`** (GitHub CLI) autenticado con `gh auth login`, o la web de GitHub para la PR y el workflow.
+
+**Puesta en marcha:**
+
+```sh
+git clone https://github.com/pla87/pizarro.git && cd pizarro
+cp .env.example .env        # y edítalo (abajo)
+npm ci                      # nunca npm install: reescribe el package-lock.json
+createdb -h localhost -U postgres pizarro   # o: docker exec pizarro-pg createdb -U postgres pizarro
+npx prisma migrate deploy
+npm run dev                 # desarrollo en http://localhost:3000
+```
+
+En el `.env`, los mismos valores que en §0: `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pizarro"`, un
+`SESSION_SECRET` aleatorio (`openssl rand -base64 48`, que trae Git Bash, o
+`node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`), `APP_URL="http://localhost:3000"`,
+`UPLOAD_DIR="./uploads"`, `SEED_ADMIN_EMAIL="admin@example.com"`, `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y
+`SEED_ADMIN_NAME="Administrador"` (valores de ejemplo: nunca los reales del propietario). `createdb` pide la contraseña
+(`postgres`) si no tienes `PGPASSWORD`. Añade `.claude/` a `.git/info/exclude` (worktrees de los agentes).
+
+Build de producción, la que prueban las suites e2e y la que hay que mirar antes de fusionar (§4):
+`npx prisma generate && npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot` y después
+`npm start` (funciona también en Windows: el script `start` no lleva `exec`).
+
+**Lo que en la nube hacía falta y en local no («solo nube»):**
+
+- El binario SWC `@next/swc-linux-x64-gnu` extraído a mano: *solo nube*. En local `npm ci` instala el de tu sistema
+  (Windows, macOS Intel o ARM).
+- `NODE_OPTIONS=--use-openssl-ca` para `npm test` y las pruebas de PDF: *solo nube* (allí `NODE_OPTIONS` traía
+  `--max-old-space-size=8192`). En local no lo pongas; si tu `NODE_OPTIONS` lleva `--max-old-space-size`, quítalo para
+  `npm test` (anula el tope del worker de PDF).
+- `pg_ctlcluster 16 main start` y el `alter user postgres password`: *solo nube*. En local, el servicio o el
+  contenedor de PostgreSQL.
+- `PGPASSWORD=postgres … </dev/null` para que `createdb`/`dropdb` no se queden esperando: *solo nube* (en local te lo
+  pregunta y contestas).
+- Los límites de la nube (sin descargar binarios, sin `npx --yes knip@5` para los agentes, reinicios del contenedor):
+  *solo nube*. En local, `npx --yes knip@5` lo puede pasar la sesión principal con normalidad.
+- Valen también en local: las bases sueltas de `tests/db/` se llaman `pizarro_test_<hex>`; tras borrar una página,
+  `rm -rf .next/types` antes de `tsc`; `tests/report-render.test.ts` puede fallar con la CPU cargada (sola, pasa).
+
+**Chromium para e2e:** `npx playwright-core install chromium` (las suites usan el de `playwright-core` si no hay otro),
+o `CHROME=` a un Chrome instalado (Windows: `CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"` en Git
+Bash; macOS: `CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`). Para los PDF del manual,
+`CHROME_PATH` con la misma ruta. Las suites corren en su propio Chromium sin interfaz, no en el Chrome del propietario.
+
+**Recursos:** en un portátil, **no más de 2–3 agentes a la vez**, y que no compilen ni pasen e2e salvo encargo (la
+build de producción y las suites las pasa la sesión principal al final, una cada vez). Cada agente con su base
+(`pz_<agente>`), su puerto y `OUT=` propio. En Windows y macOS `cp -al` puede no existir: el agente hace `npm ci` en su
+propio worktree (más lento, pero nunca toca el `node_modules` del repositorio principal).
+
+**Ramas y publicación desde local:**
+
+- `git push` normal a la rama de trabajo; **nunca forzar** (`--force`) desde el PC. Tras la fusión aplastada, la
+  ronda siguiente empieza en una rama recién sacada de `origin/main` (o con `git merge origin/main` sobre la anterior
+  y push normal).
+- PR con `gh pr create --base main` (o la web), esperar sus dos comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas
+  y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
+- Publicar: en GitHub, **Actions → Release → Run workflow** sobre `main` (o `gh workflow run release.yml --ref main`);
+  después `git fetch origin --tags` y comprobar que `origin/stable` y `vX.Y.Z` apuntan al commit fusionado. Detalle en
+  `docs/handoff/PUBLICAR.md`.
+- Minutos de Actions solo al final (la PR y la Release): las comprobaciones de §4 se pasan en local antes.
+
+**Claude in Chrome.** La propia sesión de Claude Code puede ejecutar los prompts de `docs/PRUEBAS-CHROME.md` en el
+Chrome del propietario (instalación de prueba de Railway, Cloudflare, GitHub). Reglas:
+
+- Siempre en una **pestaña nueva**; no tocar las pestañas que el propietario tenga abiertas.
+- En Railway, **comprobar el nombre del proyecto antes de tocar nada** (el de prueba y el real se llaman parecido).
+- **Nunca la instalación real** salvo que el propietario lo pida expresamente en esa ronda.
+- **Nunca copiar claves, tokens ni datos personales** (emails, dominios, nombres) a ficheros, briefs ni commits.
+- Si hace falta una contraseña o un segundo factor, **pedir al propietario que inicie sesión él**; no escribirla.
+- Capturas y descargas solo en una **carpeta temporal fuera del repositorio**.
+- Lo aprendido en `PRUEBAS-CHROME.md` («Lo aprendido en las pruebas») sigue valiendo: sin incógnito ni 390 px ni
+  arrastres, PDF por captura, tooltips con read_page, etc.
+
+**Privacidad:** antes de cada fusión en `main`, el grep de los términos personales en el diff, los PDF y los mensajes
+de commit (los términos los da el propietario; no se apuntan en el repositorio).
 
 ## 1. Qué es Pizarro
 
@@ -72,7 +164,7 @@ mejora, `RxxR1` respuestas a preguntas anteriores), a veces con un ZIP de captur
 datos personales: **nunca se suben al repositorio**. Extrae cada ZIP en una carpeta nueva y temporal.
 
 Cada ronda empieza con «Revisa todo antes de empezar y organiza el orden idóneo» y una indicación de qué modelo usar
-para los agentes (p. ej. «Usa Fable 5.2», o «usa agentes con modelos más sencillos cuando sea posible y revisa siempre
+para los agentes (p. ej. «Usa <modelo>», o «usa agentes con modelos más sencillos cuando sea posible y revisa siempre
 con el modelo principal lo que han hecho»: entonces revisa tú cada entrega antes de fusionar) y termina con «merge a main y
 commit, actualiza el pdf de cómo funciona todo, prepara un resumen de los cambios y después un listado de lo que
 necesitas que decida junto con próximos pasos sugeridos». Suele incluir «Revisa el código» (arreglar lo evidente y
@@ -112,7 +204,7 @@ Lo que ha funcionado en las rondas 58 y 59 para «Revisa el código» y «Bug hu
 ## 3. Brief común para los agentes
 
 - Su worktree puede nacer en un commit antiguo (el de `main`): al empezar, si `git log --oneline -1` no es el de la rama
-  de trabajo, `git reset --hard <rama de trabajo>` (todavía sin commits propios). Nunca `npm install` (ver §4).
+  de trabajo, `git reset --hard <rama de trabajo>` (todavía sin commits propios). Nunca `npm install` (ver §4 y `docs/handoff/GUARDAS.md`, «Entorno»).
 - Trabajan en su propio worktree. Dependencias: **solo dentro de su worktree** (comprobar `pwd`):
   `[ -e node_modules ] || cp -al <repo>/node_modules node_modules`. Nunca tocar el `node_modules` del repositorio
   principal (un agente lo sustituyó una vez por un enlace a sí mismo).
@@ -144,6 +236,7 @@ Lo que ha funcionado en las rondas 58 y 59 para «Revisa el código» y «Bug hu
 - Privacidad: el repositorio es público. Nada de nombres, emails, dominios ni capturas del propietario; en pruebas,
   direcciones `example.com`.
 
+
 ## 4. Comprobaciones antes de fusionar
 
 ```sh
@@ -153,7 +246,7 @@ npm run lint
 npm test                 # unitarias
 npm run i18n:check
 npm run i18n:unused      # solo informa (ver abajo)
-npm run test:db          # con base de datos (crea y borra pizarro_test_*)
+npm run test:db          # con base de datos: 3 copias en paralelo (-- tests/db/x.test.ts, --jobs 1, --verbose)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
@@ -172,296 +265,40 @@ puerto 3231 o `E2E_PORT`; instrucciones en su cabecera):
 
 Termina con `Total: N/M comprobaciones OK`. Una suite nueva va con el prefijo de su tema y con su entrada en
 `e2e/suites.json` (lo comprueba `tests/e2e-affected.test.ts`); si una pieza nueva de la app la prueba una suite, añade
-su ruta a esa entrada. Cómo se lanza cada una y cuántas comprobaciones tiene: `e2e/README.md` (las cifras solo se
-apuntan allí). Si cambias el rol o la
+su ruta a esa entrada. Cuántas comprobaciones tiene cada una: `e2e/README.md` (las cifras solo se
+apuntan allí); qué prueba y cómo se lanza sola: `e2e/SUITES.md`. Si cambias el rol o la
 etiqueta de un elemento que una suite usa, actualiza el script correspondiente. Para esperar al canal en vivo del
 tablero, `L.liveOpen(page)` (la raíz del tablero lleva `data-live="open"`), no una pausa fija. Las suites declaran la
 instalación de uso personal en `prepareUsers` (`e2e/qa/lib.mjs`) para que no salga el recordatorio de licencia.
 Chromium: `CHROME` o, si no, el más reciente de `/opt/pw-browsers`.
 
-Guardas que conviene conocer:
+Las guardas técnicas (qué no romper en cada parte de la app) están en `docs/handoff/GUARDAS.md`, agrupadas por tema
+con un índice. Léelas cuando la ronda toque ese tema. Las imprescindibles, en una línea:
 
-- `npm run i18n:unused` (solo informa): traducciones sin uso, repetidas o que solo usan las pruebas. Antes de
-  borrar una, comprueba que no puede venir del historial de las tareas (un año), del deshacer (7 días) ni de los
-  errores de exportar/importar, que se traducen al leerlos. Las que se conservan por eso van bajo el comentario
-  «Textos guardados por versiones anteriores».
-- `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
-  consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
-  leer las descripciones completas o a hacer consultas entrada a entrada. También mide recortar la pila con 500
-  adjuntos huérfanos y 4.000 entradas guardadas (una sola pasada por `UndoEntry` en `stillRetained`, `src/lib/undo.ts`).
-- Código sin uso (solo informa, no está en las dependencias): `npx --yes knip@5`. La configuración está en `knip.json`
-  (entradas que Next no declara: pruebas, `e2e/`, `scripts/`, `public/sw.js`, el worker de los PDF…). No hay ficheros
-  ni dependencias sin uso, y desde la ronda 56 tampoco `export` ni tipos sin uso (se quitó el `export` de los ~45
-  valores y 29 tipos que solo usaba su propio módulo, y los re-exports que nadie importaba por esa ruta): `npx --yes
-  knip@5` no lista nada. Un `export` nuevo que nadie importa fuera de su módulo no debe volver a aparecer
-  (quítale el `export`). Lo que `scripts/build-site.mjs` carga con `import()` de una
-  ruta knip no lo ve: márcalo con `@public` en su comentario. Antes de quitar un `export`, busca el nombre en `src`,
-  `tests`, `scripts` y `e2e`. Los nombres de las pruebas van por tema (`tests/db/comment-notices.test.ts`, no
-  `review-fixes-…`): una prueba nueva va al fichero del tema que prueba.
-- Guardas de tiempo en las pruebas: con `assertFast`/`bestTime` de `tests/timing.ts` (la mejor de tres medidas, o una
-  cota proporcional a una medida de referencia), nunca una sola medida contra un tope fijo; deben pasar con la CPU
-  cargada. Las esperas a otra transacción, con `waitForLockWaiter()` (`tests/db/helpers.ts`), no con pausas. `npm test`
-  corta cada prueba a los 120 s (`--test-timeout`); un intervalo o un temporizador que siga vivo al terminar deja el
-  proceso colgado, así que se paran en un `finally`. No uses `--test-force-exit` en `npm test`: con la CPU cargada se
-  pierden pruebas en silencio (se vio 891 → 862, sin ningún fallo).
-- Lo que llega al navegador no debe importar `zod` (unos 85 KB): las constantes y tipos que usa un componente de cliente
-  van en un módulo `*-core.ts` sin zod (`changelog-core.ts`, `project-templates-core.ts`); los tipos derivados de un
-  esquema se importan con `import type`.
-- Apagado ordenado (`src/lib/shutdown.ts`): al recibir la señal, `/api/health` responde `503` (`shutting_down`),
-  se cierran los canales en vivo y se espera hasta 5 s a las peticiones en curso (subidas incluidas) y a los
-  emails. Una ruta nueva de larga duración debe contar como petición en curso; lo que no termine queda en
-  `system.shutdown`. Con Telegram en modo sondeo, al apagarse confirma a Telegram los mensajes ya procesados.
-- `npm start` fuera de Docker (`scripts/start-local.mjs`): carga el `.env` y `scripts/server.env`, convierte en
-  absolutas las rutas de datos relativas (`UPLOAD_DIR`, `MAIL_OUTBOX_DIR`, `BACKUP_EXTERNAL_DIR`; lógica en
-  `scripts/local-paths.mjs`, probada en `tests/local-paths.test.ts`) y después carga `.next/standalone/server.js`.
-  Sin eso, una ruta relativa acababa dentro de `.next/standalone/` y cada compilación la borraba. `postbuild.mjs`
-  quita del standalone las subidas, las copias y los `.env` que Next copiaba allí. El contenedor no usa este script
-  (`scripts/start.sh`). El script `start` no lleva `exec` (cmd.exe no lo entiende y en Windows `npm start` no
-  arrancaba): al parar npm, el `sh -c` de npm muere con el SIGTERM sin pasarlo a node, y `scripts/parent-watch.mjs`
-  detecta que ha desaparecido el proceso padre (también si npm muere de golpe) y lanza el apagado ordenado en ~1 s
-  (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts` (arranca `npm start` de verdad con un servidor de
-  prueba, lo para con SIGTERM al pid de npm y comprueba que no queda huérfano).
-  Antes de cargar `server.js`, `start-local.mjs` importa `dist/boot.mjs` y espera a `runBoot()`: las mismas tareas de
-  arranque que el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y
-  plantillas de serie), en el mismo proceso y sin abrir otro servidor. Sin `dist/boot.mjs` o si fallan, no arranca.
-  `boot.ts` solo se ejecuta por sí mismo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
-  de Prisma y lo quita de `globalThis` para que el servidor no herede uno cerrado. `start.sh` y `start-local.mjs` fijan
-  `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
-  (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
-  `e2e/install-e2e.mjs`.
-- Tablero con cientos o miles de tarjetas (`Board.tsx`, `TaskCard.tsx`, `nearCards.ts`): solo las tarjetas a la vista
-  de su columna o a menos de 300 px llevan `useSortable` (`SortableBinding`, que no pinta nada y pone transform,
-  transición y `data-dragging` en el nodo); las demás se pintan igual pero no se apuntan a dnd-kit y llevan
-  `content-visibility: auto`. Al pulsar una aún no apuntada se apunta en el acto (`flushSync`). El desplazamiento va en
-  `translate()` 2D y solo si no es cero (`translate3d` en todas creaba una capa por tarjeta). `DndContext` y las columnas
-  van en un `useMemo` (`dndBoard`) con manejadores estables: cada dibujo de `DndContext` hace que React recorra todas
-  las tarjetas, así que no debe volver a dibujarse al escribir en el buscador ni al abrir un diálogo. No leas
-  `useDndContext` en las tarjetas ni pases a `DndContext` props nuevas en cada dibujo. El texto del buscador de cada
-  tarea se normaliza una vez por versión (`taskSearchText`, `filters.ts`). Medida de referencia (Chromium con la CPU
-  ×4, 300 tarjetas en una columna): de 1,8 s a 0,3 s en tareas largas por arrastre.
-  Arrastrar una tarjeta seleccionada con otras (reglas puras en `groupDrag.ts`) no añade nada a dnd-kit: solo se arrastra
-  la cogida; el montón es el overlay, y el atenuado de las demás y el texto del hueco son CSS (`data-group-drag` y
-  `--group-drop-label` en la raíz, `globals.css`), sin volver a dibujar ninguna tarjeta. Al soltar, `moveTasks(ids,
-  columna, { prevId, nextId })` las coloca seguidas (`placeBlockInColumn`, `task-positions.ts`), un solo deshacer.
-- Idioma en el cliente (`src/i18n/client.tsx`): `I18nProvider` pinta siempre el mismo `I18nContext.Provider` y solo
-  cambia `value`; el diccionario de inglés llega con `use()` (y `next/dynamic` solo para la precarga en el HTML). No
-  vuelvas a envolver los hijos en un componente distinto según el idioma: React desmontaba la página entera al cambiar
-  (el asistente volvía al paso 1). El layout raíz no se repinta en la navegación de cliente: un enlace de una pantalla
-  sin sesión que puede ir en otro idioma (`/reset`, `/confirm`, `/login/verify`, `/setup` → `/login`) es un `<a href>`
-  con recarga completa, no un `Link`.
-- Aviso de pg «DeprecationWarning: Calling client.query() when the client is already executing a query»: pg 8.23 lo
-  da cuando un mismo `pg.Client` recibe una tercera consulta con otras dos en curso (en pg 9 será un error). Buscado con
-  `NODE_OPTIONS=--trace-deprecation` y con `e2e/warn-hook.mjs` (anota cada aviso de Node con su pila en `WARN_LOG`) en:
-  `npm start` y `node dist/boot.mjs` sobre una base vacía y sobre una ya instalada, `prisma migrate deploy` con y sin
-  migraciones pendientes, la primera pasada de las tareas de fondo (copia cifrada con `BACKUP_KEY` incluida), el asistente
-  completo y las suites QA, tablero e instalación. No sale en ningún caso: ni la app ni Prisma (`@prisma/adapter-pg` usa
-  el pool, y en las transacciones interactivas no hay `Promise.all` sobre `tx`; `PgSql` de las copias encadena sus
-  consultas). El que se veía venía del arnés de las pruebas (`L.q` en paralelo en `e2e/qa/lib.mjs`, ya en fila desde la
-  caza de bugs anterior). `e2e/install-e2e.mjs` arranca el servidor con `warn-hook.mjs` y falla si vuelve a aparecer.
-  Para localizarlo en otro proceso: `WARN_LOG=/ruta/avisos.log NODE_OPTIONS="--import file://$PWD/e2e/warn-hook.mjs"`.
-  Ojo con código nuevo que use un `pg.Client` propio (`pg-connect.ts`): sus consultas, en fila.
-  Excepción hallada después: Prisma 7 sí provoca este aviso con relaciones anidadas dentro de `$transaction` (p. ej.
-  `buildProjectExport`). No subas `pg` a la 9 sin revisarlo antes: allí será un error.
-- IP del cliente: una sola función, `clientIp` / `clientIpOrNull` (`src/lib/request.ts`, regla pura en
-  `src/lib/client-ip.ts`), para los límites de intentos, el registro y las sesiones. `X-Real-IP` / `X-Forwarded-For` solo
-  cuentan con `TRUST_PROXY` (sin definir: sí en Docker, `PIZARRO_LAUNCHER=docker`, y en Railway; no con `npm start`,
-  `next start` ni `node server.js` a mano). Sin proxy de confianza vale la dirección de la conexión: Next no la da a las
-  rutas, así que `src/lib/peer-ip.ts` (instalado en `instrumentation.ts`) la escribe en la cabecera interna
-  `x-pz-peer-ip` de cada petición, sustituyendo la que mande el cliente. `tests/client-ip.test.ts` falla si otro módulo
-  lee esas cabeceras. `npm run test:db` fija `TRUST_PROXY=1` (las pruebas ponen la IP con `X-Real-IP`).
-- Pool de PostgreSQL (`src/lib/db.ts`): tope de 20 s para conseguir una conexión (`DATABASE_CONNECT_TIMEOUT_MS`; antes
-  esperaba sin límite) y `DATABASE_POOL_SIZE` validado (`src/lib/db-pool.ts`: un valor raro avisa y usa 10). El pool
-  (`LoggedPool`, subclase de `pg.Pool` que se pasa a `PrismaPg` con `disposeExternalPool`) anota «[db] No se puede
-  conectar con PostgreSQL (servidor, base): motivo» como mucho cada 30 s.
-- Migrador de la imagen Docker (`scripts/migrator-deps.mjs`, etapa `migrator` del `Dockerfile`): el `package-lock.json`
-  del migrador sale del del proyecto (solo `prisma` y lo que necesita) y se instala con `npm ci`; después se poda lo que
-  `migrate deploy` no lee (Studio, `prisma dev`/PGlite, compiladores de consultas…; lista `UNUSED`, medida con un gancho
-  de módulos y `strace`). El `Dockerfile` comprueba tras podar que `prisma --version` y `prisma migrate diff` funcionan:
-  si una versión nueva de Prisma necesita algo podado, falla la construcción, no el arranque. 257 → 109 MB sin comprimir.
-- Acciones de servidor dentro de una transición: `useActionTransition()` (`src/components/useActionTransition.ts`) en
-  lugar de `useTransition()`. Si la acción lanza (sin red, servidor caído, versión nueva) muestra «Sin conexión: no se ha
-  guardado» o el aviso que toque (en un aviso emergente o, con `onError`, en el formulario) en vez de la pantalla «Algo ha
-  fallado». Una llamada suelta (`await accion()` fuera de una transición) lleva `.catch((e) => actionThrowResult(e, t))`;
-  `actionThrowMessage` ya activa el aviso fijo de sin conexión. Prueba: `e2e/red-formularios-e2e.mjs`.
-- Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
-  `parseTasksText` lineal, `strictJsonFormat` para Ctrl+V), resolución de nombres común a pegar e importar en
-  `src/lib/task-json-resolve.ts`, importación en `src/lib/task-import.ts` servida por la ruta
-  `POST /api/projects/[projectId]/import-tasks` (fuera del proxy, con su propio tope: las acciones de servidor admiten
-  1 MB, `next.config.ts`). Ningún `route.ts` importa `src/actions` (`tests/route-handlers.test.ts`): Next reenviaba las
-  llamadas a la acción a la ruta. Deshacer usa `label.remove`/`label.restore` para las etiquetas creadas.
-- Importar tareas de otros Kanban: `src/lib/foreign-import/tasks.ts` detecta por contenido Trello (tablero, tarjeta,
-  lista), Jira (JSON de la API y CSV), GitHub Issues, Asana (JSON y CSV) y CSV genéricos (reutiliza `parseTrello` y
-  `parseCsvRows` de la importación de proyectos) y devuelve el mismo `TaskJsonInput` que el JSON propio: tipos, columnas
-  por nombre, etiquetas, topes, permisos y deshacer son los de siempre. Lo llama `parseTasksText`.
-- Cachés en memoria con tope: `memo` y `boundedMemo` (`src/lib/memo.ts`, en `globalThis`). `boundedMemo` barre lo
-  caducado al leer (como mucho una vez por plazo) y admite un tope de bytes (`maxBytes` + `sizeOf`). El calendario suscrito
-  guarda 60 s el .ics (en bytes UTF-8) y su ETag por enlace (`cachedFeedIcs`, `FEED_CACHE_MAX` = 200,
-  `FEED_CACHE_MAX_BYTES` = 64 MB) pero comprueba el token en cada petición; `revokeProject`/`revokeUser` la vacían
-  (`clearBoundedMemo(FEED_CACHE_NAME)`) y la ruta manda `max-age` = lo que le queda en la memoria (≤ 60 s): un cambio se
-  ve como mucho al minuto. `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
-- Zona horaria: `appTimeZone()` (`src/lib/format.ts`) ignora una `APP_TIMEZONE` (o una zona guardada, o `data-tz`) que
-  Intl no acepte, con un aviso en el log; `envTimeZone()` es la variable solo si vale (lo que fija la zona en `/setup` y
-  Ajustes) y el diagnóstico la marca `invalid`.
-- «Hoy» a medianoche fuera del tablero: `useMidnightRefresh(today, refresh)` / `<MidnightRefresh today>`
-  (`src/components/useMidnightRefresh.ts`, regla pura `midnightStep` en `dates.ts`), en el Calendario y Mis tareas.
-- Calendario suscrito (`/api/calendar/<token>.ics`): el registro está muestreado (`feedLogDue`,
-  `src/lib/calendar-feed-core.ts`): la primera consulta de cada enlace e IP y luego una cada 6 h; los enlaces no válidos,
-  una por IP cada 6 h; el exceso de ritmo, uno por hora; los errores, siempre.
-- Subidas (ronda 55): `acquireUploadSlot(userId, waitMs, { declaredBytes })` reparte los 3 huecos del servidor; con más
-  de una persona activa (`user-activity.ts`, en memoria, la anota `querySessionUser`) cada una tiene uno. Las rutas de
-  subida envuelven su `POST` con `withUploadCapHeader` (cabecera `X-Pizarro-Upload-Per-User`) y el navegador ajusta la cola
-  (`uploadCap`, `uploadGate` y `runQueue({ limit })` en `upload-queue.ts`). Una ruta de subida nueva debe hacer lo mismo.
-- Copia provisional del tablero (Ctrl al soltar): id con `PENDING_COPY_PREFIX` (`groupDrag.ts`). Nunca debe llegar al
-  servidor: las vecinas se calculan con `withoutPendingCopies`/`realPlacement`, y TaskCard, `cardActions` y la fila del
-  panel de fijas la ignoran. Una acción nueva sobre tarjetas debe saltarla.
-- Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
-  huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
-  (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
-- Capas sobre un diálogo (ronda 56): con un `Modal` abierto, `inertBackground` deja `inert` todo lo que cuelga de
-  `<body>` salvo las regiones `aria-live`, lo marcado con `data-pz-layer` y los otros modales de la pareja. Un botón
-  portado que deba seguir usable encima del diálogo (Deshacer/Rehacer, la copia flotante de «Nueva tarea», el
-  `<input type=file>` de importar) lleva `data-pz-layer=""`; si no, el clic lo atraviesa y cierra el diálogo.
-- Presencia (ronda 56): `src/lib/presence.ts`, en memoria y por proceso. El canal en vivo manda `event: ping` cada 25 s
-  y `presence` (JSON calculado una vez por proyecto) al cambiar; el detalle anuncia la tarea con
-  `/api/tasks/[id]/viewers?stream=…&open=…` (con `stream`, `open` es obligatorio: sin él, 400; sin canal va sin
-  parámetros y cada aviso vale 150 s). Sin canal sano (más de 60 s sin mensajes) se vuelve al sondeo de respaldo y
-  se reabre el canal. Las revocaciones cortan el canal en el mismo proceso; la comprobación de acceso del canal es cada
-  5 min. Una ruta de larga duración nueva debe comprobar `req.signal.aborted` antes de registrar nada.
-- Tarjetas del tablero: las 15 primeras de cada columna no llevan `content-visibility` (evita el salto al cargar) y el asa
-  táctil se pinta siempre y se muestra con `pointer-coarse:`; la casilla, el asa y el enlace externo son `<span>` (la
-  tarjeta es un `role=button` con `aria-pressed`).
-- Descargas ZIP (ronda 56): las envía el propio navegador. El histórico usa `?part=&v=`; «Generar release» y el plan piden
-  un vale (`POST …/release-attachments?plan=1`; `src/lib/zip-ticket.ts`, en memoria, por persona y proyecto), cada
-  paquete se baja con `GET ?ticket=&part=&v=` y la página consulta su estado. Un POST sin `?plan=1` responde 400 (el
-  envío del ZIP en la respuesta del POST, de antes de la v1.60, ya no existe), y un paquete sin `?part=` o sin `?v=`
-  también (`zipPartRequired`; desde la ronda 59 no hay «primer paquete sin número» ni enlaces sin token). El `Content-Length` lo pone
-  `src/lib/response-length.ts` (instalado en `instrumentation.ts`) a partir de la cabecera interna
-  `x-pz-content-length`, porque Next lo quita. Un paquete solo cuenta como descargado si llega entero.
-- Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
-  adelantado (diálogos del tablero en reposo, `HoverPrefetchLink`, el detalle adelantado al hacer clic). Una precarga
-  nueva debe mirarlo. Los `Link` de Next con su precarga normal no lo miran (Next solo lo hace en el router de `pages/`).
-- Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
-  errores de hidratación.
-- «Compartir → Pizarro» (ronda 57): el manifiesto declara `share_target` (POST multipart a `/api/share`, fuera del proxy
-  como las demás subidas). La ruta solo guarda lo compartido en `UPLOAD_DIR/shared/<usuario>/<envío>/`
-  (`src/lib/share-inbox.ts`: 30 min, 3 envíos por persona, fuera de las copias, limpieza en el mantenimiento
-  `sharedFiles`) y redirige a `/share`, que abre «Nueva tarea» (`ShareTarget.tsx`, con `stubBoard`). CSRF: el navegador
-  manda el envío como navegación suya (`Sec-Fetch-Site: none`, sin `Origin`); `shareRequestAllowed` rechaza `cross-site`,
-  `same-site`, un `Origin` ajeno y la ausencia de ambas cabeceras, y guardar no tiene efectos: la tarea y sus adjuntos solo
-  se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
-  la dirección de vuelta del acceso).
-- Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
-  Telegram y WhatsApp). Las anclas antiguas (`#avisos-email`, `#acceso-google`, `#mensajeria`) redirigen. Las guías de
-  `docs/guias/` y los textos de la app dicen «Administración → Integraciones».
-- Menús: `MenuSub` (`src/components/ui/Menu.tsx`) es el submenú accesible (se abre dentro del mismo panel; → o Intro,
-  ← o Escape). Lo usa el rol de la columna.
-- Agentes en paralelo: cada uno con su base (`pz_<nombre>`), su puerto y su carpeta de logs (`OUT=` en
-  `scripts/e2e-all.sh`; por defecto todas escriben en `/tmp/pizarro-e2e`). `npm run test:db` necesita
-  `APP_URL="http://localhost:3000"` en el `.env` (dos pruebas comprueban esa URL) y sus bases se llaman `pizarro_test_*`.
-- Entorno de la nube: `NODE_OPTIONS` trae `--max-old-space-size=8192`, que anula el tope de memoria del worker de PDF
-  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. Lanza `npm test` (y las pruebas de PDF) con
-  `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
-  sesión principal.
-- PDF largos (ronda 58, `src/lib/pdf-chunks.ts`): más de ~20 páginas se maquetan en tramos de varios `<Page>` cortados donde
-  el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
-  él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
-  de @react-pdf, pasa `tests/report-pages.test.ts` y `tests/report-pages-iguales.test.ts`.
-- Tablero en vivo por tarjeta (ronda 60, `src/components/board/livePatch.ts`): el canal manda `taskIds` (hasta 50) y
-  `full`; para las acciones de `PATCHABLE_ACTIONS` el navegador pide solo esas tarjetas a `GET
-  /api/projects/<id>/board-tasks?ids=…` (mismo permiso que el tablero, 15 s de tiempo máximo) y las aplica
-  (`applyTaskPatch`; si algo no cuadra, recarga entera). **Una acción nueva solo entra en `PATCHABLE_ACTIONS` si anota cada
-  tarjeta que toca (`noteTask`/`noteTasks`) y llama a `needOwnRefresh()` si toca algo más** (columnas, etiquetas,
-  posiciones de otras). Una recarga entera que llega tras un parche conserva las tarjetas parcheadas después de pedirla
-  (`withPatchedTasks`, `patchedSince`); deshacer recarga por la del tablero (`boardRefreshFor`, `undo-context.ts`).
-- Datos del tablero: `packBoardTask`/`unpackBoardTask` (`src/lib/board-task-wire.ts`) omiten y restauran los campos por
-  defecto (`BOARD_TASK_DEFAULTS`); un campo nuevo de `BoardTask` necesita su valor por defecto ahí. El servidor pinta 50
-  tarjetas por columna (`deferredCards.ts`) y el resto llega en tandas de 200 con el hueco reservado; búsqueda, filtros,
-  recuentos y teclado trabajan con las listas de ids, no con lo pintado.
-- `APP_URL` (ronda 60): siempre con `resolveAppUrl()` (`src/lib/app-url.ts`; sin la variable, `https://` +
-  `RAILWAY_PUBLIC_DOMAIN`), también en scripts (`reset-link`, `doctor`, `boot`). No leas `process.env.APP_URL` directamente.
-- Otra copia en la misma base (`src/lib/instance-lock*.ts`): `pg_try_advisory_lock(LOCK_INSTANCE)` en una conexión propia
-  (`application_name` `pizarro-instance:<id>`), aviso tras 2 min; con PgBouncer no se comprueba.
-- Migraciones y P3009 (`scripts/migrate.mjs`): una migración posterior a `20261126100000` que falla se marca como
-  revertida y se reintenta una vez solo si `transactionProblem` la da por buena (entera entre `BEGIN;`/`COMMIT;`, sin otra
-  sentencia de control de transacción ni `CONCURRENTLY` en medio).
-- Baja de emails (`src/lib/unsubscribe*.ts`, rutas `/unsubscribe/<token>` y `/api/unsubscribe/<token>`): token HMAC con
-  `TOKEN_SECRET` (etiqueta propia), el GET nunca da de baja, `List-Unsubscribe` solo con https. `/unsubscribe/` está en
-  `SECRET_PATH_PREFIXES` y en `redactPath` (el token no llega a los logs): una ruta nueva con token en la URL, igual.
-- Aviso de cambio simultáneo (`src/lib/edit-conflict*.ts`, `EditConflictNotice.tsx`): versión por valor de las claves de
-  `AppState` y `updatedAt` en plantillas; `runAction` devuelve el `code` del `AppError`.
-- Releases: la búsqueda usa `search_fold()` (función SQL IMMUTABLE de la migración `20261127103000`, mismas letras que
-  `search-accents.ts`) con índices trigram si `pg_trgm` se pudo crear; `wipeDatabase` la borra y la migración la recrea.
-- **Enums nuevos (ronda 61):** Prisma 7 falla al leer una fila con un valor de enum que no conoce (`Value 'X' not found
-  in enum`). Un valor nuevo que la app ESCRIBE (p. ej. `NotificationType.REPORT_UNSUBSCRIBED`) rompe la lectura en la
-  versión anterior si se vuelve atrás: añádelo en una versión y empieza a escribirlo en la siguiente (expandir y contraer).
-- Plantillas de serie retiradas (`RETIRED_BUILTINS`, `retireBuiltinTemplates` en `template-store.ts`, llamada desde
-  `scripts/boot.ts`): sin modificar se borran, modificadas pasan a propias; sus filas de `BuiltinTemplateSeeded` se quedan
-  como lápida (si no, una versión anterior las volvería a sembrar). Las claves retiradas no se reutilizan nunca.
-- Informar de un error (`src/lib/feedback*.ts`, `src/components/feedback/`, `POST /api/feedback`): solo en builds oficiales;
-  sus límites van en el mapa de seguridad del limitador (`SECURITY_KEY_PREFIXES`); la captura (`modern-screenshot`, cargada
-  al pulsar) excluye lo marcado con `data-pz-no-capture`: **un secreto nuevo que se muestre en pantalla (código, enlace con
-  token) debe llevar ese atributo**.
-- `npm install` en este entorno reescribe el `package-lock.json` quitando los campos `libc`: para añadir una dependencia,
-  edita a mano `package.json` y su entrada del lock (o usa `npm ci` para instalar, que no lo toca).
-- e2e: `page.accessibility` ya no existe en playwright-core 1.65: usa `L.axSnapshot(page, locator, { interestingOnly })`
-  (`e2e/qa/lib.mjs`, árbol de Chromium por CDP con la misma forma).
-- Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
-  sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
-
-- Ronda 62:
-  - Tareas de fondo que no hacen nada: devuelven `{ skipped: "<motivo>" }` y `runJob` lo guarda en `JobRun.lastError` con el
-    prefijo `skip:` y `lastOk = true` (`src/lib/job-run.ts`, `jobRunView`, que usan la pantalla y el diagnóstico). Un
-    motivo nuevo necesita su texto en `BackupsAdmin.tsx`.
-  - Mensajes de Logs traducibles: `logEvent({ label })` guarda la plantilla `{k, p}` en `details.$msg` (`LOG_LABEL_KEY`,
-    `src/lib/log-message.ts`) y el mensaje en español para buscar. Todo `logEvent` nuevo va con `label` (sin `message`):
-    los datos en `p`, los motivos y errores como plantilla anidada (`logText`/`logError` de `log.ts`, que se traducen si
-    están en el diccionario) y las listas con `andList` («título y tipo»). `tests/log-message.test.ts` falla con un
-    `logEvent` sin plantilla (excepción: comentario `// log-sin-plantilla: motivo`) o con un texto sin traducción.
-  - URL sin recargar: `replaceUrlKeepingState` (`src/lib/replace-url.ts`), nunca `history.replaceState(window.history.state…)`
-    (Next vuelve a escribir la dirección vieja en el siguiente refresco).
-  - Modales que se abren al cerrarse otro: `useBackToClose` espera a que no haya «atrás» silenciosos pendientes
-    (`whenNoSilentPops`) antes de apilar su entrada; si no, Atrás salía de la página.
-  - IP del cliente en Render/Fly.io: `platformIpHeader()` (`CF-Connecting-IP` / `Fly-Client-IP`) solo si existen
-    `RENDER`/`RENDER_SERVICE_ID` o `FLY_APP_NAME`/`FLY_MACHINE_ID`; `resolveAppUrl()` deduce `APP_URL` también de
-    `RENDER_EXTERNAL_URL` y `FLY_APP_NAME`. `tests/cloud-platforms.test.ts` comprueba `render.yaml` y `deploy/fly.toml`
-    contra el Dockerfile y que no vuelva `railway.json`.
-  - Correo caído: `periodic-mail.ts` corta la pasada solo por errores del envío (`sending`) y aparta una hora a quien falló
-    (`failureMemory`, igual que los informes).
-  - Cambiar de tipo: `switchKindDescription` (`kinds-special.ts`) lee el formulario por apartados (`formBlocks`): solo las
-    etiquetas en negrita son anclas. `tests/kinds-special.test.ts` fija los casos raros.
-
-- Ronda 63:
-  - Columna «Asignación a persona» (`src/lib/column-assign*.ts`): una columna con `assigneeId` (o `assignDueDays`) y rol
-    `NONE`. La regla al entrar una tarjeta está en un solo sitio (`columnAssignment`/`assignOnEnter`/`finishAssignOnEnter`)
-    y usa la columna que devuelve `assertColumnRoom` (`column-capacity.ts`), leída con el candado: **una vía nueva por la
-    que una tarea entre en una columna debe pasar por ahí** (crear, mover, importar, duplicar, recuperar, repeticiones,
-    aplicar plantilla). Con columnas normales no gasta consultas (`tests/db/assign-column.test.ts` lo cuenta).
-  - Logs: **todo `logEvent` lleva `label`** (plantilla `{k, p}` traducible; `logText`/`logError` para motivos y errores) y
-    las filas escritas a mano llevan `LOG_LABEL_KEY`; `tests/log-message.test.ts` falla si no (excepción con el comentario
-    `// log-sin-plantilla: motivo`). Listas con `andList` (`undo-label.ts`).
-  - Ids de la URL: `isRowId` (`src/lib/row-id.ts`, sin zod) antes de tocar la base; mal formados → 404.
-  - Copia diaria: `estimateDumpBytes` + `assertDiskRoom` antes de volcar; nombres únicos con `freshBackupName`; `S3Destination.put`
-    da por subido un objeto que ya existe con su tamaño cuando el bloqueo de R2 rechaza el reintento.
-  - Memoria: nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el `resourceLimits` del worker de PDF): ni en Compose ni
-    en `render.yaml`; Node ajusta su montón al límite del contenedor.
-
-- Ronda 64:
-  - Roles de columna retirados (`RETIRED_COLUMN_ROLES`, `SELECTABLE_COLUMN_ROLES`, `liveColumnRole` en `constants.ts`):
-    *Agenda* y *Entrega al cliente* ya no se ofrecen y todo lo que entra (validación, importar, plantillas, deshacer) los
-    lee como `NONE`. **Fase 2 (v1.69):** repetir los dos `UPDATE` de `20261129100000_retirar_roles_agenda_entrega` antes
-    de quitar los valores del enum (una vuelta atrás a la v1.67 puede volver a escribirlos) y seguir aceptando "AGENDA" y
-    "DELIVERY" en la importación, las plantillas y el deshacer (ZIP exportados con la v1.67). Quitar también `deliveryDoc`
-    / `DeliveryPdfInput` (`report-pdf.tsx`, solo pruebas) pasando antes esas pruebas a otro PDF.
-  - Orden de columnas: siempre con `COLUMN_ORDER` (`[{position},{id}]`, `task-positions.ts`); tras deshacer una columna,
-    `resolveColumnPositionTies` renumera si hay empate. Mover, crear, borrar y aplicar plantilla toman `columnsLockName`.
-  - PDF de columna (plan por persona, semana, lista consolidada): se descargan con `columnDownload.ts` (un clic a la vez,
-    `busy` en `ColumnActionButton` sin `aria-disabled`) y sus rutas responden `attachment`. Un PDF de columna nuevo, igual.
-  - Logs: `log-legacy.ts` traduce al leer las filas antiguas sin plantilla; `es-text.ts` (`esText`) monta los errores
-    con datos que luego se traducen; `client-error-origin.ts` descarta rechazos de promesas sin pila de `/_next/`.
-  - Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
-    `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
-  - Prefijos de tipo (`switchKindTitle` con `known`): de otros tipos solo se quitan los que acaban en signo; los que acaban
-    en palabra, solo si son del tipo anterior (no borrar lo que escribió la persona).
+- Migraciones: `BEGIN;`/`COMMIT;`, expandir y luego contraer, nunca editar una publicada (§3); un valor de enum nuevo que
+  la app escribe se añade en una versión y se escribe en la siguiente (GUARDAS, «Migraciones y enums»).
+- Logs: todo `logEvent` lleva `label` (plantilla `{k, p}`), sin `message` (GUARDAS, «Logs»).
+- Tablero en vivo: una acción nueva solo entra en `PATCHABLE_ACTIONS` si anota cada tarjeta (`noteTask`) y llama a
+  `needOwnRefresh()` si toca algo más; un campo nuevo de `BoardTask` necesita su valor en `BOARD_TASK_DEFAULTS`
+  (GUARDAS, «Tablero»).
+- Toda vía nueva por la que una tarea entre en una columna pasa por `assertColumnRoom` + `columnAssignment` (GUARDAS, «Tablero»).
+- Diálogos: un botón portado que deba usarse encima de un `Modal` lleva `data-pz-layer=""` (GUARDAS, «Navegador e interfaz»).
+- Un secreto nuevo que se muestre en pantalla lleva `data-pz-no-capture` (GUARDAS, «Seguridad y límites»).
+- Los topes de lo que cuesta dinero o molesta a terceros van en el mapa de seguridad del limitador (GUARDAS, «Seguridad y límites»).
+- Una ruta nueva con token en la URL va en `SECRET_PATH_PREFIXES` y `redactPath` (GUARDAS, «Emails y mensajería»).
+- Ids de la URL con `isRowId` antes de tocar la base (GUARDAS, «Servidor, arranque y red»).
+- `APP_URL` siempre con `resolveAppUrl()`, nunca `process.env.APP_URL` (GUARDAS, «Servidor, arranque y red»).
+- Ningún `route.ts` importa `src/actions` (GUARDAS, «Importar y exportar»).
+- Una ruta de subida nueva usa `acquireUploadSlot` y `withUploadCapHeader` (GUARDAS, «Subidas y Compartir»).
+- Un PDF de columna nuevo se descarga con `columnDownload.ts` y responde `attachment` (GUARDAS, «PDF y descargas»).
+- Nada que llegue al navegador importa `zod`; acciones en transición con `useActionTransition()`; URL sin recargar con
+  `replaceUrlKeepingState` (GUARDAS, «Navegador e interfaz»).
+- SQL propio sin `NOW()` sobre `timestamp(3)`; consultas de un `pg.Client` propio, en fila (GUARDAS, «Base de datos»).
+- Nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el tope del worker de PDF) (GUARDAS, «PDF y descargas»).
+- Nunca `npm install` (reescribe el lock sin `libc`): `npm ci`, y las dependencias se añaden a mano (GUARDAS, «Entorno»).
+- Guardas de tiempo con `assertFast`/`bestTime`, nunca un tope fijo; sin `--test-force-exit` (GUARDAS, «Pruebas y código sin uso»).
+- Un `export` que nadie importa fuera de su módulo no se deja (knip); pruebas en el fichero de su tema (GUARDAS, «Pruebas y código sin uso»).
+- Antes de borrar una traducción sin uso, mira el historial, el deshacer y los errores de importar (GUARDAS, «i18n»).
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -469,321 +306,69 @@ llevan enlaces de sesión ni nombres de modelos.
 
 ## 5. Cerrar una versión
 
-1. `TZ=Europe/Madrid npm run version:bump -- minor --summary "…"` (o `patch`).
-2. Rellenar en `changelog.json` el bloque nuevo: `changes` (`nuevas`, `mejoras`, `correcciones`, `tecnicos`) y
-   `en: { summary, changes }`. Después `npm run version:bump -- --render`.
-3. Actualizar `docs/MANUAL.md` (las dos líneas de versión, `version: "vX"` y «Versión de la aplicación») y las
-   secciones afectadas. Generar el PDF en local para revisarlo: `node scripts/build-manual-pdf.mjs` (con `CHROME_PATH`
-   si hace falta; `pruebas` para `PRUEBAS.pdf`). **No se sube**: los dos PDF están en `.gitignore` y el workflow Release
-   los vuelve a generar desde `docs/` y los adjunta a la GitHub Release.
-   Actualiza también `docs/PRUEBAS.md` (sección nueva con lo que hay que probar en real) y `docs/PRUEBAS-CHROME.md`
-   (los prompts de Claude in Chrome que sigan pendientes, con lo nuevo de la versión).
-4. Commit «vX.Y.Z: …», PR a `main` y fusionar.
-5. Publicar la versión (etiqueta, imagen Docker y GitHub Release): en GitHub, **Actions → Release → Run workflow**
-   sobre `main` (la publicación manual solo funciona desde `main`: lanzada desde otra rama no hace nada), o `npm run release:tag` y `git push origin vX.Y.Z` desde un equipo con permiso para subir
-   etiquetas. Tras la primera publicación, el paquete `ghcr.io/pla87/pizarro` debe hacerse público. El mismo
-   workflow mueve la rama `stable` al commit publicado (job «Rama stable», el único con permiso para escribir en el
-   repositorio además de la release): de ella despliegan las instalaciones de Railway. Si se protege `stable` en
-   GitHub, hay que permitir que la mueva GitHub Actions. Cada arquitectura de la imagen se construye en su máquina
-   nativa de GitHub (job «Imagen amd64» en `ubuntu-latest` e «Imagen arm64» en `ubuntu-24.04-arm`, sin emular con QEMU),
-   se sube a GHCR solo por su digest y el job «Imagen Docker» las une con `docker buildx imagetools create` en
-   `:X.Y.Z` (y `:latest`) y comprueba que la imagen publicada tiene las dos. La imagen se construye con `OFFICIAL_BUILD=1` y
-   `RELEASE_VERSION`: así la app sabe que es una build oficial y ofrece «Informar de un error» (en Railway, también
-   si el código viene del repositorio oficial y de la rama `stable`; lógica en `src/lib/bug-report-core.ts`). El
-   botón abre el formulario `.github/ISSUE_TEMPLATE/bug_report.yml` con datos técnicos rellenos (versión, commit,
-   tipo de instalación, navegador y sistema, idioma); nunca usuarios, proyectos, emails ni la dirección de la
-   instalación. Los fallos de seguridad van en privado (`SECURITY.md`). *Copiar información técnica* (Ajustes) sale
-   de `src/lib/tech-info.ts`. Si cambian esos campos, actualiza a la vez el formulario y `tests/bug-report.test.ts`.
-   El job solo mueve `stable` a un commit que ya está en `main` (`git merge-base --is-ancestor`); una etiqueta puesta
-   en otra rama publica la imagen y la release, pero deja `stable` donde estaba (con un aviso en el job).
-   El job «Manual en PDF» (en paralelo con las imágenes) genera `MANUAL.pdf` y `PRUEBAS.pdf` con
-   `scripts/build-manual-pdf.mjs` y el Chrome del runner (`CHROME_PATH` = `CHROME_BIN`); «Imagen Docker» lo espera (si
-   falla no se etiqueta nada) y «GitHub Release» los adjunta al crear la release. Si hace falta cambiar uno después:
-   `gh release upload vX.Y.Z MANUAL.pdf --clobber`.
-6. **Secreto `STABLE_PUSH_TOKEN` (una vez).** GitHub no deja que `GITHUB_TOKEN` mueva una rama si entre su commit
-   anterior y el nuevo cambia algún fichero de `.github/workflows/` (error «refusing to allow a GitHub App to create
-   or update workflow … without `workflows` permission»; el bloque `permissions:` no tiene un permiso `workflows`).
-   Para esas versiones el job usa el secreto `STABLE_PUSH_TOKEN` si existe (si no, `GITHUB_TOKEN`). Crearlo:
-   1. GitHub → *Settings* (de tu cuenta) → *Developer settings* → *Personal access tokens* → *Fine-grained tokens* →
-      *Generate new token*. *Resource owner*: el dueño del repositorio (`pla87`); *Repository access*: **Only select
-      repositories** → `pla87/pizarro`; caducidad: la que admita la organización (apunta cuándo renovarlo).
-   2. *Repository permissions*: **Contents: Read and write** y **Workflows: Read and write** (nada más; *Metadata:
-      Read* se añade solo).
-   3. En el repositorio: *Settings → Secrets and variables → Actions → New repository secret* (o editar el que
-      exista), nombre `STABLE_PUSH_TOKEN`, valor solo el token, sin espacios ni saltos de línea.
-   Toda la lógica está en `scripts/move-stable.sh`, que usan el job «Rama stable» y el workflow «Mover stable». El
-   checkout y las lecturas usan siempre `GITHUB_TOKEN`; el token solo se usa para el `git push` (en una cabecera, sin
-   aparecer en el log), limpio de espacios y saltos de línea. Si falta (o le falta el permiso) y la versión cambia
-   los workflows, el job termina en rojo con un mensaje que dice qué secreto crear; la imagen y la release ya están
-   publicadas y no se tocan. Si `stable` está protegida, la regla debe permitir el push del propietario del token
-   (o de GitHub Actions si no hay token).
-7. **Comprobar el token.** El paso «Comprobar STABLE_PUSH_TOKEN» (en los dos workflows, antes de mover nada) pregunta
-   a la API de GitHub con el token y hace un `git push --dry-run` (no cambia nada) para ver si puede escribir. Si
-   falla, el error dice la causa probable:
-   - *no es válido (401)*: caducado, revocado, pendiente de aprobación o el valor del secreto no es el token;
-   - *no tiene acceso (403/404)*: el token no incluye `pla87/pizarro` (*Only select repositories*) o su *Resource
-     owner* no es el dueño del repositorio;
-   - *no puede escribir*: falta **Contents: Read and write** (o la cuenta del token no puede escribir en el repo).
-   El permiso **Workflows** solo se puede comprobar al mover de verdad: si falta, el paso siguiente falla con «no
-   tiene el permiso Workflows». Para revisar el token a mano: *Settings → Developer settings → Fine-grained tokens*,
-   abrir el token y mirar *Expiration*, *Repository access* y *Permissions* (o *Regenerate token* y volver a guardar
-   el secreto). En el pasado, un token mal creado hacía fallar el `actions/checkout` con «could not read Username
-   for 'https://github.com': terminal prompts disabled»; ya no se usa en el checkout.
-8. **Mover `stable` sin publicar otra versión.** Tras arreglar el secreto: **Actions → Mover stable → Run workflow**
-   (rama `main`; `.github/workflows/stable.yml`). Mueve `stable` a la última versión publicada: la etiqueta `vX.Y.Z`
-   más alta con GitHub Release publicada (ni borrador ni preversión) cuyo commit está en `main`, con las mismas reglas
-   (nunca hacia atrás, `--force-with-lease`); si `stable` ya está ahí, no hace nada. También vale *Re-run failed
-   jobs* en la ejecución de Release, pero esa repetición usa el workflow de la versión publicada (no recoge arreglos
-   posteriores del workflow).
+Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/handoff/PUBLICAR.md`):
 
-### Actualizaciones de dependencias (Dependabot)
-
-`.github/dependabot.yml` abre PR contra `main`:
-
-- **Acciones de GitHub**, un PR semanal con todas juntas. En los workflows cada acción va fijada a un commit exacto
-  (`uses: owner/acción@<SHA de 40 caracteres> # vX.Y.Z`): nunca se vuelve a poner una etiqueta móvil como `@v4`.
-  Para fijar una acción nueva a mano: `git ls-remote https://github.com/<owner>/<acción> refs/tags/<tag>` (si la
-  etiqueta es anotada, el commit es el de la línea `^{}`).
-- **npm**, un PR mensual con todas las versiones menores y parches. Las versiones mayores no se proponen (se hacen a
-  mano, leyendo sus notas de cambios). Las de seguridad llegan en cuanto hay aviso, en su propio PR (requiere
-  *Settings → Code security → Dependabot security updates* activado).
-- **Imágenes base de Docker** (ecosistemas `docker`, el `Dockerfile`, y `docker-compose`, `deploy/compose.yml`), un PR
-  semanal por ecosistema. Van fijadas por digest con su etiqueta (`node:22-bookworm-slim@sha256:…`,
-  `caddy:2-alpine@sha256:…`, `postgres:16-alpine@sha256:…`): Dependabot propone el digest nuevo de la misma etiqueta,
-  nunca otra versión mayor (PostgreSQL 16 → 17 exige migrar los datos). A mano: `docker buildx imagetools inspect
-  <imagen:etiqueta>`, línea `Digest:` (la del índice multiarquitectura, no la de una plataforma).
-- En todos, `cooldown: default-days: 7`: solo se proponen versiones publicadas hace al menos 7 días (las de
-  seguridad no esperan).
-- **`overrides` en `package.json`**: `minimatch` 11 dentro de `@typescript-eslint/typescript-estree` (herramienta de
-  lint, no va en la app) por el aviso GHSA-g3hv-75wg-m249; quitarlo cuando `typescript-eslint` traiga una versión
-  corregida por sí mismo (`npm ls minimatch` y `npm audit`).
-
-Cómo se revisa cada PR:
-
-1. Leer qué cambia: en las acciones, que el SHA nuevo corresponde a la etiqueta del comentario (enlace «Release
-   notes» del PR) y que la acción sigue siendo del mismo propietario; en npm, las notas de los paquetes con cambios
-   de comportamiento (Next, Prisma, TipTap, @dnd-kit, sharp…). Prisma: `prisma` y `@prisma/*` deben ir a la misma
-   versión; Next y `@next/swc-*`, también.
-2. Bajarse la rama y pasar **todas** las comprobaciones de la sección 4 (incluidas `npm run test:db` y el build de
-   producción) y, si toca Next, TipTap o @dnd-kit, las suites e2e.
-3. **Una actualización de dependencias se aprueba solo si pasan todas las pruebas.** Si algo falla, se cierra el PR
-   (o se ignora esa versión con `@dependabot ignore this minor version`) y se anota en la sección 6. Nunca se
-   «arregla» una prueba para que pase con la dependencia nueva sin entender por qué fallaba.
-4. Se fusiona en `main` como cualquier otro cambio; llega a los usuarios con la siguiente versión publicada (nunca
-   antes: las instalaciones siguen las releases o la rama `stable`).
+1. `TZ=Europe/Madrid npm run version:bump -- minor --summary "…"` (o `patch`); rellenar el bloque nuevo de
+   `changelog.json` (`changes` y `en`) y `npm run version:bump -- --render`.
+2. Actualizar `docs/MANUAL.md` (las dos líneas de versión y las secciones afectadas), `docs/PRUEBAS.md` y
+   `docs/PRUEBAS-CHROME.md`. Los PDF se revisan en local (`node scripts/build-manual-pdf.mjs`) y **no se suben**.
+3. Commit «vX.Y.Z: …», PR a `main` (esperar sus dos comprobaciones), fusionar aplastando.
+4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasa antes el job `checks`: tipos,
+   lint, pruebas y traducciones, y si falla no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
+   al commit fusionado (unos 6 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
+5. Una actualización de Dependabot se aprueba solo si pasan **todas** las comprobaciones (PUBLICAR, «Dependabot»).
 
 ## 6. Estado y pendientes
 
 **Paquetización (paso a paso, a petición del propietario):**
 
-- Hecho: instalación en un paso (`deploy/get.sh`), actualizaciones con versiones e imagen publicada, aviso de
-  versión nueva, proyectos de ejemplo al crear un proyecto (`src/lib/project-examples.ts`), página de presentación
-  `/presentacion` simplificada (sin demo; la administración no enlaza a ella por decisión del propietario) y licencia
-  (`LICENSE.md` + `/licencia`; `npm run license:sync` tras cambiarla).
-- Hecho: web estática del producto en `site/` (plantillas y estáticos), generada con `scripts/build-site.mjs` y
-  publicada con GitHub Pages por `.github/workflows/site.yml` (workflow «Web») en getpizarro.com. En
-  *Settings → Pages → Build and deployment*, **Source debe ser «GitHub Actions»**: con «Deploy from a branch»
-  GitHub publica el README del repositorio con Jekyll en lugar de la web. Las capturas de `site/static/img/` y las
-  imágenes `og.png`/`og-en.png` se regeneran con `scripts/site-screenshots.mjs` (instrucciones en su cabecera;
-  siempre contra una base de pruebas con datos de demostración) cuando cambie el aspecto de la app. Puesta en
-  marcha (Pages, DNS, HTTPS, verificación del dominio): `docs/VENTA.md` §8.
-- Hecho: guías de conexión en la web (`/guias/`, `/en/guides/`): una página por cada `docs/guias/<nombre>.md` con su
-  `docs/guias/en/<nombre>.md` (Google, Google Docs, Sheets y Slides, Telegram, WhatsApp). La cabecera del fichero (`titulo`,
-  `descripcion`, `orden`, `icono`) da la tarjeta del índice; `build-site.mjs` las añade solas al índice y al sitemap
-  y falla si falta la versión en inglés, el título o la descripción. El workflow «Web» también se lanza al cambiar
-  `docs/guias/`. La portada enlaza a cada guía desde «Se conecta con lo que ya usas». El pie lleva una línea de
-  autoría: no escribas en ella ni en el manual dominios personales.
-- Hecho: recordatorio de licencia para administradores (franja bajo la cabecera, como mucho cada 30 días, nunca en
-  los 7 primeros días): lógica en `shouldShowLicenseNudge` (`src/lib/license-core.ts`), interfaz en
-  `src/components/LicenseNudge.tsx`. Se oculta con licencia registrada o declarando uso personal o educativo.
-- Modelo de venta decidido: gratis para uso personal y para uso educativo (centros de enseñanza públicos o
-  privados, también academias, con su profesorado y alumnado; definición en `LICENSE.md` §2); empresas y profesionales, pago único por servidor con
-  actualizaciones gratis para siempre y sin soporte. Precio: 100 € + IVA (pago con tarjeta y factura, NIF opcional); botón Comprar con `BUY_URL` en `src/lib/product.ts` (vacía hasta que el propietario cree el Payment Link de Stripe, ver `docs/VENTA.md`); *Administración → Licencia* solo informa. Todo uso que no sea personal ni educativo paga. La propuesta antigua de funciones para una licencia profesional e ideas de otros Kanban (ronda 38, estado de la v1.48) se retiró en la ronda 61: está en el historial de git (`git show v1.64.0:docs/IDEAS.md`).
-- Hecho: las versiones se publican con *Actions → Release → Run workflow* sobre `main` (imagen en GHCR, GitHub Release
-  y rama `stable`); el secreto `STABLE_PUSH_TOKEN` funciona y la instalación del propietario en Railway sigue `stable`.
+- Lo hecho de la paquetización (instalación, web, guías, recordatorio y modelo de venta, publicación):
+  `docs/handoff/HISTORIA.md`, «Paquetización: lo hecho».
 - Pendiente de confirmar por el propietario: prueba real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de
   Railway (pasos en `docs/INSTALL.md`; la sintaxis de variables generadas debe verificarse en Railway); las pruebas en
   real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
-- Huellas de deshacer (`fingerprintOps`, `src/lib/undo.ts`): solo existe el formato con prefijo `v2:b:` (`FP_CURRENT`:
-  la descripción por su hash y también el bloqueo de cada tarea, `blockedById`). Los anteriores (sin prefijo, y `v2:`
-  sin «b:», que no cubría el bloqueo) se quitaron con su compatibilidad (la de `v2:` en la ronda 59); una entrada que aún
-  traiga uno (copia de seguridad antigua restaurada) se descarta al intentar aplicarla con «ya no se puede deshacer»,
-  también si se confirma, y no se pone al día al aplicar otra (`isObsoleteFingerprint`, «no empieza por `v2:b:`»;
-  `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
-  el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
-  borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
-  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
+- Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
+  su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 64:** v1.68.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Hecho por el propietario con Claude in Chrome en la ronda 64: pruebas en real de la v1.67.0 (bien; no se pudieron las
-plantillas propias como miembro ni el plan para IA), auditoría como usuario nuevo de la v1.67.0 (sus fallos y lo evidente,
-arreglados en la v1.68.0) y registro DMARC `_dmarc` con `p=none` en getpizarro.com. Pendiente: los prompts de
-`PRUEBAS-CHROME.md` (pruebas en real de la v1.68.0, `rua` del DMARC si lo aprueba, auditoría).
-La ronda 64 dio 8 vueltas de revisión (servidor y seguridad, navegador y ficheros, acceso y emails, tablero y plantillas,
-instalación y CI, y tres sobre el diff de la ronda); la última no encontró nada.
+**Estado al cerrar la ronda 65:** v1.69.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Ronda hecha en la nube; desde la ronda 66 el propietario sigue en Claude Code en su PC con Claude in Chrome (§0b), que
+ejecuta directamente los prompts de `docs/PRUEBAS-CHROME.md` (pendientes: 1, pruebas en real de la v1.69.0 con lo que
+quedó de la v1.68; 2, `rua` del DMARC, aprobado; 3, auditoría como usuario de la v1.69.0). La ronda 65 dio 3 vueltas de
+revisión y caza de bugs (servidor, navegador y áreas sin mirar, infraestructura y migraciones, y convergencia); la
+última solo halló dos detalles, ya arreglados.
 
-**Preguntas abiertas al propietario (tras la v1.68.0)**, con la numeración del informe final de la ronda 64 (entre
+**Preguntas abiertas al propietario (tras la v1.69.0)**, con la numeración del informe final de la ronda 65 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Historial de versiones: pintar solo las 10 últimas con «Ver más» (la página pesa ~450 KB; −78 %). (SÍ)
-2. Mis tareas: cambiar los filtros por una línea de resumen con enlaces a cada grupo. (SÍ)
-3. Logs en inglés: guardar también el mensaje en inglés (`messageEn`) para poder buscar en inglés. (SÍ)
-4. Filtrar también en `client.window` los errores que vienen de extensiones. (SÍ)
-5. Avisar por email a quien configuró el informe semanal cuando el destinatario se rechaza para siempre. (SÍ)
-6. Cambiar de tipo en el detalle: sustituir las subtareas del tipo anterior que sigan sin marcar ni editar, con deshacer. (SÍ)
-7. Atenuar en escritorio los botones «+» y «Varias tareas» junto al diálogo (enteros al pasar el ratón). (SÍ)
-8. Recalcular la fecha al mover una tarjeta entre dos columnas de persona. (NO)
-9. «Tipo por defecto» también en plantillas y en «Varias tareas». (Solo si se echa de menos)
-10. Plan para IA: decir el tipo una sola vez si todas las tareas son del mismo tipo. (SÍ, pequeño)
-11. Administración → Proyectos: «asignados» → «miembros», como en Ajustes del proyecto. (SÍ)
-12. Invitación pendiente en Ajustes del proyecto: «Reenviar invitación» por email si hay email. (SÍ)
-13. Retirar código que solo usan las pruebas: `reencryptIfStale` (`keyring.ts`), `parseTaskLines` (`bulk.ts`) y el
-    `describeAction` «Abrió la tarea…» de `getTaskDetail` (nunca se registra). (SÍ)
-14. Avisos: «Ver más» por páginas en lugar de volver a leer todo. (NO por ahora)
-15. CI: no repetir la pasada de comprobaciones al fusionar en `main` (ya pasó en la PR). (SÍ)
-16. `npm run test:db` repartido en 3 bases en paralelo. (Más adelante)
-17. Documentación más corta para cada sesión nueva: HANDOFF con anexos aparte, detalle de las suites en `e2e/SUITES.md`
-    y leer solo el índice del manual al empezar (de ~130.000 a ~45.000 tokens de lectura inicial). (SÍ)
-18. DMARC con informes (`rua`), prompt 2 de `PRUEBAS-CHROME.md`. (Opcional)
-19. Ideas de la auditoría: «Organizar por personas» en *Casa y familia*, roles de columna filtrados por plantilla,
-    arrastrar cabeceras de columna. (Más adelante)
-20. Fase 2 de Agenda y Entrega al cliente (ver §4, Ronda 64). (SÍ, en la v1.69)
+1. Ideas de la auditoría (aprobadas para «más adelante»): botón «Organizar por personas» en *Casa y familia*, roles de
+   columna según la plantilla y arrastrar cabeceras de columna. ¿En la ronda 66? (SÍ, una ronda propia)
+2. Avisar antes de perder una plantilla a medio editar al cambiar de pestaña o recargar (Ajustes del proyecto, Mi
+   perfil). (SÍ, pequeño)
+3. Al cambiar de tipo en el detalle, dejar una línea en el historial de la tarea con las subtareas cambiadas. (SÍ, pequeño)
+4. Pasar `npm run test:db` también en la PR (GitHub con PostgreSQL, ~3 min; los minutos son gratis por ser público). (SÍ)
+5. `--shuffle` de vez en cuando en `test:db` para destapar pruebas que dependen del orden. (SÍ, barato)
+6. Logs: no guardar el texto en inglés de los registros de páginas vistas (ahorra espacio, pierden la búsqueda en inglés). (NO)
+7. Rellenar el texto en inglés de los registros anteriores a la v1.69. (NO: caducan en 7 días)
+8. «Importar tareas»: que la vista previa diga qué tipo tomará cada tarea. (NO por ahora)
+9. Comprobar en Railway el tiempo de espera al apagar (como el `kill_timeout` de Fly.io) y apuntarlo en la guía. (SÍ,
+   con Claude in Chrome)
+10. WhatsApp en la instalación del propietario: decisión de coste (Meta cobra cada aviso). (Lo decide el propietario)
 
-Límites conocidos (no se cambian): un administrador puede saber si existe un tipo con cierto nombre en otro proyecto (los
-nombres de tipos son únicos entre generales y de proyecto); volver a la v1.64 con avisos `REPORT_UNSUBSCRIBED` ya creados
-hace fallar la página de Avisos de quien los tenga (ver la regla de enums en §4).
+Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
+`docs/handoff/HISTORIA.md`.
 
-Menores sin numerar de antes (recomendación NO salvo que se note): «Guardar de todos modos» en el aviso de cambio
-simultáneo; `INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro; «Esta semana» de domingo a sábado en
-inglés; búsquedas de releases de 1–2 caracteres sin índice; `socketTimeout` del SMTP; log de errores de Caddy; código
-propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores.
+## 7. Anexos: cuándo leer cada uno
 
-**Decisiones de la ronda 64 (ya aplicadas):** retirados de la oferta los roles *Agenda* y *Entrega al cliente* (fase 1;
-sus columnas a «Sin rol»); «Tipo por defecto…» por columna (`Column.defaultKindId`); suite e2e de «Asignación a persona»;
-subtareas de *Vibecoding* como criterios; margen de 100 MB de la copia diaria; errores de copias traducibles; retirada
-`listTemplates`; PDF de columna descargados con el botón ocupado; DMARC `p=none` hecho. Respuesta a la pregunta 2 de la
-ronda 63: el «PDF de plan» común compartiría motor y aspecto, pero cada rol agrupa distinto (por día o por vencimiento).
+| Anexo | Qué tiene | Cuándo leerlo |
+|---|---|---|
+| `docs/handoff/GUARDAS.md` | Las guardas técnicas de §4 (y las de cada ronda) por tema: tablero, navegador, logs, migraciones, base de datos, PDF, subidas, importar, i18n, fechas, servidor, seguridad, emails, tareas de fondo, plantillas, deshacer, pruebas, e2e, entorno | Al repartir una ronda, la sección del tema de cada agente (cópiala a su brief); al revisar una entrega de ese tema |
+| `docs/handoff/HISTORIA.md` | Decisiones de cada ronda ya aplicadas, lo hecho de la paquetización, ideas pospuestas, límites conocidos y menores sin numerar | Cuando el propietario pregunte por algo ya decidido, antes de proponer algo que pudo descartarse, y al cerrar la ronda (para añadir sus decisiones) |
+| `docs/handoff/PUBLICAR.md` | Cerrar y publicar una versión paso a paso, `STABLE_PUSH_TOKEN`, mover `stable`, publicar desde la sesión, Dependabot | Al cerrar una versión o si falla el workflow Release; al revisar un PR de Dependabot |
+| `e2e/SUITES.md` | Qué prueba cada suite e2e y cómo se lanza sola (las cifras, en `e2e/README.md`) | Al tocar o lanzar una suite concreta |
+| `docs/MANUAL.md` | Cómo funciona todo (para el usuario y el administrador) | Su índice al empezar; las secciones del tema de la ronda |
 
-**Decisiones de la ronda 63 (ya aplicadas):** columna «Asignación a persona» con dos campos en `Column` (`assigneeId`,
-`assignDueDays`, rol `NONE`; sin valor nuevo de enum para poder volver a la v1.66) y «Generar plan» en PDF; plantillas
-propias usables por cualquiera (crear y editar, solo administradores); comprobación de espacio de la copia diaria (solo el
-volcado y solo con copia anterior o un intento fallido por disco lleno); importar `.pizarro.zip` espera turno en la cola de
-imágenes; Compose sin `NODE_OPTIONS` (`APP_HEAP_MB` en desuso, avisos en el diagnóstico); todos los `logEvent` con
-plantilla traducible (prueba guardiana `tests/log-message.test.ts`); mostaza legible; avisos de actualización y de copias
-por plataforma (`setupCodeSource`); códigos de release explicados; plan para IA un 23 % más corto; guardado automático del
-detalle, no (ya avisa al cerrar con cambios y guarda borradores); negrita tras la etiqueta de plantilla, no; destino de
-copia válido + otro mal configurado sigue «Correcta».
-
-**Decisiones de la ronda 62 (ya aplicadas):** `FEEDBACK_EMAIL` = feedback@getpizarro.com con «Enviar por email» (mailto)
-cuando la instalación no envía emails y GitHub como alternativa; guías de Render y Fly.io (`render.yaml`, `deploy/fly.toml`);
-retirado `railway.json`; fechas con puntos siempre día/mes; *Curso o charla* en inglés americano; `MAX_USERS` mal escrito sin
-tope (como estaba); no dejar a quien no es administrador usar plantillas propias con ejemplos; recordar todas las bajas del
-informe y el interruptor del informe de errores, solo si se pide; rol «Presupuesto» como está; alta sin email solo con
-enlace de invitación; «Cita» en índigo; copia externa mal configurada como error; retirado `dateNumeric`.
-
-**Decisiones de la ronda 61 (ya aplicadas):** 6 plantillas de serie (*Vibecoding*, *Trabajo y clientes*, *Casa y
-familia*, *Eventos y viajes*, *Estudios y aprendizaje*, *Curso o charla* con «Publicado») con «Con tarjetas de ejemplo» en
-vez de la lista de ejemplos; no ocultar Documentación por plantilla; no estrechar columnas; fechas y «Esperando» de serie;
-baja del informe recordada y avisada; una sola tarjeta de email; «Generar enlace de invitación nuevo» sin email; contador
-de avisos exacto; «Responsable» en todas partes y sin «(opcional)»; Lista con pintado diferido; sesión en una consulta;
-fechas día/mes por fichero; imágenes sin tipo; `MAX_USERS` opcional (sin tope por defecto; recomendación: 1 GB hasta ~25
-personas activas, 2 GB hasta ~50); bloqueo de R2 en vez de segundo proveedor; retirados `db:generate`, la nota de
-`JWT_SECRET`, `docs/IDEAS.md` (en el historial) y tres `export` de pruebas; suites de «Aplicar plantilla» unidas y
-`tablero-e2e`/`pegar-e2e`; «check» en las guías inglesas; botón de informar de un error o enviar una sugerencia junto a
-«Cerrar sesión», con captura y envío privado por email (desactivado si no es la última versión); «Descartar cambios» a la
-altura del resto.
-
-**Decisiones de la ronda 60 (ya aplicadas):** las 19 primeras preguntas de la ronda 59 (tablero en vivo por tarjeta, datos
-sin campos por defecto, 50 tarjetas por columna desde el servidor, índice trigram de releases ya, plan para IA sin enlaces
-y sin interruptor, cookie de dispositivo por cuenta, invitación en el idioma de quien invita, «Invitación pendiente»,
-reintento de P3009, aviso de otra copia, «Esperando» con la casilla de fechas, citas «ha escrito:» y nombres reservados,
-baja en un clic ya, informe semanal corto, fechas en-US, CSV de logs para Excel, aviso de cambio simultáneo, vuelta a Logs,
-portada del administrador); `APP_URL` desde `RAILWAY_PUBLIC_DOMAIN`; `no-transform` contra la ofuscación de Cloudflare;
-copias que toleran el bloqueo de R2; resaltado de la búsqueda de releases; cambiar de tipo sin perder lo escrito; crear
-un proyecto abre su tablero; Dependabot de noviembre (Next 16.4.6…) incluido en la versión. Pizarro es el producto: la
-instalación del propietario es solo una más, y lo que se revisa en ella (Cloudflare, Railway) se convierte en mejoras del
-producto y de la guía.
-
-**Decisiones de la ronda 59 (ya aplicadas):** administradores asignables a proyectos de equipo, aviso «te han añadido»,
-invitar por email desde el proyecto y «Copiar enlace»; margen de intentos para dispositivos conocidos; «Forzar cambio de
-contraseña» corta calendario, canales y Drive; privado sin miembros activos → de equipo; TLS obligatorio con `SMTP_*`
-(`SMTP_ALLOW_PLAINTEXT`); calendario vacío para enlaces no válidos y «Último uso»; releases que cargan su texto al
-desplegar; comentarios en vivo solo la primera página; limpiezas diarias; SMTP con `pool`; miniaturas 2 min; disco en
-subidas; Compartir con tope por archivo; importar con los topes de la app; `/api/health` 200 con aviso de disco; fotos
-grandes en Documentación; confirmaciones del calendario; «Nuevo proyecto» para miembros; «Próximos 7 días»; avance de
-entregables único; repeticiones sin entregable vencido; Caddy sin URI; imagen sin sharp musl; `get.sh` desde `stable`;
-imágenes por digest; migraciones entre `BEGIN`/`COMMIT`; PDF como adjuntos de la release; retiradas (páginas de admin,
-`redoLast`, `capTitle`, `generateProjectReportPdf` como envoltorio, `passwordChangeRequired`, huellas `v2:` sin `b:`,
-tabla «Nombres antiguos», suites solapadas, ZIP del histórico sin `?part`, una versión de `marked`); inglés americano;
-no subir `PDF_WORKER_MAX_MB`.
-
-**Decisiones de la ronda 58 (ya aplicadas):** borrar en un menú «⋯» en Releases y Documentación; informe semanal con
-margen de 3 días; `MALLOC_ARENA_MAX=2`; workflow «Comprobaciones» en cada PR; sin precargas con Ahorro de datos; retirados
-el ZIP por POST sin vale y `/viewers` sin `?open=`; no unificar «Nueva tarea» con el detalle; en inglés, «organisation»
-(británico, como «licence»).
-
-**Decisiones de la ronda 57 (ya aplicadas):** un solo selector de proyecto en escritorio (el de la barra lateral) y sin
-«Informe PDF» en la cabecera; roles de columna en un submenú; recordar el último tipo usado; tareas fijas fuera del
-avance del informe PDF; *Administración* en dos pestañas (*Ajustes* e *Integraciones*); no juntar «Varias tareas» e
-«Importar» en «Nueva tarea»; no ampliar el deshacer fuera del tablero; en el móvil, avisos abajo, «Editar» comentarios
-a la vista, archivadas en lectura, «Descartar cambios» con confirmación y «Compartir → Pizarro»; sondeo de presencia de
-respaldo a 60 s; plantillas de serie mejoradas sin tocar *Vibecoding* ni *Curso o máster* (de esas se encarga el
-propietario).
-
-**Decisiones de la ronda 56 (ya aplicadas):** recarga de respaldo a 15 min con el canal sano; presencia por el canal en
-vivo; ZIP de release en flujo; tareas de fondo a 60 s; destinatario del informe por nombre y emails ajenos ocultos;
-duplicar una repetitiva no copia la repetición pero lo avisa; calendario del móvil en hoy; retiradas aprobadas (hecho);
-e2e solo de las suites afectadas en cada ronda y todas al publicar; imagen arm64 en máquinas ARM nativas.
-
-**Decisiones de la ronda 55 (ya aplicadas):** exportar sin transacción abierta mientras se leen los ficheros; una
-subida a la vez por persona solo si hay más de una persona activa en los últimos 5 minutos (`user-activity.ts`; cualquier
-petición con sesión cuenta como actividad); la zona horaria no se fija en la conexión (un parámetro `options` lo rechazan
-poolers como PgBouncer): los `NOW()` propios se pasan desde la app y el disparador convierte a UTC.
-
-**Decisiones de la ronda 54 (ya aplicadas):** importar no avisa a las personas mencionadas, sí al responsable; emails
-ajenos al exportar un proyecto solo para administradores; caché de 60 s del calendario suscrito y de 3 s de
-`/api/health`; «Nueva tarea» con etiquetas (solo existentes), color y enlace; el cursor de «Nueva tarea» sigue empezando
-en el título.
-
-**Ideas pospuestas por decisión del propietario:**
-
-- Limitar las tarjetas visibles en columnas terminadas («ver más») o archivarlas solas tras N días.
-- Cargar las plantillas de release solo al abrir «Generar release».
-- Guardar la fecha esperada al deshacer el movimiento de un entregable en el calendario.
-
-**Otros:**
-
-- Telegram y WhatsApp: los dos están implementados y se configuran en *Administración → Integraciones → Avisos por
-  Telegram y WhatsApp* (las variables `WHATSAPP_*` solo rellenan lo que no se guarde allí; guías en `docs/guias/`;
-  manual §3.9, §3.16 y §4.7b). Telegram es gratis. La única decisión pendiente del propietario es de coste: si activa
-  WhatsApp en su instalación (Meta cobra cada aviso entregado con plantilla, ver `docs/guias/whatsapp.md`).
-  - Código: `src/lib/messaging-core.ts` (lógica pura: textos, topes de 30/h por Telegram y 10/h por WhatsApp por
-    persona, clasificación de errores), `src/lib/messaging-config.ts` (Ajustes en `AppState`, tokens cifrados con
-    `ENCRYPTION_KEY`; `rotate-keys` los cubre), `src/lib/telegram.ts`, `src/lib/whatsapp.ts`, `src/lib/notify.ts`
-    (envío tras responder) y `src/actions/messaging.ts`. Datos: `UserChannel` (canal, dirección, código de WhatsApp,
-    qué avisos) y `TelegramLinkCode`; las preferencias de WhatsApp ya no están en `User`.
-  - Telegram: webhook `APP_URL/api/telegram/webhook` (fuera del proxy de sesión, con el secreto en
-    `X-Telegram-Bot-Api-Secret-Token`) si `APP_URL` es https pública; si no, sondeo con `getUpdates`, que solo vale
-    con una instancia. El arranque reintenta con espera creciente (hasta 5 min) si Telegram o la base no responden.
-  - WhatsApp: plantilla de utilidad `aviso_pizarro` (3 variables); la antigua `mencion_pizarro` (4 variables) solo
-    envía menciones. Guardar la configuración no activa el envío (hay que pulsar *Activar*). Un fallo que Meta pudo
-    haber enviado (5xx, corte, tiempo agotado) no se reintenta, para no cobrar dos veces. Cada número se confirma con
-    un código de 6 cifras (15 min, 5 intentos; 5 mensajes al día por persona y 3 por número), que va en la plantilla
-    de autenticación `codigo_pizarro` (Meta lo exige para códigos de un solo uso; ajustes `whatsapp.codeTemplate*` en
-    `AppState`, con traducción inglesa opcional). *Probar* envía las dos plantillas. Si Meta rechaza la de verificación,
-    Ajustes lo marca en rojo y nadie puede conectar un número nuevo hasta crearla (guía de WhatsApp, paso 6).
-  - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
-- Entorno de la nube: `npm ci` instala solo el binario SWC musl; para `next build` hace falta
-  `@next/swc-linux-x64-gnu` (misma versión que `next`) extraído en `node_modules/@next/`. La suite QA necesita
-  `SEED_ADMIN_EMAIL="admin@example.com"`, `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y `SEED_ADMIN_NAME="Administrador"` en el `.env` local, y
-  `tests/db/task-json-paste.test.ts` espera `APP_URL="http://localhost:3000"` en el `.env` (los servidores de prueba en
-  otro puerto, con `PORT` y `APP_URL` en la línea de comandos). Si PostgreSQL no arranca tras reiniciarse el contenedor:
-  `pg_ctlcluster 16 main start` (usuario `postgres`, contraseña `postgres`). Los worktrees de los agentes quedan en
-  `.claude/worktrees/` (añade `.claude/` a `.git/info/exclude` para que no salgan como ficheros sin seguir). Tras
-  fusionar el PR de la rama de trabajo en `main`, no se puede forzar la subida de la rama: ponla igual que `main` con
-  `git merge origin/<rama>` (sin cambios de contenido) y súbela normal.
-- Ideas pospuestas (R36): tablero que recarga solo lo cambiado (a partir de ~10 personas a la vez).
-- Las copias de seguridad cifradas suben a un almacenamiento S3 compatible configurado por el propietario.
+Al cerrar una ronda: las decisiones nuevas van a `HISTORIA.md` (arriba, la más reciente), las guardas nuevas a su tema
+de `GUARDAS.md` (con «(Ronda N)») y aquí solo el estado y las preguntas abiertas de la última ronda.

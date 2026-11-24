@@ -1,4 +1,4 @@
-# Actualizaciones de dependencias propuestas por Dependabot (PR contra main). Cómo se revisan: docs/HANDOFF.md,
+# Actualizaciones de dependencias propuestas por Dependabot (PR contra main). Cómo se revisan: docs/handoff/PUBLICAR.md,
 # «Actualizaciones de dependencias». Regla: una actualización solo se aprueba si pasan todas las pruebas.
 version: 2
 updates:
