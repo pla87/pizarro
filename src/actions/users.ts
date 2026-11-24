@@ -159,10 +159,15 @@ async function invitePending(userId: string): Promise<boolean> {
 }
 
 /**
- * Proyecto al que lleva una invitación reenviada: el de la última invitación (si la persona aún está en él) o, si ya no
+ * Proyecto al que lleva una invitación reenviada: `here` (el proyecto desde cuyos ajustes se reenvía, si la persona es
+ * miembro: al aceptar entra en ese tablero), si no el de la última invitación (si la persona aún está en él) o, si ya no
  * queda ninguna (caducó y el mantenimiento la borró), su único proyecto. Con varios, o sin ninguno, la invitación genérica.
  */
-async function inviteProject(userId: string): Promise<{ id: string; name: string } | null> {
+async function inviteProject(userId: string, here?: string): Promise<{ id: string; name: string } | null> {
+  if (here) {
+    const member = await db.projectMember.findFirst({ where: { projectId: here, userId }, select: { project: { select: { id: true, name: true } } } });
+    if (member) return member.project;
+  }
   const pending = await db.authToken.findFirst({ where: { userId, purpose: "INVITE" }, orderBy: { createdAt: "desc" }, select: { data: true } });
   if (pending) {
     const projectId = inviteProjectId(pending.data);
@@ -176,10 +181,10 @@ async function inviteProject(userId: string): Promise<{ id: string; name: string
 /**
  * «Reenviar invitación» (Administración → Usuarios y miembros del proyecto): enlace nuevo (72 h) por email; el anterior
  * deja de valer. Si el envío falla, se devuelve el enlace con `mailFailed` para pasarlo a mano. Solo para quien aún no
- * ha entrado.
+ * ha entrado. Con `projectId` (Ajustes del proyecto), la invitación lleva a ese proyecto si la persona es miembro.
  */
-export async function resendInvite(userId: string) {
-  return runAction({ name: "users.resendInvite", args: [userId] }, async () => {
+export async function resendInvite(userId: string, projectId?: string) {
+  return runAction({ name: "users.resendInvite", args: [userId, projectId] }, async () => {
     const admin = await requireAdmin();
     if (!rateLimit(`resend-invite:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
     if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
@@ -187,7 +192,7 @@ export async function resendInvite(userId: string) {
     if (!user) throw notFound();
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de reenviar la invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
-    const project = await inviteProject(user.id);
+    const project = await inviteProject(user.id, projectId === undefined ? undefined : v.id.parse(projectId));
     // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
     const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
     const link = `${appUrl()}/reset/${token}`;
@@ -213,8 +218,8 @@ export async function resendInvite(userId: string) {
  * lo devuelve para que el administrador se lo pase por otro canal. Solo para quien aún no ha entrado. El enlace no se
  * registra: solo quién lo generó y para quién.
  */
-export async function generateInviteLink(userId: string) {
-  return runAction({ name: "users.generateInviteLink", args: [userId] }, async () => {
+export async function generateInviteLink(userId: string, projectId?: string) {
+  return runAction({ name: "users.generateInviteLink", args: [userId, projectId] }, async () => {
     const admin = await requireAdmin();
     // El mismo tope que «Reenviar invitación» (las dos emiten enlaces de invitación).
     if (!rateLimit(`resend-invite:${admin.id}`, 20, 15 * 60_000)) throw new AppError("Demasiados intentos. Espera unos minutos.");
@@ -222,7 +227,7 @@ export async function generateInviteLink(userId: string) {
     if (!user) throw notFound();
     if (!user.active) throw new AppError("La cuenta está desactivada: actívala antes de generar otro enlace de invitación.");
     if (!(await invitePending(user.id))) throw new AppError("Esta persona ya ha entrado alguna vez: usa «Forzar cambio de contraseña».");
-    const project = await inviteProject(user.id);
+    const project = await inviteProject(user.id, projectId === undefined ? undefined : v.id.parse(projectId));
     // issueAuthToken borra antes la invitación pendiente: solo vale el enlace nuevo.
     const token = await issueAuthToken(user.id, "INVITE", project ? { projectId: project.id } : undefined);
     describeAction("Generó un enlace de invitación nuevo para «{name}» (sin enviarlo; el anterior deja de valer)", { name: user.name });
