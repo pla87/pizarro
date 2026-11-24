@@ -54,15 +54,20 @@ const deploySchema = z.object({
    * las notas llevarían el título viejo y el histórico de la release, el nuevo.
    */
   titles: z.array(z.object({ taskId: v.id, title: z.string().max(5000) })).max(RELEASE_MAX_TASKS, "Una release admite como mucho 500 tareas: quita alguna de la selección.").optional(),
+  /**
+   * Tipo de cada tarea con el que se generó el texto. Si otra persona ha cambiado alguno entretanto, no se despliega: el
+   * código del título (F1, C2…) saldría del tipo nuevo y las notas y los adjuntos del histórico dirían el viejo.
+   */
+  kinds: z.array(z.object({ taskId: v.id, kindId: v.id })).max(RELEASE_MAX_TASKS, "Una release admite como mucho 500 tareas: quita alguna de la selección.").optional(),
 });
 
 /**
- * 409 si `missing` tareas de la release ya no están en el tablero, `moved` han cambiado de columna o `renamed` han
- * cambiado de título desde que se generó el texto: el texto no coincidiría con el histórico (o se sacaría a producción
- * una tarea que ya no toca).
+ * 409 si `missing` tareas de la release ya no están en el tablero, `moved` han cambiado de columna, `renamed` han
+ * cambiado de título o `retyped` de tipo desde que se generó el texto: el texto no coincidiría con el histórico (o se
+ * sacaría a producción una tarea que ya no toca).
  */
-async function assertNoneMissing(missing: number, moved = 0, renamed = 0) {
-  if (missing <= 0 && moved <= 0 && renamed <= 0) return;
+async function assertNoneMissing(missing: number, moved = 0, renamed = 0, retyped = 0) {
+  if (missing <= 0 && moved <= 0 && renamed <= 0 && retyped <= 0) return;
   const t = await getT();
   if (missing > 0) {
     throw new AppError(
@@ -80,6 +85,14 @@ async function assertNoneMissing(missing: number, moved = 0, renamed = 0) {
       409,
     );
   }
+  if (retyped > 0 && renamed <= 0) {
+    throw new AppError(
+      retyped === 1
+        ? t("Una de las tareas ha cambiado de tipo mientras tanto: vuelve a generar la release.")
+        : t("{n} de las tareas han cambiado de tipo mientras tanto: vuelve a generar la release.", { n: retyped }),
+      409,
+    );
+  }
   throw new AppError(
     renamed === 1
       ? t("Una de las tareas ha cambiado de título mientras tanto: vuelve a generar la release.")
@@ -92,6 +105,12 @@ async function assertNoneMissing(missing: number, moved = 0, renamed = 0) {
 function renamedCount(rows: { id: string; title: string }[], expected: Map<string, string> | null): number {
   if (!expected) return 0;
   return rows.filter((r) => expected.has(r.id) && expected.get(r.id) !== r.title).length;
+}
+
+/** Cuántas de las tareas leídas no tienen ya el tipo con el que se generó el texto. */
+function retypedCount(rows: { id: string; kindId: string }[], expected: Map<string, string> | null): number {
+  if (!expected) return 0;
+  return rows.filter((r) => expected.has(r.id) && expected.get(r.id) !== r.kindId).length;
 }
 
 /** Cuántas de las tareas leídas no están en la columna en la que estaban al generar el texto. */
@@ -121,7 +140,8 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
     // columna mientras tanto, el histórico no coincidiría con lo que dice el texto. Se pide volver a generarlo.
     const expectedColumns = data.columns ? new Map(data.columns.map((c) => [c.taskId, c.columnId])) : null;
     const expectedTitles = data.titles ? new Map(data.titles.map((c) => [c.taskId, c.title])) : null;
-    await assertNoneMissing(new Set(data.taskIds).size - tasks.length, movedCount(tasks, expectedColumns), renamedCount(tasks, expectedTitles));
+    const expectedKinds = data.kinds ? new Map(data.kinds.map((c) => [c.taskId, c.kindId])) : null;
+    await assertNoneMissing(new Set(data.taskIds).size - tasks.length, movedCount(tasks, expectedColumns), renamedCount(tasks, expectedTitles), retypedCount(tasks, expectedKinds));
 
     // Deshacer: dónde estaba cada tarea (solo las de este proyecto); la release del histórico se quita (ver más abajo).
     // La columna de destino se busca a la vez.
@@ -132,9 +152,7 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
         : null,
     ]);
     addUndo(...undo);
-    // Orden y tipos del diálogo para que los códigos coincidan con los del texto.
-    const byId = new Map(tasks.map((t) => [t.id, t]));
-    const ordered = [...new Set(data.taskIds)].map((id) => ({ id, kindId: byId.get(id)!.kindId }));
+    // Los tipos, para los códigos (el orden y el tipo de cada tarea se toman dentro de la transacción, ver `ordered`).
     // Con los nombres guardados de los tipos, no los traducidos al idioma de quien despliega: el código va en el título
     // de las tareas y debe ser el mismo para todo el equipo (el diálogo usa `codeName`, ver localizeGeneralKind).
     const kinds = await listKinds(data.projectId);
@@ -157,13 +175,17 @@ export async function deployRelease(input: z.input<typeof deploySchema>) {
       // medias, la release la incluiría y la sacaría a producción sin quitarle archivedAt. Se bloquean aquí las que
       // siguen activas en el proyecto (un archivado en curso termina antes y deja de contar) y se repite el aviso. En
       // orden de id, como las acciones en bloque: dos transacciones que bloquean las mismas tareas no se cruzan (40P01).
-      // También su columna y su título: si otra persona ha movido o renombrado alguna desde que se generó el texto, no
-      // se despliega (con el título leído fuera, las notas dirían el viejo y el histórico el nuevo, o al revés).
+      // También su columna, su título y su tipo: si otra persona ha movido, renombrado o cambiado de tipo alguna desde que
+      // se generó el texto, no se despliega (con el título leído fuera, las notas dirían el viejo y el histórico el nuevo, o al revés).
       const ids = tasks.map((t) => t.id);
       const still = ids.length
-        ? await tx.$queryRaw<{ id: string; columnId: string; title: string }[]>`SELECT "id", "columnId", "title" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
+        ? await tx.$queryRaw<{ id: string; columnId: string; title: string; kindId: string }[]>`SELECT "id", "columnId", "title", "kindId" FROM "Task" WHERE "id" IN (${Prisma.join(ids)}) AND "projectId" = ${data.projectId} AND "archivedAt" IS NULL ORDER BY "id" FOR UPDATE`
         : [];
-      await assertNoneMissing(ids.length - still.length, movedCount(still, expectedColumns), renamedCount(still, expectedTitles));
+      await assertNoneMissing(ids.length - still.length, movedCount(still, expectedColumns), renamedCount(still, expectedTitles), retypedCount(still, expectedKinds));
+      // Orden del diálogo y tipos de ahora (con la fila bloqueada) para que los códigos coincidan con los del texto.
+      const kindNow = new Map(still.map((r) => [r.id, r.kindId]));
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const ordered = [...new Set(data.taskIds)].map((id) => ({ id, kindId: kindNow.get(id) ?? byId.get(id)!.kindId }));
       // Títulos de ahora (con la fila bloqueada) para el histórico y el código: nunca los leídos antes del candado.
       const titleNow = new Map(still.map((r) => [r.id, r.title]));
       const titleOf = (t: { id: string; title: string }) => titleNow.get(t.id) ?? t.title;

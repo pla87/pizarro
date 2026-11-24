@@ -1,7 +1,7 @@
 // Despliegue de releases: tareas que ya no están y despliegues simultáneos, contra PostgreSQL real.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { afterDone, db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { countReleasesOn, deleteRelease, deployRelease, getReleaseTaskDetails } from "../../src/actions/releases";
 import { RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS } from "../../src/lib/release";
 import { redoChecked, undoLast } from "../../src/actions/undo";
@@ -50,6 +50,33 @@ describe("deployRelease", () => {
     const fresh = [{ taskId: a.id, columnId: f.columns.todo }, { taskId: b.id, columnId: f.columns.doing }];
     expectOk(await deployRelease({ ...input, columns: fresh }));
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: b.id } })).columnId, prod.id);
+  });
+
+  // Antes no se comprobaba: la tarea salía con el código del tipo nuevo (R1C1) y las notas y los adjuntos decían R1F1.
+  test("rechaza el despliegue si otra persona cambió el tipo de alguna tarea desde que se generó el texto", async () => {
+    const { f, prod } = await setup();
+    const fix = await db.taskKind.create({ data: { name: "Corrección", color: "#3b82f6", position: 2, projectId: f.project.id } });
+    const a = await makeTask(f, { title: "A", columnId: f.columns.done });
+    const b = await makeTask(f, { title: "B", columnId: f.columns.done });
+    const kinds = [{ taskId: a.id, kindId: f.kindId }, { taskId: b.id, kindId: f.kindId }];
+    const input = { projectId: f.project.id, title: "R", content: "- A\n- B", destination: "IN_PRODUCTION" as const, taskIds: [a.id, b.id] };
+    await db.task.update({ where: { id: b.id }, data: { kindId: fix.id } });
+    expectFail(await deployRelease({ ...input, kinds }), /Una de las tareas ha cambiado de tipo mientras tanto: vuelve a generar la release/);
+    // También si el cambio llega mientras el despliegue espera el candado de la tarea.
+    await db.task.update({ where: { id: b.id }, data: { kindId: f.kindId } });
+    let pending: ReturnType<typeof deployRelease> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.task.update({ where: { id: a.id }, data: { kindId: fix.id }, select: { id: true } });
+      pending = deployRelease({ ...input, kinds });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    expectFail(await pending!, /Una de las tareas ha cambiado de tipo/);
+    assert.equal(await db.release.count({ where: { projectId: f.project.id } }), 0);
+    const rows = await db.task.findMany({ where: { id: { in: [a.id, b.id] } }, orderBy: { title: "asc" } });
+    assert.deepEqual(rows.map((r) => [r.title, r.columnId]), [["A", f.columns.done], ["B", f.columns.done]]);
+    // Con el texto generado de nuevo, sí.
+    expectOk(await deployRelease({ ...input, kinds: [{ taskId: a.id, kindId: fix.id }, { taskId: b.id, kindId: f.kindId }] }));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: a.id } })).columnId, prod.id);
   });
 
   test("rechaza el despliegue si otra persona renombró alguna tarea desde que se generó el texto (título viejo en las notas)", async () => {

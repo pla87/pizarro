@@ -76,9 +76,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   /**
    * Tareas del texto generado con la columna en la que estaban y su título: se despliegan esas (no la selección viva, de
    * la que desaparece una tarea que otra persona archiva o borra) y el servidor rechaza el despliegue si alguna ha
-   * cambiado de columna o de título entretanto.
+   * cambiado de columna, de título o de tipo entretanto.
    */
-  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string }[]>([]);
+  const [generatedTasks, setGeneratedTasks] = useState<{ taskId: string; columnId: string; title: string; kindId: string }[]>([]);
   const selectedTasks = useMemo(() => tasks.filter((t) => chosen.has(t.id)), [tasks, chosen]);
   // Topes de la release (los mismos que el servidor): con más, «Generar» o «Marcar como desplegado» se desactivan con su
   // motivo (antes llegaba el error de zod en inglés).
@@ -141,7 +141,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       description: details.get(t.id)?.description ?? "",
       attachments: details.get(t.id)?.attachments ?? [],
     }));
-    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId, title: x.title })));
+    setGeneratedTasks(selectedTasks.map((x) => ({ taskId: x.id, columnId: x.columnId, title: x.title, kindId: x.kindId })));
     const codes = computeReleaseCodes(board.kinds, releaseTasks, releaseNumber);
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
@@ -233,6 +233,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         taskIds: generatedTasks.map((x) => x.taskId),
         columns: generatedTasks.map(({ taskId, columnId }) => ({ taskId, columnId })),
         titles: generatedTasks.map(({ taskId, title }) => ({ taskId, title })),
+        kinds: generatedTasks.map(({ taskId, kindId }) => ({ taskId, kindId })),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
         number: generatedNumber ?? undefined,
