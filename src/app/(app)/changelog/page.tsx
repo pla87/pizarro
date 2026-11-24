@@ -1,6 +1,6 @@
 import { History } from "lucide-react";
-import { db } from "@/lib/db";
-import { parseChanges } from "@/lib/changelog";
+import { CHANGELOG_FIRST_PAGE } from "@/lib/changelog-core";
+import { changelogVersions } from "@/lib/changelog-page";
 import { requireUserPage } from "@/lib/session";
 import { getLocale, getT } from "@/i18n/server";
 import { BugReportLink } from "@/components/BugReportLink";
@@ -12,21 +12,11 @@ export async function generateMetadata() {
   return { title: t("Historial de versiones") };
 }
 
-function compareSemver(a: string, b: string): number {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pb[i] ?? 0) - (pa[i] ?? 0);
-  return 0;
-}
-
 export default async function ChangelogPage() {
   await requireUserPage();
   const t = await getT();
-  const en = (await getLocale()) === "en";
-  // Solo lo que se muestra (sin syncedAt), y la traducción solo en inglés.
-  const versions = (
-    await db.appVersionLog.findMany({ select: { id: true, version: true, releasedAt: true, summary: true, changes: true, summaryEn: en, changesEn: en } })
-  ).sort((a, b) => compareSemver(a.version, b.version));
+  // Solo las más recientes: con todas, la página pesaba cientos de KB. Las demás se piden desde la lista.
+  const { versions, total } = await changelogVersions((await getLocale()) === "en", 0, CHANGELOG_FIRST_PAGE);
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-6">
@@ -42,17 +32,7 @@ export default async function ChangelogPage() {
           <BugReportLink />
         </div>
       </div>
-      <ChangelogList
-        currentVersion={pkg.version}
-        versions={versions.map((v) => ({
-          id: v.id,
-          version: v.version,
-          releasedAt: v.releasedAt.toISOString(),
-          // En inglés, la traducción si la hay; si no, el texto original.
-          summary: en && v.summaryEn ? v.summaryEn : v.summary,
-          changes: en && v.changesEn ? parseChanges(v.changesEn) : parseChanges(v.changes),
-        }))}
-      />
+      <ChangelogList currentVersion={pkg.version} initial={versions} total={total} />
     </div>
   );
 }

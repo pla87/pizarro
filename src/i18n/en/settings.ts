@@ -253,4 +253,7 @@ export const settings: Record<string, string> = {
   "La sesión ya estaba cerrada": "The session was already closed",
   "Cerró {n} sesión(es) en otros dispositivos": "Signed out {n} session(s) on other devices",
   "Desconectó su cuenta de Google": "Disconnected their Google account",
+  // Historial de versiones: la página trae las más recientes y el resto se pide
+  "Ver más": "Show more",
+  "Buscando en todas las versiones…": "Searching all versions…",
 };

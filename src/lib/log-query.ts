@@ -39,6 +39,7 @@ export const READ_ACTIONS = [
   "releases.getReleaseTaskDetails",
   "releases.countReleasesOn",
   "releases.getReleaseContent",
+  "changelog.getOlderVersions",
   "aiPlan.getAiPlanSetup",
   "aiPlan.getAiPlanTaskDetails",
   // Acción retirada (el diálogo usa projects.listProjectStarts): sus filas antiguas siguen en los logs hasta caducar.
