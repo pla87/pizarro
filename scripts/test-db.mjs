@@ -280,10 +280,19 @@ try {
   for (let i = 0; i < jobs && !interrupted; i++) dbs.push(await copyOf(template));
   if (!interrupted) console.log(`${all.length} ficheros en ${jobs} ${jobs === 1 ? "base" : "bases a la vez"} (plantilla ${template}, migrada en ${secs(performance.now() - t0)})${seed !== null ? `; orden al azar con semilla ${seed}` : ""}.`);
 
-  const queue = [...parallel];
-  await Promise.all(dbs.map(async (db) => {
-    for (let file; !interrupted && (file = queue.shift()); ) await runFile(file, db);
-  }));
+  if (seed === null) {
+    // Cada base toma el siguiente fichero pendiente en cuanto acaba el suyo (lo más rápido).
+    const queue = [...parallel];
+    await Promise.all(dbs.map(async (db) => {
+      for (let file; !interrupted && (file = queue.shift()); ) await runFile(file, db);
+    }));
+  } else {
+    // Con semilla, el reparto es fijo (el fichero i va a la base i % jobs, en ese orden): la misma semilla y las mismas
+    // --jobs repiten exactamente qué ficheros pasan en cada base y detrás de cuáles, sea cual sea la velocidad.
+    await Promise.all(dbs.map(async (db, j) => {
+      for (const file of parallel.filter((_, i) => i % dbs.length === j)) if (!interrupted) await runFile(file, db);
+    }));
+  }
   for (const file of serial) if (!interrupted) await runFile(file, dbs[0]);
 
   if (!interrupted) {
@@ -292,7 +301,7 @@ try {
     if (totals.skipped) parts.push(`${totals.skipped} omitidas`);
     if (totals.todo) parts.push(`${totals.todo} pendientes`);
     console.log(`\n${totals.files} ficheros, ${totals.tests} pruebas: ${parts.join(", ")}. ${secs(performance.now() - t0)} en total.`);
-    if (failed.length && seed !== null) console.log(`Orden al azar: repítelo con npm run test:db -- --shuffle=${seed}`);
+    if (failed.length && seed !== null) console.log(`Orden al azar: repítelo con npm run test:db -- --shuffle=${seed} --jobs ${jobs}`);
     if (failed.length) console.log(`Fallan:\n${failed.map((f) => `  ${f}`).join("\n")}`);
     code = failed.length || totals.files < all.length ? 1 : 0;
   }

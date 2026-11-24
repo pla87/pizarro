@@ -3,7 +3,7 @@
 # secretos. El build de producción y las e2e se siguen pasando en local antes de fusionar (docs/HANDOFF.md §4).
 # Sin pasada al hacer push a main: la de la PR prueba su mezcla con el main de ese momento. Si main avanza después
 # (otra PR fusionada), el main que resulta no lo ha probado nadie: «Update branch» en la PR repite la pasada, y la release
-# (.github/workflows/release.yml) vuelve a pasar estas comprobaciones sobre el commit que publica antes de etiquetar
+# (.github/workflows/release.yml) vuelve a pasar las del job «checks» (no las de base) sobre el commit que publica antes de etiquetar
 # nada. A mano: Actions → Comprobaciones → Run workflow.
 name: Comprobaciones
 
