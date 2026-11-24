@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CollisionDetection } from "@dnd-kit/core";
-import { createBoardCollisionDetection } from "../src/lib/collision";
+import { COLUMN_DRAG_PREFIX, columnDragCollision, createBoardCollisionDetection } from "../src/lib/collision";
 
 // Versiones mínimas de los algoritmos de dnd-kit (el paquete real necesita React).
 const inside = (r: { left: number; right: number; top: number; bottom: number }, p: { x: number; y: number }) =>
@@ -133,4 +133,15 @@ test("cada medida se lee una vez por detección y solo las de la columna bajo el
   assert.ok(reads.size > 0);
   for (const [id, n] of reads) assert.ok(n <= 2, `${id}: ${n} lecturas`);
   assert.equal(reads.get("c0"), undefined);
+});
+
+test("arrastrando una columna solo cuentan las columnas, por la horizontal", () => {
+  const args = scenario({ x: 260, y: 320 });
+  const column = { ...args, active: { ...args.active, id: `${COLUMN_DRAG_PREFIX}a` } } as Args;
+  assert.deepEqual(columnDragCollision(column).map((c) => c.id), ["col:c"]);
+  // En el hueco entre dos columnas (o por encima de las tarjetas), la de centro más cercano; nunca una tarjeta.
+  assert.equal(columnDragCollision({ ...column, pointerCoordinates: { x: 106, y: 320 } } as Args)[0]?.id, "col:b");
+  assert.equal(columnDragCollision({ ...column, pointerCoordinates: { x: 50, y: 330 } } as Args)[0]?.id, "col:a");
+  // Más allá de la última, la última.
+  assert.equal(columnDragCollision({ ...column, pointerCoordinates: { x: 900, y: 10 } } as Args)[0]?.id, "col:c");
 });

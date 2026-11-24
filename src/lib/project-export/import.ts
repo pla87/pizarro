@@ -560,6 +560,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
             storageQuotaMb,
             // Los programas importados con la Documentación siguen su numeración (el siguiente no repite un «_vN»).
             programVersion: data.project.programVersion ?? 0,
+            templateKey: data.project.templateKey ?? null,
           },
         });
         // Quien importa: miembro si es privado, o proyecto de trabajo suyo si es de equipo (como al crear uno).

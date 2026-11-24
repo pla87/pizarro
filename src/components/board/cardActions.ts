@@ -44,6 +44,8 @@ interface Deps {
   getSelected: () => ReadonlySet<string>;
   /** Mueve el grupo en bloque (Board.tsx, lo mismo que soltar una selección arrastrada); `focusId`: la tarjeta con el foco. */
   moveBlock: (group: string[], columnId: string, placement: BlockPlacement, focusId?: string) => Promise<void>;
+  /** Aviso «Asignada a X · vence el …» con «Deshacer» tras entrar en una columna «Asignación a persona» (false: no había nada). */
+  assignedNotice: (assigned: readonly { id: string; assigneeId: string; dueDate: string | null }[], undoId: string | undefined) => boolean;
 }
 
 /**
@@ -139,7 +141,7 @@ export function useCardActions(deps: Deps) {
         if (latest) patchTask(id, { position: res.data.position });
         res.data.spawned.forEach(upsertTask);
         for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
-        toast(t("Movida a «{name}»", { name: target.name }));
+        if (!ref.current.assignedNotice(res.data.assigned, res.data.undo.id)) toast(t("Movida a «{name}»", { name: target.name }));
       },
 
       moveWithinColumn: async (id: string, dir: -1 | 1) => {

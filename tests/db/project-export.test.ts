@@ -356,6 +356,11 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     // Sin el dato (archivos anteriores), empieza en 0.
     const old = await importProjectFile(await craft(minimal()), asImporter(admin), { isPrivate: true });
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: old.projectId } })).programVersion, 0);
+    // La plantilla de la que salió (los roles que sugiere el menú de la columna) también va y vuelve; sin ella, null.
+    const tk = await importProjectFile(await craft({ ...data, project: { ...data.project, templateKey: "curso-master" } }), asImporter(admin), { isPrivate: true });
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: tk.projectId } })).templateKey, "curso-master");
+    assert.equal(projectJsonOf(await buildProjectExport(tk.projectId, { attachments: false, scope: "all" }, ADMIN_EXPORT)).project.templateKey, "curso-master");
+    assert.equal((await db.project.findUniqueOrThrow({ where: { id: old.projectId } })).templateKey, null);
   });
 
   test("plan de trabajo para IA: el turno de cada columna (planCount) va y vuelve; sin el dato, empieza en 0", async () => {

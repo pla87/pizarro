@@ -1,5 +1,6 @@
 import type { Announcements, DndContextProps } from "@dnd-kit/core";
 import type { T } from "@/i18n/shared";
+import { COLUMN_DRAG_PREFIX } from "@/lib/collision";
 
 /**
  * Textos del lector de pantalla al arrastrar (prop `accessibility` de los DndContext). Sin esto dnd-kit los da en inglés
@@ -33,9 +34,15 @@ export function boardDragA11y(
     if ("evergreen" in at) return group ? t("la columna {column}", { column: at.evergreen }) : t("las tareas fijas de {column}", { column: at.evergreen });
     return t("la columna {column}", { column: at.column });
   };
+  // Arrastre de una columna por su cabecera (Board.tsx): sus propios avisos.
+  const isColumn = (id: string | number) => String(id).startsWith(COLUMN_DRAG_PREFIX);
   const announcements: Announcements = {
     onDragStart: ({ active }) => {
       const title = titleOf(String(active.id));
+      if (isColumn(active.id)) {
+        lastPlace = null;
+        return t("Has cogido la columna «{title}».", { title });
+      }
       const n = countOf(String(active.id));
       lastPlace = place(String(active.id), n > 1);
       if (n > 1) return lastPlace ? t("Has cogido {n} tarjetas («{title}» y {more} más), en {place}.", { n, title, more: n - 1, place: lastPlace }) : t("Has cogido {n} tarjetas («{title}» y {more} más).", { n, title, more: n - 1 });
@@ -43,6 +50,12 @@ export function boardDragA11y(
     },
     onDragOver: ({ active, over }) => {
       const title = titleOf(String(active.id));
+      if (isColumn(active.id)) {
+        const at = over ? place(String(over.id), false) : null;
+        if (at === lastPlace) return undefined;
+        lastPlace = at;
+        return at ? t("La columna «{title}» irá al sitio de {place}.", { title, place: at }) : undefined;
+      }
       const n = countOf(String(active.id));
       const at = over ? place(String(over.id), n > 1) : null;
       if (at === lastPlace) return undefined;
@@ -52,12 +65,17 @@ export function boardDragA11y(
     },
     onDragEnd: ({ active, over }) => {
       const title = titleOf(String(active.id));
+      if (isColumn(active.id)) {
+        const at = over ? place(String(over.id), false) : null;
+        return at ? t("Has soltado la columna «{title}» en el sitio de {place}.", { title, place: at }) : t("Has soltado la columna «{title}»: no se mueve.", { title });
+      }
       const n = countOf(String(active.id));
       const at = over ? place(String(over.id), n > 1) : null;
       if (n > 1) return at ? t("Has soltado {n} tarjetas en {place}.", { n, place: at }) : t("Has soltado {n} tarjetas fuera de las columnas: no se mueven.", { n });
       return at ? t("Has soltado «{title}» en {place}.", { title, place: at }) : t("Has soltado «{title}» fuera de las columnas: no se mueve.", { title });
     },
     onDragCancel: ({ active }) => {
+      if (isColumn(active.id)) return t("Arrastre cancelado: la columna «{title}» vuelve a su sitio.", { title: titleOf(String(active.id)) });
       const n = countOf(String(active.id));
       return n > 1 ? t("Arrastre cancelado: las {n} tarjetas vuelven a su sitio.", { n }) : t("Arrastre cancelado: «{title}» vuelve a su sitio.", { title: titleOf(String(active.id)) });
     },

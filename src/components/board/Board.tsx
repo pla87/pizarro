@@ -17,7 +17,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
-import { createBoardCollisionDetection } from "@/lib/collision";
+import { placeColumn } from "@/actions/columns";
+import { showAssignedNotice } from "./assignNotice";
+import { COLUMN_DRAG_PREFIX, columnDragCollision, createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardPageData, BoardTask, LabelOption } from "@/lib/types";
 import { unpackBoardTask, type BoardTaskWire } from "@/lib/board-task-wire";
@@ -28,7 +30,7 @@ import { UndoButton } from "../UndoButton";
 import { setBoardModalOpen, setBoardRefresh } from "../undo-context";
 import { PlusStack } from "../ui/PlusStack";
 import { useFloatingRect } from "../ui/useFloatingRect";
-import { useT } from "@/i18n/client";
+import { useIntlLocale, useT } from "@/i18n/client";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { useToast } from "../ui/Toast";
 import { cn } from "../ui/cn";
@@ -98,6 +100,8 @@ const MAX_COLUMN_HISTORY = 5;
 const baseCollisionDetection = createBoardCollisionDetection({ closestCorners, pointerWithin });
 /** Si el puntero está dentro del panel de tareas fijas, manda él; si no, la detección normal del tablero. */
 const boardCollisionDetection: CollisionDetection = (args) => {
+  // Arrastre de una columna por su cabecera: solo cuentan las columnas.
+  if (String(args.active.id).startsWith(COLUMN_DRAG_PREFIX)) return columnDragCollision(args);
   if (args.pointerCoordinates) {
     const visible = args.droppableContainers.filter(
       (c) => String(c.id).startsWith(EVERGREEN_DROPPABLE_PREFIX) && (args.droppableRects.get(c.id)?.width ?? 0) > 0,
@@ -261,6 +265,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   const toast = useToast();
   const confirm = useConfirm();
   const t = useT();
+  const locale = useIntlLocale();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   // Descripción del proyecto recién creado desde una plantilla (ProjectIntroNotice), una sola vez.
@@ -411,7 +416,17 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   }, []);
 
   // Estado temporal durante el arrastre.
-  const [dragItems, setDragItems] = useState<Items | null>(null);
+  const [dragItems, setDragItemsState] = useState<Items | null>(null);
+  // Lo último puesto en `dragItems`, sin esperar al dibujo: con un movimiento rápido dnd-kit avisa de dos cambios de lista
+  // seguidos antes de que el tablero se vuelva a dibujar, y con el estado del dibujo anterior el segundo se perdía (la
+  // tarjeta se quedaba en la columna intermedia y, al soltar, iba allí). onDragOver y onDragEnd leen esto.
+  const dragItemsNow = useRef<Items | null>(null);
+  const setDragItems = useCallback((next: Items | null) => {
+    dragItemsNow.current = next;
+    setDragItemsState(next);
+  }, []);
+  // Arrastre de una columna por su cabecera: cuál y sobre cuál está (para la marca del hueco).
+  const [columnDrag, setColumnDrag] = useState<{ id: string; over: string | null } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const dragOrigin = useRef<{ columnId: string; index: number } | null>(null);
   // Último cambio de lista de la tarjeta arrastrada (ver onDragOver: evita el vaivén entre dos listas).
@@ -1070,6 +1085,10 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       return next;
     });
 
+  /** Tras entrar tarjetas en una columna «Asignación a persona»: «Asignada a X · vence el …» con «Deshacer» (assignNotice.ts). */
+  const assignedNotice = (assigned: readonly { id: string; assigneeId: string; dueDate: string | null }[], undoId: string | undefined) =>
+    showAssignedNotice(assigned, undoId, { users: data.users, today: data.today, locale, t, toast, track, refresh });
+
   /**
    * Mueve una selección en bloque (soltarla arrastrada, o Alt+flechas sobre una de ellas; ver groupDrag.ts): todas seguidas
    * en `placement`, en el orden del tablero, con una sola acción (moveTasks con vecinas) y un solo paso de deshacer. La
@@ -1113,12 +1132,13 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     res.data.spawned.forEach(upsertTask);
     // Columna «Asignación a persona»: responsable y fecha que les ha puesto el servidor.
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
+    if (assignedNotice(res.data.assigned, res.data.undo.id)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
     const n = res.data.moved.length;
     toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
   };
 
-  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, getItems: itemsNow, moveTurns, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock });
+  const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, getItems: itemsNow, moveTurns, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock, assignedNotice: (a, undoId) => assignedNotice(a, undoId) });
 
   // El contexto solo cambia si cambia su contenido: los datos del servidor llegan como objetos nuevos en cada
   // refresco aunque sean iguales, y sin esto todas las tarjetas se redibujarían cada vez.
@@ -1240,6 +1260,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
     res.data.spawned.forEach(upsertTask);
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
+    if (assignedNotice(res.data.assigned, res.data.undo.id)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
@@ -1393,6 +1414,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   );
   // Avisos del lector de pantalla al arrastrar: título de la tarjeta y nombre de la columna (no el id).
   const dragTitleOf = (id: string) => {
+    if (id.startsWith(COLUMN_DRAG_PREFIX)) return columns.find((c) => c.id === id.slice(COLUMN_DRAG_PREFIX.length))?.name ?? t("Columna");
     const task = taskById.get(id);
     return task ? mentionsToPlain(task.title) : t("Tarea");
   };
@@ -1402,7 +1424,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       const column = name(id.slice(EVERGREEN_DROPPABLE_PREFIX.length));
       return column ? { evergreen: column } : null;
     }
-    const container = findContainer(dragItems ?? baseItems, id);
+    const container = findContainer(dragItemsNow.current ?? baseItems, id);
     // Tarea fija aún sin soltar: sigue en el panel de su columna.
     if (container === EVERGREEN_ORIGIN) {
       const column = name(taskById.get(id)?.columnId);
@@ -1414,6 +1436,10 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = String(active.id);
+    if (id.startsWith(COLUMN_DRAG_PREFIX)) {
+      setColumnDrag({ id: id.slice(COLUMN_DRAG_PREFIX.length), over: null });
+      return;
+    }
     const pointer = typeof PointerEvent !== "undefined" && activatorEvent instanceof PointerEvent ? activatorEvent : null;
     mouseDrag.current = pointer?.pointerType === "mouse";
     duplicateRef.current = mouseDrag.current && !!(pointer?.ctrlKey || pointer?.altKey);
@@ -1443,6 +1469,12 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   /** Mueve la tarjeta arrastrada a otra columna en el estado temporal del arrastre. */
   const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (String(active.id).startsWith(COLUMN_DRAG_PREFIX)) {
+      const target = over && String(over.id).startsWith(COLUMN_PREFIX) ? String(over.id).slice(COLUMN_PREFIX.length) : null;
+      setColumnDrag((c) => (c && c.over !== target ? { ...c, over: target } : c));
+      return;
+    }
+    const dragItems = dragItemsNow.current;
     if (!over || !dragItems) return;
     const id = String(active.id);
     const overId = String(over.id);
@@ -1463,25 +1495,19 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     // demás, el panel de fijas cambia de alto…), volver allí haría cambiar de nuevo lo que hay debajo, y así sin fin: cada
     // vuelta es un dibujo de dnd-kit seguido de otro del tablero, y React lo corta con «Maximum update depth exceeded»
     // (error #185, la pantalla «Algo ha fallado»). Volver a la lista de la que acaba de salir no se hace hasta pasado un
-    // momento; mientras, la tarjeta se queda donde está (y al soltar va donde se ve).
+    // momento; mientras, la tarjeta se queda donde está (y al soltar va a la lista que hay bajo el puntero: onDragEnd).
     const last = lastContainerMove.current;
     if (last && last.to === from && last.from === to && performance.now() - last.at < PINGPONG_MS) return;
     lastContainerMove.current = { from, to, at: performance.now() };
     // Una fija que sale de su panel a una lista: su fila se vuelve a montar al terminar (ver EvergreenPanel, `remounts`).
     if (from === EVERGREEN_ORIGIN && to !== EVERGREEN_ORIGIN) evergreenLeftPanel.add(id);
-    const dest = to;
-    setDragItems((prev) => {
-      if (!prev || findContainer(prev, id) !== from) return prev;
-      if (dest === EVERGREEN_ORIGIN) return { ...prev, [from]: prev[from]!.filter((x) => x !== id), [EVERGREEN_ORIGIN]: [id] };
-      return {
-        ...prev,
-        [from]: prev[from]!.filter((x) => x !== id),
-        [dest]: insertBefore(prev[dest]!, id, overId),
-      };
-    });
+    setDragItems(to === EVERGREEN_ORIGIN
+      ? { ...dragItems, [from]: dragItems[from]!.filter((x) => x !== id), [EVERGREEN_ORIGIN]: [id] }
+      : { ...dragItems, [from]: dragItems[from]!.filter((x) => x !== id), [to]: insertBefore(dragItems[to]!, id, overId) });
   };
 
   const cancelDrag = () => {
+    setColumnDrag(null);
     lastContainerMove.current = null;
     draggingCard.set(null);
     dragGroup.current = null;
@@ -1551,9 +1577,44 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     if (copyNotice) toast(copyNotice, "error");
   };
 
+  /** Soltar la cabecera de una columna sobre otra: pasa a ocupar su sitio (placeColumn, un paso de deshacer). */
+  const dropColumn = async (id: string, overId: string | null) => {
+    const sorted = [...columnsNow.current].sort((a, b) => a.position - b.position);
+    const from = sorted.findIndex((c) => c.id === id);
+    const to = overId ? sorted.findIndex((c) => c.id === overId) : -1;
+    if (from < 0 || to < 0 || from === to) return;
+    const before = columnsNow.current;
+    const order = sorted.filter((c) => c.id !== id);
+    order.splice(to, 0, sorted[from]!);
+    setColumns(order.map((c, k) => ({ ...c, position: (k + 1) * 1024 })));
+    const res = await track(placeColumn(id, to));
+    if (!res.ok) {
+      setColumns(before);
+      toast(res.error, "error");
+      refresh();
+    }
+  };
+
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (String(active.id).startsWith(COLUMN_DRAG_PREFIX)) {
+      const target = (over && String(over.id).startsWith(COLUMN_PREFIX) ? String(over.id).slice(COLUMN_PREFIX.length) : null) ?? columnDrag?.over ?? null;
+      cancelDrag();
+      if (over) void dropColumn(String(active.id).slice(COLUMN_DRAG_PREFIX.length), target);
+      return;
+    }
     const origin = dragOrigin.current;
-    const current = dragItems;
+    let current = dragItemsNow.current;
+    // Manda dónde se suelta: si la última lista anotada no es la que hay bajo el puntero (un aviso de cambio de lista que
+    // no llegó a aplicarse), la tarjeta pasa ahora a esa. Antes podía quedarse en una columna intermedia.
+    if (over && current && !String(over.id).startsWith(EVERGREEN_DROPPABLE_PREFIX)) {
+      const id = String(active.id);
+      const overId = String(over.id);
+      const now = findContainer(current, id);
+      const target = findContainer(current, overId);
+      if (now && target && target !== now && target !== EVERGREEN_ORIGIN) {
+        current = { ...current, [now]: current[now]!.filter((x) => x !== id), [target]: insertBefore(current[target]!, id, overId) };
+      }
+    }
     const copy = mouseDrag.current && duplicateRef.current;
     // Ctrl al soltar una selección: se copia solo la tarjeta cogida (duplicar es siempre de una en una).
     const group = copy ? null : dragGroup.current;
@@ -1620,6 +1681,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     if (res.ok) {
       res.data.spawned.forEach(upsertTask);
       for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
+      assignedNotice(res.data.assigned, res.data.undo.id);
     }
   };
 
@@ -1759,13 +1821,22 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
               total={stableColumns.length}
               droppableId={COLUMN_PREFIX + column.id}
               mobileHidden={column.id !== activeMobileColumn}
+              columnDragging={columnDrag?.id === column.id}
+              columnDrop={columnDrag && columnDrag.over === column.id && columnDrag.id !== column.id
+                ? (stableColumns.findIndex((c) => c.id === columnDrag.id) < i ? "after" : "before")
+                : null}
             />
           ))}
           <NewColumnButton variant="desktop" />
         </div>
         {/* Sin animación de soltado con Ctrl/Alt (la copia aparece donde se suelta) ni al cambiar de columna (la tarjeta ya está en destino). */}
-        <DragOverlay dropAnimation={duplicating || skipDropAnimation ? null : DROP_ANIMATION}>
-          {activeTask ? (
+        <DragOverlay dropAnimation={duplicating || skipDropAnimation || columnDrag ? null : DROP_ANIMATION}>
+          {columnDrag ? (
+            // La cabecera de la columna que se arrastra (el hueco al que irá lo marca la columna de destino).
+            <div data-column-drag-ghost className="flex h-full items-center truncate rounded-xl bg-white px-3 text-sm font-semibold shadow-lg ring-2 ring-brand-500 dark:bg-slate-800">
+              {stableColumns.find((c) => c.id === columnDrag.id)?.name}
+            </div>
+          ) : activeTask ? (
             <div className={cn("relative", duplicating && "cursor-copy")} data-drag-stack={stack || undefined}>
               {/* Una selección se arrastra como un montón: cartas detrás (dos como mucho) y una insignia con cuántas son. */}
               {stack && groupSize > 2 && <span aria-hidden className={cn(STACK_CARD, "translate-x-3 translate-y-3 rotate-[7deg]")} />}
@@ -1786,7 +1857,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
         </DragOverlay>
       </DndContext>
     ),
-    [sensors, dragAccessibility, dndHandlers, stableColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, t],
+    [sensors, dragAccessibility, dndHandlers, stableColumns, items, shownEvergreen, cardCounts, activeMobileColumn, duplicating, skipDropAnimation, activeTask, stack, groupSize, columnDrag, t],
   );
   const headerRowRef = useRef<HTMLDivElement>(null);
   const headerNameRef = useRef<HTMLHeadingElement>(null);

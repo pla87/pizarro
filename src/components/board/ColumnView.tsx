@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
-import { useDroppable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDefaultKind, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
@@ -13,6 +13,7 @@ import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { isAssignColumn } from "@/lib/column-assign-core";
+import { COLUMN_DRAG_PREFIX } from "@/lib/collision";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { useConfirm } from "../ui/ConfirmDialog";
@@ -49,6 +50,10 @@ interface Props {
   total: number;
   droppableId: string;
   mobileHidden: boolean;
+  /** Arrastrando otra columna sobre esta: se pondría antes o después de ella (la marca en el borde). */
+  columnDrop?: "before" | "after" | null;
+  /** Es la columna que se está arrastrando (se atenúa en su sitio). */
+  columnDragging?: boolean;
 }
 
 const NO_IDS: string[] = [];
@@ -97,13 +102,20 @@ function WeekPdfButton({ column, projectId, empty, hint }: { column: BoardColumn
  * Columna del tablero. Memorizada: al arrastrar una tarjeta de una columna a otra el tablero se redibuja, pero solo
  * cambian las listas de origen y destino (Board conserva el mismo array en las demás), así que el resto no se repinta.
  */
-export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenIds = NO_IDS, cardCount, index, total, droppableId, mobileHidden }: Props) {
-  const { openNewTask, openRelease, setSelectedMany, project } = useBoard();
+export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenIds = NO_IDS, cardCount, index, total, droppableId, mobileHidden, columnDrop = null, columnDragging = false }: Props) {
+  const { openNewTask, openRelease, setSelectedMany, project, kinds } = useBoard();
   const t = useT();
   const sc = useShortcut();
   const selectedHere = useSelectedCount(taskIds);
   const allSelected = taskIds.length > 0 && selectedHere === taskIds.length;
   const { setNodeRef, isOver } = useDroppable({ id: droppableId });
+  // La cabecera se arrastra para cambiar la columna de sitio (escritorio con ratón; si no, «Mover a la izquierda/derecha»
+  // del menú o Alt+flechas sobre el nombre). No es un droppable: Board la reconoce por COLUMN_DRAG_PREFIX.
+  const dragEnabled = useColumnDragEnabled() && total > 1;
+  const { setNodeRef: setDragNode, listeners: dragListeners } = useDraggable({ id: COLUMN_DRAG_PREFIX + column.id, disabled: !dragEnabled });
+  const moveColumnBy = useMoveColumn(column);
+  // Tipo por defecto de la columna (si sigue entre los del proyecto): un punto de su color junto al recuento.
+  const defaultKind = column.defaultKindId ? kinds.find((k) => k.id === column.defaultKindId) : undefined;
   const isNextRelease = column.role === "NEXT_RELEASE";
   // La release y los planes para IA acaban en su panel de tareas fijas («Siempre en la release» / «… en el plan»).
   const withFixed = hasEvergreenTasks(column.role);
@@ -133,7 +145,13 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   return (
     <section
       ref={setNodeRef}
+      data-column-id={column.id}
       className={cn(
+        "relative",
+        // Hueco al que iría la columna arrastrada: una barra en ese borde.
+        columnDrop === "before" && "before:absolute before:inset-y-0 before:-left-2 before:w-1 before:rounded-full before:bg-brand-500 before:content-['']",
+        columnDrop === "after" && "after:absolute after:inset-y-0 after:-right-2 after:w-1 after:rounded-full after:bg-brand-500 after:content-['']",
+        columnDragging && "opacity-50",
         // data-more-below (ver useMoreBelow): quedan tarjetas por debajo de lo visible; la columna sigue, sin esquinas abajo.
         "group/column flex w-full shrink-0 flex-col rounded-xl data-[more-below]:rounded-b-none",
         wipOver ? "bg-red-50/90 ring-1 ring-red-300 dark:bg-red-950/30 dark:ring-red-500/40" : "bg-slate-100/80 dark:bg-slate-900/60",
@@ -150,7 +168,16 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
       aria-label={column.name}
       data-wip-over={wipOver || undefined}
     >
-      <header className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
+      <header
+        // El arrastre lleva la cabecera (el fantasma que se ve al arrastrar tiene su tamaño).
+        ref={setDragNode}
+        className={cn("flex items-center gap-1.5 px-3 pt-2.5 pb-1.5", dragEnabled && "cursor-grab active:cursor-grabbing")}
+        // Solo el ratón sobre la cabecera (no sobre sus botones) empieza el arrastre de la columna.
+        onPointerDown={dragEnabled ? (e) => {
+          if ((e.target as HTMLElement).closest("button, a, input, select, [role=menu]")) return;
+          dragListeners?.onPointerDown?.(e);
+        } : undefined}
+      >
         {taskIds.length > 0 && (
           <button
             type="button"
@@ -168,7 +195,22 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             {allSelected ? <Check size={12} strokeWidth={3} /> : selectedHere ? <Minus size={12} strokeWidth={3} /> : null}
           </button>
         )}
-        <h2 className="min-w-0 truncate text-sm font-semibold" title={column.name}>{column.name}</h2>
+        <h2
+          className="min-w-0 truncate rounded text-sm font-semibold"
+          title={dragEnabled ? t("{name} (arrastra la cabecera o pulsa Alt+flechas para moverla)", { name: column.name }) : column.name}
+          // Alternativa de teclado al arrastre: con el foco en el nombre, Alt+← / Alt+→ la mueven (como las tarjetas).
+          tabIndex={dragEnabled ? 0 : undefined}
+          aria-roledescription={dragEnabled ? t("columna que se puede mover") : undefined}
+          aria-keyshortcuts={dragEnabled ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
+          data-column-handle
+          onKeyDown={dragEnabled ? (e) => {
+            if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+            e.preventDefault();
+            void moveColumnBy(e.key === "ArrowLeft" ? -1 : 1, true);
+          } : undefined}
+        >
+          {column.name}
+        </h2>
         {column.role === "PROGRAM" ? (
           <span
             data-session-badge
@@ -198,6 +240,16 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
             {cardCount} / {column.wipLimit}
             {wipOver && <span className="sr-only">{t("Límite superado")}</span>}
           </span>
+        )}
+        {defaultKind && (
+          <span
+            data-column-default-kind
+            className="h-2 w-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20"
+            style={{ backgroundColor: defaultKind.color }}
+            title={t("Tipo por defecto: {name}", { name: defaultKind.name })}
+            role="img"
+            aria-label={t("Tipo por defecto: {name}", { name: defaultKind.name })}
+          />
         )}
         {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
         <div className="ml-auto flex items-center">
@@ -393,6 +445,49 @@ function useMoreBelow(listRef: RefObject<HTMLDivElement | null>, enabled: boolea
   }, [listRef, enabled]);
 }
 
+/** Arrastrar cabeceras de columna: solo en escritorio con ratón (en el móvil hay pestañas; en táctil, el menú). */
+const COLUMN_DRAG_QUERY = "(min-width: 768px) and (pointer: fine)";
+function useColumnDragEnabled(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(COLUMN_DRAG_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(COLUMN_DRAG_QUERY).matches,
+    () => false,
+  );
+}
+
+/**
+ * Mueve la columna un puesto a la izquierda (-1) o a la derecha (+1): «Mover a la izquierda/derecha» del menú y Alt+flechas
+ * sobre su nombre (`keepFocus`: el foco sigue en el nombre, ya en su sitio nuevo). Optimista; si falla, vuelve y avisa.
+ */
+function useMoveColumn(column: BoardColumn): (dir: -1 | 1, keepFocus?: boolean) => Promise<void> {
+  const { setColumns, track, refresh, columns } = useBoard();
+  const toast = useToast();
+  const t = useT();
+  return async (dir, keepFocus = false) => {
+    const sorted = [...columns].sort((a, b) => a.position - b.position);
+    const i = sorted.findIndex((c) => c.id === column.id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= sorted.length) return;
+    const before = columns;
+    [sorted[i], sorted[j]] = [sorted[j]!, sorted[i]!];
+    setColumns(sorted.map((c, k) => ({ ...c, position: (k + 1) * 1024 })));
+    if (keepFocus) {
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-column-id="${CSS.escape(column.id)}"] [data-column-handle]`)?.focus());
+      toast(t("«{name}» movida a la posición {n}", { name: column.name, n: j + 1 }));
+    }
+    const res = await track(moveColumn(column.id, dir));
+    if (!res.ok) {
+      setColumns(before);
+      toast(res.error ?? t("Error"), "error");
+      refresh();
+    }
+  };
+}
+
 /** Suma del coste de las tareas (no archivadas) de una columna «Presupuesto», en la cabecera. */
 function BudgetTotal({ columnId }: { columnId: string }) {
   const locale = useIntlLocale();
@@ -504,19 +599,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
     run(() => renameColumn(column.id, name), () => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, name } : c))));
   };
 
-  const move = (dir: -1 | 1) =>
-    run(
-      () => moveColumn(column.id, dir),
-      () =>
-        setColumns((cols) => {
-          const sorted = [...cols].sort((a, b) => a.position - b.position);
-          const i = sorted.findIndex((c) => c.id === column.id);
-          const j = i + dir;
-          if (j < 0 || j >= sorted.length) return cols;
-          [sorted[i], sorted[j]] = [sorted[j]!, sorted[i]!];
-          return sorted.map((c, k) => ({ ...c, position: (k + 1) * 1024 }));
-        }),
-    );
+  const move = useMoveColumn(column);
 
   // Cambiar el rol puede convertir tareas fijas en normales (lo hace el servidor): se recarga después.
   const setRole = (role: ColumnRoleValue) =>

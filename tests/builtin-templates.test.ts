@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified, RETIRED_BUILTINS } from "../src/lib/builtin-templates";
+import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, CUSTOM_TEMPLATE_KEY, isBuiltinModified, RETIRED_BUILTINS, suggestedColumnRoles } from "../src/lib/builtin-templates";
+import { currentRoleChoice, GENERAL_ROLE_CHOICES, ROLE_CHOICES, splitRoleChoices, type ColumnRoleChoice } from "../src/lib/column-role-choices";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
 import { buildTemplateApplication, parseStoredTemplate, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
@@ -210,4 +211,31 @@ test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie l
   });
   assert.deepEqual(old.columns.map((c) => c.role), ["NONE", "NONE", "NONE"]);
   assert.ok(!(COLUMN_ROLES as readonly string[]).includes("AGENDA") && !(COLUMN_ROLES as readonly string[]).includes("DELIVERY"), "ya no están en el enum (v1.69)");
+});
+
+test("roles sugeridos por plantilla: claves de serie, propias y sin plantilla", () => {
+  // Cada plantilla de serie tiene su lista, con los roles que ya usan sus columnas (lo que trae no sale en «Más roles…»).
+  for (const b of BUILTIN_TEMPLATES) {
+    const list = suggestedColumnRoles(b.key, []);
+    assert.ok(list, b.key);
+    for (const c of b.data.columns) if (c.role !== "NONE") assert.ok(list.includes(c.role as ColumnRoleChoice), `${b.key}: ${c.role}`);
+  }
+  const casa = suggestedColumnRoles("casa-familia", [])!;
+  assert.ok(!casa.includes("NEXT_RELEASE") && !casa.includes("AI_PLAN") && casa.includes("ASSIGN"));
+  // Sin plantilla conocida: todos (null).
+  assert.equal(suggestedColumnRoles(null, []), null);
+  assert.equal(suggestedColumnRoles("ya-no-existe", []), null);
+  // Propia: los de sus columnas más los generales.
+  const own = suggestedColumnRoles(CUSTOM_TEMPLATE_KEY, [{ role: "BUDGET" }, { role: "NONE", assigneeId: "u1" }])!;
+  assert.deepEqual(own, ROLE_CHOICES.filter((r) => [...GENERAL_ROLE_CHOICES, "BUDGET"].includes(r)));
+});
+
+test("el submenú del rol: sugeridos primero, el resto en «Más roles…» y nunca se esconde el actual", () => {
+  assert.deepEqual(splitRoleChoices(null, null), { first: [...ROLE_CHOICES], more: [] });
+  const { first, more } = splitRoleChoices(["WAITING", "ASSIGN"], "NEXT_RELEASE");
+  assert.deepEqual(first, ["NEXT_RELEASE", "WAITING", "ASSIGN"]);
+  assert.equal(first.length + more.length, ROLE_CHOICES.length);
+  assert.ok(!more.includes("NEXT_RELEASE"));
+  assert.equal(currentRoleChoice({ role: "NONE", assign: true }), "ASSIGN");
+  assert.equal(currentRoleChoice({ role: "NONE", assign: false }), null);
 });

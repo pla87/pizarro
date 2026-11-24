@@ -1,5 +1,5 @@
 // Columna «Asignación a persona» (rol NONE con persona y plazo): elegirla en el submenú «Rol de la columna», con la
-// persona y «Vence en N días» en la cabecera y «Añadir personas al proyecto» (lleva a los miembros) con pocas personas;
+// persona y «Vence en N días» en la cabecera y «Añadir personas al proyecto» (abre los miembros en otra pestaña) con pocas personas;
 // lo que entra (creada con el «+», cambiando «Columna» en el detalle, «Mover a…» de la selección, Alt+→) pasa a la
 // persona y, sin fecha, vence hoy + N; con fecha la conserva; Ctrl+Z la devuelve con su responsable y su fecha. Cambiar
 // solo el plazo no pregunta; cambiar la persona pide confirmación con el número de tarjetas. «Generar plan»: PDF
@@ -129,17 +129,22 @@ try {
     await anaCol(page).locator("[data-assign-person]").click();
     await d.waitFor();
     L.eq("ROL: el diálogo abre con la persona y el plazo", [await d.getByLabel("Persona", { exact: true }).inputValue(), await d.getByLabel("Vence en (días, opcional)").inputValue()], ["asig64_ana", "5"]);
-    await d.locator("[data-assign-add-people]").click();
-    await page.waitForURL(/\/settings/, { timeout: 15000 });
-    const u = new URL(page.url());
-    L.eq("ROL: «Añadir personas» lleva a Ajustes del proyecto, en los miembros", [u.pathname, u.searchParams.get("tab"), u.hash], [`/p/${P}/settings`, "general", "#members"]);
-    const members = page.locator("#members").first();
+    // Se abre en otra pestaña: el diálogo sigue abierto aquí, con lo elegido.
+    const [tab] = await Promise.all([page.context().waitForEvent("page"), d.locator("[data-assign-add-people]").click()]);
+    await tab.waitForURL(/\/settings/, { timeout: 15000 });
+    const u = new URL(tab.url());
+    L.eq("ROL: «Añadir personas» abre Ajustes del proyecto en otra pestaña, en los miembros", [u.pathname, u.searchParams.get("tab"), u.hash], [`/p/${P}/settings`, "general", "#members"]);
+    const members = tab.locator("#members").first();
     await members.waitFor({ timeout: 15000 });
     await L.checkEventually("ROL: la sección de miembros queda a la vista", async () => {
       const b = await members.boundingBox();
-      const h = page.viewportSize().height;
+      const h = tab.viewportSize().height;
       return [!!b && b.y < h && b.y + Math.min(b.height, 40) > 0, JSON.stringify(b)];
     });
+    await tab.close();
+    L.eq("ROL: el diálogo sigue abierto en el tablero, con la persona", await d.getByLabel("Persona", { exact: true }).inputValue(), "asig64_ana");
+    await d.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await d.waitFor({ state: "detached" });
     // Con cuatro personas ya no sale.
     await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,'asig64_cai')`, [P]);
     await openBoard(page);
