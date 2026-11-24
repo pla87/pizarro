@@ -835,4 +835,4 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 18.9 WhatsApp con el token caducado (solo si lo usas)
 
-- Si el token de Meta caduca o lo revocas, *Administración → Integraciones → WhatsApp* muestra el último error, como Telegram. Pega un token nuevo, guarda y pulsa **Probar**: el error desaparece al salir bien un envío.
+- Si el token de Meta caduca o lo revocas, *Administración → Integraciones → WhatsApp* muestra el último error, como Telegram. Pega un token nuevo, guarda y pulsa **Probar**: el aviso de prueba debe llegar.
