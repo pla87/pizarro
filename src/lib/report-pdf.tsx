@@ -628,77 +628,14 @@ function checklistDoc(r: ChecklistPdfInput, t: T, locale: string): PagedDoc {
   return { title: `${t("Lista consolidada")} · ${r.project}`, build, footer: <Footer left={<>{r.project} · {r.column}</>} /> };
 }
 
-/** Tarea tal como se entrega al cliente: sin comentarios, notas internas ni datos de personas. */
-interface DeliveryTask {
-  title: string;
-  kind: string;
-  dueDate: string | null;
-  subtaskTotal: number;
-  doneSubtasks: string[];
-}
-
-interface DeliveryPdfInput {
-  project: string;
-  column: string;
-  today: string;
-  tasks: DeliveryTask[];
-}
-
-/** Tamaño de una tarjeta del resumen para el cliente: título, línea de datos y una línea (o más) por subtarea hecha. */
-const deliveryUnits = (x: DeliveryTask) => 2 + textUnits(x.title, 85) + x.doneSubtasks.reduce((n, title) => n + textUnits(`- ${title}`, 110), 0);
+// --- Plan de una columna «Asignación a persona» --------------------------------------------------------------------------
 
 /**
- * Hasta este tamaño la tarjeta no se parte (si no cabe al final de una página, pasa entera a la siguiente). Una más
- * larga podría no caber en una página: @react-pdf la aplastaba sobre la primera (texto encima de texto). Esa se parte
+ * Hasta este tamaño una tarjeta del plan no se parte (si no cabe al final de una página, pasa entera a la siguiente). Una
+ * más larga podría no caber en una página: @react-pdf la aplastaba sobre la primera (texto encima de texto). Esa se parte
  * entre subtareas; el título y la línea de datos van juntos y con algunas subtareas detrás.
  */
-const DELIVERY_UNBROKEN_UNITS = 40;
-
-function deliveryDoc(r: DeliveryPdfInput, t: T, locale: string): PagedDoc {
-  const card = (x: DeliveryTask, units: number) => {
-    const unbroken = units <= DELIVERY_UNBROKEN_UNITS;
-    const head = (
-      <>
-        <Text style={{ fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{x.title}</Text>
-        <Text style={s.small}>
-          {x.kind}
-          {x.dueDate ? ` · ${t("Fecha")}: ${formatDay(x.dueDate, r.today, locale)}` : ""}
-          {x.subtaskTotal > 0 ? ` · ${t("{done} de {total} subtareas hechas", { done: x.doneSubtasks.length, total: x.subtaskTotal })}` : ""}
-        </Text>
-      </>
-    );
-    return (
-      <View style={{ borderBottomWidth: 1, borderBottomColor: C.line, paddingVertical: 6 }} wrap={!unbroken}>
-        {unbroken ? head : <View wrap={false} minPresenceAhead={36}>{head}</View>}
-        {x.doneSubtasks.map((title, j) => (
-          <Text key={j} style={{ marginLeft: 8, marginTop: 1 }}>- {title}</Text>
-        ))}
-      </View>
-    );
-  };
-  const build = (): Block[] => [
-    {
-      units: 8,
-      node: (
-        <>
-          <View style={s.header}>
-            <Text style={s.eyebrow}>{t("Resumen para el cliente")}</Text>
-            <Text style={s.title}>{r.project}</Text>
-            <Text style={s.meta}>{r.column} · {formatDay(r.today, undefined, locale)} · {r.tasks.length === 1 ? t("1 tarea") : t("{n} tareas", { n: r.tasks.length.toLocaleString(locale) })}</Text>
-          </View>
-          {r.tasks.length === 0 && <Text style={s.small}>{t("No hay tareas en esta columna.")}</Text>}
-        </>
-      ),
-    },
-    ...r.tasks.map((x) => {
-      const units = deliveryUnits(x);
-      return { units, node: card(x, units) };
-    }),
-  ];
-  return { title: `${t("Resumen para el cliente")} · ${r.project}`, build, footer: <Footer left={r.project} /> };
-}
-
-// --- Plan de una columna «Asignación a persona» --------------------------------------------------------------------------
+const CARD_UNBROKEN_UNITS = 40;
 
 /** Tamaño de una tarea del plan: título, línea de datos (con las etiquetas), resumen de la descripción y subtareas pendientes. */
 const planTaskUnits = (x: AssignPlanTask) =>
@@ -709,7 +646,7 @@ const planTaskUnits = (x: AssignPlanTask) =>
 function assignPlanDoc(r: AssignPlanPdfInput, t: T, locale: string): PagedDoc {
   const total = r.groups.reduce((n, g) => n + g.tasks.length, 0);
   const card = (x: AssignPlanTask, overdue: boolean, units: number) => {
-    const unbroken = units <= DELIVERY_UNBROKEN_UNITS;
+    const unbroken = units <= CARD_UNBROKEN_UNITS;
     const meta = [x.kind, x.priority ? `${t("Prioridad")}: ${t(PRIORITY_LABEL[x.priority as keyof typeof PRIORITY_LABEL] ?? x.priority)}` : null, x.labels.length ? x.labels.join(", ") : null].filter(Boolean).join(" · ");
     const head = (
       <>
@@ -994,7 +931,6 @@ export type PdfJob = (
   | { kind: "report"; locale: Locale; input: Report }
   | { kind: "weekPlan"; locale: Locale; input: WeekPlanPdfInput }
   | { kind: "checklist"; locale: Locale; input: ChecklistPdfInput }
-  | { kind: "delivery"; locale: Locale; input: DeliveryPdfInput }
   | { kind: "program"; locale: Locale; input: ProgramPdfInput }
   | { kind: "assignPlan"; locale: Locale; input: AssignPlanPdfInput }
 ) & { singlePageUnits?: number };
@@ -1009,7 +945,6 @@ function jobDoc(raw: PdfJob): PagedDoc {
     case "report": return reportDoc(pdfSafeData(raw.input), t, locale);
     case "weekPlan": return weekPlanDoc(pdfSafeData(raw.input), t, locale);
     case "checklist": return checklistDoc(pdfSafeData(raw.input), t, locale);
-    case "delivery": return deliveryDoc(pdfSafeData(raw.input), t, locale);
     case "assignPlan": return assignPlanDoc(pdfSafeData(raw.input), t, locale);
     default: throw new Error(`Tipo de PDF desconocido: ${(raw as { kind: unknown }).kind}`);
   }

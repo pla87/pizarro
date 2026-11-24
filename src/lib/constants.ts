@@ -9,21 +9,21 @@ export function kindBadgeStyle(color: string): CSSProperties {
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 
-export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "AGENDA", "ROUTINES", "DELIVERY", "BUDGET", "PROGRAM", "AI_PLAN"] as const;
+export const COLUMN_ROLES = ["NONE", "NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "WEEKLY_PLAN", "CHECKLIST", "REVIEW", "ROUTINES", "BUDGET", "PROGRAM", "AI_PLAN"] as const;
 export type ColumnRoleValue = (typeof COLUMN_ROLES)[number];
 
 /**
- * Roles retirados (v1.68): «Agenda» (el calendario suscrito ya da las fechas) y «Entrega al cliente». Siguen en el enum
- * hasta la versión siguiente (expandir y contraer), pero no se ofrecen ni se escriben: lo que aún los traiga (un proyecto
- * exportado, una plantilla antigua, la base tras volver a una versión anterior) queda como «Sin rol» (liveColumnRole).
+ * Roles retirados: «Agenda» (el calendario suscrito ya da las fechas) y «Entrega al cliente». Dejaron de ofrecerse en la
+ * v1.68 y salieron del enum en la v1.69, pero aún pueden llegar como texto (un `.pizarro.zip` o JSON exportado con la
+ * v1.67, una plantilla guardada, una entrada antigua de deshacer): se aceptan y se leen como «Sin rol» (liveColumnRole).
  */
-const RETIRED_COLUMN_ROLES = ["AGENDA", "DELIVERY"] as const satisfies readonly ColumnRoleValue[];
-export type SelectableColumnRole = Exclude<ColumnRoleValue, (typeof RETIRED_COLUMN_ROLES)[number]>;
-/** Los roles que se pueden elegir (menú de la columna, editor de plantillas). */
-export const SELECTABLE_COLUMN_ROLES = COLUMN_ROLES.filter((r): r is SelectableColumnRole => !(RETIRED_COLUMN_ROLES as readonly string[]).includes(r));
+const RETIRED_COLUMN_ROLES = ["AGENDA", "DELIVERY"] as const;
+type RetiredColumnRole = (typeof RETIRED_COLUMN_ROLES)[number];
+/** Los roles que se aceptan al leer una entrada (los de ahora y los retirados). */
+export const INPUT_COLUMN_ROLES = [...COLUMN_ROLES, ...RETIRED_COLUMN_ROLES] as const;
 /** El rol tal como se guarda ahora: uno retirado pasa a NONE. */
-export function liveColumnRole(role: ColumnRoleValue): SelectableColumnRole {
-  return (RETIRED_COLUMN_ROLES as readonly string[]).includes(role) ? "NONE" : (role as SelectableColumnRole);
+export function liveColumnRole(role: ColumnRoleValue | RetiredColumnRole): ColumnRoleValue {
+  return (RETIRED_COLUMN_ROLES as readonly string[]).includes(role) ? "NONE" : (role as ColumnRoleValue);
 }
 
 /** Roles que solo puede tener una columna por proyecto (el resto de roles pueden repetirse). */
@@ -51,7 +51,7 @@ export function releaseTemplateRows<R extends { kind: string }>(rows: R[]): (R &
 export const DEFAULT_WAITING_DAYS = 3;
 export const MAX_WAITING_DAYS = 365;
 
-export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
+export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue | RetiredColumnRole, string> = {
   NONE: "Sin rol",
   NEXT_RELEASE: "Siguiente salto (genera releases)",
   IN_PRODUCTION: "En producción (destino al desplegar)",
@@ -59,7 +59,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
   WEEKLY_PLAN: "Planificación semanal",
   CHECKLIST: "Lista consolidada",
   REVIEW: "Revisión con requisitos",
-  // Los retirados (AGENDA, DELIVERY) conservan su nombre: lo usan los registros y una columna que aún lo tenga.
+  // Los retirados (AGENDA, DELIVERY) conservan su nombre: lo usan los registros antiguos.
   AGENDA: "Agenda",
   ROUTINES: "Rutinas",
   DELIVERY: "Entrega al cliente",
@@ -69,7 +69,7 @@ export const COLUMN_ROLE_LABEL: Record<ColumnRoleValue, string> = {
 };
 
 /** Explicación de una línea de cada rol (se ve al pasar por encima en el menú de la columna). */
-export const COLUMN_ROLE_HINT: Record<SelectableColumnRole, string> = {
+export const COLUMN_ROLE_HINT: Record<ColumnRoleValue, string> = {
   NONE: "Columna normal, sin funciones especiales.",
   NEXT_RELEASE: "Sus tarjetas forman la siguiente release (botón «Generar release»).",
   IN_PRODUCTION: "Las tarjetas de una release publicada pasan aquí.",

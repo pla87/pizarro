@@ -1,4 +1,4 @@
-// Paginación de los PDF largos: la lista consolidada, el informe del proyecto y el resumen para el cliente en tramos salen
+// Paginación de los PDF largos: la lista consolidada, el informe del proyecto y el plan de una persona en tramos salen
 // con las mismas páginas que en un solo <Page>. Separadas de report-pages.test.ts para que corran en paralelo.
 import { describe, test } from "node:test";
 import { assertSamePages, words } from "./report-pages-helpers";
@@ -27,11 +27,12 @@ describe("PDF largos en tramos: mismas páginas que en un solo <Page>", () => {
     await assertSamePages({ kind: "report", locale: "es", input: report }, 10);
   });
 
-  test("resumen para el cliente (tarjetas)", async () => {
+  test("plan de una persona (tarjetas)", async () => {
     const tasks = Array.from({ length: 160 }, (_, i) => ({
-      title: `Entrega ${i} ${words(i, 15)}`, kind: "Funcionalidad", dueDate: i % 3 ? "2026-12-01" : null, subtaskTotal: i % 6,
-      doneSubtasks: Array.from({ length: Math.floor((i % 6) / 2) }, (_, k) => `Subtarea ${k} ${words(i + k, 16)}`),
+      title: `Tarea ${i} ${words(i, 15)}`, kind: "Funcionalidad", priority: null, dueDate: i % 3 ? "2026-12-01" : null, labels: [],
+      summary: i % 4 ? [words(i, 18)] : [],
+      pendingSubtasks: Array.from({ length: Math.floor((i % 6) / 2) }, (_, k) => `Subtarea ${k} ${words(i + k, 16)}`), pendingCount: Math.floor((i % 6) / 2),
     }));
-    await assertSamePages({ kind: "delivery", locale: "es", input: { project: "Proyecto", column: "Entrega", today: "2026-11-20", tasks } }, 10);
+    await assertSamePages({ kind: "assignPlan", locale: "es", input: { project: "Proyecto", column: "De Ana", person: "Ana", today: "2026-11-20", groups: [{ bucket: "later", tasks }], others: 0 } }, 10);
   });
 });

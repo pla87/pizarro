@@ -9,7 +9,6 @@ import { dateToIso, todayIso } from "../dates";
 import { db } from "../db";
 import { AppError } from "../errors";
 import { appTimeZone } from "../format";
-import { liveColumnRole } from "../constants";
 import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, releaseAttachmentStream } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
@@ -461,8 +460,7 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
     reportSchedule: project.reportSchedule,
     releaseTemplates: project.releaseTemplates.map((r) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, createdAt: iso(r.createdAt) })),
     columns: project.columns.map((c) => ({
-      // Un rol retirado (que quedara tras volver a una versión anterior) sale como «Sin rol».
-      ref: columnRef.get(c.id)!, name: c.name, position: c.position, role: liveColumnRole(c.role), isDone: c.isDone, waitingDays: c.waitingDays,
+      ref: columnRef.get(c.id)!, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays,
       routineTargetRef: c.routineTargetColumnId ? (columnRef.get(c.routineTargetColumnId) ?? null) : null,
       wipLimit: c.wipLimit,
       planCount: c.planCount,

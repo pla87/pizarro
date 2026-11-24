@@ -105,10 +105,12 @@ describe("registro del cambio de rol y roles retirados", () => {
     expectOk(await setColumnRole(f.columns.todo, "WAITING"));
     expectOk(await setColumnRole(f.columns.todo, "AGENDA"));
     assert.equal((await roles(f))[f.columns.todo], "NONE");
-    // Una columna que aún lo tiene (de antes de la migración o tras volver a una versión anterior) y un deshacer guardado
-    // con ese rol: vuelve como «Sin rol».
-    await db.column.update({ where: { id: f.columns.doing }, data: { role: "DELIVERY" } });
+    // Un deshacer guardado con ese rol (de antes de quitarlo del enum, v1.69): vuelve como «Sin rol».
     expectOk(await setColumnRole(f.columns.doing, "CHECKLIST"));
+    const entry = await db.undoEntry.findFirstOrThrow({ where: { projectId: f.project.id, kind: "UNDO" }, orderBy: { createdAt: "desc" } });
+    const ops = (entry.ops as { t: string; data?: { role?: string } }[]).map((op) => (op.t === "column.set" && op.data?.role ? { ...op, data: { ...op.data, role: "DELIVERY" } } : op));
+    assert.ok(JSON.stringify(ops).includes("DELIVERY"));
+    await db.undoEntry.update({ where: { id: entry.id }, data: { ops } });
     expectOk(await undoLast(f.project.id));
     assert.equal((await roles(f))[f.columns.doing], "NONE");
   });

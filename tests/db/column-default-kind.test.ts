@@ -81,8 +81,6 @@ describe("tipo por defecto de una columna", () => {
     await loginAs(admin);
     const own = await db.taskKind.create({ data: { name: "Cita médica", color: "#3b82f6", position: 2, projectId: f.project.id } });
     expectOk(await setColumnDefaultKind(f.columns.todo, own.id));
-    // Una columna con un rol retirado (de antes de la migración) sale como «Sin rol».
-    await db.column.update({ where: { id: f.columns.doing }, data: { role: "AGENDA" } });
     const parts: Buffer[] = [];
     for await (const c of streamZip((await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT)).entries)) parts.push(c);
     const file = path.join(work, "exp.zip");
@@ -92,7 +90,6 @@ describe("tipo por defecto de una columna", () => {
     const byName = new Map(cols.map((c) => [c.name, c]));
     assert.deepEqual(byName.get("Por hacer")!.defaultKind, { name: "Cita médica", projectId: imported.projectId });
     assert.equal(byName.get("En curso")!.defaultKind, null);
-    assert.equal(byName.get("En curso")!.role, "NONE");
   });
 });
 

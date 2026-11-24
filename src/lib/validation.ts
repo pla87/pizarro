@@ -7,7 +7,7 @@ import { isReservedName } from "./reserved-names";
 import { ID_RE } from "./row-id";
 import { MAX_CLIENT, MAX_COST, MAX_HOURS, TASK_PRIORITIES } from "./task-fields";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB } from "./upload-size";
-import { COLUMN_ROLES, HEX_COLOR_RE, liveColumnRole, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
+import { HEX_COLOR_RE, INPUT_COLUMN_ROLES, liveColumnRole, MAX_DESCRIPTION, MAX_TITLE, PALETTE, RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "./constants";
 
 /** Ids de fila: ver `ID_RE` (`row-id.ts`). */
 export const id = z.string().regex(ID_RE, "No encontrado o sin acceso.");
@@ -38,7 +38,7 @@ export const name = z.string().overwrite(collapseSpaces).min(1, "El nombre es ob
 export const personName = name.refine((n) => !isReservedName(n), { message: "Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro." });
 export const description = z.string().max(MAX_DESCRIPTION, "La descripción es demasiado larga.");
 /** Rol de columna recibido: uno retirado (Agenda, Entrega al cliente) se lee como «Sin rol» (liveColumnRole). */
-export const columnRole = z.enum(COLUMN_ROLES).transform(liveColumnRole);
+export const columnRole = z.enum(INPUT_COLUMN_ROLES).transform(liveColumnRole);
 export const color = z.enum(PALETTE).nullable();
 export const hexColor = z.string().regex(HEX_COLOR_RE, "Color no válido.").transform((c) => c.toLowerCase());
 export const email = z.string().trim().toLowerCase().email("Email no válido.").max(200);

@@ -15,7 +15,7 @@ enum Role {
 }
 
 /// Rol funcional de una columna. NEXT_RELEASE e IN_PRODUCTION son únicos por proyecto (índice único
-/// parcial en la migración); el resto de roles (WAITING, WEEKLY_PLAN, CHECKLIST, REVIEW, AGENDA, ROUTINES, DELIVERY y BUDGET) pueden repetirse en varias columnas.
+/// parcial en la migración); el resto de roles (WAITING, WEEKLY_PLAN, CHECKLIST, REVIEW, ROUTINES y BUDGET) pueden repetirse en varias columnas.
 enum ColumnRole {
   NONE
   NEXT_RELEASE
@@ -24,9 +24,7 @@ enum ColumnRole {
   WEEKLY_PLAN
   CHECKLIST
   REVIEW
-  AGENDA
   ROUTINES
-  DELIVERY
   BUDGET
   /// Programa de un curso: cada tarea es una sesión; «Publicar programa (PDF)».
   PROGRAM

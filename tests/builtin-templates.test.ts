@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified, RETIRED_BUILTINS } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
-import { COLUMN_ROLES, SELECTABLE_COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
+import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
 import { buildTemplateApplication, parseStoredTemplate, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
 import { PROJECT_EXAMPLES } from "../src/lib/project-examples";
 
@@ -200,7 +200,7 @@ test("Vibecoding: las subtareas de sus tipos son criterios comprobables, no paso
 test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie los usa y una guardada antigua los lee como «Sin rol»", () => {
   for (const b of BUILTIN_TEMPLATES) {
     for (const t of [canonicalTemplate(b.key)!, canonicalTemplateEn(b.key)!]) {
-      for (const c of t.columns) assert.ok((SELECTABLE_COLUMN_ROLES as readonly string[]).includes(c.role), `${b.key}: «${c.name}» con el rol ${c.role}`);
+      for (const c of t.columns) assert.ok((COLUMN_ROLES as readonly string[]).includes(c.role), `${b.key}: «${c.name}» con el rol ${c.role}`);
     }
   }
   const old = parseStoredTemplate({
@@ -209,5 +209,5 @@ test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie l
     kinds: [], hiddenGeneralKinds: [], labels: [],
   });
   assert.deepEqual(old.columns.map((c) => c.role), ["NONE", "NONE", "NONE"]);
-  assert.ok(COLUMN_ROLES.includes("AGENDA"), "el valor sigue en el enum hasta la versión siguiente");
+  assert.ok(!(COLUMN_ROLES as readonly string[]).includes("AGENDA") && !(COLUMN_ROLES as readonly string[]).includes("DELIVERY"), "ya no están en el enum (v1.69)");
 });
