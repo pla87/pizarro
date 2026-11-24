@@ -625,8 +625,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return false;
     }
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
-    const { kindSubtasks, ...saved } = res.data;
+    const { kindSubtasks, titleClipped, ...saved } = res.data;
     board.upsertTask(saved);
+    // El servidor recortó el título (p. ej. la plantilla de título del tipo nuevo lo alarga): se dice, como en el tablero.
+    if (titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped }));
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
     if (kindSubtasks) {
       setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
