@@ -14,6 +14,15 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 65 (ya aplicadas):** Historial de versiones con 10 versiones y «Ver más»; Mis tareas con línea de
+resumen; Logs también en inglés (`messageEn`); errores de extensiones fuera también en `client.window`; aviso por email del
+informe semanal rechazado; cambiar de tipo en el detalle sustituye las subtareas sin tocar, con Deshacer; tipo por defecto
+en plantillas, «Varias tareas» e importar tareas; plan para IA con el tipo una vez; «miembros» en Administración →
+Proyectos; «Reenviar invitación» desde Ajustes del proyecto; retirados `reencryptIfStale`, `parseTaskLines` y el texto
+de abrir tarea; CI solo en las PR (la Release pasa antes `checks`); `test:db` en 3 bases; HANDOFF en núcleo + anexos;
+roles Agenda y Entrega fuera del enum. No: atenuar los botones laterales del diálogo; recalcular la fecha entre columnas
+de persona; «Ver más» de Avisos por páginas. Botón de informar y copia de «Nueva tarea» siempre enteros sobre el fondo.
+
 **Decisiones de la ronda 64 (ya aplicadas):** retirados de la oferta los roles *Agenda* y *Entrega al cliente* (fase 1;
 sus columnas a «Sin rol»); «Tipo por defecto…» por columna (`Column.defaultKindId`); suite e2e de «Asignación a persona»;
 subtareas de *Vibecoding* como criterios; margen de 100 MB de la copia diaria; errores de copias traducibles; retirada

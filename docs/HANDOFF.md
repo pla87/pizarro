@@ -246,7 +246,7 @@ npm run lint
 npm test                 # unitarias
 npm run i18n:check
 npm run i18n:unused      # solo informa (ver abajo)
-npm run test:db          # con base de datos (crea y borra pizarro_test_*)
+npm run test:db          # con base de datos: 3 copias en paralelo (-- tests/db/x.test.ts, --jobs 1, --verbose)
 npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot
 ```
 
@@ -313,8 +313,9 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 2. Actualizar `docs/MANUAL.md` (las dos líneas de versión y las secciones afectadas), `docs/PRUEBAS.md` y
    `docs/PRUEBAS-CHROME.md`. Los PDF se revisan en local (`node scripts/build-manual-pdf.mjs`) y **no se suben**.
 3. Commit «vX.Y.Z: …», PR a `main` (esperar sus dos comprobaciones), fusionar aplastando.
-4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada) y comprobar que `origin/stable` y
-   la etiqueta `vX.Y.Z` apuntan al commit fusionado (unos 6 min).
+4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasa antes el job `checks`: tipos,
+   lint, pruebas y traducciones, y si falla no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
+   al commit fusionado (unos 6 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
 5. Una actualización de Dependabot se aprueba solo si pasan **todas** las comprobaciones (PUBLICAR, «Dependabot»).
 
 ## 6. Estado y pendientes
@@ -332,40 +333,29 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 64:** v1.68.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Hecho por el propietario con Claude in Chrome en la ronda 64: pruebas en real de la v1.67.0 (bien; no se pudieron las
-plantillas propias como miembro ni el plan para IA), auditoría como usuario nuevo de la v1.67.0 (sus fallos y lo evidente,
-arreglados en la v1.68.0) y registro DMARC `_dmarc` con `p=none` en getpizarro.com. Pendiente: los prompts de
-`PRUEBAS-CHROME.md` (pruebas en real de la v1.68.0, `rua` del DMARC si lo aprueba, auditoría).
-La ronda 64 dio 8 vueltas de revisión (servidor y seguridad, navegador y ficheros, acceso y emails, tablero y plantillas,
-instalación y CI, y tres sobre el diff de la ronda); la última no encontró nada.
+**Estado al cerrar la ronda 65:** v1.69.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Ronda hecha en la nube; desde la ronda 66 el propietario sigue en Claude Code en su PC con Claude in Chrome (§0b), que
+ejecuta directamente los prompts de `docs/PRUEBAS-CHROME.md` (pendientes: 1, pruebas en real de la v1.69.0 con lo que
+quedó de la v1.68; 2, `rua` del DMARC, aprobado; 3, auditoría como usuario de la v1.69.0). La ronda 65 dio 3 vueltas de
+revisión y caza de bugs (servidor, navegador y áreas sin mirar, infraestructura y migraciones, y convergencia); la
+última solo halló dos detalles, ya arreglados.
 
-**Preguntas abiertas al propietario (tras la v1.68.0)**, con la numeración del informe final de la ronda 64 (entre
+**Preguntas abiertas al propietario (tras la v1.69.0)**, con la numeración del informe final de la ronda 65 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Historial de versiones: pintar solo las 10 últimas con «Ver más» (la página pesa ~450 KB; −78 %). (SÍ)
-2. Mis tareas: cambiar los filtros por una línea de resumen con enlaces a cada grupo. (SÍ)
-3. Logs en inglés: guardar también el mensaje en inglés (`messageEn`) para poder buscar en inglés. (SÍ)
-4. Filtrar también en `client.window` los errores que vienen de extensiones. (SÍ)
-5. Avisar por email a quien configuró el informe semanal cuando el destinatario se rechaza para siempre. (SÍ)
-6. Cambiar de tipo en el detalle: sustituir las subtareas del tipo anterior que sigan sin marcar ni editar, con deshacer. (SÍ)
-7. Atenuar en escritorio los botones «+» y «Varias tareas» junto al diálogo (enteros al pasar el ratón). (SÍ)
-8. Recalcular la fecha al mover una tarjeta entre dos columnas de persona. (NO)
-9. «Tipo por defecto» también en plantillas y en «Varias tareas». (Solo si se echa de menos)
-10. Plan para IA: decir el tipo una sola vez si todas las tareas son del mismo tipo. (SÍ, pequeño)
-11. Administración → Proyectos: «asignados» → «miembros», como en Ajustes del proyecto. (SÍ)
-12. Invitación pendiente en Ajustes del proyecto: «Reenviar invitación» por email si hay email. (SÍ)
-13. Retirar código que solo usan las pruebas: `reencryptIfStale` (`keyring.ts`), `parseTaskLines` (`bulk.ts`) y el
-    `describeAction` «Abrió la tarea…» de `getTaskDetail` (nunca se registra). (SÍ)
-14. Avisos: «Ver más» por páginas en lugar de volver a leer todo. (NO por ahora)
-15. CI: no repetir la pasada de comprobaciones al fusionar en `main` (ya pasó en la PR). (SÍ)
-16. `npm run test:db` repartido en 3 bases en paralelo. (Más adelante)
-17. Documentación más corta para cada sesión nueva: HANDOFF con anexos aparte, detalle de las suites en `e2e/SUITES.md`
-    y leer solo el índice del manual al empezar (de ~130.000 a ~45.000 tokens de lectura inicial). (SÍ)
-18. DMARC con informes (`rua`), prompt 2 de `PRUEBAS-CHROME.md`. (Opcional)
-19. Ideas de la auditoría: «Organizar por personas» en *Casa y familia*, roles de columna filtrados por plantilla,
-    arrastrar cabeceras de columna. (Más adelante)
-20. Fase 2 de Agenda y Entrega al cliente (ver `docs/handoff/GUARDAS.md`, «Migraciones y enums», Ronda 64). (SÍ, en la v1.69)
+1. Ideas de la auditoría (aprobadas para «más adelante»): botón «Organizar por personas» en *Casa y familia*, roles de
+   columna según la plantilla y arrastrar cabeceras de columna. ¿En la ronda 66? (SÍ, una ronda propia)
+2. Avisar antes de perder una plantilla a medio editar al cambiar de pestaña o recargar (Ajustes del proyecto, Mi
+   perfil). (SÍ, pequeño)
+3. Al cambiar de tipo en el detalle, dejar una línea en el historial de la tarea con las subtareas cambiadas. (SÍ, pequeño)
+4. Pasar `npm run test:db` también en la PR (GitHub con PostgreSQL, ~3 min; los minutos son gratis por ser público). (SÍ)
+5. `--shuffle` de vez en cuando en `test:db` para destapar pruebas que dependen del orden. (SÍ, barato)
+6. Logs: no guardar el texto en inglés de los registros de páginas vistas (ahorra espacio, pierden la búsqueda en inglés). (NO)
+7. Rellenar el texto en inglés de los registros anteriores a la v1.69. (NO: caducan en 7 días)
+8. «Importar tareas»: que la vista previa diga qué tipo tomará cada tarea. (NO por ahora)
+9. Comprobar en Railway el tiempo de espera al apagar (como el `kill_timeout` de Fly.io) y apuntarlo en la guía. (SÍ,
+   con Claude in Chrome)
+10. WhatsApp en la instalación del propietario: decisión de coste (Meta cobra cada aviso). (Lo decide el propietario)
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
