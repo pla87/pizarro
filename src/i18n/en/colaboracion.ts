@@ -76,13 +76,9 @@ export const colaboracion: Record<string, string> = {
   "Desactivó el informe semanal por email": "Turned off the weekly report by email",
   // Mis tareas
   "Más adelante": "Later",
-  "Filtrar mis tareas": "Filter my tasks",
-  "No hay tareas en este filtro.": "No tasks in this filter.",
   "Cambió la cadencia en la release a «{to}»": "Changed the release cadence to “{to}”",
   // Mis tareas: grupo de los 7 días siguientes a hoy
   "Próximos 7 días": "Next 7 days",
-  // Filtro de Mis tareas: incluye las vencidas y las de hoy (su cuenta es la de los tres grupos)
-  "Vencidas y próximos 7 días": "Overdue and next 7 days",
   // Emails de avisos, resumen e informe: pie, lote de asignaciones, periodo del resumen y organización (ronda 59)
   "No respondas a este email: contesta en Pizarro.": "Don't reply to this email: reply in Pizarro.",
   "{actor} te ha asignado {n} tareas (entre ellas {task})": "{actor} assigned you {n} tasks (including {task})",
@@ -136,4 +132,6 @@ export const colaboracion: Record<string, string> = {
   "Volvió a activar para sí el informe semanal por email del que se había dado de baja": "Turned the weekly email report they had unsubscribed from back on for themselves",
   // Logs: avisos por email de Mi perfil (antes solo «OK»)
   "Cambió sus avisos por email": "Changed their email notifications",
+  // Mis tareas: línea de resumen con un enlace a cada grupo
+  "Grupos de mis tareas": "My task groups",
 };

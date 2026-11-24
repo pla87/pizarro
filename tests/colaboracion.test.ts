@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 
 process.env.SESSION_SECRET = "x".repeat(48);
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/test";
 
 const { followerIds, isFollowing } = await import("../src/lib/followers");
 const { digestDue, localParts, reportDue } = await import("../src/lib/schedule");
-const { bucketOf, groupByDue, matchesFilter, parseFilter } = await import("../src/lib/my-tasks");
+const { bucketAnchor, bucketOf, groupByDue } = await import("../src/lib/my-tasks");
 const { buildDigest, digestEmail, digestPeriod, emptyDigestInput, DIGEST_MAX_ITEMS } = await import("../src/lib/digest");
 const { dueChangeExcerpt, dueChangeText, parseDueChange } = await import("../src/lib/notification-text");
 const { splitMentions, mentionToken } = await import("../src/lib/mentions");
@@ -117,17 +118,18 @@ test("mis tareas: orden vencidas, hoy, semana, más adelante, sin fecha y orden 
   assert.deepEqual(groups[2]!.tasks.map((t) => t.id), ["g", "c"]);
 });
 
-test("mis tareas: filtros «Vencidas» y «Esta semana»; los grupos vacíos no salen", () => {
+test("mis tareas: los grupos vacíos no salen y cada grupo tiene su ancla", () => {
   const today = "2026-10-23";
   const tasks = [{ dueDate: "2026-10-01" }, { dueDate: "2026-10-23" }, { dueDate: "2026-11-30" }, { dueDate: null }];
-  assert.deepEqual(groupByDue(tasks, today, "overdue").map((g) => g.bucket), ["overdue"]);
-  assert.deepEqual(groupByDue(tasks, today, "week").map((g) => g.bucket), ["overdue", "today"]);
-  assert.equal(groupByDue(tasks, today, "all").length, 4);
-  assert.equal(matchesFilter("later", "week"), false);
-  assert.equal(parseFilter("overdue"), "overdue");
-  assert.equal(parseFilter(["week", "x"]), "week");
-  assert.equal(parseFilter("otra"), "all");
-  assert.equal(parseFilter(undefined), "all");
+  assert.deepEqual(groupByDue(tasks, today).map((g) => g.bucket), ["overdue", "today", "later", "none"]);
+  assert.deepEqual(groupByDue([], today), []);
+  assert.equal(bucketAnchor("overdue"), "tareas-overdue");
+});
+
+test("mis tareas: sin filtros; un ?filter= antiguo (marcadores) redirige a la página limpia", () => {
+  const src = readFileSync("src/app/(app)/my-tasks/page.tsx", "utf8");
+  assert.doesNotMatch(src, /my-tasks\?filter=/);
+  assert.match(src, /redirect\("\/my-tasks"\)/);
 });
 
 // --- Resumen diario ---

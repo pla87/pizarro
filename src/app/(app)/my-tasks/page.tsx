@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ExternalLink, Folder, ListChecks } from "lucide-react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { Prisma } from "@/generated/prisma/client";
@@ -11,7 +12,7 @@ import { cn } from "@/components/ui/cn";
 import { MidnightRefresh } from "@/components/useMidnightRefresh";
 import { appTimeZone } from "@/lib/board";
 import { dateToIso, dueStatus, formatDay, todayIso } from "@/lib/dates";
-import { bucketOf, groupByDue, matchesFilter, parseFilter, type TaskBucket, type TaskFilter } from "@/lib/my-tasks";
+import { bucketAnchor, groupByDue, type TaskBucket } from "@/lib/my-tasks";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -23,19 +24,13 @@ export async function generateMetadata() {
 /** Tope de tareas que se pintan en la página. */
 const MAX_TASKS = 500;
 
-const FILTERS: { value: TaskFilter; label: string }[] = [
-  { value: "all", label: "Todas" },
-  { value: "overdue", label: "Vencidas" },
-  // Incluye las vencidas y las de hoy: el nombre lo dice, para que su cuenta cuadre con los grupos que muestra.
-  { value: "week", label: "Vencidas y próximos 7 días" },
-];
-
 export default async function MyTasksPage({ searchParams }: { searchParams: Promise<{ filter?: string | string[] }> }) {
   const user = await requireUserPage();
+  // Los filtros se quitaron (la línea de resumen enlaza a cada grupo): un marcador antiguo con ?filter= va a la página limpia.
+  if ((await searchParams).filter !== undefined) redirect("/my-tasks");
   const t = await getT();
   const uiLocale = await getLocale();
   const locale = intlLocale(uiLocale);
-  const filter = parseFilter((await searchParams).filter);
   const where = { assigneeId: user.id, archivedAt: null, column: { isDone: false }, project: visibleProjectsWhere(user) };
   const fetched = await db.task.findMany({
     // Bandeja de lo pendiente: sin las ya terminadas (columnas «hechas») y con un tope razonable.
@@ -71,9 +66,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
   const today = todayIso(appTimeZone());
   // La consulta ya excluye las columnas «hechas»: cada tarea se agrupa por su fecha límite.
   const tasks = rows.map((task) => ({ ...task, due: dateToIso(task.dueDate), dueDate: dateToIso(task.dueDate) }));
-  const counts = Object.fromEntries(FILTERS.map((f) => [f.value, tasks.filter((x) => matchesFilter(bucketOf(x.dueDate, today), f.value)).length])) as Record<TaskFilter, number>;
-  const groups = groupByDue(tasks, today, filter);
-  const shown = groups.reduce((n, g) => n + g.tasks.length, 0);
+  const groups = groupByDue(tasks, today);
 
   const heading: Record<TaskBucket, string> = {
     overdue: t("Vencidas"),
@@ -95,32 +88,34 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
           {t("Se muestran las primeras {shown} de {total}, por fecha límite. Abre cada proyecto para ver el resto.", { shown: tasks.length, total })}
         </p>
       )}
-      <nav className="mb-6 flex flex-wrap gap-2" aria-label={t("Filtrar mis tareas")}>
-        {FILTERS.map((f) => (
-          <Link
-            key={f.value}
-            href={f.value === "all" ? "/my-tasks" : `/my-tasks?filter=${f.value}`}
-            aria-current={filter === f.value ? "page" : undefined}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm",
-              filter === f.value ? "border-brand-600 bg-brand-600 text-on-brand" : "border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800",
-            )}
-          >
-            {t(f.label)}
-            <span className={cn("text-xs", filter === f.value ? "opacity-80" : "text-slate-500")}>{counts[f.value]}</span>
-          </Link>
-        ))}
-      </nav>
-      {shown === 0 && (
+      {/* Resumen con un enlace a cada grupo (solo los que tienen tareas; con un solo grupo no hace falta). */}
+      {groups.length > 1 && (
+        <nav className="mb-6" aria-label={t("Grupos de mis tareas")}>
+          <ul className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+            {groups.map((group, i) => (
+              <li key={group.bucket} className="flex items-center gap-x-1">
+                {i > 0 && <span className="text-slate-400" aria-hidden>·</span>}
+                <a
+                  href={`#${bucketAnchor(group.bucket)}`}
+                  className={cn("rounded px-1 py-0.5 hover:underline", group.bucket === "overdue" ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-300")}
+                >
+                  {heading[group.bucket]} <span className="font-semibold">{group.tasks.length}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+      {tasks.length === 0 && (
         <div className="card flex flex-col items-center gap-2 p-10 text-sm text-slate-500">
           <ListChecks size={32} className="text-slate-300" />
-          {tasks.length === 0 ? t("No tienes tareas asignadas.") : t("No hay tareas en este filtro.")}
+          {t("No tienes tareas asignadas.")}
         </div>
       )}
       <div className="space-y-6">
         {groups.map((group) => (
-          <section key={group.bucket}>
-            <h2 className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", group.bucket === "overdue" ? "text-red-600" : "text-slate-600 dark:text-slate-300")}>
+          <section key={group.bucket} id={bucketAnchor(group.bucket)} aria-labelledby={`${bucketAnchor(group.bucket)}-h`} className="scroll-mt-4">
+            <h2 id={`${bucketAnchor(group.bucket)}-h`} className={cn("mb-2 flex items-center gap-2 text-sm font-semibold", group.bucket === "overdue" ? "text-red-600" : "text-slate-600 dark:text-slate-300")}>
               {heading[group.bucket]}
               <span className="text-xs font-normal text-slate-500">{group.tasks.length}</span>
             </h2>
