@@ -5,6 +5,7 @@
 //
 // Lo usa .github/workflows/release.yml para el texto de la GitHub Release. Sale con error si la versión no está.
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 const CATEGORIES = [
   ["nuevas", "Nuevas funcionalidades"],
@@ -26,7 +27,8 @@ export function releaseNotes(changelog, version) {
   return out.join("\n");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL: en Windows la ruta lleva unidad y barras invertidas (file:///D:/…), no vale `file://${argv[1]}`.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const version = (process.argv[2] ?? "").replace(/^v/, "");
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
     console.error("Uso: node scripts/release-notes.mjs X.Y.Z");
