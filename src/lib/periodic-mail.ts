@@ -376,8 +376,12 @@ const REJECTED_NOTICE_GAP_MS = 7 * DAY_MS;
  */
 async function notifyReportRejected(s: Schedule, creator: Creator, url: string, now: Date): Promise<void> {
   const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
+  // Quien se programó el informe a sí mismo: el aviso iría a la misma dirección rechazada y volvería a fallar cada
+  // semana (el rechazo ya queda en los Logs como «report.scheduledRejected»).
+  if (creator.email.trim().toLowerCase() === s.recipient.trim().toLowerCase()) return;
   try {
-    const recent = await db.appLog.count({ where: { action: "report.rejectedNotified", projectId: s.projectId, createdAt: { gt: new Date(now.getTime() - REJECTED_NOTICE_GAP_MS) } } });
+    // Con la categoría, la consulta usa el índice [category, createdAt] en vez de recorrer toda la semana de Logs.
+    const recent = await db.appLog.count({ where: { category: "notify", action: "report.rejectedNotified", projectId: s.projectId, createdAt: { gt: new Date(now.getTime() - REJECTED_NOTICE_GAP_MS) } } });
     if (recent) return;
     const [project, person] = await Promise.all([
       db.project.findUnique({ where: { id: s.projectId }, select: { name: true } }),
