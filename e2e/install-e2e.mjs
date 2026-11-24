@@ -50,10 +50,10 @@ const env = {
   // Anota cualquier aviso de Node (p. ej. DeprecationWarning) con su pila.
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${pathToFileURL(path.join(L.HERE, "..", "warn-hook.mjs")).href}`.trim(), WARN_LOG: warnLog,
 };
-const server = spawn("npm", ["start"], { cwd: APP_DIR, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+const server = spawn(process.execPath, L.START_ARGS, { cwd: APP_DIR, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 server.stdout.on("data", (d) => (out += d));
 server.stderr.on("data", (d) => (out += d));
-const stop = () => { try { process.kill(-server.pid, "SIGTERM"); } catch { /* ya parado */ } };
+const stop = () => L.stopServerTree(server);
 process.on("exit", stop);
 const ready = await L.waitFor(async () => (await fetch(L.BASE + "/api/health")).ok, { timeout: 90000, step: 500 });
 if (!ready) { console.log(out); throw new Error("el servidor no arranca"); }

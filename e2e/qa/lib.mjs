@@ -118,13 +118,26 @@ export async function resetDatabase(appDir) {
   execFileSync("node", ["--env-file-if-exists=.env", "dist/boot.mjs"], { cwd: appDir, env, stdio: "pipe" });
 }
 let server = null;
+/**
+ * Lo mismo que `npm start` (package.json), con node directamente: en Windows `spawn("npm")` no encuentra npm.cmd sin
+ * shell. Lo usan también install-e2e.mjs y stopServerTree.
+ */
+export const START_ARGS = ["--env-file-if-exists=.env", "--env-file=scripts/server.env", "scripts/start-local.mjs"];
+/** Para el servidor y lo que haya arrancado: el grupo de procesos (detached) o, en Windows, el árbol con taskkill. */
+export function stopServerTree(child) {
+  if (process.platform === "win32") {
+    try { execFileSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* ya parado */ }
+    return;
+  }
+  try { process.kill(-child.pid, "SIGTERM"); } catch { /* ya parado */ }
+}
 export async function startServer(appDir) {
   const port = new URL(BASE).port || "80";
-  server = spawn("npm", ["start"], { cwd: appDir, env: { ...process.env, DATABASE_URL, PORT: port, APP_URL: BASE }, stdio: "ignore", detached: true });
+  server = spawn(process.execPath, START_ARGS, { cwd: appDir, env: { ...process.env, DATABASE_URL, PORT: port, APP_URL: BASE }, stdio: "ignore", detached: true });
   for (let i = 0; i < 60; i++) { try { const r = await fetch(BASE + "/login"); if (r.ok) return; } catch { /* aún no */ } await sleep(1000); }
   throw new Error("el servidor no arranca");
 }
-export function stopServer() { if (server) { try { process.kill(-server.pid, "SIGTERM"); } catch { /* ya parado */ } server = null; } }
+export function stopServer() { if (server) { stopServerTree(server); server = null; } }
 
 /** Usuarios MEMBER (sin 2FA), un segundo usuario y todos como miembros de todos los proyectos. */
 export async function prepareUsers() {
