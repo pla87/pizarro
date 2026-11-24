@@ -1,9 +1,10 @@
 # Comprobaciones básicas en cada PR contra main (también las de Dependabot): tipos, lint, pruebas unitarias y
 # traducciones. No necesita base de datos ni secretos; las pruebas con base (`npm run test:db`), el build de producción
 # y las e2e se siguen pasando en local antes de fusionar (docs/HANDOFF.md §4).
-# Sin pasada al hacer push a main: la de la PR prueba ya la mezcla con main, y fusionar aplastando deja ese mismo árbol.
-# Si main avanzó después de la última pasada, «Update branch» en la PR la repite; a mano: Actions → Comprobaciones →
-# Run workflow.
+# Sin pasada al hacer push a main: la de la PR prueba su mezcla con el main de ese momento. Si main avanza después
+# (otra PR fusionada), el main que resulta no lo ha probado nadie: «Update branch» en la PR repite la pasada, y la release
+# (.github/workflows/release.yml) vuelve a pasar estas comprobaciones sobre el commit que publica antes de etiquetar
+# nada. A mano: Actions → Comprobaciones → Run workflow.
 name: Comprobaciones
 
 on:
