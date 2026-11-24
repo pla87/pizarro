@@ -115,13 +115,13 @@ export function subtasksN(n: number): Label {
 
 /**
  * Textos del usuario entre comillas como lista: «a», «a» y «b», «a», «b» y «c»; con más de `max`, los primeros y
- * «y N más». Los textos no se traducen (son contenido); solo la «y».
+ * «y N más». Los textos no se traducen (son contenido); las comillas y la «y», sí.
  */
 export function quotedList(items: readonly string[], max = 3): Param {
-  const q = items.map((x) => `«${x}»`);
-  if (q.length > max) return { k: "{names} y {n} más", p: { names: q.slice(0, max).join(", "), n: q.length - max } };
+  const q: Label[] = items.map((title) => ({ k: "«{title}»", p: { title } }));
+  if (q.length > max) return { k: "{names} y {n} más", p: { names: q.slice(0, max), n: q.length - max } };
   if (q.length <= 1) return q[0] ?? "";
-  return { k: "{list} y {last}", p: { list: q.slice(0, -1).join(", "), last: q.at(-1)! } };
+  return { k: "{list} y {last}", p: { list: q.slice(0, -1), last: q.at(-1)! } };
 }
 
 /**

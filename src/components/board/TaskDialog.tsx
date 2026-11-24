@@ -1,7 +1,7 @@
 "use client";
 
 import { takePrefetchedTaskDetail } from "./taskDetailPrefetch";
-import { Archive, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileCode, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Presentation, Trash2, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowLeft, Camera, Check, ChevronDown, Copy, Download, ExternalLink, File as FileIcon, FileArchive, FileAudio, FileCode, FileSpreadsheet, FileText, FileVideo, GripVertical, ImagePlus, Loader2, Pencil, Plus, Presentation, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -72,6 +72,7 @@ import { subtasksDidNotFit } from "./count-texts";
 import { anchorFromPoint } from "../ui/editAnchorDom";
 import type { EditAnchor } from "@/lib/edit-anchor";
 import { undoneText } from "../undo-text";
+import { forgetTaskReturn, rememberTaskReturn, taskReturnFor } from "./taskReturn";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft, gone }: {
   task: BoardTask;
@@ -111,6 +112,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   });
   const onClose = () => {
     discardDraft();
+    forgetTaskReturn();
     close();
   };
   /**
@@ -150,9 +152,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
    * Cerrar con la X, clic fuera, Escape o el botón atrás: si la descripción tiene cambios sin guardar, hay una subtarea a
    * medio escribir o renombrándose, o un comentario en edición con cambios, se pregunta antes de descartarlos; sin cambios
    * se cierra directamente. Lo que se guarda al salir de su campo (título, enlace, campos opcionales) se guarda también al
-   * cerrar. `false` si no se cerró.
+   * cerrar. `false` si no se cerró. Con `next` (abrir otra tarea desde un enlace del detalle), en vez de cerrar se hace eso,
+   * tras las mismas preguntas: antes el enlace sustituía el detalle y lo escrito sin guardar se perdía sin aviso.
    */
-  const requestClose = async (): Promise<boolean> => {
+  const requestClose = (): Promise<boolean> => closeOr();
+  const closeOr = async (next?: () => void): Promise<boolean> => {
     if (closeGuard.current !== "idle") return false;
     const desc = descLive.current;
     const descDirty = desc !== null && desc !== (detail?.description ?? "") && (descDirtyCheck.current?.() ?? true);
@@ -201,9 +205,28 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       closeGuard.current = "idle";
       if (!ok) return false;
     }
+    if (next) {
+      discardDraft();
+      next();
+      return true;
+    }
     onClose();
     return true;
   };
+  /**
+   * Abre otra tarea en lugar de esta (enlaces de «Bloqueada por» y «Bloquea a»). El detalle nuevo ofrece volver a esta
+   * («← Volver a «…»», taskReturn.ts); al volver no se ofrece ir otra vez hacia delante.
+   */
+  const goToTask = (id: string, remember = true) => {
+    void closeOr(() => {
+      if (remember) rememberTaskReturn(task.id, id);
+      else forgetTaskReturn();
+      board.openTask(id);
+    });
+  };
+  // Se llegó aquí desde el enlace de otra tarea (que siga en el tablero): «← Volver a «…»» en la cabecera.
+  const [backId] = useState(() => taskReturnFor(task.id));
+  const backTask = backId ? board.getTask(backId) : undefined;
 
   // Si el título cambia desde fuera (otra persona, deshacer, recarga tras un conflicto), se muestra el nuevo, pero solo
   // si no se está editando: lo que se esté escribiendo (distinto de lo que se mostraba) no se pisa, como el enlace. Antes
@@ -835,8 +858,14 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const bs = getComputedStyle(body);
       const as = getComputedStyle(aside);
       const ss = getComputedStyle(scroller);
-      // Alto útil de la fila de columnas cuando el diálogo está a su alto máximo.
-      const available = body.clientHeight - px(bs.paddingTop) - px(bs.paddingBottom);
+      // Alto útil de la fila de columnas cuando el diálogo está a su alto máximo. El cuerpo toma el alto de su contenido
+      // hasta ese tope: medir el actual servía mientras el diálogo estaba al máximo, pero con la paleta ya compacta y un
+      // diálogo más bajo (al cerrar el buscador de «Bloqueada por», que lo había estirado) nunca «cabía» y la paleta se
+      // quedaba en el desplegable «Sin color». Se cuenta lo que podría crecer el panel hasta su `max-height`.
+      const panel = body.parentElement;
+      const maxPanel = panel ? parseFloat(getComputedStyle(panel).maxHeight) : NaN;
+      const room = panel && Number.isFinite(maxPanel) ? Math.max(0, maxPanel - panel.getBoundingClientRect().height) : 0;
+      const available = body.clientHeight + room - px(bs.paddingTop) - px(bs.paddingBottom);
       // Alto que necesita la columna para no desplazarse: su contenido, el relleno del contenedor con scroll y lo que lo
       // rodea en la columna (relleno, márgenes negativos, botones de abajo). Igual en los dos modos (el contenedor llena la columna).
       const around = aside.getBoundingClientRect().height - scroller.getBoundingClientRect().height + px(as.marginTop) + px(as.marginBottom);
@@ -1132,7 +1161,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       // (o, si la de campos no cabe, el cuerpo entero: ver `flow`).
       header={
         <div className="relative flex items-start gap-2 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-          <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
+          {backTask ? (
+            <div className="flex min-w-0 flex-1 flex-col">
+              <button type="button" className="mb-1 flex max-w-full items-center gap-1 self-start text-xs text-brand-600 hover:underline dark:text-brand-300" onClick={() => goToTask(backTask.id, false)} data-task-back>
+                <ArrowLeft size={13} className="shrink-0" aria-hidden />
+                <span className="truncate">{t("Volver a «{title}»", { title: mentionsToPlain(backTask.title) })}</span>
+              </button>
+              <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
+            </div>
+          ) : (
+            <TitleField value={title} onChange={setTitle} onCommit={commitTitle} users={board.users} />
+          )}
           {/* «Guardando… / Guardado»: aviso flotante sobre la línea inferior de la cabecera, a la derecha. Absoluto: no quita
               ancho al título ni tapa el micrófono, y su mitad inferior cae en el margen superior del cuerpo (sin texto). */}
           <span
@@ -1400,7 +1439,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             <p className="col-span-2 -mt-1 text-xs text-slate-500">{t("Al terminarla o archivarla se crea la siguiente, sin las subtareas marcadas.")}</p>
           )}
           <Field label={t("Bloqueada por")} wide>
-            <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} />
+            <BlockerPicker task={task} onChange={(blocker) => save({ blockedById: blocker?.id ?? null }, { blockedBy: blocker })} onOpen={goToTask} />
           </Field>
           <Field label={t("Color")} wide>
             <div ref={colorBox}>
@@ -1717,21 +1756,42 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   }, [editing, value]);
   useEffect(() => () => draftCb.current?.(null), []);
   // Al cerrar el editor (Escape, Cancelar, Guardar) su campo desaparece y el foco se iba a <body>: con el teclado había
-  // que volver a buscar el sitio. Pasa al botón «Editar» de la descripción (no a «Añade una descripción…», que al
-  // recibir el foco con el teclado vuelve a abrir el editor).
+  // que volver a buscar el sitio y lo que se tecleaba justo después no iba a ninguna parte. Pasa a la descripción ya
+  // guardada (Intro la vuelve a editar) o, si está vacía, al botón «Editar» (no a «Añade una descripción…», que al recibir
+  // el foco con el teclado vuelve a abrir el editor). Sin desplazar: el foco llevaba la columna hasta el principio de la
+  // descripción (con una larga, la pantalla saltaba), y la sección se queda donde estaba.
   const section = useRef<HTMLElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
+  const readView = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
+  // Dónde estaba la sección al cerrar el editor (su borde superior en pantalla), para dejarla en el mismo sitio.
+  const closedAt = useRef<number | null>(null);
+  // El foco lo pone el propio editor al cerrarse: la vista de lectura no debe abrir la edición por recibirlo.
+  const placingFocus = useRef(false);
   useLayoutEffect(() => {
     if (editing || !refocus.current) return;
     refocus.current = false;
+    const el = section.current;
+    const before = closedAt.current;
+    closedAt.current = null;
+    if (el && before !== null) {
+      const shift = el.getBoundingClientRect().top - before;
+      if (Math.abs(shift) >= 1) scrollParentOf(el)?.scrollBy({ top: shift });
+    }
     const active = document.activeElement;
     // Si la persona ya ha puesto el foco en otro sitio (clic en otro campo), se queda allí.
-    if (active && active !== document.body && !section.current?.contains(active)) return;
-    editButton.current?.focus();
+    if (active && active !== document.body && !el?.contains(active)) return;
+    const target = readView.current ?? editButton.current;
+    placingFocus.current = true;
+    try {
+      target?.focus({ preventScroll: true });
+    } finally {
+      placingFocus.current = false;
+    }
   }, [editing]);
   const closeEditor = () => {
     refocus.current = true;
+    closedAt.current = section.current?.getBoundingClientRect().top ?? null;
     setKindChanged(false);
     setEditing(false);
   };
@@ -1820,14 +1880,16 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
         </div>
       ) : value.trim() ? (
         <div
+          ref={readView}
           className="cursor-text rounded-lg p-1 hover:bg-slate-50 dark:hover:bg-slate-800/50"
           onDoubleClick={(e) => setEditing(true, anchorFromPoint(e.currentTarget, e.clientX, e.clientY))}
           tabIndex={0}
           role="group"
           aria-label={t("Descripción")}
           // Solo con el teclado (Tab): el clic con el ratón no debe abrir la edición, y un enlace del texto conserva su foco.
+          // Tampoco el foco que pone el editor al cerrarse (ver `placingFocus`).
           onFocus={(e) => {
-            if (e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setEditing(true);
+            if (!placingFocus.current && e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setEditing(true);
           }}
           onKeyDown={(e) => {
             if (e.target === e.currentTarget && e.key === "Enter") setEditing(true);
@@ -1848,6 +1910,15 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
       )}
     </section>
   );
+}
+
+/** El contenedor con desplazamiento vertical más cercano (la columna del detalle o, en móvil, el cuerpo del diálogo). */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY;
+    if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
 }
 
 function Subtasks({ taskId, detail, setDetail, flushRef, draftRef, blurHeld, onUndo }: {

@@ -680,11 +680,11 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
  * `removed` o `added` pueden ir vacías, pero no las dos.
  */
 function kindSubtasksEvent(removed: string[], added: string[]): Label {
-  const r = quotedList(removed.map(mentionsToPlain));
-  const a = quotedList(added.map(mentionsToPlain));
+  const r = quotedList(removed.map((x) => mentionsToPlain(x)));
+  const a = quotedList(added.map((x) => mentionsToPlain(x)));
   if (!added.length) return { k: "Quitó las subtareas del tipo anterior: {removed}", p: { removed: r } };
   if (!removed.length) return { k: "Añadió las subtareas del tipo: {added}", p: { added: a } };
-  return { k: "Cambió las subtareas del tipo: quitó {removed} y añadió {added}", p: { removed: r, added: a } };
+  return { k: "Cambió las subtareas del tipo: quitó {removed}; añadió {added}", p: { removed: r, added: a } };
 }
 
 /**

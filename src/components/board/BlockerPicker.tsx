@@ -12,14 +12,19 @@ import { useBoard, useTasks } from "./context";
 
 const MAX_RESULTS = 8;
 
+/** Tareas que se enseñan por su nombre en «Bloquea a»; las demás, como «y N más». */
+const MAX_BLOCKING = 5;
+
 /**
  * «Bloqueada por»: muestra la tarea que bloquea (con enlace que la abre) y un buscador de las tareas del proyecto para
  * elegirla. Las candidatas salen del tablero ya cargado (mismo proyecto, sin pedir nada más); se excluyen la propia tarea
- * y las que crearían un ciclo. El servidor lo vuelve a comprobar.
+ * y las que crearían un ciclo. El servidor lo vuelve a comprobar. Debajo, solo lectura, «Bloquea a»: las tareas del
+ * tablero que esperan a esta (también con enlace). `onOpen` abre una de ellas (el detalle pregunta si hay algo sin guardar).
  */
-export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (blocker: { id: string; title: string } | null) => void }) {
+export function BlockerPicker({ task, onChange, onOpen }: { task: BoardTask; onChange: (blocker: { id: string; title: string } | null) => void; onOpen?: (id: string) => void }) {
   const t = useT();
   const { openTask, columns } = useBoard();
+  const open = onOpen ?? openTask;
   const tasks = useTasks();
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
@@ -30,6 +35,8 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
   const title = mentionsToPlain(live?.title ?? blocked?.title ?? "");
 
   const byId = new Map(tasks.map((x) => [x.id, x]));
+  // Las que esperan a esta (las archivadas no están en el tablero y no salen).
+  const blocking = tasks.filter((x) => x.blockedBy?.id === task.id && x.id !== task.id);
   const words = normalizeSearch(query).split(/\s+/).filter(Boolean);
   // Primero el texto; wouldCycle (que sigue la cadena) solo se calcula sobre los que se van a enseñar, sin recorrer todo el tablero.
   const candidates: BoardTask[] = [];
@@ -57,7 +64,7 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
           <p className="min-w-0 flex-1 break-words">
             {t("Bloqueada por")}{" "}
             {live ? (
-              <button type="button" className="text-left font-medium text-brand-600 hover:underline dark:text-brand-300" onClick={() => openTask(live.id)} title={t("Abrir la tarea que bloquea")}>
+              <button type="button" className="text-left font-medium text-brand-600 hover:underline dark:text-brand-300" onClick={() => open(live.id)} title={t("Abrir la tarea que bloquea")}>
                 <MentionText text={live.title} />
               </button>
             ) : (
@@ -110,6 +117,20 @@ export function BlockerPicker({ task, onChange }: { task: BoardTask; onChange: (
           </ul>
           <button type="button" className="mt-1 text-xs text-slate-500 hover:underline" onClick={() => { setSearching(false); setQuery(""); }}>{t("Cancelar")}</button>
         </div>
+      )}
+      {blocking.length > 0 && (
+        <p className="mt-1.5 text-sm break-words" data-blocking>
+          {t("Bloquea a")}{" "}
+          {blocking.slice(0, MAX_BLOCKING).map((x, i) => (
+            <span key={x.id}>
+              {i > 0 && ", "}
+              <button type="button" className="text-left font-medium text-brand-600 hover:underline dark:text-brand-300" onClick={() => open(x.id)} title={t("Abrir la tarea bloqueada")}>
+                <MentionText text={x.title} />
+              </button>
+            </span>
+          ))}
+          {blocking.length > MAX_BLOCKING && <span className="text-slate-500"> {t("y {n} más", { n: blocking.length - MAX_BLOCKING })}</span>}
+        </p>
       )}
     </div>
   );

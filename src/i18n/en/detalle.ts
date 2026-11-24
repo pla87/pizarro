@@ -54,13 +54,31 @@ export const detalle: Record<string, string> = {
   "Guardar descripción": "Save description",
   "Tipo cambiado; falta guardar la descripción": "Type changed; description not saved yet",
 
-  // Cambiar de tipo en el detalle: subtareas de la plantilla del anterior sustituidas por las del nuevo
-  "Cambiada 1 subtarea": "1 subtask changed",
-  "Cambiadas {n} subtareas": "{n} subtasks changed",
+  // (Ronda 66) Cambiar de tipo en el detalle: aviso con lo que ha cambiado además del tipo (kindChangeNotice)
+  "Tipo cambiado: {changes}": "Type changed: {changes}",
+  "1 subtarea quitada": "1 subtask removed",
+  "{n} subtareas quitadas": "{n} subtasks removed",
+  "1 quitada": "1 removed",
+  "{n} quitadas": "{n} removed",
+  "plantilla de la descripción aplicada": "description template applied",
+  "Tipo cambiado y plantilla aplicada; falta guardar la descripción": "Type changed and template applied; description not saved yet",
 
-  // Cambiar de tipo en el detalle: aviso según lo que pasó con las subtareas de la plantilla
-  "Añadida 1 subtarea del tipo": "1 subtask from the type added",
-  "Añadidas {n} subtareas del tipo": "{n} subtasks from the type added",
-  "Quitada 1 subtarea del tipo": "1 subtask from the type removed",
-  "Quitadas {n} subtareas del tipo": "{n} subtasks from the type removed",
+  // (Ronda 66) Historial y deshacer del cambio de tipo
+  "Cambió el tipo de «{title}» a «{kind}»": "Changed the type of “{title}” to “{kind}”",
+  "Quitó las subtareas del tipo anterior: {removed}": "Removed the previous type's subtasks: {removed}",
+  "Añadió las subtareas del tipo: {added}": "Added the type's subtasks: {added}",
+  "Cambió las subtareas del tipo: quitó {removed}; añadió {added}": "Changed the type's subtasks: removed {removed}; added {added}",
+  "Deshecho el cambio de tipo de «{title}»": "Undid the type change of “{title}”",
+  "Rehecho el cambio de tipo de «{title}»": "Redid the type change of “{title}”",
+  "Deshecho el cambio de {changes} en «{title}»": "Undid changes to {changes} in “{title}”",
+  "Rehecho el cambio de {changes} en «{title}»": "Redid changes to {changes} in “{title}”",
+  "{text} (parte ya no existía)": "{text} (part of it no longer existed)",
+
+  // (Ronda 66) «Varias tareas»: el tipo común cuando alguna línea tiene otro
+  "(ahora hay varios)": "(currently mixed)",
+
+  // (Ronda 66) «Bloquea a» y volver a la tarea de la que se vino
+  "Bloquea a": "Blocks",
+  "Abrir la tarea bloqueada": "Open the blocked task",
+  "Volver a «{title}»": "Back to “{title}”",
 };

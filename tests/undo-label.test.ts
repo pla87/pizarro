@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeLabel, encodeLabel, renderLabelEs, renderStoredLabel, tasksN, LABEL_MAX } from "../src/lib/undo-label";
+import { decodeLabel, encodeLabel, quotedList, renderLabel, renderLabelEs, renderStoredLabel, tasksN, undoneLabel, LABEL_MAX } from "../src/lib/undo-label";
 import { makeT } from "../src/i18n/core";
 
 const es = makeT("es");
@@ -45,4 +45,26 @@ test("etiqueta: restaurar una archivada dice «Restauró», y las guardadas con 
   assert.equal(renderStoredLabel(now, en), "Restored “T” in “Hecho”");
   const old = encodeLabel({ k: "Recuperó «{title}» en «{col}»", p: { title: "T", col: "Hecho" } });
   assert.equal(renderStoredLabel(old, en), "Restored “T” in “Hecho”");
+});
+
+test("quotedList: títulos entre comillas, con «y» y resumidos si son muchos", () => {
+  const r = (xs: string[]) => renderLabelEs({ k: "{x}", p: { x: quotedList(xs) } });
+  assert.equal(r([]), "");
+  assert.equal(r(["a"]), "«a»");
+  assert.equal(r(["a", "b"]), "«a» y «b»");
+  assert.equal(r(["a", "b", "c"]), "«a», «b» y «c»");
+  assert.equal(r(["a", "b", "c", "d", "e"]), "«a», «b», «c» y 2 más");
+  assert.equal(renderLabel({ k: "{x}", p: { x: quotedList(["a", "b"]) } }, en), "“a” and “b”");
+});
+
+test("undoneLabel: texto natural tras deshacer un cambio de tipo o una modificación; null en las demás", () => {
+  const kind = { k: "Cambió el tipo de «{title}» a «{kind}»", p: { title: "Mirar el tiempo", kind: "Casa" } };
+  assert.equal(renderLabelEs(undoneLabel(kind, false)!), "Deshecho el cambio de tipo de «Mirar el tiempo»");
+  assert.equal(renderLabelEs(undoneLabel(kind, true)!), "Rehecho el cambio de tipo de «Mirar el tiempo»");
+  assert.equal(renderLabel(undoneLabel(kind, false)!, en), "Undid the type change of “Mirar el tiempo”");
+  const mod = { k: "Modificó «{title}»: {changes}", p: { title: "T", changes: { k: "{list} y {last}", p: { list: [{ k: "título" }, { k: "descripción" }], last: { k: "color" } } } } };
+  assert.equal(renderLabelEs(undoneLabel(mod, false)!), "Deshecho el cambio de título, descripción y color en «T»");
+  assert.equal(renderLabel(undoneLabel(mod, true)!, en), "Redid changes to title, description and color in “T”");
+  assert.equal(undoneLabel({ k: "Modificó «{title}»: {changes}", p: { title: "T", changes: { k: "sin cambios" } } }, false), null);
+  assert.equal(undoneLabel(sub, false), null);
 });
