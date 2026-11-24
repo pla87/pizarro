@@ -24,6 +24,7 @@ import { initialsOf } from "@/lib/graphemes";
 import type { RecurrenceRule } from "@/lib/recurrence-date";
 import { recurrenceLabel } from "@/components/board/recurrence-ui";
 import { actionThrowResult } from "@/lib/stale-action";
+import { undoneText } from "@/components/undo-text";
 
 export interface CalendarTask {
   id: string;
@@ -451,7 +452,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       if (!res.ok) return toast(res.error, "error");
       setOverrides((o) => ({ ...o, [last.taskId]: last.from }));
       setLast(null);
-      toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
+      toast(undoneText(t, res.data), "undo");
       safeRefresh();
     } finally {
       setUndoing(false);

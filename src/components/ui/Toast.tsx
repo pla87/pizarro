@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
 import { cn } from "./cn";
-import { pushToast } from "./toast-queue";
+import { pushToast, toastMs } from "./toast-queue";
 import { isSessionExpiredMessage, SESSION_EXPIRED } from "./session-expired";
 
 type ToastKind = "success" | "error" | "undo";
@@ -112,7 +112,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const id = nextId++;
-    const ms = kind === "error" || action ? 6000 : 2500;
+    const ms = toastMs(kind, !!action);
     const timer = setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), ms);
     last.current = { message, kind, at: now, id, timer, ms };
     // Con muchos avisos seguidos se van los más antiguos, nunca el de sesión caducada (su temporizador sigue en marcha

@@ -1,7 +1,7 @@
 // Cola de avisos (src/components/ui/toast-queue.ts): con muchos avisos seguidos no se cae el de sesión caducada.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_TOASTS, pushToast } from "../src/components/ui/toast-queue";
+import { MAX_TOASTS, pushToast, toastMs } from "../src/components/ui/toast-queue";
 
 const ids = (xs: { id: number }[]) => xs.map((x) => x.id);
 
@@ -36,4 +36,12 @@ test("no muta la lista anterior (estado de React)", () => {
   const next = pushToast(prev, { id: 5 });
   assert.deepEqual(ids([...prev]), [1, 2, 3, 4]);
   assert.deepEqual(ids(next), [2, 3, 4, 5]);
+});
+
+test("los avisos con «Deshacer» duran al menos 10 s; los errores y otros con botón, 6 s; los demás, 2,5 s", () => {
+  assert.ok(toastMs("undo", true) >= 10000);
+  assert.equal(toastMs("error", false), 6000);
+  assert.equal(toastMs("success", true), 6000);
+  assert.equal(toastMs("undo", false), 2500);
+  assert.equal(toastMs("success", false), 2500);
 });

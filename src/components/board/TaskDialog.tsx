@@ -30,7 +30,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
+import { kindChangeNotice, switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
@@ -71,6 +71,7 @@ import { UndoButton } from "../UndoButton";
 import { subtasksDidNotFit } from "./count-texts";
 import { anchorFromPoint } from "../ui/editAnchorDom";
 import type { EditAnchor } from "@/lib/edit-anchor";
+import { undoneText } from "../undo-text";
 
 export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecondBulk, draft, gone }: {
   task: BoardTask;
@@ -124,7 +125,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // ¿La descripción abierta tiene cambios de la persona? (la comunica el editor; ver DescriptionEditor).
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
   // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
-  const descReplace = useRef<((markdown: string) => void) | null>(null);
+  const descReplace = useRef<((markdown: string, templated: boolean) => void) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -574,13 +575,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind).
-  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange = false): Promise<boolean> => {
+  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, la
+  // descripción guardada pasa a la plantilla del tipo nuevo (el aviso lo dice).
+  type KindChange = false | { description: boolean };
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
     const done = saveNow(patch, optimistic, kindChange);
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
     return done;
   };
-  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange = false): Promise<boolean> => {
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
     const before = board.getTask(task.id);
     const send = (since: ReturnType<typeof textSince> | undefined): Promise<Awaited<ReturnType<typeof changeTaskKind>>> =>
       kindChange && patch.kindId ? changeTaskKind(task.id, { kindId: patch.kindId, title: patch.title, description: patch.description }, since) : updateTask(task.id, patch, since);
@@ -625,23 +628,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return false;
     }
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
-    const { kindSubtasks, titleClipped, ...saved } = res.data;
+    const { kindSubtasks, kindUndo, titleClipped, ...saved } = res.data;
     board.upsertTask(saved);
     // El servidor recortó el título (p. ej. la plantilla de título del tipo nuevo lo alarga): se dice, como en el tablero.
     if (titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped }));
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
-    if (kindSubtasks) {
-      setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
-      const { removed, added, undo } = kindSubtasks;
-      const n = Math.max(removed, added);
-      const text = !removed
-        ? n === 1 ? t("Añadida 1 subtarea del tipo") : t("Añadidas {n} subtareas del tipo", { n })
-        : !added
-          ? n === 1 ? t("Quitada 1 subtarea del tipo") : t("Quitadas {n} subtareas del tipo", { n })
-          : n === 1 ? t("Cambiada 1 subtarea") : t("Cambiadas {n} subtareas", { n });
-      // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
-      toast(text, "undo", undo.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
-    }
+    if (kindSubtasks) setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
+    // Lo que ha cambiado además del tipo, contado por separado («Tipo cambiado: 3 subtareas añadidas, 2 quitadas y
+    // plantilla de la descripción aplicada»); solo el tipo, sin aviso (basta con «Guardado»).
+    const text = kindChange ? kindChangeNotice(t, { added: kindSubtasks?.added ?? 0, removed: kindSubtasks?.removed ?? 0, description: kindChange.description }) : null;
+    const undo = kindSubtasks?.undo ?? kindUndo;
+    // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
+    if (text) toast(text, "undo", undo?.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
     return true;
   };
 
@@ -742,7 +740,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // Con id (aviso «Adjunto borrado») se deshace exactamente esa entrada, no la última de la tarea.
     const res = await board.track(entryId ? undoEntry(entryId) : undoLast(board.project.id, task.id));
     if (!res.ok) return toast(res.error, "error");
-    toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
+    toast(undoneText(t, res.data), "undo");
     await reloadRef.current();
   };
 
@@ -1046,25 +1044,27 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const nextTitle = detail && kind ? switchKindTitle(prev, kind, title, board.kinds).trimEnd() : title;
     const typed = descLive.current;
     if (detail && kind && typed !== null && typed !== detail.description && (descDirtyCheck.current?.() ?? true)) {
-      // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción.
-      descReplace.current?.(switchKindDescription(prev, kind, typed));
+      // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción (y, si
+      // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado).
+      const nextDesc = switchKindDescription(prev, kind, typed);
+      descReplace.current?.(nextDesc, nextDesc !== typed);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
-      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, true);
+      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: false });
       // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
       // Más rato que «Guardado»: el aviso de la cabecera queda lejos del selector de tipo y se pasaba por alto.
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
       return saved;
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
-    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, true);
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: false });
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
     save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
-      true,
+      { description: preset.description !== detail?.description },
     );
   };
 
@@ -1628,7 +1628,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
-  replaceRef?: React.MutableRefObject<((markdown: string) => void) | null>;
+  replaceRef?: React.MutableRefObject<((markdown: string, templated: boolean) => void) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -1670,14 +1670,16 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   const touch = () => {
     touched.current = true;
   };
-  // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado.
-  const [kindChanged, setKindChanged] = useState(false);
+  // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado
+  // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; ver switchKindDescription).
+  const [kindChanged, setKindChanged] = useState<false | "kind" | "template">(false);
   useEffect(() => {
     if (!replaceRef) return;
-    replaceRef.current = (markdown) => {
+    replaceRef.current = (markdown, templated) => {
       touched.current = true;
       setValue(markdown);
-      setKindChanged(true);
+      // Una vez aplicada, el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
+      setKindChanged((k) => (templated || k === "template" ? "template" : "kind"));
     };
     return () => {
       replaceRef.current = null;
@@ -1808,7 +1810,9 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar descripción")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
             {kindChanged ? (
-              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">{t("Tipo cambiado; falta guardar la descripción")}</span>
+              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">
+                {kindChanged === "template" ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción") : t("Tipo cambiado; falta guardar la descripción")}
+              </span>
             ) : (
               <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>
             )}
