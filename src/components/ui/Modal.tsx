@@ -55,6 +55,24 @@ export function hasOpenModal(): boolean {
 export function modalDepth(): number {
   return modalStack.length;
 }
+/** Modales pintados ahora mismo (para las copias flotantes de botones que quedan debajo del fondo: useAnyModalOpen). */
+let shownModals = 0;
+const shownListeners = new Set<() => void>();
+function setShownModals(delta: number) {
+  shownModals += delta;
+  for (const l of shownListeners) l();
+}
+/** ¿Hay algún Modal en pantalla? (el botón de informar de un error se copia entonces encima del fondo). */
+export function useAnyModalOpen(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      shownListeners.add(cb);
+      return () => shownListeners.delete(cb);
+    },
+    () => shownModals > 0,
+    () => false,
+  );
+}
 let scrollLocks = 0;
 let savedBody: { overflow: string; position: string; top: string; width: string; htmlOverflow: string; scrollY: number } | null = null;
 
@@ -184,7 +202,12 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
   useEffect(() => {
     const root = rootRef.current;
     if (!open || !hydrated || !root) return;
-    return inertBackground(root, side !== "center");
+    const restore = inertBackground(root, side !== "center");
+    setShownModals(1);
+    return () => {
+      setShownModals(-1);
+      restore();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `side` no cambia mientras está abierto
   }, [open, hydrated]);
 

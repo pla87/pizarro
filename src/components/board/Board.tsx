@@ -1913,7 +1913,8 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
                 tabIndex={-1}
                 // Fuera del `inert` del modal (Modal.tsx): es el acceso a la segunda tarea por encima del fondo.
                 data-pz-layer
-                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "opacity-60")}
+                // Con la pareja abierta no hace nada, pero se ve entera (atenuada parecía tapada por el fondo).
+                className={cn("btn-primary fixed z-[70] whitespace-nowrap shadow-lg", secondOpen && "cursor-default")}
                 style={{ left: newTaskRect.left, top: newTaskRect.top, width: newTaskRect.width, height: newTaskRect.height }}
                 onClick={() => !secondOpen && addSecond()}
                 aria-disabled={secondOpen}
@@ -1921,8 +1922,9 @@ export function Board({ data: page, initialTaskId = null, intro = "" }: { data: 
                 aria-label={t("Abrir otra tarea nueva al lado")}
                 title={t("Abrir otra tarea nueva al lado")}
               >
-                {/* Mismo texto que el botón original: corto cuando la cabecera va justa de sitio y solo el icono si no cabe más. */}
-                <Plus size={16} /> {newTaskRect.width < 60 ? null : newTaskRect.width < 130 ? t("Nueva") : t("Nueva tarea")}
+                {/* Mismo texto que el botón original, según el modo de la cabecera (useHeaderFit): «Nueva tarea», «Nueva» o
+                    solo el icono. Antes se deducía del ancho, y «Nueva tarea» (unos 120 px) salía como «Nueva». */}
+                <Plus size={16} /> {headerFit === "tight" ? null : headerFit === "icons" ? t("Nueva") : t("Nueva tarea")}
               </button>,
               document.body,
             )}
