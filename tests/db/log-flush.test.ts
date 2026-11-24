@@ -32,7 +32,7 @@ beforeEach(async () => {
   resetRateLimit("client-errors:anon:10.7.7.7");
   await flushLogs();
   state.queue.length = 0;
-  await db.appLog.deleteMany({ where: { OR: [{ category: "test" }, { category: "client", message: { contains: "fallo-" } }] } });
+  await db.appLog.deleteMany({ where: { OR: [{ category: "test" }, { category: "client", details: { path: ["error"], string_contains: "fallo-" } }] } });
 });
 
 describe("logs con NUL o medio emoji", () => {
@@ -41,13 +41,14 @@ describe("logs con NUL o medio emoji", () => {
     assert.equal((await report({ source: "window", message: "fallo-emoji x\ud83d", stack: "pila \ud83d\u0000 rota" })).status, 204);
     assert.equal((await report({ source: "window", message: "fallo-normal 😀" })).status, 204);
     await flushLogs();
-    const saved = await db.appLog.findMany({ where: { category: "client", message: { contains: "fallo-" } } });
-    const by = (s: string) => saved.find((r) => r.message.includes(s));
+    const saved = await db.appLog.findMany({ where: { category: "client", details: { path: ["error"], string_contains: "fallo-" } } });
+    const error = (r: (typeof saved)[number]) => (r.details as { error: string }).error;
+    const by = (s: string) => saved.find((r) => error(r).includes(s));
     assert.equal(saved.length, 3);
-    assert.match(by("fallo-nul")!.message, /fallo-nul ab$/);
-    assert.match(by("fallo-emoji")!.message, /fallo-emoji x�$/);
+    assert.equal(error(by("fallo-nul")!), "fallo-nul ab");
+    assert.equal(error(by("fallo-emoji")!), "fallo-emoji x�");
     assert.equal((by("fallo-emoji")!.details as { stack: string }).stack, "pila � rota");
-    assert.match(by("fallo-normal")!.message, /😀$/);
+    assert.match(error(by("fallo-normal")!), /😀$/);
     assert.equal(state.queue.length, 0);
   });
 

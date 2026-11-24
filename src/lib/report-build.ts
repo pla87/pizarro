@@ -6,6 +6,7 @@ import { addDaysIso, dateToIso, isoToDate, todayIso, weekBoundsIso } from "./dat
 import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
+import { COLUMN_ORDER } from "./task-positions";
 import { AppError } from "./errors";
 import { mentionsToPlain } from "./mentions";
 import { slugify } from "./search-accents";
@@ -18,7 +19,8 @@ import { loadChecklistItems } from "./column-views";
 import { buildWeekPlan, type WeekPlanGroupBy } from "./week-plan";
 import { buildProgramSessions, programDocumentName } from "./course-program";
 import { PROGRAM_MAX_SESSIONS } from "./program-limit";
-import { buildAssignPlan, firstDescriptionLine, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
+import { buildAssignPlan, descriptionSummary, PLAN_DESCRIPTION_READ, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
+import { descriptionHeads } from "./description-heads";
 import { calendarWeekStart } from "./calendar";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -159,7 +161,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
 
   const today = todayIso(appTimeZone());
   const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts, subtaskGroups] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, isDone: true } }),
+    db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, isDone: true } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],
@@ -313,35 +315,6 @@ export function generateChecklistPdf(
   })();
 }
 
-/** PDF «Resumen para el cliente» de una columna DELIVERY: sin comentarios, descripciones ni personas. */
-export function generateDeliveryPdf(
-  projectId: string, columnId: string, opts: PdfRequestOpts,
-): Promise<{ pdf: Uint8Array; filename: string; taskCount: number } | null> {
-  return (async () => {
-    const t = makeT(opts.locale);
-    const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "DELIVERY" }, select: { name: true, project: { select: { name: true } } } });
-    if (!column) return null;
-    const tasks = await db.task.findMany({
-      where: { projectId, columnId, archivedAt: null },
-      orderBy: [{ position: "asc" }, { id: "asc" }],
-      take: 2000,
-      select: {
-        title: true, dueDate: true, kind: { select: { id: true, name: true } },
-        subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
-      },
-    });
-    const today = todayIso(appTimeZone());
-    const pdf = await renderPdf({ kind: "delivery", locale: opts.locale, input: {
-      project: column.project.name, column: column.name, today,
-      tasks: tasks.map((x) => ({
-        title: mentionsToPlain(x.title, false), kind: localizeGeneralKind(x.kind, opts.locale).name, dueDate: dateToIso(x.dueDate),
-        subtaskTotal: x.subtasks.length, doneSubtasks: x.subtasks.filter((s) => s.done).map((s) => mentionsToPlain(s.title, false)),
-      })),
-    } }, opts.signal);
-    return { pdf, filename: `${t("entrega")}-${slugOf(column.project.name, t("proyecto"))}-${today}.pdf`, taskCount: tasks.length };
-  })();
-}
-
 /** PDF de la planificación de la semana de una columna con rol WEEKLY_PLAN (por día o por persona). */
 export function generateWeekPlanPdf(
   projectId: string, columnId: string, opts: PdfRequestOpts & { generatedBy: string; groupBy: WeekPlanGroupBy },
@@ -374,7 +347,7 @@ export function generateWeekPlanPdf(
  * grupo, por fecha límite. La semana empieza en lunes en español y en domingo en inglés (como la cuadrícula del
  * calendario: calendarWeekStart). Null si la columna no tiene persona o no es «Asignación a persona» (con otro rol, la
  * persona que conserve de una versión anterior no cuenta: isAssignColumn). De las subtareas pendientes se leen solo las
- * que salen (PLAN_SUBTASKS_SHOWN) y cuántas son.
+ * que salen (PLAN_SUBTASKS_SHOWN) y cuántas son; de la descripción, su comienzo (PLAN_DESCRIPTION_READ), para el resumen.
  */
 export function generateAssignPlanPdf(
   projectId: string, columnId: string, opts: PdfRequestOpts,
@@ -393,20 +366,25 @@ export function generateAssignPlanPdf(
         orderBy: [{ position: "asc" }, { id: "asc" }],
         take: 2000,
         select: {
-          title: true, description: true, dueDate: true, priority: true, kind: { select: { id: true, name: true } },
+          id: true, title: true, dueDate: true, priority: true, kind: { select: { id: true, name: true } },
+          labels: { select: { label: { select: { name: true } } } },
           subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], take: PLAN_SUBTASKS_SHOWN, select: { title: true } },
           _count: { select: { subtasks: { where: { done: false } } } },
         },
       }),
       db.task.count({ where: { projectId, columnId, archivedAt: null, OR: [{ assigneeId: null }, { assigneeId: { not: column.assigneeId! } }] } }),
     ]);
+    // De la descripción solo hace falta el comienzo (el resumen no pasa de unas líneas): se lee solo eso de la base.
+    const heads = (await descriptionHeads(tasks.map((x) => x.id), [], PLAN_DESCRIPTION_READ)).tasks;
     const today = todayIso(appTimeZone());
+    const labelCollator = new Intl.Collator(intlLocale(opts.locale), { sensitivity: "base", numeric: true });
     const rows: AssignPlanTask[] = tasks.map((x) => ({
       title: mentionsToPlain(x.title, false),
       kind: localizeGeneralKind(x.kind, opts.locale).name,
       priority: withPriority ? x.priority : null,
       dueDate: dateToIso(x.dueDate),
-      firstLine: firstDescriptionLine(mentionsToPlain(x.description, false)),
+      summary: descriptionSummary(mentionsToPlain(heads.get(x.id) ?? "", false)),
+      labels: x.labels.map((l) => l.label.name).sort(labelCollator.compare),
       pendingSubtasks: x.subtasks.map((st) => mentionsToPlain(st.title, false)),
       pendingCount: x._count.subtasks,
     }));

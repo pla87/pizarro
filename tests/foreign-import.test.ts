@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test, describe } from "node:test";
 import { makeT } from "../src/i18n/core";
-import { assertCsvHeader, detectDelimiter, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
+import { assertCsvHeader, detectDelimiter, MAX_CSV_FIELDS, mapHeaders, parseCsv, parseCsvBoard } from "../src/lib/foreign-import/csv";
 import { assertBoardLimits, decodeText, foreignMaxBytes, parseForeign, sniffFormat } from "../src/lib/foreign-import/parse";
 import { cleanMarkdown, cleanName, cleanTitle, instantDay, isDoneName, parseDay, stripHtml } from "../src/lib/foreign-import/text";
 import { parseTrello } from "../src/lib/foreign-import/trello";
@@ -118,6 +118,80 @@ describe("CSV: lectura RFC 4180", () => {
 
   test("campo entre comillas vacío en una fila de una sola columna se conserva; una comilla en mitad de un campo es literal", () => {
     assert.deepEqual(parseCsv('a\n""\n5" pulgadas'), [["a"], [""], ['5" pulgadas']]);
+  });
+
+  test("lectura por tramos: la misma salida que el lector carácter a carácter en casos raros y en entradas al azar", () => {
+    // Copia del lector anterior (campo a campo, carácter a carácter), como referencia de la salida.
+    const charByChar = (input: string, delimiter?: string): string[][] => {
+      const text = input.replace(/^\uFEFF/, "");
+      const sep = delimiter ?? detectDelimiter(text);
+      const rows: string[][] = [];
+      let row: string[] = [];
+      let field = "";
+      let quoted = false;
+      let wasQuoted = false;
+      const endField = () => { row.push(field); field = ""; };
+      const endRow = () => {
+        const q = wasQuoted;
+        endField();
+        wasQuoted = false;
+        if (row.length > 1 || row[0] !== "" || q) rows.push(row);
+        row = [];
+      };
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i]!;
+        if (quoted) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; } else quoted = false;
+          } else field += ch;
+        } else if (ch === '"' && field === "") { quoted = true; wasQuoted = true; }
+        else if (ch === sep) endField();
+        else if (ch === "\n") endRow();
+        else if (ch === "\r") { if (text[i + 1] === "\n") i++; endRow(); }
+        else field += ch;
+      }
+      if (field !== "" || row.length || wasQuoted) endRow();
+      return rows;
+    };
+    const cases = [
+      "", "\uFEFF", "\n\n\r\n\r", '"', '""', '"""', '""""', '"""""', '"a', 'a"', '"a"b', '"a""b"', '""a""', '"" x"', 'a,"b\r\nc",d\re\nf',
+      '"x"\r', "a\r\r\nb", ",", ",,\n,", '"",""', '\uFEFF"a";"b;c"\n1;2', "a\tb\n\"c\td\"\te", 'x"y"z,"q""', '"abc\n', "\uFEFF\uFEFFa",
+      '"a"\n""\n"b"', 'a,b\n"",\n,""', '5" pulgadas,"3"" tornillo"',
+    ];
+    const seps = [undefined, ",", ";", "\t", '"', "\n", "\r", "ab", ""];
+    for (const c of cases) for (const sep of seps) assert.deepEqual(parseCsv(c, sep), charByChar(c, sep), JSON.stringify([c, sep]));
+    // Entradas al azar con los caracteres que importan (generador fijo para que la prueba sea repetible).
+    let seed = 42;
+    const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed % n; };
+    const alphabet = ['"', '"', ",", ";", "\t", "\r", "\n", "a", "b", " ", "ñ", "\uFEFF"];
+    for (let k = 0; k < 3000; k++) {
+      let c = "";
+      for (let len = rnd(30); len > 0; len--) c += alphabet[rnd(alphabet.length)];
+      const sep = seps[rnd(5)];
+      assert.deepEqual(parseCsv(c, sep), charByChar(c, sep), JSON.stringify([c, sep]));
+    }
+  });
+
+  test("CSV grandes: un campo largo, una fila de millones de campos y 23 MB de notas no gastan memoria ni tiempo", () => {
+    // Una fila con muchos campos guarda solo los primeros MAX_CSV_FIELDS (la cabecera no mira más).
+    const wide = parseCsv(`${",".repeat(2_000_000)}\nx`);
+    assert.equal(wide.length, 2);
+    assert.equal(wide[0]!.length, MAX_CSV_FIELDS);
+    assert.deepEqual(wide[1], ["x"]);
+    assert.equal(parseCsv(`${"a,".repeat(1500)}"no se guarda ""x""",z\nfin`)[1]![0], "fin");
+    // Un campo de 5 millones de caracteres entre comillas (tope de «Importar tareas»), con comillas dobles y saltos.
+    const long = `${"x".repeat(1_000_000)}""\r\n`.repeat(5);
+    assert.deepEqual(parseCsv(`title\n"${long}"`), [["title"], [long.replaceAll('""', '"')]]);
+    // Un CSV realista de 23 MB: 6000 filas con una descripción de 4 KB (como un Asana o Jira con notas largas).
+    const notes = `"${'Texto de la nota, con ""comillas"" y comas. '.repeat(90)}\n segunda línea"`;
+    const big = `title,description\n${Array.from({ length: 5800 }, (_, i) => `Tarea ${i},${notes}\n`).join("")}`;
+    assert.ok(big.length > 23_000_000);
+    globalThis.gc?.();
+    const before = process.memoryUsage().heapUsed;
+    const rows = assertFast(1500, () => parseCsv(big));
+    assert.equal(rows.length, 5801);
+    assert.ok(process.memoryUsage().heapUsed - before < 200 * 1024 * 1024, "gastó demasiada memoria");
+    assert.ok(rows[1]![1]!.startsWith('Texto de la nota, con "comillas"'));
   });
 
   test("UTF-8 con BOM y Windows-1252 (Excel) se decodifican bien; UTF-16 con BOM también", () => {

@@ -41,6 +41,7 @@ export const READ_ACTIONS = [
   "releases.getReleaseContent",
   "aiPlan.getAiPlanSetup",
   "aiPlan.getAiPlanTaskDetails",
+  // Acción retirada (el diálogo usa projects.listProjectStarts): sus filas antiguas siguen en los logs hasta caducar.
   "templates.listTemplates",
   "projects.listProjectStarts",
   "report.pdf",
@@ -108,6 +109,9 @@ export function logWhere(f: LogFilters, memberProjectIds: readonly string[], wit
         { action: { contains: q, mode: "insensitive" } },
         { message: { contains: q, mode: "insensitive" } },
         { path: { contains: q, mode: "insensitive" } },
+        // Errores del navegador: su texto técnico va en los detalles, no en el mensaje (api/client-errors). Aquí Prisma no
+        // admite «insensitive»: distingue mayúsculas.
+        { category: "client", details: { path: ["error"], string_contains: q } },
       ],
     });
   }

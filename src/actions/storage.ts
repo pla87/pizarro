@@ -11,6 +11,7 @@ import { AppError, forbidden } from "@/lib/errors";
 import { QUOTA_MAX_MB, QUOTA_MIN_MB, type QuotaSetting } from "@/lib/quota";
 import { getQuotaSettings, saveQuotaSettings } from "@/lib/quota-settings";
 import { requireAdmin, requireUser } from "@/lib/session";
+import type { Label } from "@/lib/undo-label";
 import { QUOTA_KEYS } from "@/lib/settings-versions";
 import {
   CLEANUP_DAYS, cleanupArchivedTaskAttachments, cleanupOldReleaseAttachments, deleteDocumentsForever, deleteReleaseAttachments, deleteTaskAttachments,
@@ -31,8 +32,9 @@ const settingInput = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("custom"), mb }),
 ]);
 
-const describe = (s: QuotaSetting, t: "project" | "total"): string =>
-  s.mode === "custom" ? `${s.mb} MB` : s.mode === "unlimited" ? "sin límite" : t === "project" ? "la predeterminada (10 GB)" : "sin cuota total";
+// Para Logs: las cifras van tal cual y las palabras como plantilla, para leerlas en el idioma de cada cual.
+const describe = (s: QuotaSetting, t: "project" | "total"): string | Label =>
+  s.mode === "custom" ? `${s.mb} MB` : s.mode === "unlimited" ? { k: "sin límite" } : t === "project" ? { k: "la predeterminada (10 GB)" } : { k: "sin cuota total" };
 
 /** Administración → Ajustes → Almacenamiento: cuotas generales guardadas en la aplicación (las variables de entorno, si existen, mandan). */
 export async function saveStorageQuotas(input: { project: QuotaSetting; total: QuotaSetting }, since?: string) {
@@ -61,7 +63,7 @@ export async function setProjectStorageQuota(projectId: string, quotaMb: number 
     const project = await findManageableProject(user, projectId);
     const next = quotaMb === null ? null : mb.parse(quotaMb);
     await db.project.update({ where: { id: project.id }, data: { storageQuotaMb: next } });
-    describeAction("Cambió la cuota de almacenamiento del proyecto a {value}", { value: next === null ? "la general" : `${next} MB` });
+    describeAction("Cambió la cuota de almacenamiento del proyecto a {value}", { value: next === null ? { k: "la general" } : `${next} MB` });
     revalidatePath(`/p/${project.id}/settings`);
   });
 }

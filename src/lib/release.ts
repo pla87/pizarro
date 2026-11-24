@@ -1,7 +1,7 @@
 // Generador de release notes. Función pura: se usa en el navegador (instantáneo)
 // y en los tests.
 
-import { isoInZone } from "./dates";
+import { formatDay, isoInZone } from "./dates";
 import { addDays, startOfDayInZone } from "./log-range";
 import { blankEmptyParagraphs, decodeEntities } from "./markdown-entities";
 import { mentionsToPlain } from "./mentions";
@@ -315,12 +315,14 @@ export function swapTemplateBlock(text: string, previous: string, next: string, 
 }
 
 /**
- * Título por defecto: «Release 2026-10-18 · Proyecto». Si ya hay releases desplegadas ese día,
- * se indica el ordinal tras la fecha: «Release 2026-10-18 (2) · Proyecto».
+ * Título por defecto, con la fecha como en el resto de la app y en el idioma de la persona (`locale` de Intl):
+ * «Release 18 oct 2026 · Proyecto» / «Release Oct 18, 2026 · Proyecto». Si ya hay releases desplegadas ese día, se indica
+ * el ordinal tras la fecha: «Release 18 oct 2026 (2) · Proyecto». Nada depende de este formato: el histórico se ordena por
+ * `deployedAt`, el buscador busca en el título tal cual y los nombres de los ficheros llevan su propia fecha ISO.
  */
-export function defaultReleaseTitle(dayIso: string, projectName: string, releasesToday = 0): string {
+export function defaultReleaseTitle(dayIso: string, projectName: string, releasesToday = 0, locale = "es-ES"): string {
   const n = Math.max(0, Math.floor(releasesToday)) + 1;
-  return `Release ${dayIso}${n > 1 ? ` (${n})` : ""} · ${projectName}`;
+  return `Release ${formatDay(dayIso, undefined, locale)}${n > 1 ? ` (${n})` : ""} · ${projectName}`;
 }
 
 /**

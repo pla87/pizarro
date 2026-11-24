@@ -121,3 +121,25 @@ export function normalizeModel(model: MentionModel): MentionModel {
 export function mentionTouching(model: MentionModel, pos: number, dir: "backward" | "forward"): MentionSpan | undefined {
   return model.mentions.find((m) => (dir === "backward" ? m.end === pos : m.start === pos));
 }
+
+// --- El espacio detrás de una mención elegida en la lista de «@» ---
+// Al elegir una persona se inserta la mención con un espacio detrás para seguir escribiendo. Antes, quien seguía
+// escribiendo con un espacio dejaba dos («@Ana  para…»), y elegirla delante de un espacio que ya había, también.
+
+/** Lo que va detrás de la mención al elegirla: un espacio, salvo si el texto que sigue ya empieza por uno. */
+export function mentionSuffix(after: string): string {
+  return /^[  ]/.test(after) ? "" : " ";
+}
+
+const RAW_MENTION_END = /@\[[^\]\n]{1,80}\]\(user:[a-z0-9]{1,40}\)$/i;
+
+/**
+ * ¿Sobra el espacio que se va a escribir en `caret`? Sí cuando justo detrás de una mención ya hay uno (el que se puso al
+ * elegirla): `value` es el texto de la caja y `mentionEnds`, dónde acaba cada mención en él (modo «bonito»); sin él, las
+ * menciones se buscan en el formato guardado @[Nombre](user:ID).
+ */
+export function redundantMentionSpace(value: string, caret: number, mentionEnds?: readonly number[]): boolean {
+  if (caret < 1 || value[caret - 1] !== " ") return false;
+  const end = caret - 1;
+  return mentionEnds ? mentionEnds.includes(end) : RAW_MENTION_END.test(value.slice(0, end));
+}

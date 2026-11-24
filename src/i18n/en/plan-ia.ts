@@ -68,7 +68,6 @@ export const planIa: Record<string, string> = {
     "{n} file(s) in the “attachments/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own and the images in the descriptions point to it. Images are in WebP.",
   "ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas": "“attachments/…” ZIP with the attachments of the plan's tasks: the text cites their paths",
   // Botones de columnas especiales sin tarjetas con lo que necesitan
-  "Ninguna tarjeta tiene fecha límite": "No card has a due date",
   "Ninguna tarjeta tiene subtareas": "No card has subtasks",
   // Plan sin enlaces a Pizarro (la IA no puede abrirlos): los adjuntos, por su ruta en el ZIP o por su nombre
   "Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.":

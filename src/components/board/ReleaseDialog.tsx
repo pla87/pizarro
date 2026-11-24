@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
 import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
-import { useLocale, useT } from "@/i18n/client";
+import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
@@ -47,12 +47,13 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const confirm = useConfirm();
   const t = useT();
   const uiLocale = useLocale();
+  const intlLocale = useIntlLocale();
   const [step, setStep] = useState<"select" | "edit">("select");
   const [chosen, setChosen] = useState<Set<string>>(new Set(preselected));
   /** Si la persona ya marcó o desmarcó alguna tarea, la cadencia de las fijas no vuelve a tocar la selección. */
   const selectionTouched = useRef(false);
   const [initialTasks] = useState(tasks);
-  const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name));
+  const [title, setTitle] = useState(() => defaultReleaseTitle(board.today, board.project.name, 0, intlLocale));
   /** Si el usuario ya tocó el título, no se sustituye por el ordinal del día. */
   const titleEdited = useRef(false);
   const [generated, setGenerated] = useState("");
@@ -119,9 +120,9 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         const notDue = initialTasks.filter((x) => x.evergreen && !evergreenDue(res.data.nextNumber, x.evergreenEvery)).map((x) => x.id);
         if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
       }
-      if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today));
+      if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today, intlLocale));
     }, () => {});
-  }, [board.project.id, board.project.name, board.today, initialTasks]);
+  }, [board.project.id, board.project.name, board.today, initialTasks, intlLocale]);
 
   const generate = async () => {
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
@@ -264,7 +265,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             {tooMany ? (
               <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 500 tareas: quita alguna de la selección.")}</span>
             ) : (
-              <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} />
+              <TemplateSourceNote projectId={board.project.id} projectTab="releases" />
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails}>
@@ -297,6 +298,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     >
       {step === "select" ? (
         <div className="space-y-3">
+          {/* Qué hace, como en «Generar plan de trabajo»: sobre todo, que desplegar cambia el título de las tareas. */}
+          <p className="text-sm text-slate-600 dark:text-slate-400" data-release-intro>
+            {t("Notas de versión en Markdown con estas tareas, agrupadas por tipo. Al marcarla como desplegada se guarda en el histórico y el título de cada tarea (salvo las fijas) pasa a empezar por su código, p. ej. «R{number}F1: …».", { number: releaseNumber ?? 1 })}
+          </p>
           <div>
             <label className="label" htmlFor="rel-title">{t("Título de la release")}</label>
             <input id="rel-title" className="input" value={title} onChange={(e) => {
@@ -326,7 +331,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
       ) : (
         <div className="flex h-full flex-col gap-3">
           {templatePickers}
-          <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject={projectTemplates.headers.length + projectTemplates.footers.length > 0} confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
+          <TemplateSourceNote projectId={board.project.id} projectTab="releases" confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
           <DraftTextEditor draft={draft} label={t("Contenido de la release")} idPrefix="release" dataAttr="data-release-editor" onEscape={() => void requestClose()} />
           <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <legend className="sr-only">{t("Al marcar como desplegado")}</legend>

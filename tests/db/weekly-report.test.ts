@@ -6,8 +6,9 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, beforeEach, describe, test } from "node:test";
-import { db, makeProject, makeTask, makeUser, withSmtpDown } from "./helpers";
+import { db, makeProject, makeTask, makeUser, withSmtpDown, withSmtpRejecting } from "./helpers";
 import { INSTANCE_ORG_KEY, invalidateInstance } from "../../src/lib/instance";
+import { flushLogs } from "../../src/lib/log";
 import { appTimeZone } from "../../src/lib/format";
 import { sendDueReports } from "../../src/lib/periodic-mail";
 import { generateProjectReportPdf, reportCounts } from "../../src/lib/report-build";
@@ -150,6 +151,45 @@ describe("email del informe semanal", () => {
     const rows = await db.reportSchedule.findMany({ where: { projectId: { in: projects.map((f) => f.project.id) } } });
     assert.deepEqual(rows.map((r) => r.lastSentAt), [null, null], "los dos siguen pendientes para la pasada siguiente");
   });
+  // Antes, con una dirección que el servidor de correo rechaza para siempre (un buzón que ya no existe), se volvía a generar
+  // el PDF y a intentar el envío cada hora hasta medianoche, todas las semanas.
+  test("un rechazo permanente del servidor de correo (550) no se reintenta hasta el próximo envío", async () => {
+    const creator = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [creator] });
+    await schedule(f, creator, `no-existe-${Date.now()}@example.com`);
+    const calls: string[] = [];
+    const now = new Date();
+    await withSmtpRejecting(async () => {
+      for (const h of [0, 1, 2]) assert.equal(await sendDueReports(new Date(now.getTime() + h * 3_600_000), { generate: fakePdf(calls) }), 0);
+    });
+    assert.equal(calls.length, 1, "un solo PDF");
+    const row = await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } });
+    assert.equal(row.lastSentAt?.getTime(), now.getTime(), "queda la reserva de esta semana");
+    assert.equal(row.enabled, true);
+    await flushLogs();
+    const log = await db.appLog.findFirst({ where: { projectId: f.project.id, action: "report.scheduledRejected" } });
+    assert.ok(log, "deja un error en Logs");
+  });
+  // Antes también se daba por perdido el informe de la semana si el servidor rechazaba el remitente (un SMTP_FROM que no
+  // admite) o el mensaje: son fallos de la instalación y, arreglados, el informe debe salir en el reintento de la hora.
+  for (const at of ["MAIL FROM", "DATA"] as const) {
+    test(`un rechazo en ${at} (de la instalación, no del destinatario) se reintenta a la hora`, async () => {
+      const creator = await makeUser({ role: "ADMIN" });
+      const f = await makeProject({ members: [creator] });
+      await schedule(f, creator, `rechazo-${Date.now()}@example.com`);
+      const calls: string[] = [];
+      const now = new Date();
+      await withSmtpRejecting(async () => {
+        for (const h of [0, 1]) assert.equal(await sendDueReports(new Date(now.getTime() + h * 3_600_000), { generate: fakePdf(calls) }), 0);
+      }, at);
+      assert.equal(calls.length, 2, "se vuelve a intentar a la hora");
+      const row = await db.reportSchedule.findUniqueOrThrow({ where: { projectId: f.project.id } });
+      assert.equal(row.lastSentAt, null, "la reserva se devuelve");
+      await flushLogs();
+      assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.scheduledRejected" } }), 0);
+      assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: "report.scheduledFailed" } }), 2);
+    });
+  }
 });
 
 describe("informe semanal de un proyecto enorme", () => {

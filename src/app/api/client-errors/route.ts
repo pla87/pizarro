@@ -2,6 +2,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { isNextNavigationSignal } from "@/lib/next-navigation-signal";
 import { redactPath } from "@/lib/redact-path";
+import { maskSecretPaths } from "@/lib/secret-path";
 import { rateIp, rateLimit } from "@/lib/rate-limit";
 import { BodyTooLargeError, declaredLength, readBodyLimited } from "@/lib/upload-slots";
 import { clientIp, isSameOrigin } from "@/lib/request";
@@ -56,15 +57,17 @@ export async function POST(req: Request) {
     level: "error",
     category: "client",
     action: `client.${e.source}`,
+    // Frase llana («Error en el navegador en /p/…»); el texto técnico va en los detalles (`error`), donde también lo busca
+    // el buscador de Logs (logWhere).
     label: {
-      k: user ? (path ? "Error en el navegador en {path}: {error}" : "Error en el navegador: {error}") : path ? "Error en el navegador (sin sesión) en {path}: {error}" : "Error en el navegador (sin sesión): {error}",
-      p: { path: path ?? "", error: e.message },
+      k: user ? (path ? "Error en el navegador en {path}" : "Error en el navegador") : path ? "Error en el navegador (sin sesión) en {path}" : "Error en el navegador (sin sesión)",
+      ...(path ? { p: { path } } : {}),
     },
     userId: user?.id ?? null,
     userName: user?.name ?? null,
     path: path ?? null,
     ip,
-    details: { anonymous: !user, digest: e.digest, stack: e.stack, userAgent: req.headers.get("user-agent")?.slice(0, 300) },
+    details: { error: maskSecretPaths(e.message), anonymous: !user, digest: e.digest, stack: e.stack, userAgent: req.headers.get("user-agent")?.slice(0, 300) },
   });
   return new Response(null, { status: 204 });
 }

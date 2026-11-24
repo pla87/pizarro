@@ -10,7 +10,6 @@ import { db, expectOk, loginAs, logout, makeProject, makeUser, waitForLockWaiter
 import { pdfRuns } from "../pdf-runs";
 import { createProject } from "../../src/actions/projects";
 import { setColumnRole } from "../../src/actions/columns";
-import { listTemplates } from "../../src/actions/templates";
 import { createDocumentWithinLimit, saveGeneratedDocument } from "../../src/lib/documents";
 import { lockProject } from "../../src/lib/caps";
 import { nextProgramVersion } from "../../src/lib/report-build";
@@ -19,7 +18,7 @@ import { appTimeZone } from "../../src/lib/format";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { stopPdfWorker } from "../../src/lib/report-render";
 import { documentPath } from "../../src/lib/uploads";
-import { listTemplatesSorted, seedBuiltinTemplates } from "../../src/lib/template-store";
+import { listStartTemplates, listTemplatesSorted, seedBuiltinTemplates } from "../../src/lib/template-store";
 import { GET as programGet, POST as programPost } from "../../src/app/api/projects/[projectId]/columns/[columnId]/program/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-program-"));
@@ -79,7 +78,7 @@ describe("plantilla «Curso o charla»", () => {
 
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
     await loginAs(admin);
-    const en = expectOk(await listTemplates()).find((t) => t.id === tpl.id)!;
+    const en = (await listStartTemplates(db, "en")).find((t) => t.id === tpl.id)!;
     assert.equal(en.name, "Course or talk");
     const pe = expectOk(await createProject("Test master", { templateId: en.id }));
     const colsEn = await db.column.findMany({ where: { projectId: pe.id }, orderBy: { position: "asc" } });

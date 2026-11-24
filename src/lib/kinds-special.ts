@@ -92,27 +92,39 @@ function titleWithoutPrefix(prev: KindAutomation | null | undefined, title: stri
 
 /**
  * Título al pasar del tipo `prev` (el que tenía; null si ninguno) a `next`. Lo escrito no se pierde nunca: el prefijo del
- * anterior se cambia por el del nuevo y, si el título no lo llevaba, el del nuevo se pone delante («Leche y pan» →
- * «Comprar Leche y pan»); a un tipo sin prefijo se quita el del anterior si acaba en «:», «-»… Si solo queda el prefijo, va con un espacio detrás para seguir escribiendo («Comprar pan» y no
- * «Comprarpan», que ya no se reconocería como prefijo): el espacio sobrante se quita al guardar.
+ * anterior se cambia por el del nuevo (o se quita, si el nuevo no tiene) y, si el título no lo llevaba, el del nuevo se
+ * pone delante («Leche y pan» → «Comprar Leche y pan»). Si solo queda el prefijo, va con un espacio detrás para seguir
+ * escribiendo («Comprar pan» y no «Comprarpan», que ya no se reconocería como prefijo): el espacio sobrante se quita al
+ * guardar. `known` (los tipos del proyecto): si el título no empieza por el prefijo del anterior pero sí por el de otro
+ * tipo que acaba en signo («Cita:», quedó de un cambio anterior), también se quita; así no se acumulan («Gestionar Cita:
+ * …»). Uno que acaba en palabra («Comprar») solo se quita si es del tipo anterior: pudo escribirlo la persona.
  */
-export function switchKindTitle(prev: KindAutomation | null | undefined, next: KindAutomation, title: string): string {
+export function switchKindTitle(prev: KindAutomation | null | undefined, next: KindAutomation, title: string, known: readonly KindAutomation[] = []): string {
   const prefix = next.titleTemplate.trim();
   // El mismo tipo otra vez (pulsar el ya elegido): no se toca lo que haya.
   if (prev && prev.titleTemplate.trim() === prefix) return title;
   const join = (text: string) => (text ? `${prefix} ${text}` : `${prefix} `);
-  const rest = titleWithoutPrefix(prev, title);
-  // Con el prefijo del anterior: se cambia por el del nuevo y se conserva lo escrito detrás. Si el nuevo no tiene, se quita
-  // el prefijo («Obra: Baño» pasa a «Baño» al volver a «Casa»; antes se quedaba «Obra: »), salvo si acaba en una palabra:
-  // entonces forma parte de la frase («Respuesta a Juan» no pasa a «a Juan», ni «Comprar pan» a «pan»).
-  if (rest !== null) {
-    if (prefix) return join(rest);
-    if (!rest) return "";
-    return /[\p{L}\p{N}]$/u.test(prev!.titleTemplate.trim()) ? title : rest;
-  }
-  if (!prefix) return title;
+  let rest = titleWithoutPrefix(prev, title);
   // Ya empieza por el prefijo del nuevo (escrito a mano o de antes): se queda como está.
-  if (titleWithoutPrefix(next, title) !== null) return title;
+  if (rest === null && prefix && titleWithoutPrefix(next, title) !== null) return title;
+  // Otro prefijo conocido del proyecto (el más largo primero: «Cita previa:» antes que «Cita»).
+  if (rest === null) {
+    // Solo los que acaban en signo («Cita:», «Bug -»): uno que acaba en palabra («Comprar», «Gestionar») pudo escribirlo
+    // la persona («Comprar regalo de Ana» en una tarea de Casa) y solo se quita si es el del tipo anterior, arriba.
+    const others = known
+      .map((k) => k.titleTemplate.trim())
+      .filter((p) => p && p !== prefix && !/[\p{L}\p{N}]$/u.test(p))
+      .sort((a, b) => b.length - a.length);
+    for (const p of others) {
+      rest = titleWithoutPrefix({ titleTemplate: p, descriptionTemplate: "" }, title);
+      if (rest !== null) break;
+    }
+  }
+  // Con el prefijo de otro tipo: se cambia por el del nuevo y se conserva lo escrito detrás; si el nuevo no tiene, se quita
+  // («Comprar renovar pasaporte» pasa a «renovar pasaporte» al ir a «Casa»; antes se quedaba y, al elegir luego
+  // «Papeleo», salía «Gestionar Comprar renovar pasaporte»).
+  if (rest !== null) return prefix ? join(rest) : rest;
+  if (!prefix) return title;
   return join(title.trim());
 }
 
@@ -296,9 +308,10 @@ export function switchKindText(
   prev: KindTemplate | null | undefined,
   next: KindTemplate,
   current: { title: string; description: string; subtasks: readonly string[] },
+  known: readonly KindAutomation[] = [],
 ): { title: string; description: string; subtasks: string[] } {
   return {
-    title: switchKindTitle(prev, next, current.title),
+    title: switchKindTitle(prev, next, current.title, known),
     description: switchKindDescription(prev, next, current.description),
     subtasks: switchKindSubtasks(prev, next, current.subtasks),
   };

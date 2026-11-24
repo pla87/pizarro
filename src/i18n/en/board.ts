@@ -290,10 +290,8 @@ export const board: Record<string, string> = {
   "Agrupar": "Group",
   "No hay subtareas en esta columna.": "There are no subtasks in this column.",
   "Ver lista": "View list",
-  "Exportar a calendario (.ics)": "Export to calendar (.ics)",
   "Destino de la siguiente aparición: {name}…": "Next occurrence goes to: {name}…",
   "esta columna": "this column",
-  "Resumen para el cliente (PDF)": "Client summary (PDF)",
   "Destino de la siguiente aparición": "Next occurrence destination",
   "Cuando una tarea recurrente de esta columna se termine o se archive, su siguiente aparición se creará en:": "When a recurring task in this column is finished or archived, its next occurrence will be created in:",
   "Columna destino": "Target column",
@@ -308,7 +306,6 @@ export const board: Record<string, string> = {
   " y {n} más": " and {n} more",
   "Falta 1 subtarea": "1 subtask is missing",
   "lista": "list",
-  "entrega": "delivery",
   "Resumen para el cliente": "Client summary",
   "{done} de {total} subtareas hechas": "{done} of {total} subtasks done",
   "Revisión con requisitos": "Review with requirements",
@@ -364,9 +361,6 @@ export const board: Record<string, string> = {
 
   // Tablero con un filtro o una búsqueda activos: columna sin resultados
   "Ninguna tarjeta coincide": "No cards match",
-  // Agenda: el .ics se descarga sin salir del tablero (ronda 57)
-  "No se pudo exportar el calendario.": "The calendar could not be exported.",
-  "Sin conexión: no se ha podido exportar el calendario.": "Offline: the calendar could not be exported.",
   // Sin red al adjuntar el documento del visor o al descargar los adjuntos en ZIP (en vez del texto del navegador)
   "Sin conexión: no se ha podido descargar el documento.": "Offline: the document could not be downloaded.",
   "Sin conexión: no se han podido descargar los adjuntos.": "Offline: the attachments could not be downloaded.",
@@ -374,4 +368,10 @@ export const board: Record<string, string> = {
   "Responsable: {name}": "Assignee: {name}",
   // Buscador de «Tareas archivadas» (nombre accesible)
   "Buscar en las archivadas": "Search archived tasks",
+  // PDF de la semana y de la lista consolidada: se descargan sin abrir otra pestaña (columnDownload.ts)
+  "Generando PDF…": "Generating PDF…",
+  "No se pudo generar el PDF de la semana.": "The week PDF could not be generated.",
+  "Sin conexión: no se ha podido generar el PDF de la semana.": "Offline: the week PDF could not be generated.",
+  "No se pudo generar el PDF de la lista.": "The list PDF could not be generated.",
+  "Sin conexión: no se ha podido generar el PDF de la lista.": "Offline: the list PDF could not be generated.",
 };

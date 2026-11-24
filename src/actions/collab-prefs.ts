@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
+import { describeAction } from "@/lib/action-context";
 import { requireUser } from "@/lib/session";
 
 const schema = z.object({
@@ -27,5 +28,6 @@ export async function updateEmailPrefs(input: z.input<typeof schema>) {
     // el mismo día, que repetiría el resumen. Con uno antiguo (o ninguno), digestDue ya lo da por pendiente, y gatherDigest
     // no mira más de 48 h atrás.
     await db.user.update({ where: { id: user.id }, data });
+    describeAction("Cambió sus avisos por email");
   });
 }

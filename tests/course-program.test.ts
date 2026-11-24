@@ -5,7 +5,7 @@ import { buildProgramSessions, programBlocks, programDateLabel, programDocumentN
 import { markdownToPdfBlocks } from "../src/lib/pdf-markdown";
 import { canonicalTemplate } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
-import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole } from "../src/lib/constants";
+import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, COLUMN_ROLES, isUniqueColumnRole, SELECTABLE_COLUMN_ROLES } from "../src/lib/constants";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS, programColumnsOverLimit } from "../src/lib/program-limit";
 import { pdfRuns } from "./pdf-runs";
 import { assertFast } from "./timing";
@@ -67,6 +67,15 @@ describe("Markdown de la descripción → bloques del PDF", () => {
     const md = Array.from({ length: 12 }, (_, i) => `${"  ".repeat(i)}- nivel ${i}`).join("\n");
     const json = JSON.stringify(markdownToPdfBlocks(md));
     for (let i = 0; i < 12; i++) assert.ok(json.includes(`nivel ${i}`), `nivel ${i}`);
+  });
+
+  test("miles de citas anidadas (agotan la pila de marked): la descripción sale como texto plano", () => {
+    for (const md of ["> ".repeat(10_000) + "fin", ">".repeat(20_000)]) {
+      const out = markdownToPdfBlocks(md);
+      assert.equal(out.length, 1);
+      assert.equal(out[0]!.t, "p");
+      assert.equal((out[0] as { runs: { text: string }[] }).runs[0]!.text, md.trim());
+    }
   });
 });
 
@@ -132,7 +141,7 @@ describe("sesiones del programa", () => {
   test("rol PROGRAM: repetible, con nombre y explicación", () => {
     assert.ok(COLUMN_ROLES.includes("PROGRAM"));
     assert.equal(isUniqueColumnRole("PROGRAM"), false);
-    for (const r of COLUMN_ROLES) assert.ok(COLUMN_ROLE_LABEL[r] && COLUMN_ROLE_HINT[r], r);
+    for (const r of SELECTABLE_COLUMN_ROLES) assert.ok(COLUMN_ROLE_LABEL[r] && COLUMN_ROLE_HINT[r], r);
   });
 });
 
@@ -194,6 +203,13 @@ describe("PDF del programa", () => {
     const text = pdfRuns(pdf).join("");
     for (const s of ["COURSE PROGRAM", "3 sessions", "Session 1: Presentación", "Tuesday, January 12, 2027", "Date to be confirmed"]) assert.ok(text.includes(s), `falta «${s}»`);
     assert.ok(!text.includes("Profesora Uno"));
+  });
+
+  test("una sesión con miles de citas anidadas no impide el PDF: va como texto y las demás salen", async () => {
+    const odd = buildProgramSessions([{ title: "Rara", description: `${"> ".repeat(10_000)}fin`, startDate: null, dueDate: null, assignee: null }], { locale: "es-ES", t: es, withAssignee: false, useStartDate: false });
+    const pdf = await renderInWorker({ kind: "program", locale: "es", input: { project: "Citas", today: "2026-11-13", withAssignee: false, sessions: [...sessions(es, "es-ES"), ...odd] } });
+    const text = pdfRuns(pdf).join("");
+    for (const s of ["Sesión 1: Presentación", "Objetivos:", "Sesión 3: Cierre", "Rara", "fin"]) assert.ok(text.includes(s), `falta «${s}»`);
   });
 
   test("sin sesiones: el PDF lo dice", async () => {

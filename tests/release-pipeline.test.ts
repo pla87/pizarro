@@ -33,8 +33,10 @@ test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64 en máquinas n
   assert.match(wf, /needs: \[version, build, pdf\]/);
   assert.match(wf, /ghcr\.io\/pla87\/pizarro:\$\{VERSION\}/);
   assert.match(wf, /pizarro:latest/);
-  assert.match(wf, /cache-from: type=gha/);
-  assert.match(wf, /cache-to: type=gha/);
+  // Sin caché de Docker: subirla costaba ~3 min por arquitectura y casi no se reutilizaba (la versión cambia
+  // package.json y package-lock.json, así que `npm ci` y `npm run build` se rehacían igual).
+  assert.doesNotMatch(wf, /cache-from:/);
+  assert.doesNotMatch(wf, /cache-to:/);
   assert.match(wf, /secrets\.GITHUB_TOKEN/);
   assert.match(wf, /scripts\/release-notes\.mjs/);
   assert.match(wf, /needs: image/);

@@ -53,7 +53,15 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  // El máximo cuenta a todos los activos (también las invitaciones sin aceptar); el resumen los separa.
   const activeCount = users.filter((u) => u.active).length;
+  const pendingCount = users.filter((u) => u.active && u.invitePending).length;
+  const joinedCount = activeCount - pendingCount;
+  const summary = [
+    joinedCount === 1 ? t("1 activo") : t("{n} activos", { n: joinedCount }),
+    ...(pendingCount ? [pendingCount === 1 ? t("1 invitación pendiente") : t("{n} invitaciones pendientes", { n: pendingCount })] : []),
+    ...(maxUsers !== null ? [t("{n} de {max} como máximo", { n: activeCount, max: maxUsers })] : []),
+  ].join(" · ");
 
   const unlink = async (u: UserRow) => {
     const ok = await confirm({
@@ -120,15 +128,13 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
         <div>
           <h2 className="text-lg font-semibold">{t("Usuarios")}</h2>
           <p className="flex items-center gap-1 text-sm text-slate-500">
-            {maxUsers !== null
-              ? t("{n} de {max} usuarios activos", { n: activeCount, max: maxUsers })
-              : activeCount === 1 ? t("1 usuario activo") : t("{n} usuarios activos", { n: activeCount })}
+            {summary}
             {/* Primero, en una frase para cualquiera, si hay máximo y quién da de alta; lo técnico (la variable MAX_USERS y
                 dónde se cambia), después y más pequeño. */}
             <InfoTip topic={t("Usuarios")}>
               <span className="block">
                 {maxUsers !== null
-                  ? t("Puede haber como mucho {max} usuarios activos a la vez. Las personas desactivadas no cuentan.", { max: maxUsers })
+                  ? t("Puede haber como mucho {max} usuarios activos a la vez, contando las invitaciones pendientes. Las personas desactivadas no cuentan.", { max: maxUsers })
                   : t("No hay un máximo de usuarios activos.")}{" "}
                 {t("No hay registro público: solo un administrador da de alta usuarios.")}
               </span>
@@ -157,7 +163,8 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
             ...(u.id !== meId && u.invitePending && u.active && emailAvailable ? [{ key: "resend", icon: MailPlus, label: t("Reenviar invitación a {name}", { name: u.name }), title: t("Reenviar invitación"), onClick: () => void resend(u), disabled: resending === u.id }] : []),
             ...(u.id !== meId && u.invitePending && u.active && !emailAvailable ? [{ key: "invite-link", icon: LinkIcon, label: t("Generar enlace de invitación nuevo para {name}", { name: u.name }), title: t("Genera un enlace de invitación nuevo; el anterior deja de valer"), onClick: () => void freshLink(u), disabled: resending === u.id }] : []),
             { key: "edit", icon: Pencil, label: t("Editar {name}", { name: u.name }), title: t("Editar"), onClick: () => setEditing(u) },
-            ...(u.id !== meId ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
+            // A una invitación sin aceptar no se le fuerza nada: aún no tiene contraseña (se reenvía la invitación).
+            ...(u.id !== meId && !u.invitePending ? [{ key: "password", icon: KeyRound, label: t("Forzar cambio de contraseña de {name}", { name: u.name }), title: t("Forzar cambio de contraseña"), onClick: () => setResetting(u) }] : []),
             ...(u.id !== meId && u.twoFactor ? [{ key: "2fa", icon: ShieldOff, label: t("Restablecer la verificación en dos pasos de {name}", { name: u.name }), title: t("Restablecer la verificación en dos pasos"), onClick: () => setResetting2fa(u) }] : []),
             ...(u.id !== meId && u.googleLinked ? [{ key: "unlink", icon: Link2Off, label: t("Desvincular Google de {name}", { name: u.name }), title: t("Desvincular Google"), onClick: () => void unlink(u) }] : []),
             ...(u.googleRelinkBlocked ? [{ key: "relink", icon: Link2, label: t("Permitir Google a {name}", { name: u.name }), title: t("Permitir Google"), onClick: () => void allow(u) }] : []),
@@ -189,7 +196,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
             </div>
             <div className="hidden sm:contents">
               {actions.map((a) => (
-                <button key={a.key} className={cn("btn-icon", a.danger && "text-red-600 dark:text-red-400")} onClick={a.onClick} disabled={a.disabled} aria-label={a.label} title={a.key === "edit" || a.key === "delete" ? undefined : a.title}>
+                <button key={a.key} className={cn("btn-icon", a.danger && "text-red-600 dark:text-red-400")} onClick={a.onClick} disabled={a.disabled} aria-label={a.label} title={a.title}>
                   <a.icon size={16} />
                 </button>
               ))}

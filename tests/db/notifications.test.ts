@@ -14,6 +14,7 @@ import { markAllNotificationsRead, markNotificationRead } from "../../src/action
 import { updateEmailPrefs } from "../../src/actions/collab-prefs";
 import { UNREAD_COUNT_CAP } from "../../src/lib/unread-core";
 import { makeT } from "../../src/i18n/core";
+import { flushLogs } from "../../src/lib/log";
 
 const mention = (u: { id: string; name: string }) => mentionToken(u.name, u.id);
 const recipients = async (taskId: string) => (await db.notification.findMany({ where: { taskId }, select: { userId: true, type: true } })).sort((a, b) => a.userId.localeCompare(b.userId));
@@ -96,6 +97,39 @@ describe("menciones según la visibilidad", () => {
 });
 
 describe("envío externo de avisos", () => {
+  // Logs decía «2 aviso(s) MENTION creados (2 con envío externo)» sin email ni Telegram/WhatsApp: contaba la casilla del
+  // email de menciones (activada por defecto) aunque la instalación no pudiera enviar nada.
+  test("«con envío externo» solo cuenta lo que puede salir: sin email configurado, 0", async () => {
+    const author = await makeUser();
+    const a = await makeUser();
+    const b = await makeUser();
+    await db.user.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { notifyEmail: true } });
+    const f = await makeProject({ members: [author, a, b] });
+    await loginAs(author);
+    const logOf = async (taskId: string) => {
+      await flushLogs();
+      const row = await db.appLog.findFirstOrThrow({ where: { action: "notify.mention", details: { path: ["taskId"], equals: taskId } } });
+      return { external: (row.details as { externalRecipients: string[] }).externalRecipients.length, message: row.message };
+    };
+    const t1 = await makeTask(f);
+    expectOk(await addComment(t1.id, `${mention(a)} ${mention(b)}`));
+    const off = await logOf(t1.id);
+    assert.equal(off.external, 0);
+    assert.match(off.message, /2 aviso\(s\) MENTION creados \(0 con envío externo\)/);
+
+    const dir = await mkdtemp(join(tmpdir(), "pz-outbox-count-"));
+    const prev = process.env.MAIL_OUTBOX_DIR;
+    process.env.MAIL_OUTBOX_DIR = dir;
+    try {
+      const t2 = await makeTask(f);
+      expectOk(await addComment(t2.id, `${mention(a)} ${mention(b)}`));
+      assert.equal((await logOf(t2.id)).external, 2);
+    } finally {
+      process.env.MAIL_OUTBOX_DIR = prev ?? "";
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("no sale el email si la persona perdió el acceso al proyecto privado antes del envío", async () => {
     const author = await makeUser();
     const stays = await makeUser();

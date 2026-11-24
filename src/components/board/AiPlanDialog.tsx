@@ -279,7 +279,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
             {tooMany ? (
               <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.")}</span>
             ) : (
-              <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject />
+              <TemplateSourceNote projectId={board.project.id} projectTab="releases" />
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
             <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loading}>
@@ -331,7 +331,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       ) : (
         <div className="flex h-full flex-col gap-3" data-plan-step="edit">
           {pickers}
-          <TemplateSourceNote projectId={board.project.id} projectTab="releases" withProject confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
+          <TemplateSourceNote projectId={board.project.id} projectTab="releases" confirmLeave={() => (textEdited() ? confirmDiscard() : false)} />
           <DraftTextEditor draft={draft} label={t("Texto del plan de trabajo")} idPrefix="plan" dataAttr="data-plan-editor" onEscape={() => void requestClose()} />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
             <label className="flex items-center gap-1.5">

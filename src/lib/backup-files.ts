@@ -17,6 +17,7 @@ import { lstat, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { decryptChunks, encryptChunks, encryptionOverhead, fileSha256, type BackupManifest } from "./backup-core";
+import { esText } from "./es-text";
 
 const MANIFEST_VERSION = 1;
 const MANIFEST_MAGIC = Buffer.from("PZMF1\n", "utf8");
@@ -94,10 +95,10 @@ export async function decodeManifest(buf: Buffer, key: Buffer): Promise<FullMani
   try {
     plain = gunzipSync(await collect(decryptChunks(once(buf), key, MANIFEST_MAGIC)));
   } catch (err) {
-    throw new Error(`No se pudo descifrar el manifiesto (¿BACKUP_KEY distinta o fichero dañado?): ${err instanceof Error ? err.message : err}`);
+    throw new Error(esText("No se pudo descifrar el manifiesto (¿BACKUP_KEY distinta o fichero dañado?): {error}", { error: err instanceof Error ? err.message : String(err) }));
   }
   const m = JSON.parse(plain.toString("utf8")) as FullManifest;
-  if (m.kind !== "pizarro-backup" || m.version !== MANIFEST_VERSION) throw new Error(`Manifiesto de versión no soportada: ${m.version}.`);
+  if (m.kind !== "pizarro-backup" || m.version !== MANIFEST_VERSION) throw new Error(esText("Manifiesto de versión no soportada: {version}.", { version: m.version }));
   if (!Array.isArray(m.files) || m.files.length !== m.fileCount) throw new Error("El manifiesto no cuadra (número de ficheros).");
   for (const f of m.files) {
     if (!safeRelPath(f.p) || !/^[0-9a-f]{64}$/.test(f.h) || !/^[0-9a-f]{64}$/.test(f.o) || !Number.isSafeInteger(f.s) || f.s < 0) throw new Error("El manifiesto tiene una entrada de fichero inválida.");
@@ -146,7 +147,7 @@ export async function* encryptFileObject(file: string, entry: { s: number; h: st
       size += (chunk as Buffer).length;
       yield chunk as Buffer;
     }
-    if (size !== entry.s || hash.digest("hex") !== entry.h) throw new Error(`El fichero ${path.basename(file)} cambió desde que se hizo la copia.`);
+    if (size !== entry.s || hash.digest("hex") !== entry.h) throw new Error(esText("El fichero {file} cambió desde que se hizo la copia.", { file: path.basename(file) }));
   }
   yield* encryptChunks(source(), key, OBJECT_MAGIC);
 }

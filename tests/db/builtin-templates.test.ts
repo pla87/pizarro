@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { createProject } from "../../src/actions/projects";
-import { deleteTemplate, listTemplates, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
+import { deleteTemplate, resetTemplate, restoreDefaultTemplates, saveTemplate } from "../../src/actions/templates";
 import { applyTemplateChange } from "../../src/actions/template-apply";
 import { BUILTIN_KEYS, canonicalTemplate } from "../../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../../src/lib/builtin-templates-en";
 import { resetRateLimit } from "../../src/lib/rate-limit";
-import { listTemplatesSorted, retireBuiltinTemplates, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
+import { listStartTemplates, listTemplatesSorted, retireBuiltinTemplates, seedBuiltinTemplates, templateFingerprint, upgradeBuiltinTemplates } from "../../src/lib/template-store";
 import type { TemplateData } from "../../src/lib/project-templates";
 
 describe("plantillas de proyecto de serie", () => {
@@ -20,11 +20,12 @@ describe("plantillas de proyecto de serie", () => {
 
     assert.equal((await seedBuiltinTemplates(db)).length, BUILTIN_KEYS.length);
     assert.equal((await seedBuiltinTemplates(db)).length, 0);
-    // Al diálogo «Nuevo proyecto» solo van nombre y descripción, por orden alfabético; el resto se queda en el servidor.
-    const offered = expectOk(await listTemplates());
+    // Al diálogo «Nuevo proyecto» (listStartTemplates, la de la app) solo van nombre, descripción y dos marcas, por orden
+    // alfabético; columnas, tipos y textos de release se quedan en el servidor.
+    const offered = await listStartTemplates(db, "es");
     const names = offered.map((t) => t.name);
     assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b, "es")));
-    assert.ok(offered.every((t) => Object.keys(t).sort().join() === "description,id,name"));
+    assert.ok(offered.every((t) => Object.keys(t).sort().join() === "builtin,description,examples,id,name"));
     const list = await listTemplatesSorted(db);
     assert.deepEqual(list.map((t) => [t.id, t.name, t.description]), offered.map((t) => [t.id, t.name, t.description]));
     assert.ok(list.every((t) => t.builtinKey && !t.builtinModified));
@@ -173,7 +174,7 @@ describe("plantillas de proyecto de serie", () => {
     await db.user.update({ where: { id: admin.id }, data: { locale: "EN" } });
     await loginAs(admin);
 
-    const list = expectOk(await listTemplates());
+    const list = await listStartTemplates(db, "en");
     assert.ok(list.some((t) => t.name === "Home and family"));
     assert.ok(!list.some((t) => t.name === "Casa y familia"));
 
@@ -327,5 +328,43 @@ describe("plantillas de proyecto de serie", () => {
     assert.deepEqual(other, { removed: ["negocio"], kept: ["viajes"] });
     assert.deepEqual(late, { removed: [], kept: [] });
     assert.deepEqual((await db.projectTemplate.findMany({ select: { name: true, builtinKey: true } })), [{ name: "Nuestros viajes", builtinKey: null }]);
+  });
+  test("Vibecoding: los criterios nuevos de sus tipos llegan a la sembrada sin tocar; la modificada se respeta", async () => {
+    // La definición anterior (subtareas que eran pasos de la persona: «Pedir el cambio a la IA»…).
+    const vibe = canonicalTemplate("vibecoding")!;
+    const OLD_SUBTASKS = [
+      ["Pedir el cambio a la IA", "Revisar el diff", "Probarlo en local"],
+      ["Escribir el prompt con el contexto", "Contrastar la respuesta", "Anotar lo aprendido"],
+      ["Cubrir con pruebas lo que se toca", "Aplicar el cambio", "Comprobar que todo sigue igual"],
+      ["Revisar migraciones", "Comprobar variables de entorno", "Desplegar", "Prueba rápida en producción"],
+    ];
+    const old: TemplateData = { ...vibe, kinds: vibe.kinds.map((k, i) => ({ ...k, subtaskTemplate: OLD_SUBTASKS[i]! })) };
+    assert.notEqual(templateFingerprint(old), templateFingerprint(vibe));
+    const store = async (data: TemplateData) => {
+      await db.projectTemplate.deleteMany();
+      await db.builtinTemplateSeeded.deleteMany();
+      await db.projectTemplate.create({
+        data: {
+          builtinKey: "vibecoding", name: data.name, description: data.description, columns: data.columns, kinds: data.kinds, hiddenGeneralKinds: data.hiddenGeneralKinds,
+          hideAllGeneralKinds: data.hideAllGeneralKinds, labels: data.labels, taskFields: data.taskFields, releaseTemplates: data.releaseTemplates, position: 1,
+        },
+      });
+      // Sembrada con la definición anterior (su huella es la de `old`).
+      await db.builtinTemplateSeeded.create({ data: { key: "vibecoding", appliedHash: templateFingerprint(old) } });
+    };
+    const kindsNow = async () => ((await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: "vibecoding" } })).kinds as { subtaskTemplate: string[] }[]).map((k) => k.subtaskTemplate);
+
+    await store(old);
+    assert.deepEqual(await upgradeBuiltinTemplates(db), ["vibecoding"]);
+    assert.deepEqual(await kindsNow(), vibe.kinds.map((k) => k.subtaskTemplate));
+    assert.equal((await listTemplatesSorted(db)).find((t) => t.builtinKey === "vibecoding")!.builtinModified, false);
+
+    // Modificada por el administrador (otra subtarea en «Mejora»): se queda como está.
+    const mine: TemplateData = { ...old, kinds: old.kinds.map((k, i) => (i === 0 ? { ...k, subtaskTemplate: [...k.subtaskTemplate, "Avisar al equipo"] } : k)) };
+    await store(mine);
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    assert.deepEqual((await kindsNow())[0], [...OLD_SUBTASKS[0]!, "Avisar al equipo"]);
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
   });
 });

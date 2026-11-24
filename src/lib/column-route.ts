@@ -7,17 +7,17 @@ import { getCurrentUser } from "./session";
 import { getT } from "../i18n/server";
 import { toLocale, type Locale, type T } from "../i18n/core";
 
-// Comprobaciones comunes de las rutas de descarga de una columna (PDF de la semana, lista, entrega, .ics):
+// Comprobaciones comunes de las rutas de descarga de una columna (PDF de la semana, lista, programa, plan):
 // sesión, límite de peticiones y acceso al proyecto. Devuelve la respuesta de error o el contexto.
 
-/** Descargas de una columna. Cada una con su propio contador: descargar varios .ics no agota los PDF, ni al revés. */
-type ColumnDownloadKind = "week" | "checklist" | "delivery" | "program" | "plan" | "ics";
+/** Descargas de una columna. Cada una con su propio contador: descargar varias veces un PDF no agota los demás. */
+type ColumnDownloadKind = "week" | "checklist" | "program" | "plan";
 
 /**
- * Peticiones por minuto de cada descarga: los PDF ocupan la cola de generación (5/min); el .ics de la Agenda es texto
- * barato y se descarga a menudo (30/min). El informe del proyecto lleva su propio contador (`project-report:`).
+ * Peticiones por minuto de cada descarga: los PDF ocupan la cola de generación (5/min). El informe del proyecto lleva su
+ * propio contador (`project-report:`).
  */
-const COLUMN_DOWNLOAD_LIMITS: Record<ColumnDownloadKind, number> = { week: 5, checklist: 5, delivery: 5, program: 5, plan: 5, ics: 30 };
+const COLUMN_DOWNLOAD_LIMITS: Record<ColumnDownloadKind, number> = { week: 5, checklist: 5, program: 5, plan: 5 };
 
 export const columnRateKey = (kind: ColumnDownloadKind, userId: string) => `column-${kind}:${userId}`;
 
@@ -36,7 +36,7 @@ export async function authorizeColumnRoute(params: Promise<{ projectId: string; 
   if (!user) return new Response(t("No autorizado"), { status: 401 });
   if (!rateLimit(columnRateKey(kind, user.id), COLUMN_DOWNLOAD_LIMITS[kind], 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   // Además, un tope común a todos los PDF de columna: cada tipo tiene el suyo, pero juntos no pasan de 10 por minuto.
-  if (kind !== "ics" && !rateLimit(`column-pdf:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
+  if (!rateLimit(`column-pdf:${user.id}`, 10, 60_000)) return new Response(t("Demasiadas peticiones"), { status: 429 });
   const { projectId, columnId } = await params;
   // Un id mal formado (el carácter nulo, p. ej.) no existe: 404 sin llegar a PostgreSQL, que fallaba con un 500.
   if (!isRowId(projectId) || !isRowId(columnId)) return new Response(t("No encontrado"), { status: 404 });
@@ -45,11 +45,12 @@ export async function authorizeColumnRoute(params: Promise<{ projectId: string; 
   return { user, t, locale: toLocale(user.locale), project, projectId, columnId };
 }
 
-export function pdfResponse(pdf: Uint8Array, filename: string): Response {
+/** `download`: el navegador lo guarda (attachment) en lugar de abrirlo (inline, lo de siempre en otra pestaña). */
+export function pdfResponse(pdf: Uint8Array, filename: string, opts: { download?: boolean } = {}): Response {
   return new Response(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
+      "Content-Disposition": `${opts.download ? "attachment" : "inline"}; filename="${filename}"`,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },

@@ -6,7 +6,9 @@ import { describe, test } from "node:test";
 import { db, expectFail, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { logsAfter, logWhere, parseLogFilters } from "../../src/lib/log-query";
 import { flushLogs } from "../../src/lib/log";
-import { logDetailsShown } from "../../src/lib/log-message";
+import { logDetailsShown, logMessageText } from "../../src/lib/log-message";
+import { updateAccent, updateLocale, updateTheme } from "../../src/actions/profile";
+import { makeT } from "../../src/i18n/core";
 import { resetRateLimit } from "../../src/lib/rate-limit";
 import { updateTask } from "../../src/actions/tasks";
 import { GET as logsCsv } from "../../src/app/api/admin/logs/route";
@@ -234,5 +236,26 @@ describe("registro de una acción que falla antes de saber su proyecto", () => {
     const details = row.details as { args: unknown[]; issues: { path: string; message: string }[] };
     assert.deepEqual(details.args, ["texto", { description: "texto", color: "texto" }, null]);
     assert.ok(details.issues.some((i) => i.path === "color"), JSON.stringify(details.issues));
+  });
+});
+
+describe("mensajes de las acciones de Mi perfil en Logs", () => {
+  // Antes salían como «OK»: ahora dicen qué cambió, en el idioma de quien lee los Logs.
+  test("idioma, tema de color y tema: frase con el valor elegido, traducida al leerla", async () => {
+    const u = await makeUser();
+    await loginAs(u);
+    assert.equal((await updateLocale("EN")).ok, true);
+    assert.equal((await updateAccent("FOREST")).ok, true);
+    assert.equal((await updateTheme("DARK")).ok, true);
+    await flushLogs();
+    const row = async (action: string) => db.appLog.findFirstOrThrow({ where: { action, userId: u.id }, select: { message: true, details: true } });
+    const en = makeT("en");
+    const locale = await row("profile.updateLocale");
+    assert.equal(locale.message, "Cambió el idioma a English");
+    assert.equal(logMessageText(locale, en), "Changed the language to English");
+    const accent = await row("profile.updateAccent");
+    assert.equal(accent.message, "Cambió el tema de color a «Verde bosque»");
+    assert.equal(logMessageText(accent, en), "Changed the color theme to “Forest green”");
+    assert.equal(logMessageText(await row("profile.updateTheme"), en), "Changed the theme to “Dark”");
   });
 });

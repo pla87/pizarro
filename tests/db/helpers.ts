@@ -3,6 +3,7 @@
 // cookie del «jar» que sustituye a next/headers (ver register.mjs). Los datos se crean con Prisma directamente.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { createServer, type Socket } from "node:net";
 import { after } from "node:test";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
@@ -214,5 +215,65 @@ export async function withSmtpDown<T>(fn: () => Promise<T>): Promise<T> {
     }
     const { closeMailTransport } = await import("../../src/lib/mail");
     closeMailTransport();
+  }
+}
+
+/**
+ * Ejecuta `fn` con un servidor de correo de prueba (en esta máquina) que acepta la conexión y rechaza para siempre cada
+ * envío en la fase `at`: por defecto cada destinatario con «550 5.1.1» (un buzón que no existe; nodemailer falla con
+ * EENVELOPE, `command` «RCPT TO» y responseCode 550); con «MAIL FROM», el remitente (553); con «DATA», el mensaje (554).
+ */
+export async function withSmtpRejecting<T>(fn: () => Promise<T>, at: "RCPT TO" | "MAIL FROM" | "DATA" = "RCPT TO"): Promise<T> {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.setEncoding("utf8");
+    socket.write("220 prueba ESMTP\r\n");
+    let buf = "";
+    let inData = false;
+    socket.on("data", (chunk: string) => {
+      buf += chunk;
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const raw = buf.slice(0, nl).replace(/\r$/, "");
+        buf = buf.slice(nl + 1);
+        if (inData) {
+          if (raw === ".") {
+            inData = false;
+            socket.write("554 5.7.1 Mensaje rechazado\r\n");
+          }
+          continue;
+        }
+        const line = raw.trim().toUpperCase();
+        if (line.startsWith("EHLO") || line.startsWith("HELO")) socket.write("250 prueba\r\n");
+        else if (line.startsWith("MAIL FROM")) socket.write(at === "MAIL FROM" ? "553 5.7.1 Remitente no admitido\r\n" : "250 2.1.0 Ok\r\n");
+        else if (line.startsWith("RCPT TO")) socket.write(at === "RCPT TO" ? "550 5.1.1 No existe ese buzón\r\n" : "250 2.1.5 Ok\r\n");
+        else if (line === "DATA") {
+          inData = true;
+          socket.write("354 Adelante\r\n");
+        } else if (line.startsWith("QUIT")) socket.end("221 Adiós\r\n");
+        else socket.write("250 Ok\r\n");
+      }
+    });
+    socket.on("error", () => {});
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  const keys = ["MAIL_OUTBOX_DIR", "SMTP_HOST", "SMTP_PORT", "SMTP_FROM"] as const;
+  const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  delete process.env.MAIL_OUTBOX_DIR;
+  Object.assign(process.env, { SMTP_HOST: "127.0.0.1", SMTP_PORT: String(port), SMTP_FROM: "pizarro@example.com" });
+  try {
+    return await fn();
+  } finally {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+    const { closeMailTransport } = await import("../../src/lib/mail");
+    closeMailTransport();
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }

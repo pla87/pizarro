@@ -1,6 +1,85 @@
 {
   "versions": [
     {
+      "version": "1.68.0",
+      "date": "2026-11-24",
+      "releasedAt": "2026-11-24T01:15:20+01:00",
+      "summary": "«Tipo por defecto» por columna, «Generar plan» y los PDF de columna que se descargan, roles Agenda y Entrega al cliente retirados, prefijos de tipo que no se acumulan, Logs y copias más claros, importar CSV grandes sin agotar la memoria, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "«Tipo por defecto…» en el menú de cada columna: el «+» de esa columna empieza con ese tipo; sin él, sigue el último usado.",
+          "«Generar release» explica en el paso 1 qué hace (también que los títulos pasan a llevar su código) y propone el título con la fecha en el formato de la app («Release 23 nov 2026 · Proyecto»)."
+        ],
+        "mejoras": [
+          "«Generar plan», «PDF de la semana» y el PDF de la lista consolidada se descargan sin abrir otra pestaña, con el botón ocupado mientras se generan; «Generar plan» va bajo la cabecera, como los demás.",
+          "El plan por persona muestra lo rellenado de cada descripción, sin apartados vacíos, y sus etiquetas.",
+          "Columna «Asignación a persona»: «Añadir personas al proyecto» desde el diálogo y la nota de «Nueva tarea» con el plazo.",
+          "Plantilla Vibecoding: las subtareas son criterios de aceptación comprobables, no pasos de la persona.",
+          "Logs: las acciones de Mi perfil dicen qué cambió, el cambio de rol de columna dice de qué a qué, los errores del navegador van en frase llana (sin los de extensiones o la consola) y las filas antiguas se leen traducidas.",
+          "Copias: margen libre de 100 MB para la copia diaria, tareas de mantenimiento con nombres llanos y errores en el idioma de quien los lee.",
+          "Usuarios: «N activos · M invitaciones pendientes»; Ajustes del proyecto dice «Miembros» y, con una invitación pendiente, ofrece un enlace nuevo.",
+          "Detalle de la tarea: «Guardar descripción», aviso visible al cambiar de tipo con la descripción a medias y el diálogo ya no salta al subir un adjunto.",
+          "Calendario: con un responsable elegido solo salen los entregables con tareas suyas; carga con menos consultas.",
+          "Importar CSV (proyectos y tareas) gasta unas 12 veces menos memoria y es 20 veces más rápido."
+        ],
+        "correcciones": [
+          "Al cambiar de tipo, los prefijos de título ya no se acumulan («Gestionar Comprar …») ni se borra lo escrito por la persona.",
+          "Logs ya no cuenta «con envío externo» en instalaciones sin email ni canales.",
+          "Sin doble espacio tras elegir una mención; las copias flotantes de Deshacer y «Nueva tarea» se ocultan bajo «Cambios sin guardar»; las muestras de tarjeta siguen el tema de color.",
+          "Deshacer el borrado o el movimiento de una columna ya no deja dos columnas en la misma posición; mover columnas a la vez no se pisa.",
+          "Una tarea archivada a la vez que se fija ya no queda fija; las menciones salen legibles en Logs y en Deshacer.",
+          "Una descripción con miles de citas anidadas ya no hace fallar el PDF del programa.",
+          "El informe semanal con el destinatario rechazado no se reintenta cada hora; con el remitente rechazado, sí.",
+          "Los topes de WhatsApp, avisos y emails de prueba ya no se pueden vaciar desde fuera.",
+          "«Forzar cambio de contraseña» se rechaza para invitaciones pendientes; «1 fila / 1 tabla» en Copias; el aviso de importar ya no repite la frase."
+        ],
+        "tecnicos": [
+          "Roles AGENDA y DELIVERY: dejan de ofrecerse y una migración pasa sus columnas (y las plantillas guardadas) a NONE; el valor se quitará del enum en la versión siguiente.",
+          "Migración que añade Column.defaultKindId (nullable, ON DELETE SET NULL).",
+          "La release construye la imagen sin caché de Docker (unos 3 min menos por arquitectura); fly.toml con kill_timeout de 15 s.",
+          "Suite e2e nueva tablero-asignacion-e2e; retirada la acción listTemplates y las rutas .ics y de entrega de columna."
+        ]
+      },
+      "en": {
+        "summary": "“Default type” per column, “Generate plan” and column PDFs that download, Agenda and Client delivery roles retired, type prefixes that no longer pile up, clearer Logs and backups, large CSV imports without running out of memory, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "“Default type…” in each column's menu: that column's “+” starts with that type; without it, the last type used.",
+            "“Generate release” explains in step 1 what it does (including that task titles get their code) and suggests the title with the date in the app's format (“Release Nov 23, 2026 · Project”)."
+          ],
+          "mejoras": [
+            "“Generate plan”, “Week PDF” and the checklist PDF download without opening another tab, with the button busy while they are generated; “Generate plan” sits under the header like the others.",
+            "The per-person plan shows what was filled in each description, without empty sections, and its labels.",
+            "“Assign to person” column: “Add people to the project” from the dialog, and the “New task” note includes the deadline.",
+            "Vibecoding template: subtasks are checkable acceptance criteria, not steps for the person.",
+            "Logs: My profile actions say what changed, a column role change says from what to what, browser errors are in plain words (without those from extensions or the console) and older rows are shown translated.",
+            "Backups: 100 MB free margin for the daily backup, plain names for maintenance tasks and errors in the reader's language.",
+            "Users: “N active · M pending invitations”; Project settings says “Members” and, for a pending invitation, offers a new link.",
+            "Task details: “Save description”, a visible notice when changing type with the description half-edited, and the dialog no longer jumps when uploading an attachment.",
+            "Calendar: with an assignee chosen, only deliverables with their tasks are shown; it loads with fewer queries.",
+            "CSV import (projects and tasks) uses about 12 times less memory and is 20 times faster."
+          ],
+          "correcciones": [
+            "When changing type, title prefixes no longer pile up (“Manage Buy …”) and nothing the person typed is removed.",
+            "Logs no longer counts “with external delivery” on installations without email or channels.",
+            "No double space after picking a mention; the floating Undo and “New task” copies hide under “Unsaved changes”; card samples follow the color theme.",
+            "Undoing a column deletion or move no longer leaves two columns in the same position; simultaneous column moves no longer clash.",
+            "A task archived while being pinned no longer stays pinned; mentions read properly in Logs and Undo.",
+            "A description with thousands of nested quotes no longer breaks the course program PDF.",
+            "The weekly report with a rejected recipient is no longer retried every hour; with a rejected sender, it is.",
+            "WhatsApp, notification and test email limits can no longer be emptied from outside.",
+            "“Force password change” is rejected for pending invitations; “1 row / 1 table” in Backups; the import notice no longer repeats itself."
+          ],
+          "tecnicos": [
+            "AGENDA and DELIVERY roles: no longer offered and a migration turns their columns (and saved templates) into NONE; the value will be removed from the enum in the next version.",
+            "Migration adding Column.defaultKindId (nullable, ON DELETE SET NULL).",
+            "The release builds the image without Docker cache (about 3 min less per architecture); fly.toml with a 15 s kill_timeout.",
+            "New e2e suite tablero-asignacion-e2e; removed the listTemplates action and the column .ics and delivery routes."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.67.0",
       "date": "2026-11-23",
       "releasedAt": "2026-11-23T13:06:51+01:00",

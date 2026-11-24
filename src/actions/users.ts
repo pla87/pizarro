@@ -355,6 +355,8 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
     const user = await db.user.findUnique({ where: { id: v.id.parse(userId) }, select: { id: true, name: true, email: true, locale: true } });
     if (!user) throw notFound();
     if (user.id === admin.id) throw new AppError("Para cambiar tu propia contraseña usa «Mi perfil».");
+    // Una invitación sin aceptar aún no tiene contraseña: se reenvía la invitación (la interfaz ya no ofrece forzarlo).
+    if (await invitePending(user.id)) throw new AppError("Esta persona aún no ha aceptado la invitación: reenvíasela en lugar de forzar el cambio.");
     // Sin email (o si el admin lo pide) el enlace no se envía: se le devuelve para que lo pase por otro canal.
     const showLink = !emailEnabled() || !!opts?.copyLink;
     // Fuera de la transacción: bcrypt tarda (~0,1 s). El valor aleatorio se descarta enseguida.

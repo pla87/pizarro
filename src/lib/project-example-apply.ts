@@ -4,6 +4,7 @@ import { hasEvergreenTasks } from "./constants";
 import { addDaysIso, isoToDate, todayIso } from "./dates";
 import { appTimeZone } from "./format";
 import { POSITION_STEP } from "./positions";
+import { COLUMN_ORDER } from "./task-positions";
 import { GENERAL_KIND_IDS, type ResolvedExamples } from "./project-examples";
 import { normalizeRecurrence } from "./recurrence-date";
 
@@ -20,7 +21,7 @@ export async function createExampleContent(tx: Prisma.TransactionClient, project
   const due = (days: number) => isoToDate(addDaysIso(today, days));
 
   const [columns, ownKinds, generalKinds, labels] = await Promise.all([
-    tx.column.findMany({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true, role: true } }),
+    tx.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, role: true } }),
     tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true } }),
     tx.taskKind.findMany({ where: { projectId: null }, orderBy: { position: "asc" }, select: { id: true } }),
     tx.label.findMany({ where: { projectId }, select: { id: true, name: true } }),

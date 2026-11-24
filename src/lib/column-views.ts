@@ -1,21 +1,12 @@
 import "server-only";
-import type { Locale, T } from "../i18n/core";
+import type { Locale } from "../i18n/core";
 import type { ChecklistItem } from "./checklist";
-import { addDaysIso, dateToIso, todayIso } from "./dates";
-import { appTimeZone } from "./board";
-import { FEED_FUTURE_DAYS, FEED_MAX_REPEATS, sequenceOf, snippet } from "./calendar-feed-core";
-import { repeatIcsEvents } from "./recurrence-series";
-import { recurrenceLabel } from "../components/board/recurrence-ui";
 import { db } from "./db";
-import { DESCRIPTION_READ, descriptionHeads } from "./description-heads";
-import { buildIcs, descriptionToPlain } from "./ics";
 import { localizeGeneralKind } from "./kinds-localize";
 import { mentionsToPlain } from "./mentions";
-import { slugify } from "./search-accents";
-import { appUrl } from "./mail";
 import type { ColumnRoleValue } from "./constants";
 
-// Lecturas de las columnas con rol (lista consolidada, agenda): las comparten los diálogos, las rutas de
+// Lecturas de las columnas con rol (lista consolidada, revisión): las comparten los diálogos, las rutas de
 // descarga y los PDF. Quien llama comprueba antes que la persona puede ver el proyecto.
 
 /** Subtareas de las tarjetas no archivadas de la columna, en el orden de la columna (si tiene ese rol). */
@@ -46,57 +37,4 @@ export async function loadPendingSubtasks(projectId: string, taskIds: string[]):
     select: { id: true, title: true, subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true } } },
   });
   return tasks.map((x) => ({ taskId: x.id, title: mentionsToPlain(x.title), pending: x.subtasks.map((s) => mentionsToPlain(s.title)) }));
-}
-
-/**
- * Calendario .ics con las tareas no archivadas de una columna AGENDA que tienen fecha límite. Las que se repiten (y aún no han
- * dado la siguiente) llevan además la serie de sus apariciones futuras (RRULE), salvo en una columna que cuenta como terminada.
- * `i18n` añade a la serie la nota de que es una previsión (las rutas la pasan; sin ella, solo la descripción de la tarea).
- */
-export async function buildColumnIcs(projectId: string, columnId: string, i18n?: { t: T; locale: Locale }): Promise<{ ics: string; filename: string; count: number } | null> {
-  const column = await db.column.findFirst({ where: { id: columnId, projectId, role: "AGENDA" }, select: { name: true, isDone: true, project: { select: { name: true, taskFields: true, updatedAt: true } } } });
-  if (!column) return null;
-  const tasks = await db.task.findMany({
-    where: { projectId, columnId, archivedAt: null, dueDate: { not: null } },
-    orderBy: [{ dueDate: "asc" }, { position: "asc" }],
-    take: 2000,
-    select: { id: true, title: true, dueDate: true, startDate: true, updatedAt: true, recurrence: true, recurrenceDay: true, recurrenceNext: { select: { id: true } } },
-  });
-  // Las descripciones aparte y solo su comienzo (lo único que se usa), como en la suscripción: leerlas enteras eran
-  // decenas de MB con una columna de 2.000 tareas de descripción larga.
-  const heads = (await descriptionHeads(tasks.map((x) => x.id))).tasks;
-  const base = appUrl();
-  const today = todayIso(appTimeZone());
-  const until = addDaysIso(today, FEED_FUTURE_DAYS);
-  // Series como en la suscripción (calendar-feed.ts): como mucho FEED_MAX_REPEATS tareas (las de fecha más próxima) y con
-  // un extracto de la descripción. Una mensual del día 29 o 30 da un evento por mes, y con la descripción entera en cada
-  // uno, una columna de 2.000 tareas así eran decenas de MB por petición.
-  let seriesLeft = FEED_MAX_REPEATS;
-  const ics = buildIcs({
-    name: `${column.project.name} · ${column.name}`,
-    events: tasks.flatMap((x) => {
-      const due = dateToIso(x.dueDate);
-      // Con el campo «Fecha de inicio» activo y una fecha de inicio anterior, el evento abarca de inicio a límite.
-      const start = column.project.taskFields.includes("startDate") ? dateToIso(x.startDate) : null;
-      const range = due && start && start < due;
-      const date = range ? start : due;
-      if (!date) return [];
-      const summary = mentionsToPlain(x.title);
-      const head = heads.get(x.id);
-      const description = head ? descriptionToPlain(head, DESCRIPTION_READ) : undefined;
-      const url = `${base}/p/${projectId}?task=${x.id}`;
-      // Último cambio y SEQUENCE como en la suscripción: el cliente que lo importa de nuevo sabe qué ha cambiado.
-      const modifiedAt = x.updatedAt > column.project.updatedAt ? x.updatedAt : column.project.updatedAt;
-      const changed = { modifiedAt, sequence: sequenceOf(modifiedAt) };
-      const own = { uid: `${x.id}@pizarro`, date, endDate: range ? due! : undefined, summary, description, url, ...changed };
-      if (x.recurrence === "NONE" || x.recurrenceNext || column.isDone || seriesLeft <= 0) return [own];
-      const note = i18n ? i18n.t("Repetición prevista ({rule}): se crea al terminar la anterior.", { rule: recurrenceLabel(x, i18n.t, i18n.locale) ?? "" }) : "";
-      const brief = description ? snippet(description, 300) : "";
-      const series = repeatIcsEvents({ id: x.id, recurrence: x.recurrence, recurrenceDay: x.recurrenceDay, due }, { summary, description: [note, brief].filter(Boolean).join("\n") || undefined, url, ...changed }, today, until);
-      if (series.length) seriesLeft--;
-      return [own, ...series];
-    }),
-  });
-  const slug = slugify(column.name) || "agenda";
-  return { ics, filename: `${slug}.ics`, count: tasks.length };
 }

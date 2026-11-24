@@ -130,9 +130,6 @@ jobs:
             org.opencontainers.image.source=https://github.com/pla87/pizarro
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.revision=${{ github.sha }}
-          # Una caché por arquitectura: si compartieran «scope», cada una pisaría la de la otra.
-          cache-from: type=gha,scope=image-${{ matrix.arch }}
-          cache-to: type=gha,scope=image-${{ matrix.arch }},mode=max
 
       - name: Guardar el digest
         env:

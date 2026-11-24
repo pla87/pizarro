@@ -26,6 +26,19 @@ export function diskMarginBytes(totalBytes: number | null = null, raw: string | 
   return Math.max(DISK_MIN_FREE_FLOOR_MB * MB, Math.min(DISK_MIN_FREE_DEFAULT_MB * MB, byVolume));
 }
 
+/** Margen de la copia de seguridad: aprobado aparte, porque la retención libera después lo que la copia escribe. */
+const BACKUP_MIN_FREE_MB = 100;
+
+/**
+ * Margen en bytes de la copia de seguridad (local y diaria, antes de volcar la base de datos): 100 MB en vez del común
+ * de diskMarginBytes (hasta 1 GB). Con DISK_MIN_FREE_MB válido manda tal cual, como en lo demás.
+ */
+export function backupMarginBytes(raw: string | undefined = process.env.DISK_MIN_FREE_MB): number {
+  const n = Number(raw);
+  if (raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 0) return n * MB;
+  return BACKUP_MIN_FREE_MB * MB;
+}
+
 // Reservas en este proceso: bytes que los trabajos en marcha aún van a escribir y que el disco no refleja todavía.
 const reservations: Map<string, { dir: string; bytes: number }> = ((globalThis as unknown as { __pzDiskReserved?: Map<string, { dir: string; bytes: number }> }).__pzDiskReserved ??= new Map());
 
@@ -91,7 +104,8 @@ export interface DiskRoom {
  * Falla (507) si en el volumen de `dir` no caben `needed` bytes más el margen. Si el sistema de ficheros no informa
  * del espacio libre no se bloquea nada: es una salvaguarda, no una garantía. `free` y `total` permiten inyectar los datos en las pruebas
  * (sin `total` en una prueba solo cuenta el mínimo configurado). Lo reservado por los demás trabajos en marcha de
- * este proceso en `dir` (salvo `selfId`) se descuenta del espacio libre. El error lleva `room` (DiskRoom).
+ * este proceso en `dir` (salvo `selfId`) se descuenta del espacio libre. El error lleva `room` (DiskRoom). `marginFor`: el
+ * margen según el tamaño del volumen (por defecto diskMarginBytes; la copia de seguridad usa backupMarginBytes).
  */
 export async function assertDiskRoom(
   dir: string,
@@ -99,6 +113,7 @@ export async function assertDiskRoom(
   free?: (dir: string) => Promise<number | null>,
   total?: (dir: string) => Promise<number | null>,
   selfId?: string,
+  marginFor: (totalBytes: number | null) => number = diskMarginBytes,
 ): Promise<void> {
   let available: number | null;
   let size: number | null = null;
@@ -111,6 +126,6 @@ export async function assertDiskRoom(
     size = s?.total ?? null;
   }
   if (available === null) return;
-  const room: DiskRoom = { free: available - reservedDiskBytes(dir, selfId), margin: diskMarginBytes(size) };
+  const room: DiskRoom = { free: available - reservedDiskBytes(dir, selfId), margin: marginFor(size) };
   if (room.free < needed + room.margin) throw Object.assign(new AppError(NO_SPACE_MESSAGE, 507, "disk_full"), { room });
 }

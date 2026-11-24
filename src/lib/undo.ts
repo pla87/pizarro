@@ -5,13 +5,13 @@ import { Prisma } from "@/generated/prisma/client";
 import { actionContext } from "./action-context";
 import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
-import { isUniqueColumnRole, MAX_LABELS_PER_PROJECT } from "./constants";
+import { isUniqueColumnRole, liveColumnRole, MAX_LABELS_PER_PROJECT, type ColumnRoleValue } from "./constants";
 import { excerpt } from "./mentions";
 import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
 import { assertTaskCapacity, lockProject } from "./caps";
 import { blockProblem, lockBlocking } from "./blocking";
-import { lockTaskRows, lockTaskRowsForDelete, resolvePositionTies } from "./task-positions";
+import { COLUMN_ORDER, lockTaskRows, lockTaskRowsForDelete, resolveColumnPositionTies, resolvePositionTies } from "./task-positions";
 import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 
 // Deshacer: cada acción deshacible deja sus operaciones inversas (addUndo) y runAction las guarda
@@ -73,7 +73,7 @@ type AttachmentRow = {
 type LinkRow = { id: string; taskId: string; kind: string; title: string; url: string; externalId: string | null; createdById: string | null; shareStatus?: string | null; shareFailed?: number; createdAt: string };
 /** Etiqueta del proyecto (para devolverla al rehacer lo que la creó). */
 type LabelRow = { id: string; projectId: string; name: string; color: string };
-type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number; assigneeId?: string | null; assignDueDays?: number | null };
+type ColumnRow = { id: string; projectId: string; name: string; position: number; role: string; isDone: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; planCount?: number; assigneeId?: string | null; assignDueDays?: number | null; defaultKindId?: string | null };
 
 /** Todo lo necesario para recrear una tarea borrada con sus hijos. */
 interface TaskSnapshot {
@@ -112,7 +112,7 @@ export type UndoOp =
    * `costOff`: la acción que se deshace activó el campo Coste al dar a esta columna el rol «Presupuesto»; al devolverle su
    * rol anterior se vuelve a desactivar, si ya no queda ninguna columna de presupuesto en el proyecto.
    */
-  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; assigneeId?: string | null; assignDueDays?: number | null }; costOff?: true }
+  | { t: "column.set"; id: string; data: { name?: string; position?: number; role?: string; isDone?: boolean; waitingDays?: number | null; routineTargetColumnId?: string | null; wipLimit?: number | null; assigneeId?: string | null; assignDueDays?: number | null; defaultKindId?: string | null }; costOff?: true }
   | { t: "column.remove"; id: string }
   | { t: "column.restore"; row: ColumnRow }
   | { t: "release.remove"; id: string }
@@ -578,7 +578,7 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
       }
       case "column.remove": {
         const c = once(`column:${op.id}`) && (await db.column.findFirst({ where: { id: op.id, projectId } }));
-        if (c) push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit, planCount: c.planCount, assigneeId: c.assigneeId, assignDueDays: c.assignDueDays } });
+        if (c) push({ t: "column.restore", row: { id: c.id, projectId: c.projectId, name: c.name, position: c.position, role: c.role, isDone: c.isDone, waitingDays: c.waitingDays, routineTargetColumnId: c.routineTargetColumnId, wipLimit: c.wipLimit, planCount: c.planCount, assigneeId: c.assigneeId, assignDueDays: c.assignDueDays, defaultKindId: c.defaultKindId } });
         break;
       }
       case "column.restore":
@@ -782,8 +782,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   const releaseFiles: string[] = [];
   // Tareas que vuelven a una posición guardada: al terminar se comprueba que no coincidan con otra (ver resolvePositionTies).
   const placed: string[] = [];
+  // Columnas que vuelven a una posición guardada (recreadas o recolocadas): lo mismo, con resolveColumnPositionTies.
+  const placedColumns: string[] = [];
   const columnIds = new Set((await db.column.findMany({ where: { projectId }, select: { id: true } })).map((c) => c.id));
-  const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true } }))?.id;
+  const firstColumn = async () => (await db.column.findFirst({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true } }))?.id;
   /** Una columna borrada entretanto: la tarea va a la primera. */
   const safeColumn = async (id: string | undefined) => (id && columnIds.has(id) ? id : await firstColumn());
   // Quién puede seguir siendo responsable (activo y con acceso al proyecto) y quién existe aún (autor):
@@ -798,6 +800,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   );
   const known = (id: string | null | undefined) => (id && existingIds.has(id) ? id : null);
   const assignable = (id: string | null | undefined) => (id && assignableIds.has(id) ? id : null);
+  const existingKind = async (id: string | null | undefined) => (id && (await db.taskKind.count({ where: { id } })) ? id : null);
 
   // Bloqueos entre tareas que vuelven en esta misma entrada: si la bloqueada se recrea antes que la que la bloquea
   // (el orden de las operaciones no lo garantiza: la entrada de un rehacer deshecho solo trae las tareas), su bloqueo
@@ -1021,7 +1024,11 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           // se le quita antes; la operación de esa columna en la misma entrada le devuelve el suyo.
           const uniqueRole = op.data.role && isUniqueColumnRole(op.data.role) ? (op.data.role as "NEXT_RELEASE" | "IN_PRODUCTION") : null;
           // La persona de una columna «Asignación a persona» puede haberse borrado entretanto: la columna vuelve sin ella.
-          const data = op.data.assigneeId ? { ...op.data, assigneeId: known(op.data.assigneeId) } : op.data;
+          // Un rol retirado (Agenda, Entrega al cliente) que guardó la entrada vuelve como «Sin rol».
+          const withRole = op.data.role ? { ...op.data, role: liveColumnRole(op.data.role as ColumnRoleValue) } : op.data;
+          const withPerson = withRole.assigneeId ? { ...withRole, assigneeId: known(withRole.assigneeId) } : withRole;
+          // El tipo por defecto puede haberse borrado entretanto: la columna vuelve sin él.
+          const data = withPerson.defaultKindId ? { ...withPerson, defaultKindId: await existingKind(withPerson.defaultKindId) } : withPerson;
           const [, { count }] = await db.$transaction([
             db.column.updateMany({ where: uniqueRole ? { projectId, role: uniqueRole, id: { not: op.id } } : { id: "" }, data: { role: "NONE" } }),
             db.column.updateMany({ where: { id: op.id, projectId }, data: data as Prisma.ColumnUncheckedUpdateManyInput }),
@@ -1029,6 +1036,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (!count) miss++;
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           else if (op.costOff) await dropCostField(projectId);
+          if (count && op.data.position !== undefined) placedColumns.push(op.id);
           break;
         }
         case "column.remove": {
@@ -1037,7 +1045,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const moved = await db.$transaction(async (tx) => {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
             if (await tx.task.count({ where: { columnId: op.id, archivedAt: null } })) return null;
-            const other = await tx.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: { position: "asc" }, select: { id: true } });
+            const other = await tx.column.findFirst({ where: { projectId, id: { not: op.id } }, orderBy: COLUMN_ORDER, select: { id: true } });
             if (!other) return null;
             const ids = (await tx.task.findMany({ where: { columnId: op.id }, select: { id: true } })).map((r) => r.id);
             await tx.task.updateMany({ where: { columnId: op.id }, data: { columnId: other.id } });
@@ -1053,9 +1061,10 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           if (await db.column.count({ where: { id: op.row.id } })) { miss++; break; }
           // El destino de rutinas puede haberse borrado entre tanto: entonces la columna vuelve sin él.
           const routineTargetColumnId = op.row.routineTargetColumnId && (await db.column.count({ where: { id: op.row.routineTargetColumnId, projectId } })) ? op.row.routineTargetColumnId : null;
-          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: op.row.role as Prisma.ColumnCreateInput["role"], assigneeId: known(op.row.assigneeId) } });
+          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: liveColumnRole(op.row.role as ColumnRoleValue), assigneeId: known(op.row.assigneeId), defaultKindId: await existingKind(op.row.defaultKindId) } });
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
+          placedColumns.push(op.row.id);
           break;
         }
         case "label.remove":
@@ -1266,6 +1275,7 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
   }
   await clearStrayEvergreen(projectId);
   await resolvePositionTies(placed);
+  await resolveColumnPositionTies(projectId, placedColumns);
   if (filesToRemove.length && !opts.keepFiles) await removeAttachmentFiles(filesToRemove);
   if (releaseFiles.length) await removeReleaseAttachmentFiles(releaseFiles);
   return skipped;

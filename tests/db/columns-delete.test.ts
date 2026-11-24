@@ -3,8 +3,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeUser } from "./helpers";
-import { createColumn, deleteColumn } from "../../src/actions/columns";
-import { undoEntry } from "../../src/actions/undo";
+import { createColumn, deleteColumn, moveColumn } from "../../src/actions/columns";
+import { undoEntry, undoLast } from "../../src/actions/undo";
 
 const columns = (projectId: string) => db.column.count({ where: { projectId } });
 
@@ -36,5 +36,47 @@ describe("borrar columnas a la vez", () => {
       await Promise.all([deleteColumn(f.columns.todo), undoEntry(entry.id)]);
       assert.equal(await columns(f.project.id), 1);
     }
+  });
+});
+
+// Deshacer devuelve una columna a su posición guardada; si otra persona ha creado entretanto una columna que ocupa esa
+// misma posición, se renumeran: sin empates (el tablero ordena por posición) y la que vuelve, en su sitio de antes.
+describe("deshacer no deja columnas en la misma posición", () => {
+  const order = async (projectId: string) => (await db.column.findMany({ where: { projectId }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { name: true, position: true } }));
+  const noTies = (rows: { position: number }[]) => assert.equal(new Set(rows.map((r) => r.position)).size, rows.length, JSON.stringify(rows));
+
+  test("borrar la última columna, otra persona crea una y deshacer", async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const f = await makeProject({ members: [a, b] });
+    await db.column.update({ where: { id: f.columns.done }, data: { position: 4096 } });
+    await loginAs(a);
+    expectOk(await deleteColumn(f.columns.done));
+    await loginAs(b);
+    const created = expectOk(await createColumn(f.project.id, "Revisión"));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: created.id } })).position, 2000 + 1024);
+    await db.column.update({ where: { id: created.id }, data: { position: 4096 } });
+    await loginAs(a);
+    expectOk(await undoLast(f.project.id));
+    const rows = await order(f.project.id);
+    noTies(rows);
+    assert.deepEqual(rows.map((r) => r.name), ["Por hacer", "En curso", "Hecho", "Revisión"]);
+  });
+
+  test("mover una columna, otra persona crea una y deshacer", async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const f = await makeProject({ members: [a, b] });
+    await db.column.update({ where: { id: f.columns.done }, data: { position: 4096 } });
+    await loginAs(a);
+    expectOk(await moveColumn(f.columns.todo, 1));
+    await loginAs(b);
+    const created = expectOk(await createColumn(f.project.id, "Revisión"));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: created.id } })).position, 4096);
+    await loginAs(a);
+    expectOk(await undoLast(f.project.id));
+    const rows = await order(f.project.id);
+    noTies(rows);
+    assert.deepEqual(rows.map((r) => r.name), ["Por hacer", "En curso", "Hecho", "Revisión"]);
   });
 });

@@ -26,22 +26,22 @@ const sizeText = (bytes: number, locale: string): string => formatSize(Math.max(
 /** Nombre legible de cada tarea de mantenimiento (las claves están en lib/maintenance.ts). */
 function jobLabel(t: (s: string) => string, name: string): string {
   switch (name) {
-    case "nonImageCopies": return t("Copias de ficheros no imagen antiguas");
-    case "undo": return t("Deshacer antiguo");
-    case "documentsTrashPurge": return t("Papelera de documentos (una vez al día)");
-    case "notifications": return t("Avisos leídos antiguos");
-    case "authData": return t("Enlaces y dispositivos caducados");
-    case "taskHistory": return t("Historial de tareas antiguo");
-    case "orphanFiles": return t("Ficheros huérfanos (una vez al día)");
+    case "nonImageCopies": return t("Borrar las copias de adjuntos de releases (salvo imágenes) de más de 7 días");
+    case "undo": return t("Limpiar el historial de deshacer de más de 7 días");
+    case "documentsTrashPurge": return t("Vaciar la papelera de documentos de más de 7 días (una vez al día)");
+    case "notifications": return t("Borrar los avisos leídos de más de 90 días (y los no leídos de más de un año)");
+    case "authData": return t("Borrar los enlaces de email caducados y los dispositivos sin usar en un año");
+    case "taskHistory": return t("Borrar el historial de las tareas de más de un año");
+    case "orphanFiles": return t("Borrar los ficheros que ya no usa nada (una vez al día)");
     case "backup": return t("Copia diaria");
-    case "backupExternal": return t("Copia a destino externo");
+    case "backupExternal": return t("Subir la última copia al destino externo");
     case "backupAlert": return t("Aviso de copia atrasada");
     case "restoreTest": return t("Prueba de restauración mensual");
     case "periodicMail": return t("Resúmenes e informes por email");
-    case "transferJobs": return t("Archivos de exportación de proyectos caducados");
-    case "sharedFiles": return t("Archivos compartidos con Pizarro sin usar");
+    case "transferJobs": return t("Borrar las exportaciones de proyectos de más de 24 horas");
+    case "sharedFiles": return t("Borrar lo compartido con Pizarro que nadie ha usado");
     case "waitingReminders": return t("Recordatorios de tareas en espera");
-    case "releaseResume": return t("Reanudar copias de adjuntos de releases");
+    case "releaseResume": return t("Terminar las copias de adjuntos de releases que cortó un reinicio");
     default: return name;
   }
 }
@@ -165,6 +165,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       router.refresh();
     });
 
+  // Cifras con el separador de miles del idioma («12.345 filas» / "12,345 rows").
+  const num = (n = 0) => n.toLocaleString(locale);
   const run = (r: (BackupRun & Partial<RestoreTestRun>) | undefined, what: "backup" | "test") => {
     if (!r) return <p className="text-sm text-slate-500">{what === "backup" ? t("Aún no se ha hecho ninguna copia.") : t("Aún no se ha hecho ninguna prueba de restauración.")}</p>;
     return (
@@ -175,10 +177,10 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         </p>
         {r.ok ? (
           <p className="mt-1 text-slate-500">
-            {r.file} · {r.rows} {t("filas")} · {r.tables} {t("tablas")}
+            {r.file} · {r.rows === 1 ? t("1 fila") : t("{n} filas", { n: num(r.rows) })} · {r.tables === 1 ? t("1 tabla") : t("{n} tablas", { n: num(r.tables) })}
             {r.bytes ? ` · ${sizeText(r.bytes, locale)}` : ""}
-            {r.files !== undefined && ` · ${r.files === 1 ? t("1 fichero") : t("{n} ficheros", { n: r.files })}${r.filesBytes ? ` (${sizeText(r.filesBytes, locale)})` : ""}`}
-            {what === "backup" && r.filesNew ? ` · ${r.filesNew === 1 ? t("1 nuevo") : t("{n} nuevos", { n: r.filesNew })}` : ""}
+            {r.files !== undefined && ` · ${r.files === 1 ? t("1 fichero") : t("{n} ficheros", { n: num(r.files) })}${r.filesBytes ? ` (${sizeText(r.filesBytes, locale)})` : ""}`}
+            {what === "backup" && r.filesNew ? ` · ${r.filesNew === 1 ? t("1 nuevo") : t("{n} nuevos", { n: num(r.filesNew) })}` : ""}
           </p>
         ) : (
           <p className="mt-1 break-words text-red-600 dark:text-red-400">{r.error}</p>

@@ -362,4 +362,6 @@ export const cuentas: Record<string, string> = {
   "Contraseña guardada. Por seguridad se han cerrado todas las sesiones. En este servidor se entra con Google: pulsa «Iniciar sesión con Google» con {email}.": "Password saved. For security, all sessions have been signed out. On this server you sign in with Google: click “Sign in with Google” and use {email}.",
   // Aviso del enlace recién creado con el email configurado (y caído): en su fila está «Reenviar invitación»
   "Este enlace no volverá a mostrarse; si lo pierdes, puedes reenviar la invitación desde su fila.": "This link won't be shown again; if you lose it, you can resend the invitation from their row.",
+  // Forzar cambio de contraseña: el servidor también lo rechaza a una invitación pendiente
+  "Esta persona aún no ha aceptado la invitación: reenvíasela en lugar de forzar el cambio.": "This person hasn't accepted the invitation yet: resend it instead of forcing a change.",
 };

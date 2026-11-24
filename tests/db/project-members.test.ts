@@ -218,6 +218,31 @@ describe("aviso por email al añadir a alguien a un proyecto", () => {
 });
 
 describe("Invitar por email desde un proyecto", () => {
+  test("añadir a quien no ha aceptado su invitación: al administrador se le dice si sigue valiendo (no el enlace al tablero)", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const first = await makeProject({ members: [] });
+    const second = await makeProject({ members: [] });
+    await loginAs(admin);
+    const to = address("pendiente");
+    expectOk(await inviteToProject(first.project.id, to));
+    const user = await db.user.findUniqueOrThrow({ where: { email: to } });
+    const res = expectOk(await addProjectMember(second.project.id, user.id));
+    assert.equal(res.invite?.userId, user.id);
+    assert.ok(res.invite?.expiresAt && new Date(res.invite.expiresAt).getTime() > Date.now(), "con la invitación vigente, hasta cuándo vale");
+    // Caducada: sin fecha (la interfaz ofrece «Generar enlace de invitación nuevo»).
+    await db.authToken.updateMany({ where: { userId: user.id, purpose: "INVITE" }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    expectOk(await removeProjectMember(second.project.id, user.id));
+    assert.deepEqual(expectOk(await addProjectMember(second.project.id, user.id)).invite, { userId: user.id, expiresAt: null });
+    // Quien ya ha entrado alguna vez: el enlace al tablero, como siempre.
+    const known = await makeUser();
+    assert.equal(expectOk(await addProjectMember(second.project.id, known.id)).invite, null);
+    // Un miembro que no es administrador (proyecto privado) no ve el estado de la invitación.
+    const owner = await makeUser();
+    const priv = await makeProject({ visibility: "PRIVATE", owner });
+    await loginAs(owner);
+    assert.equal(expectOk(await addProjectMember(priv.project.id, user.id)).invite, null);
+  });
+
   test("crea la invitación ya dentro del proyecto, envía el email y devuelve el enlace (que lleva el proyecto)", async () => {
     const admin = await makeUser({ role: "ADMIN", name: "Ana Admin" });
     const f = await makeProject({ members: [] });

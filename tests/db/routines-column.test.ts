@@ -93,7 +93,7 @@ describe("rutinas", () => {
 
   test("los roles nuevos se pueden repetir en varias columnas", async () => {
     const { f } = await setup();
-    for (const role of ["CHECKLIST", "REVIEW", "AGENDA", "DELIVERY"] as const) {
+    for (const role of ["CHECKLIST", "REVIEW", "WEEKLY_PLAN"] as const) {
       expectOk(await setColumnRole(f.columns.doing, role));
       expectOk(await setColumnRole(f.columns.done, role));
       assert.equal((await db.column.count({ where: { projectId: f.project.id, role } })), 2);

@@ -34,18 +34,19 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Siguiente release", false, "NEXT_RELEASE"),
         col("En producción", true, "IN_PRODUCTION"),
       ],
-      // Funcionalidad, Corrección y Respuesta ya son tipos generales: aquí solo se añaden los propios.
+      // Funcionalidad, Corrección y Respuesta ya son tipos generales: aquí solo se añaden los propios. Sus subtareas son
+      // criterios comprobables de la tarea (llegan al plan para IA como criterios de aceptación), no pasos de la persona.
       kinds: [
-        kind("Mejora", "#0ea5e9", "", "**Qué mejora:**\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n", ["Pedir el cambio a la IA", "Revisar el diff", "Probarlo en local"]),
+        kind("Mejora", "#0ea5e9", "", "**Qué mejora:**\n\n**Por qué:**\n\n**Cómo sabré que está bien:**\n", ["Funciona en local", "Hay una prueba que lo cubre", "Sin errores en la consola"]),
         kind(
           "Prompt e investigación",
           "#a855f7",
           "",
           "**Pregunta o prompt:**\n\n**Contexto que tiene que saber la IA:**\n\n**Resultado esperado:**\n",
-          ["Escribir el prompt con el contexto", "Contrastar la respuesta", "Anotar lo aprendido"],
+          ["El prompt lleva el contexto necesario", "La respuesta está contrastada", "Lo aprendido queda anotado en la tarea"],
         ),
-        kind("Refactorización", "#6366f1", "Refactor: ", "**Qué se limpia:**\n\n**Riesgo:** sin cambios visibles para el usuario.\n", ["Cubrir con pruebas lo que se toca", "Aplicar el cambio", "Comprobar que todo sigue igual"]),
-        kind("Despliegue", "#14b8a6", "Desplegar ", "**Versión o cambio:**\n\n**Variables o migraciones nuevas:**\n", ["Revisar migraciones", "Comprobar variables de entorno", "Desplegar", "Prueba rápida en producción"]),
+        kind("Refactorización", "#6366f1", "Refactor: ", "**Qué se limpia:**\n\n**Riesgo:** sin cambios visibles para el usuario.\n", ["Las pruebas cubren lo que se toca", "Todas las pruebas pasan", "Sin cambios visibles para el usuario"]),
+        kind("Despliegue", "#14b8a6", "Desplegar ", "**Versión o cambio:**\n\n**Variables o migraciones nuevas:**\n", ["Migraciones revisadas", "Variables de entorno configuradas", "Desplegado en producción", "Prueba rápida en producción correcta"]),
       ],
       hiddenGeneralKinds: [],
       hideAllGeneralKinds: false,
@@ -96,7 +97,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
   {
     // Casa y familia (también mudanzas y reformas): lo de esta semana se imprime por persona (Planificación semanal), lo
     // que depende de otros avisa si tarda (Esperando), la compra es una lista única (Lista consolidada: cada producto es
-    // una subtarea), las citas van al calendario (Agenda) y lo que se repite, a Rutinas.
+    // una subtarea), las citas tienen su columna (con fecha, salen en el calendario) y lo que se repite, a Rutinas.
     key: "casa-familia",
     data: {
       name: "Casa y familia",
@@ -106,7 +107,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Esta semana", false, "WEEKLY_PLAN"),
         col("Esperando", false, "WAITING"),
         col("Lista de la compra", false, "CHECKLIST"),
-        col("Citas", false, "AGENDA"),
+        col("Citas"),
         col("Rutinas", false, "ROUTINES"),
         col("Hecho", true),
       ],
@@ -133,7 +134,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
   },
   {
     // Evento o viaje: lo pedido a proveedores avisa si no responden (Esperando), lo reservado suma su coste con pagado y
-    // pendiente (Presupuesto), el programa o el itinerario va al calendario (Agenda) y lo del día, maleta incluida, se ve
+    // pendiente (Presupuesto), el programa o el itinerario tiene su columna (con fecha, sale en el calendario) y lo del día, maleta incluida, se ve
     // como una sola lista (Lista consolidada).
     key: "eventos-viajes",
     data: {
@@ -144,7 +145,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Por confirmar", false, "WAITING"),
         col("Reservado", false, "BUDGET"),
         col("Preparando"),
-        col("Agenda", false, "AGENDA"),
+        col("Agenda"),
         col("Lista del día y maleta", false, "CHECKLIST"),
         col("Hecho", true),
       ],

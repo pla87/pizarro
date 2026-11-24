@@ -10,13 +10,14 @@ import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasks
 import { MAX_BULK_TASKS } from "@/lib/bulk";
 import { EVERGREEN_COLUMN_ROLES, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
+import { cutText } from "@/lib/graphemes";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
 import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
-import { lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
+import { COLUMN_ORDER, lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
 import { rateLimit } from "@/lib/rate-limit";
 import { assertTaskCapacity, assertTaskCreateRate } from "@/lib/caps";
 import { assertColumnRoom } from "@/lib/column-capacity";
@@ -235,7 +236,7 @@ export async function getProjectFormData(projectId: string) {
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true } });
     const [columns, users, deliverables, kinds, locale, labels, clients] = await Promise.all([
-      db.column.findMany({ where: { projectId: id }, orderBy: { position: "asc" }, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true } }),
+      db.column.findMany({ where: { projectId: id }, orderBy: COLUMN_ORDER, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
       projectUsers(id, project),
       db.deliverable.findMany({ where: { projectId: id }, orderBy: [{ position: "asc" }], select: { id: true, name: true, dueDate: true } }),
       listKinds(id),
@@ -336,7 +337,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
       return { ids: created.map((t) => t.id), assigneeId: assigned.assigneeId };
     });
     addUndo(...ids.map((id) => ({ t: "task.remove" as const, id })));
-    describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: data.tasks.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
+    describeAction("Creó {count} en «{col}»: {titles}", { count: tasksN(ids.length), col: await columnName(data.columnId), titles: cutText(data.tasks.map((t) => `«${mentionsToPlain(t.title)}»`).join(", "), 600) }, { taskIds: ids });
     // Un solo aviso para todo el lote (enlaza a la primera tarea), como createTask pero sin inundar al responsable.
     if (assigneeId && ids[0]) {
       await notifyTask({ type: "ASSIGNED", actorId: user.id, taskId: ids[0], projectId: data.projectId, recipientIds: [assigneeId], excerpt: ids.length === 1 ? makeExcerpt(data.tasks[0]!.title) : assignedBatchExcerpt(ids.length) });
@@ -444,9 +445,9 @@ export async function duplicateTask(taskId: string, target?: z.input<typeof dupl
     addUndo({ t: "task.remove", id: copy.id });
     if (copy.notify) await notifyAssigned(copy.notify, [copy.id], user.id, [{ id: copy.id, title }]);
     noteTasks([copy.id]);
-    if (evergreen) describeAction("Duplicó «{title}» como fija en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
-    else if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: src.title }, { taskId: copy.id });
-    else describeAction("Duplicó «{title}» en «{col}»", { title: src.title, col: await columnName(columnId) }, { taskId: copy.id });
+    if (evergreen) describeAction("Duplicó «{title}» como fija en «{col}»", { title: mentionsToPlain(src.title), col: await columnName(columnId) }, { taskId: copy.id });
+    else if (columnId === src.columnId) describeAction("Duplicó «{title}»", { title: mentionsToPlain(src.title) }, { taskId: copy.id });
+    else describeAction("Duplicó «{title}» en «{col}»", { title: mentionsToPlain(src.title), col: await columnName(columnId) }, { taskId: copy.id });
     // Después de crear la tarea (los ficheros pueden tardar): lo que no se copie se avisa, pero la copia ya existe.
     const copied = await copyTaskAttachments(taskId, copy.id);
     // Las imágenes de la descripción (`![…](/api/attachments/<id>)`) apuntan a los adjuntos de la original: en la copia,
@@ -892,14 +893,13 @@ export async function makeEvergreen(taskId: string, columnId?: string) {
       if (!column) throw new AppError(target ? "Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA." : "El proyecto no tiene columna de release.");
       await lockColumns(tx, [column.id]);
       const position = positionBetween(await lastPositionIn(tx, column.id, taskId), null);
-      const task = await tx.task.update({
-        where: { id: taskId },
-        data: { columnId: column.id, position, evergreen: true },
-        select: { title: true },
-      });
-      return { columnId: column.id, position, title: task.title, plan: column.role === "AI_PLAN" };
+      // Solo si sigue activa: otra persona puede haberla archivado después de la comprobación de arriba (quedaría
+      // archivada y marcada como fija), como en applyTaskMove.
+      const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId: column.id, position, evergreen: true } });
+      if (!count) throw await inactiveTaskError(tx, taskId);
+      return { columnId: column.id, position, plan: column.role === "AI_PLAN" };
     });
-    describeAction(result.plan ? "Marcó «{title}» como fija en el plan" : "Marcó «{title}» como fija en la release", { title: result.title }, { taskId, columnId: result.columnId });
+    describeAction(result.plan ? "Marcó «{title}» como fija en el plan" : "Marcó «{title}» como fija en la release", { title: (await taskLabel(taskId)).title }, { taskId, columnId: result.columnId });
     return { columnId: result.columnId, position: result.position };
   });
 }
@@ -1054,7 +1054,7 @@ export async function deleteTasks(taskIds: string[]) {
     noteTasks(ids);
     addUndo(...(await dependentLinkOps(ids)), ...(await snapshotTasks(ids)));
     const titles = await db.task.findMany({ where: { id: { in: ids } }, select: { title: true } });
-    describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: titles.map((t) => `«${t.title}»`).join(", ").slice(0, 600) }, { taskIds: ids });
+    describeAction("Borró {count}: {titles}", { count: tasksN(ids.length), titles: cutText(titles.map((t) => `«${mentionsToPlain(t.title)}»`).join(", "), 600) }, { taskIds: ids });
     await db.task.deleteMany({ where: { id: { in: ids } } });
     forgetTaskAttachments(ids);
     return { deleted: ids.length };
@@ -1594,7 +1594,7 @@ export async function restoreTask(taskId: string) {
     const origin = task.archivedFromColumnId
       ? await db.column.findFirst({ where: { id: task.archivedFromColumnId, projectId }, select: { id: true, name: true } })
       : null;
-    const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: { position: "asc" }, select: { id: true, name: true } }));
+    const column = origin ?? (await db.column.findFirst({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true } }));
     if (!column) throw new AppError("El proyecto no tiene columnas.");
     const undo = await captureTasks([taskId], ARCHIVE_FIELDS);
     const assigned = await db.$transaction(async (tx) => {
@@ -1750,7 +1750,7 @@ export async function editComment(commentId: string, body: string) {
     // Sin cambios: no hay nada que anotar ni deshacer.
     if (!updated) return toCommentInfo((await db.taskComment.findUniqueOrThrow({ where: { id: found.id }, select: commentSelect })));
     addUndo({ t: "comment.set", id: found.id, body: before.body, editedAt: before.editedAt?.toISOString() ?? null });
-    describeAction("Editó un comentario en «{title}»", { title: found.task.title }, { taskId });
+    describeAction("Editó un comentario en «{title}»", { title: mentionsToPlain(found.task.title) }, { taskId });
     const old = new Set(extractMentionIds(before.body));
     const candidates = extractMentionIds(text).filter((id) => !old.has(id));
     const notified = candidates.length
@@ -1785,7 +1785,7 @@ export async function deleteComment(commentId: string) {
     noteProject(comment.task.projectId);
     noteTask(comment.taskId);
     await assertNotArchived(comment.taskId);
-    describeAction("Borró un comentario de «{title}»", { title: comment.task.title }, { taskId: comment.taskId });
+    describeAction("Borró un comentario de «{title}»", { title: mentionsToPlain(comment.task.title) }, { taskId: comment.taskId });
     // Se relee con la fila bloqueada: si se editó entre la comprobación y el borrado, el deshacer guarda el texto vigente
     // (y se vacían los avisos que lo muestran).
     const { ops, soft } = await db.$transaction(async (tx) => {

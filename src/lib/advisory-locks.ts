@@ -28,7 +28,7 @@ export const LOCK_BACKUP = 741_031_005;
 export const LOCK_INSTANCE = 741_031_006;
 
 /**
- * Nombre del bloqueo de las columnas de un proyecto (para `pg_advisory_xact_lock(hashtext(…))`): crear, borrar y deshacer
+ * Nombre del bloqueo de las columnas de un proyecto (para `pg_advisory_xact_lock(hashtext(…))`): crear, mover, borrar, aplicar plantilla y deshacer
  * la creación de una columna lo toman dentro de su transacción, así dos a la vez no pasan del tope ni dejan el
  * proyecto sin columnas.
  */

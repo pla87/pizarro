@@ -21,7 +21,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Generales** | | **449** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
-| **Tablero** | | **830** | |
+| **Tablero** | | **912** | |
 | Tablero | `e2e/tablero-e2e.mjs` | 374 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 132 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
@@ -29,6 +29,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos, CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 111 | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
+| Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Generar plan» (PDF descargado, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 82 | ~1 min |
 | **Detalle de la tarea** | | **56** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
 | **Copias de tareas** | | **120** | |
@@ -39,13 +40,13 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/importar-json-detalle-e2e.mjs` | 100 | ~1,5 min |
 | Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/importar-exportar-e2e.mjs` | 155 | ~3 min |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/importar-pegar-foco-e2e.mjs` | 25 | ~1 min |
-| **Calendario** | | **50** | |
-| Tareas que se repiten (calendario, .ics —una descarga por columna a la vez— y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 50 | ~1 min |
+| **Calendario** | | **42** | |
+| Tareas que se repiten (calendario, .ics —una descarga por columna a la vez— y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 42 | ~1 min |
 | **Releases** | | **55** | |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
-| **Plan de trabajo para IA** | | **274** | |
-| Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 154 | ~1 min |
-| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 102 | ~1 min |
+| **Plan de trabajo para IA** | | **257** | |
+| Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 146 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 93 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 18 | ~30 s |
 | **Plantillas y programa del curso** | | **185** | |
 | Aplicar plantilla a un proyecto existente (ronda 50); opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51); paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/plantillas-aplicar-e2e.mjs` | 88 | ~1 min |
@@ -70,7 +71,7 @@ versión, todas (`scripts/e2e-all.sh`, ver «Todas seguidas o solo las afectadas
 | **Red, sin conexión y formularios** | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3341** | |
+| **Total** | | **3400** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
@@ -279,6 +280,34 @@ tarea» trae el título y avisa de que el archivo no se guardó. Misma base y se
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-compartir-e2e.mjs
 ```
 
+### Columna «Asignación a persona» (ronda 64)
+
+En un proyecto privado propio con tres personas (lo crea y lo borra la suite, con sus personas, `asig64_*`):
+
+- `rol`: menú «⋯» → *Rol de la columna* → *Asignación a persona*, persona y «Vence en 5 días»; la cabecera los muestra y
+  el submenú marca la opción. Con tres personas el diálogo ofrece «Añadir personas al proyecto», que lleva a *Ajustes del
+  proyecto → General* en los miembros (`#members`, a la vista); con cuatro ya no.
+- `entrar`: con el «+» de la columna la nota de «Nueva tarea» dice persona y plazo y la tarea nace de esa persona,
+  venciendo hoy + 5; cambiando «Columna» en el detalle, con «Mover a…» de la selección y con Alt+→, la tarea pasa a la
+  persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
+- `cambiar`: cambiar solo el plazo no pregunta ni toca las tarjetas; cambiar la persona pide confirmación con cuántas
+  tarjetas cambian («Las 2 tarjetas…») y las reasigna.
+- `plan`: «Generar plan», bajo la cabecera, descarga el PDF sin salir del tablero (`plan-…pdf`, `Content-Disposition:
+  attachment`); con la respuesta retrasada (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled) y otro
+  clic no lanza otra descarga; con un 429 simulado sale el aviso. El texto (`pdftotext`) va por vencimiento (Vencidas,
+  Hoy, Más adelante, Sin fecha), con lo rellenado de la descripción sin los apartados vacíos, las etiquetas y el aviso de
+  la tarjeta de otra persona.
+- `tipo`: «Tipo por defecto…» del menú: el «+» de la columna lo preselecciona; con «Ninguno» vuelve el último usado.
+- `quitar`: «Sin rol» quita persona, plazo y «Generar plan»; las tarjetas conservan su responsable y su fecha.
+- `movil`: a 390 px (nombre largo) la cabecera, el botón y el diálogo caben, sin scroll horizontal.
+- `en`: cabecera, menú, diálogo, nota de «New task» y PDF en inglés.
+
+Misma base y servidor (necesita `pdftotext`):
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-asignacion-e2e.mjs   # PART=rol,entrar,cambiar,plan,tipo,quitar,movil,en
+```
+
 ## Detalle de la tarea
 
 ### Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)
@@ -397,8 +426,7 @@ cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node importar-exportar-
 «Repetir» en *Nueva tarea* (junto a la fecha límite; el día sigue a la fecha mientras no se elija a mano; se guarda al
 crear), las apariciones futuras previstas en el calendario (tenues, con borde discontinuo e icono de repetir, abren la
 tarea original; ninguna hoy ni antes, ni de una tarea repetida sin fecha límite; un mes dos años después), la serie con
-`RRULE` en la suscripción `.ics` y en el `.ics` de una columna Agenda (desde la ronda 57, su botón lo descarga sin
-salir del tablero y un error, como un 429, sale en un aviso), y lo mismo a 390 px. Misma base y servidor:
+`RRULE` en la suscripción `.ics`, y lo mismo a 390 px. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node calendario-repetir-e2e.mjs   # PART=new,cal,ics,mobile
@@ -446,9 +474,9 @@ El paso 2 del plan ofrece «Descargar adjuntos (n)»: un ZIP con los adjuntos de
 (`adjuntos/03-titulo-de-la-tarea/plano.webp`; con la app en inglés, `attachments/03-task-title/…`, parte `en`), por la misma ruta, con los mismos topes y permisos que el de la release; el
 texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la descripción) y por su enlace a Pizarro, y a
 Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
-del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Exportar a calendario»,
-«Resumen para el cliente», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón
-y en el menú de la columna; el .ics, sin fechas límite, y la lista, sin subtareas, también). Con el texto del paso 2 cambiado,
+del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Ver lista»,
+«Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón y en el menú de la columna; la lista,
+sin subtareas, también). Con el texto del paso 2 cambiado,
 un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
 (por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
 

@@ -23,7 +23,8 @@ for (const f of readdirSync("src/i18n/en")) {
 }
 
 const missing = new Map();
-const call = /\bt\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\$]|\\.)*`)\s*[,)]/g;
+// t("…") y esText("…") (mensajes con datos que se guardan en español y se traducen al leerlos, lib/es-text.ts).
+const call = /\b(?:t|esText)\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\$]|\\.)*`)\s*[,)]/g;
 for (const f of files) {
   const text = readFileSync(f, "utf8");
   for (const m of text.matchAll(call)) {

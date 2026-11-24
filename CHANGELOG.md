@@ -2,6 +2,47 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.68.0 — 2026-11-24 01:15
+
+«Tipo por defecto» por columna, «Generar plan» y los PDF de columna que se descargan, roles Agenda y Entrega al cliente retirados, prefijos de tipo que no se acumulan, Logs y copias más claros, importar CSV grandes sin agotar la memoria, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- «Tipo por defecto…» en el menú de cada columna: el «+» de esa columna empieza con ese tipo; sin él, sigue el último usado.
+- «Generar release» explica en el paso 1 qué hace (también que los títulos pasan a llevar su código) y propone el título con la fecha en el formato de la app («Release 23 nov 2026 · Proyecto»).
+
+### Mejoras
+
+- «Generar plan», «PDF de la semana» y el PDF de la lista consolidada se descargan sin abrir otra pestaña, con el botón ocupado mientras se generan; «Generar plan» va bajo la cabecera, como los demás.
+- El plan por persona muestra lo rellenado de cada descripción, sin apartados vacíos, y sus etiquetas.
+- Columna «Asignación a persona»: «Añadir personas al proyecto» desde el diálogo y la nota de «Nueva tarea» con el plazo.
+- Plantilla Vibecoding: las subtareas son criterios de aceptación comprobables, no pasos de la persona.
+- Logs: las acciones de Mi perfil dicen qué cambió, el cambio de rol de columna dice de qué a qué, los errores del navegador van en frase llana (sin los de extensiones o la consola) y las filas antiguas se leen traducidas.
+- Copias: margen libre de 100 MB para la copia diaria, tareas de mantenimiento con nombres llanos y errores en el idioma de quien los lee.
+- Usuarios: «N activos · M invitaciones pendientes»; Ajustes del proyecto dice «Miembros» y, con una invitación pendiente, ofrece un enlace nuevo.
+- Detalle de la tarea: «Guardar descripción», aviso visible al cambiar de tipo con la descripción a medias y el diálogo ya no salta al subir un adjunto.
+- Calendario: con un responsable elegido solo salen los entregables con tareas suyas; carga con menos consultas.
+- Importar CSV (proyectos y tareas) gasta unas 12 veces menos memoria y es 20 veces más rápido.
+
+### Correcciones
+
+- Al cambiar de tipo, los prefijos de título ya no se acumulan («Gestionar Comprar …») ni se borra lo escrito por la persona.
+- Logs ya no cuenta «con envío externo» en instalaciones sin email ni canales.
+- Sin doble espacio tras elegir una mención; las copias flotantes de Deshacer y «Nueva tarea» se ocultan bajo «Cambios sin guardar»; las muestras de tarjeta siguen el tema de color.
+- Deshacer el borrado o el movimiento de una columna ya no deja dos columnas en la misma posición; mover columnas a la vez no se pisa.
+- Una tarea archivada a la vez que se fija ya no queda fija; las menciones salen legibles en Logs y en Deshacer.
+- Una descripción con miles de citas anidadas ya no hace fallar el PDF del programa.
+- El informe semanal con el destinatario rechazado no se reintenta cada hora; con el remitente rechazado, sí.
+- Los topes de WhatsApp, avisos y emails de prueba ya no se pueden vaciar desde fuera.
+- «Forzar cambio de contraseña» se rechaza para invitaciones pendientes; «1 fila / 1 tabla» en Copias; el aviso de importar ya no repite la frase.
+
+### Cambios técnicos / DB
+
+- Roles AGENDA y DELIVERY: dejan de ofrecerse y una migración pasa sus columnas (y las plantillas guardadas) a NONE; el valor se quitará del enum en la versión siguiente.
+- Migración que añade Column.defaultKindId (nullable, ON DELETE SET NULL).
+- La release construye la imagen sin caché de Docker (unos 3 min menos por arquitectura); fly.toml con kill_timeout de 15 s.
+- Suite e2e nueva tablero-asignacion-e2e; retirada la acción listTemplates y las rutas .ics y de entrega de columna.
+
 ## v1.67.0 — 2026-11-23 13:06
 
 Columna «Asignación a persona» con «Generar plan», plantillas propias para todos, Logs en el idioma de cada persona, copias que comprueban el espacio, plan para IA más corto, avisos de actualización por plataforma, y revisión y caza de bugs

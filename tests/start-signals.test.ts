@@ -124,11 +124,18 @@ test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de form
     }
     assert.ok(stoppedAt, "el servidor no recibió el apagado ordenado");
     assert.ok(stoppedAt - killedAt < 2500, `apagado ${stoppedAt - killedAt} ms después de parar npm`);
-    for (let i = 0; i < 40 && running(server); i++) await sleep(50);
-    if (running(server)) {
-      process.kill(server, "SIGKILL");
-      assert.fail("el servidor quedó huérfano");
+    // Sale 50 ms después del apagado; con la máquina cargada puede tardar más: el mismo margen que la espera anterior.
+    for (let i = 0; i < 100 && running(server); i++) await sleep(50);
+    const orphan = running(server);
+    if (orphan) {
+      // Puede terminar justo ahora (ESRCH): no es un fallo de la prueba, que ya lo ha visto vivo tras el margen.
+      try {
+        process.kill(server, "SIGKILL");
+      } catch {
+        // ya había salido
+      }
     }
+    assert.equal(orphan, false, "el servidor quedó huérfano");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

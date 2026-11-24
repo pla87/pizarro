@@ -56,7 +56,7 @@ import { createAndOpenGoogleFile, shareWarning } from "./google";
 import { AttachLimitHint } from "./AttachLimitHint";
 import { attachmentTotalsOf } from "@/lib/attachment-totals";
 import { UploadProgress } from "./UploadProgress";
-import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
+import { batchErrorMessage, createProgressAggregator, filesFrom, formatBytes, isImageFile, monotonicTotals, skippedMessage, uploadBatch, useFileDrop, type BatchProgress } from "./upload";
 import { planUploads } from "@/lib/upload-queue";
 import { appTimeZone, formatDate } from "@/lib/format";
 import { normalizeLinkUrl } from "@/lib/link-url";
@@ -248,6 +248,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     });
   }
   const [uploading, setUploading] = useState(0);
+  // Subidas en curso por clase: cada una reserva el hueco de su miniatura (o de su fila) hasta que llega el adjunto. Sin
+  // esto el detalle (centrado y con la altura de su contenido) crecía al terminar y saltaba hacia arriba bajo el ratón.
+  const [pending, setPending] = useState({ images: 0, files: 0 });
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   // Varias tandas a la vez suman en un solo progreso, que se limpia cuando acaban todas.
   const [progressAgg] = useState(() => createProgressAggregator(setProgress));
@@ -368,11 +371,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   useEffect(() => () => clearTimeout(savedTimer.current), []);
   // «Tarea copiada» / «Tarea pegada»: el mismo indicador, con otro texto, durante el mismo rato.
   const [notice, setNotice] = useState<string | null>(null);
-  const showNotice = (text: string) => {
+  const showNotice = (text: string, ms = 2500) => {
     clearTimeout(savedTimer.current);
     setJustSaved(false);
     setNotice(text);
-    savedTimer.current = setTimeout(() => setNotice(null), 2500);
+    savedTimer.current = setTimeout(() => setNotice(null), ms);
   };
   const tracked = async <T extends { ok: boolean }>(p: Promise<T>): Promise<T> => {
     clearTimeout(savedTimer.current);
@@ -661,12 +664,23 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (!accepted.length) return;
     if (uploadAbort.current.signal.aborted) return;
     setUploading((n) => n + accepted.length);
+    // Lo que aún reserva hueco de esta tanda (la clase la confirma el servidor al subir: `att.isImage`).
+    const left = { images: accepted.filter(isImageFile).length, files: 0 };
+    left.files = accepted.length - left.images;
+    setPending((p) => ({ images: p.images + left.images, files: p.files + left.files }));
     const batch = progressAgg.start();
     const res = await uploadBatch(task.id, accepted, {
       t,
       track: board.trackRaw,
       signal: uploadAbort.current.signal,
       onUploaded: (att) => {
+        // Libera un hueco de su clase (o del otro, si la imagen no lo era para el servidor o al revés).
+        const own = att.isImage ? "images" : "files";
+        const kind = left[own] > 0 ? own : own === "images" ? "files" : "images";
+        if (left[kind] > 0) {
+          left[kind]--;
+          setPending((p) => ({ ...p, [kind]: p[kind] - 1 }));
+        }
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         // Con el diálogo ya cerrado nadie recalcula desde la lista: los contadores de la tarjeta se ponen aquí.
         board.patchTask(task.id, monotonicTotals(board.getTask(task.id), att.totals));
@@ -674,6 +688,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       onProgress: batch.update,
     });
     setUploading((n) => n - accepted.length);
+    setPending((p) => ({ images: p.images - left.images, files: p.files - left.files }));
     batch.finish();
     if (res.totalRejected) setTotalRejected(true);
     const msg = batchErrorMessage(t, res.errors, res.notSent);
@@ -1010,16 +1025,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const kind = board.kindById.get(kindId);
     const prev = board.kindById.get(task.kindId);
     // Sin el espacio que deja el prefijo solo para seguir escribiendo en «Nueva tarea»: aquí se guarda al momento.
-    const nextTitle = detail && kind ? switchKindTitle(prev, kind, title).trimEnd() : title;
+    const nextTitle = detail && kind ? switchKindTitle(prev, kind, title, board.kinds).trimEnd() : title;
     const typed = descLive.current;
     if (detail && kind && typed !== null && typed !== detail.description && (descDirtyCheck.current?.() ?? true)) {
-      const nextDesc = switchKindDescription(prev, kind, typed);
-      if (nextDesc !== typed) descReplace.current?.(nextDesc);
+      // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción.
+      descReplace.current?.(switchKindDescription(prev, kind, typed));
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
       const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept });
       // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
-      void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar")));
+      // Más rato que «Guardado»: el aviso de la cabecera queda lejos del selector de tipo y se pasaba por alto.
+      void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
       return saved;
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
@@ -1200,15 +1216,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                   </button>
                 </div>
               ))}
-              {uploading > 0 && !progress && (
-                <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
+              {/* Una por imagen que sube, del tamaño de su miniatura: al llegar la ocupa sin mover nada. */}
+              {Array.from({ length: pending.images }, (_, i) => (
+                <div key={`up-${i}`} data-upload-slot className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-500 dark:border-slate-700">
                   <Loader2 size={16} className="mr-1.5 animate-spin" /> {t("Subiendo…")}
                 </div>
-              )}
+              ))}
             </div>
-            {progress && <UploadProgress progress={progress} className="mt-2" />}
-            {files.length > 0 && (
-              <ul className={cn("space-y-1.5", images.length > 0 && "mt-2")}>
+            {/* El progreso, solo con varias a la vez: con una basta su hueco (y no cambia la altura al empezar y acabar). */}
+            {progress && progress.total > 1 && <UploadProgress progress={progress} className="mt-2" />}
+            {/* Con uno solo, el lector de pantalla oye «Subiendo…» aquí (los huecos no son región viva: serían varios avisos). */}
+            <span className="sr-only" role="status">{uploading > 0 && !(progress && progress.total > 1) ? t("Subiendo…") : ""}</span>
+            {(files.length > 0 || pending.files > 0) && (
+              <ul className={cn("space-y-1.5", (images.length > 0 || pending.images > 0) && "mt-2")}>
                 {files.map((a) => {
                   const Icon = fileIcon(a);
                   return (
@@ -1225,6 +1245,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
                     </li>
                   );
                 })}
+                {Array.from({ length: pending.files }, (_, i) => (
+                  <li key={`up-${i}`} data-upload-slot className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-sm text-slate-500 dark:border-slate-700">
+                    <Loader2 size={18} className="shrink-0 animate-spin" />
+                    {/* Alto de una fila con botones (h-7): no cambia al llegar el adjunto. */}
+                    <span className="flex h-7 min-w-0 flex-1 items-center truncate text-xs">{t("Subiendo…")}</span>
+                  </li>
+                ))}
               </ul>
             )}
             {detail && detail.attachments.length === 0 && uploading === 0 && (
@@ -1624,11 +1651,14 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   const touch = () => {
     touched.current = true;
   };
+  // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado.
+  const [kindChanged, setKindChanged] = useState(false);
   useEffect(() => {
     if (!replaceRef) return;
     replaceRef.current = (markdown) => {
       touched.current = true;
       setValue(markdown);
+      setKindChanged(true);
     };
     return () => {
       replaceRef.current = null;
@@ -1681,6 +1711,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   }, [editing]);
   const closeEditor = () => {
     refocus.current = true;
+    setKindChanged(false);
     setEditing(false);
   };
 
@@ -1713,6 +1744,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   };
 
   const clear = () => {
+    setKindChanged(false);
     setEditing(false);
     setValue("");
     if (initial.trim()) onClear();
@@ -1753,9 +1785,14 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
           />
           </div>
           <div className="flex gap-2">
-            <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar")}</button>
+            {/* «Guardar descripción»: el pie del detalle tiene otro «Guardar» (guarda todo y cierra). */}
+            <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar descripción")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
-            <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>
+            {kindChanged ? (
+              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">{t("Tipo cambiado; falta guardar la descripción")}</span>
+            ) : (
+              <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>
+            )}
           </div>
         </div>
       ) : value.trim() ? (

@@ -365,7 +365,7 @@ Guardas que conviene conocer:
 - PDF largos (ronda 58, `src/lib/pdf-chunks.ts`): más de ~20 páginas se maquetan en tramos de varios `<Page>` cortados donde
   el documento entero saltaría de página (lee `_INTERNAL__LAYOUT__DATA_` de `onRender`, interno de @react-pdf 4.9.0; sin
   él, se trocea por estimación). El worker usa una sola raíz de React (`renderDoc`), de uno en uno. Si cambias la versión
-  de @react-pdf, pasa `tests/report-pages.test.ts`.
+  de @react-pdf, pasa `tests/report-pages.test.ts` y `tests/report-pages-iguales.test.ts`.
 - Tablero en vivo por tarjeta (ronda 60, `src/components/board/livePatch.ts`): el canal manda `taskIds` (hasta 50) y
   `full`; para las acciones de `PATCHABLE_ACTIONS` el navegador pide solo esas tarjetas a `GET
   /api/projects/<id>/board-tasks?ids=…` (mismo permiso que el tablero, 15 s de tiempo máximo) y las aplica
@@ -444,6 +444,24 @@ Guardas que conviene conocer:
     da por subido un objeto que ya existe con su tamaño cuando el bloqueo de R2 rechaza el reintento.
   - Memoria: nunca `--max-old-space-size` en `NODE_OPTIONS` (anula el `resourceLimits` del worker de PDF): ni en Compose ni
     en `render.yaml`; Node ajusta su montón al límite del contenedor.
+
+- Ronda 64:
+  - Roles de columna retirados (`RETIRED_COLUMN_ROLES`, `SELECTABLE_COLUMN_ROLES`, `liveColumnRole` en `constants.ts`):
+    *Agenda* y *Entrega al cliente* ya no se ofrecen y todo lo que entra (validación, importar, plantillas, deshacer) los
+    lee como `NONE`. **Fase 2 (v1.69):** repetir los dos `UPDATE` de `20261129100000_retirar_roles_agenda_entrega` antes
+    de quitar los valores del enum (una vuelta atrás a la v1.67 puede volver a escribirlos) y seguir aceptando "AGENDA" y
+    "DELIVERY" en la importación, las plantillas y el deshacer (ZIP exportados con la v1.67). Quitar también `deliveryDoc`
+    / `DeliveryPdfInput` (`report-pdf.tsx`, solo pruebas) pasando antes esas pruebas a otro PDF.
+  - Orden de columnas: siempre con `COLUMN_ORDER` (`[{position},{id}]`, `task-positions.ts`); tras deshacer una columna,
+    `resolveColumnPositionTies` renumera si hay empate. Mover, crear, borrar y aplicar plantilla toman `columnsLockName`.
+  - PDF de columna (plan por persona, semana, lista consolidada): se descargan con `columnDownload.ts` (un clic a la vez,
+    `busy` en `ColumnActionButton` sin `aria-disabled`) y sus rutas responden `attachment`. Un PDF de columna nuevo, igual.
+  - Logs: `log-legacy.ts` traduce al leer las filas antiguas sin plantilla; `es-text.ts` (`esText`) monta los errores
+    con datos que luego se traducen; `client-error-origin.ts` descarta rechazos de promesas sin pila de `/_next/`.
+  - Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
+    `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
+  - Prefijos de tipo (`switchKindTitle` con `known`): de otros tipos solo se quitan los que acaban en signo; los que acaban
+    en palabra, solo si son del tipo anterior (no borrar lo que escribió la persona).
 
 Antes de cada fusión en `main`, comprueba que no se cuela ningún dato personal del propietario en el diff ni en el
 PDF del manual (busca su nombre, email y dominios; pídeselos si no los sabes) y que los mensajes de commit no
@@ -599,36 +617,40 @@ Cómo se revisa cada PR:
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
 
-**Estado al cerrar la ronda 63:** v1.67.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Hecho por el propietario con Claude in Chrome en la ronda 63: `feedback@getpizarro.com` con Cloudflare Email Routing
-(reenvía a su buzón; probado), regla de bloqueo de R2 `adjuntos-pizarro` (`pizarro/files/`, 180 días) además de
-`copias-pizarro` (`pizarro/pizarro-backup-`, 31 días), y comprobación de salud en sus dos Railway (`/api/health`, 600 s).
-Pendiente: los prompts 1–3 de `PRUEBAS-CHROME.md` (pruebas en real de la v1.67.0, DMARC si lo aprueba, auditoría).
+**Estado al cerrar la ronda 64:** v1.68.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Hecho por el propietario con Claude in Chrome en la ronda 64: pruebas en real de la v1.67.0 (bien; no se pudieron las
+plantillas propias como miembro ni el plan para IA), auditoría como usuario nuevo de la v1.67.0 (sus fallos y lo evidente,
+arreglados en la v1.68.0) y registro DMARC `_dmarc` con `p=none` en getpizarro.com. Pendiente: los prompts de
+`PRUEBAS-CHROME.md` (pruebas en real de la v1.68.0, `rua` del DMARC si lo aprueba, auditoría).
+La ronda 64 dio 8 vueltas de revisión (servidor y seguridad, navegador y ficheros, acceso y emails, tablero y plantillas,
+instalación y CI, y tres sobre el diff de la ronda); la última no encontró nada.
 
-**Preguntas abiertas al propietario (tras la v1.67.0)**, con la numeración del informe final de la ronda 63 (entre
+**Preguntas abiertas al propietario (tras la v1.68.0)**, con la numeración del informe final de la ronda 64 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Retirar los roles de columna más flojos: *Agenda* (solo descarga un .ics de la columna; la suscripción del calendario
-   ya lo cubre) y *Entrega al cliente* (un PDF básico que ninguna plantilla usa). En dos versiones: primero dejar de
-   ofrecerlos y convertir las columnas a «Sin rol», y quitar el valor del enum una versión después. (SÍ)
-2. A medio plazo, un solo «PDF de plan» para *Planificación semanal* y *Asignación a persona* (agrupado por día, por
-   persona o por vencimiento). (Más adelante)
-3. *Revisión con requisitos* (y quizá *Rutinas*) como opciones del menú de la columna, combinables con un rol. (Más
-   adelante)
-4. «Generar plan» de una columna de asignación: incluir también las tarjetas de otras personas (hoy solo las cuenta). (NO)
-5. Registro DMARC de getpizarro.com con `p=none` (prompt 2 de `PRUEBAS-CHROME.md`). (SÍ)
-6. Retirar la acción `listTemplates` (`src/actions/templates.ts`), que ya no usa la app (solo pruebas). (SÍ)
-7. Las subtareas de los tipos de *Vibecoding* («Pedir el cambio a la IA», «Revisar el diff», «Probarlo en local») son
-   pasos de la persona y llegan al plan para IA como criterios de aceptación: reescribirlas. (Lo decide el propietario:
-   son sus plantillas; recomendación SÍ)
-8. Margen de disco menor para la copia diaria (100 MB en vez del 1 GB común): la retención libera lo que escribe. (SÍ)
-9. Tipo por defecto en el «+» de cada columna: un ajuste opcional «Tipo por defecto» en el menú de la columna; sin él,
-   el último usado (respuesta a «¿en base a qué?»). (SÍ, pequeño)
-10. Suite e2e de la columna «Asignación a persona» (hoy la cubren pruebas unitarias y de base y la caza en navegador).
-    (SÍ, próxima ronda)
-11. Traducir los errores sueltos de copias y configuración que aún salen en español dentro de Logs en inglés («BACKUP_KEY
-    no está configurada.»…). (SÍ, pequeño)
-12. Probar en un iPad real el arrastre de franjas del Calendario. (Más adelante, decisión de la ronda 62)
+1. Historial de versiones: pintar solo las 10 últimas con «Ver más» (la página pesa ~450 KB; −78 %). (SÍ)
+2. Mis tareas: cambiar los filtros por una línea de resumen con enlaces a cada grupo. (SÍ)
+3. Logs en inglés: guardar también el mensaje en inglés (`messageEn`) para poder buscar en inglés. (SÍ)
+4. Filtrar también en `client.window` los errores que vienen de extensiones. (SÍ)
+5. Avisar por email a quien configuró el informe semanal cuando el destinatario se rechaza para siempre. (SÍ)
+6. Cambiar de tipo en el detalle: sustituir las subtareas del tipo anterior que sigan sin marcar ni editar, con deshacer. (SÍ)
+7. Atenuar en escritorio los botones «+» y «Varias tareas» junto al diálogo (enteros al pasar el ratón). (SÍ)
+8. Recalcular la fecha al mover una tarjeta entre dos columnas de persona. (NO)
+9. «Tipo por defecto» también en plantillas y en «Varias tareas». (Solo si se echa de menos)
+10. Plan para IA: decir el tipo una sola vez si todas las tareas son del mismo tipo. (SÍ, pequeño)
+11. Administración → Proyectos: «asignados» → «miembros», como en Ajustes del proyecto. (SÍ)
+12. Invitación pendiente en Ajustes del proyecto: «Reenviar invitación» por email si hay email. (SÍ)
+13. Retirar código que solo usan las pruebas: `reencryptIfStale` (`keyring.ts`), `parseTaskLines` (`bulk.ts`) y el
+    `describeAction` «Abrió la tarea…» de `getTaskDetail` (nunca se registra). (SÍ)
+14. Avisos: «Ver más» por páginas en lugar de volver a leer todo. (NO por ahora)
+15. CI: no repetir la pasada de comprobaciones al fusionar en `main` (ya pasó en la PR). (SÍ)
+16. `npm run test:db` repartido en 3 bases en paralelo. (Más adelante)
+17. Documentación más corta para cada sesión nueva: HANDOFF con anexos aparte, detalle de las suites en `e2e/SUITES.md`
+    y leer solo el índice del manual al empezar (de ~130.000 a ~45.000 tokens de lectura inicial). (SÍ)
+18. DMARC con informes (`rua`), prompt 2 de `PRUEBAS-CHROME.md`. (Opcional)
+19. Ideas de la auditoría: «Organizar por personas» en *Casa y familia*, roles de columna filtrados por plantilla,
+    arrastrar cabeceras de columna. (Más adelante)
+20. Fase 2 de Agenda y Entrega al cliente (ver §4, Ronda 64). (SÍ, en la v1.69)
 
 Límites conocidos (no se cambian): un administrador puede saber si existe un tipo con cierto nombre en otro proyecto (los
 nombres de tipos son únicos entre generales y de proyecto); volver a la v1.64 con avisos `REPORT_UNSUBSCRIBED` ya creados
@@ -638,6 +660,12 @@ Menores sin numerar de antes (recomendación NO salvo que se note): «Guardar de
 simultáneo; `INSTANCE_LOCK=0`; quitar del plan para IA las URL sueltas a Pizarro; «Esta semana» de domingo a sábado en
 inglés; búsquedas de releases de 1–2 caracteres sin índice; `socketTimeout` del SMTP; log de errores de Caddy; código
 propio de «disco lleno» en Compartir; la importación de `.pizarro.zip` no asigna administradores.
+
+**Decisiones de la ronda 64 (ya aplicadas):** retirados de la oferta los roles *Agenda* y *Entrega al cliente* (fase 1;
+sus columnas a «Sin rol»); «Tipo por defecto…» por columna (`Column.defaultKindId`); suite e2e de «Asignación a persona»;
+subtareas de *Vibecoding* como criterios; margen de 100 MB de la copia diaria; errores de copias traducibles; retirada
+`listTemplates`; PDF de columna descargados con el botón ocupado; DMARC `p=none` hecho. Respuesta a la pregunta 2 de la
+ronda 63: el «PDF de plan» común compartiría motor y aspecto, pero cada rol agrupa distinto (por día o por vencimiento).
 
 **Decisiones de la ronda 63 (ya aplicadas):** columna «Asignación a persona» con dos campos en `Column` (`assigneeId`,
 `assignDueDays`, rol `NONE`; sin valor nuevo de enum para poder volver a la v1.66) y «Generar plan» en PDF; plantillas

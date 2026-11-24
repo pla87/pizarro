@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified, RETIRED_BUILTINS } from "../src/lib/builtin-templates";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
-import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
-import { buildTemplateApplication, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
+import { COLUMN_ROLES, SELECTABLE_COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
+import { buildTemplateApplication, parseStoredTemplate, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
+import { PROJECT_EXAMPLES } from "../src/lib/project-examples";
 
 test("cada plantilla de serie pasa la misma validación que las de los usuarios", () => {
   assert.equal(BUILTIN_TEMPLATES.length, 6);
@@ -150,11 +151,11 @@ test("cada plantilla de serie, en los dos idiomas: roles válidos y únicos dond
   }
 });
 
-test("las plantillas de trabajo real usan los roles de columna (espera, rutinas, agenda, presupuesto, listas…)", () => {
+test("las plantillas de trabajo real usan los roles de columna (espera, rutinas, presupuesto, listas…)", () => {
   const expected: Record<string, string[]> = {
     "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES"],
-    "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "AGENDA", "ROUTINES"],
-    "eventos-viajes": ["WAITING", "BUDGET", "AGENDA", "CHECKLIST"],
+    "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "ROUTINES"],
+    "eventos-viajes": ["WAITING", "BUDGET", "CHECKLIST"],
     "estudios-tesis": ["ROUTINES", "WAITING", "REVIEW"],
   };
   for (const [k, roles] of Object.entries(expected)) {
@@ -176,4 +177,37 @@ test("en las columnas de lista consolidada, los tipos pensados para ellas traen 
       for (const k of t.kinds) for (const s of k.subtaskTemplate) assert.ok(!steps.test(s), `${b.key}/${k.name}: «${s}»`);
     }
   }
+});
+
+test("Vibecoding: las subtareas de sus tipos son criterios comprobables, no pasos de la persona (llegan al plan para IA)", () => {
+  const steps = /^(pedir|revisar|probar|escribir|contrastar|anotar|cubrir|aplicar|comprobar|desplegar|ask|review|try|write|cross-check|note|cover|apply|check|deploy)\b/i;
+  for (const t of [canonicalTemplate("vibecoding")!, canonicalTemplateEn("vibecoding")!]) {
+    assert.ok(t.kinds.every((k) => k.subtaskTemplate.length >= 2), t.name);
+    for (const k of t.kinds) for (const s of k.subtaskTemplate) {
+      assert.ok(!steps.test(s), `${k.name}: «${s}»`);
+      assert.ok(s.length <= 50, `${k.name}: «${s}» es largo`);
+    }
+  }
+  // Las subtareas de las tarjetas de ejemplo, tampoco.
+  const exampleSteps = /^(pedir|revisar|probar|escribir|reproducir|arreglar|ask|review|try|write|reproduce|fix)\b/i;
+  const ex = PROJECT_EXAMPLES.find((e) => e.key === "vibecoding")!;
+  for (const task of [...ex.es.tasks, ...ex.en.tasks]) for (const s of task.subtasks ?? []) {
+    assert.ok(!exampleSteps.test(s), `${task.title}: «${s}»`);
+    assert.ok(s.length <= 50, `${task.title}: «${s}» es largo`);
+  }
+});
+
+test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie los usa y una guardada antigua los lee como «Sin rol»", () => {
+  for (const b of BUILTIN_TEMPLATES) {
+    for (const t of [canonicalTemplate(b.key)!, canonicalTemplateEn(b.key)!]) {
+      for (const c of t.columns) assert.ok((SELECTABLE_COLUMN_ROLES as readonly string[]).includes(c.role), `${b.key}: «${c.name}» con el rol ${c.role}`);
+    }
+  }
+  const old = parseStoredTemplate({
+    id: "x", name: "Antigua", description: "",
+    columns: [{ name: "Citas", role: "AGENDA", isDone: false }, { name: "Entrega", role: "DELIVERY", isDone: false }, { name: "Hecho", role: "NONE", isDone: true }],
+    kinds: [], hiddenGeneralKinds: [], labels: [],
+  });
+  assert.deepEqual(old.columns.map((c) => c.role), ["NONE", "NONE", "NONE"]);
+  assert.ok(COLUMN_ROLES.includes("AGENDA"), "el valor sigue en el enum hasta la versión siguiente");
 });

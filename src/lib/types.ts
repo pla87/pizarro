@@ -20,6 +20,8 @@ export interface BoardColumn {
   assigneeId: string | null;
   /** «Asignación a persona»: plazo en días para la fecha límite de las que entran sin fecha (null = sin plazo). */
   assignDueDays: number | null;
+  /** Tipo con el que se abre «Nueva tarea» desde esta columna (null = el último usado). Si no está entre los visibles, no cuenta. */
+  defaultKindId: string | null;
 }
 
 export interface BoardTask extends TaskFieldValues {
@@ -119,6 +121,8 @@ export interface BoardData {
   google: { enabled: boolean; connected: boolean };
   /** Hoy (YYYY-MM-DD) en la zona horaria de la app, para los avisos de plazo. */
   today: string;
+  /** Puede añadir personas al proyecto (administradores y, si es privado, sus miembros). Opcional: sin él, no. */
+  canManageMembers?: boolean;
   /** Espera máxima (ms, al azar) antes de refrescar por un cambio de otra persona (LIVE_REFRESH_JITTER_MS; por defecto 2000). */
   liveRefreshJitterMs?: number;
   /** Último aviso del canal en vivo del proyecto al pedir estos datos (ver realtime.ts `liveCursor`). */

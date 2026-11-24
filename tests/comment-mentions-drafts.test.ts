@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 import {
-  addMentions, applyTextChange, changedRange, mentionTouching, modelFromRaw, modelToRaw, normalizeModel, replaceRange, sliceToRaw,
+  addMentions, applyTextChange, changedRange, mentionSuffix, mentionTouching, modelFromRaw, redundantMentionSpace, modelToRaw, normalizeModel, replaceRange, sliceToRaw,
 } from "../src/lib/mention-edit";
 import { extractMentionIds, mentionToken } from "../src/lib/mentions";
 import { touchesComments } from "../src/components/board/remoteChange";
@@ -139,5 +139,31 @@ describe("borradores de comentarios", () => {
     purgeExpiredCommentDrafts(now);
     assert.deepEqual([...store.keys()].sort(), [commentDraftKey("u1", "reciente"), "pz-draft-new:u1:p1"].sort(), "solo borra comentarios caducados o ilegibles");
     assert.equal(readCommentDraft("u1", "reciente")?.text, "hace un minuto");
+  });
+});
+
+describe("espacio detrás de una mención elegida en la lista de «@»", () => {
+  const persona = mentionToken("Persona Prueba", "p1");
+  test("se pone un espacio detrás, salvo si el texto ya sigue con uno", () => {
+    assert.equal(mentionSuffix(""), " ");
+    assert.equal(mentionSuffix("para"), " ");
+    assert.equal(mentionSuffix(" para"), "");
+    assert.equal(mentionSuffix("\u00a0para"), "");
+  });
+  test("seguir escribiendo con un espacio no deja dos (formato guardado, editor Markdown)", () => {
+    const raw = `Hola ${persona} `;
+    assert.equal(redundantMentionSpace(raw, raw.length), true);
+    // Un espacio normal en otro sitio sí se escribe.
+    assert.equal(redundantMentionSpace("Hola ", 5), false);
+    assert.equal(redundantMentionSpace(`${persona} para `, `${persona} para `.length), false);
+    // Sin espacio detrás de la mención (el cursor justo al final de ella), el espacio se escribe.
+    assert.equal(redundantMentionSpace(persona, persona.length), false);
+  });
+  test("lo mismo con las menciones legibles (comentarios)", () => {
+    const model = modelFromRaw(`Hola ${persona} `);
+    assert.equal(model.text, "Hola @Persona Prueba ");
+    const ends = model.mentions.map((m) => m.end);
+    assert.equal(redundantMentionSpace(model.text, model.text.length, ends), true);
+    assert.equal(redundantMentionSpace("Hola @Persona Prueba ", 21, []), false);
   });
 });
