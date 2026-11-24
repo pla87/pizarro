@@ -28,7 +28,3 @@ export function parseTaskLinesInfo(text: string): { lines: string[]; clipped: nu
     });
   return { lines, clipped, limits };
 }
-
-export function parseTaskLines(text: string): string[] {
-  return parseTaskLinesInfo(text).lines;
-}

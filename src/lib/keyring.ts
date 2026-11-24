@@ -131,9 +131,3 @@ export function decryptSecretInfo(token: string, env: Env = process.env): Decryp
 export function decryptSecret(token: string, env: Env = process.env): string {
   return decryptSecretInfo(token, env).plain;
 }
-
-/** Valor re-cifrado con la clave actual si el guardado es antiguo; null si ya está al día. Lanza si no se puede leer. */
-export function reencryptIfStale(token: string, env: Env = process.env): string | null {
-  const { plain, stale } = decryptSecretInfo(token, env);
-  return stale ? encryptSecret(plain, env) : null;
-}

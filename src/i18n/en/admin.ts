@@ -704,7 +704,6 @@ export const admin: Record<string, string> = {
   "; su proyecto privado pasa a ser de equipo": "; their private project becomes a team project",
   "; su proyecto privado «{project}» pasa a ser de equipo": "; their private project “{project}” becomes a team project",
   "; sus {n} proyectos privados pasan a ser de equipo": "; their {n} private projects become team projects",
-  "Abrió la tarea «{title}»": "Opened the task “{title}”",
   "Copió la tarea «{title}» como JSON": "Copied the task “{title}” as JSON",
   "Cambió el máximo por archivo a {file} MB, el de adjuntos por tarea a {task} MB y el de cada ZIP de release a {zip} MB":
     "Set the maximum per file to {file} MB, per task attachments to {task} MB and per release ZIP to {zip} MB",
@@ -800,4 +799,8 @@ export const admin: Record<string, string> = {
   "{n} invitaciones pendientes": "{n} pending invitations",
   "{n} de {max} como máximo": "{n} of {max} maximum",
   "Puede haber como mucho {max} usuarios activos a la vez, contando las invitaciones pendientes. Las personas desactivadas no cuentan.": "There can be at most {max} active users at a time, counting pending invitations. Deactivated people don't count.",
+  // Abrir una tarea se anotaba en Logs hasta la v1.41.0 (ahora no se anota: UNLOGGED_READS en lib/action.ts); sus filas
+  // se leen en inglés con log-legacy.ts mientras duren (LOG_RETENTION_DAYS, hasta 90 días).
+  // Textos guardados por versiones anteriores (Logs)
+  "Abrió la tarea «{title}»": "Opened the task “{title}”",
 };

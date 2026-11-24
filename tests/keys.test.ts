@@ -123,11 +123,11 @@ describe("cifrado de secretos (ENCRYPTION_KEY)", () => {
     const old = keyring.encryptSecret("secreto", { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC });
     const env = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2, ENCRYPTION_KEY_PREVIOUS: ENC };
     assert.deepEqual(keyring.decryptSecretInfo(old, env), { plain: "secreto", stale: true });
-    const fresh = keyring.reencryptIfStale(old, env);
-    assert.ok(fresh);
-    assert.equal(fresh!.split(".")[1], keyring.encryptionKeys(env).current.id);
-    assert.deepEqual(keyring.decryptSecretInfo(fresh!, { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 }), { plain: "secreto", stale: false });
-    assert.equal(keyring.reencryptIfStale(fresh!, env), null);
+    // Re-cifrado como lo hacen la rotación (key-rotation.ts), la verificación en dos pasos y Google: con la clave actual.
+    const fresh = keyring.encryptSecret(keyring.decryptSecretInfo(old, env).plain, env);
+    assert.equal(fresh.split(".")[1], keyring.encryptionKeys(env).current.id);
+    assert.deepEqual(keyring.decryptSecretInfo(fresh, { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 }), { plain: "secreto", stale: false });
+    assert.equal(keyring.decryptSecretInfo(fresh, env).stale, false);
   });
 
   test("ENCRYPTION_KEY_PREVIOUS también abre el formato antiguo (v1)", () => {
