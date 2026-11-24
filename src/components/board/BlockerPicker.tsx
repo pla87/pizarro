@@ -8,6 +8,7 @@ import { mentionsToPlain } from "@/lib/mentions";
 import type { BoardTask } from "@/lib/types";
 import { normalizeSearch } from "@/lib/search-accents";
 import { MentionText } from "../ui/MentionText";
+import { isPendingCopy } from "./groupDrag";
 import { useBoard, useTasks } from "./context";
 
 const MAX_RESULTS = 8;
@@ -36,7 +37,8 @@ export function BlockerPicker({ task, onChange, onOpen }: { task: BoardTask; onC
 
   const byId = new Map(tasks.map((x) => [x.id, x]));
   // Las que esperan a esta (las archivadas no están en el tablero y no salen).
-  const blocking = tasks.filter((x) => x.blockedBy?.id === task.id && x.id !== task.id);
+  // Sin copias provisionales (Ctrl al soltar): aún no existen en el servidor y abrirlas no hace nada.
+  const blocking = tasks.filter((x) => x.blockedBy?.id === task.id && x.id !== task.id && !isPendingCopy(x.id));
   const words = normalizeSearch(query).split(/\s+/).filter(Boolean);
   // Primero el texto; wouldCycle (que sigue la cadena) solo se calcula sobre los que se van a enseñar, sin recorrer todo el tablero.
   const candidates: BoardTask[] = [];

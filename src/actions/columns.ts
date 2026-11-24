@@ -87,7 +87,7 @@ export async function createPersonColumns(projectId: string) {
     });
     if (!created.length) return created;
     addUndo(...created.map((c) => ({ t: "column.remove" as const, id: c.id })));
-    describeAction(created.length === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n: created.length });
+    describeAction(created.length === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n: created.length }, {});
     return created;
   });
 }

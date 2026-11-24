@@ -207,6 +207,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (!ok) return false;
     }
     if (next) {
+      // Si `next` no desmonta el diálogo (otra tarea que no se puede abrir), que se pueda seguir cerrando.
+      closeGuard.current = "idle";
       discardDraft();
       next();
       return true;
@@ -777,6 +779,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // Optimista: el diálogo se cierra y la tarjeta desaparece al momento; si el servidor falla (o no hay red) vuelve a su sitio.
     const before = board.getTask(task.id);
     board.removeTask(task.id);
+    forgetTaskReturn();
     close();
     const res = await board.track(deleteTask(task.id));
     if (!res.ok) {
@@ -793,6 +796,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     // Optimista (como borrar): se cierra y desaparece al momento; si falla, la tarjeta vuelve y sale el aviso.
     const before = board.getTask(task.id);
     board.removeTask(task.id);
+    forgetTaskReturn();
     close();
     const res = await board.track(archiveTask(task.id));
     if (!res.ok) {

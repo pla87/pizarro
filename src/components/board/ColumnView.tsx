@@ -203,7 +203,8 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           aria-keyshortcuts={dragEnabled ? "Alt+ArrowLeft Alt+ArrowRight" : undefined}
           data-column-handle
           onKeyDown={dragEnabled ? (e) => {
-            if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+            // Sin repetición al mantener la tecla (como las tarjetas): una columna por pulsación.
+            if (!e.altKey || e.repeat || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
             e.preventDefault();
             void moveColumnBy(e.key === "ArrowLeft" ? -1 : 1, true);
           } : undefined}

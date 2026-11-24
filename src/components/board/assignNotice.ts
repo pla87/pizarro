@@ -1,5 +1,6 @@
 import { undoEntry } from "@/actions/undo";
 import { formatDay } from "@/lib/dates";
+import { undoneText } from "../undo-text";
 import type { T } from "@/i18n/shared";
 
 /** Lo que el servidor puso a las tarjetas que entraron en una columna «Asignación a persona» (AssignedPatch). */
@@ -35,7 +36,7 @@ export function showAssignedNotice(assigned: readonly Assigned[], undoId: string
         label: t("Deshacer"),
         onClick: () => void ctx.track(undoEntry(undoId)).then((res) => {
           if (!res.ok) return ctx.toast(res.error, "error");
-          ctx.toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
+          ctx.toast(undoneText(t, res.data), "undo");
           ctx.refresh();
         }),
       }
