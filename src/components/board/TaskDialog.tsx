@@ -42,6 +42,7 @@ import { isSessionExpiredMessage, useToast } from "../ui/Toast";
 import { isOfflineMessage, loadWhenOnline } from "@/lib/connection";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { textHash, type TextSince } from "@/lib/text-version";
+import { showAssignedNotice } from "./assignNotice";
 import { boardClients, useBoard } from "./context";
 import { subtaskDragA11y } from "./drag-a11y";
 import { isTypingTarget, useShortcut } from "./shortcuts";
@@ -682,8 +683,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
     if (latest) board.patchTask(task.id, { position: res.data.position });
     res.data.spawned.forEach(board.upsertTask);
-    // Columna «Asignación a persona»: responsable y fecha que le ha puesto el servidor.
+    // Columna «Asignación a persona»: responsable y fecha que le ha puesto el servidor, con el mismo aviso que al arrastrar
+    // («Asignada a X · vence el …», con «Deshacer», que también recarga este detalle).
     for (const a of res.data.assigned) board.patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
+    showAssignedNotice(res.data.assigned, res.data.undo.id, { users: board.users, today: board.today, locale, t, toast, track: board.track, refresh: () => { board.refresh(); void reloadRef.current(); } });
   };
 
   /** Cambio de la repetición; al activar semanal o mensual el día sale de la fecha límite (o de hoy). */
