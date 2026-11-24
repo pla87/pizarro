@@ -145,21 +145,21 @@ if (only.includes("copiar") || only.includes("pegar")) {
     await U.undoKey(page, "Control+z");
     await L.eqEventually("DESHACER: y se deshace otra vez", () => row(ids.dst), EMPTY);
 
-    // «Descartar cambios» del detalle también descarta lo pegado (es un cambio más de la sesión de edición). Con cambios
+    // «Deshacer todo» del detalle también descarta lo pegado (es un cambio más de la sesión de edición). Con cambios
     // pregunta antes, con un texto que dice qué hace; «Seguir editando» no toca nada.
     await blur(page);
     await page.keyboard.press("Control+v");
     await L.eqEventually("DESCARTAR: se pega de nuevo…", async () => (await row(ids.dst)).title, "Destino pegado");
     await statusShows(page, "Tarea pegada");
-    const ask = page.locator("[role=dialog],[role=alertdialog]").filter({ hasText: "¿Descartar los cambios?" });
-    await U.dialog(page).getByRole("button", { name: "Descartar cambios", exact: true }).click();
+    const ask = page.locator("[role=dialog],[role=alertdialog]").filter({ hasText: "¿Deshacer todos los cambios?" });
+    await U.dialog(page).getByRole("button", { name: "Deshacer todo", exact: true }).click();
     await ask.waitFor({ timeout: 5000 });
     L.check("DESCARTAR: con cambios pregunta y explica qué hace", /Se desharán los cambios que has hecho en esta tarea desde que la abriste/.test(await ask.innerText()));
     await ask.getByRole("button", { name: "Seguir editando" }).click();
     await ask.waitFor({ state: "detached", timeout: 5000 });
     L.eq("DESCARTAR: «Seguir editando» no descarta nada", [(await row(ids.dst)).title, await U.dialog(page).count()], ["Destino pegado", 1]);
-    await U.dialog(page).getByRole("button", { name: "Descartar cambios", exact: true }).click();
-    await ask.getByRole("button", { name: "Descartar cambios", exact: true }).click();
+    await U.dialog(page).getByRole("button", { name: "Deshacer todo", exact: true }).click();
+    await ask.getByRole("button", { name: "Deshacer todo", exact: true }).click();
     await L.eqEventually("DESCARTAR: … y al confirmar lo descarta entero", () => row(ids.dst), EMPTY);
     L.assertNoErrors("pegar", [s]);
   }

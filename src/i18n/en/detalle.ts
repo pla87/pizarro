@@ -44,7 +44,8 @@ export const detalle: Record<string, string> = {
   "Estás editando un comentario y tiene cambios sin guardar. ¿Cerrar la tarea y descartarlos?": "You are editing a comment with unsaved changes. Close the task and discard them?",
 
   // «Descartar cambios» del detalle (antes «Cancelar»): pide confirmación si hay cambios tuyos
-  "¿Descartar los cambios?": "Discard the changes?",
+  "¿Deshacer todos los cambios?": "Undo all the changes?",
+  "Deshacer todo": "Undo all",
   "Se desharán los cambios que has hecho en esta tarea desde que la abriste, también lo escrito sin guardar, y se cerrará. Los comentarios y lo que hayan cambiado otras personas se quedan como están.": "The changes you have made to this task since you opened it, including anything typed and not yet saved, will be undone and the task will close. Comments and changes made by other people stay as they are.",
 
   // Cambiar de tipo con la descripción abierta (ronda 62): el tipo se guarda; la descripción, al pulsar Guardar

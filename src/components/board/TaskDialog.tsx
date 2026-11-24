@@ -552,9 +552,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (edited || typedUnsaved()) {
         closeGuard.current = "confirming";
         const ok = await confirm({
-          title: t("¿Descartar los cambios?"),
+          title: t("¿Deshacer todos los cambios?"),
           message: t("Se desharán los cambios que has hecho en esta tarea desde que la abriste, también lo escrito sin guardar, y se cerrará. Los comentarios y lo que hayan cambiado otras personas se quedan como están."),
-          confirmLabel: t("Descartar cambios"),
+          confirmLabel: t("Deshacer todo"),
           cancelLabel: t("Seguir editando"),
           danger: true,
         }).catch(() => false);
@@ -1127,9 +1127,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
         <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-        <button className="btn-secondary ml-auto min-w-0 px-2 whitespace-nowrap" onClick={discardEdits} disabled={cancelling} aria-label={t("Descartar cambios")} title={t("Descarta los cambios hechos desde que abriste la tarea y la cierra")}>
-          <span className="@max-[24rem]:hidden">{t("Descartar cambios")}</span>
-          <span className="@min-[24rem]:hidden">{t("Descartar")}</span>
+        <button className="btn-secondary ml-auto min-w-0 px-2 whitespace-nowrap" onClick={discardEdits} disabled={cancelling} aria-label={t("Deshacer todo")} title={t("Deshace los cambios hechos desde que abriste la tarea y la cierra")}>
+          <span className="@max-[24rem]:hidden">{t("Deshacer todo")}</span>
+          <span className="@min-[24rem]:hidden">{t("Deshacer")}</span>
         </button>
         <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden" /> {t("Guardar")}</button>
       </div>

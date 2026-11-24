@@ -30,7 +30,7 @@ export const task: Record<string, string> = {
   "Borrar adjunto": "Delete attachment",
   "Adjunto borrado": "Attachment deleted",
   "Cambios descartados": "Changes discarded",
-  "Descarta los cambios hechos desde que abriste la tarea y la cierra": "Discards the changes made since you opened the task and closes it",
+  "Deshace los cambios hechos desde que abriste la tarea y la cierra": "Undoes the changes made since you opened the task and closes it",
   "Subiendo…": "Uploading…",
   "Descargar {name}": "Download {name}",
   "Sin adjuntos.": "No attachments.",

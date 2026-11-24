@@ -238,7 +238,7 @@ if (only.includes("rel")) {
     L.eq(`REL (${how}): no se registra la release`, (await L.q(`SELECT count(*)::int n FROM "Release"`))[0].n, 0);
     await p.keyboard.press("Escape");
     await sleep(300);
-    await p.locator("[role=dialog]").last().getByRole("button", { name: /Descartar|Continuar|Cerrar/ }).first().click({ timeout: 2000 }).catch(() => {});
+    await p.locator("[role=dialog]").last().getByRole("button", { name: /Descartar|Deshacer todo|Continuar|Cerrar/ }).first().click({ timeout: 2000 }).catch(() => {});
     await L.q(`UPDATE "Task" SET title='Rel Alpha', "updatedAt"=NOW() WHERE id=$1`, [alpha]);
   }
   // Generada de nuevo con los títulos de ahora, sí se despliega.

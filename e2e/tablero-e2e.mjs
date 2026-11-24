@@ -1386,15 +1386,15 @@ if (only.includes("r46")) {
       heights: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height))).size,
       rows: new Set(btns.map((b) => Math.round(b.getBoundingClientRect().top))).size,
       inside: !!r && btns.every((b) => b.getBoundingClientRect().left >= r.left - 0.5 && b.getBoundingClientRect().right <= r.right + 0.5),
-      discard: btns.find((b) => b.getAttribute("aria-label") === "Descartar cambios")?.innerText.trim(),
+      discard: btns.find((b) => b.getAttribute("aria-label") === "Deshacer todo")?.innerText.trim(),
     };
   });
-  for (const [width, label] of [[430, "Descartar cambios"], [390, "Descartar"], [320, "Descartar"]]) {
+  for (const [width, label] of [[430, "Deshacer todo"], [390, "Deshacer"], [320, "Deshacer"]]) {
     await mp.setViewportSize({ width, height: 844 });
     await sleep(300);
     const fit = await footFit();
     L.eq(`R61C1 móvil ${width} px: pie del detalle con cinco botones del mismo alto, en una fila y dentro`, [fit.n, fit.heights, fit.rows, fit.inside], [5, 1, 1, true]);
-    L.eq(`R61C1 móvil ${width} px: el botón de descartar dice «${label}»`, fit.discard, label);
+    L.eq(`R61C1 móvil ${width} px: el botón de deshacer todo dice «${label}»`, fit.discard, label);
   }
   await mp.setViewportSize({ width: 390, height: 844 });
   await U.closeDialog(mp);
