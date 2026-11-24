@@ -1587,7 +1587,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     const order = sorted.filter((c) => c.id !== id);
     order.splice(to, 0, sorted[from]!);
     setColumns(order.map((c, k) => ({ ...c, position: (k + 1) * 1024 })));
-    const res = await track(placeColumn(id, to));
+    const res = await track(placeColumn(id, overId!));
     if (!res.ok) {
       setColumns(before);
       toast(res.error, "error");

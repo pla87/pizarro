@@ -55,18 +55,35 @@ describe("mover columnas a la vez", () => {
 });
 
 describe("arrastrar una columna a otro sitio (placeColumn)", () => {
-  test("la lleva a esa posición, renumera, un solo deshacer; en su sitio no hace nada", async () => {
+  test("ocupa el sitio de la columna sobre la que se suelta, renumera, un solo deshacer; sobre sí misma no hace nada", async () => {
     const user = await makeUser();
     await loginAs(user);
     const f = await makeProject({ members: [user] });
-    expectOk(await placeColumn(f.columns.done, 0));
+    // De la derecha: delante de la de destino.
+    expectOk(await placeColumn(f.columns.done, f.columns.todo));
     assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Hecho", "Por hacer", "En curso"]);
-    expectOk(await placeColumn(f.columns.done, 7));
+    // De la izquierda: detrás.
+    expectOk(await placeColumn(f.columns.done, f.columns.doing));
     assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Por hacer", "En curso", "Hecho"]);
     const entries = await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "UNDO" } });
-    expectOk(await placeColumn(f.columns.done, 2));
+    expectOk(await placeColumn(f.columns.done, f.columns.done));
     assert.equal(await db.undoEntry.count({ where: { userId: user.id, projectId: f.project.id, kind: "UNDO" } }), entries, "en su sitio: sin deshacer");
     expectOk(await undoLast(f.project.id));
     assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Hecho", "Por hacer", "En curso"]);
+  });
+
+  test("con columnas nuevas que el tablero aún no veía, acaba junto a la de destino", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    // Otra persona crea una columna al principio (el tablero de quien arrastra todavía no la tiene).
+    await db.column.create({ data: { projectId: f.project.id, name: "Nueva", position: 1 } });
+    expectOk(await placeColumn(f.columns.done, f.columns.todo));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Nueva", "Hecho", "Por hacer", "En curso"]);
+    // Destino borrado entretanto: no se mueve nada.
+    const gone = await db.column.create({ data: { projectId: f.project.id, name: "Borrada", position: 99_999 }, select: { id: true } });
+    await db.column.delete({ where: { id: gone.id } });
+    expectOk(await placeColumn(f.columns.doing, gone.id));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Nueva", "Hecho", "Por hacer", "En curso"]);
   });
 });
