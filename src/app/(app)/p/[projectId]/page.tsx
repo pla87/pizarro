@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { cache } from "react";
 import { visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, listKinds, loadBoardTasks, projectReleaseTemplates, projectUsers, userTemplates } from "@/lib/board";
@@ -9,6 +10,7 @@ import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
 import { liveCursor } from "@/lib/realtime";
 import { db } from "@/lib/db";
+import { noteProjectVisit } from "@/lib/project-visit";
 import { COLUMN_ORDER } from "@/lib/task-positions";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
 import { normalizeTaskFields } from "@/lib/task-fields";
@@ -41,6 +43,8 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const { projectId } = await params;
   const project = await visibleProject(projectId);
   if (!project) notFound();
+  // «Usados recientemente» (orden de los proyectos): después de responder y como mucho una escritura cada pocos minutos.
+  after(() => noteProjectVisit(user.id, project.id));
   // Antes de leer el tablero: un aviso publicado mientras se lee hará que la pestaña refresque al conectar (no se pierde).
   const live = liveCursor(projectId);
   const { task, nuevo } = await searchParams;

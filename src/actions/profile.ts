@@ -13,6 +13,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema, verifyPasswordCounted } from "@/lib/password";
 import { POSITION_STEP } from "@/lib/positions";
+import { PROJECT_ORDER_VALUES, type ProjectOrderValue } from "@/lib/project-order";
 import { createSession, currentSessionId, destroySession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount, googleEnabled } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
@@ -113,6 +114,17 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
     const cardStyle = z.enum(["STRIPE", "FILLED"]).parse(style);
     await db.user.update({ where: { id: user.id }, data: { cardStyle } });
     describeAction("Cambió el aspecto de las tarjetas a «{style}»", { style: { k: cardStyle === "STRIPE" ? "Franja a la izquierda" : "Tarjeta entera del color" } });
+  });
+}
+
+/** Orden de los proyectos en el selector de la barra lateral y en las listas: usados recientemente o alfabético. */
+export async function updateProjectOrder(order: ProjectOrderValue) {
+  return runAction({ name: "profile.updateProjectOrder", args: [order] }, async () => {
+    const user = await requireUser();
+    const projectOrder = z.enum(PROJECT_ORDER_VALUES).parse(order);
+    await db.user.update({ where: { id: user.id }, data: { projectOrder } });
+    describeAction("Cambió el orden de los proyectos a «{order}»", { order: { k: projectOrder === "RECENT" ? "Usados recientemente" : "Alfabético" } });
+    revalidatePath("/", "layout");
   });
 }
 

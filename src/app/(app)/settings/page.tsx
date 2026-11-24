@@ -1,4 +1,5 @@
 import { visibleProjectsWhere } from "@/lib/access";
+import { sortProjects } from "@/lib/project-order";
 import { userTemplates } from "@/lib/board";
 import { userPlanTemplates } from "@/lib/ai-plan-templates";
 import { db } from "@/lib/db";
@@ -61,6 +62,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       email: true,
       cardStyle: true,
       editorMode: true,
+      projectOrder: true,
       clearDraftsOnLogout: true,
       theme: true,
       accent: true,
@@ -90,8 +92,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ? await db.project.findMany({
         where: visibleProjectsWhere(user),
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, isPrivate: true, adminPicks: { where: { userId: user.id }, select: { userId: true } } },
-      })
+        select: { id: true, name: true, isPrivate: true, adminPicks: { where: { userId: user.id }, select: { userId: true } }, visits: { where: { userId: user.id }, select: { visitedAt: true } } },
+      }).then((rows) => sortProjects(rows.map((p) => ({ ...p, visitedAt: p.visits[0]?.visitedAt ?? null })), row.projectOrder, user.locale === "EN" ? "en" : "es"))
     : [];
   let googleMessage = typeof google === "string" && Object.hasOwn(GOOGLE_MESSAGES, google) ? GOOGLE_MESSAGES[google]! : google ? GOOGLE_MESSAGES.error! : null;
   if (googleMessage) googleMessage = { ...googleMessage, text: t(googleMessage.text) };
@@ -105,6 +107,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         planTemplates={await userPlanTemplates(user.id)}
         cardStyle={row.cardStyle}
         editorMode={row.editorMode}
+        projectOrder={row.projectOrder}
         clearDraftsOnLogout={row.clearDraftsOnLogout}
         theme={row.theme}
         accent={row.accent}

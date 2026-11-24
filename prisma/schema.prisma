@@ -59,6 +59,8 @@ model User {
   clearDraftsOnLogout Boolean @default(false)
   /// Cómo se editan las descripciones: escribiendo Markdown o con barra de formato.
   editorMode     EditorMode @default(WYSIWYG)
+  /// Orden de los proyectos en el selector y las listas: usados recientemente (ProjectVisit) o alfabético.
+  projectOrder   ProjectOrder @default(RECENT)
   /// Aviso de menciones por email (Telegram y WhatsApp: UserChannel).
   notifyEmail    Boolean   @default(true)
   /// Avisos por email de los demás tipos (los avisos en la app se crean siempre). Fechas y «Esperando», marcado de
@@ -95,6 +97,7 @@ model User {
   loginChallenges   LoginChallenge[]
   memberships       ProjectMember[]
   projectPicks      AdminProjectPick[]
+  projectVisits     ProjectVisit[]
   privateProjects   Project[]         @relation("PrivateProjects")
   assignedTasks     Task[]            @relation("TaskAssignee")
   assignedColumns   Column[]          @relation("ColumnAssignee")
@@ -266,6 +269,7 @@ model Project {
 
   members      ProjectMember[]
   adminPicks   AdminProjectPick[]
+  visits       ProjectVisit[]
   columns      Column[]
   tasks        Task[]
   labels       Label[]
@@ -306,6 +310,19 @@ model AdminProjectPick {
 
   @@id([projectId, userId])
   @@index([userId])
+}
+
+/// Última vez que cada usuario abrió cada proyecto (para «Usados recientemente»). Se escribe como mucho cada pocos
+/// minutos por usuario y proyecto (noteProjectVisit) y se borra con el usuario o el proyecto.
+model ProjectVisit {
+  userId    String
+  projectId String
+  visitedAt DateTime
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
 }
 
 model Column {
@@ -927,6 +944,12 @@ enum Locale {
 enum EditorMode {
   MARKDOWN
   WYSIWYG
+}
+
+/// Orden de los proyectos de cada usuario (Mi perfil → Preferencias).
+enum ProjectOrder {
+  RECENT
+  ALPHABETICAL
 }
 
 enum TemplateKind {

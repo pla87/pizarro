@@ -4,8 +4,6 @@ export const proyectos: Record<string, string> = {
   "Quitar a {name}": "Remove {name}",
   "Quitar del proyecto": "Remove from project",
   "¿Quitar a {name} de «{project}»? Dejará de verlo y sus tarjetas quedarán sin asignar.": "Remove {name} from “{project}”? They will no longer see it and their cards will be unassigned.",
-  "(admin, ve todos; elegido)": "(admin, sees all; selected)",
-  "(admin, ve todos; no elegido)": "(admin, sees all; not selected)",
   "Quitar «{project}» de los proyectos en los que trabaja {name}": "Remove “{project}” from {name}'s work projects",
   "Añadir «{project}» a los proyectos en los que trabaja {name}": "Add “{project}” to {name}'s work projects",
   "Proyecto quitado de sus proyectos de trabajo": "Project removed from their work projects",
@@ -196,4 +194,15 @@ export const proyectos: Record<string, string> = {
   // Ajustes del proyecto: invitación pendiente al añadir a alguien, con «Reenviar invitación» si hay email
   "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, resend it by email or generate a new link (either way, the previous one will stop working).",
   "La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: resend it by email or generate a new invitation link to send them.",
+  // Administración → Proyectos: administradores que lo ven sin ser miembros
+  "1 admin sin ser miembro": "1 admin who isn't a member",
+  "{n} admins sin ser miembros": "{n} admins who aren't members",
+  "(admin, no miembro; lo tiene en su lista)": "(admin, not a member; in their list)",
+  "(admin, no miembro; no lo tiene en su lista)": "(admin, not a member; not in their list)",
+  // Ajustes del proyecto: miembros de un proyecto de equipo e invitaciones pendientes
+  "Sin miembros. Los administradores lo ven sin ser miembros.": "No members. Administrators see it without being members.",
+  "Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).": "Email is set up: “Resend invitation” emails them a new link (the previous one stops working).",
+  "Sin email configurado: «Generar enlace de invitación nuevo» crea uno para que se lo pases tú (el anterior deja de valer).": "Email isn't set up: “Generate new invitation link” creates one for you to send them yourself (the previous one stops working).",
+  "Reenviar invitación por email (el enlace anterior deja de valer)": "Resend the invitation by email (the previous link stops working)",
+  "Sin email configurado: genera un enlace de invitación nuevo para pasárselo; el anterior deja de valer": "Email isn't set up: generates a new invitation link to send them; the previous one stops working",
 };
