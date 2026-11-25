@@ -16,7 +16,7 @@ import { WEEKLY_REPORT_LIST_LIMIT } from "./report";
 import { PDF_OUT_OF_MEMORY_MESSAGE } from "./report-render";
 import { digestDue, reportDue } from "./schedule";
 import type { CurrentUser } from "./session";
-import { isShuttingDown, trackInFlight } from "./shutdown";
+import { isShuttingDown, onShutdown, trackInFlight } from "./shutdown";
 
 // Envíos periódicos por email (resumen diario e informe semanal). Los lanza el mantenimiento cada hora;
 // ver schedule.ts para cuándo toca cada uno. Se «reserva» el envío antes de hacerlo (compare-and-set de la
@@ -297,6 +297,20 @@ export async function sendDueReports(now: Date = new Date(), opts: { generate?: 
 }
 
 type Schedule = { projectId: string; recipient: string; lastSentAt: Date | null };
+
+/**
+ * Informes reservados que aún no han empezado a enviarse (reuniendo datos o generando el PDF). Si llega un apagado y el
+ * PDF tarda más que su plazo, el proceso saldría con la reserva puesta y el informe no saldría hasta la semana siguiente:
+ * al empezar el apagado se devuelven estas reservas (y sendReport ya no envía), y el proceso nuevo lo manda en su primera
+ * pasada.
+ */
+const pendingReports = new Map<string, { previous: Date | null; claimedAt: Date }>();
+onShutdown("periodic-mail", async () => {
+  for (const [projectId, c] of [...pendingReports]) {
+    pendingReports.delete(projectId);
+    await db.reportSchedule.updateMany({ where: { projectId, lastSentAt: c.claimedAt }, data: { lastSentAt: c.previous } });
+  }
+});
 type Creator = { id: string; name: string; email: string; locale: string | null };
 
 /**
@@ -307,6 +321,7 @@ type Creator = { id: string; name: string; email: string; locale: string | null 
 async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean | { smtpDown: unknown }> {
   const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
   if (claim.count !== 1) return false;
+  pendingReports.set(s.projectId, { previous: s.lastSentAt, claimedAt: now });
   const t0 = performance.now();
   const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
   const url = `${appUrl()}/p/${s.projectId}`;
@@ -322,6 +337,9 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     // La baja de este email apaga este informe (el destinatario puede no tener cuenta en Pizarro).
     const unsub = unsubscribeLinks("report", s.projectId, s.recipient);
     const mail = reportMail({ projectName: report.project.name, url, orgName, setBy: creator.name, unsubscribeUrl: unsub.page }, makeT(locale));
+    // Apagado en marcha: su reserva ya se ha devuelto (o se devuelve en el catch); lo envía el proceso nuevo.
+    pendingReports.delete(s.projectId);
+    if (isShuttingDown()) throw new Error("apagado en curso: se enviará al volver a arrancar");
     sending = true;
     await sendMail({ to: s.recipient, ...mail, headers: unsub.headers, attachments: [{ filename: report.filename, content: Buffer.from(report.pdf), contentType: "application/pdf" }] });
     sending = false;
@@ -329,6 +347,8 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
     logEvent({ ...base, action: "report.scheduledSent", label: { k: "Informe semanal de «{project}» enviado a {to}", p: { project: report.project.name, to: maskEmail(s.recipient) } }, durationMs: performance.now() - t0, details: { to: maskEmail(s.recipient), bytes: report.pdf.length, locale: intlLocale(locale) } });
     return true;
   } catch (err) {
+    // El catch decide qué pasa con la reserva (devolverla o dejarla): el apagado ya no la toca.
+    pendingReports.delete(s.projectId);
     if (pdfOutOfMemory(err)) {
       // Sin memoria para el PDF: reintentarlo cada hora volvería a fallar y ocuparía la cola de PDF todo el día. Se deja
       // la reserva (ya no se intenta más hasta el próximo envío, tampoco en otro proceso) y se avisa una vez a quien lo

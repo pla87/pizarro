@@ -17,6 +17,12 @@ import { andList, type Label } from "./undo-label";
 
 const GRACE_MS = 5_000;
 const FLUSH_MS = 3_000;
+/**
+ * En Railway, con «Teardown» y 15 s de *Draining* (docs/INSTALL.md), hay margen para esperar más a lo que está en curso (una
+ * subida grande, un PDF, un ZIP): 10 s + FLUSH_MS + 1 s = 14 s, por debajo de los 15. Sin nada en curso se sale al momento.
+ */
+const RAILWAY_GRACE_MS = 10_000;
+const onRailway = () => !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
 
 interface ShutdownState {
   stopping: boolean;
@@ -141,7 +147,7 @@ export interface ShutdownDeps {
 
 async function defaultDeps(): Promise<ShutdownDeps> {
   const [{ flushLogs, logEvent }, { closeAllStreams }] = await Promise.all([import("./log"), import("./realtime")]);
-  return { flushLogs, logEvent, closeStreams: closeAllStreams, stopListening, exit: (code) => process.exit(code), graceMs: GRACE_MS, flushMs: FLUSH_MS };
+  return { flushLogs, logEvent, closeStreams: closeAllStreams, stopListening, exit: (code) => process.exit(code), graceMs: onRailway() ? RAILWAY_GRACE_MS : GRACE_MS, flushMs: FLUSH_MS };
 }
 
 function exitCode(signal: NodeJS.Signals): number {
