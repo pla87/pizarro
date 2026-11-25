@@ -4,6 +4,7 @@ import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { intlLocale, makeT, toLocale, type Locale, type T } from "../i18n/core";
 import { projectUsersWhere } from "./access";
+import { actionContext } from "./action-context";
 import { db } from "./db";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { ellipsize } from "./graphemes";
@@ -332,7 +333,7 @@ const MAX_EXTERNAL_PER_HOUR = 40;
 /**
  * Los avisos en la app se crean siempre; el email, Telegram y WhatsApp (que puede costar dinero)
  * se limitan: uno por persona y tarea cada 10 minutos y un tope por hora: por autor o, en los avisos del sistema,
- * por destinatario.
+ * por destinatario; lo hecho desde «Compartir fuera», por enlace (el cubo de la acción, ActionContext.notifyBucket).
  */
 async function externalAllowed(actorId: string | null, type: NotificationKind, taskId: string, recipientIds: string[], newIds: string[]): Promise<Set<string>> {
   const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
@@ -358,12 +359,19 @@ async function externalAllowed(actorId: string | null, type: NotificationKind, t
     loadMessagingConfig(),
   ]);
   const wanted = new Set(prefs.filter((u) => externalWanted(type, u, messaging)).map((u) => u.id));
+  const bucket = actionContext.getStore()?.notifyBucket ?? null;
   const allowed = new Set<string>();
   for (const id of recipientIds) {
     if (skip.has(id) || !wanted.has(id)) continue;
     // Los de una persona, con tope por autor (nadie inunda a los demás). Los del sistema (recordatorios de «Esperando»),
     // por destinatario: con uno solo para todos, a partir del 40.º de la hora nadie más recibía el email.
-    if (!rateLimit(actorId ? `notify:${actorId}` : `notify:system:${id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
+    // Con un cubo propio (lo hecho desde «Compartir fuera»: uno por enlace), el suyo, con su tope, para todos los destinatarios.
+    if (bucket) {
+      if (!rateLimit(`notify:${bucket.key}`, bucket.limit, 60 * 60_000)) {
+        console.error("[notify] Límite de envíos externos alcanzado para", bucket.key);
+        break;
+      }
+    } else if (!rateLimit(actorId ? `notify:${actorId}` : `notify:system:${id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)) {
       console.error("[notify] Límite de envíos externos alcanzado para", actorId ?? `el sistema (destinatario ${id})`);
       if (actorId) break;
       continue;

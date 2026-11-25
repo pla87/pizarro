@@ -740,6 +740,9 @@ model ColumnShare {
   columnId        String?   @unique
   /// Huella del token del enlace actual (null = aún sin generar).
   tokenHash       String?   @unique
+  /// El token del enlace actual cifrado con ENCRYPTION_KEY (lib/keyring.ts), para volver a enseñar la dirección en el
+  /// diálogo de la columna. Nunca va al tablero, a Logs ni a una exportación; se vacía al terminar el enlace.
+  tokenEnc        String?
   /// Días sin uso tras los que caduca el enlace: 7, 30 o 90.
   expiryDays      Int       @default(30)
   taskIds         String[]  @default([])

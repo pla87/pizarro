@@ -6,6 +6,7 @@ import { actionContext } from "./action-context";
 import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole, liveColumnRole, MAX_LABELS_PER_PROJECT, type ColumnRoleValue } from "./constants";
+import { revokeUnsharedLinks } from "./share-out-core";
 import { excerpt } from "./mentions";
 import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
@@ -1037,6 +1038,9 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           else if (op.costOff) await dropCostField(projectId);
           if (count && op.data.position !== undefined) placedColumns.push(op.id);
+          // «Compartir fuera»: si la columna deja de serlo (otro rol, «Asignación a persona»), su enlace se revoca; si un
+          // rehacer o otro deshacer la vuelve a hacer «Compartir fuera», sale «Generar web» y el enlace es otro.
+          if (count && (op.data.role !== undefined || op.data.assigneeId !== undefined || op.data.assignDueDays !== undefined)) await revokeUnsharedLinks(db, projectId);
           break;
         }
         case "column.remove": {

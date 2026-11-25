@@ -1,5 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { Prisma } from "@/generated/prisma/client";
 import { labelledHmac, labelledHmacCandidates } from "./keyring";
+import { isShareColumn } from "./share-out-board";
 
 // «Compartir fuera» (columna cuyas tareas se publican en /x/<token>, una página sin cuenta): la parte pura, sin base de
 // datos. Token y huella, topes, plazos, cabeceras y la comprobación de mismo origen de los formularios de la página. Lo que
@@ -40,15 +42,26 @@ export const MAX_SHARE_COMMENT = 2000;
 export const SHARE_USE_WRITE_MS = 60 * 60_000;
 
 /**
- * Topes del limitador (mapa de seguridad: prefijo `share-out:`). Por IP, todas las peticiones de /x/ (la página, sus
- * imágenes y sus formularios: una página con muchas imágenes en las descripciones pide una por imagen); por enlace, los
- * cambios por hora (marcar hecha, fecha, comentar) y las descargas de adjuntos por hora (sin las imágenes en línea).
+ * Topes del limitador. Por IP, todas las peticiones de /x/ (la página, sus imágenes y sus formularios: una página con
+ * muchas imágenes en las descripciones pide una por imagen), con el prefijo `shareout-ip:`, que va al mapa general: se
+ * cuenta antes de mirar el token, así que un aluvión de direcciones inventadas desde muchas IP no puede echar del mapa de
+ * seguridad los bloqueos de inicio de sesión. Por enlace (solo con un token válido, mapa de seguridad: `share-out:`), los
+ * cambios por hora (marcar hecha, fecha, comentar) y las descargas de adjuntos por hora (sin las imágenes en línea). Los
+ * envíos externos (email, Telegram, WhatsApp) de los avisos de lo hecho desde fuera, con su propio tope por enlace
+ * (`notify:share:<id>`, ver notify.ts): no gastan el de los avisos del sistema; lo que pasa del tope se queda en la campana.
  */
 export const SHARE_LIMITS = {
   ip: { limit: 600, windowMs: 10 * 60_000 },
   changes: { limit: 60, windowMs: 60 * 60_000 },
   downloads: { limit: 300, windowMs: 60 * 60_000 },
+  notify: { limit: 10, windowMs: 60 * 60_000 },
 } as const;
+/** Clave del tope por IP (mapa general del limitador, ver SHARE_LIMITS). */
+export const shareIpKey = (ip: string): string => `shareout-ip:${ip}`;
+/** Cubo del tope de envíos externos de los avisos de un enlace (notify.ts; `notify:` está en el mapa de seguridad). */
+export const shareNotifyBucket = (shareId: string): string => `share:${shareId}`;
+/** Comentarios por tarea que se publican como mucho (los últimos): acota el tamaño de la página. */
+export const MAX_SHARE_PAGE_COMMENTS = 30;
 
 const DAY = 86_400_000;
 
@@ -123,3 +136,19 @@ export function shareResponseHeaders(production: boolean = process.env.NODE_ENV 
 export const SHARE_PAGE_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
 /** CSP de los ficheros que se sirven (descargas e imágenes): ni scripts ni nada, por si un navegador intentase pintarlos. */
 export const SHARE_FILE_CSP = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox";
+
+/**
+ * Un enlace vivo solo vale mientras su columna sea «Compartir fuera». Un deshacer o un rehacer (`column.set`) o una
+ * plantilla pueden dar otro rol a la columna sin pasar por endColumnShare: aquí se revocan los enlaces vivos del proyecto
+ * cuya columna ya no lo es (la fila sigue enganchada: si la columna vuelve a ser «Compartir fuera», sale «Generar web»
+ * y el enlace nuevo se crea desde cero; el viejo dice «ha caducado»). Devuelve cuántos.
+ */
+export async function revokeUnsharedLinks(client: Pick<Prisma.TransactionClient, "columnShare">, projectId: string, now: Date = new Date()): Promise<number> {
+  const rows = await client.columnShare.findMany({
+    where: { projectId, columnId: { not: null }, tokenHash: { not: null }, revokedAt: null },
+    select: { id: true, column: { select: { role: true, assigneeId: true, assignDueDays: true } } },
+  });
+  const ids = rows.filter((r) => r.column && !isShareColumn({ ...r.column, share: true })).map((r) => r.id);
+  if (!ids.length) return 0;
+  return (await client.columnShare.updateMany({ where: { id: { in: ids }, revokedAt: null }, data: { revokedAt: now, tokenEnc: null } })).count;
+}

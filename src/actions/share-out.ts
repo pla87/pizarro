@@ -6,9 +6,10 @@ import { visibleProjectsWhere } from "@/lib/access";
 import { runAction } from "@/lib/action";
 import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
+import { encryptSecret } from "@/lib/crypto";
 import { appUrl } from "@/lib/mail";
 import { requireAdmin, requireUser } from "@/lib/session";
-import { revokeProjectShares } from "@/lib/share-out";
+import { activeShareUrl, revokeProjectShares } from "@/lib/share-out";
 import { boardShareOf, isShareColumn, isShareExpiry, shareLinkState, type BoardShareInfo } from "@/lib/share-out-board";
 import { hashShareToken, MAX_SHARE_TASKS, newShareToken, shareUrl } from "@/lib/share-out-core";
 import { TASK_ORDER } from "@/lib/task-positions";
@@ -17,7 +18,10 @@ import * as v from "@/lib/validation";
 // «Compartir fuera» desde la app: activarla en el proyecto (administradores), generar o actualizar la web de una columna,
 // el selector de caducidad y revocar el enlace. Convertir una columna en «Compartir fuera» y quitárselo están en
 // columns.ts (es un cambio de rol). Nada de esto se deshace: un enlace revocado no vuelve, y uno nuevo es otro enlace.
-// El token solo existe en la respuesta de la acción que lo crea: en la base, solo su huella.
+// En la base, el token se busca por su huella (tokenHash) y se guarda además cifrado con ENCRYPTION_KEY (tokenEnc), para
+// que cualquiera del proyecto vuelva a ver la dirección en el diálogo: solo lo descifran «Generar web» / «Actualizar web»
+// y el botón del enlace (getShareLink), nunca el tablero, el informe, Logs ni una exportación. Al terminar el enlace
+// (revocar, caducar, quitar la función) se borra.
 
 /** La columna (con permiso para ver su proyecto) y su fila; la función debe estar activada en el proyecto. */
 async function findShareColumn(columnId: string) {
@@ -33,10 +37,19 @@ async function findShareColumn(columnId: string) {
   return { user, column, share: column.share };
 }
 
-/** Resultado de generar o actualizar: la dirección solo cuando se acaba de crear el enlace (después no se puede saber). */
-interface ShareWebResult {
+/**
+ * Lo que enseña el diálogo de la columna: la dirección del enlace activo (null si no hay, o `lost` si no se puede volver
+ * a enseñar) y su estado. `fresh`: el enlace se acaba de crear.
+ */
+interface ShareLinkView {
   url: string | null;
+  lost: boolean;
+  fresh: boolean;
   info: BoardShareInfo;
+}
+
+/** Resultado de generar o actualizar: lo del diálogo, más cuántas tareas se han publicado. */
+interface ShareWebResult extends ShareLinkView {
   published: number;
   /** Tareas de la columna que no caben en la web (pasan de MAX_SHARE_TASKS). */
   left: number;
@@ -61,7 +74,7 @@ export async function generateShareWeb(columnId: string, opts: { fresh?: boolean
     const data = {
       taskIds, generatedAt: now, generatedById: user.id, generatedByName: user.name, lastUsedAt: now,
       ...(token ? {
-        tokenHash: hashShareToken(token), revokedAt: null,
+        tokenHash: hashShareToken(token), tokenEnc: encryptSecret(token), revokedAt: null,
         // El enlace que se sustituye: «ha caducado» desde que terminó (o desde ahora, si seguía activo).
         ...(share.tokenHash ? { oldTokenHash: share.tokenHash, oldEndedAt: current.state === "active" ? now : (current.endsAt ?? now) } : {}),
       } : {}),
@@ -72,16 +85,40 @@ export async function generateShareWeb(columnId: string, opts: { fresh?: boolean
     const row = await db.columnShare.findUniqueOrThrow({ where: { id: share.id } });
     if (token) describeAction(share.tokenHash ? "Creó un enlace nuevo para la web de «{col}» ({n} tareas)" : "Generó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
     else describeAction("Actualizó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
-    return { url: token ? shareUrl(appUrl(), token) : null, info: boardShareOf(row, now), published: taskIds.length, left: Math.max(0, total - taskIds.length) };
+    const link = token ? { url: shareUrl(appUrl(), token), lost: false } : activeShareUrl(row);
+    return { ...link, fresh: !!token, info: boardShareOf(row, now), published: taskIds.length, left: Math.max(0, total - taskIds.length) };
   });
 }
 
-/** Selector de caducidad del pie (7 días, 1 mes, 3 meses): vale para el enlace actual desde su último uso. */
+/**
+ * El botón del enlace del pie: la dirección del enlace activo para el diálogo (cualquiera que pueda editar el proyecto
+ * la ve, no solo quien la generó). No cuenta como uso ni cambia nada.
+ */
+export async function getShareLink(columnId: string) {
+  return runAction({ name: "shareOut.getLink", args: [columnId] }, async (): Promise<ShareLinkView> => {
+    const { column, share } = await findShareColumn(columnId);
+    const info = boardShareOf(share);
+    if (info.state !== "active") return { url: null, lost: false, fresh: false, info };
+    describeAction("Abrió el enlace de la web de «{col}»", { col: column.name }, { shareId: share.id });
+    return { ...activeShareUrl(share), fresh: false, info };
+  });
+}
+
+/**
+ * Selector de caducidad del pie (7 días, 1 mes, 3 meses): vale para el enlace actual desde su último uso. Con el enlace
+ * activo, cambiarla cuenta como uso (si no, pasar por «7 días» caducaba al momento un enlace sin usar en una semana). Con
+ * uno terminado, lo deja terminado donde estaba (revokedAt = cuándo terminó): elegir más días no lo resucita.
+ */
 export async function setShareExpiry(columnId: string, days: number) {
   return runAction({ name: "shareOut.setExpiry", args: [columnId, days] }, async (): Promise<BoardShareInfo> => {
     const { column, share } = await findShareColumn(columnId);
     if (!isShareExpiry(days)) throw new AppError("Caducidad no válida.");
-    const row = await db.columnShare.update({ where: { id: share.id }, data: { expiryDays: days } });
+    const now = new Date();
+    const current = shareLinkState(share, now);
+    const data = current.state === "active"
+      ? { expiryDays: days, lastUsedAt: now }
+      : current.state === "ended" && !share.revokedAt ? { expiryDays: days, revokedAt: current.endsAt ?? now, tokenEnc: null } : { expiryDays: days };
+    const row = await db.columnShare.update({ where: { id: share.id }, data });
     describeAction("Cambió la caducidad de la web de «{col}» a {n} días sin uso", { col: column.name, n: days });
     return boardShareOf(row);
   });
@@ -92,7 +129,7 @@ export async function revokeShareLink(columnId: string) {
   return runAction({ name: "shareOut.revoke", args: [columnId] }, async (): Promise<BoardShareInfo> => {
     const { column, share } = await findShareColumn(columnId);
     if (shareLinkState(share).state !== "active") return boardShareOf(share);
-    const row = await db.columnShare.update({ where: { id: share.id }, data: { revokedAt: new Date() } });
+    const row = await db.columnShare.update({ where: { id: share.id }, data: { revokedAt: new Date(), tokenEnc: null } });
     describeAction("Revocó el enlace de la web de «{col}»", { col: column.name });
     return boardShareOf(row);
   });

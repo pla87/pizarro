@@ -8,7 +8,7 @@ import { TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY, WHATSAPP_TOKEN_KEY } from "./m
 
 /** Los campos cifrados de la base de datos: tabla, columna y nombre legible (`idField`: clave de la fila, «id» salvo en AppState; `where`: filtro fijo). */
 interface EncryptedField {
-  model: "user" | "loginChallenge" | "googleAccount" | "appState";
+  model: "user" | "loginChallenge" | "googleAccount" | "appState" | "columnShare";
   field: string;
   nullable: boolean;
   label: string;
@@ -26,6 +26,7 @@ export const ENCRYPTED_FIELDS: readonly EncryptedField[] = [
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: TELEGRAM_TOKEN_KEY }, label: "Telegram: token del bot guardado en Ajustes" },
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: TELEGRAM_SECRET_KEY }, label: "Telegram: secreto del webhook" },
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: WHATSAPP_TOKEN_KEY }, label: "WhatsApp: token guardado en Ajustes" },
+  { model: "columnShare", field: "tokenEnc", nullable: true, label: "Compartir fuera: direcciones de las webs de las columnas" },
 ];
 
 type Row = Record<string, string | null>;

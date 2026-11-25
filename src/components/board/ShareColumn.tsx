@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Copy, Globe, Link2, Mail } from "lucide-react";
 import { setColumnShareOut } from "@/actions/columns";
-import { generateShareWeb, revokeShareLink, setShareExpiry } from "@/actions/share-out";
+import { generateShareWeb, getShareLink, revokeShareLink, setShareExpiry } from "@/actions/share-out";
 import { DEFAULT_SHARE_EXPIRY_DAYS, nextShareExpiry, shareExpiryLabel, shareMailto, shareStateText, type BoardShareInfo } from "@/lib/share-out-board";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
@@ -15,27 +15,9 @@ import { useToast } from "../ui/Toast";
 import { useBoard } from "./context";
 
 // Columna «Compartir fuera» (lib/share-out*.ts): sus tareas se publican en una página sin cuenta (/x/<token>) para alguien
-// de fuera. Aquí, la marca de la cabecera, el pie con «Generar web» / «Actualizar web», el aviso de los adjuntos y el
-// selector de caducidad, y el diálogo con la dirección. Pizarro no guarda la dirección (solo su huella): la ve quien la
-// genera, en el diálogo; este navegador la recuerda mientras el enlace siga siendo el mismo (localStorage, por comodidad).
-
-/** La dirección que recuerda este navegador para el enlace `linkId` de la columna, si es la del enlace actual. */
-function rememberedUrl(columnId: string, linkId: string | null): string | null {
-  if (!linkId) return null;
-  try {
-    const saved = JSON.parse(localStorage.getItem(`pz-share-url:${columnId}`) ?? "null") as { linkId?: string; url?: string } | null;
-    return saved?.linkId === linkId && typeof saved.url === "string" ? saved.url : null;
-  } catch {
-    return null;
-  }
-}
-function rememberUrl(columnId: string, linkId: string | null, url: string): void {
-  try {
-    if (linkId) localStorage.setItem(`pz-share-url:${columnId}`, JSON.stringify({ linkId, url }));
-  } catch {
-    // Sin almacenamiento (ventana privada): el diálogo ya la enseña.
-  }
-}
+// de fuera. Aquí, la marca de la cabecera, el pie con «Generar web» / «Actualizar web», el aviso de lo que se publica y el
+// selector de caducidad, y el diálogo con la dirección. La dirección la da el servidor (guarda el token cifrado) a
+// cualquiera que pueda editar el proyecto, al generar o actualizar y con el botón del enlace; el navegador no la guarda.
 
 function useDay() {
   const locale = useIntlLocale();
@@ -85,14 +67,22 @@ export function useShareRole(column: BoardColumn): { pick: () => void; leave: ()
   };
 }
 
-/** Pie de la columna: «Generar web» / «Actualizar web», el aviso de los adjuntos y la caducidad. */
+/** Lo que enseña el diálogo: la dirección (o `lost` si no se puede recuperar) y, tras generar, cuántas se publicaron. */
+interface DialogState {
+  url: string | null;
+  lost: boolean;
+  published?: number;
+  left?: number;
+}
+
+/** Pie de la columna: «Generar web» / «Actualizar web», el aviso de lo que se publica y la caducidad. */
 export function ShareFooter({ column }: { column: BoardColumn }) {
   const t = useT();
   const toast = useToast();
   const { track, setColumns } = useBoard();
   const info = column.share ?? null;
   const [busy, setBusy] = useState(false);
-  const [dialog, setDialog] = useState<{ url: string | null; fresh: boolean; published?: number; left?: number } | null>(null);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   const days = info?.expiryDays ?? DEFAULT_SHARE_EXPIRY_DAYS;
   const active = info?.state === "active";
   const apply = (next: BoardShareInfo) => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, share: next } : c)));
@@ -104,8 +94,18 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     apply(res.data.info);
-    if (res.data.url) rememberUrl(column.id, res.data.info.linkId, res.data.url);
-    setDialog({ url: res.data.url ?? rememberedUrl(column.id, res.data.info.linkId), fresh: !!res.data.url, published: res.data.published, left: res.data.left });
+    setDialog({ url: res.data.url, lost: res.data.lost, published: res.data.published, left: res.data.left });
+  };
+
+  // El botón del enlace: la dirección del enlace activo, la haya generado quien la haya generado.
+  const openLink = async () => {
+    if (busy) return;
+    setBusy(true);
+    const res = await track(getShareLink(column.id)).catch(() => ({ ok: false as const, error: t("Sin conexión: no se ha guardado") }));
+    setBusy(false);
+    if (!res.ok) return toast(res.error, "error");
+    apply(res.data.info);
+    setDialog({ url: res.data.url, lost: res.data.lost });
   };
 
   const cycle = async () => {
@@ -126,13 +126,13 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
           <Globe size={15} aria-hidden /> {active ? t("Actualizar web") : t("Generar web")}
         </button>
         {active && (
-          <button type="button" className="btn-icon h-8 w-8" onClick={() => setDialog({ url: rememberedUrl(column.id, info?.linkId ?? null), fresh: false })} aria-label={t("Enlace de la web")} title={t("Enlace de la web")}>
+          <button type="button" className="btn-icon h-8 w-8" onClick={() => void openLink()} aria-label={t("Enlace de la web")} title={t("Enlace de la web")} data-share-link>
             <Link2 size={15} />
           </button>
         )}
       </div>
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t("Todos los archivos adjuntos de estas tareas se podrán descargar desde la web.")}</p>
+        <p className="min-w-0 flex-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar.")}</p>
         {/* Caducidad: rota 7 días / 1 mes / 3 meses sin uso, con el aspecto del interruptor de cadencia de las tareas fijas. */}
         <button
           type="button"
@@ -156,12 +156,13 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
 
 /**
  * Diálogo tras «Generar web» / «Actualizar web» (o desde el botón del enlace): la dirección con clic para copiar, «Copiar»,
- * «Enviar por email» (mailto: con asunto y cuerpo; lo envía el correo de quien comparte) y hasta cuándo vale. Sin la
- * dirección (Pizarro no la guarda), lo explica y ofrece un enlace nuevo. «Revocar enlace», con confirmación.
+ * «Enviar por email» (mailto: con asunto y cuerpo; lo envía el correo de quien comparte) y hasta cuándo vale. Si no se
+ * puede recuperar la dirección (`lost`: el enlace es de antes de guardarla, o cambió la clave de cifrado sin rotarla), lo
+ * explica y ofrece crear un enlace nuevo, con confirmación. «Revocar enlace», con confirmación.
  */
 function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
   column: BoardColumn;
-  state: { url: string | null; fresh: boolean; published?: number; left?: number };
+  state: DialogState;
   onClose: () => void;
   onFresh: () => void;
   onRevoked: (info: BoardShareInfo) => void;
@@ -185,6 +186,17 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
       t("Hola:\n\nEn esta página puedes ver las tareas de «{name}», marcarlas como hechas, cambiar su fecha, comentar y descargar sus archivos adjuntos, sin necesidad de cuenta:\n\n{url}\n\nEl enlace deja de funcionar si nadie lo usa hasta el {date}.", { name: column.name, url, date: until ?? "" }),
     )
     : null;
+
+  // El enlace que tiene quien está fuera deja de funcionar: como «Revocar», se confirma.
+  const fresh = async () => {
+    const ok = await confirm({
+      title: t("Crear un enlace nuevo"),
+      message: t("El enlace actual dejará de funcionar al momento para quien lo tenga y habrá que enviarle el nuevo. ¿Crear uno nuevo?"),
+      confirmLabel: t("Crear un enlace nuevo"),
+      danger: true,
+    });
+    if (ok) onFresh();
+  };
 
   const revoke = async () => {
     const ok = await confirm({ title: t("Revocar enlace"), message: t("La web dejará de funcionar al momento para quien tenga el enlace. Podrás generar otro después. ¿Revocarlo?"), confirmLabel: t("Revocar enlace"), danger: true });
@@ -219,12 +231,12 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
               {mailto && <a className="btn-secondary" href={mailto} data-pz-no-capture=""><Mail size={14} aria-hidden /> {t("Enviar por email")}</a>}
             </div>
           </>
-        ) : (
+        ) : state.lost && info?.state === "active" ? (
           <>
-            <p className="text-slate-600 dark:text-slate-400">{t("La dirección es la misma de antes. Pizarro no la guarda: la tiene quien la generó y a quien se la envió. Si no la tienes, crea un enlace nuevo (el anterior dejará de funcionar).")}</p>
-            <button type="button" className="btn-secondary" onClick={onFresh}>{t("Crear un enlace nuevo")}</button>
+            <p className="text-slate-600 dark:text-slate-400" data-share-lost>{t("El enlace sigue funcionando, pero Pizarro no puede volver a enseñar su dirección: se creó con una versión anterior o ha cambiado la clave de cifrado de la instalación. Quien ya la tiene puede seguir usándola. Si necesitas la dirección, crea un enlace nuevo (el actual dejará de funcionar).")}</p>
+            <button type="button" className="btn-secondary" onClick={() => void fresh()} data-share-fresh>{t("Crear un enlace nuevo")}</button>
           </>
-        )}
+        ) : null}
         {until && <p>{t("Vale hasta el {date} si nadie la usa (abrirla o actualizarla cuenta como uso).", { date: until })}</p>}
         {info?.state === "active" && (
           <button type="button" className="text-sm font-medium text-red-700 hover:underline dark:text-red-400" onClick={() => void revoke()}>{t("Revocar enlace")}</button>

@@ -22,6 +22,7 @@ import { ReportScheduleSection } from "./ReportScheduleSection";
 import { reportRecipientPeople, reportRecipientView, reportUnsubscribedView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
 import { ShareOutSettings } from "./ShareOutSettings";
+import { countActiveShares } from "@/lib/share-out";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
@@ -103,7 +104,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
   const unsubscribed = tab === "informes" && schedule ? await reportUnsubscribedView(schedule, reportPeople, user) : null;
   // «Compartir fuera» (solo administradores): cuántos enlaces activos dejarían de funcionar al apagarla.
   const shareLinks = tab === "tablero" && isAdmin && project.shareOutEnabled
-    ? await db.columnShare.count({ where: { projectId: project.id, columnId: { not: null }, tokenHash: { not: null }, revokedAt: null } })
+    ? await countActiveShares(project.id)
     : 0;
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));

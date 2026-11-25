@@ -27,7 +27,6 @@ export const compartirFuera: Record<string, string> = {
   "Generar web": "Generate page",
   "Actualizar web": "Update page",
   "Enlace de la web": "Page link",
-  "Todos los archivos adjuntos de estas tareas se podrán descargar desde la web.": "All attachments of these tasks can be downloaded from the page.",
   "Caduca tras {label} sin uso: pulsa para cambiarlo": "Expires after {label} without use: click to change",
   "1 mes": "1 month",
   "3 meses": "3 months",
@@ -44,8 +43,6 @@ export const compartirFuera: Record<string, string> = {
   "Tareas de «{name}»": "Tasks of “{name}”",
   "Hola:\n\nEn esta página puedes ver las tareas de «{name}», marcarlas como hechas, cambiar su fecha, comentar y descargar sus archivos adjuntos, sin necesidad de cuenta:\n\n{url}\n\nEl enlace deja de funcionar si nadie lo usa hasta el {date}.":
     "Hello,\n\nOn this page you can see the tasks of “{name}”, mark them as done, change their date, comment and download their attachments, with no account needed:\n\n{url}\n\nThe link stops working if nobody uses it until {date}.",
-  "La dirección es la misma de antes. Pizarro no la guarda: la tiene quien la generó y a quien se la envió. Si no la tienes, crea un enlace nuevo (el anterior dejará de funcionar).":
-    "The address is the same as before. Pizarro doesn't keep it: whoever generated it and whoever they sent it to have it. If you don't have it, create a new link (the previous one will stop working).",
   "Crear un enlace nuevo": "Create a new link",
   "Vale hasta el {date} si nadie la usa (abrirla o actualizarla cuenta como uso).": "Valid until {date} if nobody uses it (opening or updating it counts as use).",
   "Revocar enlace": "Revoke link",
@@ -96,4 +93,16 @@ export const compartirFuera: Record<string, string> = {
   "enlace activo, caduca el {date}": "link active, expires on {date}",
   "enlace caducado": "link expired",
   "web sin generar": "page not generated yet",
+
+  // Ronda 68, arreglos: la dirección se vuelve a ver, lo que se publica, enlace nuevo con confirmación, comentarios
+  // anteriores en la página y el registro de abrir el enlace.
+  "Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar.":
+    "The description, subtasks, comments and attachments of these tasks are published; the attachments can be downloaded.",
+  "El enlace actual dejará de funcionar al momento para quien lo tenga y habrá que enviarle el nuevo. ¿Crear uno nuevo?":
+    "The current link will stop working at once for anyone who has it, and you'll have to send them the new one. Create a new one?",
+  "El enlace sigue funcionando, pero Pizarro no puede volver a enseñar su dirección: se creó con una versión anterior o ha cambiado la clave de cifrado de la instalación. Quien ya la tiene puede seguir usándola. Si necesitas la dirección, crea un enlace nuevo (el actual dejará de funcionar).":
+    "The link still works, but Pizarro can't show its address again: it was created with an earlier version or the installation's encryption key has changed. Whoever already has it can keep using it. If you need the address, create a new link (the current one will stop working).",
+  "Hay 1 comentario anterior que no se muestra.": "There is 1 earlier comment that isn't shown.",
+  "Hay {n} comentarios anteriores que no se muestran.": "There are {n} earlier comments that aren't shown.",
+  "Abrió el enlace de la web de «{col}»": "Opened the link of the page of “{col}”",
 };

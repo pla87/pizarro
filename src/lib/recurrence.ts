@@ -127,9 +127,10 @@ async function copyDescriptionAttachments(spawned: { src: { id: string; projectI
  *
  * Lo que no depende de cada tarea (columnas de rutina, primera columna abierta, tope de tareas, roles de las columnas,
  * responsables) se lee una vez para todo el lote; cada tarea conserva su transacción corta (columna bloqueada, tope de
- * sesiones de un «Programa del curso», idempotencia por `recurrenceFromId`).
+ * sesiones de un «Programa del curso», idempotencia por `recurrenceFromId`). `actorId` null: sin nadie de la app que la
+ * cree (lo hecho desde «Compartir fuera» sin responsable ni autor de la web activos): la siguiente nace sin autor.
  */
-export async function spawnRecurrences(taskIds: string[], actorId: string, titles?: Map<string, string>, opts: { asDone?: boolean } = {}): Promise<BoardTask[]> {
+export async function spawnRecurrences(taskIds: string[], actorId: string | null, titles?: Map<string, string>, opts: { asDone?: boolean } = {}): Promise<BoardTask[]> {
   if (!taskIds.length) return [];
   const sources = await db.task.findMany({
     where: { id: { in: taskIds }, recurrence: { not: "NONE" }, recurrenceNext: null },

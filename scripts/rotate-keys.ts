@@ -1,4 +1,5 @@
-// Vuelve a cifrar con ENCRYPTION_KEY todos los secretos guardados (TOTP y tokens de Google) que sigan cifrados
+// Vuelve a cifrar con ENCRYPTION_KEY todos los secretos guardados (TOTP, tokens de Google, Telegram y WhatsApp, la
+// contraseña SMTP y las direcciones de «Compartir fuera»; lista en lib/key-rotation.ts) que sigan cifrados
 // con la clave anterior (ENCRYPTION_KEY_PREVIOUS) o en el formato antiguo. Después se puede quitar la anterior.
 //
 //   npm run keys:rotate [-- --dry-run]
@@ -31,7 +32,9 @@ async function main() {
   if (unreadable > 0) {
     console.log("[keys] AVISO: hay secretos que ninguna clave configurada abre. Si tienes la clave con la que se cifraron,");
     console.log("[keys] ponla en ENCRYPTION_KEY_PREVIOUS y repite. Si no, esas personas tendrán que volver a configurar la");
-    console.log("[keys] verificación en dos pasos (un administrador la restablece) o reconectar Google.");
+    console.log("[keys] verificación en dos pasos (un administrador la restablece) o reconectar Google. Una web de");
+    console.log("[keys] «Compartir fuera» ilegible sigue funcionando, pero su dirección ya no se puede volver a ver: en su");
+    console.log("[keys] columna, «Crear un enlace nuevo».");
     process.exitCode = 3;
   } else if (!dryRun) {
     console.log(previous ? "[keys] Hecho. Ya puedes quitar ENCRYPTION_KEY_PREVIOUS." : "[keys] Hecho.");

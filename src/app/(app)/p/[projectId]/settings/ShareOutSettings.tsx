@@ -17,13 +17,15 @@ export function ShareOutSettings({ projectId, enabled: initial, activeLinks }: {
   const toast = useToast();
   const confirm = useConfirm();
   const [enabled, setEnabled] = useState(initial);
+  // Los que funcionan ahora (sin los caducados ni los revocados). Tras apagar y volver a encender, ninguno: apagar los revoca.
+  const [links, setLinks] = useState(activeLinks);
   const [pending, start] = useActionTransition();
 
   const change = async (on: boolean) => {
-    if (!on && activeLinks > 0) {
+    if (!on && links > 0) {
       const ok = await confirm({
         title: t("Apagar «Compartir fuera»"),
-        message: activeLinks === 1 ? t("Hay 1 enlace activo: dejará de funcionar al momento. ¿Apagarlo?") : t("Hay {n} enlaces activos: dejarán de funcionar al momento. ¿Apagarlo?", { n: activeLinks }),
+        message: links === 1 ? t("Hay 1 enlace activo: dejará de funcionar al momento. ¿Apagarlo?") : t("Hay {n} enlaces activos: dejarán de funcionar al momento. ¿Apagarlo?", { n: links }),
         confirmLabel: t("Apagar"),
         danger: true,
       });
@@ -33,6 +35,7 @@ export function ShareOutSettings({ projectId, enabled: initial, activeLinks }: {
       const res = await setProjectShareOut(projectId, on);
       if (!res.ok) return toast(res.error, "error");
       setEnabled(on);
+      setLinks(0);
       toast(on ? t("«Compartir fuera» activado") : t("«Compartir fuera» apagado"));
     });
   };

@@ -171,7 +171,7 @@ function fakeDb(data: Record<string, Record<string, string | null>[]>) {
       },
     };
   };
-  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount"), appState: delegate("appState") };
+  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount"), appState: delegate("appState"), columnShare: delegate("columnShare") };
 }
 
 describe("comando de rotación (rotate-keys)", () => {
@@ -179,7 +179,7 @@ describe("comando de rotación (rotate-keys)", () => {
   const env = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2, ENCRYPTION_KEY_PREVIOUS: ENC };
 
   test("cubre todos los campos cifrados del esquema", () => {
-    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value", "appState.value", "appState.value", "appState.value", "appState.value"]);
+    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value", "appState.value", "appState.value", "appState.value", "appState.value", "columnShare.tokenEnc"]);
   });
 
   test("re-cifra lo antiguo con la clave actual, deja lo que ya está al día y cuenta lo ilegible", async () => {
@@ -197,6 +197,8 @@ describe("comando de rotación (rotate-keys)", () => {
       appState: [{ key: "mail.passEnc", value: keyring.encryptSecret("smtp-pass", prevEnv) }, { key: "google.clientSecretEnc", value: keyring.encryptSecret("g-secret", prevEnv) }, { key: "mail.host", value: "smtp.example.com" },
         // Tokens de Telegram y WhatsApp guardados en Ajustes (sin secreto del webhook: cuenta 0).
         { key: "telegram.tokenEnc", value: keyring.encryptSecret("tg-token", prevEnv) }, { key: "whatsapp.tokenEnc", value: keyring.encryptSecret("wa-token", prevEnv) }, { key: "telegram.botUsername", value: "pizarro_bot" }],
+      // «Compartir fuera»: el token de la web de una columna (una fila sin enlace no cuenta).
+      columnShare: [{ id: "s1", tokenEnc: keyring.encryptSecret("share-token", prevEnv) }, { id: "s2", tokenEnc: null }],
     };
     const u3Before = data.user[2]!.totpSecretEnc;
     const db = fakeDb(data);
@@ -207,7 +209,7 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.ok(data.user[1]!.totpSecretEnc!.startsWith("v1."));
 
     const counts = await rotateEncryptedSecrets(db, { env });
-    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [0, 0, 0, 0], [1, 0, 1, 0]]);
+    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
     // Todo lo legible queda con la clave nueva y se abre SIN la anterior.
     const onlyNew = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 };
     assert.equal(keyring.decryptSecret(data.user[0]!.totpSecretEnc!, onlyNew), "T1");
@@ -221,13 +223,14 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.equal(keyring.decryptSecret(data.appState[3]!.value!, onlyNew), "tg-token");
     assert.equal(keyring.decryptSecret(data.appState[4]!.value!, onlyNew), "wa-token");
     assert.equal(data.appState[5]!.value, "pizarro_bot");
+    assert.equal(keyring.decryptSecret(data.columnShare[0]!.tokenEnc!, onlyNew), "share-token");
     // Repetirlo no cambia nada.
     const again = await rotateEncryptedSecrets(db, { env: onlyNew });
-    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   });
 
   test("si la app cambia el valor mientras tanto, no se pisa", async () => {
-    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [], appState: [] };
+    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [], appState: [], columnShare: [] };
     const db = fakeDb(data);
     const realUpdate = db.user.updateMany;
     db.user.updateMany = async (args) => {

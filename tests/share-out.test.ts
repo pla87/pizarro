@@ -7,10 +7,11 @@ import { splitRoleChoices, currentRoleChoice, ROLE_CHOICES } from "../src/lib/co
 import { externalExcerpt, externalNotice, noticeActorName, notificationBody, notificationHeadline } from "../src/lib/notification-text";
 import { DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, nextShareExpiry, shareExpiryLabel, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
 import {
-  hashShareToken, inShareGrace, isShareNotice, isShareTokenShape, newShareToken, parseShareDate,
-  SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareKeyOf, shareResponseHeaders, shareUrl,
+  hashShareToken, inShareGrace, isShareNotice, isShareTokenShape, MAX_SHARE_PAGE_COMMENTS, newShareToken, parseShareDate,
+  SHARE_LIMITS, SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareIpKey, shareKeyOf, shareNotifyBucket, shareResponseHeaders, shareUrl,
 } from "../src/lib/share-out-core";
-import { shareAttachmentPath, shareMarkdownHtml, shareMessageHtml, sharePageHtml, type SharePageData } from "../src/lib/share-out-page";
+import { shareAttachmentPath, shareExpiryDay, shareMarkdownHtml, shareMessageHtml, sharePageHtml, type SharePageData } from "../src/lib/share-out-page";
+import { rateLimit } from "../src/lib/rate-limit";
 import { makeT } from "../src/i18n/core";
 
 process.env.SESSION_SECRET ??= "x".repeat(40);
@@ -190,4 +191,54 @@ test("rol de la columna: «Compartir fuera» sale (al final) solo si el proyecto
   assert.equal(isShareColumn({ role: "NONE", assigneeId: "u1", share: {} }), false);
   assert.equal(isShareColumn({ role: "NONE", share: null }), false);
   assert.deepEqual(shareStateText({ state: "none", endsAt: null }), { key: "Web sin generar", date: null });
+});
+
+// --- Arreglos de la revisión (ronda 68) ---------------------------------------------------------------------------------
+
+test("tope por IP de /x/: en el mapa general del limitador (no echa del de seguridad los bloqueos de inicio de sesión)", () => {
+  const key = shareIpKey("203.0.113.9");
+  assert.ok(!key.startsWith("share-out:"), key);
+  rateLimit(key, SHARE_LIMITS.ip.limit, SHARE_LIMITS.ip.windowMs);
+  const stores = (globalThis as unknown as { __pzRateStores: { general: { map: Map<string, unknown> }; security: { map: Map<string, unknown> } } }).__pzRateStores;
+  assert.ok(stores.general.map.has(key) && !stores.security.map.has(key));
+  // Los topes que solo nacen con un token válido, y el de los avisos (coste), sí van al de seguridad.
+  for (const k of [`share-out:change:${shareKeyOf(newShareToken())}`, `notify:${shareNotifyBucket("s1")}`]) {
+    rateLimit(k, 10, 60_000);
+    assert.ok(stores.security.map.has(k) && !stores.general.map.has(k), k);
+  }
+  assert.equal(SHARE_LIMITS.notify.limit, 10, "avisos externos por enlace y hora");
+});
+
+test("pie de la página: el día de caducidad en la zona horaria de la instalación, no en UTC", () => {
+  // 03:00 UTC del 26 es todavía el 25 en Nueva York.
+  assert.equal(shareExpiryDay("2026-11-26T03:00:00.000Z", "es-ES", "America/New_York"), "25 de noviembre de 2026");
+  assert.equal(shareExpiryDay("2026-11-26T03:00:00.000Z", "es-ES", "Europe/Madrid"), "26 de noviembre de 2026");
+  const html = sharePageHtml(pageData({ expiresAt: "2026-12-26T03:00:00.000Z", timeZone: "America/New_York" }), t);
+  assert.ok(html.includes("hasta el 25 de diciembre de 2026"), "la página usa la zona de la instalación");
+});
+
+test("página: botones con el título de su tarea para lectores de pantalla, contraste en oscuro y comentarios anteriores", () => {
+  const html = sharePageHtml(pageData(), t);
+  assert.ok(html.includes('<h2 id="h-t1">'));
+  for (const label of ["Marcar como hecha", "Cambiar fecha", "Comentar"]) {
+    assert.match(html, new RegExp(`<button type="submit"[^>]*aria-describedby="h-t1"[^>]*>${label}</button>`), label);
+  }
+  // Texto blanco sobre el botón: #4f46e5 en claro y en oscuro (6,3:1); antes, en oscuro, #818cf8 (3,0:1).
+  const dark = /@media \(prefers-color-scheme:dark\)\{:root\{([^}]*)\}\}/.exec(html)![1]!;
+  assert.match(dark, /--btn:#4f46e5/);
+  assert.ok(html.includes("button{background:var(--btn);color:#fff"));
+  const lum = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x! + 0.05) / (y! + 0.05); };
+  assert.ok(ratio("#ffffff", "#4f46e5") >= 4.5);
+  const link = /--brand:(#[0-9a-f]{6})/.exec(dark)![1]!;
+  const card = /--card:(#[0-9a-f]{6})/.exec(dark)![1]!;
+  assert.ok(ratio(link, card) >= 4.5, "los enlaces y el botón secundario en oscuro");
+  assert.ok(!html.includes("anteriores que no se muestran"));
+  const older = sharePageHtml(pageData({ tasks: [{ ...pageData().tasks[0]!, olderComments: 12 }] }), t);
+  assert.ok(older.includes("Hay 12 comentarios anteriores que no se muestran."));
+  assert.ok(sharePageHtml(pageData({ tasks: [{ ...pageData().tasks[0]!, olderComments: 1 }] }), t).includes("Hay 1 comentario anterior que no se muestra."));
+  assert.equal(MAX_SHARE_PAGE_COMMENTS, 30);
 });

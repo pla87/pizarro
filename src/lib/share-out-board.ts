@@ -8,8 +8,6 @@ export interface BoardShareInfo {
   /** Hasta cuándo vale si no se usa (activo) o cuándo terminó (ISO). */
   endsAt: string | null;
   expiryDays: number;
-  /** Huella corta del enlace actual (no revela el token): el navegador que lo generó recuerda su dirección con ella. */
-  linkId: string | null;
   generatedAt: string | null;
   generatedByName: string | null;
   /** Tareas publicadas en la última generación. */
@@ -81,7 +79,6 @@ export function boardShareOf(row: { columnId: string | null; tokenHash: string |
     state,
     endsAt: endsAt?.toISOString() ?? null,
     expiryDays: row.expiryDays,
-    linkId: row.tokenHash && state === "active" ? row.tokenHash.slice(0, 12) : null,
     generatedAt: row.generatedAt?.toISOString() ?? null,
     generatedByName: row.generatedByName,
     published: row.taskIds.length,

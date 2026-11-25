@@ -1,11 +1,13 @@
 import "server-only";
 import { actionContext, type ActionContext } from "./action-context";
 import { getMaxCommentsPerTask } from "./app-settings";
+import { projectUsersWhere } from "./access";
 import { appTimeZone } from "./board";
 import { assertColumnRoom } from "./column-capacity";
 import { assignOnEnter, assignUndoOps, finishAssignOnEnter } from "./column-assign";
 import { isShareColumn, shareLinkState } from "./share-out-board";
 import { dateToIso, isoToDate } from "./dates";
+import { decryptSecret } from "./crypto";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { getInstanceSettings } from "./instance";
@@ -18,8 +20,8 @@ import { rateLimit, rateIp } from "./rate-limit";
 import { publishChange } from "./realtime";
 import { spawnRecurrences } from "./recurrence";
 import {
-  inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, parseShareDate, sameHash, SHARE_GRACE_DAYS, SHARE_LIMITS, SHARE_USE_WRITE_MS, shareAuthorLabel,
-  shareKeyOf, shareTokenHashes, type ShareNotice,
+  inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, MAX_SHARE_PAGE_COMMENTS, parseShareDate, sameHash, SHARE_GRACE_DAYS, SHARE_LIMITS, SHARE_USE_WRITE_MS,
+  shareAuthorLabel, shareIpKey, shareKeyOf, shareNotifyBucket, shareTokenHashes, shareUrl, type ShareNotice,
 } from "./share-out-core";
 import type { SharePageData } from "./share-out-page";
 import { eventsOf } from "./task-events";
@@ -41,14 +43,41 @@ import { intlLocale, makeT, type Locale, type T } from "../i18n/core";
  */
 export async function endColumnShare(client: Pick<typeof db, "columnShare">, columnId: string, now: Date = new Date()): Promise<boolean> {
   const rows = await client.columnShare.findMany({ where: { columnId }, select: { id: true, revokedAt: true } });
-  for (const r of rows) await client.columnShare.update({ where: { id: r.id }, data: { columnId: null, revokedAt: r.revokedAt ?? now } });
+  for (const r of rows) await client.columnShare.update({ where: { id: r.id }, data: { columnId: null, revokedAt: r.revokedAt ?? now, tokenEnc: null } });
   return rows.length > 0;
 }
 
 /** Apagar la función en un proyecto: todos sus enlaces dejan de funcionar al momento (se revocan). */
 export async function revokeProjectShares(projectId: string, now: Date = new Date()): Promise<number> {
-  const { count } = await db.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now } });
+  const { count } = await db.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now, tokenEnc: null } });
   return count;
+}
+
+/**
+ * Enlaces que funcionan ahora en el proyecto (Ajustes, antes de apagar la función): con su columna «Compartir fuera», sin
+ * revocar y sin caducar por tiempo. Son pocas filas: se miran una a una con shareLinkState.
+ */
+export async function countActiveShares(projectId: string, now: Date = new Date()): Promise<number> {
+  const rows = await db.columnShare.findMany({
+    where: { projectId, columnId: { not: null }, tokenHash: { not: null }, revokedAt: null },
+    select: { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, column: { select: { role: true, assigneeId: true, assignDueDays: true } } },
+  });
+  return rows.filter((r) => r.column && isShareColumn({ ...r.column, share: true }) && shareLinkState(r, now).state === "active").length;
+}
+
+/**
+ * La dirección del enlace activo de una fila, descifrando su token (solo para el diálogo de la columna, a quien puede
+ * editar el proyecto). `lost`: el enlace funciona, pero no se puede volver a enseñar (se creó antes de guardar el token
+ * cifrado, o ENCRYPTION_KEY cambió sin rotar las claves): el diálogo ofrece crear uno nuevo.
+ */
+export function activeShareUrl(row: { tokenEnc: string | null }): { url: string | null; lost: boolean } {
+  if (!row.tokenEnc) return { url: null, lost: true };
+  try {
+    const token = decryptSecret(row.tokenEnc);
+    return isShareTokenShape(token) ? { url: shareUrl(appUrl(), token), lost: false } : { url: null, lost: true };
+  } catch {
+    return { url: null, lost: true };
+  }
 }
 
 /**
@@ -65,6 +94,10 @@ export async function purgeEndedShares(now: Date = new Date()): Promise<number> 
     return state === "none" || (endsAt !== null && endsAt < limit);
   }).map((r) => r.id);
   const gone = ids.length ? (await db.columnShare.deleteMany({ where: { id: { in: ids } } })).count : 0;
+  // El token cifrado de un enlace que ya no funciona (caducó por tiempo) no sirve para nada: fuera.
+  const sealed = await db.columnShare.findMany({ where: { tokenEnc: { not: null } }, select: { id: true, columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true } });
+  const stale = sealed.filter((r) => shareLinkState(r, now).state !== "active").map((r) => r.id);
+  if (stale.length) await db.columnShare.updateMany({ where: { id: { in: stale } }, data: { tokenEnc: null } });
   return old.count + gone;
 }
 
@@ -132,8 +165,8 @@ export async function noteShareUse(share: ActiveShare, now: Date = new Date()): 
   await db.columnShare.updateMany({ where: { id: share.id }, data: { lastUsedAt: now } });
 }
 
-/** Tope de peticiones por IP de todas las rutas de /x/ (mapa de seguridad del limitador). */
-export const shareIpAllowed = (ip: string): boolean => rateLimit(`share-out:ip:${rateIp(ip)}`, SHARE_LIMITS.ip.limit, SHARE_LIMITS.ip.windowMs);
+/** Tope de peticiones por IP de todas las rutas de /x/ (mapa general del limitador: se cuenta antes de mirar el token). */
+export const shareIpAllowed = (ip: string): boolean => rateLimit(shareIpKey(rateIp(ip)), SHARE_LIMITS.ip.limit, SHARE_LIMITS.ip.windowMs);
 export const shareDownloadAllowed = (share: ActiveShare): boolean => rateLimit(`share-out:dl:${share.key}`, SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
 
 /** Idioma de la página: el de la instalación (no hay nadie identificado). */
@@ -156,7 +189,9 @@ async function liveSharedTasks(share: ActiveShare) {
       assignee: { select: { name: true } },
       subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
       attachments: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, originalName: true, size: true, isImage: true } },
-      comments: { where: { deletedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 100, select: { body: true, createdAt: true, authorName: true, author: { select: { name: true } } } },
+      // Los últimos (acota el tamaño de la página); los anteriores solo se cuentan.
+      comments: { where: { deletedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: MAX_SHARE_PAGE_COMMENTS, select: { body: true, createdAt: true, authorName: true, author: { select: { name: true } } } },
+      _count: { select: { comments: { where: { deletedAt: null } } } },
     },
   });
   const order = new Map(share.taskIds.map((id, i) => [id, i]));
@@ -191,6 +226,7 @@ export async function loadSharePage(share: ActiveShare, token: string, notice: S
         subtasks: task.subtasks,
         attachments: task.attachments.map((a) => ({ id: a.id, name: a.isImage ? a.originalName.replace(/\.[^.]+$/, "") + ".webp" : a.originalName, size: a.size, isImage: a.isImage })),
         comments: task.comments.reverse().map((c) => ({ author: c.author ? firstName(c.author.name) : (c.authorName ?? t("Alguien")), body: c.body, createdAt: c.createdAt.toISOString() })),
+        olderComments: Math.max(0, task._count.comments - task.comments.length),
       })),
     },
   };
@@ -215,6 +251,22 @@ interface ShareChangeInput {
 /** La tarea se archivó o cambió de proyecto mientras se marcaba como hecha. */
 class ShareTaskGone extends Error {}
 
+/** Quien generó la web, si su cuenta existe, está activa y ve el proyecto; si no, null. */
+async function liveGenerator(share: ActiveShare): Promise<string | null> {
+  if (!share.generatedById) return null;
+  const user = await db.user.findFirst({ where: { id: share.generatedById, active: true, ...projectUsersWhere({ isPrivate: share.projectPrivate }, share.projectId) }, select: { id: true } });
+  return user?.id ?? null;
+}
+
+/** Lo que sigue a un cambio ya guardado: si falla, se registra y el cambio se queda (quien está fuera nunca ve un 500). */
+async function sideEffect(what: string, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[share-out] ${what}`, err);
+  }
+}
+
 /** Sin menciones de verdad: lo de fuera no puede avisar a nadie escribiendo `@[Nombre](user:id)`. */
 const plainMentions = (text: string): string => text.replace(mentionRegex(), (_m, name: string) => `@${name}`);
 
@@ -238,9 +290,12 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
   const { t } = await shareLocale();
   const author = renderLabel(shareAuthorLabel(share.columnName), t);
   const title = mentionsToPlain(task.title);
-  // Quién puede deshacerlo y recibe el aviso: el responsable o, sin él, quien generó la web.
-  const ownerId = task.assigneeId && task.assignee?.active ? task.assigneeId : share.generatedById;
-  const ctx: ActionContext = { projectId: share.projectId, projectIsPrivate: share.projectPrivate, taskId };
+  // Quién puede deshacerlo y recibe el aviso: el responsable o, sin él, quien generó la web, si su cuenta sigue activa y ve
+  // el proyecto (pudo borrarse o salir de él: una clave ajena a una cuenta que ya no existe haría fallar la siguiente
+  // aparición de una tarea fija). Sin ninguno de los dos, nadie: el cambio se hace igual.
+  const ownerId = task.assigneeId && task.assignee?.active ? task.assigneeId : await liveGenerator(share);
+  // Los envíos externos de estos avisos, con su propio tope por enlace (no el de los avisos del sistema).
+  const ctx: ActionContext = { projectId: share.projectId, projectIsPrivate: share.projectPrivate, taskId, notifyBucket: { key: shareNotifyBucket(share.id), limit: SHARE_LIMITS.notify.limit } };
   const start = performance.now();
   let notice: ShareNotice;
   let label: Label;
@@ -256,18 +311,17 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
           // Arriba de la columna terminada.
           const first = await tx.task.findFirst({ where: { columnId: target.id, archivedAt: null, id: { not: taskId } }, orderBy: TASK_ORDER, select: { id: true } });
           const placed = await placeInColumn(tx, target.id, null, first?.id ?? null, taskId);
-          const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId: target.id, position: placed.position, evergreen: false, evergreenEvery: 1 } });
+          const { count } = await tx.task.updateMany({ where: { id: taskId, projectId: share.projectId, archivedAt: null }, data: { columnId: target.id, position: placed.position, evergreen: false, evergreenEvery: 1 } });
           if (!count) throw new ShareTaskGone();
           return assignOnEnter(tx, room, [taskId]);
         });
         const assignUndo = assignUndoOps(assigned)[0]?.data ?? {};
         ctx.undo = [{ t: "task.set", id: taskId, data: { columnId: task.columnId, position: task.position, evergreen: task.evergreen, ...(task.evergreen ? { evergreenEvery: task.evergreenEvery } : {}), ...assignUndo } }];
         ctx.events = [{ taskId, code: "done", label: { k: "Movió la tarea de «{from}» a «{to}»", p: { from: task.column.name, to: target.name } } }];
-        if (ownerId) {
-          await finishAssignOnEnter(assigned, ownerId, { undo: false });
-          await spawnRecurrences([taskId], ownerId);
-        }
-        if (ownerId) await notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "done") });
+        // Ya está hecha: lo de después (asignar, la siguiente aparición de una tarea fija, el aviso) no la deshace si falla.
+        await sideEffect("assign", () => finishAssignOnEnter(assigned, ownerId, { undo: false }));
+        await sideEffect("recurrence", () => spawnRecurrences([taskId], ownerId));
+        if (ownerId) await sideEffect("notify", () => notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "done") }));
         return { notice: "done", label: { k: "{who}: marcó «{title}» como hecha", p: { who: author, title } } };
       }
       if (op === "due") {
@@ -277,10 +331,12 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
         if (due === before) return null;
         const startIso = dateToIso(task.startDate);
         if (due && startIso && due < startIso) return { notice: "invalid", label: { k: "" } };
-        await db.task.update({ where: { id: taskId }, data: { dueDate: due ? isoToDate(due) : null } });
+        // Solo si sigue en el proyecto y sin archivar (pudo cambiar desde que se leyó).
+        const { count } = await db.task.updateMany({ where: { id: taskId, projectId: share.projectId, archivedAt: null }, data: { dueDate: due ? isoToDate(due) : null } });
+        if (!count) throw new ShareTaskGone();
         ctx.undo = [{ t: "task.set", id: taskId, data: { dueDate: before } }];
         ctx.events = [{ taskId, code: "update", label: due ? { k: "Puso la fecha límite el {date}", p: { date: due } } : { k: "Quitó la fecha límite" } }];
-        if (ownerId) await notifyTask({ type: "DUE_CHANGED", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "due", dueChangeExcerpt(before, due)) });
+        if (ownerId) await sideEffect("notify", () => notifyTask({ type: "DUE_CHANGED", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "due", dueChangeExcerpt(before, due)) }));
         return { notice: "due", label: { k: "{who}: cambió la fecha de «{title}»", p: { who: author, title } } };
       }
       const body = plainMentions((input.body ?? "").replace(/\r\n?/g, "\n").trim());
@@ -295,7 +351,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
       ctx.undo = [{ t: "comment.remove", id: comment.id }];
       ctx.events = [{ taskId, code: "comment", label: { k: "Comentó en «{title}»", p: { title } } }];
       const recipients = [...new Set([...(ownerId ? [ownerId] : []), ...(await taskFollowerIds(taskId))])];
-      if (recipients.length) await notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: recipients, excerpt: externalExcerpt(author, "comment", makeExcerpt(body)), commentId: comment.id });
+      if (recipients.length) await sideEffect("notify", () => notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: recipients, excerpt: externalExcerpt(author, "comment", makeExcerpt(body)), commentId: comment.id }));
       return { notice: "comment", label: { k: "{who}: comentó en «{title}»", p: { who: author, title } } };
     });
     // Nada que cambiar (ya estaba hecha, la misma fecha): se dice igual que salió bien.

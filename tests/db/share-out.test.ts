@@ -1,25 +1,29 @@
 // «Compartir fuera» contra PostgreSQL real: activar y apagar en el proyecto, convertir la columna, generar y actualizar
 // la web, caducidad y los 30 días de «ha caducado», revocar, las acciones desde fuera (con historial, aviso, deshacer y
 // topes), adjuntos ajenos (404), proyecto apagado, otra columna, quitar la función o borrar la columna, el informe y
-// exportar/importar sin el token.
+// exportar/importar sin el token. Arreglos de la revisión: la dirección se vuelve a ver (token cifrado, rotar claves), el
+// selector de caducidad no resucita, borrar la cuenta de quien la generó, comentarios publicados, recuento de Ajustes y
+// deshacer o rehacer sin resucitar un enlace.
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { ADMIN_EXPORT, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { ADMIN_EXPORT, db, expectApplied, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { deleteColumn, setColumnAssignee, setColumnRole, setColumnShareOut } from "../../src/actions/columns";
-import { generateShareWeb, revokeShareLink, setProjectShareOut, setShareExpiry } from "../../src/actions/share-out";
+import { generateShareWeb, getShareLink, revokeShareLink, setProjectShareOut, setShareExpiry } from "../../src/actions/share-out";
 import { archiveTask, moveTask } from "../../src/actions/tasks";
-import { undoLast } from "../../src/actions/undo";
+import { redoChecked, undoLast } from "../../src/actions/undo";
+import { rotateEncryptedSecrets, type RotationDb } from "../../src/lib/key-rotation";
+import { eraseUser } from "../../src/lib/user-delete";
 import { externalNotice } from "../../src/lib/notification-text";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile } from "../../src/lib/project-export/import";
 import { rateLimit } from "../../src/lib/rate-limit";
 import { shareReportStatus } from "../../src/lib/report-build";
 import { boardShareOf, SHARE_BOARD_SELECT } from "../../src/lib/share-out-board";
-import { purgeEndedShares } from "../../src/lib/share-out";
-import { hashShareToken, SHARE_LIMITS, shareKeyOf } from "../../src/lib/share-out-core";
+import { countActiveShares, purgeEndedShares } from "../../src/lib/share-out";
+import { hashShareToken, MAX_SHARE_PAGE_COMMENTS, revokeUnsharedLinks, SHARE_LIMITS, shareKeyOf } from "../../src/lib/share-out-core";
 import { attachmentPath } from "../../src/lib/uploads";
 import { streamZip } from "../../src/lib/zip-stream";
 import { makeT } from "../../src/i18n/core";
@@ -120,7 +124,7 @@ describe("compartir fuera: activar y generar", () => {
     expectOk(await archiveTask(t2.id));
     assert.ok(!(await (await page(token)).text()).includes("Pedir material"));
     const again = await generate(f.columns.todo);
-    assert.equal(again.url, null, "actualizar mantiene el mismo enlace (no se puede volver a enseñar)");
+    assert.equal(tokenOf(again.url), token, "actualizar mantiene el mismo enlace y lo vuelve a enseñar");
     assert.equal(again.published, 0);
     assert.equal((await page(token)).status, 200);
     assert.ok(!(await (await page(token)).text()).includes("Revisar planos"));
@@ -326,7 +330,8 @@ describe("compartir fuera: informe y exportar", () => {
     for (const secret of [token, row.tokenHash!, row.tokenHash!.slice(0, 12)]) assert.ok(!status.includes(secret), "el texto del informe no lleva nada del enlace");
     assert.ok(!JSON.stringify(col).includes(token), "lo que lee el informe no trae el token");
     const board = JSON.stringify(boardShareOf(col.share!));
-    assert.ok(!board.includes(token) && !board.includes(row.tokenHash!), "el tablero solo lleva una huella corta");
+    assert.ok(!board.includes(token) && !board.includes(row.tokenHash!.slice(0, 12)) && !board.includes(row.tokenEnc!), "el tablero no lleva nada del enlace");
+    assert.ok(!JSON.stringify(col).includes(row.tokenEnc!), "lo que lee el informe no trae el token cifrado");
     expectOk(await revokeShareLink(f.columns.todo));
     assert.equal(shareReportStatus(await read(), t, "es-ES", "2026-11-25"), "enlace caducado");
   });
@@ -340,7 +345,7 @@ describe("compartir fuera: informe y exportar", () => {
     const parts: Buffer[] = [];
     for await (const c of streamZip(exp.entries)) parts.push(c);
     const zip = Buffer.concat(parts);
-    assert.ok(!zip.includes(token) && !zip.includes(row.tokenHash!), "ni el token ni su huella en el ZIP");
+    assert.ok(!zip.includes(token) && !zip.includes(row.tokenHash!) && !zip.includes(row.tokenEnc!), "ni el token, ni su huella, ni el cifrado en el ZIP");
     const zipFile = path.join(work, `exp-${Math.random().toString(36).slice(2)}.zip`);
     await writeFile(zipFile, zip);
     const imported = await importProjectFile(zipFile, { id: admin.id, name: admin.name, email: admin.email, role: "ADMIN" }, { isPrivate: false });
@@ -350,5 +355,172 @@ describe("compartir fuera: informe y exportar", () => {
     assert.ok(col.share, "la columna vuelve marcada");
     assert.equal(col.share.tokenHash, null);
     assert.equal(col.share.expiryDays, 90);
+  });
+});
+
+/** Cambia variables de entorno mientras dura `fn` (las claves de cifrado). */
+async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+  const before = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  for (const [k, v] of Object.entries(vars)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(before)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+}
+
+describe("compartir fuera: volver a ver la dirección", () => {
+  test("«Actualizar web» y el botón del enlace la enseñan a cualquiera del proyecto; cifrada en la base, se borra al revocar", async () => {
+    const { ana, f } = await setup();
+    const first = await generate(f.columns.todo);
+    const token = tokenOf(first.url);
+    assert.equal(first.fresh, true);
+    const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.match(row.tokenEnc!, /^v2\./, "cifrado con ENCRYPTION_KEY");
+    assert.ok(!row.tokenEnc!.includes(token));
+    const again = await generate(f.columns.todo);
+    assert.deepEqual([again.url, again.fresh, again.lost], [first.url, false, false]);
+    // Otra persona del proyecto, que no la generó.
+    await loginAs(ana);
+    const link = expectOk(await getShareLink(f.columns.todo));
+    assert.deepEqual([link.url, link.lost, link.info.state], [first.url, false, "active"]);
+    // Quien no ve el proyecto, nada.
+    await loginAs(await makeUser());
+    expectFail(await getShareLink(f.columns.todo), /No encontrado/);
+    await loginAs(ana);
+    expectOk(await revokeShareLink(f.columns.todo));
+    assert.equal((await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).tokenEnc, null, "un enlace terminado no guarda el token");
+    const gone = expectOk(await getShareLink(f.columns.todo));
+    assert.deepEqual([gone.url, gone.info.state], [null, "ended"]);
+  });
+
+  test("con la clave de cifrado cambiada sin rotar, el enlace funciona pero se ofrece uno nuevo; rotar las claves lo recupera", async () => {
+    const OLD = "o".repeat(48);
+    const NEW = "n".repeat(48);
+    const { f } = await setup();
+    const url = await withEnv({ ENCRYPTION_KEY: OLD, ENCRYPTION_KEY_PREVIOUS: undefined }, async () => (await generate(f.columns.todo)).url);
+    const token = tokenOf(url);
+    await withEnv({ ENCRYPTION_KEY: NEW, ENCRYPTION_KEY_PREVIOUS: undefined }, async () => {
+      const lost = expectOk(await getShareLink(f.columns.todo));
+      assert.deepEqual([lost.url, lost.lost, lost.info.state], [null, true, "active"]);
+      assert.equal((await page(token)).status, 200, "el enlace sigue funcionando (se busca por su huella)");
+      const kept = await generate(f.columns.todo);
+      assert.deepEqual([kept.url, kept.lost], [null, true], "«Actualizar web» tampoco puede enseñarla");
+    });
+    // Con la anterior configurada, la rotación la vuelve a cifrar con la actual.
+    const counts = await withEnv({ ENCRYPTION_KEY: NEW, ENCRYPTION_KEY_PREVIOUS: OLD }, () => rotateEncryptedSecrets(db as unknown as RotationDb));
+    assert.ok(counts.find((c) => c.label.startsWith("Compartir fuera"))!.rotated >= 1);
+    await withEnv({ ENCRYPTION_KEY: NEW, ENCRYPTION_KEY_PREVIOUS: undefined }, async () => {
+      const back = expectOk(await getShareLink(f.columns.todo));
+      assert.deepEqual([back.url, back.lost], [url, false]);
+      // «Crear un enlace nuevo»: otro token, cifrado con la actual; el anterior, «ha caducado».
+      const fresh = await generate(f.columns.todo, true);
+      assert.notEqual(fresh.url, url);
+      assert.equal((await page(token)).status, 410);
+      assert.equal(expectOk(await getShareLink(f.columns.todo)).url, fresh.url);
+    });
+  });
+});
+
+describe("compartir fuera: arreglos de la revisión", () => {
+  test("caducidad: elegir más días no resucita un enlace caducado; con uno activo, cambiarla cuenta como uso", async () => {
+    const { f } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    expectOk(await setShareExpiry(f.columns.todo, 7));
+    // Sin usar en 10 días: con 7, caducado.
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: new Date(Date.now() - 10 * DAY) } });
+    assert.equal((await page(token)).status, 410);
+    const info = expectOk(await setShareExpiry(f.columns.todo, 30));
+    assert.equal(info.state, "ended", "pasar a «1 mes» no lo revive");
+    assert.equal((await page(token)).status, 410);
+    assert.equal(expectOk(await setShareExpiry(f.columns.todo, 90)).state, "ended");
+    const frozen = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.ok(frozen.revokedAt && Math.abs(frozen.revokedAt.getTime() - (Date.now() - 3 * DAY)) < 60_000, "se congela cuando terminó");
+    assert.equal(frozen.tokenEnc, null);
+    // Uno activo sin usar en 10 días (con 30): pasar por «7 días» no lo caduca, porque cuenta como uso.
+    const next = tokenOf((await generate(f.columns.todo)).url);
+    expectOk(await setShareExpiry(f.columns.todo, 30));
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: new Date(Date.now() - 10 * DAY) } });
+    assert.equal(expectOk(await setShareExpiry(f.columns.todo, 7)).state, "active");
+    assert.equal((await page(next)).status, 200);
+  });
+
+  test("borrar la cuenta de quien generó la web: generatedById a null; marcar hecha una tarea fija desde fuera no da 500", async () => {
+    const { me, f } = await setup();
+    const fixed = await makeTask(f, { title: "Revisión semanal", recurrence: "WEEKLY", dueDate: new Date("2026-12-07T00:00:00Z"), position: 3000 });
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    const res = await eraseUser(me.id, { self: true });
+    assert.ok(res);
+    const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.equal(row.generatedById, null);
+    assert.equal(row.generatedByName, "Marta Ruiz", "el nombre se conserva");
+    assert.equal(noticeOf(await post(token, fixed.id, { op: "done" })), "done");
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixed.id } })).columnId, f.columns.done);
+    const spawned = await db.task.findFirst({ where: { recurrenceFromId: fixed.id } });
+    assert.ok(spawned, "la siguiente aparición nace igual");
+    assert.equal(spawned.createdById, null);
+  });
+
+  test("quien generó la web y ya no ve el proyecto no recibe el deshacer ni el aviso", async () => {
+    const { me, f, t2 } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    assert.equal(noticeOf(await post(token, t2.id, { op: "comment", body: "Hecho por fuera" })), "comment");
+    assert.equal(await db.notification.count({ where: { userId: me.id, taskId: t2.id } }), 0);
+    assert.equal(await db.undoEntry.count({ where: { userId: me.id, projectId: f.project.id, kind: "UNDO", taskId: t2.id } }), 0);
+  });
+
+  test("la página publica los últimos comentarios de cada tarea y dice cuántos anteriores no salen", async () => {
+    const { f, t1 } = await setup();
+    const n = MAX_SHARE_PAGE_COMMENTS + 5;
+    await db.taskComment.createMany({ data: Array.from({ length: n }, (_, i) => ({ taskId: t1.id, authorName: "Alguien", body: `Comentario número ${i + 1}.`, createdAt: new Date(Date.now() - (n - i) * 60_000) })) });
+    const html = await (await page(tokenOf((await generate(f.columns.todo)).url))).text();
+    assert.ok(html.includes(`Comentario número ${n}.`) && html.includes("Comentario número 6.") && !html.includes("Comentario número 5."));
+    assert.ok(html.includes("Hay 5 comentarios anteriores que no se muestran."));
+  });
+
+  test("Ajustes: cuenta solo los enlaces que funcionan (sin los caducados por tiempo)", async () => {
+    const { f } = await setup();
+    assert.equal(await countActiveShares(f.project.id), 0);
+    await generate(f.columns.todo);
+    expectOk(await setColumnShareOut(f.columns.doing));
+    await generate(f.columns.doing);
+    assert.equal(await countActiveShares(f.project.id), 2);
+    await db.columnShare.updateMany({ where: { columnId: f.columns.doing }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });
+    assert.equal(await countActiveShares(f.project.id), 1, "el caducado por tiempo no cuenta");
+  });
+
+  test("deshacer y rehacer el cambio de rol no resucitan un enlace: solo «Generar web» crea otro", async () => {
+    const { f } = await setup();
+    expectOk(await setColumnRole(f.columns.doing, "WAITING"));
+    expectOk(await setColumnShareOut(f.columns.doing));
+    await makeTask(f, { title: "En espera", columnId: f.columns.doing });
+    const token = tokenOf((await generate(f.columns.doing)).url);
+    assert.equal((await page(token)).status, 200);
+    // Deshacer: vuelve a «Esperando» y el enlace se revoca (antes seguía vivo en la fila).
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).role, "WAITING");
+    const revoked = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.doing } });
+    assert.ok(revoked.revokedAt);
+    assert.equal(revoked.tokenEnc, null);
+    // Rehacer: otra vez «Compartir fuera», con el enlace terminado (sale «Generar web»).
+    expectApplied(await redoChecked(f.project.id));
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing } })).role, "NONE");
+    assert.equal((await page(token)).status, 410, "el enlace viejo no vuelve");
+    const col = await db.column.findUniqueOrThrow({ where: { id: f.columns.doing }, select: { share: { select: SHARE_BOARD_SELECT } } });
+    assert.equal(boardShareOf(col.share!).state, "ended");
+    const fresh = tokenOf((await generate(f.columns.doing)).url);
+    assert.notEqual(fresh, token);
+    assert.equal((await page(fresh)).status, 200);
+  });
+
+  test("una plantilla (o cualquier cambio sin endColumnShare) que da otro rol a la columna revoca su enlace", async () => {
+    const { f } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "WAITING" } });
+    assert.equal(await revokeUnsharedLinks(db, f.project.id), 1);
+    await db.column.update({ where: { id: f.columns.todo }, data: { role: "NONE" } });
+    assert.equal((await page(token)).status, 410);
+    assert.equal(await revokeUnsharedLinks(db, f.project.id), 0, "sin nada más que revocar");
   });
 });
