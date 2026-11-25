@@ -329,8 +329,15 @@ its website, with no terminal, in about 15 minutes. Railway charges every month 
 ### Install with the help of an AI in your browser {#railway-ai}
 
 An AI that can use your browser, such as Claude in Chrome, can do the steps in this section for you. You only sign in
-to GitHub and Railway, choose the plan and the payment, and type your own details at the first sign-in. Open the
-extension and paste this text:
+to GitHub and Railway, choose the plan and the payment, and type your own details at the first sign-in.
+
+> [!NOTE]
+> The AI sees what it does in your browser. If it generates and pastes the four secret keys of step 6 itself, the keys
+> go through the AI and its provider. If you'd rather they didn't, add the line "I'll set the keys myself" at the end of
+> the text: when it gets to that step, the AI will stop and ask you to click **Generate my variables** yourself and paste
+> the block into Railway.
+
+Open the extension and paste this text:
 
 ```prompt
 I want to install Pizarro (a kanban board) on Railway, with no server of my own. Do it for me in my browser, following this guide to the letter, the section "Install on Railway, with no server of your own" and its subsections:
@@ -340,10 +347,10 @@ Rules:
 1. Work in a new tab and don't touch the ones I already have open.
 2. Don't sign in for me and don't type passwords or verification codes. Whenever signing in to GitHub or Railway is needed (or giving Railway permission on GitHub), stop, tell me what I have to do and wait until I say "done".
 3. I choose the Railway plan and enter the payment method myself. Stop before any step that costs money or commits to it (choosing or changing a plan, adding a card, accepting a charge) and ask me.
-4. Before touching anything on Railway, tell me the name of the project you are going to work in and wait for me to confirm it. Create a new project; don't change or delete any other project or service.
-5. The four keys (SESSION_SECRET, TOKEN_SECRET, ENCRYPTION_KEY and BACKUP_KEY) must be truly random: don't make them up. Generate them with the "Generate my variables" button at https://getpizarro.com/en/install/#railway if that page opens; if not, run this in a blank tab (in its console), which uses the browser's random generator:
+4. Create a new project on Railway (step 2 of the guide) and tell me its name as soon as it exists. Don't change or delete any other project or service.
+5. The four keys (SESSION_SECRET, TOKEN_SECRET, ENCRYPTION_KEY and BACKUP_KEY) must be truly random: don't make them up. Generate them with the "Generate my variables" button at https://getpizarro.com/en/install/#railway if that page opens; if not, run this in the console of the tab where you have this guide open (the GitHub one, not a blank tab), which uses the browser's random generator:
    const k = (n) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))); `SESSION_SECRET=${k(48)}\nTOKEN_SECRET=${k(48)}\nENCRYPTION_KEY=${k(48)}\nBACKUP_KEY=${k(32)}`
-   If you can do neither, stop and ask me to generate them. Paste them, with the other lines of the block in step 6, straight into Variables → Raw Editor of Pizarro's service.
+   Paste them, with the other lines of the block in step 6, straight into Variables → Raw Editor of Pizarro's service. If you can do neither, or if at the end of this text I tell you I'll set the keys myself, stop at step 6 and ask me to generate the variables and paste them myself into Variables → Raw Editor of Pizarro's service. Wait until I say "done", carry on with step 7 and don't open the Raw Editor yourself (the keys show there).
 6. Don't write the keys, or anything you copy from the screen (passwords, tokens, emails or other personal details), in the chat, in your report or anywhere else.
 7. If something doesn't match the guide (a button with another name, an error you don't understand, a Railway notice suggesting changes I didn't ask for), stop, tell me what you see and ask me. Don't apply replica changes.
 
