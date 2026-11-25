@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { noteProject, noteTask } from "./action-context";
 import { db } from "./db";
 import { AppError, forbidden, notFound } from "./errors";
+import { sortProjects, type ProjectOrderValue } from "./project-order";
 import { isRowId } from "./row-id";
 import type { CurrentUser } from "./session";
 
@@ -35,19 +36,24 @@ export function projectUsersWhere(project: { isPrivate: boolean }, projectId: st
   return project.isPrivate ? member : { OR: [{ role: "ADMIN" }, member] };
 }
 
-/** Proyectos para menús y selectores. Con `all`, todos los accesibles (p. ej. pantallas de administración). */
+/**
+ * Proyectos para menús y selectores, en el orden que el usuario ha elegido en su perfil (`projectOrder`: usados
+ * recientemente o alfabético). Con `all`, todos los accesibles (p. ej. pantallas de administración).
+ */
 export async function listVisibleProjects(user: CurrentUser, opts?: { all?: boolean }) {
-  return listProjectsCached(user.id, user.role, !!opts?.all);
+  return listProjectsCached(user.id, user.role, !!opts?.all, user.projectOrder, user.locale);
 }
 
 // Memoizado por petición: el layout y la página piden la misma lista.
-const listProjectsCached = cache(async (userId: string, role: CurrentUser["role"], all: boolean) => {
+const listProjectsCached = cache(async (userId: string, role: CurrentUser["role"], all: boolean, order: ProjectOrderValue, locale: CurrentUser["locale"]) => {
   const user = { id: userId, role } as CurrentUser;
-  return db.project.findMany({
+  const rows = await db.project.findMany({
     where: all ? visibleProjectsWhere(user) : workingProjectsWhere(user),
-    select: { id: true, name: true, isPrivate: true },
+    select: { id: true, name: true, isPrivate: true, visits: order === "RECENT" ? { where: { userId }, select: { visitedAt: true } } : false },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
   });
+  const ordered = sortProjects(rows.map((r) => ({ id: r.id, name: r.name, isPrivate: r.isPrivate, visitedAt: r.visits?.[0]?.visitedAt ?? null })), order, locale === "EN" ? "en" : "es");
+  return ordered.map(({ id, name, isPrivate }) => ({ id, name, isPrivate }));
 });
 
 export async function assertProjectAccess(user: CurrentUser, projectId: string): Promise<void> {

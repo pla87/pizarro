@@ -75,7 +75,12 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
     <li className="card p-4">
       <div className="flex items-center justify-between gap-3">
         <Link href={`/p/${project.id}`} className="min-w-0 truncate font-semibold hover:underline">{project.name}</Link>
-        <span className="shrink-0 text-xs text-slate-500">{members.length === 1 ? t("1 miembro") : t("{n} miembros", { n: members.length })}</span>
+        {/* Los administradores que no son miembros salen debajo (con borde discontinuo): el recuento los nombra aparte para
+            que «0 miembros» no contradiga lo que se ve. */}
+        <span className="shrink-0 text-xs text-slate-500">
+          {members.length === 1 ? t("1 miembro") : t("{n} miembros", { n: members.length })}
+          {admins.length > 0 && <> · {admins.length === 1 ? t("1 admin sin ser miembro") : t("{n} admins sin ser miembros", { n: admins.length })}</>}
+        </span>
       </div>
       <ul className="mt-3 flex flex-wrap gap-1.5">
         {members.map((u) => (
@@ -113,7 +118,7 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
                 onClick={() => run(() => setAdminProjectPick(project.id, u.id, !on), on ? t("Proyecto quitado de sus proyectos de trabajo") : t("Proyecto añadido a sus proyectos de trabajo"))}
               >
                 <span className="truncate">{u.name}</span>
-                <span className="ml-1 shrink-0 text-xs text-slate-500">{on ? t("(admin, ve todos; elegido)") : t("(admin, ve todos; no elegido)")}</span>
+                <span className="ml-1 shrink-0 text-xs text-slate-500">{on ? t("(admin, no miembro; lo tiene en su lista)") : t("(admin, no miembro; no lo tiene en su lista)")}</span>
               </button>
             </li>
           );

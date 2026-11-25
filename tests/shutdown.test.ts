@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, request as httpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import { beforeEach, describe, test } from "node:test";
-import { isShuttingDown, resetShutdownForTests, runShutdown, stopListening, trackInFlight, waitForInFlight, type ShutdownDeps } from "../src/lib/shutdown";
+import { isShuttingDown, resetShutdownForTests, runShutdown, stopListening, trackInFlight, waitForInFlight, type ShutdownDeps, shutdownGraceMs } from "../src/lib/shutdown";
 import { makeT } from "../src/i18n/core";
 import { renderLabel, renderLabelEs, type Label } from "../src/lib/undo-label";
 
@@ -223,4 +223,16 @@ describe("apagado sin servidor HTTP encontrado", () => {
     assert.equal((await run("production", 1)).length, 0);
     assert.equal((await run("test", 0)).length, 0);
   });
+});
+
+test("plazo del apagado: 5 s salvo que Railway diga que concede más (RAILWAY_DEPLOYMENT_DRAINING_SECONDS)", () => {
+  assert.equal(shutdownGraceMs({}), 5_000);
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "0" }), 5_000);
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "abc" }), 5_000);
+  // Con 15 s: 10 s de espera + 3 s de registros + 1 s = 14 s, dentro del margen.
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "15" }), 10_000);
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "12" }), 8_000);
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "60" }), 10_000);
+  // Poco margen: nunca menos que el plazo de siempre.
+  assert.equal(shutdownGraceMs({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "5" }), 5_000);
 });

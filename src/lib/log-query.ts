@@ -13,15 +13,25 @@ export const LOG_RANGES = [
   { value: "7d", label: "7 días", hours: 24 * 7 },
 ] as const;
 
+/**
+ * Periodo «Personalizado…»: de un día a otro (`desde`/`hasta`, AAAA-MM-DD, días enteros en la zona de la app). La
+ * página y la descarga lo convierten en `period` con parseExportRange (log-range.ts).
+ */
+export const CUSTOM_RANGE = "custom";
+
 interface LogFilters {
+  /** Uno de LOG_RANGES o CUSTOM_RANGE. */
   range: string;
+  /** Con CUSTOM_RANGE: los días elegidos (AAAA-MM-DD, o "" si no vienen o no tienen esa forma). */
+  from?: string;
+  to?: string;
   level: string;
   category: string;
   userId: string;
   q: string;
   /** Incluir las consultas (páginas vistas, aperturas, descargas); por defecto solo se ven los cambios. */
   reads: boolean;
-  /** Solo la descarga CSV: intervalo explícito que sustituye al periodo. */
+  /** Intervalo explícito que sustituye al periodo fijo (periodo personalizado, o las fechas de la descarga CSV). */
   period?: { gte: Date; lt: Date };
   /** Idioma de quien mira: en inglés, el texto se busca en el mensaje en inglés (o en el español si la fila no lo tiene). */
   locale?: Locale;
@@ -63,11 +73,16 @@ type Params = Record<string, string | string[] | undefined>;
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
+const dayParam = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+
 export function parseLogFilters(p: Params): LogFilters {
-  const range = LOG_RANGES.some((r) => r.value === first(p.range)) ? first(p.range) : "24h";
+  const range = first(p.range) === CUSTOM_RANGE || LOG_RANGES.some((r) => r.value === first(p.range)) ? first(p.range) : "24h";
   const level = ["info", "warn", "error"].includes(first(p.level)) ? first(p.level) : "";
+  const custom = range === CUSTOM_RANGE;
   return {
     range,
+    from: custom ? dayParam(first(p.desde)) : "",
+    to: custom ? dayParam(first(p.hasta)) : "",
     level,
     // Sin NUL (PostgreSQL no lo admite en un texto: /admin/logs?category=%00 daba el error 22021 y la página de error)
     // ni medio emoji al recortar.
@@ -94,7 +109,8 @@ export function isMaskedLog(row: { privateProjectId: string | null }, memberProj
  * por nivel, categoría y texto solo miran registros no ocultos (para no revelar su contenido).
  */
 export function logWhere(f: LogFilters, memberProjectIds: readonly string[], withLevel = true): Prisma.AppLogWhereInput {
-  const hours = LOG_RANGES.find((r) => r.value === f.range)!.hours;
+  // Un periodo personalizado sin `period` (fechas que no valen) se queda en las últimas 24 h, como sin filtro.
+  const hours = LOG_RANGES.find((r) => r.value === f.range)?.hours ?? 24;
   const maxMs = logRetentionDays() * 86_400_000;
   const since = new Date(Date.now() - Math.min(hours * 3_600_000, maxMs));
   const and: Prisma.AppLogWhereInput[] = [{ createdAt: f.period ? { gte: f.period.gte, lt: f.period.lt } : { gte: since } }];
@@ -142,6 +158,10 @@ export function logsAfter(row: { createdAt: Date; id: string }): Prisma.AppLogWh
 export function logQuery(f: LogFilters, extra: Record<string, string> = {}): string {
   const sp = new URLSearchParams();
   if (f.range !== "24h") sp.set("range", f.range);
+  if (f.range === CUSTOM_RANGE) {
+    if (f.from) sp.set("desde", f.from);
+    if (f.to) sp.set("hasta", f.to);
+  }
   if (f.level) sp.set("level", f.level);
   if (f.category) sp.set("category", f.category);
   if (f.userId) sp.set("user", f.userId);

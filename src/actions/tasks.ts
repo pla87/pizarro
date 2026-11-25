@@ -14,8 +14,8 @@ import { cutText } from "@/lib/graphemes";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
-import { switchKindSubtaskRows } from "@/lib/kinds-special";
-import { andList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
+import { switchKindDescription, switchKindSubtaskRows } from "@/lib/kinds-special";
+import { andList, quotedList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
 import { COLUMN_ORDER, lastPositionIn, lockColumns, lockTaskRows, placeBlockInColumn, placeInColumn, resolvePositionTies, setTaskColumnPositions, TASK_ORDER } from "@/lib/task-positions";
@@ -279,9 +279,12 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const data = createManySchema.parse(input);
     await assertProjectAccess(user, data.projectId);
     const optional = pickTaskFields({ priority: data.priority, client: data.client });
-    const kindTemplates = data.applySubtaskTemplates
-      ? db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, subtaskTemplate: true } })
-      : Promise.resolve([]);
+    // Plantillas de los tipos elegidos: el texto inicial de la descripción (siempre, como en «Nueva tarea») y, si se piden,
+    // las subtareas predefinidas. La descripción, en el idioma de quien crea (los tipos generales de serie se traducen).
+    const kindTemplates = Promise.all([
+      db.taskKind.findMany({ where: { id: { in: [...new Set(data.tasks.map((t) => t.kindId))] } }, select: { id: true, name: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true } }),
+      getLocale(),
+    ]).then(([kinds, locale]) => localizeGeneralKinds(kinds, locale));
     // A la vez, como en createTask; si fallan varias, gana la primera en el orden de siempre.
     const checks = await Promise.allSettled([
       assertColumnInProject(data.columnId, data.projectId),
@@ -296,7 +299,13 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
     const labelIds = [...new Set(data.labelIds)];
     const dueDate = data.dueDate ? isoToDate(data.dueDate) : null;
     const templates = new Map<string, string[]>();
-    for (const k of await kindTemplates) if (k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
+    const descriptions = new Map<string, string>();
+    for (const k of await kindTemplates) {
+      if (data.applySubtaskTemplates && k.subtaskTemplate.length) templates.set(k.id, k.subtaskTemplate);
+      // Lo mismo que pone «Nueva tarea» al elegir el tipo (switchKindDescription sin tipo anterior y sin texto).
+      const description = switchKindDescription(null, k, "");
+      if (description) descriptions.set(k.id, description);
+    }
     assertTaskCreateRate(user.id, data.tasks.length);
     const { ids, assigneeId } = await db.$transaction(async (tx) => {
       // Todo o nada: si el lote no cabe, no se crea ninguna.
@@ -314,6 +323,7 @@ export async function createTasks(input: z.input<typeof createManySchema>) {
             columnId: data.columnId,
             title: t.title,
             kindId: t.kindId,
+            description: descriptions.get(t.kindId) ?? "",
             assigneeId: assigned.assigneeId,
             dueDate: assigned.dueDate,
             deliverableId: data.deliverableId,
@@ -609,17 +619,20 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     const user = await requireUser();
     const data = kindChangeSchema.parse(patch);
     let swap: { removed: SubtaskInfo[]; added: SubtaskInfo[]; subtasks: SubtaskInfo[] } | null = null;
+    // Nombre del tipo nuevo si el tipo cambia de verdad (para el texto de la acción y del deshacer).
+    let kindName: string | null = null;
     await applyTaskUpdate(user, taskId, data, since, async (tx, prev) => {
       if (prev.kindId === data.kindId) return;
       // La tarea ya está bloqueada (el UPDATE de arriba): nadie añade subtareas a la vez. Las subtareas se leen con su
       // propio candado: quien marca, renombra o borra una a la vez espera, y lo marcado justo antes ya se ve aquí y se
       // queda (si no, se borraba aunque ya estuviera marcada).
       const [kinds, subs] = await Promise.all([
-        tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, subtaskTemplate: true } }),
+        tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, name: true, subtaskTemplate: true } }),
         tx.$queryRaw<{ id: string; taskId: string; title: string; done: boolean; position: number }[]>`SELECT "id", "taskId", "title", "done", "position" FROM "Subtask" WHERE "taskId" = ${taskId} ORDER BY "position" ASC FOR UPDATE`,
       ]);
       const next = kinds.find((k) => k.id === data.kindId);
       if (!next) return;
+      kindName = next.name;
       const { remove, add } = switchKindSubtaskRows(kinds.find((k) => k.id === prev.kindId), next, subs, MAX_SUBTASKS);
       if (!remove.length && !add.length) return;
       if (remove.length) await tx.subtask.deleteMany({ where: { id: { in: remove.map((s) => s.id) } } });
@@ -644,11 +657,34 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
         ...done.removed.map((s) => ({ t: "subtask.restore" as const, row: { ...s, taskId } })),
         ...done.added.map((s) => ({ t: "subtask.remove" as const, id: s.id })),
       );
+      // Historial: qué subtareas se han quitado y cuáles añadido, tras la línea del cambio de tipo.
+      recordTaskEvent(taskId, "subtask", kindSubtasksEvent(done.removed.map((s) => s.title), done.added.map((s) => s.title)));
     }
     const task = withClip(await loadBoardTask(taskId), clipOf(patch.title));
-    // `removed`/`added`: cuántas se han quitado y añadido (para el aviso); `undo`: la entrada que deshace todo el cambio.
-    return { ...task, ...(done ? { kindSubtasks: { subtasks: done.subtasks, removed: done.removed.length, added: done.added.length, undo: trackUndoEntry() } } : {}) };
+    // Un cambio de tipo de verdad se nombra así (en Logs y en el deshacer: «Deshecho el cambio de tipo de «…»»), no como
+    // «Modificó «…»: título, descripción y tipo», que es lo que deja applyTaskUpdate.
+    if (kindName !== null) describeAction("Cambió el tipo de «{title}» a «{kind}»", { title: mentionsToPlain(task.title), kind: kindName }, { taskId });
+    // `removed`/`added`: cuántas se han quitado y añadido (para el aviso); `undo` (y `kindUndo`, también sin subtareas que
+    // cambiar, para el aviso de la plantilla de la descripción): la entrada que deshace todo el cambio.
+    const undo = trackUndoEntry();
+    return {
+      ...task,
+      ...(kindName !== null ? { kindUndo: undo } : {}),
+      ...(done ? { kindSubtasks: { subtasks: done.subtasks, removed: done.removed.length, added: done.added.length, undo } } : {}),
+    };
   });
+}
+
+/**
+ * Línea del historial con las subtareas que ha cambiado el tipo: los títulos (como mucho 3 de cada lista, y «y N más»).
+ * `removed` o `added` pueden ir vacías, pero no las dos.
+ */
+function kindSubtasksEvent(removed: string[], added: string[]): Label {
+  const r = quotedList(removed.map((x) => mentionsToPlain(x)));
+  const a = quotedList(added.map((x) => mentionsToPlain(x)));
+  if (!added.length) return { k: "Quitó las subtareas del tipo anterior: {removed}", p: { removed: r } };
+  if (!removed.length) return { k: "Añadió las subtareas del tipo: {added}", p: { added: a } };
+  return { k: "Cambió las subtareas del tipo: quitó {removed}; añadió {added}", p: { removed: r, added: a } };
 }
 
 /**
@@ -803,7 +839,8 @@ async function inactiveTaskError(client: Pick<typeof db, "task">, taskId: string
  */
 export async function moveTask(taskId: string, columnId: string, prevId: string | null, nextId: string | null) {
   return runAction({ name: "tasks.moveTask", args: [taskId, columnId, prevId, nextId] }, async () => {
-    return applyTaskMove(await requireUser(), taskId, columnId, prevId, nextId);
+    // `undo`: la entrada de deshacer del movimiento (el aviso «Asignada a…» del tablero lleva «Deshacer»).
+    return { ...(await applyTaskMove(await requireUser(), taskId, columnId, prevId, nextId)), undo: trackUndoEntry() };
   });
 }
 
@@ -938,7 +975,7 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
     for (const t of toMove) if (t.columnId !== column.id) recordTaskEvent(t.id, code, { k: "Movió la tarea a «{to}»", p: { to: colName } });
     // Un solo aviso a la persona de la columna por todo el lote (como al crear varias asignadas).
     await finishAssignOnEnter(assigned, user.id, { undo: false });
-    return { columnId: column.id, moved, spawned, assigned: assignedPatches(assigned) };
+    return { columnId: column.id, moved, spawned, assigned: assignedPatches(assigned), undo: trackUndoEntry() };
   });
 }
 

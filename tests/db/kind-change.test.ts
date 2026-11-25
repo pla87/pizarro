@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
-import { changeTaskKind } from "../../src/actions/tasks";
+import { changeTaskKind, getTaskHistory } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
 
 const subtasksOf = async (taskId: string) =>
@@ -71,6 +71,45 @@ describe("cambiar de tipo en el detalle", () => {
     const task = await makeTask(f);
     const res = expectOk(await changeTaskKind(task.id, { kindId: other.id, title: "x".repeat(400) }));
     assert.ok(res.titleClipped);
+  });
+});
+
+describe("cambiar de tipo: historial y deshacer", () => {
+  test("el historial dice qué subtareas se quitaron y cuáles se añadieron, y el deshacer nombra el cambio de tipo", async () => {
+    const me = await makeUser();
+    const f = await makeProject({ members: [me] });
+    await loginAs(me);
+    await db.taskKind.update({ where: { id: f.kindId }, data: { subtaskTemplate: ["Pedir presupuesto", "Comparar", "Elegir"] } });
+    const next = await db.taskKind.create({ data: { name: "Permiso", color: "#3b82f6", position: 2, projectId: f.project.id, subtaskTemplate: ["Uno", "Dos", "Tres", "Cuatro", "Cinco"] } });
+    const task = await makeTask(f, { title: "Baño", subtasks: ["Pedir presupuesto", "Comparar", "Elegir"] });
+    await db.subtask.updateMany({ where: { taskId: task.id, title: "Elegir" }, data: { done: true } });
+    const res = expectOk(await changeTaskKind(task.id, { kindId: next.id }));
+    assert.deepEqual([res.kindSubtasks?.removed, res.kindSubtasks?.added], [2, 5]);
+    assert.equal(res.kindUndo?.id, res.kindSubtasks?.undo.id);
+    const lines = expectOk(await getTaskHistory(task.id)).map((e) => e.text);
+    assert.ok(lines.some((l) => /^Cambió el tipo de «.+» a «Permiso»$/.test(l)), lines.join(" | "));
+    // Resumida: tres títulos y «y N más».
+    assert.ok(lines.includes("Cambió las subtareas del tipo: quitó «Pedir presupuesto» y «Comparar»; añadió «Uno», «Dos», «Tres» y 2 más"), lines.join(" | "));
+    const log = await db.undoEntry.findFirstOrThrow({ where: { taskId: task.id }, orderBy: { createdAt: "desc" }, select: { label: true } });
+    assert.match(log.label, /Cambió el tipo de «\{title\}» a «\{kind\}»/);
+    const undone = expectOk(await undoLast(f.project.id, task.id));
+    assert.equal(undone.done, "Deshecho el cambio de tipo de «Baño»");
+    // Deshacer también quita las líneas del historial.
+    assert.ok(!expectOk(await getTaskHistory(task.id)).some((e) => e.text.startsWith("Cambió las subtareas")));
+  });
+
+  test("solo quitadas o solo añadidas: la línea lo dice así", async () => {
+    const me = await makeUser();
+    const f = await makeProject({ members: [me] });
+    await loginAs(me);
+    const plain = await db.taskKind.create({ data: { name: "Sin plantilla", color: "#3b82f6", position: 2, projectId: f.project.id } });
+    const full = await db.taskKind.create({ data: { name: "Con plantilla", color: "#3b82f6", position: 3, projectId: f.project.id, subtaskTemplate: ["Uno"] } });
+    const task = await makeTask(f, { subtasks: [] });
+    expectOk(await changeTaskKind(task.id, { kindId: full.id }));
+    expectOk(await changeTaskKind(task.id, { kindId: plain.id }));
+    const lines = expectOk(await getTaskHistory(task.id)).map((e) => e.text);
+    assert.ok(lines.includes("Añadió las subtareas del tipo: «Uno»"), lines.join(" | "));
+    assert.ok(lines.includes("Quitó las subtareas del tipo anterior: «Uno»"), lines.join(" | "));
   });
 });
 

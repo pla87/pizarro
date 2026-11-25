@@ -17,6 +17,20 @@ import { andList, type Label } from "./undo-label";
 
 const GRACE_MS = 5_000;
 const FLUSH_MS = 3_000;
+/** Lo más que se espera a lo que está en curso cuando la plataforma da margen de sobra (Railway con 15 s de *Draining*). */
+const LONG_GRACE_MS = 10_000;
+/**
+ * Plazo de espera a lo que está en curso (una subida grande, un PDF, un ZIP). En Railway con la variable
+ * RAILWAY_DEPLOYMENT_DRAINING_SECONDS (docs/INSTALL.md: 15 s), lo que quepa en ese margen dejando FLUSH_MS y 1 s, hasta
+ * LONG_GRACE_MS (10 s + 3 s + 1 s = 14 s con 15). Sin ella (Railway da 0 s por defecto, o el margen solo está en el panel),
+ * GRACE_MS, como en las demás plataformas: así nunca se espera más de lo que la plataforma concede. Sin nada en curso se
+ * sale al momento.
+ */
+export function shutdownGraceMs(env: Record<string, string | undefined> = process.env): number {
+  const draining = Number(env.RAILWAY_DEPLOYMENT_DRAINING_SECONDS);
+  if (!Number.isFinite(draining) || draining <= 0) return GRACE_MS;
+  return Math.max(GRACE_MS, Math.min(LONG_GRACE_MS, draining * 1000 - FLUSH_MS - 1_000));
+}
 
 interface ShutdownState {
   stopping: boolean;
@@ -141,7 +155,7 @@ export interface ShutdownDeps {
 
 async function defaultDeps(): Promise<ShutdownDeps> {
   const [{ flushLogs, logEvent }, { closeAllStreams }] = await Promise.all([import("./log"), import("./realtime")]);
-  return { flushLogs, logEvent, closeStreams: closeAllStreams, stopListening, exit: (code) => process.exit(code), graceMs: GRACE_MS, flushMs: FLUSH_MS };
+  return { flushLogs, logEvent, closeStreams: closeAllStreams, stopListening, exit: (code) => process.exit(code), graceMs: shutdownGraceMs(), flushMs: FLUSH_MS };
 }
 
 function exitCode(signal: NodeJS.Signals): number {

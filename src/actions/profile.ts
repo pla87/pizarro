@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revokeOtherTrustedDevices } from "@/lib/devices";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
@@ -13,6 +14,7 @@ import { appUrl, emailEnabled, sendMailInBackground } from "@/lib/mail";
 import { logMailError } from "@/lib/mask-email";
 import { hashPassword, passwordSchema, verifyPasswordCounted } from "@/lib/password";
 import { POSITION_STEP } from "@/lib/positions";
+import { PROJECT_ORDER_VALUES, type ProjectOrderValue } from "@/lib/project-order";
 import { createSession, currentSessionId, destroySession, requireUser } from "@/lib/session";
 import { disconnectGoogleAccount, googleEnabled } from "@/lib/google";
 import { rateLimit } from "@/lib/rate-limit";
@@ -113,6 +115,17 @@ export async function updateCardStyle(style: "STRIPE" | "FILLED") {
     const cardStyle = z.enum(["STRIPE", "FILLED"]).parse(style);
     await db.user.update({ where: { id: user.id }, data: { cardStyle } });
     describeAction("Cambió el aspecto de las tarjetas a «{style}»", { style: { k: cardStyle === "STRIPE" ? "Franja a la izquierda" : "Tarjeta entera del color" } });
+  });
+}
+
+/** Orden de los proyectos en el selector de la barra lateral y en las listas: usados recientemente o alfabético. */
+export async function updateProjectOrder(order: ProjectOrderValue) {
+  return runAction({ name: "profile.updateProjectOrder", args: [order] }, async () => {
+    const user = await requireUser();
+    const projectOrder = z.enum(PROJECT_ORDER_VALUES).parse(order);
+    await db.user.update({ where: { id: user.id }, data: { projectOrder } });
+    describeAction("Cambió el orden de los proyectos a «{order}»", { order: { k: projectOrder === "RECENT" ? "Usados recientemente" : "Alfabético" } });
+    revalidatePath("/", "layout");
   });
 }
 
@@ -263,6 +276,7 @@ export async function revokeOtherSessions() {
     const where = { userId: user.id, ...(current ? { id: { not: current } } : {}) };
     const others = await db.session.findMany({ where, select: { id: true } });
     await db.session.deleteMany({ where });
+    await revokeOtherTrustedDevices(user.id);
     for (const s of others) cutSessionStreams(s.id);
     describeAction("Cerró {n} sesión(es) en otros dispositivos", { n: others.length });
     revalidatePath("/settings");
@@ -356,7 +370,8 @@ export async function deleteMyAccount(input: z.input<typeof deleteAccountSchema>
     const { toTeam, deleted } = await eraseUser(user.id, { self: true, deleteProjects: data.deleteProjects, actor: { id: user.id, name: me.name } });
     describeAction("«{name}» borró su cuenta{deleted}{toTeam}", {
       name: me.name,
-      deleted: !deleted.length ? "" : deleted.length === 1 ? { k: " y su proyecto privado «{project}»", p: { project: deleted[0]!.name } } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
+      deleted: !deleted.length ? "" : // Sin el nombre: el proyecto privado ya no existe y la fila no se enmascara en Logs (como deleteUser).
+      deleted.length === 1 ? { k: " y su proyecto privado" } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
       toTeam: !toTeam.length ? "" : toTeam.length === 1 ? { k: "; su proyecto privado «{project}» pasa a ser de equipo", p: { project: toTeam[0]!.name } } : { k: "; sus {n} proyectos privados pasan a ser de equipo", p: { n: toTeam.length } },
     });
     // Sus sesiones ya no existen: aquí solo queda quitar la cookie de este navegador.

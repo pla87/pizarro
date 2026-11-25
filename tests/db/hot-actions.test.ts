@@ -87,7 +87,10 @@ describe("moveTask", () => {
     const since = new Date();
     const { value: res, queries: q } = await counted(() => moveTask(a.id, f.columns.doing, p.id, n.id));
     counts.moveTaskAcross = q;
-    assert.deepEqual(expectOk(res), { position: 1500, spawned: [], assigned: [] });
+    // `undo`: la entrada del movimiento (el aviso «Asignada a…» lleva «Deshacer»).
+    const { undo, ...moved } = expectOk(res);
+    assert.deepEqual(moved, { position: 1500, spawned: [], assigned: [] });
+    assert.ok(undo?.id);
     const row = await db.task.findUniqueOrThrow({ where: { id: a.id } });
     assert.equal(row.columnId, f.columns.doing);
     assert.equal(row.position, 1500);
@@ -187,7 +190,7 @@ describe("moveTasks", () => {
     const data = expectOk(res);
     const next = await db.task.findFirstOrThrow({ where: { recurrenceFromId: b.id } });
     assert.deepEqual(norm({ ...data, spawned: data.spawned.map((s) => s.id) }, { ...fixtureNames(f), [a.id]: "A", [b.id]: "B", [next.id]: "NEXT" }), {
-      columnId: "DONE", moved: [{ id: "A", position: 3000 + STEP }, { id: "B", position: 3000 + 2 * STEP }], spawned: ["NEXT"], assigned: [],
+      columnId: "DONE", moved: [{ id: "A", position: 3000 + STEP }, { id: "B", position: 3000 + 2 * STEP }], spawned: ["NEXT"], assigned: [], undo: { id: "<id>" },
     });
     assert.deepEqual(normSorted(await traces(f.project.id, "tasks.moveTasks", since), { ...fixtureNames(f), [a.id]: "A", [b.id]: "B", [next.id]: "NEXT" }), {
       undo: [{ kind: "UNDO", label: "{\"k\":\"Movió {count} a «{col}»\",\"p\":{\"count\":{\"k\":\"{n} tareas\",\"p\":{\"n\":2}},\"col\":\"Hecho\"}}", ops: sorted([{ t: "task.set", id: "A", data: { columnId: "TODO", position: 1000, evergreen: false, evergreenEvery: 1 } }, { t: "task.set", id: "B", data: { columnId: "DOING", position: 1000, evergreen: false, evergreenEvery: 1 } }, { t: "task.remove", id: "NEXT" }]), taskId: null }],

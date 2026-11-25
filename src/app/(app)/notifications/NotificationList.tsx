@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
+import { bucketAnchor } from "@/lib/my-tasks";
 import { assignedBatchCount, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
 import { announceUnreadCount, latestOnly, restoreUnread } from "@/lib/unread-core";
 import { useToast } from "@/components/ui/Toast";
@@ -51,7 +52,7 @@ const readHere = new Set<string>();
  * `unreadTotal`: sin leer de verdad (contados en el servidor con tope `unreadCap`), no solo los cargados. A partir del
  * tope se dice «Más de 99 sin leer», como la insignia de la cabecera («99+»).
  */
-export function NotificationList({ items: initial, moreHref, unreadTotal, unreadCap }: { items: Item[]; moreHref: string | null; unreadTotal: number; unreadCap: number }) {
+export function NotificationList({ items: initial, moreHref, unreadTotal, unreadCap, overdueTasks = 0 }: { items: Item[]; moreHref: string | null; unreadTotal: number; unreadCap: number; overdueTasks?: number }) {
   const router = useRouter();
   const safeRefresh = useSafeRefresh();
   const t = useT();
@@ -165,7 +166,18 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div>
           <h1 className="text-xl font-semibold">{t("Avisos")}</h1>
-          <p className="text-sm text-slate-500">{many ? t("Más de 99 sin leer") : unread ? t("{n} sin leer", { n: unread }) : t("Estás al día.")}</p>
+          <p className="text-sm text-slate-500">
+            {many ? t("Más de 99 sin leer") : unread ? t("{n} sin leer", { n: unread }) : overdueTasks > 0 ? t("No tienes avisos nuevos") : t("Estás al día.")}
+            {/* Las vencidas no son avisos, pero «Estás al día» con tareas vencidas despistaba: se enlaza a su grupo de «Mis tareas». */}
+            {!many && !unread && overdueTasks > 0 && (
+              <>
+                {" · "}
+                <Link href={"/my-tasks#" + bucketAnchor("overdue")} className="font-medium text-brand-600 underline dark:text-brand-300" data-testid="overdue-tasks-link">
+                  {overdueTasks === 1 ? t("1 tarea vencida en Mis tareas") : t("{n} tareas vencidas en Mis tareas", { n: overdueTasks })}
+                </Link>
+              </>
+            )}
+          </p>
         </div>
         {unread > 0 && (
           <button

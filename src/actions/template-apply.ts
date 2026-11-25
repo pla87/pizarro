@@ -12,6 +12,7 @@ import { finishAssignOnEnter } from "@/lib/column-assign";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { localizeTemplate } from "@/lib/builtin-templates-en";
+import { CUSTOM_TEMPLATE_KEY } from "@/lib/builtin-templates";
 import { parseStoredTemplate, type TemplateData } from "@/lib/project-templates";
 import { requireUser } from "@/lib/session";
 import { listStartTemplates } from "@/lib/template-store";
@@ -68,11 +69,12 @@ function shapeOf(t: TemplateData): ApplyTemplateShape {
 }
 
 /** La plantilla elegida (de serie o propia), en el idioma de quien la aplica. */
-async function resolveRef(rawRef: unknown, locale: "es" | "en"): Promise<TemplateData> {
+async function resolveRef(rawRef: unknown, locale: "es" | "en"): Promise<TemplateData & { templateKey: string }> {
   const ref = refSchema.parse(rawRef);
   const row = await db.projectTemplate.findUnique({ where: { id: ref.id } });
   if (!row) throw new AppError("La plantilla ya no existe.");
-  return localizeTemplate(parseStoredTemplate(row), row.builtinKey, locale);
+  // `templateKey`: la que queda apuntada en el proyecto (Project.templateKey), la de serie o «custom».
+  return { ...localizeTemplate(parseStoredTemplate(row), row.builtinKey, locale), templateKey: row.builtinKey ?? CUSTOM_TEMPLATE_KEY };
 }
 
 /** Plantillas que se pueden aplicar al proyecto: las de serie de la instalación y las propias. */
@@ -118,7 +120,7 @@ export async function applyTemplateChange(projectId: string, ref: TemplateRef, m
     const data = await resolveRef(ref, locale);
     const parsedChoices = parsedMode === "REPLACE" ? choicesSchema.parse(choices ?? {}) : undefined;
     const { handedOver, ...result } = await withinChangeLimit(user.id, project.id, () => applyTemplateToProject({
-      projectId: project.id, userId: user.id, locale, templateName: data.name, template: shapeOf(data), mode: parsedMode, choices: parsedChoices,
+      projectId: project.id, userId: user.id, locale, templateName: data.name, templateKey: data.templateKey, template: shapeOf(data), mode: parsedMode, choices: parsedChoices,
     }));
     // Tareas unidas a una columna «Asignación a persona»: historial y un aviso a su persona (el deshacer es el del cambio).
     for (const h of handedOver ?? []) await finishAssignOnEnter(h, user.id, { undo: false });

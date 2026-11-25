@@ -42,7 +42,7 @@ export const releases: Record<string, string> = {
   "Release nº {number}. Sus tareas llevan el código R{number} + las letras de su tipo + su orden dentro del tipo (R{number}F1, R{number}F2, R{number}C1…).": "Release no. {number}. Its tasks get the code R{number} + their type's letters + their order within the type (R{number}F1, R{number}F2, R{number}C1…).",
   "Código de release: R{number} = release nº {number}; {letters} = letras del tipo; {order} = orden dentro del tipo": "Release code: R{number} = release no. {number}; {letters} = type letters; {order} = order within the type",
   // Generar release: qué hace (paso 1)
-  "Notas de versión en Markdown con estas tareas, agrupadas por tipo. Al marcarla como desplegada se guarda en el histórico y el título de cada tarea (salvo las fijas) pasa a empezar por su código, p. ej. «R{number}F1: …».": "Release notes in Markdown with these tasks, grouped by type. When you mark it as deployed, it is saved in the history and each task's title (except fixed ones) starts with its code, e.g. “R{number}F1: …”.",
+  "Notas de versión por tipo. Al desplegarla, va al histórico y cada tarea (salvo las fijas) pasa a empezar por su código: «R{number}F1: …».": "Release notes by type. Once deployed, it goes to the history and each task (except fixed ones) starts with its code: “R{number}F1: …”.",
 
   // Release: tareas que cambian de tipo mientras se preparaba (el código del título saldría del tipo nuevo)
   "Una de las tareas ha cambiado de tipo mientras tanto: vuelve a generar la release.": "One of the tasks has changed type in the meantime: generate the release again.",

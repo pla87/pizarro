@@ -96,8 +96,8 @@ export function buildAssignPlan<T extends { dueDate: string | null }>(tasks: rea
 }
 
 /** Líneas y caracteres del resumen de la descripción que lleva cada tarea del plan. */
-export const PLAN_SUMMARY_LINES = 6;
-export const PLAN_SUMMARY_CHARS = 400;
+const PLAN_SUMMARY_LINES = 6;
+const PLAN_SUMMARY_CHARS = 400;
 /** De cada descripción solo se lee (y se procesa) su comienzo: el resumen nunca llega más lejos. */
 export const PLAN_DESCRIPTION_READ = 4000;
 

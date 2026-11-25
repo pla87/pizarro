@@ -14,6 +14,17 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 66 (ya aplicadas):** ideas de la auditoría en esta ronda (arrastrar cabeceras de columna, roles
+según la plantilla con «Más roles…», «Organizar por personas» en Casa y familia); avisar antes de perder una plantilla a
+medio editar; línea en el historial con las subtareas que cambia el tipo; pruebas con base de datos en cada PR y en orden
+al azar (`--shuffle`); orden de los proyectos a elegir en el perfil («Usados recientemente» de serie, o «Alfabético»; sin
+«Orden manual»); «Descartar cambios» del pie del detalle pasa a «Deshacer todo» («Guardar» se queda); Railway con
+*Teardown* de 15 s (prueba y real); no se guarda aparte el inglés de las páginas vistas, no se rellenan los Logs anteriores
+a la v1.69 y la vista previa de «Importar tareas» no dice el tipo (las tres, NO); el email propio de un admin solo se cambia
+en Mi perfil; «Cerrar las demás sesiones» quita también «Recordar este dispositivo»; Logs enmascara los emails que no son
+de ninguna cuenta (también con Google) y enseña entero el de una cuenta atacada; tope diario a la prueba de WhatsApp de
+Integraciones; plantillas de serie «De serie» y con tipo por defecto; «Cambios técnicos» del Historial solo para admins.
+
 **Decisiones de la ronda 65 (ya aplicadas):** Historial de versiones con 10 versiones y «Ver más»; Mis tareas con línea de
 resumen; Logs también en inglés (`messageEn`); errores de extensiones fuera también en `client.window`; aviso por email del
 informe semanal rechazado; cambiar de tipo en el detalle sustituye las subtareas sin tocar, con Deshacer; tipo por defecto

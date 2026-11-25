@@ -3,26 +3,36 @@
 import { Info, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useT } from "@/i18n/client";
-import { replaceUrlKeepingState } from "@/lib/replace-url";
 
-/** Parámetro de la dirección con el que «Nuevo proyecto» abre el tablero de un proyecto recién creado desde una plantilla. */
-export const NEW_PROJECT_PARAM = "nuevo";
+/**
+ * Descripciones por enseñar, por proyecto: «Nuevo proyecto» (AppShell) apunta aquí la del que acaba de crear desde una
+ * plantilla y el tablero la recoge al abrirse (useProjectIntro). En memoria de la página: al recargar ya no sale.
+ * Antes iba en la dirección (`?nuevo=1`), y quitar el parámetro hacía que el primer refresco del tablero (crear una columna,
+ * un cambio en vivo) lo montara de nuevo: el aviso desaparecía solo y el tablero volvía al principio.
+ */
+const pendingIntro = new Map<string, string>();
+
+/** Enseña una vez la descripción del proyecto encima de sus columnas cuando se abra su tablero. */
+export function showProjectIntroOnce(projectId: string, description: string): void {
+  if (description.trim()) pendingIntro.set(projectId, description.trim());
+}
+
+/** La descripción por enseñar del proyecto (o ""): se lee al montar el tablero y se olvida, así sale una sola vez. */
+export function useProjectIntro(projectId: string): string {
+  const [text] = useState(() => pendingIntro.get(projectId) ?? "");
+  useEffect(() => {
+    pendingIntro.delete(projectId);
+  }, [projectId]);
+  return text;
+}
 
 /**
  * Descripción del proyecto encima de las columnas, en la primera visita tras crearlo desde una plantilla (antes solo se veía
- * en Ajustes del proyecto). Al montar se quita `?nuevo=1` de la dirección: al recargar (o al volver) ya no sale, y al
- * cerrarlo tampoco. Sin base de datos: es un aviso de una sola vez. El tablero guarda el texto al montar (Board): tras
- * quitar el parámetro, un refresco del tablero ya no lo trae y el aviso no debe desaparecer por eso.
+ * en Ajustes del proyecto). Sin base de datos: es un aviso de una sola vez, que se cierra con su X.
  */
 export function ProjectIntroNotice({ description }: { description: string }) {
   const t = useT();
   const [open, setOpen] = useState(true);
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has(NEW_PROJECT_PARAM)) return;
-    url.searchParams.delete(NEW_PROJECT_PARAM);
-    replaceUrlKeepingState(url);
-  }, []);
   if (!open || !description.trim()) return null;
   return (
     <div

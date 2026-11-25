@@ -32,3 +32,14 @@ test("addDays cruza meses y años", () => {
   assert.equal(addDays("2026-12-31", 1), "2027-01-01");
   assert.equal(addDays("2026-03-01", -1), "2026-02-28");
 });
+
+test("días del periodo personalizado: de hoy hacia atrás, escritos en el idioma de la interfaz (no en el del navegador)", async () => {
+  const { logDayOptions } = await import("../src/lib/log-range");
+  const es = logDayOptions("2026-11-24", 7, "es-ES");
+  assert.equal(es.length, 8);
+  assert.deepEqual(es[0], { value: "2026-11-24", label: "mar, 24 nov" });
+  assert.equal(es.at(-1)!.value, "2026-11-17");
+  assert.deepEqual(logDayOptions("2026-11-24", 1, "en-US"), [{ value: "2026-11-24", label: "Tue, Nov 24" }, { value: "2026-11-23", label: "Mon, Nov 23" }]);
+  // El cambio de hora no salta ni repite días (aritmética de calendario).
+  assert.deepEqual(logDayOptions("2026-10-26", 2, "es-ES").map((d) => d.value), ["2026-10-26", "2026-10-25", "2026-10-24"]);
+});

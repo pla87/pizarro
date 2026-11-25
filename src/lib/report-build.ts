@@ -311,7 +311,9 @@ export function generateChecklistPdf(
     const today = todayIso(appTimeZone());
     const groups = groupChecklist(data.items, opts.by, locale);
     const pdf = await renderPdf({ kind: "checklist", locale: opts.locale, input: { project: data.column.projectName, column: data.column.name, today, by: opts.by, groups } }, opts.signal);
-    return { pdf, filename: `${t("lista")}-${slugOf(data.column.name, t("columna"))}-${today}.pdf`, itemCount: data.items.length };
+    // Con el modo en el nombre, como el PDF de la semana: «lista-por-tarjeta-…» y «lista-por-tipo-…» no se pisan.
+    const mode = slugify(opts.by === "kind" ? t("por tipo") : t("por tarjeta"));
+    return { pdf, filename: `${t("lista")}-${mode}-${slugOf(data.column.name, t("columna"))}-${today}.pdf`, itemCount: data.items.length };
   })();
 }
 
@@ -337,7 +339,9 @@ export function generateWeekPlanPdf(
       today, opts.groupBy, t, locale,
     );
     const pdf = await renderPdf({ kind: "weekPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, today, weekStart: week.start, weekEnd: week.end, generatedBy: opts.generatedBy, groupBy: opts.groupBy, sections } }, opts.signal);
-    return { pdf, filename: `${t("semana")}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
+    // Con el modo en el nombre: los dos PDF del mismo día no se llaman igual («semana-por-dia-…», «week-by-person-…»).
+    const mode = slugify(opts.groupBy === "person" ? t("por persona") : t("por día"));
+    return { pdf, filename: `${t("semana")}-${mode}-${slugOf(column.name, t("columna"))}-${today}.pdf`, taskCount: tasks.length };
   })();
 }
 

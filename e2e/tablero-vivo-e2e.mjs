@@ -332,8 +332,8 @@ if (only.includes("capas")) {
     L.eq(`CAPAS ${label}: nada tapa los botones del diálogo`, await covered(page), []);
     // Ronda 65: la copia del botón de informar es solo de escritorio (con el menú cerrado no aparece flotando).
     L.eq(`CAPAS ${label}: sin copia flotante del botón de informar`, await page.locator("body > button[data-feedback-copy]").count(), 0);
-    // Sin cambios, «Descartar cambios» cierra sin preguntar.
-    await U.dialog(page).getByRole("button", { name: "Descartar cambios" }).tap();
+    // Sin cambios, «Deshacer todo» cierra sin preguntar.
+    await U.dialog(page).getByRole("button", { name: "Deshacer todo" }).tap();
     await U.dialog(page).waitFor({ state: "detached" });
     L.eq(`CAPAS ${label}: al cerrarla vuelven`, await page.locator("button[aria-label='Nueva tarea o captura']:visible").count(), 1);
     await s.ctx.close();

@@ -90,12 +90,12 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
   // Tareas de copia que terminan sin hacer nada (y JobRun las da por correctas): se dice por qué, en vez de «Correcta».
   // El motivo lo anota la propia tarea (JobRun, `skipped`); las filas de versiones anteriores lo deducen de la configuración.
   const skipText: Record<string, string> = {
-    noKey: t("Omitida: sin BACKUP_KEY"),
-    paused: t("Omitida: BACKUP_PAUSE"),
+    noKey: t("Omitida: las copias no están activadas"),
+    paused: t("Omitida: copias en pausa"),
     noDestination: t("Omitida: sin destino externo"),
-    alreadyToday: t("Omitida: ya hay una copia de las últimas 23 h"),
+    alreadyToday: t("Omitida: ya se hizo una hace menos de un día"),
     noBackup: t("Omitida: aún no hay ninguna copia"),
-    notThisMonth: t("Omitida: no toca este mes"),
+    notThisMonth: t("Omitida: se hace una vez al mes"),
     retryTomorrow: t("Omitida: se repite mañana"),
   };
   const jobSkipped = (j: JobRunInfo): string | null => {
@@ -103,8 +103,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
     const name = j.name;
     const backupJob = name === "backup" || name === "backupExternal" || name === "restoreTest" || name === "backupAlert";
     if (!backupJob) return null;
-    if (keyState !== "ok") return t("Omitida: sin BACKUP_KEY");
-    if (paused && name !== "backupAlert") return t("Omitida: BACKUP_PAUSE");
+    if (keyState !== "ok") return skipText.noKey!;
+    if (paused && name !== "backupAlert") return skipText.paused!;
     if (name === "backupExternal" && destinations.external.length === 0 && destinations.errors.length === 0) return t("Omitida: sin destino externo");
     return null;
   };
@@ -222,7 +222,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
         <h2 className="text-lg font-semibold">{t("Copias de seguridad")}</h2>
         <p className="flex items-center gap-1 text-sm text-slate-500">
           {t("Cada día, la base de datos y los ficheros, cifrados. Se conservan 14 diarias y 6 mensuales.")}
-          <InfoTip topic={t("Copias de seguridad")}>{t("Comprimidas y cifradas (AES-256) en la carpeta backups del volumen y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez: cada copia solo añade los nuevos.")}</InfoTip>
+          <InfoTip topic={t("Copias de seguridad")}>{t("Comprimidas y cifradas, en el disco de este servidor y, si está configurado, en un destino externo. Los ficheros se guardan una sola vez: cada copia solo añade los nuevos.")}</InfoTip>
         </p>
       </div>
 
@@ -272,7 +272,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
                   ? t("La última copia subida correctamente al destino externo es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
                   : alert.lastAt
                     ? t("La última copia correcta es del {date}, hace más de 48 horas.", { date: formatDate(alert.lastAt, "dateTime", locale) })
-                    : t("Todavía no hay ninguna copia correcta, aunque BACKUP_KEY está configurada.")}
+                    : t("Todavía no hay ninguna copia correcta, aunque las copias están activadas.")}
             </p>
             <p className="mt-1">{t("Revisa los Logs (categoría sistema) por si hay algún error y prueba «Crear copia ahora».")}</p>
           </div>
@@ -282,7 +282,10 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
       {enabled && paused ? (
         <p role="alert" className="card flex items-start gap-2 p-3 text-sm text-amber-700 dark:text-amber-300">
           <ShieldAlert size={16} className="mt-0.5 shrink-0" />
-          <span>{t("Copias automáticas en pausa (BACKUP_PAUSE=1): no se hacen la copia diaria, la subida al destino externo ni la prueba de restauración. Quita la variable cuando termines de restaurar.")}</span>
+          <span>
+            {t("Copias automáticas en pausa: no se hacen la copia diaria, la subida al destino externo ni la prueba de restauración. Vuelven cuando quien instaló Pizarro quite la pausa.")}{" "}
+            <InfoTip topic={t("Para quien instala")}>{t("La pausa es la variable BACKUP_PAUSE=1 (p. ej. mientras se restaura una copia). Quítala y reinicia cuando termines.")}</InfoTip>
+          </span>
         </p>
       ) : enabled && destinations.external.length === 0 ? (
         // Sin destino externo, un solo estado en ámbar (no «activadas» en verde con el aviso debajo): las copias se hacen,
@@ -299,8 +302,11 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           <ShieldAlert size={16} className="mt-0.5 shrink-0" />
           <span>
             {keyState === "invalid"
-              ? keyProblemText(keyProblem, t)
-              : t("Las copias de seguridad están desactivadas: define la variable BACKUP_KEY (openssl rand -base64 32) y reinicia.")}
+              ? t("Las copias de seguridad están desactivadas: la clave con la que se cifran no es válida. Avisa a quien instaló Pizarro.")
+              : t("Las copias de seguridad están desactivadas: falta la clave con la que se cifran. Quien instaló Pizarro debe configurarla y reiniciar.")}{" "}
+            <InfoTip topic={t("Para quien instala")}>
+              {keyState === "invalid" ? keyProblemText(keyProblem, t) : t("Define la variable BACKUP_KEY (openssl rand -base64 32) y reinicia. Guárdala también fuera del servidor: sin ella no se pueden abrir las copias.")}
+            </InfoTip>
           </span>
         </p>
       )}
@@ -317,14 +323,19 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
               <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
                 <Download size={16} /> {t("Descargar")}
               </button>
-              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: se abre con la BACKUP_KEY. Para restaurar una copia completa se usa node dist/restore.mjs (pasos en «Restaurar» de la guía de instalación, en getpizarro.com).")}</InfoTip>
+              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: para abrirla hace falta la clave de las copias. Restaurar una copia completa lo hace quien instaló Pizarro, con los pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).")}</InfoTip>
             </>
           )}
         </div>
-        <p className="text-xs text-slate-500">
+        <p className="flex items-center gap-1 text-xs text-slate-500">
           {destinations.local.files
-            ? t("Destino local: {dir}, con los ficheros.", { dir: destinations.local.label })
-            : t("Destino local: {dir}, solo la base de datos (BACKUP_LOCAL_FILES=0: los ficheros van solo al destino externo).", { dir: destinations.local.label })}
+            ? t("Se guardan en el disco de este servidor, con la base de datos y los ficheros.")
+            : t("Se guardan en el disco de este servidor solo con la base de datos: los ficheros van al destino externo.")}
+          <InfoTip topic={t("Para quien instala")}>
+            {destinations.local.files
+              ? t("Carpeta {dir}.", { dir: destinations.local.label })
+              : t("Carpeta {dir}. Los ficheros no se guardan aquí porque hay un destino externo (o por BACKUP_LOCAL_FILES=0); con BACKUP_LOCAL_FILES=1 se guardan también aquí.", { dir: destinations.local.label })}
+          </InfoTip>
         </p>
       </section>
 
@@ -340,10 +351,13 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
           destinations.errors.length === 0 && (
             // Instrucciones en gris: el aviso (copias solo en el disco de este servidor) ya va destacado arriba, una sola vez.
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              {t("Ninguno configurado. Para tener las copias fuera de este servidor, configura un almacenamiento S3 compatible (BACKUP_S3_*) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}{" "}
-              {platform === "railway" && <>{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}{" "}</>}
-              {platform === "render" && <>{t("En Render: añade las variables BACKUP_S3_* en Environment del servicio de Pizarro y guarda con redespliegue.")}{" "}</>}
-              {platform === "fly" && <>{t("En Fly.io: guarda las variables BACKUP_S3_* con fly secrets set (la máquina se reinicia con los valores nuevos).")}{" "}</>}
+              {t("Ninguno. Para tener las copias también fuera de este servidor (por si se pierde su disco), quien instaló Pizarro puede añadir un almacenamiento en la nube o un disco externo.")}{" "}
+              <InfoTip topic={t("Para quien instala")}>
+                {t("Un almacenamiento S3 compatible (variables BACKUP_S3_*: R2, B2, MinIO…) o una carpeta montada (BACKUP_EXTERNAL_DIR).")}
+                {platform === "railway" && <>{" "}{t("En Railway: añade las variables BACKUP_S3_* en Variables del servicio de Pizarro y vuelve a desplegar.")}</>}
+                {platform === "render" && <>{" "}{t("En Render: añade las variables BACKUP_S3_* en Environment del servicio de Pizarro y guarda con redespliegue.")}</>}
+                {platform === "fly" && <>{" "}{t("En Fly.io: guarda las variables BACKUP_S3_* con fly secrets set (la máquina se reinicia con los valores nuevos).")}</>}
+              </InfoTip>{" "}
               <a href={installSectionUrl("backups", lang)} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t("Guía de instalación")}</a>
             </p>
           )
@@ -379,7 +393,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
               : status.lastRestoreTest.limit === "createdb"
                 ? t("Solo se descifró y se comprobó la copia: el usuario de la base de datos no puede crear bases de datos para restaurarla en una temporal.")
                 : t("Solo se descifró y se comprobó la copia.")}
-            {status.lastRestoreTest.objectsChecked !== undefined && ` ${t("Ficheros comprobados en los destinos: {n} (descifrados de muestra: {m}).", { n: status.lastRestoreTest.objectsChecked, m: status.lastRestoreTest.objectsSampled ?? 0 })}`}
+            {status.lastRestoreTest.objectsChecked !== undefined && ` ${t("Ficheros comprobados en los destinos: {n}, y {m} abiertos de muestra para ver que se leen bien.", { n: status.lastRestoreTest.objectsChecked, m: status.lastRestoreTest.objectsSampled ?? 0 })}`}
           </p>
         )}
       </section>

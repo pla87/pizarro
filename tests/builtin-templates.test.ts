@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, isBuiltinModified, RETIRED_BUILTINS } from "../src/lib/builtin-templates";
+import { BUILTIN_KEYS, BUILTIN_TEMPLATES, canonicalTemplate, comparable, CUSTOM_TEMPLATE_KEY, isBuiltinModified, knownTemplateKey, RETIRED_BUILTINS, suggestedColumnRoles } from "../src/lib/builtin-templates";
+import { currentRoleChoice, GENERAL_ROLE_CHOICES, ROLE_CHOICES, splitRoleChoices, type ColumnRoleChoice } from "../src/lib/column-role-choices";
 import { canonicalTemplateEn } from "../src/lib/builtin-templates-en";
 import { COLUMN_ROLES, UNIQUE_COLUMN_ROLES } from "../src/lib/constants";
 import { buildTemplateApplication, parseStoredTemplate, sortTemplates, templateInputSchema } from "../src/lib/project-templates";
@@ -210,4 +211,78 @@ test("roles retirados (Agenda, Entrega al cliente): ninguna plantilla de serie l
   });
   assert.deepEqual(old.columns.map((c) => c.role), ["NONE", "NONE", "NONE"]);
   assert.ok(!(COLUMN_ROLES as readonly string[]).includes("AGENDA") && !(COLUMN_ROLES as readonly string[]).includes("DELIVERY"), "ya no están en el enum (v1.69)");
+});
+
+test("roles sugeridos por plantilla: claves de serie, propias y sin plantilla", () => {
+  // Cada plantilla de serie tiene su lista, con los roles que ya usan sus columnas (lo que trae no sale en «Más roles…»).
+  for (const b of BUILTIN_TEMPLATES) {
+    const list = suggestedColumnRoles(b.key, []);
+    assert.ok(list, b.key);
+    for (const c of b.data.columns) if (c.role !== "NONE") assert.ok(list.includes(c.role as ColumnRoleChoice), `${b.key}: ${c.role}`);
+  }
+  const casa = suggestedColumnRoles("casa-familia", [])!;
+  assert.ok(!casa.includes("NEXT_RELEASE") && !casa.includes("AI_PLAN") && casa.includes("ASSIGN"));
+  // Sin plantilla conocida: todos (null).
+  assert.equal(suggestedColumnRoles(null, []), null);
+  assert.equal(suggestedColumnRoles("ya-no-existe", []), null);
+  // Claves heredadas de Object (un .pizarro.zip fabricado con «constructor»): sin plantilla, no un fallo del tablero.
+  for (const k of ["constructor", "tostring", "hasownproperty", "__proto__"]) assert.equal(suggestedColumnRoles(k, []), null, k);
+  assert.equal(suggestedColumnRoles("toString", []), null);
+  // Al importar solo se guarda una clave conocida.
+  assert.equal(knownTemplateKey("casa-familia"), "casa-familia");
+  assert.equal(knownTemplateKey(CUSTOM_TEMPLATE_KEY), CUSTOM_TEMPLATE_KEY);
+  assert.equal(knownTemplateKey("constructor"), null);
+  assert.equal(knownTemplateKey(undefined), null);
+  // Propia: los de sus columnas más los generales.
+  const own = suggestedColumnRoles(CUSTOM_TEMPLATE_KEY, [{ role: "BUDGET" }, { role: "NONE", assigneeId: "u1" }])!;
+  assert.deepEqual(own, ROLE_CHOICES.filter((r) => [...GENERAL_ROLE_CHOICES, "BUDGET"].includes(r)));
+});
+
+test("el submenú del rol: sugeridos primero, el resto en «Más roles…» y nunca se esconde el actual", () => {
+  assert.deepEqual(splitRoleChoices(null, null), { first: [...ROLE_CHOICES], more: [] });
+  const { first, more } = splitRoleChoices(["WAITING", "ASSIGN"], "NEXT_RELEASE");
+  assert.deepEqual(first, ["NEXT_RELEASE", "WAITING", "ASSIGN"]);
+  assert.equal(first.length + more.length, ROLE_CHOICES.length);
+  assert.ok(!more.includes("NEXT_RELEASE"));
+  assert.equal(currentRoleChoice({ role: "NONE", assign: true }), "ASSIGN");
+  assert.equal(currentRoleChoice({ role: "NONE", assign: false }), null);
+});
+
+test("tipo por defecto de las columnas: un tipo de la misma plantilla, el mismo en inglés, y cuenta para «modificada»", () => {
+  const withDefault: string[] = [];
+  for (const b of BUILTIN_TEMPLATES) {
+    const es = canonicalTemplate(b.key)!;
+    const en = canonicalTemplateEn(b.key)!;
+    es.columns.forEach((c, i) => {
+      const enDefault = en.columns[i]!.defaultKind ?? null;
+      if (!c.defaultKind) return assert.equal(enDefault, null, `${b.key}: «${en.columns[i]!.name}» con tipo por defecto solo en inglés`);
+      withDefault.push(`${b.key}/${c.name}`);
+      const k = es.kinds.findIndex((x) => x.name === c.defaultKind);
+      assert.ok(k >= 0, `${b.key}/${c.name}: «${c.defaultKind}» no es un tipo de la plantilla`);
+      assert.equal(enDefault, en.kinds[k]!.name, `${b.key}/${c.name}: en inglés, el mismo tipo`);
+      // Lo que llega de la base de datos lo conserva.
+      assert.equal(templateInputSchema.parse(JSON.parse(JSON.stringify(es))).columns[i]!.defaultKind, c.defaultKind);
+    });
+  }
+  // Los casos claros (Eventos y viajes, como pide la v1.69) y ninguno donde no hay un tipo evidente.
+  for (const c of ["eventos-viajes/Por confirmar", "eventos-viajes/Reservado", "eventos-viajes/Lista del día y maleta", "casa-familia/Lista de la compra"]) assert.ok(withDefault.includes(c), c);
+  assert.ok(!withDefault.some((c) => c.startsWith("vibecoding/") || c.startsWith("trabajo-clientes/")), withDefault.join(", "));
+  const canon = canonicalTemplate("eventos-viajes")!;
+  assert.equal(canon.columns.find((c) => c.name === "Por confirmar")!.defaultKind, "Proveedor");
+  assert.equal(canon.columns.find((c) => c.name === "Lista del día y maleta")!.defaultKind, "Maleta y material");
+  // Cambiar o quitar el tipo por defecto de una columna es modificar la plantilla (si no, «Restablecer» no lo deshacía y
+  // una versión nueva lo pisaba). Una plantilla sin ninguno conserva la huella de antes (las retiradas siguen valiendo).
+  assert.equal(isBuiltinModified({ ...canon, columns: canon.columns.map((c) => ({ ...c, defaultKind: null })) }, "eventos-viajes"), true);
+  assert.equal(isBuiltinModified({ ...canon, columns: canon.columns.map((c, i) => (i === 0 ? { ...c, defaultKind: "Invitados" } : c)) }, "eventos-viajes"), true);
+  const vibe = canonicalTemplate("vibecoding")!;
+  assert.ok(!comparable(vibe).includes("defaults"));
+});
+
+test("los textos de las plantillas de serie no hablan de roles retirados (la agenda, la entrega al cliente)", () => {
+  for (const b of BUILTIN_TEMPLATES) {
+    for (const t of [canonicalTemplate(b.key)!, canonicalTemplateEn(b.key)!]) {
+      assert.doesNotMatch(t.description, /\bagenda\b|entrega al cliente|client delivery/i, b.key);
+      for (const k of t.kinds) assert.doesNotMatch(`${k.descriptionTemplate} ${k.subtaskTemplate.join(" ")}`, /\bagenda\b|entrega al cliente|client delivery/i, `${b.key}/${k.name}`);
+    }
+  }
 });

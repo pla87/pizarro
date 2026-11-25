@@ -147,7 +147,7 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
   const project = await db.project.findUnique({
     where: { id: projectId },
     select: {
-      name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true, programVersion: true,
+      name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true, programVersion: true, templateKey: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
       releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
       columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKindId: true, defaultKind: { select: { name: true } } } },
@@ -458,6 +458,7 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
       googleShareMode: (project.googleShareMode as ProjectExportData["project"]["googleShareMode"]) ?? null,
       storageQuotaMb: project.storageQuotaMb,
       programVersion: project.programVersion,
+      ...(project.templateKey ? { templateKey: project.templateKey } : {}),
     },
     reportSchedule: project.reportSchedule,
     releaseTemplates: project.releaseTemplates.map((r) => ({ kind: r.kind, name: r.name, content: r.content, position: r.position, createdAt: iso(r.createdAt) })),

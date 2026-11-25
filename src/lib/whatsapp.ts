@@ -38,7 +38,7 @@ export function sendWhatsappCode(cfg: WhatsappConfig, to: string, code: string, 
  * estado de Telegram. Sin él, con un token temporal de 24 h, Integraciones seguía diciendo «Activo» y cada aviso fallaba
  * solo en Logs. Lo borra el siguiente envío que sale bien (un aviso, un código o «Probar») o guardar otro token.
  */
-export interface WhatsappAuthError { message: string; at: string }
+interface WhatsappAuthError { message: string; at: string }
 const AUTH_GLOBAL = "__pizarroWhatsappAuth";
 const authSlot = () => globalThis as unknown as Record<string, WhatsappAuthError | null | undefined>;
 export function whatsappAuthError(): WhatsappAuthError | null {

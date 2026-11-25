@@ -55,3 +55,17 @@ test("PDF: la cabecera dice la semana de lunes a domingo, no el día en que se d
   assert.ok(!es.includes("31 oct"));
   assert.ok((await text("en")).includes("Week of Oct 26 to Nov 1"));
 });
+
+test("PDF por persona: una tarea sin fecha límite dice «Sin fecha» en su columna Fecha (no una celda que parece vacía)", async () => {
+  const today = "2026-10-27";
+  const week = weekBoundsIso(today);
+  const text = async (locale: "es" | "en") => {
+    const sections = buildWeekPlan(tasks, today, "person", makeT(locale), intlLocale(locale));
+    const pdf = await renderInWorker({ kind: "weekPlan", locale, input: { project: "Proyecto", column: "Semana", today, weekStart: week.start, weekEnd: week.end, generatedBy: "Ana", groupBy: "person", sections } });
+    return pdfRuns(pdf).join("").replace(/\s+/g, " ");
+  };
+  const es = await text("es");
+  // «Sin fecha» es también el título de la tarea de prueba: la celda es la segunda vez que sale.
+  assert.equal(es.split("Sin fecha").length - 1, 2, es);
+  assert.ok((await text("en")).includes("No date"));
+});

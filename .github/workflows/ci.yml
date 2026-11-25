@@ -1,9 +1,9 @@
-# Comprobaciones básicas en cada PR contra main (también las de Dependabot): tipos, lint, pruebas unitarias y
-# traducciones. No necesita base de datos ni secretos; las pruebas con base (`npm run test:db`), el build de producción
-# y las e2e se siguen pasando en local antes de fusionar (docs/HANDOFF.md §4).
+# Comprobaciones en cada PR contra main (también las de Dependabot): tipos, lint, pruebas unitarias y traducciones, y
+# en otro job las pruebas con base (`npm run test:db`, en un PostgreSQL 16 del propio runner, en orden al azar). Sin
+# secretos. El build de producción y las e2e se siguen pasando en local antes de fusionar (docs/HANDOFF.md §4).
 # Sin pasada al hacer push a main: la de la PR prueba su mezcla con el main de ese momento. Si main avanza después
 # (otra PR fusionada), el main que resulta no lo ha probado nadie: «Update branch» en la PR repite la pasada, y la release
-# (.github/workflows/release.yml) vuelve a pasar estas comprobaciones sobre el commit que publica antes de etiquetar
+# (.github/workflows/release.yml) vuelve a pasar las del job «checks» (no las de base) sobre el commit que publica antes de etiquetar
 # nada. A mano: Actions → Comprobaciones → Run workflow.
 name: Comprobaciones
 
@@ -71,3 +71,43 @@ jobs:
             docker run --rm -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" -e DOMAIN="$domain" "$image" \
               caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           done
+
+  db:
+    # Las pruebas con PostgreSQL (tests/db/), con los ficheros en orden al azar (--shuffle): así salen las pruebas que
+    # solo pasan por el orden. Si falla, el log dice la semilla para repetirlo en local (npm run test:db -- --shuffle=N).
+    name: Pruebas con base de datos
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Solo el servidor: test:db crea y borra sus propias bases pizarro_test_*.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Cliente de Prisma
+        run: npx prisma generate
+
+      - name: Pruebas con base de datos (orden al azar)
+        run: npm run test:db -- --shuffle
+

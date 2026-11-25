@@ -24,6 +24,7 @@ import { initialsOf } from "@/lib/graphemes";
 import type { RecurrenceRule } from "@/lib/recurrence-date";
 import { recurrenceLabel } from "@/components/board/recurrence-ui";
 import { actionThrowResult } from "@/lib/stale-action";
+import { undoneText } from "@/components/undo-text";
 
 export interface CalendarTask {
   id: string;
@@ -168,18 +169,23 @@ const STATUS_BAR: Record<DeliverableStatus, string> = {
 const initials = (name: string) => initialsOf(name, "firstTwo");
 
 /**
- * Siglas del proyecto en una tarjeta del calendario (con varios proyectos a la vista). Al pasar el ratón por ellas sale
- * el nombre del proyecto (`title`, antes solo lo tenían algunas vistas), y el lector de pantalla lee el nombre, no las
- * siglas (texto oculto: un `aria-label` en un <span> sin rol no siempre se lee).
+ * Siglas del proyecto en una tarjeta del calendario (con varios proyectos a la vista). Van en un cuadro de esquinas
+ * rectas con borde (PROJECT_TAG), no en un círculo como las iniciales de una persona: «PP» puede ser «Proyecto de
+ * prueba» o «Persona Prueba». Al pasar el ratón por ellas sale «Proyecto: …» (`title`), y el lector de pantalla lee el
+ * nombre, no las siglas (texto oculto: un `aria-label` en un <span> sin rol no siempre se lee).
  */
 function ProjectTag({ name }: { name: string }) {
+  const t = useT();
   return (
-    <span className="shrink-0 rounded bg-white/60 px-1 text-[10px] font-semibold leading-4 dark:bg-black/30" title={name}>
+    <span className={PROJECT_TAG} title={t("Proyecto: {name}", { name })}>
       <span aria-hidden>{initials(name)}</span>
       <span className="sr-only">{name}</span>
     </span>
   );
 }
+
+/** Forma de las siglas de proyecto (también en la leyenda): cuadro de esquinas rectas con borde. */
+const PROJECT_TAG = "shrink-0 rounded-none border border-current/40 bg-white/60 px-0.5 text-[10px] font-semibold leading-[14px] dark:bg-black/30";
 
 /** Casilla de las opciones del filtro de proyectos. */
 function CheckBox({ on }: { on: boolean }) {
@@ -451,7 +457,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
       if (!res.ok) return toast(res.error, "error");
       setOverrides((o) => ({ ...o, [last.taskId]: last.from }));
       setLast(null);
-      toast(t("Deshecho: {label}", { label: res.data.label }), "undo");
+      toast(undoneText(t, res.data), "undo");
       safeRefresh();
     } finally {
       setUndoing(false);
@@ -879,7 +885,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           onKeyDown={(e) => onBandKey(e, "del", b.id)}
                           aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight"
                           style={{ gridColumn: `${b.colStart} / ${b.colEnd + 1}` }}
-                          title={`${d.name} · ${showProject ? `${d.projectName} · ` : ""}${t("{done} de {total} tareas", { done: d.done, total: d.total })} · ${t(status)}`}
+                          title={`${t("Entregable: {name}", { name: d.name })} · ${showProject ? `${d.projectName} · ` : ""}${t("{done} de {total} tareas", { done: d.done, total: d.total })} · ${t(status)}`}
                           className={cn(
                             "relative flex h-5 min-w-0 cursor-grab touch-pan-y select-none items-center [-webkit-touch-callout:none] data-held:z-10 data-held:ring-2 data-held:ring-brand-500 gap-1 overflow-hidden border px-1.5 text-[11px] leading-5 outline-offset-1 hover:brightness-95 focus-visible:outline-3 focus-visible:outline-focus",
                             preview?.id === b.id && "z-10 opacity-80 ring-2 ring-brand-500",
@@ -892,6 +898,8 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
                           {b.endsHere && <Flag size={11} className="relative shrink-0" aria-hidden />}
                           <span dir="auto" className="relative truncate font-medium">{d.name}</span>
                           <span className="relative ml-auto shrink-0 tabular-nums">{d.total ? `${d.done}/${d.total}` : t(status)}</span>
+                          {/* El estado también para el lector de pantalla (a la vista solo lo dice el color). */}
+                          {d.total > 0 && <span className="sr-only">{` · ${t(status)}`}</span>}
                         </Link>
                       );
                     })}
@@ -1053,6 +1061,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
           {t("Arrastra tareas, rangos y entregables para cambiar sus fechas.")}
           <InfoTip topic={t("Calendario")}>{t("En un rango, arrastra también sus bordes. Con el teclado: Alt+←/→ lo mueve y Alt+Mayús+←/→ cambia su fin.")}</InfoTip>
         </p>
+        <CalendarLegend className="mt-1" projects={showProject} deliverables={dels.length > 0} />
         {repeats.length > 0 && <RepeatLegend className="mt-1" />}
         {preview && (
           <div ref={labelRef} className="pointer-events-none fixed left-0 top-0 z-50 rounded bg-slate-900 px-2 py-1 text-xs text-white shadow-lg dark:bg-slate-100 dark:text-slate-900" role="status">
@@ -1115,6 +1124,7 @@ export function CalendarView({ month, today, weeks, tasks, overdue, repeats, del
             </div>
           </section>
         ))}
+        {!mobileEmpty && <CalendarLegend projects={showProject} deliverables={dels.length > 0} />}
         {repeats.length > 0 && !mobileEmpty && <RepeatLegend />}
       </div>
     </div>
@@ -1179,6 +1189,31 @@ function mobileTodayRow(today: string, always = false): HTMLElement | null {
   const target = days.find((el) => (el.dataset.mobileDay ?? "") >= today);
   if (always) return target ?? days.at(-1) ?? null;
   return !target || target === days[0] ? null : target;
+}
+
+/**
+ * Qué son las siglas en cuadro (el proyecto, con varios a la vista) y las franjas con bandera (entregables), solo si hay
+ * alguna a la vista. Una línea corta; el detalle de cada una, al pasar el ratón.
+ */
+function CalendarLegend({ projects, deliverables, className }: { projects: boolean; deliverables: boolean; className?: string }) {
+  const t = useT();
+  if (!projects && !deliverables) return null;
+  return (
+    <p data-calendar-legend className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500", className)}>
+      {projects && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className={PROJECT_TAG} aria-hidden>AB</span>
+          {t("Siglas del proyecto")}
+        </span>
+      )}
+      {deliverables && (
+        <span className="inline-flex items-center gap-1.5">
+          <Flag size={12} className="shrink-0" aria-hidden />
+          {t("Entregable: tareas hechas de su total; el color indica si va en plazo")}
+        </span>
+      )}
+    </p>
+  );
 }
 
 /** Leyenda de las apariciones previstas (solo si hay alguna a la vista). */

@@ -11,7 +11,7 @@ import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/l
 import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
 import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
-import { listKinds } from "@/lib/board";
+import { listKinds, projectUsers } from "@/lib/board";
 import { logText } from "@/lib/log";
 import { COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
@@ -59,6 +59,76 @@ export async function createColumn(projectId: string, name: string) {
   });
 }
 
+/**
+ * «Organizar por personas» (proyectos de «Casa y familia»): una columna «Asignación a persona» por cada persona que puede
+ * tener tareas del proyecto y aún no tiene la suya, con su nombre y sin plazo, al final del tablero. Nacen vacías (no entra
+ * ninguna tarea: nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer.
+ */
+export async function createPersonColumns(projectId: string) {
+  return runAction({ name: "columns.createPersonColumns", args: [projectId] }, async (): Promise<BoardColumn[]> => {
+    const user = await requireUser();
+    const id = v.id.parse(projectId);
+    await assertProjectAccess(user, id);
+    const project = await db.project.findUniqueOrThrow({ where: { id }, select: { isPrivate: true } });
+    const people = await projectUsers(id, project);
+    const created = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(id)}))`;
+      const columns = await tx.column.findMany({ where: { projectId: id }, select: { assigneeId: true, position: true } });
+      const taken = new Set(columns.flatMap((c) => (c.assigneeId ? [c.assigneeId] : [])));
+      const missing = people.filter((p) => !taken.has(p.id));
+      if (!missing.length) return [];
+      if (columns.length + missing.length > 30) throw new AppError("Máximo 30 columnas por proyecto.");
+      let pos = Math.max(0, ...columns.map((c) => c.position));
+      const rows: BoardColumn[] = [];
+      for (const p of missing) {
+        rows.push(await tx.column.create({ data: { projectId: id, name: v.name.parse(p.name.slice(0, 80).trim() || "?"), position: (pos += POSITION_STEP), assigneeId: p.id }, select: columnSelect }));
+      }
+      return rows;
+    });
+    if (!created.length) return created;
+    addUndo(...created.map((c) => ({ t: "column.remove" as const, id: c.id })));
+    describeAction(created.length === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n: created.length }, {});
+    return created;
+  });
+}
+
+/**
+ * Lleva la columna a la posición `index` (0 = la primera), al arrastrar su cabecera. Como moveColumn: con el bloqueo de
+ * las columnas del proyecto, renumeradas y un solo paso de deshacer.
+ */
+/**
+ * Soltar la cabecera de una columna sobre otra (`overColumnId`): ocupa su sitio, detrás de ella si viene de la izquierda
+ * y delante si viene de la derecha. Se manda la columna de destino y no un índice: si otra persona ha creado, borrado o
+ * movido columnas y el tablero aún no lo ha recibido, la columna acaba igualmente junto a la que se veía.
+ */
+export async function placeColumn(columnId: string, overColumnId: string) {
+  return runAction({ name: "columns.placeColumn", args: [columnId, overColumnId] }, async () => {
+    const column = await findColumn(columnId);
+    const overId = v.id.parse(overColumnId);
+    const moved = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
+      const columns = await tx.column.findMany({ where: { projectId: column.projectId }, orderBy: COLUMN_ORDER, select: { id: true, position: true } });
+      const from = columns.findIndex((c) => c.id === columnId);
+      const target = columns.findIndex((c) => c.id === overId);
+      // En su sitio, o una de las dos borrada entretanto (o de otro proyecto): nada que mover, ni que deshacer, ni que anotar.
+      if (from < 0 || target < 0 || from === target) return null;
+      const order = columns.filter((c) => c.id !== columnId);
+      order.splice(target, 0, columns[from]!);
+      for (const [i, c] of order.entries()) {
+        const position = (i + 1) * POSITION_STEP;
+        if (c.position !== position) await tx.column.update({ where: { id: c.id }, data: { position }, select: { id: true } });
+      }
+      return { before: columns, order, target };
+    });
+    if (!moved) return;
+    // Solo las que han cambiado de posición: deshacer no devuelve a su sitio columnas que otra persona mueva después.
+    const placed = new Map(moved.order.map((c, i) => [c.id, (i + 1) * POSITION_STEP]));
+    const changed = moved.before.filter((c) => placed.get(c.id) !== c.position);
+    addUndo(...changed.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
+    describeAction("Movió la columna «{name}» a la posición {n}", { name: column.name, n: moved.target + 1 });
+  });
+}
+
 export async function renameColumn(columnId: string, name: string) {
   return runAction({ name: "columns.renameColumn", args: [columnId, name] }, async () => {
     const column = await findColumn(columnId);
@@ -93,6 +163,8 @@ type FoundColumn = Awaited<ReturnType<typeof findColumn>>;
 async function changeColumnRole<R = undefined>(
   column: FoundColumn, value: ColumnRoleValue, assign: { assigneeId: string; dueDays: number | null } | null,
   inside?: (tx: Prisma.TransactionClient) => Promise<R>,
+  /** Nombre nuevo de la columna, en el mismo paso (y el mismo deshacer): el de la persona de «Asignación a persona». */
+  rename?: string,
 ): Promise<{ costEnabled: boolean; inside?: R }> {
   const columnId = column.id;
   // Si la columna deja de ser «Esperando» o «Rutinas», se borra su plazo de espera o su destino (y el deshacer los devuelve).
@@ -130,6 +202,7 @@ async function changeColumnRole<R = undefined>(
         ...(clearWaiting ? { waitingDays: column.waitingDays } : {}),
         ...(clearRoutine ? { routineTargetColumnId: column.routineTargetColumnId } : {}),
         ...(assignChanged ? { assigneeId: column.assigneeId, assignDueDays: column.assignDueDays } : {}),
+        ...(rename ? { name: column.name } : {}),
       },
       ...(enablesCost ? { costOff: true as const } : {}),
     },
@@ -147,7 +220,7 @@ async function changeColumnRole<R = undefined>(
     }
     await tx.column.update({
       where: { id: columnId },
-      data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}), ...(assignChanged ? assignData : {}) },
+      data: { role: value, ...(clearWaiting ? { waitingDays: null } : {}), ...(clearRoutine ? { routineTargetColumnId: null } : {}), ...(assignChanged ? assignData : {}), ...(rename ? { name: rename } : {}) },
     });
     // Una columna que pasa a «Esperando» cuenta la espera desde ahora: sin esto, las tareas antiguas recibirían de golpe un aviso cada una.
     if (value === "WAITING" && column.role !== "WAITING") await tx.task.updateMany({ where: { columnId, archivedAt: null }, data: { columnEnteredAt: new Date(), waitingNotifiedAt: null } });
@@ -161,6 +234,8 @@ async function changeColumnRole<R = undefined>(
 const assignSchema = z.object({
   assigneeId: v.id,
   dueDays: z.number().int("Indica un número entero de días.").min(1, "Mínimo 1 día.").max(MAX_ASSIGN_DUE_DAYS, "Máximo 365 días.").nullable(),
+  /** Poner a la columna el nombre de la persona (lo propone el diálogo si la columna tiene un nombre genérico). */
+  rename: z.boolean().optional(),
 });
 
 /**
@@ -170,13 +245,24 @@ const assignSchema = z.object({
  * permiso que cambiar el rol. Todo en una transacción y un solo paso de deshacer (columna y tarjetas); un solo aviso a la
  * persona por todo el lote. Con la misma persona solo cambia el plazo: las tarjetas que ya están no se tocan.
  */
-export async function setColumnAssignee(columnId: string, input: { assigneeId: string; dueDays: number | null }) {
+export async function setColumnAssignee(columnId: string, input: { assigneeId: string; dueDays: number | null; rename?: boolean }) {
   return runAction({ name: "columns.setColumnAssignee", args: [columnId, input] }, async (): Promise<{ reassigned: number }> => {
     const user = await requireUser();
     const column = await findColumn(columnId);
     const data = assignSchema.parse(input);
     await assertAssignable(column.projectId, data.assigneeId);
     const samePerson = isAssignColumn(column) && column.assigneeId === data.assigneeId;
+    // El nombre de la persona como nombre de la columna (cortado al máximo de un nombre), si se pidió y es otro.
+    const personName = data.rename ? (await userName(data.assigneeId)).slice(0, 80).trim() : "";
+    const rename = personName && personName !== column.name ? personName : undefined;
+    if (samePerson && rename) {
+      // Misma persona: solo el nombre (y el plazo, si cambia), en un paso de deshacer.
+      addUndo({ t: "column.set", id: column.id, data: { name: column.name, assignDueDays: column.assignDueDays } });
+      const { count } = await db.column.updateMany({ where: { id: columnId, role: "NONE", assigneeId: data.assigneeId }, data: { name: rename, assignDueDays: data.dueDays } });
+      if (!count) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
+      describeAction("Renombró la columna «{from}» a «{to}»", { from: column.name, to: rename });
+      return { reassigned: 0 };
+    }
     if (samePerson && column.assignDueDays === data.dueDays) return { reassigned: 0 };
     if (samePerson) {
       // Solo el plazo: vale para las que entren a partir de ahora. Si entretanto otra persona ha cambiado la columna, no se
@@ -200,7 +286,7 @@ export async function setColumnAssignee(columnId: string, input: { assigneeId: s
       await lockColumns(tx, [columnId]);
       const ids = (await tx.task.findMany({ where: { columnId, archivedAt: null }, select: { id: true } })).map((t) => t.id);
       return assignOnEnter(tx, columnId, ids, { assigneeOnly: true, rule });
-    });
+    }, rename);
     if (reassigned) noteTasks(reassigned.newlyAssigned);
     await finishAssignOnEnter(reassigned ?? null, user.id, { personName: name });
     return { reassigned: reassigned?.newlyAssigned.length ?? 0 };

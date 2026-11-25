@@ -11,6 +11,7 @@ import { useT } from "@/i18n/client";
 import type { EditorModeValue, TemplateOption } from "@/lib/types";
 import type { TemplateKindValue } from "@/lib/constants";
 import { useActionTransition } from "@/components/useActionTransition";
+import { useUnsavedChangesGuard } from "@/components/useUnsavedChangesGuard";
 import { actionThrowResult } from "@/lib/stale-action";
 
 const NO_USERS: never[] = [];
@@ -73,6 +74,22 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
     };
   }, [editing, owner]);
 
+  const askDiscard = (name: string) =>
+    confirm({
+      title: t("Cambios sin guardar"),
+      message: t("«{name}» tiene cambios sin guardar. ¿Descartarlos?", { name: name || t("Plantilla nueva") }),
+      confirmLabel: t("Descartar cambios"),
+      cancelLabel: t("Seguir editando"),
+      danger: true,
+    });
+  // Con una plantilla a medio editar: aviso al recargar o cerrar la pestaña y al irse con un enlace de la app (otra
+  // pestaña de Ajustes o de Mi perfil, la barra lateral…). Sin cambios, nada.
+  useUnsavedChangesGuard(
+    editing !== null,
+    () => activeEditor?.owner === owner && activeEditor.dirty(),
+    () => askDiscard(activeEditor?.name() ?? ""),
+  );
+
   // Tras guardar o cancelar, el foco vuelve al lápiz de la fila (o a «Añadir…» si se canceló una nueva).
   const focusAfterClose = (id: string) =>
     requestAnimationFrame(() => rootRef.current?.querySelector<HTMLElement>(id === "new" ? "[data-tpl-add]" : `[data-tpl-edit="${CSS.escape(id)}"]`)?.focus());
@@ -97,14 +114,7 @@ export function ReleaseTemplateList({ kind, title, initial, placeholder, actions
   const open = async (tpl?: TemplateOption) => {
     const current = activeEditor;
     if (current?.dirty()) {
-      const ok = await confirm({
-        title: t("Cambios sin guardar"),
-        message: t("«{name}» tiene cambios sin guardar. ¿Descartarlos?", { name: current.name() || t("Plantilla nueva") }),
-        confirmLabel: t("Descartar cambios"),
-        cancelLabel: t("Seguir editando"),
-        danger: true,
-      });
-      if (!ok) return;
+      if (!(await askDiscard(current.name()))) return;
     }
     if (current && current.owner !== owner) current.close();
     const initialForm = tpl ? { name: tpl.name, content: tpl.content } : starter ? { ...starter } : { name: "", content: "" };

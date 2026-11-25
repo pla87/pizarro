@@ -161,6 +161,8 @@ The token is stored encrypted and never shown again (only its last 4 characters)
    Meta's test number, it must be one of the 5 verified numbers.
 2. Two WhatsApp messages arrive: “Pizarro test message…” (notice template) and a sample code, `123456` (verification
    template). If either fails, Pizarro says which one and shows the error Meta returned.
+3. Each test is two paid messages, so there is a cap: **10 tests a day per administrator and per number**. Past it
+   you get “You have reached today's limit of WhatsApp test messages. Try again tomorrow.”.
 
 ## Step 9. Each person connects their WhatsApp
 

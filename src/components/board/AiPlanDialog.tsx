@@ -174,6 +174,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       project: { name: board.project.name, description: setup?.description ?? "" },
       column: column.name,
       date: today,
+      intlLocale,
       tasks: planTasks,
       origin,
     }, t);

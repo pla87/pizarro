@@ -107,6 +107,16 @@ export async function isTrustedDevice(userId: string): Promise<boolean> {
   return ids.length > 0 && (await rowsForIds(userId, ids, { trustedUntil: { gt: new Date() } })).length > 0;
 }
 
+/**
+ * «Cerrar las demás sesiones»: quita la confianza («Recordar este dispositivo») a todos los dispositivos de la cuenta menos
+ * este navegador; si no, una sesión intrusa cerrada podría volver a entrar con la contraseña sin el segundo paso.
+ */
+export async function revokeOtherTrustedDevices(userId: string): Promise<void> {
+  const ids = sentDeviceIds(await cookies());
+  const mine = ids.length ? (await rowsForIds(userId, ids)).map((r) => r.id) : [];
+  await db.knownDevice.updateMany({ where: { userId, trustedUntil: { not: null }, ...(mine.length ? { id: { notIn: mine } } : {}) }, data: { trustedUntil: null } });
+}
+
 /** Quita la confianza de todos los dispositivos de la cuenta (al cambiar de método, restablecer o cambiar la contraseña). */
 export async function revokeTrustedDevices(userId: string): Promise<void> {
   await db.knownDevice.updateMany({ where: { userId, trustedUntil: { not: null } }, data: { trustedUntil: null } });

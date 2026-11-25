@@ -186,6 +186,14 @@ export async function testWhatsapp(input: { to: string }) {
     if (!to) throw new AppError("Escribe el número al que enviar la prueba.");
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     if (!cfg.complete) throw new AppError("Faltan datos: el token, el identificador del número y la plantilla.");
+    // Cada prueba son dos mensajes de pago: tope diario por administrador y por número (como las de Mi perfil, con
+    // más margen para quien está configurando las plantillas). Acota el gasto también con una sesión robada.
+    const day = { admin: `whatsapp:admintest:${admin.id}`, number: `whatsapp:admintest:to:${labelledHmac("whatsapp-test", to)}` };
+    if (rateLimitReached(day.admin, ADMIN_WHATSAPP_TESTS_PER_DAY) || rateLimitReached(day.number, ADMIN_WHATSAPP_TESTS_PER_DAY)) {
+      throw new AppError("Has llegado al máximo de mensajes de WhatsApp de prueba por hoy. Vuelve a intentarlo mañana.", 429);
+    }
+    rateLimit(day.admin, ADMIN_WHATSAPP_TESTS_PER_DAY, DAY_MS);
+    rateLimit(day.number, ADMIN_WHATSAPP_TESTS_PER_DAY, DAY_MS);
     // Un error que no es AppError (p. ej. de la base de datos) llega en bruto: sin el token ni el número.
     const failure = (err: unknown) => (err instanceof AppError ? err.message : scrubSecrets((err as Error)?.message ?? String(err), [cfg.token, to, to.replace(/^\+/, "")]));
     let noticeError: string | null = null;
@@ -237,6 +245,8 @@ async function sendTest(cfg: WhatsappCfg, to: string, locale: string) {
 // --- Código de verificación de WhatsApp (Mi perfil) ---
 
 const DAY_MS = 24 * 3600_000;
+/** Pruebas de WhatsApp de Integraciones al día, por administrador y por número de destino (cada una son dos mensajes). */
+const ADMIN_WHATSAPP_TESTS_PER_DAY = 10;
 const codeHashInput = (userId: string, phone: string, code: string) => `${userId}:${phone}:${code}`;
 const testKeys = (userId: string, phone: string) => ({
   user: `whatsapp:test:user:${userId}`,

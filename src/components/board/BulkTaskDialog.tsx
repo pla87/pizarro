@@ -14,7 +14,7 @@ import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
 import { boardClients, useBoard, useTasks } from "./context";
 import { TypeSelector } from "./TaskDialog";
-import { columnDefaultKind } from "./NewTaskDialog";
+import { ColumnAssignsNote, columnDefaultKind, columnPerson } from "./NewTaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
 import { MAX_TASK_LABELS, MAX_TITLE } from "@/lib/constants";
 import { LabelToggles } from "./LabelToggles";
@@ -63,7 +63,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const [kindId, setKindId] = useState(() => startKind(boardForm, columnId));
   // Tipo distinto para líneas concretas (por título).
   const [overrides, setOverrides] = useState<Record<string, string>>({});
-  const [assigneeId, setAssigneeId] = useState("");
+  // Columna «Asignación a persona»: el servidor asigna las tareas a su persona; se propone como responsable (como en «Nueva tarea»).
+  const [assigneeId, setAssigneeId] = useState(() => columnPerson(boardForm, columnId)?.id ?? "");
   const [dueDate, setDueDate] = useState("");
   const [deliverableId, setDeliverableId] = useState("");
   const [labelIds, setLabelIds] = useState<string[]>([]);
@@ -79,18 +80,24 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     kindPicked.current = false;
     setKindId(startKind(f, col));
     setOverrides({});
-    setAssigneeId("");
+    setAssigneeId(columnPerson(f, col)?.id ?? "");
     setDeliverableId("");
     setLabelIds([]);
     setWithSubtasks(false);
     setPriority("");
     setClient("");
   };
-  /** Otra columna: si tiene tipo por defecto y el tipo no se eligió a mano, pasa a ese (las líneas cambiadas a mano, no). */
+  /**
+   * Otra columna: si tiene tipo por defecto y el tipo no se eligió a mano, pasa a ese (las líneas cambiadas a mano, no). Si
+   * asigna a una persona, la propone como responsable; al salir de una que asignaba, si seguía la suya, «Sin responsable».
+   */
   const changeColumn = (id: string) => {
     setColumnId(id);
     const kind = kindPicked.current ? undefined : columnDefaultKind(form, id);
     if (kind) setKindId(kind);
+    const person = columnPerson(form, id);
+    if (person) setAssigneeId(person.id);
+    else if (assigneeId && assigneeId === columnPerson(form, columnId)?.id) setAssigneeId("");
   };
   const selectProject = async (id: string) => {
     if (id === projectId) return;
@@ -119,6 +126,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
   const tooMany = lines.length > MAX_BULK_TASKS;
   const kindOf = (title: string) => overrides[title] || kindId;
   const missingKind = lines.some((l) => !kindOf(l));
+  // «Tipo para todas» resalta el tipo solo si todas las líneas lo tienen; con alguna cambiada a otro, ninguno («varios»).
+  const mixedKinds = lines.some((l) => kindOf(l) !== kindId);
   // Solo se ofrece si algún tipo elegido tiene subtareas predefinidas.
   const templated = lines.some((l) => (kindById.get(kindOf(l))?.subtaskTemplate.length ?? 0) > 0);
   const priorityOn = form.project.taskFields.includes("priority");
@@ -201,6 +210,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
           <select id="bt-column" className="input" value={columnId} onChange={(e) => changeColumn(e.target.value)}>
             {form.columns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <ColumnAssignsNote form={form} columnId={columnId} />
         </div>
         <div>
           <div className="flex items-center justify-between gap-2">
@@ -232,10 +242,13 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
               {tooMany && ` · ${t("máximo {n}", { n: MAX_BULK_TASKS })}`}
             </div>
             <div>
-              <div className="label">{t("Tipo para todas")}</div>
+              <div className="label">
+                {t("Tipo para todas")}
+                {mixedKinds && <span className="ml-1 font-normal text-slate-500" data-bulk-mixed-kinds>{t("(ahora hay varios)")}</span>}
+              </div>
               <TypeSelector
                 kinds={form.kinds}
-                value={kindId}
+                value={mixedKinds ? "" : kindId}
                 onChange={(id) => {
                   // El tipo común se aplica a todas las líneas, también a las cambiadas a mano.
                   kindPicked.current = true;

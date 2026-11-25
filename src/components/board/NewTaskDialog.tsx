@@ -107,9 +107,27 @@ export function columnDefaultKind(f: Pick<ProjectFormData, "columns" | "kinds">,
  * Persona de una columna «Asignación a persona» (si la tiene y puede tener tareas del proyecto): el servidor le asigna toda
  * tarea que nazca ahí, así que el diálogo la propone como «Responsable» y lo dice bajo el selector.
  */
-function columnPerson(f: Pick<ProjectFormData, "columns" | "users">, columnId: string) {
+export function columnPerson(f: Pick<ProjectFormData, "columns" | "users">, columnId: string) {
   const col = f.columns.find((c) => c.id === columnId);
   return col && isAssignColumn(col) && col.assigneeId ? f.users.find((u) => u.id === col.assigneeId) : undefined;
+}
+
+/** Nota bajo «Responsable» (o la columna) en una columna «Asignación a persona»: a quién asigna y, si lo tiene, el plazo. */
+export function ColumnAssignsNote({ form, columnId, className }: { form: Pick<ProjectFormData, "columns" | "users">; columnId: string; className?: string }) {
+  const t = useT();
+  const person = columnPerson(form, columnId);
+  if (!person) return null;
+  // Plazo de la columna: lo dice la nota, sin precargar la fecha (la pone el servidor si se deja vacía).
+  const days = form.columns.find((c) => c.id === columnId)?.assignDueDays;
+  return (
+    <p className={cn("mt-1 text-xs text-slate-600 dark:text-slate-400", className)} data-column-assigns>
+      {!days
+        ? t("Esta columna asigna sus tarjetas a {name}", { name: person.name })
+        : days === 1
+          ? t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en 1 día", { name: person.name })
+          : t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en {n} días", { name: person.name, n: days })}
+    </p>
+  );
 }
 
 export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles, initialDescription, initialTitle, attachDocument, onClose: close, side, onAddSecond, onAddSecondBulk, pickProject = false, draft, autosave = false }: Props) {
@@ -371,9 +389,6 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   }, [lostColumn, toast, t]);
   // La release y los planes de trabajo para IA tienen tareas fijas («Siempre en la release» / «Siempre en el plan»).
   const columnRole = form.columns.find((c) => c.id === columnId)?.role;
-  const assignPerson = columnPerson(form, columnId);
-  // Plazo de la columna «Asignación a persona»: lo dice la nota, sin precargar la fecha (la pone el servidor si se deja vacía).
-  const assignDays = assignPerson ? form.columns.find((c) => c.id === columnId)?.assignDueDays : null;
   const isReleaseColumn = hasEvergreenTasks(columnRole);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
@@ -734,15 +749,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
               <option value="">{t("Sin responsable")}</option>
               {form.users.map((u) => <option key={u.id} value={u.id}>{u.id === board.currentUserId ? t("{name} (yo)", { name: u.name }) : u.name}</option>)}
             </select>
-            {assignPerson && (
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-400" data-column-assigns>
-                {!assignDays
-                  ? t("Esta columna asigna sus tarjetas a {name}", { name: assignPerson.name })
-                  : assignDays === 1
-                    ? t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en 1 día", { name: assignPerson.name })
-                    : t("Esta columna asigna sus tarjetas a {name} y, sin fecha, vencen en {n} días", { name: assignPerson.name, n: assignDays })}
-              </p>
-            )}
+            <ColumnAssignsNote form={form} columnId={columnId} />
           </div>
           <div className="min-w-0">
             <label className="label truncate" htmlFor={`${uid}-due`}>{t("Fecha límite")}</label>

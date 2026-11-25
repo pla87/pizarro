@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
 import { visibleProjectsWhere } from "../access";
+import { knownTemplateKey } from "../builtin-templates";
 import { FILE_MAX_MAX_MB, FILE_MAX_MIN_MB, effectiveFileMaxMb } from "../upload-size";
 import { RELEASE_ZIP_MAX_MB, RELEASE_ZIP_MIN_MB } from "../constants";
 import { isoToDate, todayIso } from "../dates";
@@ -560,6 +561,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
             storageQuotaMb,
             // Los programas importados con la Documentación siguen su numeración (el siguiente no repite un «_vN»).
             programVersion: data.project.programVersion ?? 0,
+            templateKey: knownTemplateKey(data.project.templateKey),
           },
         });
         // Quien importa: miembro si es privado, o proyecto de trabajo suyo si es de equipo (como al crear uno).

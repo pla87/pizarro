@@ -211,17 +211,19 @@ TOKEN_SECRET=<otra: openssl rand -base64 48>
 ENCRYPTION_KEY=<otra: openssl rand -base64 48>
 BACKUP_KEY=<resultado de: openssl rand -base64 32>
 UPLOAD_DIR=/app/uploads
+RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
 ```
 
 - `${{Postgres.DATABASE_URL}}` es una *reference variable*: Railway la sustituye por la URL interna del servicio Postgres (`postgres.railway.internal`), sin salir a internet.
 - `PORT` no hace falta: Railway lo inyecta y la app lo respeta.
+- `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` da margen al apagado ordenado. Por defecto Railway da 0 segundos entre el aviso de apagado (SIGTERM) y el corte (SIGKILL), y una subida, un email o un registro a medias se perdería. Railway usa la variable como margen y Pizarro también la lee: con ella espera hasta 10 s a lo que está en curso (14 s en total); sin ella, 5 s, como en las demás plataformas. El ajuste del panel (*Settings → Deploy → Teardown*, *Draining* 15, confirmado con el ✓ del campo) da el mismo margen en Railway, pero solo la variable deja a Pizarro aprovecharlo entero. *Overlap* se deja en 0.
 - `APP_URL` solo con dominio propio (ver «Dominio propio en Railway» en `docs/INSTALL.md`).
 - No definas `SEED_ADMIN_*`: el primer administrador se crea con el asistente `/setup`.
 - Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` también fuera de Railway (gestor de contraseñas).
 
 ### 5. Desplegar y primer arranque
 
-1. **Settings → Deploy** del servicio de Pizarro, antes de desplegar: **Healthcheck Path** `/api/health`, **Healthcheck Timeout** `600` (el campo aparece al rellenar *Healthcheck Path*), **Restart Policy** *On Failure* y **1** réplica (estas dos son lo que pone Railway por defecto; con el volumen, Railway no deja subir las réplicas). *Custom Start Command*, vacío. Sin healthcheck, Railway da por bueno un despliegue en cuanto arranca el contenedor, aunque Pizarro no llegue a responder (una migración fallida, por ejemplo), en vez de mantener el anterior.
+1. **Settings → Deploy** del servicio de Pizarro, antes de desplegar: **Healthcheck Path** `/api/health`, **Healthcheck Timeout** `600` (el campo aparece al rellenar *Healthcheck Path*), **Restart Policy** *On Failure* y **1** réplica (estas dos son lo que pone Railway por defecto; con el volumen, Railway no deja subir las réplicas). *Custom Start Command*, vacío. El margen del apagado lo da la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` del paso 4 (no hace falta activar también *Teardown* aquí; si lo activas, *Draining* 15 y *Overlap* 0). Sin healthcheck, Railway da por bueno un despliegue en cuanto arranca el contenedor, aunque Pizarro no llegue a responder (una migración fallida, por ejemplo), en vez de mantener el anterior.
 2. Pulsa **Deploy** en el aviso «Apply N changes». Antes, revisa lo que lista: si Railway propone por su cuenta cambios de **réplicas**, no los apliques (Pizarro funciona con una sola instancia); la **región** da igual mientras `Postgres` esté en la misma.
 3. **No tienes que ejecutar nada a mano.** En cada arranque, `scripts/start.sh` espera a la base de datos, aplica las migraciones pendientes (`prisma migrate deploy`), sincroniza `changelog.json` con la tabla `AppVersionLog`, ejecuta el seed idempotente (si no hay proyectos, crea un *Proyecto de ejemplo*) y arranca el servidor.
 4. Para comprobar que el healthcheck está activo, abre el despliegue en *Deployments*: al final del log de construcción (*Build Logs*, no *Deploy Logs*) sale `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s` y, cuando Pizarro ya responde, `Healthcheck succeeded!` (antes, unas cuantas líneas `Attempt #N failed`, normales mientras se aplican las migraciones). Si no sale, vuelve al punto 1.

@@ -103,6 +103,26 @@ o `CHROME=` a un Chrome instalado (Windows: `CHROME="/c/Program Files/Google/Chr
 Bash; macOS: `CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`). Para los PDF del manual,
 `CHROME_PATH` con la misma ruta. Las suites corren en su propio Chromium sin interfaz, no en el Chrome del propietario.
 
+**Trampas de Windows (ronda 66, PC del propietario):**
+
+- La carpeta real es `D:\Pizarro` (con mayúscula). **Compila, arranca y pasa las e2e desde `D:\Pizarro`**: desde
+  `D:\pizarro` webpack ve dos copias de `next`/`react` («multiple modules with names that only differ in casing») y la
+  build falla al prerenderizar `/_global-error` («Cannot read properties of null (reading 'useContext')»).
+- La `isolation: "worktree"` automática de los agentes falla por esa misma mayúscula: crea los worktrees a mano
+  (`git worktree add -b r66-x .claude/worktrees/r66-x <rama>`, copia el `.env` con la base `pz_<agente>`) y dale al
+  agente la ruta. Al terminar, `git worktree remove --force` (si un `next dev` del agente sigue vivo, páralo antes).
+- Git: en el repositorio, `core.autocrlf=input` y `core.eol=lf` (Git for Windows trae `autocrlf=true`, y varias pruebas
+  que leen ficheros con expresiones regulares fallaban con CRLF).
+- PostgreSQL local con zona horaria UTC (`ALTER ROLE postgres SET timezone TO 'UTC'`): con la de España, lo que las
+  suites crean con `NOW()` quedaba una hora «en el futuro» frente a lo que crea la app y la QA confundía filas.
+- `npm test` en Windows: ~16 fallos solo del entorno (get.sh/install.sh, `start-signals`, `migrate.mjs`, symlinks,
+  rutas con `\`, worker de PDF); con la CPU cargada, alguna suite da *timeout* de 120 s y sola pasa. `npm run test:db`:
+  fallan solo por el entorno `health-shutdown` (ruta `/dev/null`), `start-migrate` y `backup-restore` (spawn de `npx`,
+  mensajes de PostgreSQL en español) y, a veces, `notifications` (un email de la prueba anterior llega tarde). En
+  GitHub (Linux) pasan todas: el job «Pruebas con base de datos» de la PR es la referencia.
+- Las e2e funcionan en Windows desde la ronda 66 (servidor con `node` y parada con `taskkill /T`, Prisma sin `npx`,
+  escenarios con `file://`). Chromium: el de `playwright-core` (`npx playwright-core install chromium`).
+
 **Recursos:** en un portátil, **no más de 2–3 agentes a la vez**, y que no compilen ni pasen e2e salvo encargo (la
 build de producción y las suites las pasa la sesión principal al final, una cada vez). Cada agente con su base
 (`pz_<agente>`), su puerto y `OUT=` propio. En Windows y macOS `cp -al` puede no existir: el agente hace `npm ci` en su
@@ -333,29 +353,37 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 65:** v1.69.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Ronda hecha en la nube; desde la ronda 66 el propietario sigue en Claude Code en su PC con Claude in Chrome (§0b), que
-ejecuta directamente los prompts de `docs/PRUEBAS-CHROME.md` (pendientes: 1, pruebas en real de la v1.69.0 con lo que
-quedó de la v1.68; 2, `rua` del DMARC, aprobado; 3, auditoría como usuario de la v1.69.0). La ronda 65 dio 3 vueltas de
-revisión y caza de bugs (servidor, navegador y áreas sin mirar, infraestructura y migraciones, y convergencia); la
-última solo halló dos detalles, ya arreglados.
+**Estado al cerrar la ronda 66:** v1.70.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
+Primera ronda hecha en el PC del propietario (§0b) con Claude Code y Claude in Chrome. Se pasaron los tres prompts de
+Claude in Chrome que quedaban (pruebas en real de la v1.68/v1.69, DMARC con `rua` de Cloudflare y auditoría como usuario
+de la v1.69); sus hallazgos se arreglaron en esta ronda. Cinco vueltas de revisión y caza de bugs (servidor y seguridad;
+tablero y ficheros; páginas, e2e, i18n y accesibilidad; avisos, administración y cuenta; convergencia): la última solo
+halló casos límite, ya arreglados. Railway de prueba: *Teardown* con 15 s de *Draining* puesto y comprobado. Pendientes de
+Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.70.0, primeros informes DMARC).
 
-**Preguntas abiertas al propietario (tras la v1.69.0)**, con la numeración del informe final de la ronda 65 (entre
+**Preguntas abiertas al propietario (tras la v1.70.0)**, con la numeración del informe final de la ronda 66 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Ideas de la auditoría (aprobadas para «más adelante»): botón «Organizar por personas» en *Casa y familia*, roles de
-   columna según la plantilla y arrastrar cabeceras de columna. ¿En la ronda 66? (SÍ, una ronda propia)
-2. Avisar antes de perder una plantilla a medio editar al cambiar de pestaña o recargar (Ajustes del proyecto, Mi
-   perfil). (SÍ, pequeño)
-3. Al cambiar de tipo en el detalle, dejar una línea en el historial de la tarea con las subtareas cambiadas. (SÍ, pequeño)
-4. Pasar `npm run test:db` también en la PR (GitHub con PostgreSQL, ~3 min; los minutos son gratis por ser público). (SÍ)
-5. `--shuffle` de vez en cuando en `test:db` para destapar pruebas que dependen del orden. (SÍ, barato)
-6. Logs: no guardar el texto en inglés de los registros de páginas vistas (ahorra espacio, pierden la búsqueda en inglés). (NO)
-7. Rellenar el texto en inglés de los registros anteriores a la v1.69. (NO: caducan en 7 días)
-8. «Importar tareas»: que la vista previa diga qué tipo tomará cada tarea. (NO por ahora)
-9. Comprobar en Railway el tiempo de espera al apagar (como el `kill_timeout` de Fly.io) y apuntarlo en la guía. (SÍ,
-   con Claude in Chrome)
-10. WhatsApp en la instalación del propietario: decisión de coste (Meta cobra cada aviso). (Lo decide el propietario)
+0. **Primer pendiente técnico (no es una decisión):** `interfaz-carga-e2e` falla en «LOAD: el de Releases»: al ir del
+   tablero a Releases con la red lenta sale el esqueleto del tablero y no el de Releases. Con la v1.69.0 pasa; lo trae
+   anotar la visita del proyecto («Usados recientemente», `noteProjectVisit` en `p/[projectId]/page.tsx`): sin esa línea
+   pasa 38/38, y lanzarla sin `after()` no lo arregla. Es solo estético (qué esqueleto se ve unos instantes). Investigar
+   (¿el layout cambia de orden de proyectos entre la precarga y la navegación?) y arreglar en la ronda 67.
+1. WhatsApp en la instalación real: el propietario dijo «inténtalo, tenemos que ver que funciona». Necesita su cuenta de
+   Meta (WhatsApp Business), el número y la plantilla aprobada; cada aviso cuesta dinero. Hacerlo con él delante, con la
+   guía `docs/guias/whatsapp.md` y la prueba de Integraciones (tope de 10 al día). (SÍ, en la próxima sesión, juntos)
+2. «Varias tareas»: aplicar también el prefijo de título del tipo, como «Nueva tarea». (Lo revisa más adelante)
+3. «Orden manual» de los proyectos (arrastrar en el selector; tabla por usuario). (Lo revisa más adelante; recomendación NO)
+4. Cabeceras de columna con `tabIndex` (Alt+flechas sobre el nombre): una parada de Tab más por columna. ¿Quitarla y
+   dejar solo el menú «⋯»? (NO: se queda, es la alternativa de teclado al arrastre)
+5. `migrate.mjs`: no lanzar la CLI de Prisma si `_prisma_migrations` ya está al día (unos segundos menos de corte por
+   despliegue). (SÍ, pequeño)
+6. «Organizar por personas» en proyectos de equipo: solo miembros y admins que lo tienen en su lista (hoy, todos los
+   admins de la instalación). (SÍ)
+7. Workflow Release: pasar también las pruebas con base de datos antes de publicar (+3 min por versión). (SÍ)
+8. Una URL por tarea (`?tarea=ID`) para enlazarla y abrir dos en pestañas (idea de la auditoría). (SÍ, ronda propia)
+9. Columna «Agenda» de la plantilla Eventos y viajes: renombrarla a «Programa» (cambia las instalaciones sin tocar). (NO)
+10. Railway real: el apagado de 15 s se dejó con la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` (la lee Pizarro).
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.

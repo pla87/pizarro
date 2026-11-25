@@ -246,8 +246,11 @@ from its web dashboard, with no terminal.
    ENCRYPTION_KEY=click-generate-my-variables
    BACKUP_KEY=click-generate-my-variables
    UPLOAD_DIR=/app/uploads
+   RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
    ```
 
+   - **`RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15`** gives Pizarro 15 seconds to shut down cleanly when it updates or
+     restarts (by default Railway gives none and cuts off whatever is in progress: an upload, an email, the logs).
    - **`APP_URL` isn't needed:** Pizarro uses the address Railway reserved in step 4 by itself. You only have to add
      it if you set up [your own domain](#domain).
    - `${{Postgres.DATABASE_URL}}` stays as it is: Railway replaces it with the database's address. If your database

@@ -53,6 +53,10 @@ Cómo usar esta lista:
 | ☐ | 14.3 Avisos por email, invitación sin email y usuarios sin tope | Tu instalación |
 | ☐ | 14.4 Calendario con el dedo en una tableta | Un iPad o tableta |
 | ☐ | 14.5 Copias en R2 con bloqueo | Bucket con la regla |
+| ☐ | 19.1 Railway: margen para el apagado (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS`) | Tu Railway |
+| ☐ | 19.2 WhatsApp: tope de la prueba | WhatsApp configurado |
+| ☐ | 19.3 Informe semanal tras un despliegue | Email configurado |
+| ☐ | 19.5 Logs: emails en los accesos fallidos | Una persona de prueba |
 
 ## 1. Baja de cuenta con Google
 
@@ -564,7 +568,7 @@ Crea un proyecto con *Mantenimiento e instalaciones*, *Ventas* y alguna revisada
 
 ### 10.4 Móvil
 
-Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *Descartar cambios* pregunta antes; *Editar* en tus comentarios.
+Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *Deshacer todo* (antes *Descartar cambios*; *Deshacer* en pantallas estrechas) pregunta antes; *Editar* en tus comentarios.
 
 ### 10.5 Administración
 
@@ -811,7 +815,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 18.4 Cambiar de tipo en el detalle (instalación de prueba, proyecto *Casa y familia*)
 
 1. Crea una tarea de un tipo con subtareas predefinidas. Marca una, renombra otra y añade una a mano.
-2. Ábrela y cámbiala a otro tipo con subtareas: las tres que tocaste se quedan, las demás del tipo anterior se sustituyen por las del nuevo, y el aviso dice cuántas («Añadidas…», «Quitadas…» o «Cambiadas… subtareas del tipo»).
+2. Ábrela y cámbiala a otro tipo con subtareas: las tres que tocaste se quedan, las demás del tipo anterior se sustituyen por las del nuevo, y el aviso dice lo que ha cambiado (desde la v1.70, «Tipo cambiado: 3 subtareas añadidas, 2 quitadas…»; si solo cambia el tipo, no hay aviso).
 3. Pulsa **Deshacer** en el aviso: vuelven el tipo, el título, la descripción y las subtareas de antes.
 
 ### 18.5 Tipo por defecto en plantillas y en «Varias tareas»
@@ -836,3 +840,41 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 ### 18.9 WhatsApp con el token caducado (solo si lo usas)
 
 - Si el token de Meta caduca o lo revocas, *Administración → Integraciones → WhatsApp* muestra el último error, como Telegram. Pega un token nuevo, guarda y pulsa **Probar**: el aviso de prueba debe llegar.
+
+## 19. Novedades de la v1.70.0
+
+### 19.1 Railway: margen para el apagado (tu instalación y la de prueba)
+
+1. En el servicio de Pizarro, *Variables*: añade `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` y despliega. Si además activaste *Teardown* en *Settings → Deploy*, deja *Overlap* en 0.
+2. Con el despliegue nuevo en marcha, sube un adjunto grande y, mientras sube, pulsa **Redeploy**.
+
+**Qué debe pasar:** el adjunto se sube entero o el navegador dice que ha fallado y lo puedes repetir; no queda un adjunto roto. En los *Deploy Logs* del despliegue viejo, el apagado termina en unos segundos (como mucho 14) y en *Administración → Logs* (busca `system.shutdown`) no aparecen conexiones ni envíos pendientes.
+
+**Si falla:** comprueba que la variable está en el servicio de Pizarro (no como *Shared Variable*) y que el despliegue es posterior a añadirla. Sin la variable, Pizarro espera solo 5 segundos.
+
+### 19.2 WhatsApp: tope de la prueba (solo si lo usas; cada prueba son dos mensajes de pago)
+
+- No hace falta gastar 10 pruebas: comprueba solo que **Probar** sigue funcionando (llegan los dos WhatsApp). Si alguna vez pasas de 10 pruebas en un día al mismo número, sale «Has llegado al máximo de mensajes de WhatsApp de prueba por hoy. Vuelve a intentarlo mañana.».
+
+### 19.3 Informe semanal tras un despliegue (solo si tienes SMTP configurado)
+
+- Programa un informe semanal para dentro de unos minutos y despliega justo a esa hora (o reinicia el servicio): el informe llega igual, aunque sea un poco más tarde, y no llega dos veces. En *Logs*, busca `report.scheduledSent`.
+
+### 19.4 Mi perfil y Administración (tu instalación)
+
+1. *Administración → Usuarios → Editar* en tu propia fila: el email sale bloqueado con «Tu propio email se cambia en «Mi perfil».». En otra persona, sí se puede cambiar.
+2. En otro navegador entra con tu cuenta marcando **Recordar este dispositivo 14 días**. Vuelve al primero, *Mi perfil → Cuenta → Sesiones* y **cierra las demás**. En el segundo navegador, al volver a entrar, te pide otra vez la verificación en dos pasos.
+3. *Mi perfil → Preferencias → Orden de los proyectos*: **Alfabético** ordena el selector de la barra lateral y la página de inicio por nombre; **Usados recientemente** pone arriba el último tablero que abriste (se ve al recargar).
+
+### 19.5 Logs: emails en los accesos fallidos (tu instalación)
+
+1. En una ventana privada, intenta entrar con un email que no tiene cuenta: en *Logs* sale enmascarado («a***@…») y se encuentra buscando el dominio.
+2. Con *Acceso con Google*, entra con una cuenta de Google que no tiene cuenta en Pizarro: el email sale también enmascarado.
+3. Con la persona de prueba, falla la contraseña hasta que salga el bloqueo por intentos: la fila «Inicio de sesión bloqueado por demasiados intentos» muestra su email entero y su usuario. Restablece después su contraseña o espera 15 minutos.
+4. **Periodo → Personalizado…**: elige *Desde* y *Hasta*; la lista y **Descargar CSV** muestran lo mismo.
+
+### 19.6 Columnas y detalle en el móvil (teléfono real)
+
+- En el menú «⋯» de una columna, *Mover a la izquierda* y *Mover a la derecha* la cambian de sitio y las pestañas lo reflejan.
+- En el detalle de una tarea, el botón del pie dice **Deshacer** (en el ordenador, **Deshacer todo**); tras cambiar algo, pregunta «¿Deshacer todos los cambios?».
+- En un proyecto *Casa y familia* con dos personas, *Nueva columna → Organizar por personas* crea una columna por persona; al mover una tarjeta a una de ellas (con *Mover a…*) sale «Asignada a … » con **Deshacer**.

@@ -1,4 +1,5 @@
 import "server-only";
+import { trackInFlight } from "./shutdown";
 import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import { intlLocale, makeT, toLocale, type Locale, type T } from "../i18n/core";
@@ -318,7 +319,7 @@ export async function notifyTask(opts: {
   if (toDeliver.length) {
     const send = () => deliver(toDeliver).catch((err) => console.error("[notify] envío", err));
     if (opts.immediate) await send();
-    else after(send);
+    else after(() => trackInFlight(send));
   }
   return { recipients: created.map((c) => c.userId) };
 }
@@ -406,7 +407,7 @@ export async function notifyProjectsToTeam(projects: readonly { id: string }[], 
     const send = () => deliver(toDeliver).catch((err) => console.error("[notify] envío", err));
     // Fuera de una petición no hay `after`: se envía aquí mismo.
     try {
-      after(send);
+      after(() => trackInFlight(send));
     } catch {
       await send();
     }
@@ -445,7 +446,7 @@ export async function notifyReportUnsubscribed(projectId: string, setterId: stri
     const send = () => deliver([created.id]).catch((err) => console.error("[notify] envío", err));
     // Fuera de una petición no hay `after`: se envía aquí mismo.
     try {
-      after(send);
+      after(() => trackInFlight(send));
     } catch {
       await send();
     }

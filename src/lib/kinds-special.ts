@@ -349,3 +349,23 @@ export function switchKindText(
     subtasks: switchKindSubtasks(prev, next, current.subtasks),
   };
 }
+
+/**
+ * Aviso tras cambiar el tipo en el detalle: lo que ha cambiado además del tipo, contado por separado
+ * («Tipo cambiado: 3 subtareas añadidas, 2 quitadas y plantilla de la descripción aplicada»). Solo las partes que aplican;
+ * null si solo ha cambiado el tipo. `description`: la descripción guardada ha pasado a la plantilla del tipo nuevo.
+ */
+export function kindChangeNotice(t: T, change: { added: number; removed: number; description?: boolean }): string | null {
+  const { added, removed } = change;
+  const parts: string[] = [];
+  if (added) parts.push(added === 1 ? t("1 subtarea añadida") : t("{n} subtareas añadidas", { n: added }));
+  if (removed) {
+    // Tras «N subtareas añadidas» basta con «2 quitadas».
+    if (added) parts.push(removed === 1 ? t("1 quitada") : t("{n} quitadas", { n: removed }));
+    else parts.push(removed === 1 ? t("1 subtarea quitada") : t("{n} subtareas quitadas", { n: removed }));
+  }
+  if (change.description) parts.push(t("plantilla de la descripción aplicada"));
+  if (!parts.length) return null;
+  const list = parts.length === 1 ? parts[0]! : t("{list} y {last}", { list: parts.slice(0, -1).join(", "), last: parts.at(-1)! });
+  return t("Tipo cambiado: {changes}", { changes: list });
+}

@@ -105,6 +105,10 @@ function assertSafeDb() {
   if (!/^pz_/.test(name) && process.env.QA_ALLOW_ANY_DB !== "1") throw new Error(`Por seguridad solo se resetean bases pz_* (es «${name}»)`);
   return name;
 }
+/** `prisma migrate deploy` con el mismo node y la CLI del proyecto (sin npx: en Windows es un .cmd que no se encuentra sin shell). */
+export function prismaMigrate(appDir, env) {
+  execFileSync(process.execPath, [path.join(appDir, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"], { cwd: appDir, env, stdio: "pipe" });
+}
 export async function resetDatabase(appDir) {
   const name = assertSafeDb();
   const u = new URL(DATABASE_URL); u.pathname = "/postgres";
@@ -114,17 +118,30 @@ export async function resetDatabase(appDir) {
   await admin.query(`CREATE DATABASE "${name}"`);
   await admin.end();
   const env = { ...process.env, DATABASE_URL };
-  execFileSync("npx", ["prisma", "migrate", "deploy"], { cwd: appDir, env, stdio: "pipe" });
+  prismaMigrate(appDir, env);
   execFileSync("node", ["--env-file-if-exists=.env", "dist/boot.mjs"], { cwd: appDir, env, stdio: "pipe" });
 }
 let server = null;
+/**
+ * Lo mismo que `npm start` (package.json), con node directamente: en Windows `spawn("npm")` no encuentra npm.cmd sin
+ * shell. Lo usan también install-e2e.mjs y stopServerTree.
+ */
+export const START_ARGS = ["--env-file-if-exists=.env", "--env-file=scripts/server.env", "scripts/start-local.mjs"];
+/** Para el servidor y lo que haya arrancado: el grupo de procesos (detached) o, en Windows, el árbol con taskkill. */
+export function stopServerTree(child) {
+  if (process.platform === "win32") {
+    try { execFileSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* ya parado */ }
+    return;
+  }
+  try { process.kill(-child.pid, "SIGTERM"); } catch { /* ya parado */ }
+}
 export async function startServer(appDir) {
   const port = new URL(BASE).port || "80";
-  server = spawn("npm", ["start"], { cwd: appDir, env: { ...process.env, DATABASE_URL, PORT: port, APP_URL: BASE }, stdio: "ignore", detached: true });
+  server = spawn(process.execPath, START_ARGS, { cwd: appDir, env: { ...process.env, DATABASE_URL, PORT: port, APP_URL: BASE }, stdio: "ignore", detached: true });
   for (let i = 0; i < 60; i++) { try { const r = await fetch(BASE + "/login"); if (r.ok) return; } catch { /* aún no */ } await sleep(1000); }
   throw new Error("el servidor no arranca");
 }
-export function stopServer() { if (server) { try { process.kill(-server.pid, "SIGTERM"); } catch { /* ya parado */ } server = null; } }
+export function stopServer() { if (server) { stopServerTree(server); server = null; } }
 
 /** Usuarios MEMBER (sin 2FA), un segundo usuario y todos como miembros de todos los proyectos. */
 export async function prepareUsers() {
@@ -219,6 +236,9 @@ export async function throttle(page) {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU_THROTTLE });
 }
 export async function login(page, email) {
+  // Sin aperturas anotadas («Usados recientemente», el orden de serie): «/» lleva al proyecto de QA, el primero por posición,
+  // y no al último que haya abierto otro escenario (un contexto nuevo no tiene la cookie del último proyecto).
+  await q(`DELETE FROM "ProjectVisit" WHERE "userId" IN (SELECT id FROM "User" WHERE email = $1)`, [email]);
   await page.goto(BASE + "/login");
   await page.fill("#email", email); await page.fill("#password", PASSWORD);
   await page.click("button[type=submit]");

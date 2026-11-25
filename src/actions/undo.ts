@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { requireUser } from "@/lib/session";
 import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
-import { decodeLabel, renderStoredLabel } from "@/lib/undo-label";
+import { decodeLabel, renderLabel, renderStoredLabel, undoneLabel } from "@/lib/undo-label";
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
 import { actionContext } from "@/lib/action-context";
@@ -16,7 +16,8 @@ import { findUndoConflicts, type UndoConflicts } from "@/lib/undo-conflicts";
 import { applyUndo, discardEntries, fingerprintsOf, isObsoleteFingerprint, mirrorOps, saveUndo, type SavedEvent, type UndoKind, type UndoOp } from "@/lib/undo";
 import * as v from "@/lib/validation";
 
-type Result = { label: string; remaining: number; skipped: number; redoable: number };
+/** `done`: el texto entero del aviso («Deshecho el cambio de tipo de «X»»), si la acción tiene uno propio (undoneLabel). */
+type Result = { label: string; done?: string; remaining: number; skipped: number; redoable: number };
 
 /** Lo que devuelve undoChecked/redoChecked: lo aplicado o, si otra persona cambió lo mismo después, qué preguntar. */
 type CheckedResult =
@@ -192,7 +193,10 @@ async function applyEntry(kind: UndoKind, user: { id: string }, pid: string, ent
     },
     { [undo ? "undoneId" : "redoneId"]: entry.id },
   );
-  return { label: renderStoredLabel(entry.label, await getT()), remaining, skipped, redoable };
+  const t = await getT();
+  const decoded = decodeLabel(entry.label);
+  const natural = decoded ? undoneLabel(decoded, !undo) : null;
+  return { label: renderStoredLabel(entry.label, t), ...(natural ? { done: renderLabel(natural, t) } : {}), remaining, skipped, redoable };
 }
 
 /**

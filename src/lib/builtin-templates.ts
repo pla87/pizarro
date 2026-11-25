@@ -1,11 +1,13 @@
 // Plantillas de proyecto incluidas de serie. La definición canónica vive aquí; en la base de datos cada
 // una es una fila normal de ProjectTemplate con su `builtinKey`, que el administrador puede editar o borrar.
 import { templateInputSchema, type TemplateData, type TemplateInput } from "./project-templates";
+import { GENERAL_ROLE_CHOICES, ROLE_CHOICES, type ColumnRoleChoice } from "./column-role-choices";
 
 type Col = TemplateInput["columns"][number];
 type Kind = NonNullable<TemplateInput["kinds"]>[number];
 
-export const col = (name: string, isDone = false, role: Col["role"] = "NONE"): Col => ({ name, role, isDone });
+/** Columna de una plantilla de serie; `defaultKind`, el nombre de su «Tipo por defecto» (de la misma plantilla). */
+export const col = (name: string, isDone = false, role: Col["role"] = "NONE", defaultKind?: string): Col => ({ name, role, isDone, ...(defaultKind ? { defaultKind } : {}) });
 export const kind = (name: string, color: string, titleTemplate: string, descriptionTemplate: string, subtaskTemplate: string[] = []): Kind => ({
   name,
   color,
@@ -106,8 +108,8 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Por hacer"),
         col("Esta semana", false, "WEEKLY_PLAN"),
         col("Esperando", false, "WAITING"),
-        col("Lista de la compra", false, "CHECKLIST"),
-        col("Citas"),
+        col("Lista de la compra", false, "CHECKLIST", "Compras"),
+        col("Citas", false, "NONE", "Cita"),
         col("Rutinas", false, "ROUTINES"),
         col("Hecho", true),
       ],
@@ -139,14 +141,14 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
     key: "eventos-viajes",
     data: {
       name: "Eventos y viajes",
-      description: "Organizar un evento o un viaje: lugar o alojamiento, transporte, proveedores, invitados y programa, con el presupuesto de lo reservado, la agenda y una lista única para el día o la maleta.",
+      description: "Organizar un evento o un viaje: lugar o alojamiento, transporte, proveedores, invitados y programa, con el presupuesto de lo reservado, las fechas en el calendario y una lista única para el día o la maleta.",
       columns: [
         col("Ideas"),
-        col("Por confirmar", false, "WAITING"),
-        col("Reservado", false, "BUDGET"),
+        col("Por confirmar", false, "WAITING", "Proveedor"),
+        col("Reservado", false, "BUDGET", "Proveedor"),
         col("Preparando"),
-        col("Agenda"),
-        col("Lista del día y maleta", false, "CHECKLIST"),
+        col("Agenda", false, "NONE", "Actividad o programa"),
+        col("Lista del día y maleta", false, "CHECKLIST", "Maleta y material"),
         col("Hecho", true),
       ],
       kinds: [
@@ -183,7 +185,7 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
         col("Estudiando"),
         col("Repasos", false, "ROUTINES"),
         col("Esperando corrección", false, "WAITING"),
-        col("Corrigiendo", false, "REVIEW"),
+        col("Corrigiendo", false, "REVIEW", "Correcciones"),
         col("Hecho", true),
       ],
       kinds: [
@@ -220,11 +222,11 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
       description: "Preparar un curso, un máster o una charla con ayuda de un agente de IA: plan de trabajo para el agente, programa por sesiones publicable en PDF, materiales, ejercicios y exámenes, y seguimiento de alumnos.",
       columns: [
         col("Ideas"),
-        col("Materiales"),
+        col("Materiales", false, "NONE", "Preparar material"),
         col("Ejercicios y exámenes"),
         col("Plan de trabajo para IA", false, "AI_PLAN"),
-        col("Programa", false, "PROGRAM"),
-        col("Seguimiento de alumnos"),
+        col("Programa", false, "PROGRAM", "Sesión"),
+        col("Seguimiento de alumnos", false, "NONE", "Revisar perfil de alumno"),
         col("Publicado", true),
       ],
       kinds: [
@@ -323,6 +325,9 @@ export function comparable(t: TemplateData): string {
     ...(t.releaseTemplates?.length ? { releases: t.releaseTemplates.map((r) => [r.kind, r.name, r.content]) } : {}),
     // Igual con los campos de tarea: una plantilla sin campos conserva la huella que tenía antes de existir esta opción.
     ...(t.taskFields?.length ? { fields: t.taskFields } : {}),
+    // Y con el tipo por defecto de las columnas: las de serie sin ninguno (las sembradas antes) conservan su huella, así que
+    // las sin modificar reciben los nuevos al arrancar (upgradeBuiltinTemplates) y poner uno a mano cuenta como modificarla.
+    ...(t.columns.some((c) => c.defaultKind) ? { defaults: t.columns.map((c) => c.defaultKind ?? null) } : {}),
   });
 }
 
@@ -330,4 +335,47 @@ export function comparable(t: TemplateData): string {
 export function isBuiltinModified(stored: TemplateData, key: string | null | undefined): boolean {
   const canon = key ? canonicalTemplate(key) : null;
   return canon ? comparable(stored) !== comparable(canon) : false;
+}
+
+/**
+ * Roles de columna que encajan con cada plantilla de serie: el submenú «Rol de la columna» los enseña primero y el resto
+ * va tras «Más roles…» (column-role-choices.ts). En «Casa y familia» no pinta nada «Siguiente salto (genera releases)».
+ * «ASSIGN» es «Asignación a persona». Una plantilla de serie nueva sin entrada aquí enseña todos los roles.
+ */
+const TEMPLATE_COLUMN_ROLES: Record<string, readonly ColumnRoleChoice[]> = {
+  vibecoding: ["NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "REVIEW", "AI_PLAN", "CHECKLIST", "ASSIGN"],
+  "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES", "WEEKLY_PLAN", "CHECKLIST", "BUDGET", "ASSIGN"],
+  "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "ROUTINES", "BUDGET", "ASSIGN"],
+  "eventos-viajes": ["WAITING", "BUDGET", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],
+  "estudios-tesis": ["ROUTINES", "WAITING", "REVIEW", "WEEKLY_PLAN", "CHECKLIST", "AI_PLAN"],
+  "curso-master": ["PROGRAM", "AI_PLAN", "REVIEW", "WAITING", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],
+};
+
+/** `Project.templateKey` de un proyecto que sale de una plantilla propia (las de serie guardan su clave). */
+export const CUSTOM_TEMPLATE_KEY = "custom";
+
+/**
+ * Roles sugeridos para el tablero de un proyecto según la plantilla de la que salió: los de su plantilla de serie o, si fue
+ * una propia, los que ya tienen sus columnas más los generales. null (todos a la vista): en blanco, importado, anterior a
+ * guardar la plantilla o con una clave que ya no existe.
+ */
+export function suggestedColumnRoles(templateKey: string | null | undefined, columns: readonly { role: string; assigneeId?: string | null; assignDueDays?: number | null }[]): ColumnRoleChoice[] | null {
+  if (!templateKey) return null;
+  if (templateKey === CUSTOM_TEMPLATE_KEY) {
+    const own = new Set<string>(GENERAL_ROLE_CHOICES);
+    for (const c of columns) {
+      if (c.role !== "NONE") own.add(c.role);
+      else if (c.assigneeId || c.assignDueDays != null) own.add("ASSIGN");
+    }
+    return ROLE_CHOICES.filter((r) => own.has(r));
+  }
+  // hasOwn: una clave como «constructor» (un .pizarro.zip fabricado) no debe dar lo que hereda el objeto.
+  const list = Object.hasOwn(TEMPLATE_COLUMN_ROLES, templateKey) ? TEMPLATE_COLUMN_ROLES[templateKey] : undefined;
+  return list ? [...list] : null;
+}
+
+/** La clave que se guarda al importar un proyecto: una plantilla de serie conocida o «custom»; cualquier otra, null. */
+export function knownTemplateKey(key: string | null | undefined): string | null {
+  if (!key) return null;
+  return key === CUSTOM_TEMPLATE_KEY || BUILTIN_KEYS.includes(key) ? key : null;
 }

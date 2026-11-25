@@ -23,86 +23,96 @@ Lo aprendido en las pruebas (sirve para todos los prompts):
   con un volumen no se pueden subir las réplicas.
 - `/forgot-password` redirige al tablero si hay sesión abierta: para verlo hay que cerrar sesión (y luego entra el
   propietario, que tiene la contraseña).
-- Los PDF de Pizarro se descargan (desde la v1.68) o se abren en una pestaña; su texto va con fuentes incrustadas y se
-  lee por captura, no con read_page.
+- Los PDF de Pizarro se descargan (desde la v1.68) o se abren en una pestaña; su texto va con fuentes incrustadas y no
+  se lee con read_page. Lo que funciona (así lo hizo el informe de la v1.68): interceptar el Blob de la descarga con
+  javascript_tool (por ejemplo, envolviendo `URL.createObjectURL` antes de pulsar el botón) y leer su texto o su
+  tamaño; si no, por captura.
 - Los tooltips nativos (atributo `title`, al pasar el ratón) no salen en las capturas: se leen con read_page.
 - Para ver en *Logs* el apagado en inglés hace falta un apagado nuevo: reiniciar el servicio de Pizarro de la
   instalación de prueba (Railway, *Restart*); los apagados de versiones anteriores siguen en español.
+- Railway, margen del apagado: el ajuste del panel está en *Settings → Deploy → Teardown*. Al activarlo propone
+  *Draining* 0 y *Overlap* 0; el valor nuevo hay que confirmarlo con el ✓ del campo antes de pulsar «Deploy» (si no,
+  no se guarda). Lo que recomienda la guía es la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` en *Variables* del
+  servicio de Pizarro: da el mismo margen y Pizarro la lee para esperar hasta 10 s. *Overlap* siempre en 0.
 
-Estado tras la ronda 65 (v1.69.0):
+Estado tras la ronda 66 (v1.70.0):
 
 - Hecho: revisión de Cloudflare y R2 (ronda 60), instalación desde cero en Railway con la web (ronda 60), copias en R2 y
   primera regla de bloqueo (ronda 61), pruebas en real de la v1.64/v1.65 y auditoría como usuario (ronda 62),
-  `feedback@getpizarro.com`, regla `adjuntos-pizarro`, comprobación de salud y pruebas de la v1.66.0 (ronda 63) y, en la
-  ronda 64, pruebas en real y auditoría como usuario de la v1.67.0 y registro DMARC `_dmarc` con `p=none` en
-  getpizarro.com.
-- Los prompts de la v1.68.0 no se llegaron a pasar: sus puntos siguen en el prompt 1, junto a los de la v1.69.0 y los
-  pendientes de la v1.67. El propietario los pasará en la próxima sesión.
-- Pendientes, en este orden: 1 (pruebas en real de la v1.69.0), 2 (informes DMARC `rua`, aprobado por el propietario) y
-  3 (auditoría como usuario de la v1.69.0).
+  `feedback@getpizarro.com`, regla `adjuntos-pizarro`, comprobación de salud y pruebas de la v1.66.0 (ronda 63), pruebas
+  en real y auditoría como usuario de la v1.67.0 y registro DMARC `_dmarc` con `p=none` (ronda 64) y, en la ronda 66:
+  - pruebas en real de la v1.68.0 y la v1.69.0 en la instalación de prueba: bien en general (lo que falló o confundía
+    se arregló en la v1.70.0);
+  - informes DMARC: activado DMARC Management de Cloudflare en getpizarro.com, con `rua` de Cloudflare y `p=none`; sigue
+    habiendo un solo registro `_dmarc` y Email Routing está en «Enabled»;
+  - auditoría como usuario de la v1.69.0 (sus propuestas entraron en la v1.70.0);
+  - margen del apagado en Railway comprobado en la instalación de prueba.
+- Pendientes, en este orden: 1 (pruebas en real de la v1.70.0), 2 (auditoría como usuario de la v1.70.0) y 3 (primeros
+  informes DMARC, a las 24-48 h de activarlos; solo mirar).
 
-## 1. Pruebas en real de la versión 1.69.0 (instalación de prueba)
+## 1. Pruebas en real de la versión 1.70.0 (instalación de prueba)
 
 ```text
-Quiero que compruebes en real las novedades de Pizarro v1.69.0 (y las de la v1.68.0, que no se llegaron a probar) y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves ni datos personales. Los PDF se descargan: ábrelos desde las descargas del navegador y léelos por captura. Los textos que salen al pasar el ratón léelos con read_page.
+Quiero que compruebes en real las novedades de Pizarro v1.70.0 y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves ni datos personales. Los PDF se descargan: lee su texto interceptando el Blob de la descarga con javascript_tool (como en el informe de la v1.68) o, si no puedes, por captura. Los textos que salen al pasar el ratón léelos con read_page. No puedes arrastrar: lo que sea arrastrar me lo dejas a mí y lo apuntas.
 
-0. «Historial de versiones» debe decir v1.69.0. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine.
-1. Roles retirados: en el menú «⋯» de una columna → Rol de la columna, no deben salir «Agenda» ni «Entrega al cliente». Si algún proyecto tenía una columna con uno de esos roles (por ejemplo «Citas» en un proyecto «Casa y familia»), debe seguir con su nombre y sus tarjetas y con «Sin rol».
-2. Tipo por defecto: en un proyecto «Casa y familia», menú «⋯» de una columna → «Tipo por defecto…» → «Compras» → Guardar. El menú debe decir «Tipo por defecto: Compras…». Pulsa el «+» de esa columna: «Nueva tarea» empieza con el tipo «Compras» y el título «Comprar ». Cierra sin crear. Abre «Varias tareas» y elige esa columna: el tipo para todas debe empezar en «Compras». Cierra sin crear. Deja el tipo por defecto puesto para el punto 3.
-3. Tipo por defecto en plantillas: Administración → Tipos y plantillas → Plantillas → «Crear desde un proyecto…» con ese proyecto: en el editor, la columna del punto 2 debe traer «Compras» en su selector de tipo por defecto. Renombra el tipo «Compras» en el editor a «Compras prueba»: la columna debe seguir con él. Guarda la plantilla como «Plantilla prueba tipos». Crea un proyecto «Prueba tipos» con ella: la columna debe decir «Tipo por defecto: Compras prueba…». Después vuelve a «Casa y familia» y pon «Tipo por defecto…» → «Ninguno».
-4. Columna «Asignación a persona» (usa la de la ronda anterior o crea una con el administrador y «Vence en 3 días»):
-   a. «Nueva tarea» desde su «+»: debajo de Responsable debe decir «Esta columna asigna sus tarjetas a … y, sin fecha, vencen en 3 días».
-   b. Abre la cabecera para cambiar la persona: si el proyecto tiene pocas personas, debe salir el enlace «Añadir personas al proyecto»; púlsalo: lleva a Ajustes del proyecto, a la lista «Miembros». Vuelve al tablero sin cambiar nada.
-   c. «Generar plan» debe estar bajo la cabecera (no al pie). Púlsalo dos veces seguidas: el botón queda ocupado, el segundo clic no hace nada y se descarga UN PDF, sin abrir pestaña. En el PDF, cada tarea con descripción lleva un resumen de varias líneas (no solo la primera) sin apartados vacíos como «**Material necesario:**», y sus etiquetas.
-5. PDF de la semana: en una columna «Planificación semanal» («Esta semana»), «PDF de la semana (por día)» y «(por persona)»: se descargan igual, con el botón ocupado mientras tanto.
-6. Prefijos de tipo: crea en «Casa y familia» una tarea «Prueba prefijos» de tipo «Papeleo» (título «Gestionar Prueba prefijos»). Ábrela y cambia el tipo, en este orden: Compras → Casa → Papeleo → Casa. Apunta el título tras cada cambio: debe llevar solo el prefijo del tipo actual («Comprar », ninguno con Casa, «Gestionar ») y nunca dos. Después crea una tarea de tipo «Casa» titulada «Comprar regalo de Ana» y cámbiala a «Cita»: debe quedar «Cita: Comprar regalo de Ana».
-7. Cambiar de tipo con subtareas: crea una tarea de un tipo con subtareas predefinidas; marca una, cambia el texto de otra y añade una a mano. Cambia la tarea a otro tipo con subtareas: las tres que tocaste se quedan y las demás del tipo anterior se sustituyen por las del nuevo. Apunta el texto exacto del aviso («Añadidas…», «Quitadas…» o «Cambiadas… subtareas del tipo») y pulsa su «Deshacer»: deben volver el tipo, el título, la descripción y las subtareas de antes.
-8. Detalle de una tarea con descripción: haz doble clic en la descripción; el botón del editor debe decir «Guardar descripción» y el del pie «Guardar». Cambia una palabra, cambia el tipo de la tarea sin guardar: el tipo se guarda, y junto a los botones sale un aviso en ámbar de que falta guardar la descripción. Pulsa «Guardar descripción».
-9. Menciones: en un comentario escribe «@» y elige a una persona: se añade un espacio detrás. Escribe un espacio más: no deben quedar dos.
-10. Botones encima del fondo (escritorio): con una tarea abierta, el botón de informar de un error (pie del menú, junto a «Cerrar sesión»; solo aparece en instalaciones oficiales: si no sale, apúntalo) debe verse entero por encima del fondo oscurecido; púlsalo: se abre su diálogo sin cerrar la tarea. Ciérralo. Pulsa el «+» flotante: se abre otra tarea al lado. Con las dos abiertas, el «+» sigue visible entero, no abre una tercera y su descripción (read_page) dice «Ya hay dos tareas abiertas». Cambia la descripción de una y ciérrala para que salga «Cambios sin guardar»: mientras está la confirmación, los botones «+», «Varias tareas», Deshacer y el de informar no deben verse encima. Cancela.
-11. Apariencia: Mi perfil → tema «Mostaza»: las muestras de «Tarjetas» deben salir en tonos mostaza. Vuelve al tema que tenías.
-12. Releases: en «Proyecto de prueba», «Generar release»: el paso 1 debe explicar en una línea qué hace, y el título propuesto llevar la fecha como el resto de la app (por ejemplo «Release 24 nov 2026 · …», con la fecha de hoy, no «2026-11-24»). Genera el texto, cambia en otra pestaña el tipo de una de las tareas incluidas, vuelve y pulsa «Marcar como desplegado» (elige archivar): debe rechazarlo y pedir volver a generar la release (apunta el texto). Cierra sin desplegar.
-13. Calendario: elige una persona en el filtro de personas: solo deben verse los entregables que tienen alguna tarea suya. Sin filtro, los desplegables dicen «Todos los proyectos» y «Cualquier persona».
-14. Historial de versiones: deben salir 10 versiones y «Ver más»; púlsalo y comprueba que carga más. Busca «Agenda»: la primera vez debe avisar «Buscando en todas las versiones…» y encontrar versiones antiguas. Abre `/changelog#v1.60.0` en la misma instalación: debe bajar a esa versión.
-15. Mis tareas: no debe haber filtros. Si tienes tareas en más de un grupo, arriba sale una línea como «Vencidas 2 · Hoy 1 · …» con enlaces a cada grupo; pulsa uno. Abre `/my-tasks?filter=overdue`: debe llevar a `/my-tasks`.
-16. Administración → Usuarios: si hay alguien con la invitación pendiente, la cabecera dice «N activos · 1 invitación pendiente» y su fila no ofrece «Forzar cambio de contraseña». Lee con read_page la descripción de los botones de icono de una fila.
-17. Administración → Proyectos: debe hablar de «miembros» («1 miembro», «Sin miembros.») y el selector debe decir «Añadir miembro…» (no «Asignar usuario» ni «asignados»).
-18. Ajustes del proyecto → General, en un proyecto de equipo: la lista se llama «Miembros» (o «Sin miembros.»). Si hay alguien con la invitación pendiente que no sea miembro, añádelo: en su fila debe salir «Generar enlace de invitación nuevo» (sin email) o «Reenviar invitación» (con email); apunta cuál y no lo pulses.
-19. Logs en inglés: Mi perfil → English. Cambia el tema y vuelve a ponerlo; cambia el rol de una columna de prueba de «Sin rol» a «Rutinas» y otra vez a «Sin rol». En Administration → Logs, las filas deben decir qué cambió («Changed the theme to …», «Changed the role of the column … from … to …»). Busca «theme»: deben salir esas filas. Ya no debe estar la nota de que los mensajes se guardan en español. Después pídeme que reinicie el servicio de prueba en Railway (o hazlo tú en Railway → servicio de Pizarro → Restart, solo en `pizarro-prueba-instalacion`), espera a que arranque y busca el apagado nuevo: debe salir en inglés. Vuelve a español.
-20. Documentación (en «Proyecto de prueba»): sube un fichero «notas.md», renómbralo a «v1.2 notas» (sin extensión) y descárgalo desde su menú «⋯»: el fichero descargado debe llamarse «v1.2 notas.md». Envíalo después a la papelera.
-21. Integraciones → WhatsApp: si está configurado, apunta si muestra un último error y su texto (no cambies nada). Si no está configurado, sáltalo.
-22. Pendientes de la v1.67: (a) si te doy la contraseña de «Persona Prueba», comprueba como administrador que hay una plantilla propia en Administración → Tipos y plantillas → Plantillas (vale «Plantilla prueba tipos»), entra como «Persona Prueba» y comprueba que la puede elegir en «Nuevo proyecto»; si no, sáltalo. (b) En «Proyecto de prueba», pon una columna con rol «Plan de trabajo para IA» con dos tareas del mismo tipo y pulsa «Generar plan de trabajo»: el texto no debe llevar «Descripción:», ni «Tarea fija…», ni apartados del formulario sin rellenar, y el tipo debe ir una sola vez en el contexto, no en cada tarea; el pie del paso 1 debe explicar de dónde salen la cabecera y el pie.
+0. «Historial de versiones» debe decir v1.70.0. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine. En Railway, servicio de Pizarro → Variables, apunta si existe `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` y con qué valor (debe ser 15; si no está, pregúntame antes de añadirla).
+1. Mover columnas con el teclado: en «Proyecto de prueba», pon el foco en el nombre de una columna (Tab) y pulsa Alt+→: la columna pasa un sitio a la derecha y sale el aviso ««…» movida a la posición N». Pulsa Ctrl+Z: vuelve a su sitio. Lee con read_page la descripción del nombre de la columna: «… (arrastra la cabecera o pulsa Alt+flechas para moverla)». En Administración → Logs, busca «Movió la columna».
+2. Roles según la plantilla: en un proyecto creado con «Casa y familia», menú «⋯» de una columna → Rol de la columna ›: deben salir primero unos pocos roles (Planificación semanal, Esperando, Lista consolidada, Rutinas, Presupuesto, Asignación a persona) y el resto tras «Más roles…» («Siguiente salto» debe estar ahí, no a la vista). En «Proyecto de prueba» (en blanco o anterior), deben salir todos sin «Más roles…».
+3. Organizar por personas: en el proyecto «Casa y familia» con al menos dos personas (añade a «Persona Prueba» como miembro si hace falta), pulsa «Añadir columna»: el diálogo «Nueva columna» ofrece «Organizar por personas: una columna para cada una». Púlsalo: debe explicar «Se crearán N columnas «Asignación a persona», una por persona (…)» (o «Se creará una columna…» si solo falta una). Confirma con «Crear N columnas»: sale «N columnas creadas», con el nombre de cada persona. Ctrl+Z las quita todas de una vez. Vuelve a crearlas para el punto 4. Si solo hubiera una persona, debe decir «En el proyecto solo hay una persona: añade antes a las demás.» con el enlace «Añadir personas al proyecto (se abre en otra pestaña)».
+4. Asignación a persona: (a) en la cabecera de una de esas columnas, cambia la persona: debe salir la casilla «Cambiar el nombre de la columna a «…»», marcada. (b) Abre una tarea de otra columna y cambia «Columna» a esa: sale el aviso «Asignada a … · vence el …» (o «Asignada a …» si la columna no tiene plazo) con «Deshacer»; púlsalo: la tarea vuelve con su responsable y su fecha de antes. (c) Con la selección múltiple, «Mover a…» esa columna con dos tarjetas: un solo aviso.
+5. Tipo por defecto en la cabecera: en «Casa y familia», la columna «Lista de la compra» de un proyecto nuevo debe traer el tipo por defecto «Compras» y «Citas» el tipo «Cita»: junto al contador de la cabecera sale un punto de color; lee su descripción con read_page: «Tipo por defecto: Compras».
+6. Añadir columna: la barra del final del tablero lleva el texto «Añadir columna» en vertical bajo el «+». Crea un proyecto nuevo desde una plantilla (sale su descripción encima de las columnas), añade una columna: el tablero se desplaza hasta ella y la descripción del proyecto sigue a la vista.
+7. Detalle: el botón del pie dice «Deshacer todo». Cambia el título y pulsa «Deshacer todo»: pregunta «¿Deshacer todos los cambios?» con «Deshacer todo» y «Seguir editando». Confirma: sale «Cambios descartados» con «Deshacer». Aparte, abre una tarea, escribe en la descripción sin guardar y ciérrala con la X: el diálogo «Cambios sin guardar» sigue ofreciendo «Seguir editando» y «Descartar cambios».
+8. Cambio de tipo: crea una tarea de un tipo con subtareas y descripción de plantilla y cámbiala a otro tipo con subtareas: el aviso debe decir algo como «Tipo cambiado: 3 subtareas añadidas, 2 quitadas y plantilla de la descripción aplicada» (apunta el texto exacto) y durar unos 10 segundos. Pulsa «Deshacer»: «Deshecho el cambio de tipo de «…»». Abre «Historial» de la tarea: debe haber una línea «Cambió las subtareas del tipo: quitó …; añadió …». Cambia a un tipo sin subtareas ni plantilla: no sale aviso. En Logs, «Cambió el tipo de «…» a «…»».
+9. Guardar la descripción: edita la descripción y pulsa «Guardar descripción»: el foco queda en la descripción guardada y la columna de la tarea no salta; pulsa Intro: vuelve a editarla.
+10. Varias tareas: en una columna «Asignación a persona», «Varias tareas»: sale la nota de la columna y el responsable propuesto es su persona. Pon dos líneas y cambia el tipo de una: «Tipo para todas» dice «(ahora hay varios)». Crea las tareas: cada una lleva la descripción de plantilla de su tipo (pero no el prefijo del título).
+11. Bloquea a: en la tarea A pon «Bloqueada por» → B. Abre B: debe salir «Bloquea a» con el enlace a A. Púlsalo: se abre A con «← Volver a «B»» en la cabecera; púlsalo: vuelves a B. El color de A no debe haber cambiado a un desplegable «Sin color».
+12. Orden de los proyectos: Mi perfil → Preferencias → «Orden de los proyectos»: «Usados recientemente» («Arriba el último que has abierto.») y «Alfabético» («Por nombre, de la A a la Z.»). Elige «Alfabético» y recarga: el selector de la barra lateral y la página de inicio van por nombre. Vuelve a «Usados recientemente», abre el tablero de un proyecto que esté abajo y recarga: ese pasa arriba.
+13. Plantillas a medio editar: Mi perfil → Plantillas, edita una cabecera sin guardar y pulsa la pestaña «Avisos»: debe preguntar antes de salir. Cancela y descarta la edición. Lo mismo en Ajustes del proyecto → Plantillas.
+14. Avisos: con todos los avisos leídos y alguna tarea vencida, la página Avisos debe decir «No tienes avisos nuevos · N tareas vencidas en Mis tareas»; el enlace lleva al grupo «Vencidas» de Mis tareas.
+15. Calendario: con varios proyectos a la vista, las siglas de proyecto van en un cuadro de esquinas rectas (no en un círculo); su descripción (read_page) dice «Proyecto: …». Un entregable dice «Entregable: …». Bajo la cuadrícula, una línea con «Siglas del proyecto» y «Entregable: tareas hechas de su total; el color indica si va en plazo».
+16. PDF: en una columna «Planificación semanal», los dos «PDF de la semana» se descargan como «semana-por-dia-…» y «semana-por-persona-…» (apunta los nombres); en el de por persona, las tareas sin fecha dicen «Sin fecha». En una «Lista consolidada», el PDF se llama «lista-por-tarjeta-…» o «lista-por-tipo-…».
+17. Generar release: el paso 1 dice «Notas de versión por tipo. Al desplegarla, va al histórico y cada tarea (salvo las fijas) pasa a empezar por su código: «R…F1: …».». Cierra sin desplegar. En «Generar plan de trabajo», el texto lleva la fecha como «24 nov 2026», no «2026-11-24».
+18. Historial de versiones: busca una palabra: sale resaltada. Como administrador ves «Cambios técnicos / DB»; si te doy la contraseña de «Persona Prueba», comprueba que ella no los ve (tampoco al buscar ni con «Ver más»). Abre `/changelog#v1.60.0`: baja a esa versión; cambia la dirección a `#v1.62.0` sin recargar: baja a esa.
+19. Administración → Usuarios → Editar en tu propia fila: el email sale bloqueado con «Tu propio email se cambia en «Mi perfil».». No cambies nada.
+20. Administración → Proyectos: los administradores que no son miembros salen como «(admin, no miembro; lo tiene en su lista)» o «(admin, no miembro; no lo tiene en su lista)», y el recuento añade «· N admins sin ser miembros». En Ajustes del proyecto → General de un proyecto de equipo sin miembros: «Sin miembros. Los administradores lo ven sin ser miembros.»; apunta la nota sobre «Reenviar invitación» o «Generar enlace de invitación nuevo».
+21. Administración → Logs: «Periodo» con «Última hora», «Últimas 24 h», «7 días» y «Personalizado…»; elige «Personalizado…»: salen «Desde» y «Hasta» como listas de días. Elige un rango y pulsa «Descargar CSV»: su descripción (read_page) dice «Con el periodo y los filtros de la lista». Si eliges un «Desde» posterior al «Hasta», debe avisar «Periodo personalizado: … Se muestran las últimas 24 h.». Busca una fila «Inicio de sesión fallido» de un email sin cuenta (si no hay, pídeme que pruebe yo uno en ventana privada): el email sale como «a***@…».
+22. Administración → Copias de seguridad: los textos no deben nombrar variables («Se guardan en el disco de este servidor…»); las variables están en las notas «Para quien instala». Apunta si alguna frase se entiende mal.
+23. Administración → Tipos y plantillas → Plantillas: las de serie llevan la etiqueta «De serie» (no «Por defecto»). Abre «Eventos y viajes»: su descripción ya no habla de «la agenda» y las columnas «Por confirmar» y «Reservado» traen el tipo por defecto «Proveedor».
+24. Integraciones → WhatsApp: si está configurado, NO pulses «Probar» sin preguntarme (cada prueba son dos mensajes de pago). Solo apunta si muestra un último error.
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```
 
-## 2. Informes DMARC de getpizarro.com (aprobado por el propietario)
-
-```text
-El dominio getpizarro.com ya tiene en Cloudflare el registro TXT `_dmarc` con `v=DMARC1; p=none;`, pero sin `rua` no llega ningún informe. Quiero activar los informes con DMARC Management de Cloudflare (está aprobado). Trabaja en una pestaña nueva, no cambies nada más y, si algo no coincide o te pide pagar, para y pregúntame.
-
-1. Panel de Cloudflare → getpizarro.com → Email → DMARC Management. Apunta cómo está el registro `_dmarc` antes de tocar nada.
-2. Actívalo y comprueba en DNS → Records que el registro `_dmarc` sigue siendo uno solo, con `p=none` y una dirección `rua` de Cloudflare.
-3. Comprueba que Email Routing sigue en «Enabled».
-
-Informe en español: qué había antes y qué ha quedado.
-```
-
-## 3. Auditoría como usuario de la v1.69.0 (instalación de prueba)
+## 2. Auditoría como usuario de la v1.70.0 (instalación de prueba)
 
 ```text
 Quiero que uses Pizarro como lo haría una persona nueva en su trabajo y me des un informe de todo lo que confunda, falle o se pueda mejorar. Trabaja en una pestaña nueva y, si algo no coincide con lo que te describo, para y pregúntame.
 
 Dónde: la instalación de PRUEBA en Railway (proyecto `pizarro-prueba-instalacion`, administrador `admin-prueba@example.com`). No toques la real. Antes de cualquier paso que cueste dinero, para y pregúntame. No pongas en tu informe claves, contraseñas ni datos personales.
 
-0. En Historial de versiones, comprueba que es la v1.69.0 (si no: Railway, servicio de Pizarro, rama `stable`, «Deploy»).
-1. Crea un proyecto «Eventos y viajes» con tarjetas de ejemplo y organiza con él un viaje de fin de semana de tres personas: una columna «Asignación a persona» por persona (con su plazo), un tipo por defecto en las columnas donde tenga sentido, mueve tareas entre ellas y descarga el plan de cada una. Las fechas se ven en el Calendario (ya no hay columnas «Agenda» ni «Entrega al cliente» con rol).
-2. Crea tareas de varios tipos (también con «Varias tareas»), cambia de tipo en el detalle con subtareas tocadas y sin tocar y con la descripción a medias, usa «Deshacer», añade comentarios con «@» y adjuntos. Trabaja un rato con dos tareas abiertas a la vez.
-3. Calendario (con y sin filtro de persona), Mis tareas (con su línea de resumen) y Avisos: ¿se entiende qué tienes pendiente y para cuándo?
-4. Releases y plan de trabajo para IA en el proyecto «Proyecto de prueba».
-5. Administración: Usuarios, Proyectos (miembros), Tipos y plantillas (tipo por defecto de las columnas), Ajustes, Copias de seguridad, Logs (en español y en inglés, buscando en los dos).
-6. Historial de versiones: «Ver más», el buscador y el enlace de una versión.
-7. Cuenta lo que no entiendas sin ayuda y lo que te sobre.
+0. En Historial de versiones, comprueba que es la v1.70.0 (si no: Railway, servicio de Pizarro, rama `stable`, «Deploy»).
+1. Crea un proyecto «Casa y familia» con tarjetas de ejemplo para una familia de tres personas: «Organizar por personas», reordena las columnas con Alt+flechas, mueve tareas entre las columnas de cada persona (con «Columna» en el detalle y con «Mover a…») y usa «Deshacer» en los avisos. Descarga el plan de cada persona y el PDF de la semana.
+2. Crea tareas de varios tipos (también con «Varias tareas»), cambia de tipo en el detalle con y sin la descripción a medias, usa «Deshacer todo», enlaza tareas con «Bloqueada por» y navega con «Bloquea a» y «← Volver».
+3. Mi perfil: cambia el orden de los proyectos y edita una plantilla sin guardar antes de cambiar de pestaña. ¿Se entiende cada opción?
+4. Calendario (con varios proyectos y entregables), Mis tareas y Avisos: ¿se entiende qué tienes pendiente y para cuándo? ¿Se entiende la leyenda?
+5. Releases y plan de trabajo para IA en el proyecto «Proyecto de prueba».
+6. Administración: Usuarios, Proyectos (miembros y administradores que no lo son), Tipos y plantillas (las «De serie»), Copias de seguridad (¿se entiende sin saber de servidores?), Logs (periodo personalizado y CSV).
+7. Historial de versiones: el buscador y el enlace de una versión.
+8. Cuenta lo que no entiendas sin ayuda y lo que te sobre.
 
 Informe en español, ordenado de más a menos grave: para cada punto, la pantalla, qué hiciste, qué esperabas, qué pasó (texto exacto) y una propuesta. Separa: fallos, cosas confusas, ideas para simplificar y lo que te ha gustado. No borres nada: pregúntame.
+```
+
+## 3. Primeros informes DMARC de getpizarro.com (solo mirar, a las 24-48 h)
+
+```text
+Hace uno o dos días se activó DMARC Management de Cloudflare en getpizarro.com (registro `_dmarc` con `p=none` y `rua` de Cloudflare). Quiero saber qué dicen los primeros informes. Trabaja en una pestaña nueva y NO cambies nada (ni DNS, ni DMARC, ni Email Routing). Si te pide pagar o algo no coincide, para y pregúntame.
+
+1. Panel de Cloudflare → getpizarro.com → Email → DMARC Management. Apunta el periodo que cubren los informes y si ya ha llegado alguno (si no hay ninguno, dilo y para).
+2. Para cada fuente que envía correo con el dominio getpizarro.com (nombre del proveedor o servicio, no direcciones IP sueltas si se puede evitar): cuántos mensajes, si pasan SPF, si pasan DKIM y si pasan DMARC (alineados).
+3. Señala las fuentes que no reconozcas o que fallen SPF o DKIM, y di qué crees que son (por ejemplo, reenvíos de Email Routing), sin tocar nada.
+4. Comprueba que en DNS → Records sigue habiendo un solo registro `_dmarc` con `p=none`.
+
+Informe en español: una tabla con fuente, mensajes, SPF, DKIM y DMARC, y debajo lo que convendría revisar antes de pasar a `p=quarantine` (solo como propuesta).
 ```

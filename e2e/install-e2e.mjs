@@ -7,7 +7,7 @@
 // Borra y crea la base de DATABASE_URL (solo nombres pz_*) y arranca su propio `npm start` en el puerto de BASE (debe
 // estar libre; compila antes con next build + postbuild + build:boot). No usa la base de la QA.
 //   cd e2e && BASE=http://localhost:3317 DATABASE_URL=postgresql://…/pz_install APP_DIR=$PWD/.. node install-e2e.mjs
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
@@ -35,7 +35,7 @@ const SETUP_TOKEN = "token-de-reserva-e2e";
   await admin.query(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
   await admin.query(`CREATE DATABASE "${dbName}"`);
   await admin.end();
-  execFileSync("npx", ["prisma", "migrate", "deploy"], { cwd: APP_DIR, env: { ...process.env, DATABASE_URL: DB }, stdio: "pipe" });
+  L.prismaMigrate(APP_DIR, { ...process.env, DATABASE_URL: DB });
 }
 let out = "";
 const port = new URL(L.BASE).port || "80";
@@ -50,10 +50,10 @@ const env = {
   // Anota cualquier aviso de Node (p. ej. DeprecationWarning) con su pila.
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import ${pathToFileURL(path.join(L.HERE, "..", "warn-hook.mjs")).href}`.trim(), WARN_LOG: warnLog,
 };
-const server = spawn("npm", ["start"], { cwd: APP_DIR, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+const server = spawn(process.execPath, L.START_ARGS, { cwd: APP_DIR, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
 server.stdout.on("data", (d) => (out += d));
 server.stderr.on("data", (d) => (out += d));
-const stop = () => { try { process.kill(-server.pid, "SIGTERM"); } catch { /* ya parado */ } };
+const stop = () => L.stopServerTree(server);
 process.on("exit", stop);
 const ready = await L.waitFor(async () => (await fetch(L.BASE + "/api/health")).ok, { timeout: 90000, step: 500 });
 if (!ready) { console.log(out); throw new Error("el servidor no arranca"); }

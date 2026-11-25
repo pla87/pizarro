@@ -56,6 +56,8 @@ interface TemplateChangeSnapshot {
   createdReleaseTemplates: string[];
   taskFields: string[];
   tasks: TaskSnap[];
+  /** Project.templateKey de antes (el deshacer lo devuelve); las instantáneas anteriores a guardarlo no lo traen. */
+  templateKey?: string | null;
 }
 
 /**
@@ -131,7 +133,7 @@ async function takeSnapshot(tx: Tx, projectId: string): Promise<TemplateChangeSn
   const kinds = await tx.taskKind.findMany({ where: { projectId }, select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } });
   const hidden = await tx.projectHiddenKind.findMany({ where: { projectId }, select: { kindId: true } });
   const labels = await tx.label.findMany({ where: { projectId }, select: { id: true, name: true, color: true } });
-  const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { taskFields: true } });
+  const project = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { taskFields: true, templateKey: true } });
   return {
     v: 1,
     columns,
@@ -144,6 +146,7 @@ async function takeSnapshot(tx: Tx, projectId: string): Promise<TemplateChangeSn
     createdReleaseTemplates: [],
     taskFields: project.taskFields,
     tasks: [],
+    templateKey: project.templateKey,
   };
 }
 
@@ -169,6 +172,8 @@ interface ApplyResult {
  */
 export async function applyTemplateToProject(opts: {
   projectId: string; userId: string; locale: Locale; templateName: string; template: ApplyTemplateShape; mode: ApplyMode; choices?: Partial<ApplyChoices>;
+  /** La plantilla que queda apuntada en el proyecto (Project.templateKey): al cambiarla siempre; al añadir, solo si no tenía. */
+  templateKey?: string;
 }): Promise<ApplyResult> {
   const { projectId, template, mode } = opts;
   return db.$transaction(async (tx) => {
@@ -184,6 +189,9 @@ export async function applyTemplateToProject(opts: {
       const snap = await takeSnapshot(tx, projectId);
       const result = plan.mode === "ADD" ? await executeAdd(tx, projectId, plan, template, snap, opts.locale) : await executeReplace(tx, projectId, plan, template, shape, snap, opts.locale);
       await addCommon(tx, projectId, plan, snap);
+      if (opts.templateKey && (mode === "REPLACE" || snap.templateKey == null) && opts.templateKey !== snap.templateKey) {
+        await tx.project.update({ where: { id: projectId }, data: { templateKey: opts.templateKey }, select: { id: true } });
+      }
       // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
       await assertProgramColumnsFit(tx, projectId, shape.columns);
       const data = { userId: opts.userId, templateName: cutText(opts.templateName, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
@@ -575,7 +583,11 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     }
     await ensureUsableKind(tx, projectId);
     const budget = await tx.column.count({ where: { projectId, role: "BUDGET" } });
-    await tx.project.update({ where: { id: projectId }, data: { taskFields: normalizeTaskFields([...snap.taskFields, ...(budget ? ["cost"] : [])]) } });
+    await tx.project.update({
+      where: { id: projectId },
+      // La plantilla apuntada de antes, si la instantánea la trae (las anteriores a guardarla no: se deja como esté).
+      data: { taskFields: normalizeTaskFields([...snap.taskFields, ...(budget ? ["cost"] : [])]), ...(snap.templateKey !== undefined ? { templateKey: snap.templateKey } : {}) },
+    });
     // Las tareas fijas fuera de la columna de release o de las de plan para IA pasan a normales (la marca devuelta solo vale allí).
     await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
 

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { visibleProjectsWhere } from "@/lib/access";
+import { sortProjects } from "@/lib/project-order";
 import { requireAdminPage } from "@/lib/session";
 import { getT } from "@/i18n/server";
 import { ExistingProjects } from "./ExistingProjects";
@@ -15,7 +16,9 @@ export default async function ExistingProjectsPage() {
   const projects = await db.project.findMany({
     where: { isPrivate: false, ...visibleProjectsWhere(user) },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true, adminPicks: { where: { userId: user.id }, select: { userId: true } } },
+    select: { id: true, name: true, adminPicks: { where: { userId: user.id }, select: { userId: true } }, visits: { where: { userId: user.id }, select: { visitedAt: true } } },
   });
-  return <ExistingProjects userId={user.id} projects={projects.map((p) => ({ id: p.id, name: p.name, picked: p.adminPicks.length > 0 }))} />;
+  // En el orden que ha elegido en su perfil (como el selector de la barra lateral).
+  const ordered = sortProjects(projects.map((p) => ({ ...p, visitedAt: p.visits[0]?.visitedAt ?? null })), user.projectOrder, user.locale === "EN" ? "en" : "es");
+  return <ExistingProjects userId={user.id} projects={ordered.map((p) => ({ id: p.id, name: p.name, picked: p.adminPicks.length > 0 }))} />;
 }

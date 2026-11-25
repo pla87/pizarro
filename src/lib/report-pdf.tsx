@@ -546,7 +546,8 @@ function weekPlanDoc(r: WeekPlanPdfInput, t: T, locale: string): PagedDoc {
     { label: t("Tipo"), width: "18%", render: (x) => x.kind },
     byDay
       ? { label: t("Responsable"), width: "30%", render: (x) => x.assigneeName ?? "—" }
-      : { label: t("Fecha"), width: "32%", render: (x) => (x.dueDate ? formatDay(x.dueDate, r.today, locale) : "—") },
+      // Sin fecha límite, dicho con palabras (como la sección «Sin fecha» del PDF por día): una raya sola pasaba por celda vacía.
+      : { label: t("Fecha"), width: "32%", render: (x) => (x.dueDate ? formatDay(x.dueDate, r.today, locale) : t("Sin fecha")) },
   ];
   const build = (big: boolean): Block[] => [
     {

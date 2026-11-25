@@ -157,6 +157,8 @@ El token se guarda cifrado y no se vuelve a mostrar (solo sus 4 últimos caracte
    Con el número de prueba de Meta, tiene que ser uno de los 5 verificados.
 2. Llegan dos WhatsApp: «Mensaje de prueba de Pizarro…» (plantilla de avisos) y un código de muestra, `123456`
    (plantilla de verificación). Si alguna falla, Pizarro dice cuál y muestra el error que devuelve Meta.
+3. Cada prueba son dos mensajes de pago, así que hay un tope: **10 pruebas al día por administrador y por número**.
+   Al pasarlo sale «Has llegado al máximo de mensajes de WhatsApp de prueba por hoy. Vuelve a intentarlo mañana.».
 
 ## Paso 9. Cada persona conecta su WhatsApp
 

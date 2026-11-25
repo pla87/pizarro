@@ -1,11 +1,11 @@
 import { db } from "@/lib/db";
 import { flushLogs, logEvent, logRetentionDays } from "@/lib/log";
-import { isMaskedLog, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
+import { isMaskedLog, LOG_RANGES, logQuery, logsAfter, logWhere, memberPrivateProjectIds, parseLogFilters } from "@/lib/log-query";
 import { CSV_BOM, csvDateParam, csvRow, csvSeparator, type LogCsvError } from "@/lib/log-csv";
 import { logDetailsShown, logMessageText } from "@/lib/log-message";
 import { legacyLogLabel } from "@/lib/log-legacy";
 import { appTimeZone } from "@/lib/board";
-import { parseExportRange } from "@/lib/log-range";
+import { dayInZone, parseExportRange } from "@/lib/log-range";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
 import { getCurrentUser } from "@/lib/session";
@@ -30,7 +30,11 @@ function isNavigation(req: Request): boolean {
   return req.headers.get("sec-fetch-mode") === "navigate" || (req.headers.get("accept") ?? "").includes("text/html");
 }
 
-/** Descarga en CSV de los logs con el filtro actual y un intervalo de fechas (solo administradores; por defecto, el último día). */
+/**
+ * Descarga en CSV de los logs con el filtro actual (solo administradores). El periodo, el de la lista: uno fijo
+ * (`range=1h|24h|7d`: las últimas horas) o uno personalizado (`range=custom` con `desde`/`hasta`). Con `desde`/`hasta`
+ * sueltos (los enlaces de antes del periodo personalizado), esas fechas; sin nada, de ayer a hoy.
+ */
 export async function GET(req: Request) {
   const t = await getT();
   const user = await getCurrentUser();
@@ -52,7 +56,8 @@ export async function GET(req: Request) {
     if (to) extra.hasta = to;
     return new Response(null, { status: 303, headers: { Location: `/admin/logs${logQuery(filters, extra)}`, "Cache-Control": "no-store" } });
   };
-  const range = parseExportRange(params.get("desde"), params.get("hasta"), { tz, retentionDays: days });
+  const preset = !params.has("desde") && !params.has("hasta") ? LOG_RANGES.find((r) => r.value === params.get("range")) : undefined;
+  const range = preset ? presetRange(preset.hours, tz, days) : parseExportRange(params.get("desde"), params.get("hasta"), { tz, retentionDays: days });
   if (!range.ok) {
     const msg =
       range.error === "order" ? t("La fecha «desde» no puede ser posterior a «hasta».")
@@ -94,7 +99,8 @@ export async function GET(req: Request) {
     throw err;
   }
   const locale = await getLocale();
-  const where = logWhere({ ...filters, period: { gte: range.gte, lt: range.lt }, locale }, mine);
+  // Periodo fijo: las últimas horas, como la lista (logWhere con `range`); si no, los días enteros pedidos.
+  const where = logWhere({ ...filters, period: preset ? undefined : { gte: range.gte, lt: range.lt }, locale }, mine);
   const sep = csvSeparator(locale);
   const truncatedLine = t("Recortado a {n} filas: acorta el intervalo.", { n: MAX_ROWS.toLocaleString(intlLocale(locale)) });
   const maskedLine = t("Actividad en un proyecto privado");
@@ -158,4 +164,11 @@ export async function GET(req: Request) {
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+/** Periodo fijo de la lista (las últimas `hours` horas, como mucho lo que se conservan): los días que abarca, para el registro. */
+function presetRange(hours: number, tz: string, retentionDays: number): { ok: true; from: string; to: string; gte: Date; lt: Date } {
+  const now = new Date();
+  const gte = new Date(now.getTime() - Math.min(hours * 3_600_000, retentionDays * 86_400_000));
+  return { ok: true, from: dayInZone(gte, tz), to: dayInZone(now, tz), gte, lt: now };
 }

@@ -61,3 +61,18 @@ export function parseExportRange(
   if (Math.round((utcOf(t) - utcOf(f)) / DAY_MS) > opts.retentionDays) return { ok: false, error: "too_long" };
   return { ok: true, from: f, to: t, gte: startOfDayInZone(f, opts.tz), lt: startOfDayInZone(addDays(t, 1), opts.tz) };
 }
+
+/**
+ * Días que se pueden elegir en el periodo personalizado de Logs, de `today` hacia atrás (`count` días antes), con la
+ * fecha escrita en el idioma de la interfaz («lun, 24 nov» / «Mon, Nov 24»): un campo de fecha del navegador seguiría el
+ * formato del navegador, no el de la interfaz.
+ */
+export function logDayOptions(today: string, count: number, locale: string): { value: string; label: string }[] {
+  const fmt = new Intl.DateTimeFormat(locale, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+  return Array.from({ length: count + 1 }, (_, i) => {
+    const value = addDays(today, -i);
+    // Sin los puntos de las abreviaturas de algunas versiones de ICU («lun., 24 nov.») ni espacios duros.
+    const label = fmt.format(new Date(utcOf(value))).replace(/\./g, "").replace(/[   ]/g, " ");
+    return { value, label };
+  });
+}

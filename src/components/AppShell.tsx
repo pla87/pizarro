@@ -46,7 +46,7 @@ import { useFocusTrap } from "./ui/focusTrap";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
-import { NEW_PROJECT_PARAM } from "@/components/board/ProjectIntroNotice";
+import { showProjectIntroOnce } from "@/components/board/ProjectIntroNotice";
 
 interface Props {
   user: CurrentUser;
@@ -561,10 +561,11 @@ function NewProjectModal({ isAdmin, onClose }: { isAdmin: boolean; onClose: () =
       if (!res.ok) return toast(res.error, "error");
       // Con una plantilla, al tablero: ya trae columnas, tipos y etiquetas, y lo siguiente es crear tareas (antes se abrían
       // siempre los ajustes). En blanco, a los ajustes, para adaptar las columnas por defecto y los tipos.
-      // Con una plantilla, `?nuevo=1`: el tablero enseña la descripción del proyecto una vez (ProjectIntroNotice).
+      // Con una plantilla, el tablero enseña la descripción del proyecto una vez (ProjectIntroNotice).
       const dest = template ? `/p/${res.data.id}` : `/p/${res.data.id}/settings`;
+      if (template) showProjectIntroOnce(res.data.id, description);
       setTarget(dest);
-      router.push(template ? `${dest}?${NEW_PROJECT_PARAM}=1` : dest);
+      router.push(dest);
     });
   };
   return (
