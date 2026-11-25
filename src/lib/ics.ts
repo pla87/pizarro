@@ -35,6 +35,9 @@ export function escapeIcsText(text: string): string {
 
 /** Pliega una línea a 75 octetos como máximo (CRLF + espacio), sin partir caracteres UTF-8. */
 export function foldIcsLine(line: string): string {
+  // Atajo para las que ya caben (DTSTART, UID, SEQUENCE…: la mayoría). Cada unidad UTF-16 son como mucho 3 octetos (un
+  // carácter de 4 ocupa dos unidades; una suplente suelta se codifica con 3), así que 25 unidades siempre caben.
+  if (line.length <= 25 || (line.length <= 75 && Buffer.byteLength(line, "utf8") <= 75)) return line;
   const parts: string[] = [];
   let current = "";
   let bytes = 0;

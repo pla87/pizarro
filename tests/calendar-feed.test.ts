@@ -63,6 +63,38 @@ test("plegado a 75 octetos sin partir UTF-8 y sin perder texto", () => {
   assert.equal(lines.map((l, i) => (i ? l.slice(1) : l)).join(""), line);
 });
 
+// foldIcsLine tiene un atajo para las líneas que ya caben: la salida tiene que ser la del plegado carácter a carácter.
+test("plegado: el atajo de las líneas que ya caben da lo mismo que plegar carácter a carácter", () => {
+  const reference = (line: string): string => {
+    const parts: string[] = [];
+    let current = "";
+    let bytes = 0;
+    let limit = 75;
+    for (const ch of line) {
+      const size = Buffer.byteLength(ch, "utf8");
+      if (bytes + size > limit) {
+        parts.push(current);
+        current = "";
+        bytes = 0;
+        limit = 74;
+      }
+      current += ch;
+      bytes += size;
+    }
+    parts.push(current);
+    return parts.join("\r\n ");
+  };
+  // Letras de 1, 2, 3 y 4 octetos, y una suplente suelta (3 octetos al codificarla).
+  const alphabet = ["a", "ñ", "€", "😀", "\ud800", ";"];
+  let seed = 7;
+  const rnd = (n: number) => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) % n);
+  const cases: string[] = ["", "corta", "UID:t1@pizarro", "x".repeat(75), "x".repeat(76), "€".repeat(25), "€".repeat(26), "😀".repeat(18), "😀".repeat(19)];
+  for (const len of [1, 17, 18, 19, 24, 25, 26, 37, 38, 74, 75, 76, 77, 150]) {
+    for (let k = 0; k < 40; k++) cases.push(Array.from({ length: len }, () => alphabet[rnd(alphabet.length)]).join(""));
+  }
+  for (const line of cases) assert.equal(foldIcsLine(line), reference(line), JSON.stringify(line));
+});
+
 test("evento de día completo con rango, SEQUENCE, DTSTAMP propio y refresco", () => {
   const modifiedAt = new Date("2026-10-30T08:15:30Z");
   const ics = buildIcs({
