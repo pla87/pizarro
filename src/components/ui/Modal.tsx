@@ -30,7 +30,8 @@ interface ModalProps {
   /**
    * Con `placement="top"`, también en tableta y escritorio (sm+) va anclado arriba en lugar de centrado: un diálogo que
    * cambia de alto mientras se escribe («Crear varias tareas») crece hacia abajo y su cabecera no se mueve (centrado,
-   * crecía hacia arriba y hacia abajo a la vez).
+   * crecía hacia arriba y hacia abajo a la vez). En pareja de escritorio (`side` "left"/"right", lg+) no: va centrado
+   * como el otro diálogo.
    */
   topOnDesktop?: boolean;
   /** Clases extra para el panel (p. ej. una altura fija en escritorio). */
@@ -315,6 +316,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           top && !topOnDesktop && "sm:max-h-[calc(100dvh-2rem)]",
           // Arriba, a un 8 % de la altura (como mucho 4rem), y el alto máximo descuenta ese margen.
           top && topOnDesktop && "sm:mt-[min(8dvh,4rem)] sm:max-h-[calc(100dvh-2rem-min(8dvh,4rem))] sm:self-start",
+          // En pareja (lg+, uno al lado del otro) va centrado como el otro: si no, quedaba más arriba y no formaban un bloque.
+          top && topOnDesktop && side !== "center" && "lg:mt-0 lg:max-h-[calc(100dvh-2rem)] lg:self-auto",
           SIZES[size],
           // Hueco para el «+» y «Varias tareas» de fuera del panel (1,25rem de separación + 3,5rem del botón, a cada lado).
           side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-11rem))]",

@@ -99,12 +99,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const last = useRef<{ message: string; kind: ToastKind; at: number; id: number; timer: ReturnType<typeof setTimeout>; ms: number } | null>(null);
   // Aviso de sesión caducada visible: cada acción que falla después no apila otro igual, solo alarga el que hay.
   const sessionToast = useRef<{ id: number; timer: ReturnType<typeof setTimeout> } | null>(null);
-  // Con el ratón encima de la pila no se cierra ni se recoloca nada (se iba el aviso que se estaba por pulsar, o se movía
-  // bajo el ratón): lo que caduca entretanto espera en `expired` y lo nuevo no echa a los antiguos hasta salir.
+  // Con el ratón encima de la pila, o el foco del teclado dentro, no se cierra ni se recoloca nada (se iba el aviso que se
+  // estaba por pulsar, o se movía bajo el ratón o bajo el foco): lo que caduca entretanto espera en `expired` y lo nuevo no
+  // echa a los antiguos hasta salir. `hovered`: en pausa por cualquiera de los dos.
   const hoveredRef = useRef(false);
   const [hovered, setHovered] = useState(false);
+  const pausedBy = useRef({ pointer: false, focus: false });
   const expired = useRef(new Set<number>());
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
+  // Dónde estaba el foco antes de entrar en la pila con el teclado: vuelve ahí al pulsar un botón del aviso (que se va),
+  // en vez de caer en <body> y obligar a empezar con Tab desde el principio de la página.
+  const focusBefore = useRef<HTMLElement | null>(null);
   const expire = useCallback((id: number) => {
     if (hoveredRef.current) {
       expired.current.add(id);
@@ -112,14 +118,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     }
     setItems((prev) => prev.filter((x) => x.id !== id));
   }, []);
-  const pinnedId = () => sessionToast.current?.id ?? null;
-  const onEnter = () => {
+  // Solo refs y setters: no cambian de identidad (los usa `returnFocus`, también estable).
+  const onEnter = useCallback(() => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
     leaveTimer.current = null;
     hoveredRef.current = true;
     setHovered(true);
-  };
-  const onLeave = () => {
+  }, []);
+  const onLeave = useCallback(() => {
     hoveredRef.current = false;
     setHovered(false);
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
@@ -128,9 +134,34 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       if (hoveredRef.current) return;
       const gone = expired.current;
       expired.current = new Set();
-      setItems((prev) => trimToasts(prev.filter((x) => !gone.has(x.id)), pinnedId()));
+      // El de sesión caducada que se va ahora deja de contar como visible (un 401 después saca uno nuevo, no lo alarga).
+      if (sessionToast.current && gone.has(sessionToast.current.id)) sessionToast.current = null;
+      setItems((prev) => trimToasts(prev.filter((x) => !gone.has(x.id)), sessionToast.current?.id ?? null));
     }, AFTER_HOVER_MS);
-  };
+  }, []);
+  /** Pausa por el ratón o por el foco; los avisos siguen su curso cuando no queda ninguno de los dos. */
+  const pause = useCallback((by: "pointer" | "focus", on: boolean) => {
+    const was = hoveredRef.current;
+    pausedBy.current[by] = on;
+    const paused = pausedBy.current.pointer || pausedBy.current.focus;
+    if (paused && !was) onEnter();
+    else if (!paused && was) onLeave();
+  }, [onEnter, onLeave]);
+  /**
+   * El foco, fuera de la pila antes de que se vaya el aviso que lo tiene: al sitio de donde vino (si sigue en la página y
+   * se puede usar) o al diálogo abierto de más arriba; si no hay ninguno, donde lo deje el navegador.
+   */
+  const returnFocus = useCallback(() => {
+    const stack = stackRef.current;
+    if (!stack || !stack.contains(document.activeElement)) return;
+    const back = focusBefore.current;
+    focusBefore.current = null;
+    const usable = (el: HTMLElement | null | undefined): el is HTMLElement => !!el && el.isConnected && !el.closest("[inert]");
+    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'));
+    const target = usable(back) ? back : dialogs.findLast(usable);
+    target?.focus({ preventScroll: true });
+    pause("focus", false);
+  }, [pause]);
   useEffect(() => () => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
   }, []);
@@ -142,13 +173,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     // Con el ratón encima, lo nuevo se añade sin echar a nadie (se recorta al salir).
     const max = hoveredRef.current ? Infinity : MAX_TOASTS;
     if (kind === "error" && isSessionExpiredMessage(message, t)) {
+      // Con la pila en pausa, caduca pero sigue a la vista (espera en `expired`): sigue siendo «el» aviso de sesión, y un
+      // 401 entretanto lo alarga en vez de apilar otro igual (se anula al irse de verdad, en onLeave o al pulsarlo).
       const hide = (id: number) => setTimeout(() => {
         expire(id);
-        if (sessionToast.current?.id === id) sessionToast.current = null;
+        if (!hoveredRef.current && sessionToast.current?.id === id) sessionToast.current = null;
       }, SESSION_TOAST_MS);
       const cur = sessionToast.current;
       if (cur) {
         clearTimeout(cur.timer);
+        expired.current.delete(cur.id);
         cur.timer = hide(cur.id);
         return;
       }
@@ -165,6 +199,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       // Se descarta el duplicado, pero el aviso visible vuelve a contar su tiempo.
       const cur = last.current;
       clearTimeout(cur.timer);
+      expired.current.delete(cur.id);
       cur.timer = setTimeout(() => expire(cur.id), cur.ms);
       return;
     }
@@ -185,10 +220,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           SelectionBar) y del aviso «Sin conexión» (`--connection-notice-space`, ConnectionNotice), con el más reciente
           abajo y solo los dos últimos a la vista (más el de sesión caducada, que no se oculta nunca). */}
       <div
+        ref={stackRef}
         data-toasts=""
         // Solo con ratón: en una pantalla táctil no hay «salir», y los avisos no se irían nunca.
-        onPointerEnter={(e) => e.pointerType === "mouse" && onEnter()}
-        onPointerLeave={(e) => e.pointerType === "mouse" && onLeave()}
+        onPointerEnter={(e) => e.pointerType === "mouse" && pause("pointer", true)}
+        onPointerLeave={(e) => e.pointerType === "mouse" && pause("pointer", false)}
+        // Con el foco del teclado dentro (Tab hasta «Deshacer»), igual que con el ratón encima (WCAG 2.2.1): no se va el
+        // aviso ni desaparece el botón que tiene el foco. Sale de la pausa cuando el foco se va a otro sitio de la página.
+        onFocus={(e) => {
+          const from = e.relatedTarget as HTMLElement | null;
+          if (from && !e.currentTarget.contains(from)) focusBefore.current = from;
+          pause("focus", true);
+        }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) pause("focus", false);
+        }}
         className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4 max-md:top-auto max-md:bottom-[calc(env(safe-area-inset-bottom)+max(9rem,1rem+var(--selection-bar-space,0px))+var(--connection-notice-space,0px))] max-md:[&>:not([data-pinned]):nth-last-child(n+3)]:hidden"
         aria-live="polite"
       >
@@ -205,24 +251,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           >
             {item.kind === "error" ? <AlertCircle size={16} className="shrink-0" /> : item.kind === "undo" ? <Undo2 size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
             <span><MessageWithLinks message={item.message} /></span>
-            {/* «Deshacer» anulado por uno posterior: con el ratón encima sigue en su sitio (nada se mueve bajo el ratón),
-                apagado y explicando por qué; al salir, desaparece. */}
-            {item.action && item.stale && hovered && (
+            {/* «Deshacer» anulado por uno posterior: en pausa (ratón encima o foco dentro) sigue en su sitio, apagado y
+                explicando por qué; al salir, desaparece. Es el mismo botón (no otro en su lugar): si tenía el foco, lo
+                conserva. */}
+            {item.action && (!item.stale || hovered) && (
               <button
                 type="button"
-                aria-disabled
-                title={t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.")}
-                className="ml-1 shrink-0 cursor-not-allowed rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sky-300 opacity-50"
-                onClick={() => show(t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba."), "error")}
-              >
-                {item.action.label}
-              </button>
-            )}
-            {item.action && !item.stale && (
-              <button
-                type="button"
-                className="ml-1 shrink-0 rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sky-300 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                aria-disabled={item.stale || undefined}
+                title={item.stale ? t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.") : undefined}
+                className={cn(
+                  "ml-1 shrink-0 rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white",
+                  item.stale ? "cursor-not-allowed opacity-50" : "hover:bg-white/10",
+                )}
                 onClick={() => {
+                  if (item.stale) return show(t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba."), "error");
+                  returnFocus();
                   setItems((prev) => prev.filter((x) => x.id !== item.id));
                   if (sessionToast.current?.id === item.id) {
                     clearTimeout(sessionToast.current.timer);
