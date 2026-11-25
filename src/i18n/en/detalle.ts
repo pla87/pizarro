@@ -82,4 +82,8 @@ export const detalle: Record<string, string> = {
   "Bloquea a": "Blocks",
   "Abrir la tarea bloqueada": "Open the blocked task",
   "Volver a «{title}»": "Back to “{title}”",
+
+  // (Ronda 68) Cambiar de tipo: la plantilla del anterior se quita y el nuevo no tiene (kindChangeNotice)
+  "plantilla de la descripción quitada": "description template removed",
+  "Tipo cambiado y plantilla quitada; falta guardar la descripción": "Type changed and template removed; description not saved yet",
 };

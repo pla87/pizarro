@@ -14,7 +14,7 @@ import { cutText } from "@/lib/graphemes";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
 import { assertCanBlock, blockProblem, lockBlocking } from "@/lib/blocking";
 import { addUndo, captureTasks, dependentLinkOps, entriesMayBeTrimmed, snapshotTasks, TASK_UNDO_SELECT, taskSetOp, touchEverything, touchedTask, type OthersActivity, type TaskField, type UndoOp } from "@/lib/undo";
-import { switchKindDescription, switchKindSubtaskRows } from "@/lib/kinds-special";
+import { switchKindDescription, switchKindSubtaskRows, titleWithoutKindPrefix } from "@/lib/kinds-special";
 import { andList, quotedList, subtasksN, tasksN, type Label } from "@/lib/undo-label";
 import { AppError, notFound } from "@/lib/errors";
 import { needsRebalance, positionBetween, POSITION_STEP } from "@/lib/positions";
@@ -621,18 +621,21 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     let swap: { removed: SubtaskInfo[]; added: SubtaskInfo[]; subtasks: SubtaskInfo[] } | null = null;
     // Nombre del tipo nuevo si el tipo cambia de verdad (para el texto de la acción y del deshacer).
     let kindName: string | null = null;
+    // Prefijos de título del tipo anterior y del nuevo: el texto de la acción nombra la tarea sin ellos.
+    let kindPrefixes: { titleTemplate: string; descriptionTemplate: string }[] = [];
     await applyTaskUpdate(user, taskId, data, since, async (tx, prev) => {
       if (prev.kindId === data.kindId) return;
       // La tarea ya está bloqueada (el UPDATE de arriba): nadie añade subtareas a la vez. Las subtareas se leen con su
       // propio candado: quien marca, renombra o borra una a la vez espera, y lo marcado justo antes ya se ve aquí y se
       // queda (si no, se borraba aunque ya estuviera marcada).
       const [kinds, subs] = await Promise.all([
-        tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, name: true, subtaskTemplate: true } }),
+        tx.taskKind.findMany({ where: { id: { in: [prev.kindId, data.kindId] } }, select: { id: true, name: true, subtaskTemplate: true, titleTemplate: true } }),
         tx.$queryRaw<{ id: string; taskId: string; title: string; done: boolean; position: number }[]>`SELECT "id", "taskId", "title", "done", "position" FROM "Subtask" WHERE "taskId" = ${taskId} ORDER BY "position" ASC FOR UPDATE`,
       ]);
       const next = kinds.find((k) => k.id === data.kindId);
       if (!next) return;
       kindName = next.name;
+      kindPrefixes = kinds.map((k) => ({ titleTemplate: k.titleTemplate, descriptionTemplate: "" }));
       const { remove, add } = switchKindSubtaskRows(kinds.find((k) => k.id === prev.kindId), next, subs, MAX_SUBTASKS);
       if (!remove.length && !add.length) return;
       if (remove.length) await tx.subtask.deleteMany({ where: { id: { in: remove.map((s) => s.id) } } });
@@ -662,8 +665,9 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     }
     const task = withClip(await loadBoardTask(taskId), clipOf(patch.title));
     // Un cambio de tipo de verdad se nombra así (en Logs y en el deshacer: «Deshecho el cambio de tipo de «…»»), no como
-    // «Modificó «…»: título, descripción y tipo», que es lo que deja applyTaskUpdate.
-    if (kindName !== null) describeAction("Cambió el tipo de «{title}» a «{kind}»", { title: mentionsToPlain(task.title), kind: kindName }, { taskId });
+    // «Modificó «…»: título, descripción y tipo», que es lo que deja applyTaskUpdate. La tarea, sin el prefijo que pone el
+    // tipo: «Deshecho el cambio de tipo de «Mudanza: Varias dos»» nombraba la tarea con el del tipo que se deshace.
+    if (kindName !== null) describeAction("Cambió el tipo de «{title}» a «{kind}»", { title: mentionsToPlain(titleWithoutKindPrefix(task.title, kindPrefixes)), kind: kindName }, { taskId });
     // `removed`/`added`: cuántas se han quitado y añadido (para el aviso); `undo` (y `kindUndo`, también sin subtareas que
     // cambiar, para el aviso de la plantilla de la descripción): la entrada que deshace todo el cambio.
     const undo = trackUndoEntry();

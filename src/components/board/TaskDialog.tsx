@@ -30,7 +30,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { kindChangeNotice, switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
+import { kindChangeNotice, kindDescriptionChange, switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
@@ -129,7 +129,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
   // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
   // Devuelve cómo volver al texto y al aviso de antes si el cambio de tipo no se guarda (solo si nada ha cambiado después).
-  const descReplace = useRef<((markdown: string, templated: boolean) => () => void) | null>(null);
+  const descReplace = useRef<((markdown: string, templated: KindTemplateChange) => () => void) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -609,9 +609,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, la
-  // descripción guardada pasa a la plantilla del tipo nuevo (el aviso lo dice).
-  type KindChange = false | { description: boolean };
+  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, lo
+  // que le ha pasado a la descripción guardada: la plantilla del tipo nuevo aplicada o la del anterior quitada (el aviso lo dice).
+  type KindChange = false | { description: KindTemplateChange };
   const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
     const done = saveNow(patch, optimistic, kindChange);
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
@@ -669,7 +669,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
     if (kindSubtasks) setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
     // Lo que ha cambiado además del tipo, contado por separado («Tipo cambiado: 3 subtareas añadidas, 2 quitadas y
-    // plantilla de la descripción aplicada»); solo el tipo, sin aviso (basta con «Guardado»).
+    // plantilla de la descripción aplicada», o «quitada»); solo el tipo, sin aviso (basta con «Guardado»).
     const text = kindChange ? kindChangeNotice(t, { added: kindSubtasks?.added ?? 0, removed: kindSubtasks?.removed ?? 0, description: kindChange.description }) : null;
     const undo = kindSubtasks?.undo ?? kindUndo;
     // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
@@ -1090,14 +1090,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const typed = descLive.current;
     if (detail && kind && typed !== null && typed !== detail.description && (descDirtyCheck.current?.() ?? true)) {
       // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción (y, si
-      // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado).
-      const nextDesc = switchKindDescription(prev, kind, typed);
-      const undoReplace = descReplace.current?.(nextDesc, nextDesc !== typed);
+      // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado o que se ha quitado la del anterior). Si
+      // solo cambiarían espacios o saltos de línea, lo escrito se queda tal cual.
+      const switched = switchKindDescription(prev, kind, typed);
+      const typedChange = kindDescriptionChange(kind, typed, switched);
+      const undoReplace = descReplace.current?.(typedChange ? switched : typed, typedChange);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
       const prevTitle = title;
       const prevFailed = textSaveFailed.current;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
-      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: false });
+      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: null });
       // Sin guardar, el título que puso el tipo vuelve al de antes (como abajo), y el editor, a lo escrito antes del cambio
       // y sin el aviso «Tipo cambiado…» (el selector ya enseña el tipo de antes) si no se ha tocado desde entonces; si se ha
       // escrito algo después, se queda como está.
@@ -1113,8 +1115,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
       return saved;
     }
-    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
-    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: false });
+    // Qué le pasa a la descripción guardada: la plantilla del nuevo se aplica, la del anterior se quita o nada (si solo
+    // cambiarían espacios o saltos de línea, se queda como está y el aviso no dice nada de ella).
+    const switched = detail && kind ? switchKindDescription(prev, kind, detail.description) : "";
+    const descChange = detail && kind ? kindDescriptionChange(kind, detail.description, switched) : null;
+    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: descChange ? switched : detail.description } : null;
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: null });
     // Si no se guarda (sin conexión, sesión caducada, otro error), el selector vuelve al tipo de antes (saveNow) y con él
     // el título y la descripción: los puso el tipo, no la persona. Antes se quedaban los de la plantilla nueva: la
     // descripción parecía guardada y el título, pendiente, se podía acabar guardando con el tipo anterior.
@@ -1128,7 +1134,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
-      { description: preset.description !== detail?.description },
+      { description: descChange },
     ).then((ok) => {
       if (ok) return ok;
       // Solo lo que sigue como lo dejó el cambio de tipo: lo que haya cambiado después (lo escrito, lo recargado tras un
@@ -1621,6 +1627,9 @@ export function ColorPopover({ value, onChange }: { value: string | null; onChan
   );
 }
 
+/** Lo que le ha hecho un cambio de tipo a la descripción: plantilla aplicada, la del anterior quitada o nada. */
+type KindTemplateChange = ReturnType<typeof kindDescriptionChange>;
+
 /** Ver `crowdedAside` en el detalle. */
 const CROWDED_ASIDE_ITEMS = 12;
 const CROWDED_ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_24rem]";
@@ -1724,7 +1733,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
-  replaceRef?: React.MutableRefObject<((markdown: string, templated: boolean) => () => void) | null>;
+  replaceRef?: React.MutableRefObject<((markdown: string, templated: KindTemplateChange) => () => void) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -1767,8 +1776,9 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     touched.current = true;
   };
   // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado
-  // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; ver switchKindDescription).
-  const [kindChanged, setKindChanged] = useState<false | "kind" | "template">(false);
+  // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; «removed»: se ha quitado la del
+  // anterior y el nuevo no tiene; ver switchKindDescription).
+  const [kindChanged, setKindChanged] = useState<false | "kind" | "template" | "removed">(false);
   // Lo último que se ha dibujado, para `replaceRef` (que se llama desde fuera, sin el estado del dibujo).
   const shown = useRef({ value, kindChanged, editing });
   useEffect(() => {
@@ -1782,8 +1792,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
       const turn = ++replaces.current;
       touched.current = true;
       setValue(markdown);
-      // Una vez aplicada, el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
-      setKindChanged((k) => (templated || k === "template" ? "template" : "kind"));
+      // Una vez aplicada (o quitada), el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
+      setKindChanged((k) => (templated === "applied" ? "template" : templated === "removed" ? "removed" : k === "template" || k === "removed" ? k : "kind"));
       // El cambio de tipo no se ha guardado: vuelven el texto y el aviso de antes, salvo que después se haya escrito algo,
       // cambiado otra vez de tipo o cerrado el editor (guardada o descartada la descripción): entonces no se toca nada.
       return () => {
@@ -1944,7 +1954,11 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
             {kindChanged ? (
               <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">
-                {kindChanged === "template" ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción") : t("Tipo cambiado; falta guardar la descripción")}
+                {kindChanged === "template"
+                  ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción")
+                  : kindChanged === "removed"
+                    ? t("Tipo cambiado y plantilla quitada; falta guardar la descripción")
+                    : t("Tipo cambiado; falta guardar la descripción")}
               </span>
             ) : (
               <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>
