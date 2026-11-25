@@ -266,6 +266,9 @@ model Project {
   /// Plantilla de la que salió el proyecto: la clave de una de serie (builtin-templates.ts) o «custom» (una propia); null =
   /// en blanco, importado o anterior a guardarlo. Ordena los roles del menú de la columna (TEMPLATE_COLUMN_ROLES).
   templateKey String?
+  /// «Compartir fuera» activado en el proyecto (solo lo cambian los administradores). Apagado: ninguna columna se ofrece
+  /// como «Compartir fuera» y todos sus enlaces dejan de funcionar al momento (se revocan).
+  shareOutEnabled Boolean @default(false)
   position    Float    @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -282,6 +285,7 @@ model Project {
   hiddenKinds  ProjectHiddenKind[]
   undoEntries  UndoEntry[]
   reportSchedule ReportSchedule?
+  columnShares ColumnShare[]
   documents    ProjectDocument[]
   releaseTemplates ProjectReleaseTemplate[]
   templateChange ProjectTemplateChange?
@@ -356,6 +360,8 @@ model Column {
   defaultKind   TaskKind? @relation("ColumnDefaultKind", fields: [defaultKindId], references: [id], onDelete: SetNull)
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks     Task[]
+  /// «Compartir fuera» (con rol NONE): la columna publica sus tareas en una página sin cuenta (ver ColumnShare).
+  share     ColumnShare?
 
   @@index([projectId, position])
   @@index([assigneeId])
@@ -721,6 +727,39 @@ model TaskFollower {
 
   @@id([taskId, userId])
   @@index([userId])
+}
+
+/// «Compartir fuera»: una columna (rol NONE) cuyas tareas se publican en /x/<token>, una página sin cuenta para alguien de
+/// fuera. Solo se guarda la huella HMAC del token (TOKEN_SECRET, etiqueta «share-out»). `taskIds`: las tareas publicadas al
+/// pulsar «Generar/Actualizar web» (la página muestra su contenido actual). Caduca a los `expiryDays` días sin uso
+/// (lastUsedAt); tras caducar o revocarse, la URL dice «ha caducado» 30 días más. Con `columnId` null la columna se borró o
+/// dejó de compartirse: la fila solo sirve para ese aviso. Una versión anterior la ignora (la columna es normal).
+model ColumnShare {
+  id              String    @id @default(cuid())
+  projectId       String
+  columnId        String?   @unique
+  /// Huella del token del enlace actual (null = aún sin generar).
+  tokenHash       String?   @unique
+  /// Días sin uso tras los que caduca el enlace: 7, 30 o 90.
+  expiryDays      Int       @default(30)
+  taskIds         String[]  @default([])
+  generatedAt     DateTime?
+  /// Quién generó o actualizó la web por última vez (sin clave ajena: el nombre se conserva).
+  generatedById   String?
+  generatedByName String?
+  /// Último uso (abrir la página o generar/actualizar): de aquí cuenta la caducidad.
+  lastUsedAt      DateTime?
+  /// El enlace actual se revocó (a mano, al quitar la función, al borrar la columna o al apagarla en el proyecto).
+  revokedAt       DateTime?
+  /// Enlace anterior, ya terminado: solo para enseñar «ha caducado» durante 30 días desde `oldEndedAt`.
+  oldTokenHash    String?   @unique
+  oldEndedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column          Column?   @relation(fields: [columnId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
 }
 
 /// Historial de cambios de una tarea (se conserva 365 días, a diferencia de los logs).

@@ -90,7 +90,8 @@ const nextConfig: NextConfig = {
         // La CSP (con nonce por petición) se fija en src/proxy.ts; aquí van el resto de cabeceras.
         // El informe PDF queda fuera: el visor de PDF de Chrome se queda en blanco con cabeceras restrictivas.
         // Los documentos (/api/documents) también: su ruta fija las suyas (X-Frame-Options SAMEORIGIN para el visor de PDF).
-        source: "/((?!api/projects/[^/]+/report|api/documents/).*)",
+        // Y /x/ («Compartir fuera»): sus rutas fijan las suyas (Referrer-Policy no-referrer en vez de same-origin).
+        source: "/((?!api/projects/[^/]+/report|api/documents/|x/).*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },

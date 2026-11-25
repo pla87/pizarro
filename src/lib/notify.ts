@@ -10,7 +10,7 @@ import { ellipsize } from "./graphemes";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
+import { noticeActorName, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
   CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, quoteIntro, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
@@ -155,7 +155,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       ? {
           type: n.type,
           locale: intlLocale(locale),
-          actorName: n.actor?.name ?? t("Alguien"),
+          actorName: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")),
           taskTitle: mentionsToPlain(n.task.title),
           projectName: project.name,
           excerpt: n.excerpt,
@@ -197,7 +197,7 @@ export async function deliver(notificationIds: string[]): Promise<void> {
           // Sin la plantilla en inglés, el aviso va entero en español (ver whatsappLocale).
           const waLocale = whatsappLocale(messaging.whatsapp, locale);
           const tw = waLocale === locale ? t : makeT(waLocale);
-          const waMsg = waLocale === locale ? msg : n.task ? { ...msg, locale: intlLocale(waLocale), actorName: n.actor?.name ?? tw("Alguien") } : projectNoticeMessage({ type: n.type, excerpt: n.excerpt, project }, waLocale, tw);
+          const waMsg = waLocale === locale ? msg : n.task ? { ...msg, locale: intlLocale(waLocale), actorName: noticeActorName(n.actor?.name, n.excerpt, tw("Alguien")) } : projectNoticeMessage({ type: n.type, excerpt: n.excerpt, project }, waLocale, tw);
           await sendWhatsappNotice(messaging.whatsapp, ch.address, waMsg, tw, waLocale === "en");
           update.whatsappSentAt = new Date();
         }

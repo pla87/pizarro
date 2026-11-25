@@ -10,6 +10,7 @@ import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
 import { liveCursor } from "@/lib/realtime";
+import { boardShareOf, SHARE_BOARD_SELECT } from "@/lib/share-out";
 import { db } from "@/lib/db";
 import { noteProjectVisit } from "@/lib/project-visit";
 import { COLUMN_ORDER } from "@/lib/task-positions";
@@ -29,7 +30,7 @@ type Params = { params: Promise<{ projectId: string }>; searchParams: Promise<{ 
 // Una sola consulta por petición para el título y la página.
 const visibleProject = cache(async (projectId: string) => {
   const user = await getCurrentUser();
-  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true, templateKey: true } }) : null;
+  return user ? db.project.findFirst({ where: { id: projectId, ...visibleProjectsWhere(user) }, select: { id: true, name: true, isPrivate: true, taskAttachMaxMb: true, fileMaxMb: true, taskFields: true, templateKey: true, shareOutEnabled: true } }) : null;
 });
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -55,7 +56,14 @@ export default async function BoardPage({ params, searchParams }: Params) {
   // «Organizar por personas» en un proyecto de equipo: quiénes tienen columna (en uno privado, todos los de `users`).
   const peopleTeam = !project.isPrivate && project.templateKey === PEOPLE_TEMPLATE;
   const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, people] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
+    db.column.findMany({
+      where: { projectId }, orderBy: COLUMN_ORDER,
+      select: {
+        id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true,
+        // «Compartir fuera»: el estado de su enlace (nunca el token), solo si el proyecto la tiene activada.
+        ...(project.shareOutEnabled ? { share: { select: SHARE_BOARD_SELECT } } : {}),
+      },
+    }).then((rows) => rows.map(({ share, ...c }: (typeof rows)[number] & { share?: Parameters<typeof boardShareOf>[0] | null }) => (share ? { ...c, share: boardShareOf(share) } : c))),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),
@@ -76,6 +84,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
       templateKey: project.templateKey,
       suggestedRoles: suggestedColumnRoles(project.templateKey, columns),
       peopleIds: people?.map((p) => p.id) ?? null,
+      ...(project.shareOutEnabled ? { shareOut: true } : {}),
     },
     columns,
     // Sin los campos que valen lo de por defecto: el navegador lee bastante menos (el tablero los completa al llegar).

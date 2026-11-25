@@ -3,7 +3,7 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Bot, CalendarDays, CalendarRange, Check, CheckCircle2, ClipboardCheck, FileDown, Flag, Gauge, Globe, GraduationCap, Hourglass, ListChecks, Minus, MoreHorizontal, Pencil, Plus, Repeat, Rocket, Shapes, Tag, Trash2, UserCheck, Users, Wallet, type LucideIcon } from "lucide-react";
 import { deleteColumn, moveColumn, renameColumn, setColumnDefaultKind, setColumnDone, setColumnRole, setColumnRoutineTarget, setColumnWaitingDays, setColumnWipLimit } from "@/actions/columns";
 import { COLUMN_ROLE_HINT, COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { currentRoleChoice, splitRoleChoices, type ColumnRoleChoice } from "@/lib/column-role-choices";
@@ -13,6 +13,7 @@ import { parseWipInput, WIP_MAX, WIP_MIN, wipExceeded } from "@/lib/wip";
 import { columnAtSessionLimit, PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import { budgetSummary, formatEuro } from "@/lib/task-fields";
 import { isAssignColumn } from "@/lib/column-assign-core";
+import { isShareColumn } from "@/lib/share-out-board";
 import { COLUMN_DRAG_PREFIX } from "@/lib/collision";
 import { cn } from "../ui/cn";
 import { useToast } from "../ui/Toast";
@@ -22,6 +23,7 @@ import { Menu, MenuItem, MenuSeparator, MenuSub } from "../ui/Menu";
 import { Modal } from "../ui/Modal";
 import { ColumnActionButton, ColumnActionMenu } from "./ColumnActionButton";
 import { AssignDialog, AssignHeader, AssignPlanButton, useAssignPlan } from "./AssignColumn";
+import { ShareBadge, ShareFooter, useShareRole } from "./ShareColumn";
 import { downloadFile, useDownloadBusy } from "./columnDownload";
 import { columnGateSnapshot } from "./columnGate";
 import { useBoard, useSelectedCount, useTasks } from "./context";
@@ -129,8 +131,10 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
   // «Asignación a persona» (rol NONE con persona o plazo): «Descargar plan (PDF)» bajo la cabecera (como los botones de los demás
   // roles) y la persona debajo.
   const assign = isAssignColumn(column);
-  // Columnas que acaban en algo fijo al pie (el panel de fijas).
-  const withFooter = withFixed;
+  // «Compartir fuera» (rol NONE con su fila; solo si el proyecto la tiene activada): pie con «Generar web» (ShareColumn).
+  const share = isShareColumn(column);
+  // Columnas que acaban en algo fijo al pie (el panel de fijas o el de «Compartir fuera»).
+  const withFooter = withFixed || share;
   const [dialog, setDialog] = useState<ColumnDialog | null>(null);
   const action = assign ? <AssignPlanButton column={column} cardCount={cardCount} /> : roleAction(column, project.id, cardCount, setDialog, openRelease, t, sc);
   // Límite orientativo: solo avisa al pasarlo (con las tarjetas justas no), nunca impide mover ni crear.
@@ -170,7 +174,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         // release» / «… en el plan»): el panel va pegado al fondo de la columna y su barra deja libre a la derecha el sitio
         // del «+» flotante (EvergreenPanel). Antes esas columnas acababan 4,75 rem más arriba y dejaban un hueco vacío.
         // Columnas especiales (con botón de acción): el mismo borde suave del color de la app.
-        (action != null || assign) && !wipOver && "ring-1 ring-brand-500/30",
+        (action != null || assign || share) && !wipOver && "ring-1 ring-brand-500/30",
       )}
       aria-label={column.name}
       data-wip-over={wipOver || undefined}
@@ -259,6 +263,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
           />
         )}
         {column.role === "BUDGET" && <BudgetTotal columnId={column.id} />}
+        {share && <ShareBadge info={column.share} />}
         <div className="ml-auto flex items-center">
           <button
             className={HEADER_BTN}
@@ -332,6 +337,7 @@ export const ColumnView = memo(function ColumnView({ column, taskIds, evergreenI
         </div>
       </SortableContext>
       {withFixed && <EvergreenPanel columnId={column.id} taskIds={evergreenIds} kind={isNextRelease ? "release" : "plan"} />}
+      {share && <ShareFooter column={column} />}
     </section>
   );
 });
@@ -588,6 +594,8 @@ function roleAction(
 function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDialog }: { column: BoardColumn; index: number; total: number; empty: boolean; cardCount: number; openDialog: (d: ColumnDialog) => void }) {
   const { setColumns, track, refresh, project, columns, kinds } = useBoard();
   const assign = isAssignColumn(column);
+  const share = isShareColumn(column);
+  const shareRole = useShareRole(column);
   const plan = useAssignPlan(column, cardCount);
   const week = useWeekPdf(project.id, column.id);
   // Tipo por defecto: solo cuenta si sigue entre los tipos visibles del proyecto (borrado u oculto: «último usado»).
@@ -633,7 +641,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       },
       () =>
         setColumns((cols) =>
-          cols.map((c) => (c.id === column.id ? { ...c, role, assigneeId: null, assignDueDays: null } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
+          cols.map((c) => (c.id === column.id ? { ...c, role, assigneeId: null, assignDueDays: null, share: null } : isUniqueColumnRole(role) && c.role === role ? { ...c, role: "NONE" } : c)),
         ),
     );
 
@@ -691,13 +699,16 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
     );
 
   // Submenú del rol: «Asignación a persona» abre su diálogo; «Sin rol» y los demás cambian el rol.
-  const currentChoice = currentRoleChoice({ role: column.role, assign });
-  const roleChoices = splitRoleChoices(project.suggestedRoles, currentChoice);
-  const pickRole = (choice: ColumnRoleChoice | null) => {
+  const currentChoice = currentRoleChoice({ role: column.role, assign, share });
+  const roleChoices = splitRoleChoices(project.suggestedRoles, currentChoice, project.shareOut);
+  const pickRole = async (choice: ColumnRoleChoice | null) => {
     // La que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
     // «Asignación a persona» otra vez: abre su diálogo (cambiar la persona o el plazo), como antes del submenú nuevo.
     if (choice === currentChoice && choice !== "ASSIGN") return;
-    if (choice === "ASSIGN") setDialog("assign");
+    // Dejar «Compartir fuera» con el enlace activo: se confirma (deja de funcionar y no se deshace).
+    if (share && !(await shareRole.leave())) return;
+    if (choice === "SHARE") shareRole.pick();
+    else if (choice === "ASSIGN") setDialog("assign");
     else setRole(choice ?? "NONE");
   };
 
@@ -727,7 +738,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       <MenuSeparator />
       {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). Primero los que encajan
           con la plantilla del proyecto; el resto tras «Más roles…» (column-role-choices.ts). */}
-      <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
+      <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : share ? t("Compartir fuera") : t(COLUMN_ROLE_LABEL[column.role])}>
         <RoleChoices choices={roleChoices} current={currentChoice} onPick={pickRole} />
       </MenuSub>
       {column.role === "WAITING" && (
@@ -805,16 +816,19 @@ function RoleChoices({ choices, current, onPick }: { choices: { first: ColumnRol
 function RoleItem({ choice, current, onPick, more }: { choice: ColumnRoleChoice | null; current: ColumnRoleChoice | null; onPick: (c: ColumnRoleChoice | null) => void; more?: boolean }) {
   const t = useT();
   const on = choice === current;
-  const label = choice === "ASSIGN" ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[choice ?? "NONE"]);
-  // «Asignación a persona» no es un valor del rol (la columna queda con rol NONE): abre el diálogo de la persona y el plazo.
-  const hint = choice === "ASSIGN" ? t("Todo lo que entra se asigna a una persona (y, opcional, con un plazo): botón «Descargar plan (PDF)».") : t(COLUMN_ROLE_HINT[choice ?? "NONE"]);
+  // «Asignación a persona» y «Compartir fuera» no son valores del rol (la columna queda con rol NONE): la primera abre el
+  // diálogo de la persona y el plazo; la segunda la convierte (ShareColumn).
+  const label = choice === "ASSIGN" ? t("Asignación a persona") : choice === "SHARE" ? t("Compartir fuera") : t(COLUMN_ROLE_LABEL[choice ?? "NONE"]);
+  const hint = choice === "ASSIGN" ? t("Todo lo que entra se asigna a una persona (y, opcional, con un plazo): botón «Descargar plan (PDF)».")
+    : choice === "SHARE" ? t("Sus tareas se publican en una web sin cuenta para alguien de fuera: botón «Generar web» al pie.")
+    : t(COLUMN_ROLE_HINT[choice ?? "NONE"]);
   return (
     <MenuItem
       role="menuitemradio"
       aria-checked={on}
       data-more-role={more || undefined}
       onClick={() => onPick(choice)}
-      icon={choice === "ASSIGN" ? UserCheck : ROLE_ICON[choice ?? "NONE"]}
+      icon={choice === "ASSIGN" ? UserCheck : choice === "SHARE" ? Globe : ROLE_ICON[choice ?? "NONE"]}
       title={hint}
       className={cn("py-1.5 text-xs", on && "font-semibold text-brand-600 dark:text-brand-300")}
     >

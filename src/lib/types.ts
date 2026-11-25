@@ -1,5 +1,6 @@
 // Tipos serializables que viajan del servidor al cliente.
 import type { ColumnRoleChoice } from "./column-role-choices";
+import type { BoardShareInfo } from "./share-out-board";
 import type { ColumnRoleValue } from "./constants";
 import type { GoogleFileKind } from "./google-files";
 import type { TaskFieldKey, TaskFieldValues } from "./task-fields";
@@ -23,6 +24,8 @@ export interface BoardColumn {
   assignDueDays: number | null;
   /** Tipo con el que se abre «Nueva tarea» desde esta columna (null = el último usado). Si no está entre los visibles, no cuenta. */
   defaultKindId: string | null;
+  /** «Compartir fuera» (rol NONE con su fila ColumnShare): estado del enlace. Solo en el tablero y si el proyecto la tiene activada. */
+  share?: BoardShareInfo | null;
 }
 
 export interface BoardTask extends TaskFieldValues {
@@ -116,6 +119,8 @@ export interface BoardData {
     peopleIds?: string[] | null;
     /** Roles que el menú de la columna enseña primero (suggestedColumnRoles); sin ellos, todos. Solo en el tablero. */
     suggestedRoles?: ColumnRoleChoice[] | null;
+    /** «Compartir fuera» activada en el proyecto (Ajustes del proyecto, solo administradores). Solo en el tablero. */
+    shareOut?: boolean;
   };
   columns: BoardColumn[];
   tasks: BoardTask[];

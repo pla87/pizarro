@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { T } from "../i18n/shared";
 import { markdownToPlain } from "./ics";
-import { assignedBatchCount, isProjectNotice, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "./notification-text";
+import { assignedBatchCount, externalNotice, isProjectNotice, notificationBody, notificationHeadline, quotesWriting, type NotificationKind } from "./notification-text";
 import { codeTemplateProblem, type CodeTemplateProblem } from "./whatsapp-code-text";
 import { ellipsize } from "./graphemes";
 
@@ -220,7 +220,7 @@ export const quoteIntro = (m: Pick<NoticeMessage, "actorName">, t: T): string =>
  */
 export function noticeBody(m: NoticeMessage, t: T): string {
   const type = m.type ?? "MENTION";
-  if (quotesWriting(type)) return commentExcerptPlain(m.excerpt);
+  if (quotesWriting(type)) return commentExcerptPlain(externalNotice(m.excerpt)?.text ?? m.excerpt);
   const body = notificationBody(type, m.excerpt, t, m.locale ?? "es-ES");
   if (type === "ASSIGNED") {
     // Lote: el número ya va en la cabecera («te ha asignado 5 tareas (entre ellas «…»)»).

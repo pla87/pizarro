@@ -11,8 +11,9 @@ export function landingIsPublic(env: string | undefined = process.env.LANDING_AT
 
 /** Contenido de /robots.txt. */
 export function robotsRules(landingPublic: boolean): MetadataRoute.Robots {
-  if (!landingPublic) return { rules: { userAgent: "*", disallow: "/" } };
-  return { rules: { userAgent: "*", allow: ["/$", "/presentacion", "/licencia"], disallow: "/" } };
+  // /x/ (la página de «Compartir fuera», con un token en la dirección) va además aparte: nunca se rastrea.
+  if (!landingPublic) return { rules: { userAgent: "*", disallow: ["/", "/x/"] } };
+  return { rules: { userAgent: "*", allow: ["/$", "/presentacion", "/licencia"], disallow: ["/", "/x/"] } };
 }
 
 /** Metadatos de indexación de /presentacion y /licencia (las demás páginas heredan el noindex del layout raíz). */
