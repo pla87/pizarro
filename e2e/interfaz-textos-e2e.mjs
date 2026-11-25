@@ -73,10 +73,6 @@ if (only.includes("admin")) {
     L.eq("INTEGRATIONS: pestaña propia en /admin/integrations", new URL(page.url()).pathname, "/admin/integrations");
     L.eq("INTEGRATIONS: email, Google y mensajería", await page.locator("section#avisos-email, section#acceso-google, section#mensajeria").count(), 3);
     L.eq("INTEGRATIONS: la pestaña activa", await page.getByRole("link", { name: "Integraciones", exact: true }).getAttribute("aria-current"), "page");
-    // Un enlace antiguo con ancla a una sección que se ha movido lleva a su sitio nuevo.
-    await page.goto(`${L.BASE}/admin/settings#acceso-google`);
-    await page.waitForURL((u) => u.pathname === "/admin/integrations", { timeout: 20000 });
-    L.eq("INTEGRATIONS: /admin/settings#acceso-google lleva a Integraciones con su ancla", new URL(page.url()).hash, "#acceso-google");
 
     // Textos legales: «Partir del texto por defecto» con ese texto ya puesto no haría nada.
     await page.goto(`${L.BASE}/admin/legal`);

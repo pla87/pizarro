@@ -23,10 +23,11 @@ test("los errores de verdad se siguen registrando", () => {
   assert.equal(isNextNavigationSignal(null, null), false);
 });
 
-test("/admin y /admin/types redirigen desde next.config (307 sin pintar la página) y el menú enlaza directamente", async () => {
+test("/admin redirige desde next.config (307 sin pintar la página) y el menú enlaza directamente", async () => {
   const redirects = await nextConfig.redirects!();
   const find = (source: string) => redirects.find((r) => r.source === source);
   assert.deepEqual([find("/admin")?.destination, find("/admin")?.permanent], ["/admin/users", false]);
-  assert.deepEqual([find("/admin/types")?.destination, find("/admin/types")?.permanent], ["/admin/templates?vista=tipos", false]);
+  // La de /admin/types (de antes de que los tipos pasaran a Plantillas) se retiró en la v1.72.
+  assert.equal(find("/admin/types"), undefined);
   assert.doesNotMatch(readFileSync(new URL("../src/components/AppShell.tsx", import.meta.url), "utf8"), /href="\/admin"/);
 });

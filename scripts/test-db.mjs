@@ -18,8 +18,8 @@
 //
 // Cada fichero corre en su propio proceso (como con node --test): las variables de entorno que cambia una prueba
 // (TRUST_PROXY, APP_URL, SMTP_*, UPLOAD_DIR…) no llegan a las demás. Lo que comparten las tandas es el servidor de
-// PostgreSQL (cada una con su base: los bloqueos consultivos y pg_stat_activity se miran por base) y la máquina. Un
-// fichero que no pueda ir a la vez que otros va en SERIAL: se pasa al final, solo.
+// PostgreSQL (cada una con su base: los bloqueos consultivos y pg_stat_activity se miran por base) y la máquina. Todos
+// los ficheros pueden ir a la vez que otros (la lista SERIAL, que siempre estuvo vacía, se retiró en la ronda 68).
 //
 // Servidor: TEST_DATABASE_URL o, si no existe, DATABASE_URL (del entorno o de .env). El nombre de la
 // base de la URL se ignora. El usuario necesita permiso CREATEDB.
@@ -39,9 +39,6 @@ if (!base) {
   console.error("Falta TEST_DATABASE_URL (o DATABASE_URL): servidor PostgreSQL donde crear la base de pruebas.");
   process.exit(1);
 }
-
-/** Ficheros que no pueden pasar a la vez que otros: van al final, de uno en uno. */
-const SERIAL = [];
 
 // --- Opciones -------------------------------------------------------------------------------------------------------
 
@@ -83,7 +80,7 @@ for (const f of picked) {
 const all = picked.length ? picked : readdirSync("tests/db").filter((f) => f.endsWith(".test.ts")).sort().map((f) => `tests/db/${f}`);
 // Los más grandes primero (aproximan a los más lentos): así ninguna tanda se queda al final con uno largo.
 const size = (f) => statSync(f).size;
-const parallel = all.filter((f) => !SERIAL.includes(f)).sort((a, b) => size(b) - size(a));
+const parallel = [...all].sort((a, b) => size(b) - size(a));
 // --shuffle: los ficheros de una tanda comparten base, así que otro orden destapa pruebas que dependen de lo que dejó
 // (o no dejó) un fichero anterior. Fisher-Yates con un generador sencillo (mulberry32) para repetir el orden con la semilla.
 if (seed !== null) {
@@ -99,7 +96,6 @@ if (seed !== null) {
     [parallel[i], parallel[j]] = [parallel[j], parallel[i]];
   }
 }
-const serial = all.filter((f) => SERIAL.includes(f));
 jobs = Math.max(1, Math.min(jobs, parallel.length || 1));
 // Un fichero colgado falla solo, con su nombre y su salida, en vez de dejar la tanda parada (se cambia con --test-timeout=…).
 const timeoutArg = nodeTestArgs.some((a) => a.startsWith("--test-timeout")) ? [] : ["--test-timeout=600000"];
@@ -293,7 +289,6 @@ try {
       for (const file of parallel.filter((_, i) => i % dbs.length === j)) if (!interrupted) await runFile(file, db);
     }));
   }
-  for (const file of serial) if (!interrupted) await runFile(file, dbs[0]);
 
   if (!interrupted) {
     const parts = [`${totals.pass} pasan`, `${totals.fail} fallan`];

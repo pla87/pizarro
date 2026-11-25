@@ -380,7 +380,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   a la vez (`CREATE DATABASE … TEMPLATE …`), cada uno en su proceso, los más grandes primero; ficheros sueltos con
   `npm run test:db -- tests/db/x.test.ts`, en serie con `--jobs 1`, salida completa con `--verbose`; con Ctrl+C borra
   las bases y enseña lo que estaba en marcha. Una prueba de BD no puede depender de lo que dejaron otros ficheros (el
-  orden cambia): si empareja por nombre, `freeUserNames()`; si de verdad no puede ir a la vez, en `SERIAL`. Las que
+  orden cambia): si empareja por nombre, `freeUserNames()` (no hay lista de ficheros en serie: `SERIAL` se retiró, vacía). Las que
   miran `pg_locks` o `pg_stat_activity` filtran por `current_database()`.
 - `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
   consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a

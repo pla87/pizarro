@@ -458,8 +458,7 @@
       "src/app/icon.*/**",
       "src/app/favicon.ico/**",
       "src/app/apple-touch-icon.png/**",
-      "src/app/app-icon/**",
-      "public/icons/**"
+      "src/app/app-icon/**"
     ],
     "interfaz-auditoria-e2e": [
       "src/components/ui/EmailSafe.tsx",

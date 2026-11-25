@@ -82,7 +82,6 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/admin", destination: "/admin/users", permanent: false },
-      { source: "/admin/types", destination: "/admin/templates?vista=tipos", permanent: false },
     ];
   },
   async headers() {
