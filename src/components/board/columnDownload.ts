@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { useT } from "@/i18n/client";
 import type { useToast } from "../ui/Toast";
+import { downloadErrorText } from "./download-error";
 
 // Descargas de una columna que se generan en el servidor (los PDF de «Generar plan», de la semana y de la lista
 // consolidada): se piden con fetch y se guardan con un <a download>, sin salir del tablero ni abrir otra pestaña. Una a
@@ -40,9 +41,7 @@ export async function downloadFile(
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
-      const text = (await res.text().catch(() => "")).trim();
-      // 429: el tope de PDF por minuto (column-route.ts). El texto del servidor («Demasiadas peticiones») no dice qué hacer.
-      toast(res.status === 429 ? t("Has pedido muchos PDF seguidos: espera un minuto y vuelve a intentarlo.") : text && text.length < 300 ? text : texts.failed, "error");
+      toast(downloadErrorText(res.status, await res.text().catch(() => ""), texts.failed, t), "error");
       return false;
     }
     const blob = await res.blob();
