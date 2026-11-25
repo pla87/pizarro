@@ -73,6 +73,12 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   aplicar plantilla). Con columnas normales no gasta consultas (`tests/db/assign-column.test.ts` lo cuenta).
 - (Ronda 64) Orden de columnas: siempre con `COLUMN_ORDER` (`[{position},{id}]`, `task-positions.ts`); tras deshacer una columna,
   `resolveColumnPositionTies` renumera si hay empate. Mover, crear, borrar y aplicar plantilla toman `columnsLockName`.
+- (Ronda 66) Arrastre de cabeceras: ids `colmove:<id>` (`COLUMN_DRAG_PREFIX`), colisión propia (`columnDragCollision`) y
+  `placeColumn(columnId, overColumnId)`: se manda la columna de destino, nunca un índice (con cambios simultáneos acaba
+  junto a la que se veía), y su deshacer guarda solo las columnas que cambian. Durante un arrastre de tarjetas, leer
+  `dragItemsNow` (ref), no el estado del dibujo anterior (una tarjeta rápida se quedaba en una columna intermedia).
+- (Ronda 66) Lo que entra en una columna «Asignación a persona» enseña `showAssignedNotice` (assignNotice.ts) con
+  «Deshacer»: `moveTask`/`moveTasks` devuelven `undo`. Una vía nueva de mover tarjetas, igual.
 
 ## Navegador e interfaz
 
@@ -282,6 +288,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `FEED_CACHE_MAX_BYTES` = 64 MB) pero comprueba el token en cada petición; `revokeProject`/`revokeUser` la vacían
   (`clearBoundedMemo(FEED_CACHE_NAME)`) y la ruta manda `max-age` = lo que le queda en la memoria (≤ 60 s): un cambio se
   ve como mucho al minuto. `/api/health` guarda 3 s su resultado y el apagado responde 503 antes de mirar la caché.
+- (Ronda 66) Apagado: `shutdownGraceMs()` solo espera más de 5 s si `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` lo permite
+  (nunca más de lo que concede la plataforma). Un envío nuevo en `after()` va con `trackInFlight`. Una reserva de envío
+  periódico se devuelve si llega un apagado antes de empezar a enviar (`pendingReports` en periodic-mail.ts).
+- (Ronda 66) Orden de los proyectos: `ProjectVisit` se escribe con `after()` y como mucho una vez cada 5 min por persona y
+  proyecto (al cambiar de proyecto, enseguida, como mucho cada 30 s); la preferencia viaja en la sesión (`projectOrder`).
 
 ## Seguridad y límites
 
@@ -338,6 +349,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   etiquetas en negrita son anclas. `tests/kinds-special.test.ts` fija los casos raros.
 - (Ronda 64) Prefijos de tipo (`switchKindTitle` con `known`): de otros tipos solo se quitan los que acaban en signo; los que acaban
   en palabra, solo si son del tipo anterior (no borrar lo que escribió la persona).
+- (Ronda 66) `Project.templateKey`: clave de serie o `custom`; al importar solo `knownTemplateKey()`; las búsquedas en
+  mapas por clave con `Object.hasOwn` (una clave «constructor» tiraba el tablero). La huella de «modificada»
+  (`comparable()`) cuenta los tipos por defecto solo si alguna columna tiene uno (las demás conservan su huella).
 
 ## Deshacer
 
@@ -386,6 +400,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Agentes en paralelo: cada uno con su base (`pz_<nombre>`), su puerto y su carpeta de logs (`OUT=` en
   `scripts/e2e-all.sh`; por defecto todas escriben en `/tmp/pizarro-e2e`). `npm run test:db` necesita
   `APP_URL="http://localhost:3000"` en el `.env` (dos pruebas comprueban esa URL) y sus bases se llaman `pizarro_test_*`.
+- (Ronda 66) `login()` borra las aperturas (`ProjectVisit`) de quien entra: con «Usados recientemente» `/` llevaría al
+  último proyecto que abrió otro escenario. El servidor de las suites se arranca con `node` + `START_ARGS` (lo mismo que
+  `npm start`) y se para con `stopServerTree` (taskkill en Windows); Prisma con `prismaMigrate()`, nunca `npx`.
 
 ## Entorno
 

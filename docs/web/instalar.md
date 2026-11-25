@@ -246,8 +246,11 @@ Se hace desde su panel web, sin terminal.
    ENCRYPTION_KEY=pulsa-generar-mis-variables
    BACKUP_KEY=pulsa-generar-mis-variables
    UPLOAD_DIR=/app/uploads
+   RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
    ```
 
+   - **`RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15`** da a Pizarro 15 segundos para cerrar ordenadamente al actualizar o
+     reiniciar (por defecto Railway no da ninguno y corta lo que esté a medias: una subida, un email, los registros).
    - **No hace falta `APP_URL`:** Pizarro usa sola la dirección que reservó Railway en el paso 4. Solo tendrás que
      añadirla si pones un [dominio propio](#dominio).
    - `${{Postgres.DATABASE_URL}}` se queda tal cual: Railway lo cambia por la dirección de la base de datos. Si tu

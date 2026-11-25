@@ -85,6 +85,7 @@ Railway se configura en su panel, sin fichero de configuración en el repositori
    | `ENCRYPTION_KEY` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
    | `BACKUP_KEY` | 32 bytes en base64 | **Generar:** `openssl rand -base64 32` (activa las copias diarias cifradas) |
    | `UPLOAD_DIR` | `/app/uploads` | Fija |
+   | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15` | Fija: margen para el apagado ordenado (ver paso 5) |
    | `APP_URL` | `https://<tu-dominio>` | **Solo con dominio propio.** Sin ella, Pizarro usa `https://` + `RAILWAY_PUBLIC_DOMAIN` (el dominio de *Generate Domain*, que Railway pone en el entorno) |
 
    No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso. `PORT` lo inyecta Railway.
@@ -93,6 +94,7 @@ Railway se configura en su panel, sin fichero de configuración en el repositori
    - **Healthcheck Timeout:** `600` (10 minutos: el primer arranque aplica las migraciones). El campo aparece en esa misma pantalla en cuanto rellenas *Healthcheck Path*; no hace falta ninguna variable.
    - **Restart Policy:** *On Failure* (lo que pone Railway por defecto).
    - **Réplicas:** **1** (lo que pone por defecto). Con un volumen, Railway no deja subirlas, así que el servicio de Pizarro se queda en una, que es lo que necesita (ver arriba).
+   - **Margen para el apagado:** la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` del paso 4 (si no la pusiste, añádela en *Variables*). Por defecto Railway da 0 segundos entre el aviso de apagado (SIGTERM) y el corte (SIGKILL), y corta el apagado ordenado de Pizarro: una subida, un email o un registro que estuviera a medias se perdería. Railway usa esa variable como margen y Pizarro también la lee: con ella espera hasta 10 segundos a lo que está en curso (14 en total); sin ella, 5, como en las demás plataformas. El panel tiene el ajuste equivalente (*Settings → Deploy → Teardown*, **Draining** `15`; al activarlo propone *Draining* 0 y *Overlap* 0, y el valor hay que confirmarlo con el ✓ del campo antes de pulsar **Deploy**), pero solo la variable deja a Pizarro aprovechar el margen entero. *Overlap* se deja en 0 (con un volumen, Railway no solapa el contenedor viejo y el nuevo). En una instalación que ya funciona, añádela igual: vale desde el siguiente despliegue.
 
    No rellenes *Custom Start Command*: lo da el `Dockerfile`.
 6. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques; la región da igual mientras `Postgres` esté en la misma.
