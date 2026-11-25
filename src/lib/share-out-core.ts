@@ -40,11 +40,12 @@ export const MAX_SHARE_COMMENT = 2000;
 export const SHARE_USE_WRITE_MS = 60 * 60_000;
 
 /**
- * Topes del limitador (mapa de seguridad: prefijo `share-out:`). Por IP, todas las peticiones de la página; por enlace,
- * los cambios por hora (marcar hecha, fecha, comentar) y las descargas por hora.
+ * Topes del limitador (mapa de seguridad: prefijo `share-out:`). Por IP, todas las peticiones de /x/ (la página, sus
+ * imágenes y sus formularios: una página con muchas imágenes en las descripciones pide una por imagen); por enlace, los
+ * cambios por hora (marcar hecha, fecha, comentar) y las descargas de adjuntos por hora (sin las imágenes en línea).
  */
 export const SHARE_LIMITS = {
-  ip: { limit: 120, windowMs: 10 * 60_000 },
+  ip: { limit: 600, windowMs: 10 * 60_000 },
   changes: { limit: 60, windowMs: 60 * 60_000 },
   downloads: { limit: 300, windowMs: 60 * 60_000 },
 } as const;

@@ -28,8 +28,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string; 
   const { share } = resolved;
   const meta = await shareAttachment(share, attachmentId);
   if (!meta) return fail(404, "Not found");
-  if (!shareDownloadAllowed(share)) return fail(429, "Too many requests");
   const inline = meta.isImage && new URL(req.url).searchParams.has("inline");
+  // Las descargas cuentan para el tope del enlace; ver las imágenes de la descripción no (ya cuentan por IP).
+  if (!inline && !shareDownloadAllowed(share)) return fail(429, "Too many requests");
   const variant = meta.isImage ? "full" : "file";
   let size: number;
   try {
