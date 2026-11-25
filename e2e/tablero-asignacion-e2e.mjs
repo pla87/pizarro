@@ -2,7 +2,7 @@
 // persona y «Vence en N días» en la cabecera y «Añadir personas al proyecto» (abre los miembros en otra pestaña) con pocas personas;
 // lo que entra (creada con el «+», cambiando «Columna» en el detalle, «Mover a…» de la selección, Alt+→) pasa a la
 // persona y, sin fecha, vence hoy + N; con fecha la conserva; Ctrl+Z la devuelve con su responsable y su fecha. Cambiar
-// solo el plazo no pregunta; cambiar la persona pide confirmación con el número de tarjetas. «Generar plan»: PDF
+// solo el plazo no pregunta; cambiar la persona pide confirmación con el número de tarjetas. «Descargar plan (PDF)» (antes «Generar plan»): PDF
 // descargado (attachment, «plan-…pdf»), botón ocupado mientras se genera y sin segunda descarga, aviso con un 429, y su
 // texto por vencimiento, con lo rellenado de la descripción y las etiquetas. «Tipo por defecto…» de la columna; «Sin rol»
 // quita persona y plazo; a 390 px cabe; en inglés. Crea y borra su proyecto y sus personas (`asig64_*`). Misma base y
@@ -235,10 +235,10 @@ try {
     await L.eqEventually("CAMBIAR: todas pasan a Bea", async () => (await L.q(`SELECT DISTINCT "assigneeId" a FROM "Task" WHERE "columnId"=$1`, [COL.ana])).map((r) => r.a), ["asig64_bea"]);
     await L.eqEventually("CAMBIAR: la columna es de Bea con el mismo plazo", async () => { const c = await colRow(); return [c.assigneeId, c.assignDueDays]; }, ["asig64_bea", 9]);
     await L.checkEventually("CAMBIAR: la cabecera muestra a Bea", async () => { const h = await headerText(page); return [h.includes("Bea Asig64"), h]; });
-    await L.checkEventually("CAMBIAR: aviso de las reasignadas", async () => (await page.getByText("2 tarjetas asignadas a Bea Asig64").count()) > 0);
+    await L.checkEventually("CAMBIAR: aviso de las reasignadas", async () => (await page.getByText("2 tareas asignadas a Bea Asig64").count()) > 0);
   }
 
-  // --- plan: «Generar plan» ------------------------------------------------------------------------------------------
+  // --- plan: «Descargar plan (PDF)» (antes «Generar plan») ---------------------------------------------------------------
   if (only.includes("plan")) {
     L.scenario("plan: PDF descargado, botón ocupado, 429 y contenido");
     await setAssign("asig64_ana", 5);
@@ -252,7 +252,7 @@ try {
     await openBoard(page);
     const btn = anaCol(page).locator("[data-column-action] button");
     await btn.waitFor();
-    L.eq("PLAN: el botón dice «Generar plan»", (await btn.innerText()).trim(), "Generar plan");
+    L.eq("PLAN: el botón dice «Descargar plan (PDF)»", (await btn.innerText()).trim(), "Descargar plan (PDF)");
     const head = await anaCol(page).locator("header").first().boundingBox();
     const bb = await btn.boundingBox();
     L.check("PLAN: está bajo la cabecera de la columna", bb.y >= head.y + head.height - 1, JSON.stringify({ head, bb }));
@@ -268,6 +268,7 @@ try {
     L.check("PLAN: se sirve como attachment", /^attachment;/.test(res.headers()["content-disposition"] ?? ""), res.headers()["content-disposition"]);
     L.eq("PLAN: es un PDF", res.headers()["content-type"], "application/pdf");
     L.eq("PLAN: el tablero sigue en su página", new URL(page.url()).pathname, `/p/${P}`);
+    await L.checkEventually("PLAN: aviso «Plan de Ana Asig64 descargado»", async () => (await page.getByText("Plan de Ana Asig64 descargado").count()) > 0);
     const file = path.join(TMP, "plan.pdf");
     await dl.saveAs(file);
     const text = flat(pdfText(file));
@@ -283,22 +284,24 @@ try {
 
     // Ocupado mientras se genera (respuesta retrasada): aria-busy sin aria-disabled, y otro clic no descarga otra vez.
     const before = downloads;
-    await page.route("**/columns/*/plan", async (route) => { await sleep(2500); await route.continue(); });
+    let planRequests = 0;
+    await page.route("**/columns/*/plan", async (route) => { planRequests++; await sleep(2500); await route.continue(); });
     const done = page.waitForEvent("download", { timeout: 30000 });
     await btn.click();
     await L.eqEventually("PLAN: ocupado (aria-busy) y sin aria-disabled", async () => [await btn.getAttribute("aria-busy"), await btn.getAttribute("aria-disabled")], ["true", null]);
-    L.eq("PLAN: dice «Generando plan…»", (await btn.innerText()).trim(), "Generando plan…");
+    L.eq("PLAN: dice «Generando PDF…»", (await btn.innerText()).trim(), "Generando PDF…");
     await btn.click();
     await done;
-    await sleep(1500);
-    L.eq("PLAN: el segundo clic no lanza otra descarga", downloads - before, 1);
+    // En vez de esperar un rato fijo: al acabar deja de estar ocupado y solo se pidió un PDF (el segundo clic, ocupado, no pide).
     await L.eqEventually("PLAN: al terminar deja de estar ocupado", () => btn.getAttribute("aria-busy"), null);
+    L.eq("PLAN: el segundo clic no pide otro PDF", planRequests, 1);
+    L.eq("PLAN: el segundo clic no lanza otra descarga", downloads - before, 1);
     await page.unroute("**/columns/*/plan");
 
     // Un 429 simulado: el aviso.
     await page.route("**/columns/*/plan", (route) => route.fulfill({ status: 429, body: "" }));
     await btn.click();
-    await L.checkEventually("PLAN: con un 429 sale el aviso", async () => (await page.getByText("Demasiadas peticiones, espera un momento.").count()) > 0);
+    await L.checkEventually("PLAN: con un 429 sale el aviso", async () => (await page.getByText("Has pedido muchos PDF seguidos: espera un minuto y vuelve a intentarlo.").count()) > 0);
     L.eq("PLAN: y no descarga nada", downloads - before, 1);
     await page.unroute("**/columns/*/plan");
     // El 429 lo pone la prueba: Chromium lo anota en la consola («Failed to load resource…»), no es un error de la app.
@@ -362,7 +365,7 @@ try {
     await page.getByRole("menuitemradio", { name: /Sin rol/ }).click();
     await L.eqEventually("QUITAR: la columna queda sin persona ni plazo", async () => { const c = await colRow(); return [c.role, c.assigneeId, c.assignDueDays]; }, ["NONE", null, null]);
     await L.eqEventually("QUITAR: la cabecera ya no muestra persona ni plazo", async () => [await anaCol(page).locator("[data-assign-person]").count(), await anaCol(page).locator("[data-assign-warning]").count(), await anaCol(page).getByText(/Vence en/).count()], [0, 0, 0]);
-    L.eq("QUITAR: ni «Generar plan»", await anaCol(page).locator("[data-column-action]").count(), 0);
+    L.eq("QUITAR: ni «Descargar plan (PDF)»", await anaCol(page).locator("[data-column-action]").count(), 0);
     L.eq("QUITAR: la tarjeta conserva su responsable y su fecha", await taskState("Queda de Ana A64"), [COL.ana, "asig64_ana", addDays(today, 5)]);
     await L.reload(page);
     L.eq("QUITAR: tras recargar, igual", await anaCol(page).locator("[data-assign-person]").count(), 0);
@@ -391,7 +394,7 @@ try {
     L.check("MOVIL: el plazo no se sale del botón", due.x + due.width <= pb.x + pb.width + 1, JSON.stringify({ due, pb }));
     L.eq("MOVIL: sin scroll horizontal", await m.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     const ab = await col.locator("[data-column-action] button").boundingBox();
-    L.check("MOVIL: «Generar plan» cabe", ab.x >= 0 && ab.x + ab.width <= 390, JSON.stringify(ab));
+    L.check("MOVIL: «Descargar plan (PDF)» cabe", ab.x >= 0 && ab.x + ab.width <= 390, JSON.stringify(ab));
     await m.page.screenshot({ path: `${SHOTS}/asig64-movil.png` });
     await person.tap();
     const d = assignDialog(m.page);
@@ -423,7 +426,7 @@ try {
     await openBoard(pe);
     await L.checkEventually("EN: la cabecera dice «Due in 1 day»", async () => { const h = await headerText(pe); return [h.includes("Ana Asig64") && h.includes("Due in 1 day"), h]; });
     const btn = anaCol(pe).locator("[data-column-action] button");
-    L.eq("EN: «Generate plan»", (await btn.innerText()).trim(), "Generate plan");
+    L.eq("EN: «Download plan (PDF)»", (await btn.innerText()).trim(), "Download plan (PDF)");
     await roleMenu(pe, true);
     L.eq("EN: el submenú marca «Assign to person»", await pe.getByRole("menuitemradio", { name: /Assign to person/ }).getAttribute("aria-checked"), "true");
     await pe.keyboard.press("Escape");

@@ -19,12 +19,14 @@ export function currentRoleChoice(column: { role: ColumnRoleValue; assign: boole
 }
 
 /**
- * Reparte las opciones entre las que se ven al abrir el submenú y las de «Más roles…». `suggested` null (proyecto sin
- * plantilla conocida): todas a la vista, como siempre. La que ya tiene la columna nunca se esconde.
+ * Reparte las opciones entre las que se ven al abrir el submenú y las de «Más roles…». Las sugeridas salen en el orden
+ * de su lista (lo más usado en esa plantilla primero: en «Casa y familia», «Planificación semanal»); antes se volvían a
+ * ordenar como ROLE_CHOICES y salía primero «Esperando». La que ya tiene la columna nunca se esconde: si no está entre
+ * las sugeridas, va la primera. `suggested` null (proyecto sin plantilla conocida): todas a la vista, como siempre.
  */
 export function splitRoleChoices(suggested: readonly ColumnRoleChoice[] | null | undefined, current: ColumnRoleChoice | null): { first: ColumnRoleChoice[]; more: ColumnRoleChoice[] } {
   if (!suggested) return { first: [...ROLE_CHOICES], more: [] };
-  const shown = new Set<ColumnRoleChoice>(suggested);
-  if (current) shown.add(current);
-  return { first: ROLE_CHOICES.filter((r) => shown.has(r)), more: ROLE_CHOICES.filter((r) => !shown.has(r)) };
+  const first = [...new Set(suggested)].filter((r) => ROLE_CHOICES.includes(r));
+  if (current && !first.includes(current)) first.unshift(current);
+  return { first, more: ROLE_CHOICES.filter((r) => !first.includes(r)) };
 }

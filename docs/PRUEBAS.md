@@ -745,7 +745,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 2. Crea una tarea en la columna (sin fecha): queda asignada y vence en 3 días. Arrastra otra con fecha: se asigna y conserva su fecha. Ctrl+Z la devuelve como estaba.
 3. Arrastra varias a la vez: la persona recibe un solo aviso.
 4. Cambia la persona: pide confirmación y reasigna todas. Cambia solo el plazo: no reasigna nada.
-5. *Generar plan*: el PDF agrupa en Vencidas, Hoy, Esta semana, Este mes, Más adelante y Sin fecha (en inglés, la semana empieza en domingo).
+5. *Descargar plan (PDF)* (antes «Generar plan»): el PDF agrupa en Vencidas, Hoy, Esta semana, Este mes, Más adelante y Sin fecha (en inglés, la semana empieza en domingo).
 6. Con la columna configurada, abre el tablero en otra pestaña: los cambios de responsable y fecha llegan sin recargar.
 
 ### 16.2 Copias y Docker
@@ -762,7 +762,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 17.1 Descargas de las columnas (instalación de prueba; también en el móvil)
 
-1. Columna *Asignación a persona*: **Generar plan** está bajo la cabecera. Al pulsarlo se descarga el PDF (sin abrir otra pestaña) y, mientras se genera, el botón sale ocupado y un segundo clic no hace nada. Cada tarea lleva sus etiquetas y un resumen de la descripción sin los apartados vacíos de su tipo.
+1. Columna *Asignación a persona*: **Descargar plan (PDF)** (antes «Generar plan») está bajo la cabecera. Al pulsarlo se descarga el PDF (sin abrir otra pestaña), sale el aviso «Plan de <persona> descargado» y, mientras se genera, el botón sale ocupado y un segundo clic no hace nada. Cada tarea lleva sus etiquetas y un resumen de la descripción sin los apartados vacíos de su tipo.
 2. Columna *Planificación semanal*: **PDF de la semana** (por día y por persona) se descarga igual. Lo mismo el **PDF** de *Ver lista* en una *Lista consolidada*.
 3. En el iPhone y en Android: comprueba que el PDF llega a *Descargas* (o al visor del sistema) y se puede abrir.
 

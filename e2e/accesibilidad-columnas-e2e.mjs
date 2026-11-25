@@ -132,9 +132,8 @@ if (only.includes("columnas")) {
     L.check(`COLUMNAS: «${col}»: sigue en el orden de tabulación (se puede enfocar)`, await b.evaluate((e) => { e.focus(); return document.activeElement === e; }));
     await b.click({ force: true }); // Playwright no pulsa lo que está aria-disabled si no se fuerza
     // La release dice qué hacer («Añade tarjetas…»); las demás, que no hay tarjetas.
-    const reason = col === "Salto" ? EMPTY_RELEASE : EMPTY;
+    const reason = col === "Salto" ? EMPTY_RELEASE : `No hay tarjetas en «${col}»`;
     await L.checkEventually(`COLUMNAS: «${col}» («${label}»): al tocarlo sale el motivo como aviso`, async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes(reason), { timeout: 4000 });
-    await sleep(300);
   }
   L.check("COLUMNAS: tocar el botón vacío no abre ningún diálogo", (await page.locator("[role=dialog]").count()) === 0);
   // Opciones del menú de la columna.

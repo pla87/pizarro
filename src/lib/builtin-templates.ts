@@ -338,14 +338,18 @@ export function isBuiltinModified(stored: TemplateData, key: string | null | und
 }
 
 /**
- * Roles de columna que encajan con cada plantilla de serie: el submenú «Rol de la columna» los enseña primero y el resto
- * va tras «Más roles…» (column-role-choices.ts). En «Casa y familia» no pinta nada «Siguiente salto (genera releases)».
- * «ASSIGN» es «Asignación a persona». Una plantilla de serie nueva sin entrada aquí enseña todos los roles.
+ * Roles de columna que encajan con cada plantilla de serie: el submenú «Rol de la columna» los enseña primero, **en este
+ * orden** (lo más usado en esa clase de proyecto arriba), y el resto va tras «Más roles…» (column-role-choices.ts). En
+ * «Casa y familia» no pinta nada «Siguiente salto (genera releases)». «ASSIGN» es «Asignación a persona». Una plantilla de
+ * serie nueva sin entrada aquí enseña todos los roles.
  */
 const TEMPLATE_COLUMN_ROLES: Record<string, readonly ColumnRoleChoice[]> = {
-  vibecoding: ["NEXT_RELEASE", "IN_PRODUCTION", "WAITING", "REVIEW", "AI_PLAN", "CHECKLIST", "ASSIGN"],
-  "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES", "WEEKLY_PLAN", "CHECKLIST", "BUDGET", "ASSIGN"],
-  "casa-familia": ["WEEKLY_PLAN", "WAITING", "CHECKLIST", "ROUTINES", "BUDGET", "ASSIGN"],
+  // Lo que hace el propio flujo (release, producción, plan para la IA y revisar) antes que lo de apoyo.
+  vibecoding: ["NEXT_RELEASE", "IN_PRODUCTION", "AI_PLAN", "REVIEW", "WAITING", "CHECKLIST", "ASSIGN"],
+  // Con clientes: esperar su respuesta y revisar es lo diario; repartir entre el equipo, antes que listas y presupuesto.
+  "trabajo-clientes": ["WAITING", "REVIEW", "ROUTINES", "WEEKLY_PLAN", "ASSIGN", "BUDGET", "CHECKLIST"],
+  // La semana por persona primero, y una columna para cada persona («Organizar por personas») justo después.
+  "casa-familia": ["WEEKLY_PLAN", "ASSIGN", "CHECKLIST", "WAITING", "ROUTINES", "BUDGET"],
   "eventos-viajes": ["WAITING", "BUDGET", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],
   "estudios-tesis": ["ROUTINES", "WAITING", "REVIEW", "WEEKLY_PLAN", "CHECKLIST", "AI_PLAN"],
   "curso-master": ["PROGRAM", "AI_PLAN", "REVIEW", "WAITING", "CHECKLIST", "WEEKLY_PLAN", "ASSIGN"],

@@ -2,8 +2,8 @@
 export const board: Record<string, string> = {
   // Board
   "{moved} a «{name}»": "{moved} to “{name}”",
-  "1 tarjeta movida": "1 card moved",
-  "{n} tarjetas movidas": "{n} cards moved",
+  "1 tarea movida": "1 task moved",
+  "{n} tareas movidas": "{n} tasks moved",
   "1 tarea archivada": "1 task archived",
   "{n} tareas archivadas": "{n} tasks archived",
   "¿Borrar la tarea seleccionada y sus adjuntos? Puedes deshacerlo justo después.": "Delete the selected task and its attachments? You can undo it right after.",
@@ -372,4 +372,13 @@ export const board: Record<string, string> = {
   "Sin conexión: no se ha podido generar el PDF de la semana.": "Offline: the week PDF could not be generated.",
   "No se pudo generar el PDF de la lista.": "The list PDF could not be generated.",
   "Sin conexión: no se ha podido generar el PDF de la lista.": "Offline: the list PDF could not be generated.",
+
+  // Ronda 68: deshacer o rehacer «Mover…» dice adónde vuelven las tareas (undoneLabel); tope de PDF de una columna (429)
+  "Deshecho: 1 tarea vuelve a su columna": "Undone: 1 task is back in its column",
+  "Deshecho: {count} vuelven a su columna": "Undone: {count} are back in their column",
+  "Rehecho: 1 tarea movida a «{col}»": "Redone: 1 task moved to “{col}”",
+  "Rehecho: {count} movidas a «{col}»": "Redone: {count} moved to “{col}”",
+  "Deshecho: «{title}» vuelve a «{from}»": "Undone: “{title}” is back in “{from}”",
+  "Rehecho: «{title}» otra vez en «{to}»": "Redone: “{title}” is in “{to}” again",
+  "Has pedido muchos PDF seguidos: espera un minuto y vuelve a intentarlo.": "You have requested many PDFs in a row: wait a minute and try again.",
 };

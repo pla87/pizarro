@@ -8,7 +8,7 @@
 //  - ritmo: las tareas fijas «cada dos» cuentan los planes guardados en SU columna (guardar en una no adelanta a las demás),
 //    mientras la versión del documento (_vN) sigue siendo del proyecto.
 //  - vacias: «Publicar programa», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas
-//    (botón y menú de la columna), con el título «No hay tarjetas en esta columna»; la lista sin subtareas, también, con su
+//    (botón y menú de la columna), con el motivo («No hay tarjetas en «Semana»» bajo el botón; «… en esta columna» en el menú); la lista sin subtareas, también, con su
 //    motivo.
 //  - salir: con el texto del paso 2 cambiado, un enlace del pie («tus plantillas») pide confirmar como cerrar; sin cambios
 //    navega directo. En el plan y en la release.
@@ -266,7 +266,12 @@ if (only.includes("vacias")) {
   };
   for (const [col, label] of Object.entries(LABEL)) {
     L.check(`VACIAS: «${col}» tiene su botón «${label}»`, (await L.colLoc(page, col).locator("[data-column-action] button").first().innerText()).includes(label));
-    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, col === "Salto" ? "Añade tarjetas a esta columna para generar la release" : EMPTY]);
+    // Ronda 68: el motivo nombra la columna y se ve bajo el botón (y es su descripción accesible), no solo en el `title`.
+    const why = col === "Salto" ? "Añade tarjetas a esta columna para generar la release" : `No hay tarjetas en «${col}»`;
+    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, why]);
+    const btn = L.colLoc(page, col).locator("[data-column-action] button").first();
+    L.eq(`VACIAS: «${col}»: el motivo a la vista bajo el botón`, (await L.colLoc(page, col).locator("[data-column-action-reason]").first().innerText()).trim(), why);
+    L.eq(`VACIAS: «${col}»: y como descripción accesible`, await btn.evaluate((b) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null), why);
   }
   /** Estado de las opciones del menú de la columna (… → opciones): [desactivada, título]. */
   const menuItems = async (col, names) => {
@@ -277,7 +282,7 @@ if (only.includes("vacias")) {
       out.push([n, await it.isDisabled(), await it.getAttribute("title")]);
     }
     await page.keyboard.press("Escape");
-    await sleep(200);
+    await page.getByRole("menu").waitFor({ state: "detached", timeout: 5000 });
     return out;
   };
   for (const [col, names] of Object.entries({

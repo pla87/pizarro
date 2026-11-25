@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
-import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
+import { isAssignColumn, MAX_ASSIGN_DUE_DAYS, personColumnSlots } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
 import { listKinds, projectPeople } from "@/lib/board";
 import { logText } from "@/lib/log";
@@ -62,34 +62,42 @@ export async function createColumn(projectId: string, name: string) {
 /**
  * «Organizar por personas» (proyectos de «Casa y familia»): una columna «Asignación a persona» por cada persona del
  * proyecto (projectPeople: sus miembros y, si es de equipo, los administradores que lo tienen en su lista; el diálogo
- * cuenta con las mismas, `project.peopleIds`) que aún no tiene la suya, con su nombre y sin plazo, al final del tablero. Nacen vacías (no entra
- * ninguna tarea: nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer.
+ * cuenta con las mismas, `project.peopleIds`) que aún no tiene la suya, con su nombre y sin plazo, justo antes de la
+ * primera columna terminada («Hecho») o, si no hay, al final (personColumnSlots). Nacen vacías (no entra ninguna tarea:
+ * nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer, que quita las nuevas
+ * y devuelve a su posición las que se corrieron. Devuelve las nuevas (`created`) y las posiciones nuevas de las demás que
+ * cambian (`moved`), para que el tablero las coloque sin recargar.
  */
 export async function createPersonColumns(projectId: string) {
-  return runAction({ name: "columns.createPersonColumns", args: [projectId] }, async (): Promise<BoardColumn[]> => {
+  return runAction({ name: "columns.createPersonColumns", args: [projectId] }, async (): Promise<{ created: BoardColumn[]; moved: { id: string; position: number }[] }> => {
     const user = await requireUser();
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { isPrivate: true } });
     const people = await projectPeople(id, project);
-    const created = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(id)}))`;
-      const columns = await tx.column.findMany({ where: { projectId: id }, select: { assigneeId: true, position: true } });
+      const columns = await tx.column.findMany({ where: { projectId: id }, orderBy: COLUMN_ORDER, select: { id: true, assigneeId: true, position: true, isDone: true } });
       const taken = new Set(columns.flatMap((c) => (c.assigneeId ? [c.assigneeId] : [])));
       const missing = people.filter((p) => !taken.has(p.id));
-      if (!missing.length) return [];
+      if (!missing.length) return { created: [], moved: [] };
       if (columns.length + missing.length > 30) throw new AppError("Máximo 30 columnas por proyecto.");
-      let pos = Math.max(0, ...columns.map((c) => c.position));
-      const rows: BoardColumn[] = [];
-      for (const p of missing) {
-        rows.push(await tx.column.create({ data: { projectId: id, name: v.name.parse(p.name.slice(0, 80).trim() || "?"), position: (pos += POSITION_STEP), assigneeId: p.id }, select: columnSelect }));
+      const slots = personColumnSlots(columns, missing.length);
+      for (const m of slots.moved) await tx.column.update({ where: { id: m.id }, data: { position: m.position }, select: { id: true } });
+      const created: BoardColumn[] = [];
+      for (const [i, p] of missing.entries()) {
+        created.push(await tx.column.create({ data: { projectId: id, name: v.name.parse(p.name.slice(0, 80).trim() || "?"), position: slots.positions[i]!, assigneeId: p.id }, select: columnSelect }));
       }
-      return rows;
+      return { created, moved: slots.moved };
     });
-    if (!created.length) return created;
-    addUndo(...created.map((c) => ({ t: "column.remove" as const, id: c.id })));
-    describeAction(created.length === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n: created.length }, {});
-    return created;
+    if (!result.created.length) return { created: [], moved: [] };
+    addUndo(
+      ...result.created.map((c) => ({ t: "column.remove" as const, id: c.id })),
+      ...result.moved.map((m) => ({ t: "column.set" as const, id: m.id, data: { position: m.before } })),
+    );
+    const n = result.created.length;
+    describeAction(n === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n }, {});
+    return { created: result.created, moved: result.moved.map(({ id: columnId, position }) => ({ id: columnId, position })) };
   });
 }
 

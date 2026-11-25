@@ -32,7 +32,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Panel de tareas fijas: sin scroll de más al abrirlo, copia con Ctrl que nace fija en el panel (release y plan), arrastres con Ctrl entre la lista llena y el panel sin «Algo ha fallado», foco con el teclado, copia provisional con la red lenta (ronda 55) y fija arrastrada del panel de un plan al de otro (caza de bugs 51a) | `e2e/tablero-fijas-e2e.mjs` | 84 | ~1,5 min |
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos (ronda 65: copia del botón de informar y «Nueva tarea» entera con la pareja), CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 119 (123 con build oficial) | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
-| Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Generar plan» (PDF descargado, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 83 | ~1 min |
+| Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Descargar plan (PDF)» (PDF descargado con su aviso, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 85 | ~1 min |
 | [**Detalle de la tarea**](SUITES.md#detalle-de-la-tarea) | | **56** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
 | [**Copias de tareas**](SUITES.md#copias-de-tareas) | | **120** | |
@@ -49,7 +49,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
 | [**Plan de trabajo para IA**](SUITES.md#plan-de-trabajo-para-ia) | | **257** | |
 | Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 146 | ~1 min |
-| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 93 | ~1 min |
+| Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía (motivo a la vista, ronda 68) y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 105 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 18 | ~30 s |
 | [**Plantillas y programa del curso**](SUITES.md#plantillas-y-programa-del-curso) | | **185** | |
 | Aplicar plantilla a un proyecto existente (ronda 50); opción elegida en oscuro, tareas fijas, generales ocultos y límite (ronda 51); paso 2 y archivadas de columnas unidas (caza de bugs 50a) | `e2e/plantillas-aplicar-e2e.mjs` | 88 | ~1 min |

@@ -244,6 +244,13 @@ test("el submenú del rol: sugeridos primero, el resto en «Más roles…» y nu
   assert.deepEqual(first, ["NEXT_RELEASE", "WAITING", "ASSIGN"]);
   assert.equal(first.length + more.length, ROLE_CHOICES.length);
   assert.ok(!more.includes("NEXT_RELEASE"));
+  // En el orden de la lista sugerida, no en el de ROLE_CHOICES (en «Casa y familia» salía primero «Esperando»).
+  const casa = splitRoleChoices(suggestedColumnRoles("casa-familia", []), null);
+  assert.deepEqual(casa.first.slice(0, 2), ["WEEKLY_PLAN", "ASSIGN"]);
+  assert.deepEqual(splitRoleChoices(["ROUTINES", "WAITING"], "WAITING").first, ["ROUTINES", "WAITING"]);
+  // Cada plantilla de serie: lo de su flujo arriba.
+  const top = (key: string) => splitRoleChoices(suggestedColumnRoles(key, []), null).first[0];
+  assert.deepEqual(["vibecoding", "trabajo-clientes", "casa-familia", "eventos-viajes", "estudios-tesis", "curso-master"].map(top), ["NEXT_RELEASE", "WAITING", "WEEKLY_PLAN", "WAITING", "ROUTINES", "PROGRAM"]);
   assert.equal(currentRoleChoice({ role: "NONE", assign: true }), "ASSIGN");
   assert.equal(currentRoleChoice({ role: "NONE", assign: false }), null);
 });

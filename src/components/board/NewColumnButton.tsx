@@ -3,8 +3,8 @@
 import { Plus, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createColumn, createPersonColumns } from "@/actions/columns";
-import { useT } from "@/i18n/client";
-import { PEOPLE_TEMPLATE } from "@/lib/column-assign-core";
+import { useIntlLocale, useT } from "@/i18n/client";
+import { PEOPLE_TEMPLATE, personColumnsNotice } from "@/lib/column-assign-core";
 import { cn } from "../ui/cn";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
@@ -37,6 +37,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
   const { project, setColumns, track, users, canManageMembers, columns } = useBoard();
   const toast = useToast();
   const t = useT();
+  const locale = useIntlLocale();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,10 +108,16 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     close();
-    if (!res.data.length) return toast(t("Todas las personas ya tienen su columna."));
-    setColumns((cols) => [...cols.filter((c) => !res.data.some((n) => n.id === c.id)), ...res.data]);
-    created.current = res.data[0]!.id;
-    toast(res.data.length === 1 ? t("1 columna creada") : t("{n} columnas creadas", { n: res.data.length }));
+    const { created: added, moved } = res.data;
+    if (!added.length) return toast(t("Todas las personas ya tienen su columna."));
+    // Van antes de «Hecho» (el servidor corre las de detrás: `moved`); el tablero las ordena por posición.
+    const shifted = new Map(moved.map((m) => [m.id, m.position]));
+    setColumns((cols) => [
+      ...cols.filter((c) => !added.some((n) => n.id === c.id)).map((c) => (shifted.has(c.id) ? { ...c, position: shifted.get(c.id)! } : c)),
+      ...added,
+    ]);
+    created.current = added[0]!.id;
+    toast(personColumnsNotice(added.map((c) => c.name), t, locale));
   };
 
   return (
@@ -155,6 +162,10 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
                   ? t("Se creará una columna «Asignación a persona» para {names}: lo que entre en ella será de esa persona.", { names: missing[0]!.name })
                   : t("Se crearán {n} columnas «Asignación a persona», una por persona ({names}): lo que entre en cada una será de esa persona.", { n: missing.length, names: missing.map((u) => u.name).join(", ") })}
               </p>
+            )}
+            {/* Una tarjeta está en una sola columna: ponerla en la de una persona la saca de «Esta semana» o de donde esté. */}
+            {people.length > 1 && missing.length > 0 && (
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t("Las tarjetas que pongas en estas columnas salen de su columna actual.")}</p>
             )}
             {/* Solo a quien puede hacer algo con ella (un administrador, que puede ponerse el proyecto en su lista) y mientras
                 queden columnas por crear. En un proyecto de equipo (el único con administradores fuera, `peopleIds`),

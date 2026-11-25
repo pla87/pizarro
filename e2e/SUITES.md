@@ -185,13 +185,14 @@ En un proyecto privado propio con tres personas (lo crea y lo borra la suite, co
   persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
 - `cambiar`: cambiar solo el plazo no pregunta ni toca las tarjetas; cambiar la persona pide confirmación con cuántas
   tarjetas cambian («Las 2 tarjetas…») y las reasigna.
-- `plan`: «Generar plan», bajo la cabecera, descarga el PDF sin salir del tablero (`plan-…pdf`, `Content-Disposition:
-  attachment`); con la respuesta retrasada (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled) y otro
-  clic no lanza otra descarga; con un 429 simulado sale el aviso. El texto (`pdftotext`) va por vencimiento (Vencidas,
+- `plan`: «Descargar plan (PDF)» (antes «Generar plan»), bajo la cabecera, descarga el PDF sin salir del tablero
+  (`plan-…pdf`, `Content-Disposition: attachment`) y avisa «Plan de <persona> descargado»; con la respuesta retrasada
+  (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled, «Generando PDF…») y otro clic no pide otro PDF;
+  con un 429 simulado sale el aviso «Has pedido muchos PDF seguidos…». El texto (`pdftotext`) va por vencimiento (Vencidas,
   Hoy, Más adelante, Sin fecha), con lo rellenado de la descripción sin los apartados vacíos, las etiquetas y el aviso de
   la tarjeta de otra persona.
 - `tipo`: «Tipo por defecto…» del menú: el «+» de la columna lo preselecciona; con «Ninguno» vuelve el último usado.
-- `quitar`: «Sin rol» quita persona, plazo y «Generar plan»; las tarjetas conservan su responsable y su fecha.
+- `quitar`: «Sin rol» quita persona, plazo y «Descargar plan (PDF)»; las tarjetas conservan su responsable y su fecha.
 - `movil`: a 390 px (nombre largo) la cabecera, el botón y el diálogo caben, sin scroll horizontal.
 - `en`: cabecera, menú, diálogo, nota de «New task» y PDF en inglés.
 
@@ -369,7 +370,7 @@ texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la d
 Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
 del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Ver lista»,
 «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón y en el menú de la columna; la lista,
-sin subtareas, también). Con el texto del paso 2 cambiado,
+sin subtareas, también); el botón enseña el motivo debajo («No hay tarjetas en «Semana»») y es su descripción accesible. Con el texto del paso 2 cambiado,
 un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
 (por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
 

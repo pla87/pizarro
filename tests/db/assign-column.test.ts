@@ -463,14 +463,22 @@ describe("asignación a persona: nombre de la columna, columnas por persona y de
     await loginAs(me);
     expectOk(await setColumnAssignee(f.columns.todo, { assigneeId: ana.id, dueDays: null }));
     const before = await db.column.count({ where: { projectId: f.project.id } });
-    const created = expectOk(await createPersonColumns(f.project.id));
+    const order = async () => (await db.column.findMany({ where: { projectId: f.project.id }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { name: true, position: true } }));
+    const positionsBefore = await order();
+    const { created, moved } = expectOk(await createPersonColumns(f.project.id));
     // Ana ya tenía la suya («Por hacer»): solo la de quien gestiona.
     assert.deepEqual(created.map((c) => [c.name, c.assigneeId, c.assignDueDays, c.role]), [[me.name, me.id, null, "NONE"]]);
     assert.equal(await db.column.count({ where: { projectId: f.project.id } }), before + 1);
+    // Antes de «Hecho» (la primera terminada), no detrás; el tablero recibe las posiciones nuevas de las que se corren.
+    assert.deepEqual((await order()).map((c) => c.name), ["Por hacer", "En curso", me.name, "Hecho"]);
+    const done = await db.column.findUniqueOrThrow({ where: { id: f.columns.done }, select: { position: true } });
+    assert.ok(moved.some((m) => m.id === f.columns.done && m.position === done.position), JSON.stringify(moved));
     // Otra vez: nada que crear.
-    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)), []);
+    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)), { created: [], moved: [] });
     expectOk(await undoLast(f.project.id));
     assert.equal(await db.column.count({ where: { projectId: f.project.id } }), before);
+    // Un solo deshacer: también vuelven las posiciones de antes.
+    assert.deepEqual(await order(), positionsBefore);
     assert.equal((await db.column.count({ where: { projectId: f.project.id, assigneeId: ana.id } })), 1);
     // Sin sitio para todas: ninguna.
     await db.column.createMany({ data: Array.from({ length: 30 - before }, (_, i) => ({ projectId: f.project.id, name: `C${i}`, position: 10_000 + i })) });
@@ -489,11 +497,11 @@ describe("asignación a persona: nombre de la columna, columnas por persona y de
     assert.ok((await projectUsers(f.project.id, team)).some((u) => u.id === outside.id));
     assert.deepEqual((await projectPeople(f.project.id, team)).map((u) => u.id).sort(), [ana.id, picked.id].sort());
     await loginAs(outside);
-    const created = expectOk(await createPersonColumns(f.project.id));
+    const { created } = expectOk(await createPersonColumns(f.project.id));
     assert.deepEqual(created.map((c) => c.assigneeId).sort(), [ana.id, picked.id].sort());
     // Un administrador asignado al proyecto cuenta como miembro aunque no lo tenga en su lista.
     await db.projectMember.create({ data: { projectId: f.project.id, userId: outside.id } });
-    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)).map((c) => c.assigneeId), [outside.id]);
+    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)).created.map((c) => c.assigneeId), [outside.id]);
   });
 
   test("mover a la columna devuelve la entrada de deshacer: el «Deshacer» del aviso la deshace entera", async () => {

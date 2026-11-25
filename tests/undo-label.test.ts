@@ -68,3 +68,20 @@ test("undoneLabel: texto natural tras deshacer un cambio de tipo o una modificac
   assert.equal(undoneLabel({ k: "Modificó «{title}»: {changes}", p: { title: "T", changes: { k: "sin cambios" } } }, false), null);
   assert.equal(undoneLabel(sub, false), null);
 });
+
+test("undoneLabel: mover tareas dice adónde vuelven (sin mezclar «tarjetas» y «tareas»), también con etiquetas guardadas antes", () => {
+  // Etiquetas tal como las guardan moveTasks y moveTask (y las de versiones anteriores, que son las mismas plantillas).
+  const many = decodeLabel(encodeLabel({ k: "Movió {count} a «{col}»", p: { count: tasksN(2), col: "Hecho" } }))!;
+  assert.equal(renderLabelEs(undoneLabel(many, false)!), "Deshecho: 2 tareas vuelven a su columna");
+  assert.equal(renderLabelEs(undoneLabel(many, true)!), "Rehecho: 2 tareas movidas a «Hecho»");
+  assert.equal(renderLabel(undoneLabel(many, false)!, en), "Undone: 2 tasks are back in their column");
+  const one = { k: "Movió {count} a «{col}»", p: { count: tasksN(1), col: "Hecho" } };
+  assert.equal(renderLabelEs(undoneLabel(one, false)!), "Deshecho: 1 tarea vuelve a su columna");
+  assert.equal(renderLabelEs(undoneLabel(one, true)!), "Rehecho: 1 tarea movida a «Hecho»");
+  const single = { k: "Movió «{title}» de «{from}» a «{to}»", p: { title: "Pan", from: "Por hacer", to: "Hecho" } };
+  assert.equal(renderLabelEs(undoneLabel(single, false)!), "Deshecho: «Pan» vuelve a «Por hacer»");
+  assert.equal(renderLabelEs(undoneLabel(single, true)!), "Rehecho: «Pan» otra vez en «Hecho»");
+  assert.equal(renderLabel(undoneLabel(single, false)!, en), "Undone: “Pan” is back in “Por hacer”");
+  // El registro (Logs) no cambia: sigue guardando y mostrando la etiqueta de siempre.
+  assert.equal(renderLabelEs(many), "Movió 2 tareas a «Hecho»");
+});

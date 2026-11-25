@@ -768,7 +768,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (!res.ok) return toast(res.error, "error");
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
     setTotalRejected(false);
-    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id) });
+    // `independent`: el servidor deshace un borrado de adjuntos aunque no sea lo último (undoEntry).
+    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id), independent: true });
   };
 
   /** Deshace lo último hecho en esta tarea, o la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle. */
