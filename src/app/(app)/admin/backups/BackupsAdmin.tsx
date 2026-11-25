@@ -323,7 +323,7 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
               <button type="button" className="btn-secondary" onClick={() => setDlOpen(true)}>
                 <Download size={16} /> {t("Descargar")}
               </button>
-              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: para abrirla hace falta la clave de las copias. Restaurar una copia completa lo hace quien instaló Pizarro, con los pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).")}</InfoTip>
+              <InfoTip topic={t("Descargar")}>{t("Baja solo la base de datos, cifrada: para abrirla hace falta la clave de las copias. Restaurar una copia completa lo hace quien instaló Pizarro, con los pasos de «Restaurar» de la guía de instalación.")}</InfoTip>
             </>
           )}
         </div>
@@ -335,6 +335,8 @@ export function BackupsAdmin({ keyState, keyProblem, alert, status, files, canUs
             {destinations.local.files
               ? t("Carpeta {dir}.", { dir: destinations.local.label })
               : t("Carpeta {dir}. Los ficheros no se guardan aquí porque hay un destino externo (o por BACKUP_LOCAL_FILES=0); con BACKUP_LOCAL_FILES=1 se guardan también aquí.", { dir: destinations.local.label })}
+            {/* El detalle técnico de restaurar va aquí, no en la nota de «Descargar» (que lee cualquier administrador). */}
+            {" "}{t("Para restaurar una copia: pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).")}
           </InfoTip>
         </p>
       </section>

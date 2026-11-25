@@ -160,7 +160,7 @@ export const admin: Record<string, string> = {
   "Pizarro: la copia de seguridad externa está atrasada": "Pizarro: the external backup is overdue",
   "Se guardan en el disco de este servidor, con la base de datos y los ficheros.": "Stored on this server's disk, with the database and the files.",
   "Se guardan en el disco de este servidor solo con la base de datos: los ficheros van al destino externo.": "Stored on this server's disk with the database only: the files go to the external destination.",
-  "Baja solo la base de datos, cifrada: para abrirla hace falta la clave de las copias. Restaurar una copia completa lo hace quien instaló Pizarro, con los pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).": "Downloads only the database, encrypted: opening it needs the backup key. Restoring a full backup is done by whoever installed Pizarro, following “Restore” in the installation guide (BACKUP_KEY variable and node dist/restore.mjs).",
+  "Baja solo la base de datos, cifrada: para abrirla hace falta la clave de las copias. Restaurar una copia completa lo hace quien instaló Pizarro, con los pasos de «Restaurar» de la guía de instalación.": "Downloads only the database, encrypted: opening it needs the backup key. Restoring a full backup is done by whoever installed Pizarro, following “Restore” in the installation guide.",
   "Destino externo": "External destination",
   "Ninguno. Para tener las copias también fuera de este servidor (por si se pierde su disco), quien instaló Pizarro puede añadir un almacenamiento en la nube o un disco externo.": "None. To also keep the backups outside this server (in case its disk is lost), whoever installed Pizarro can add cloud storage or an external disk.",
   "Copiando…": "Copying…",
@@ -822,4 +822,7 @@ export const admin: Record<string, string> = {
   // Baja de una cuenta con su proyecto privado nombrado, en las filas de Logs de la v1.67 a la v1.69.
   // (textos guardados por versiones anteriores: se traducen al leerlas)
   " y su proyecto privado «{project}»": " and their private project “{project}”",
+  // Copias: el detalle técnico de restaurar, en la nota «Para quien instala» de la carpeta (no en la de «Descargar»)
+  "Para restaurar una copia: pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).":
+    "To restore a backup: “Restore” steps in the installation guide (BACKUP_KEY variable and node dist/restore.mjs).",
 };
