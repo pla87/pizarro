@@ -26,10 +26,37 @@ const TrimmedCodeBlock = CodeBlock.extend({
   parseMarkdown: (token, helpers) => {
     const raw = token.raw;
     if (raw?.startsWith("```") === false && raw.startsWith("~~~") === false && token.codeBlockStyle !== "indented") return [];
-    const text = token.codeBlockStyle === "indented" ? String(token.text ?? "").replace(/\n+$/, "") : token.text;
+    const text = token.codeBlockStyle === "indented" ? String(token.text ?? "").replace(/\n+$/, "") : fencedCodeText(String(raw ?? ""), String(token.text ?? ""));
     return helpers.createNode("codeBlock", { language: token.lang || null }, text ? [helpers.createTextNode(text)] : []);
   },
 });
+
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * Texto de un bloque cercado («```») con tantos saltos de línea al final como líneas vacías tiene dentro, ni uno más.
+ * marked 18.2 añade un salto al texto de un bloque que acaba en una línea vacía («```\ncódigo\n\n```» da «código\n\n»;
+ * antes, «código\n»), y el editor escribe el texto seguido de otro salto y la valla: cada guardado sumaba una línea vacía.
+ * Las líneas de dentro se cuentan en el propio Markdown (`raw`), así que vale con cualquier versión de marked. Sin valla
+ * de cierre (el bloque sigue hasta el final), sin líneas vacías al final, como el sangrado.
+ */
+function fencedCodeText(raw: string, text: string): string {
+  const lines = raw.replace(/\n+$/, "").split("\n");
+  const open = FENCE_LINE.exec(lines[0] ?? "")?.[1];
+  const last = lines.length > 1 ? lines[lines.length - 1]!.trim() : "";
+  const closed = !!open && last.length >= open.length && last.startsWith(open[0]!) && [...last].every((c) => c === open[0]);
+  const body = text.replace(/\n+$/, "");
+  if (!closed) return body;
+  const content = lines.slice(1, -1);
+  // Vacía también si solo tiene los espacios que se quitan por la sangría de la valla de apertura.
+  const indent = /^ */.exec(lines[0]!)![0].length;
+  const empty = (l: string) => l === "" || (/^ +$/.test(l) && l.length <= indent);
+  let blank = 0;
+  while (blank < content.length && empty(content[content.length - 1 - blank]!)) blank++;
+  // Solo líneas vacías: el texto son sus saltos entre ellas (una sola vacía es un bloque vacío, como lo escribe el editor).
+  const newlines = blank === content.length ? Math.max(0, blank - 1) : blank;
+  return body + "\n".repeat(newlines);
+}
 
 /** Celdas de una tabla GFM («| a | b |»), sin la fila separadora; el texto de cada celda tal cual (con su Markdown). */
 export function tableRows(raw: string): string[][] {

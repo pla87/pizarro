@@ -7,6 +7,7 @@ import { escapeBlockStarts, formatExtensions, tableRows } from "../src/lib/edito
 import { MentionChip } from "../src/lib/editor-mention";
 import { normalizeEditorMarkdown } from "../src/lib/markdown-entities";
 import { markdownToHtml } from "../src/lib/markdown-html";
+import { editorMarkdown } from "../src/lib/editor-markdown";
 
 const manager = new MarkdownManager({ extensions: formatExtensions() as never });
 const roundTrip = (md: string) => manager.serialize(manager.parse(md)).trim();
@@ -34,6 +35,34 @@ test("un bloque sangrado (4 espacios) al final no gana una línea vacía (marked
   assert.equal(roundTrip("texto\n\n    a\n\n    b\n"), "texto\n\n```\na\n\nb\n```");
   // Los cercados conservan su texto tal cual (también las líneas vacías del final, que son contenido).
   assert.equal(roundTrip("```\ncódigo\n\n```"), "```\ncódigo\n\n```");
+});
+
+test("un bloque cercado que acaba en líneas vacías no gana otra en cada guardado (marked 18.2 añade un salto)", () => {
+  // Ida y vuelta completa (Markdown → documento del editor → Markdown) cuatro veces seguidas: como abrir y guardar.
+  const cases = [
+    "```\ncódigo\n\n```",
+    "```js\na\n\n```\n\ntexto",
+    "```\na\n\n\n```",
+    "texto\n\n```\nb\n\n```\n",
+    "~~~\na\n\n~~~",
+    "```\n```",
+    "```\n\n```",
+    "```\n\n\n```",
+    "- x\n\n  ```\n  c\n\n  ```",
+    "> ```\n> d\n>\n> ```",
+    "```\nsin cerrar\n\n",
+    "```\na\n  \n```",
+  ];
+  for (const md of cases) {
+    const first = editorMarkdown(md);
+    let now = first;
+    for (let i = 0; i < 4; i++) now = editorMarkdown(now);
+    assert.equal(now, first, JSON.stringify(md));
+  }
+  // Lo que se conserva: las líneas vacías de dentro, tal cual.
+  assert.equal(editorMarkdown("```\ncódigo\n\n```"), "```\ncódigo\n\n```");
+  assert.equal(editorMarkdown("```\na\n\n\n```"), "```\na\n\n\n```");
+  assert.equal(editorMarkdown("~~~\na\n\n~~~"), "```\na\n\n```");
 });
 
 test("sangría de listas: viñetas y numeradas anidadas se conservan", () => {
