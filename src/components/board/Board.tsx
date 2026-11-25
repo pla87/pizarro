@@ -421,8 +421,12 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // seguidos antes de que el tablero se vuelva a dibujar, y con el estado del dibujo anterior el segundo se perdía (la
   // tarjeta se quedaba en la columna intermedia y, al soltar, iba allí). onDragOver y onDragEnd leen esto.
   const dragItemsNow = useRef<Items | null>(null);
+  // La última lista del arrastre, también tras soltar: el aviso del lector de pantalla («Has soltado 3 tarjetas en …»)
+  // se calcula después de onDragEnd, que ya ha vaciado dragItemsNow (sin esto decía la columna de origen).
+  const lastDragItems = useRef<Items | null>(null);
   const setDragItems = useCallback((next: Items | null) => {
     dragItemsNow.current = next;
+    if (next) lastDragItems.current = next;
     setDragItemsState(next);
   }, []);
   // Arrastre de una columna por su cabecera: cuál y sobre cuál está (para la marca del hueco).
@@ -1424,7 +1428,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       const column = name(id.slice(EVERGREEN_DROPPABLE_PREFIX.length));
       return column ? { evergreen: column } : null;
     }
-    const container = findContainer(dragItemsNow.current ?? baseItems, id);
+    const container = findContainer(dragItemsNow.current ?? lastDragItems.current ?? baseItems, id);
     // Tarea fija aún sin soltar: sigue en el panel de su columna.
     if (container === EVERGREEN_ORIGIN) {
       const column = name(taskById.get(id)?.columnId);
@@ -1436,6 +1440,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   const onDragStart = ({ active, activatorEvent }: DragStartEvent) => {
     const id = String(active.id);
+    lastDragItems.current = null;
     if (id.startsWith(COLUMN_DRAG_PREFIX)) {
       setColumnDrag({ id: id.slice(COLUMN_DRAG_PREFIX.length), over: null });
       return;
