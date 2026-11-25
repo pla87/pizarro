@@ -90,7 +90,8 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   const generate = async (fresh = false) => {
     if (busy) return;
     setBusy(true);
-    const res = await track(generateShareWeb(column.id, { fresh })).catch(() => ({ ok: false as const, error: t("Sin conexión: no se ha guardado") }));
+    // `track` no lanza: si la acción lanza (sin red), devuelve el fallo.
+    const res = await track(generateShareWeb(column.id, { fresh }));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     apply(res.data.info);
@@ -101,7 +102,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   const openLink = async () => {
     if (busy) return;
     setBusy(true);
-    const res = await track(getShareLink(column.id)).catch(() => ({ ok: false as const, error: t("Sin conexión: no se ha guardado") }));
+    const res = await track(getShareLink(column.id));
     setBusy(false);
     if (!res.ok) return toast(res.error, "error");
     apply(res.data.info);
@@ -178,7 +179,8 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
 
   const copy = async () => {
     if (!url) return;
-    toast((await copyText(url)) ? t("Enlace copiado") : t("No se ha podido copiar"), undefined);
+    const ok = await copyText(url);
+    toast(ok ? t("Enlace copiado") : t("No se ha podido copiar al portapapeles."), ok ? "success" : "error");
   };
   const mailto = url
     ? shareMailto(

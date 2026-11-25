@@ -714,7 +714,10 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
 
   const remove = async () => {
     if (!empty) return toast(t("Solo se pueden borrar columnas vacías."), "error");
-    const ok = await confirm({ title: t("Borrar columna"), message: t("¿Borrar la columna «{name}»?", { name: column.name }), confirmLabel: t("Borrar"), danger: true });
+    // Una columna «Compartir fuera» con el enlace activo: su web deja de funcionar y no vuelve aunque se deshaga el borrado.
+    const question = t("¿Borrar la columna «{name}»?", { name: column.name });
+    const message = column.share?.state === "active" ? `${question} ${t("La web compartida dejará de funcionar y no vuelve al deshacer.")}` : question;
+    const ok = await confirm({ title: t("Borrar columna"), message, confirmLabel: t("Borrar"), danger: true });
     if (!ok) return;
     run(() => deleteColumn(column.id), () => setColumns((cols) => cols.filter((c) => c.id !== column.id)));
   };

@@ -22,7 +22,6 @@ import { ReportScheduleSection } from "./ReportScheduleSection";
 import { reportRecipientPeople, reportRecipientView, reportUnsubscribedView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
 import { ShareOutSettings } from "./ShareOutSettings";
-import { countActiveShares } from "@/lib/share-out";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
@@ -102,10 +101,6 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
     tab === "informes" ? reportRecipientPeople(project.id) : Promise.resolve([]),
   ]);
   const unsubscribed = tab === "informes" && schedule ? await reportUnsubscribedView(schedule, reportPeople, user) : null;
-  // «Compartir fuera» (solo administradores): cuántos enlaces activos dejarían de funcionar al apagarla.
-  const shareLinks = tab === "tablero" && isAdmin && project.shareOutEnabled
-    ? await countActiveShares(project.id)
-    : 0;
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
   const kindTasks = new Map(kindUsage.map((g) => [g.kindId, g._count._all]));
@@ -123,7 +118,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
         // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
         key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
         storageSection={storageSection}
-        shareOutSection={tab === "tablero" && isAdmin ? <ShareOutSettings projectId={project.id} enabled={project.shareOutEnabled} activeLinks={shareLinks} /> : null}
+        shareOutSection={tab === "tablero" && isAdmin ? <ShareOutSettings projectId={project.id} enabled={project.shareOutEnabled} /> : null}
         applyTemplate={tab === "tablero" && canManage ? (
           <ApplyTemplate
             projectId={project.id}

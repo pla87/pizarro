@@ -7,6 +7,8 @@ export interface BoardShareInfo {
   state: "none" | "active" | "ended";
   /** Hasta cuándo vale si no se usa (activo) o cuándo terminó (ISO). */
   endsAt: string | null;
+  /** Terminado porque se revocó («Revocar enlace», apagar «Compartir fuera»), no porque caducara sin uso. */
+  revoked: boolean;
   expiryDays: number;
   generatedAt: string | null;
   generatedByName: string | null;
@@ -22,10 +24,10 @@ export function isShareColumn(c: { role: string; assigneeId?: string | null; ass
   return c.share != null && c.role === "NONE" && !isAssignColumn(c);
 }
 
-/** Lo que dice la cabecera y el informe del estado del enlace (clave de traducción y fecha). */
-export function shareStateText(info: Pick<BoardShareInfo, "state" | "endsAt">): { key: "Enlace activo hasta el {date}" | "Enlace caducado" | "Web sin generar"; date: string | null } {
+/** Lo que dice la cabecera del estado del enlace (clave de traducción y fecha). Revocado no es «caducado». */
+export function shareStateText(info: Pick<BoardShareInfo, "state" | "endsAt"> & { revoked?: boolean }): { key: "Enlace activo hasta el {date}" | "Enlace caducado" | "Enlace revocado" | "Web sin generar"; date: string | null } {
   if (info.state === "active") return { key: "Enlace activo hasta el {date}", date: info.endsAt };
-  if (info.state === "ended") return { key: "Enlace caducado", date: null };
+  if (info.state === "ended") return { key: info.revoked ? "Enlace revocado" : "Enlace caducado", date: null };
   return { key: "Web sin generar", date: null };
 }
 
@@ -73,11 +75,25 @@ export function shareLinkState(row: ShareLinkRow, now: Date = new Date()): { sta
 /** Campos de ColumnShare que necesita el tablero (con `columns: { select: { share: … } } }`). */
 export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, generatedByName: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
 
+/**
+ * ¿Terminó al revocarlo (y no por caducar)? Con `revokedAt` y sin haber caducado antes. El selector de caducidad deja
+ * terminado donde estaba un enlace ya caducado poniendo `revokedAt` en el momento exacto en que caducó (último uso más sus
+ * días, ver setShareExpiry): ese sigue siendo «caducado».
+ */
+function wasRevoked(row: ShareLinkRow): boolean {
+  if (!row.revokedAt) return false;
+  const at = row.revokedAt.getTime();
+  const used = (row.lastUsedAt ?? row.generatedAt)?.getTime();
+  if (used === undefined) return true;
+  return !SHARE_EXPIRY_DAYS.some((d) => used + d * DAY === at) && used + row.expiryDays * DAY > at;
+}
+
 export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; generatedByName: string | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
   const { state, endsAt } = shareLinkState(row, now);
   return {
     state,
     endsAt: endsAt?.toISOString() ?? null,
+    revoked: state === "ended" && wasRevoked(row),
     expiryDays: row.expiryDays,
     generatedAt: row.generatedAt?.toISOString() ?? null,
     generatedByName: row.generatedByName,

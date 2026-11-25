@@ -39,7 +39,6 @@ export const compartirFuera: Record<string, string> = {
   "Cualquiera con esta dirección puede ver estas tareas, marcarlas como hechas, cambiar su fecha, comentar y descargar sus adjuntos, sin cuenta.":
     "Anyone with this address can see these tasks, mark them as done, change their date, comment and download their attachments, with no account.",
   "Pulsa para copiar": "Click to copy",
-  "No se ha podido copiar": "Couldn't copy",
   "Tareas de «{name}»": "Tasks of “{name}”",
   "Hola:\n\nEn esta página puedes ver las tareas de «{name}», marcarlas como hechas, cambiar su fecha, comentar y descargar sus archivos adjuntos, sin necesidad de cuenta:\n\n{url}\n\nEl enlace deja de funcionar si nadie lo usa hasta el {date}.":
     "Hello,\n\nOn this page you can see the tasks of “{name}”, mark them as done, change their date, comment and download their attachments, with no account needed:\n\n{url}\n\nThe link stops working if nobody uses it until {date}.",
@@ -105,4 +104,9 @@ export const compartirFuera: Record<string, string> = {
   "Hay 1 comentario anterior que no se muestra.": "There is 1 earlier comment that isn't shown.",
   "Hay {n} comentarios anteriores que no se muestran.": "There are {n} earlier comments that aren't shown.",
   "Abrió el enlace de la web de «{col}»": "Opened the link of the page of “{col}”",
+  // Ronda 68, segunda vuelta (cliente): apagar con el recuento del servidor, borrar una columna compartida.
+  "Los enlaces activos del proyecto dejarán de funcionar al momento. ¿Apagarlo?": "The project's active links will stop working at once. Turn it off?",
+  "«Compartir fuera» apagado: 1 enlace ha dejado de funcionar": "“Share outside” turned off: 1 link has stopped working",
+  "«Compartir fuera» apagado: {n} enlaces han dejado de funcionar": "“Share outside” turned off: {n} links have stopped working",
+  "La web compartida dejará de funcionar y no vuelve al deshacer.": "The shared page will stop working and won't come back if you undo.",
 };

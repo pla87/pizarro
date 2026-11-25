@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { hashFeedToken } from "../src/lib/calendar-feed-core";
 import { splitRoleChoices, currentRoleChoice, ROLE_CHOICES } from "../src/lib/column-role-choices";
 import { externalExcerpt, externalNotice, noticeActorName, notificationBody, notificationHeadline } from "../src/lib/notification-text";
-import { DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, nextShareExpiry, shareExpiryLabel, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
+import { boardShareOf, DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, nextShareExpiry, shareExpiryLabel, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
 import {
   hashShareToken, inShareGrace, isShareNotice, isShareTokenShape, MAX_SHARE_PAGE_COMMENTS, newShareToken, parseShareDate,
   SHARE_LIMITS, SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareIpKey, shareKeyOf, shareNotifyBucket, shareResponseHeaders, shareUrl,
@@ -241,4 +241,30 @@ test("página: botones con el título de su tarea para lectores de pantalla, con
   assert.ok(older.includes("Hay 12 comentarios anteriores que no se muestran."));
   assert.ok(sharePageHtml(pageData({ tasks: [{ ...pageData().tasks[0]!, olderComments: 1 }] }), t).includes("Hay 1 comentario anterior que no se muestra."));
   assert.equal(MAX_SHARE_PAGE_COMMENTS, 30);
+});
+
+// --- Segunda vuelta (cliente): la marca dice «Enlace revocado» tras revocar, no «caducado» -----------------------------
+
+test("marca de la cabecera: revocado o caducado", () => {
+  const now = new Date("2026-06-15T12:00:00Z");
+  const used = new Date("2026-06-10T12:00:00Z");
+  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: used, generatedByName: null, lastUsedAt: null, revokedAt: null, taskIds: [] };
+  // «Revocar enlace» con el enlace activo.
+  const revoked = boardShareOf({ ...base, revokedAt: new Date("2026-06-12T08:00:00Z") }, now);
+  assert.deepEqual([revoked.state, revoked.revoked], ["ended", true]);
+  assert.deepEqual(shareStateText(revoked), { key: "Enlace revocado", date: null });
+  // Caducado sin uso.
+  const expired = boardShareOf({ ...base, generatedAt: new Date(now.getTime() - 31 * DAY) }, now);
+  assert.deepEqual([expired.state, expired.revoked], ["ended", false]);
+  assert.deepEqual(shareStateText(expired), { key: "Enlace caducado", date: null });
+  // Caducado y después revocado (apagar la función los marca todos): sigue siendo «caducado».
+  const gen = new Date(now.getTime() - 40 * DAY);
+  assert.equal(boardShareOf({ ...base, generatedAt: gen, revokedAt: now }, now).revoked, false);
+  // El selector de caducidad deja un enlace caducado terminado donde estaba (revokedAt = cuándo caducó) y cambia los días.
+  for (const days of [7, 90]) {
+    const frozen = boardShareOf({ ...base, generatedAt: gen, expiryDays: days, revokedAt: new Date(gen.getTime() + 30 * DAY) }, now);
+    assert.deepEqual([frozen.state, frozen.revoked], ["ended", false], `${days} días`);
+  }
+  assert.equal(boardShareOf(base, now).revoked, false);
+  assert.equal(shareStateText({ state: "ended", endsAt: null }).key, "Enlace caducado");
 });

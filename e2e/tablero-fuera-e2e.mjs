@@ -258,6 +258,8 @@ try {
     const r = await fetch(url);
     L.eq("REVOCAR: 410 con el aviso", [r.status, (await r.text()).includes("Esta lista de tareas ha caducado. Contacta con la persona que te ha dado el enlace.")], [410, true]);
     await L.eqEventually("REVOCAR: la cabecera ya no dice activo", async () => shareCol(page).locator("[data-share-badge]").getAttribute("data-share-badge"), "ended");
+    // Revocado, no caducado.
+    L.eq("REVOCAR: la marca dice «Enlace revocado»", await shareCol(page).locator("[data-share-badge]").getAttribute("title"), "Compartir fuera: Enlace revocado");
   }
 
   if (only.includes("apagar")) {
@@ -269,7 +271,10 @@ try {
     }
     await sleep(500);
     await box.click();
+    // Antes de preguntar, pide al servidor cuántos enlaces funcionan: la pregunta llega tras esa vuelta (o se apaga sin ella).
     const confirm = page.getByRole("dialog").filter({ hasText: "Apagar «Compartir fuera»" });
+    const enabledNow = async () => (await L.q(`SELECT "shareOutEnabled" FROM "Project" WHERE id=$1`, [P]))[0].shareOutEnabled;
+    await L.waitFor(async () => (await confirm.count()) > 0 || !(await enabledNow()), { timeout: 10000 });
     if (await confirm.count()) await confirm.getByRole("button", { name: "Apagar" }).click();
     await L.eqEventually("APAGAR: apagada en el proyecto", async () => (await L.q(`SELECT "shareOutEnabled" FROM "Project" WHERE id=$1`, [P]))[0].shareOutEnabled, false);
     await openBoard(page);

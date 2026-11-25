@@ -160,6 +160,7 @@
       "src/app/x/**",
       "src/lib/share-out*.ts",
       "src/actions/share-out.ts",
+      "src/actions/share-out-count.ts",
       "src/actions/columns.ts",
       "src/components/board/ShareColumn.tsx",
       "src/components/board/ColumnView.tsx",
