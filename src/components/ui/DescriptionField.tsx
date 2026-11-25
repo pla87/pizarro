@@ -16,6 +16,7 @@ import type { EditAnchor } from "@/lib/edit-anchor";
 import { anchorFromTextarea, placeEditorAt, placeTextareaAt } from "./editAnchorDom";
 import { attachablePasteFiles, claimDrop, claimPaste, pasteClaimed, recoverEmptyImages } from "./pasteFiles";
 import { isUntypedImage } from "@/lib/document-kind";
+import { useToast } from "./Toast";
 
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
@@ -60,6 +61,11 @@ interface Props {
    * siguen su curso (el diálogo los adjunta). Lo pegado o soltado sin imágenes también.
    */
   onFiles?: (files: File[]) => Promise<InlineImage[]>;
+  /**
+   * Imágenes pegadas o soltadas que aún se están subiendo (0 al acabar, ya insertadas): quien pinta los botones del
+   * editor dice «Subiendo imagen…» y puede esperar a que acaben para guardar.
+   */
+  onUploadsChange?: (pending: number) => void;
 }
 
 /** Imagen subida que se inserta en el texto. */
@@ -83,20 +89,27 @@ function imageMarkdown(img: InlineImage): string {
  * conserva su función de mover el foco, así que el teclado nunca queda atrapado. Los botones de la barra están fuera del orden
  * de Tab; se entra con Alt+F10 (flechas para moverse; Tab o Escape vuelven al texto).
  */
-export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName, startAt, onFiles }: Props) {
+export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName, startAt, onFiles, onUploadsChange }: Props) {
   const t = useT();
+  const toast = useToast();
   const inner = useRef<HTMLTextAreaElement | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useImperativeHandle(textareaRef, () => inner.current!);
   // El editor con barra, cuando ya existe (para insertar las imágenes subidas en su cursor).
   const editorOutRef = useRef<Editor | null>(null);
   const changeRef = useRef(onValueChange);
+  const uploadsRef = useRef(onUploadsChange);
   useEffect(() => {
     changeRef.current = onValueChange;
+    uploadsRef.current = onUploadsChange;
   });
+  // Imágenes subiéndose desde este campo (las que se insertarán al llegar).
+  const pendingImages = useRef(0);
   /**
    * Inserta las imágenes subidas donde está el cursor ahora (la subida tarda: se puede haber seguido escribiendo). En el
    * campo de texto, separadas por espacios de lo que haya alrededor; sin quitarle el foco a otro sitio si ya no lo tiene.
+   * Si el editor ya se ha cerrado (Cancelar, Escape), se avisa: la imagen es un adjunto de la tarea, pero no está en el
+   * texto (antes no se decía nada y parecía que el pegado no había funcionado).
    */
   const insertImages = (images: InlineImage[]) => {
     if (!images.length) return;
@@ -109,7 +122,15 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
       return;
     }
     const el = inner.current;
-    if (!el?.isConnected) return;
+    if (!el?.isConnected) {
+      toast(
+        images.length === 1
+          ? t("La imagen se ha adjuntado, pero el editor ya estaba cerrado: no está en la descripción")
+          : t("Las imágenes se han adjuntado, pero el editor ya estaba cerrado: no están en la descripción"),
+        "error",
+      );
+      return;
+    }
     const md = images.map(imageMarkdown).join(" ");
     const start = el.selectionStart, end = el.selectionEnd;
     const before = el.value.slice(0, start), after = el.value.slice(end);
@@ -121,14 +142,34 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     else changeRef.current(next);
   };
   const upload = (files: File[]) => {
-    void onFiles?.(files).then(insertImages, () => undefined);
+    if (!onFiles) return;
+    const count = files.filter(isImage).length;
+    pendingImages.current += count;
+    uploadsRef.current?.(pendingImages.current);
+    void onFiles(files)
+      .then(insertImages, () => undefined)
+      .finally(() => {
+        pendingImages.current -= count;
+        uploadsRef.current?.(pendingImages.current);
+      });
+  };
+  /**
+   * ¿El pegado o el soltado va al texto de este campo? Solo si su destino es la caja de texto (el editor con barra o el
+   * área de texto) y, al pegar, si el foco está en ella. Lo demás (otro campo, un botón, fuera de las cajas) sigue su
+   * curso: el diálogo lo adjunta sin insertarlo (antes, con la descripción abierta, también entraba en el texto).
+   */
+  const ownsEvent = (container: Element, target: EventTarget | null, paste: boolean): boolean => {
+    const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+    const box = el?.closest<HTMLElement>("textarea, [contenteditable=true], [contenteditable='']");
+    if (!box || !container.contains(box)) return false;
+    return !paste || box.contains(document.activeElement);
   };
   // En captura: antes que el editor (que deja los archivos sin pegar) y que el diálogo (que solo los adjunta).
   const fileHandlers = onFiles
     ? {
         onPasteCapture: (e: React.ClipboardEvent) => {
           const native = e.nativeEvent as ClipboardEvent;
-          if (pasteClaimed(native)) return;
+          if (pasteClaimed(native) || !ownsEvent(e.currentTarget, native.target, true)) return;
           const files = attachablePasteFiles(native);
           if (!files.some(isImage)) return;
           claimPaste(native);
@@ -136,6 +177,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
           void recoverEmptyImages(files).then(upload);
         },
         onDropCapture: (e: React.DragEvent) => {
+          if (!ownsEvent(e.currentTarget, e.nativeEvent.target, false)) return;
           const files = Array.from(e.dataTransfer?.files ?? []);
           if (!files.some(isImage)) return;
           claimDrop(e.nativeEvent);

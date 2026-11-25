@@ -88,5 +88,16 @@ export const detalle: Record<string, string> = {
   "Tipo cambiado y plantilla quitada; falta guardar la descripción": "Type changed and template removed; description not saved yet",
 
   // (Ronda 68) Descripción en edición cuando otra persona la cambia (o tras un conflicto): lo escrito no se pierde
-  "Otra persona ha cambiado la descripción mientras escribías; lo tuyo sigue aquí, sin guardar": "Someone else changed the description while you were typing; your text is still here, unsaved",
+  "La descripción guardada ha cambiado mientras escribías; lo tuyo sigue aquí, sin guardar": "The saved description changed while you were typing; your text is still here, unsaved",
+
+  // (Ronda 68, revisión) Imagen pegada o soltada en la descripción mientras se sube (DescriptionField, DescriptionEditor)
+  "Subiendo imagen…": "Uploading image…",
+  "Subiendo {n} imágenes…": "Uploading {n} images…",
+  "Subiendo imagen…; se guardará al terminar": "Uploading image…; it will be saved when done",
+  "Subiendo {n} imágenes…; se guardará al terminar": "Uploading {n} images…; it will be saved when done",
+  "La imagen se ha adjuntado, pero el editor ya estaba cerrado: no está en la descripción": "The image was attached, but the editor was already closed: it isn't in the description",
+  "Las imágenes se han adjuntado, pero el editor ya estaba cerrado: no están en la descripción": "The images were attached, but the editor was already closed: they aren't in the description",
+
+  // (Ronda 68, revisión) Aviso de soltar sobre la descripción en edición (la imagen además se inserta en el texto)
+  "Suelta para insertar en la descripción": "Drop to insert into the description",
 };

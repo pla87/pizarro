@@ -185,7 +185,8 @@ if (only.includes("conflicto")) {
   // La segunda persona cambia el título.
   await U.openTask(b.page, "Conflicto de tipo");
   const db = U.dialog(b.page);
-  await db.getByRole("button", { name: "Título", exact: true }).click();
+  // El título del detalle es un área de texto (un botón solo con menciones o en una ventana estrecha).
+  await db.locator("textarea[aria-label='Título']").first().click();
   await b.page.keyboard.press("Control+a");
   await b.page.keyboard.type("Conflicto de tipo (cambiado por B)");
   await b.page.keyboard.press("Enter");
@@ -293,7 +294,7 @@ if (only.includes("imagen")) {
   await L.eqEventually("IMAGEN: soltada, un adjunto más", async () => (await attachments(id)).length, 2, { timeout: 15000 });
   const second = (await attachments(id))[1];
   await L.eqEventually("IMAGEN: soltada, también en el editor", () => d.locator(`[contenteditable=true] img[src="/api/attachments/${second.id}"]`).count(), 1);
-  L.eq("IMAGEN: sin el aviso de soltar a la vista", await s.page.getByText("Suelta para adjuntar").count(), 0);
+  L.eq("IMAGEN: sin el aviso de soltar a la vista", await s.page.getByText(/^Suelta para (adjuntar|insertar en la descripción)$/).count(), 0);
   await saveDesc(d).click();
   await L.eqEventually("IMAGEN: guardada con las dos", async () => { const t = (await row(id)).description; return [t.includes(`(/api/attachments/${first.id})`), t.includes(`![${second.name}](/api/attachments/${second.id})`)]; }, [true, true]);
   // Fuera del editor: solo se adjunta (como siempre).
@@ -303,6 +304,17 @@ if (only.includes("imagen")) {
   await L.eqEventually("IMAGEN: fuera del editor, se adjunta", async () => (await attachments(id)).length, 3, { timeout: 15000 });
   L.eq("IMAGEN: … y la descripción no cambia", (await row(id)).description, saved);
   L.eq("IMAGEN: … ni se abre el editor", await saveDesc(d).count(), 0);
+  // (Ronda 68, revisión) «Guardar descripción» justo después de pegar: espera a la subida y guarda la imagen en el texto
+  // (antes se guardaba sin ella y la imagen solo quedaba como adjunto).
+  await openDesc(d);
+  await editor(d).click();
+  await s.page.keyboard.press("Control+End");
+  await pasteImage(s.page, "deprisa.png");
+  await saveDesc(d).click();
+  await L.eqEventually("IMAGEN: guardar mientras sube, un adjunto más", async () => (await attachments(id)).length, 4, { timeout: 15000 });
+  const quick = (await attachments(id))[3];
+  await L.eqEventually("IMAGEN: guardar mientras sube espera y la guarda en el texto", async () => (await row(id)).description.includes(`(/api/attachments/${quick.id})`), true, { timeout: 15000 });
+  await L.eqEventually("IMAGEN: … y el editor se cierra al guardarla", () => saveDesc(d).count(), 0);
   L.assertNoErrors("IMAGEN", [s]);
   await U.closeDialog(s.page);
   await s.ctx.close();

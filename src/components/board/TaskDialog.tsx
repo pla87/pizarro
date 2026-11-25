@@ -803,6 +803,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
   const dropping = useFileDrop((files) => void upload(files));
+  // El arrastre va sobre la descripción en edición con alguna imagen (ver el aviso de soltar).
+  const [dropInDesc, setDropInDesc] = useState(false);
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después."), confirmLabel: t("Borrar"), danger: true }))) return;
@@ -1280,7 +1282,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     >
       <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : ASIDE_COLS, flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}>
+        <div
+          className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}
+          // ¿Se arrastra una imagen sobre la descripción en edición? Ahí, además de adjuntarse, se inserta en el texto
+          // (DescriptionField): el aviso de soltar lo dice.
+          onDragOverCapture={(e) => {
+            const over = dragOntoDescription(e);
+            if (over !== dropInDesc) setDropInDesc(over);
+          }}
+          onDragLeave={(e) => {
+            if (dropInDesc && !e.currentTarget.contains(e.relatedTarget as Node | null)) setDropInDesc(false);
+          }}
+          onDropCapture={() => dropInDesc && setDropInDesc(false)}
+        >
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
@@ -1598,7 +1612,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-brand-500/15 p-4 backdrop-blur-[1px]">
           <div className="rounded-2xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-lg font-semibold text-brand-700 shadow-xl dark:bg-slate-900/90 dark:text-brand-300">
-            {t("Suelta para adjuntar")}
+            {dropInDesc ? t("Suelta para insertar en la descripción") : t("Suelta para adjuntar")}
           </div>
         </div>
       )}
@@ -1701,6 +1715,16 @@ function DiscardAllButton({ onClick, disabled }: { onClick: () => void; disabled
       <span ref={fullRef} aria-hidden className="pointer-events-none invisible absolute top-0 left-0 whitespace-nowrap">{t("Deshacer todo")}</span>
     </button>
   );
+}
+
+/**
+ * ¿Este arrastre va sobre el texto de la descripción en edición y lleva alguna imagen? Entonces, al soltar, se inserta en
+ * el texto además de adjuntarse (DescriptionField). Durante el arrastre se sabe el tipo de cada archivo, no su contenido.
+ */
+function dragOntoDescription(e: React.DragEvent): boolean {
+  const el = e.target instanceof Element ? e.target : null;
+  if (!el?.closest("[data-desc-editing] textarea, [data-desc-editing] [contenteditable=true]")) return false;
+  return Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === "file" && i.type.startsWith("image/"));
 }
 
 /** Lo que le ha hecho un cambio de tipo a la descripción: plantilla aplicada, la del anterior quitada o nada. */
@@ -1839,6 +1863,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   };
   const onEditorChange = (v: string) => {
     if (!touched.current) baseline.current = v;
+    typed.current = v;
     setValue(v);
   };
   const dirtyLatest = useRef<() => boolean>(() => false);
@@ -1859,6 +1884,17 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; «removed»: se ha quitado la del
   // anterior y el nuevo no tiene; ver switchKindDescription).
   const [kindChanged, setKindChanged] = useState<false | "kind" | "template" | "removed">(false);
+  // Imágenes pegadas o soltadas que aún se suben (ver DescriptionField): «Subiendo imagen…» junto a los botones, y
+  // «Guardar descripción» o Ctrl+Intro esperan a que lleguen para guardarlas en el texto (antes se guardaba sin ellas y,
+  // al llegar, el editor ya estaba cerrado: solo quedaban como adjunto).
+  const [uploads, setUploads] = useState(0);
+  const [saveAfterUploads, setSaveAfterUploads] = useState(false);
+  // Lo escrito al instante: la imagen se inserta (onEditorChange) justo antes de avisar de que ha acabado la subida, sin
+  // que se haya vuelto a dibujar.
+  const typed = useRef(value);
+  useEffect(() => {
+    typed.current = value;
+  });
   // Lo último que se ha dibujado, para `replaceRef` (que se llama desde fuera, sin el estado del dibujo).
   const shown = useRef({ value, kindChanged, editing });
   useEffect(() => {
@@ -1970,6 +2006,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     closedAt.current = section.current?.getBoundingClientRect().top ?? null;
     setKindChanged(false);
     setRemoteChanged(false);
+    setSaveAfterUploads(false);
     setEditing(false);
   };
 
@@ -1977,12 +2014,24 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     return <div className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />;
   }
 
-  const finish = () => {
+  const saveText = (text: string) => {
     // Pasarse del límite no se guarda: se queda editando con el aviso del recuento.
-    if (value.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
+    if (text.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     closeEditor();
     // Si falla y el editor sigue montado (no se recargó la tarea), se reabre con lo escrito para no perderlo.
-    if (value !== initial) void onSave(value).then((ok) => !ok && setEditing(true));
+    if (text !== initial) void onSave(text).then((ok) => !ok && setEditing(true));
+  };
+  const finish = () => {
+    // Con una imagen aún subiéndose, se guarda al llegar (ya en el texto); el editor sigue abierto y lo dice.
+    if (uploads > 0) return setSaveAfterUploads(true);
+    saveText(value);
+  };
+  // Acaba una subida: si se había pedido guardar, se guarda ahora, con la imagen ya en el texto (`typed`: aún sin dibujar).
+  const uploadsChanged = (n: number) => {
+    setUploads(n);
+    if (n > 0 || !saveAfterUploads || !editing) return;
+    setSaveAfterUploads(false);
+    saveText(typed.current);
   };
   const cancel = () => {
     setValue(initial);
@@ -2022,7 +2071,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
         )}
       </div>
       {editing ? (
-        <div className="space-y-2">
+        <div className="space-y-2" data-desc-editing="">
           {/* Lo que hace la persona en el editor (teclas, pegar, soltar, clics en la barra) marca el texto como tocado. */}
           <div onKeyDownCapture={touch} onPasteCapture={touch} onDropCapture={touch} onMouseDownCapture={touch} onTouchStartCapture={touch} onBeforeInputCapture={touch}>
           <DescriptionField
@@ -2042,18 +2091,27 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             onCancel={() => void escapeCancel()}
             onSubmit={finish}
             onFiles={onFiles}
+            onUploadsChange={uploadsChanged}
           />
           </div>
-          <div className="flex gap-2">
+          {/* Con `flex-wrap`: en el móvil (390 px), un aviso largo pasa a su propia línea en vez de quedar en una columna estrecha. */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* «Guardar descripción»: el pie del detalle tiene otro «Guardar» (guarda todo y cierra). */}
             <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar descripción")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
-            {remoteChanged ? (
-              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status" data-desc-remote>
-                {t("Otra persona ha cambiado la descripción mientras escribías; lo tuyo sigue aquí, sin guardar")}
+            {uploads > 0 ? (
+              <span className="ml-auto self-center text-xs text-slate-500 max-sm:basis-full dark:text-slate-400" role="status" data-desc-uploading>
+                {saveAfterUploads
+                  ? uploads === 1 ? t("Subiendo imagen…; se guardará al terminar") : t("Subiendo {n} imágenes…; se guardará al terminar", { n: uploads })
+                  : uploads === 1 ? t("Subiendo imagen…") : t("Subiendo {n} imágenes…", { n: uploads })}
+              </span>
+            ) : remoteChanged ? (
+              // Texto neutro: la guardada también cambia con un deshacer propio (↶ de la cabecera) mientras se escribe.
+              <span className="ml-auto self-center text-xs text-amber-700 max-sm:basis-full dark:text-amber-400" role="status" data-desc-remote>
+                {t("La descripción guardada ha cambiado mientras escribías; lo tuyo sigue aquí, sin guardar")}
               </span>
             ) : kindChanged ? (
-              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">
+              <span className="ml-auto self-center text-xs text-amber-700 max-sm:basis-full dark:text-amber-400" role="status">
                 {kindChanged === "template"
                   ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción")
                   : kindChanged === "removed"
