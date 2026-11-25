@@ -122,7 +122,9 @@ export const config = {
   // Y lo compartido con «Compartir → Pizarro» (api/share: textos y archivos, con el tope de una subida).
   // El webhook del bot de Telegram tampoco pasa: lo llama Telegram, sin sesión; se protege con su secreto y lee con tope.
   // /robots.txt tampoco: es público (sin él, el buscador iba a /login?next=/robots.txt) y dice que no se rastree nada.
-  // Ni /x/ («Compartir fuera»): la página sin cuenta, sus descargas y sus formularios; el token de la dirección es la
-  // credencial y sus rutas ponen sus propias cabeceras (CSP sin scripts, no-referrer, no-store, noindex).
-  matcher: ["/((?!x/|api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/projects/[^/]+/import-tasks$|api/share$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest|robots.txt$).*)"],
+  // Ni las tres rutas de /x/ («Compartir fuera»): la página sin cuenta (/x/<token>), sus formularios (/x/<token>/t/<id>)
+  // y sus descargas (/x/<token>/a/<id>); el token de la dirección es la credencial y sus rutas ponen sus propias
+  // cabeceras (CSP sin scripts, no-referrer, no-store, noindex). Solo esas: otra dirección bajo /x/ pasa por aquí como
+  // cualquiera que no existe (CSP, cabeceras y «No encontrado»).
+  matcher: ["/((?!x/[^/]+$|x/[^/]+/t/[^/]+$|x/[^/]+/a/[^/]+$|api/auth/google/|api/telegram/webhook$|api/projects/import$|api/tasks/[^/]+/attachments$|api/projects/[^/]+/documents$|api/projects/[^/]+/import-tasks$|api/share$|api/health|_next/static|_next/image|favicon.ico|icon.svg|icon.png|app-icon/|apple-touch-icon.png|pizarro-logo-120.png|sw.js|manifest.webmanifest|robots.txt$).*)"],
 };

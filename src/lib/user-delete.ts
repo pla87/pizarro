@@ -131,8 +131,8 @@ export async function eraseUser(userId: string, opts: { self: boolean; deletePro
     const toTeam = solo.filter((p) => !wanted.has(p.id)).map((p) => p.id);
     if (toTeam.length) await tx.project.updateMany({ where: { id: { in: toTeam } }, data: { isPrivate: false, privateOwnerId: null } });
     await tx.taskEvent.updateMany({ where: { userId }, data: { userName: "" } });
-    // «Compartir fuera»: quien generó la web no tiene clave ajena (su nombre se conserva); sin la cuenta, el id no vale.
-    await tx.columnShare.updateMany({ where: { generatedById: userId }, data: { generatedById: null } });
+    // «Compartir fuera»: quien generó la web no tiene clave ajena; sin la cuenta, ni el id ni su nombre (como en el historial).
+    await tx.columnShare.updateMany({ where: { generatedById: userId }, data: { generatedById: null, generatedByName: null } });
     await tx.user.delete({ where: { id: userId } });
     return { solo, userName: user.name, reportsOff };
     // Con muchos ficheros que liberar, el descarte del deshacer puede tardar más que los 5 s por defecto.

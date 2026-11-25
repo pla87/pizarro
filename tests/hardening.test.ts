@@ -34,8 +34,23 @@ test("matcher del proxy (compilado como lo compila Next): las rutas que reciben 
     "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar", "/api/telegram/webhooks", "/api/telegram/webhook/x", "/x", "/xyz", "/p/x/y",
     // public/icons/ ya no existe: sin esa excepción, /icons/… pasa por el proxy como cualquier otra ruta (CSP y sesión).
     "/icons/icon-192.png",
+    // Bajo /x/ solo quedan fuera sus tres rutas: una dirección inventada es un «No encontrado» con las cabeceras normales.
+    "/x/", "/x/abc/loquesea/otra", "/x/tok/t", "/x/tok/t/task1/mas", "/x/tok/a/att1/mas", "/x/tok/z/att1",
   ]) {
     assert.equal(passes(path), true, `${path} pasa por el proxy`);
+  }
+});
+
+test("cabeceras generales de next.config (compiladas como las compila Next): todas las rutas salvo el informe, los documentos y las tres de /x/", async () => {
+  const { default: nextConfig } = await import("../next.config");
+  const { getPathMatch } = nextRequire("next/dist/shared/lib/router/utils/path-match.js");
+  const general = (await nextConfig.headers!()).find((h) => h.headers.some((x) => x.key === "X-Frame-Options"))!;
+  const match = getPathMatch(general.source, { strict: true, removeUnnamedParams: true }) as (path: string) => unknown;
+  for (const path of ["/x/tok", "/x/tok/t/task1", "/x/tok/a/att1", "/api/projects/abc/report", "/api/documents/abc"]) {
+    assert.equal(match(path), false, `${path} pone sus propias cabeceras`);
+  }
+  for (const path of ["/", "/login", "/p/abc", "/x/abc/loquesea/otra", "/x/tok/t/task1/mas", "/x/tok/z/att1", "/xyz", "/api/attachments/abc"]) {
+    assert.notEqual(match(path), false, `${path} lleva las cabeceras generales`);
   }
 });
 

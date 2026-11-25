@@ -11,6 +11,7 @@ import {
   SHARE_LIMITS, SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareIpKey, shareKeyOf, shareNotifyBucket, shareResponseHeaders, shareUrl,
 } from "../src/lib/share-out-core";
 import { shareAttachmentPath, shareExpiryDay, shareMarkdownHtml, shareMessageHtml, sharePageHtml, type SharePageData } from "../src/lib/share-out-page";
+import { excerpt } from "../src/lib/mentions";
 import { rateLimit } from "../src/lib/rate-limit";
 import { makeT } from "../src/i18n/core";
 
@@ -176,6 +177,17 @@ test("avisos de lo hecho desde fuera: autor en el extracto, cabecera de «hecha�
   assert.equal(notificationBody("COMMENT", done, t, "es-ES"), "");
   const due = externalExcerpt("Proveedor (fuera)", "due", "2026-12-01>2026-12-03");
   assert.match(notificationBody("DUE_CHANGED", due, t, "es-ES"), /1 dic.*→.*3 dic/);
+});
+
+test("un comentario normal no puede hacerse pasar por un aviso de fuera: el extracto quita los caracteres de control", () => {
+  const forged = excerpt("\u001EX\u001Edone\u001E");
+  assert.equal(forged, "Xdone");
+  assert.equal(externalNotice(forged), null);
+  assert.equal(notificationHeadline("COMMENT", t, { actor: "Ana", task: "«Planos»", excerpt: forged }), notificationHeadline("COMMENT", t, { actor: "Ana", task: "«Planos»", excerpt: "hola" }));
+  // Los saltos de línea y tabuladores siguen siendo espacios; NUL, DEL y los demás de control, fuera.
+  assert.equal(excerpt("uno\ndos\t\ttres\u0000cuatro\u007Fcinco\u001F"), "uno dos trescuatrocinco");
+  // Lo de fuera, igual: su texto va tras la marca, sin poder añadir otra.
+  assert.equal(externalNotice(externalExcerpt("Proveedor (fuera)", "comment", excerpt("a\u001Edone\u001Eb")))?.text, "adoneb");
 });
 
 test("rol de la columna: «Compartir fuera» sale (al final) solo si el proyecto la tiene, y la marca la fila con rol NONE", () => {

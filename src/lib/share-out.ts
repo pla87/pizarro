@@ -11,7 +11,7 @@ import { decryptSecret } from "./crypto";
 import { db } from "./db";
 import { AppError } from "./errors";
 import { getInstanceSettings } from "./instance";
-import { logEvent, logError } from "./log";
+import { logEvent } from "./log";
 import { appUrl } from "./mail";
 import { excerpt as makeExcerpt, mentionRegex, mentionsToPlain } from "./mentions";
 import { dueChangeExcerpt, externalExcerpt } from "./notification-text";
@@ -20,13 +20,13 @@ import { rateLimit, rateIp } from "./rate-limit";
 import { publishChange } from "./realtime";
 import { spawnRecurrences } from "./recurrence";
 import {
-  inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, MAX_SHARE_PAGE_COMMENTS, parseShareDate, sameHash, SHARE_GRACE_DAYS, SHARE_LIMITS, SHARE_USE_WRITE_MS,
-  shareAuthorLabel, shareIpKey, shareKeyOf, shareNotifyBucket, shareTokenHashes, shareUrl, type ShareNotice,
+  hashShareToken, inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, MAX_SHARE_PAGE_COMMENTS, parseShareDate, sameHash, SHARE_GRACE_DAYS, SHARE_LIMITS, SHARE_USE_WRITE_MS,
+  externalUndoWhere, shareAuthorLabel, shareIpKey, shareKeyOf, shareNotifyBucket, SHARE_UNDO_KEYS, shareTokenHashes, shareUrl, type ShareNotice,
 } from "./share-out-core";
 import type { SharePageData } from "./share-out-page";
 import { eventsOf } from "./task-events";
 import { COLUMN_ORDER, lockColumns, placeInColumn, TASK_ORDER } from "./task-positions";
-import { saveUndo } from "./undo";
+import { discardUndo, saveUndo } from "./undo";
 import { encodeLabel, renderLabel, type Label } from "./undo-label";
 import { intlLocale, makeT, type Locale, type T } from "../i18n/core";
 
@@ -48,8 +48,8 @@ export async function endColumnShare(client: Pick<typeof db, "columnShare">, col
 }
 
 /** Apagar la función en un proyecto: todos sus enlaces dejan de funcionar al momento (se revocan). */
-export async function revokeProjectShares(projectId: string, now: Date = new Date()): Promise<number> {
-  const { count } = await db.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now, tokenEnc: null } });
+export async function revokeProjectShares(projectId: string, now: Date = new Date(), client: Pick<typeof db, "columnShare"> = db): Promise<number> {
+  const { count } = await client.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now, tokenEnc: null } });
   return count;
 }
 
@@ -69,15 +69,26 @@ export async function countActiveShares(projectId: string, now: Date = new Date(
  * La dirección del enlace activo de una fila, descifrando su token (solo para el diálogo de la columna, a quien puede
  * editar el proyecto). `lost`: el enlace funciona, pero no se puede volver a enseñar (se creó antes de guardar el token
  * cifrado, o ENCRYPTION_KEY cambió sin rotar las claves): el diálogo ofrece crear uno nuevo.
+ * Si la huella guardada no es la de la clave actual de TOKEN_SECRET (se cambió sin pasar rotate-keys, o aún vale la
+ * anterior), se rehace con el token descifrado antes de entregar la dirección: si no, la que se entregaba podía responder
+ * «no encontrado» con el pie diciendo «Enlace activo». Es seguro: el token sale de nuestro propio cifrado.
  */
-export function activeShareUrl(row: { tokenEnc: string | null }): { url: string | null; lost: boolean } {
-  if (!row.tokenEnc) return { url: null, lost: true };
+export async function activeShareUrl(row: { id: string; tokenEnc: string | null; tokenHash: string | null }): Promise<{ url: string | null; lost: boolean }> {
+  if (!row.tokenEnc || !row.tokenHash) return { url: null, lost: true };
+  let token: string;
   try {
-    const token = decryptSecret(row.tokenEnc);
-    return isShareTokenShape(token) ? { url: shareUrl(appUrl(), token), lost: false } : { url: null, lost: true };
+    token = decryptSecret(row.tokenEnc);
   } catch {
     return { url: null, lost: true };
   }
+  if (!isShareTokenShape(token)) return { url: null, lost: true };
+  const hash = hashShareToken(token);
+  if (!sameHash(hash, row.tokenHash)) {
+    const { count } = await db.columnShare.updateMany({ where: { id: row.id, tokenHash: row.tokenHash }, data: { tokenHash: hash } });
+    // Otra petición la cambió entre medias: solo vale si quedó con la huella de este token (la rehízo otra igual).
+    if (!count && (await db.columnShare.findUnique({ where: { id: row.id }, select: { tokenHash: true } }))?.tokenHash !== hash) return { url: null, lost: true };
+  }
+  return { url: shareUrl(appUrl(), token), lost: false };
 }
 
 /**
@@ -322,7 +333,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
         await sideEffect("assign", () => finishAssignOnEnter(assigned, ownerId, { undo: false }));
         await sideEffect("recurrence", () => spawnRecurrences([taskId], ownerId));
         if (ownerId) await sideEffect("notify", () => notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "done") }));
-        return { notice: "done", label: { k: "{who}: marcó «{title}» como hecha", p: { who: author, title } } };
+        return { notice: "done", label: { k: SHARE_UNDO_KEYS.done, p: { who: author, title } } };
       }
       if (op === "due") {
         const due = parseShareDate(input.due ?? "");
@@ -337,7 +348,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
         ctx.undo = [{ t: "task.set", id: taskId, data: { dueDate: before } }];
         ctx.events = [{ taskId, code: "update", label: due ? { k: "Puso la fecha límite el {date}", p: { date: due } } : { k: "Quitó la fecha límite" } }];
         if (ownerId) await sideEffect("notify", () => notifyTask({ type: "DUE_CHANGED", actorId: null, taskId, projectId: share.projectId, recipientIds: [ownerId], excerpt: externalExcerpt(author, "due", dueChangeExcerpt(before, due)) }));
-        return { notice: "due", label: { k: "{who}: cambió la fecha de «{title}»", p: { who: author, title } } };
+        return { notice: "due", label: { k: SHARE_UNDO_KEYS.due, p: { who: author, title } } };
       }
       const body = plainMentions((input.body ?? "").replace(/\r\n?/g, "\n").trim());
       if (!body || [...body].length > MAX_SHARE_COMMENT) return { notice: "invalid", label: { k: "" } };
@@ -350,9 +361,12 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
       if (!comment) return { notice: "full", label: { k: "" } };
       ctx.undo = [{ t: "comment.remove", id: comment.id }];
       ctx.events = [{ taskId, code: "comment", label: { k: "Comentó en «{title}»", p: { title } } }];
-      const recipients = [...new Set([...(ownerId ? [ownerId] : []), ...(await taskFollowerIds(taskId))])];
-      if (recipients.length) await sideEffect("notify", () => notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: recipients, excerpt: externalExcerpt(author, "comment", makeExcerpt(body)), commentId: comment.id }));
-      return { notice: "comment", label: { k: "{who}: comentó en «{title}»", p: { who: author, title } } };
+      // El comentario ya está guardado: buscar a quién avisar tampoco puede romperlo (un 500 haría que lo reenviasen).
+      await sideEffect("notify", async () => {
+        const recipients = [...new Set([...(ownerId ? [ownerId] : []), ...(await taskFollowerIds(taskId))])];
+        if (recipients.length) await notifyTask({ type: "COMMENT", actorId: null, taskId, projectId: share.projectId, recipientIds: recipients, excerpt: externalExcerpt(author, "comment", makeExcerpt(body)), commentId: comment.id });
+      });
+      return { notice: "comment", label: { k: SHARE_UNDO_KEYS.comment, p: { who: author, title } } };
     });
     // Nada que cambiar (ya estaba hecha, la misma fecha): se dice igual que salió bien.
     if (!out) return op === "done" ? "done" : "due";
@@ -362,7 +376,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
   } catch (err) {
     if (err instanceof ShareTaskGone) return "gone";
     if (err instanceof AppError) return "invalid";
-    logEvent({ level: "error", category: "api", action: `shareOut.${op}Failed`, label: { k: "Fallo de una acción de «Compartir fuera»: {error}", p: { error: logError(err) } }, projectId: share.projectId, path: "/x/…", ip, durationMs: performance.now() - start });
+    // Lo registra la ruta (una sola fila por fallo, también si falla antes de llegar aquí).
     throw err;
   }
 
@@ -381,7 +395,13 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
     console.error("[share-out] historial", err);
   }
   if (ownerId && ctx.undo?.length) {
-    await saveUndo(ownerId, share.projectId, encodeLabel(label), ctx.undo, taskId, "UNDO", false, null, { eventIds }).catch((err) => console.error("[share-out] deshacer", err));
+    // Como mucho una entrada «de fuera» en la pila del responsable en el proyecto: la nueva sustituye a la anterior de
+    // fuera, y no cuenta para el límite de 10 (saveUndo no la cuenta al recortar), así que lo hecho desde la página no le
+    // echa de la pila lo que hizo él. Esas entradas solo llevan `task.set` o `comment.remove` (ningún adjunto);
+    // discardUndo, además, solo libera los ficheros que ninguna otra entrada retiene.
+    await discardUndo({ userId: ownerId, projectId: share.projectId, kind: "UNDO", ...externalUndoWhere() })
+      .then(() => saveUndo(ownerId, share.projectId, encodeLabel(label), ctx.undo!, taskId, "UNDO", false, null, { eventIds }))
+      .catch((err) => console.error("[share-out] deshacer", err));
   }
   await actionContext.run(ctx, async () => logEvent({
     category: "api", action: `shareOut.${op}`, label, userName: author, projectId: share.projectId, path: "/x/…", ip, durationMs: performance.now() - start,

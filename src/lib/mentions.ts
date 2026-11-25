@@ -29,10 +29,13 @@ export function mentionsToMarkdown(text: string): string {
 
 /**
  * Extracto de un texto para avisos y emails, en texto plano: las entidades que guarda el editor (`&lt;`, `&amp;`,
- * `&nbsp;`…) pasan a su carácter, porque el extracto se muestra (y se escapa) como texto, no como HTML.
+ * `&nbsp;`…) pasan a su carácter, porque el extracto se muestra (y se escapa) como texto, no como HTML. Los saltos de
+ * línea y tabuladores pasan a espacios y los demás caracteres de control (C0 y DEL) se quitan: el separador `\u001E` de
+ * los avisos de lo hecho desde fuera (notification-text.ts) no se puede colar en un comentario normal.
  */
 export function excerpt(text: string, max = 180): string {
-  const plain = decodeEntities(mentionsToPlain(text)).replace(/\s+/g, " ").trim();
+  // eslint-disable-next-line no-control-regex -- se quitan justo los caracteres de control
+  const plain = decodeEntities(mentionsToPlain(text)).replace(/\s+/g, " ").replace(/[\u0000-\u001F\u007F]/g, "").trim();
   return ellipsize(plain, max);
 }
 

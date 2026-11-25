@@ -15,8 +15,8 @@ export const SHARE_TOKEN_LENGTH = Math.ceil((SHARE_TOKEN_BYTES * 8) / 6);
 const SHARE_HMAC_LABEL = "share-out";
 
 export const newShareToken = (): string => randomBytes(SHARE_TOKEN_BYTES).toString("base64url");
-/** Lo único que se guarda del token. */
-export const hashShareToken = (token: string): string => labelledHmac(SHARE_HMAC_LABEL, token);
+/** Lo único que se guarda del token para buscarlo (con la clave actual de TOKEN_SECRET; `env`: la de rotate-keys). */
+export const hashShareToken = (token: string, env?: Record<string, string | undefined>): string => labelledHmac(SHARE_HMAC_LABEL, token, env);
 /** Huellas con las que buscar un token: la de la clave actual y, durante la rotación de TOKEN_SECRET, la de la anterior. */
 export const shareTokenHashes = (token: string): string[] => labelledHmacCandidates(SHARE_HMAC_LABEL, token);
 /** ¿Tiene la forma de un token nuestro? Descarta basura sin tocar la base de datos. */
@@ -109,6 +109,23 @@ export function parseShareDate(raw: string): string | null | undefined {
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== s) return undefined;
   const y = d.getUTCFullYear();
   return y >= 2000 && y <= 2100 ? s : undefined;
+}
+
+/** Etiquetas de las entradas de deshacer de lo hecho desde fuera (por ellas se reconocen en la pila: externalUndoWhere). */
+export const SHARE_UNDO_KEYS = {
+  done: "{who}: marcó «{title}» como hecha",
+  due: "{who}: cambió la fecha de «{title}»",
+  comment: "{who}: comentó en «{title}»",
+} as const;
+
+/**
+ * Las entradas de deshacer «de fuera» (lo hecho desde la página, en la pila del responsable o de quien generó la web):
+ * su etiqueta guardada (encodeLabel, un JSON que empieza por la clave) es una de SHARE_UNDO_KEYS; ninguna acción de la
+ * app usa esas claves. Hay como mucho una por persona y proyecto (share-out.ts) y no cuentan para el límite de la pila
+ * (saveUndo, undo.ts): lo de fuera no echa de la pila lo que hizo la persona.
+ */
+export function externalUndoWhere(): Prisma.UndoEntryWhereInput {
+  return { OR: Object.values(SHARE_UNDO_KEYS).map((k) => ({ label: { startsWith: `{"k":${JSON.stringify(k)}` } })) };
 }
 
 /** Códigos del aviso que enseña la página tras un formulario (`?m=`): solo estos se pintan. */

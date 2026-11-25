@@ -31,9 +31,11 @@ const ECHO_SAFE_ACTIONS = new Set([
 
 /**
  * Acciones que solo cambian datos personales de quien las lanza (nada que se vea en el tablero de los demás): se
- * registran como las demás, pero no se avisa a las otras pestañas del proyecto (cada aviso las haría recargar).
+ * registran como las demás, pero no se avisa a las otras pestañas del proyecto (cada aviso las haría recargar). También
+ * las que no cambian nada del tablero aunque se registren: abrir el enlace de «Compartir fuera» (shareOut.getLink) solo
+ * descifra la dirección para el diálogo.
  */
-const UNPUBLISHED_ACTIONS: ReadonlySet<string> = new Set(["tasks.setTaskFollowing"]);
+const UNPUBLISHED_ACTIONS: ReadonlySet<string> = new Set(["tasks.setTaskFollowing", "shareOut.getLink"]);
 
 /** `cid`: id del cambio publicado a las demás pestañas (solo en acciones que cambian datos de un proyecto). */
 /** `code`: el de un AppError que lo lleve, para que la pantalla distinga un fallo concreto (p. ej. `edit_conflict`). */

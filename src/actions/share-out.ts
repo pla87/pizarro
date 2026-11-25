@@ -39,12 +39,11 @@ async function findShareColumn(columnId: string) {
 
 /**
  * Lo que enseña el diálogo de la columna: la dirección del enlace activo (null si no hay, o `lost` si no se puede volver
- * a enseñar) y su estado. `fresh`: el enlace se acaba de crear.
+ * a enseñar) y su estado.
  */
 interface ShareLinkView {
   url: string | null;
   lost: boolean;
-  fresh: boolean;
   info: BoardShareInfo;
 }
 
@@ -79,14 +78,21 @@ export async function generateShareWeb(columnId: string, opts: { fresh?: boolean
         ...(share.tokenHash ? { oldTokenHash: share.tokenHash, oldEndedAt: current.state === "active" ? now : (current.endsAt ?? now) } : {}),
       } : {}),
     };
-    // Solo si nadie la ha cambiado entre medias (otra persona pudo generar a la vez: su enlace no se pisa sin saberlo).
-    const { count } = await db.columnShare.updateMany({ where: { id: share.id, columnId: column.id, tokenHash: share.tokenHash }, data });
+    // Solo si nadie la ha cambiado entre medias (otra persona pudo generar a la vez: su enlace no se pisa sin saberlo) y
+    // con la función aún activada: la fila del proyecto se bloquea para leer (FOR SHARE) y apagarla (setProjectShareOut,
+    // que la escribe y revoca en una transacción) espera a que esto termine, o al revés. Sin eso, generar justo mientras
+    // se apagaba dejaba un enlace sin revocar que volvía a funcionar al encenderla otra vez.
+    const count = await db.$transaction(async (tx) => {
+      const [project] = await tx.$queryRaw<{ on: boolean }[]>`SELECT "shareOutEnabled" AS "on" FROM "Project" WHERE "id" = ${column.projectId} FOR SHARE`;
+      if (!project?.on) throw new AppError("«Compartir fuera» no está activado en este proyecto.");
+      return (await tx.columnShare.updateMany({ where: { id: share.id, columnId: column.id, tokenHash: share.tokenHash, project: { shareOutEnabled: true } }, data })).count;
+    });
     if (!count) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
     const row = await db.columnShare.findUniqueOrThrow({ where: { id: share.id } });
     if (token) describeAction(share.tokenHash ? "Creó un enlace nuevo para la web de «{col}» ({n} tareas)" : "Generó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
     else describeAction("Actualizó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
-    const link = token ? { url: shareUrl(appUrl(), token), lost: false } : activeShareUrl(row);
-    return { ...link, fresh: !!token, info: boardShareOf(row, now), published: taskIds.length, left: Math.max(0, total - taskIds.length) };
+    const link = token ? { url: shareUrl(appUrl(), token), lost: false } : await activeShareUrl(row);
+    return { ...link, info: boardShareOf(row, now), published: taskIds.length, left: Math.max(0, total - taskIds.length) };
   });
 }
 
@@ -98,9 +104,9 @@ export async function getShareLink(columnId: string) {
   return runAction({ name: "shareOut.getLink", args: [columnId] }, async (): Promise<ShareLinkView> => {
     const { column, share } = await findShareColumn(columnId);
     const info = boardShareOf(share);
-    if (info.state !== "active") return { url: null, lost: false, fresh: false, info };
+    if (info.state !== "active") return { url: null, lost: false, info };
     describeAction("Abrió el enlace de la web de «{col}»", { col: column.name }, { shareId: share.id });
-    return { ...activeShareUrl(share), fresh: false, info };
+    return { ...(await activeShareUrl(share)), info };
   });
 }
 
@@ -148,8 +154,12 @@ export async function setProjectShareOut(projectId: string, enabled: boolean) {
     if (!project) throw notFound();
     noteProject(project.id, project.isPrivate);
     if (project.shareOutEnabled === on) return { revoked: 0 };
-    await db.project.update({ where: { id }, data: { shareOutEnabled: on } });
-    const revoked = on ? 0 : await revokeProjectShares(id);
+    // En una transacción: si falla la revocación, la función sigue activada (no queda apagada con enlaces vivos que
+    // volverían a funcionar al encenderla). Escribir el proyecto lo bloquea: un «Generar web» a la vez espera (ver arriba).
+    const revoked = await db.$transaction(async (tx) => {
+      await tx.project.update({ where: { id }, data: { shareOutEnabled: on } });
+      return on ? 0 : revokeProjectShares(id, new Date(), tx);
+    });
     describeAction(on ? "Activó «Compartir fuera» en el proyecto «{name}»" : "Apagó «Compartir fuera» en el proyecto «{name}»", { name: project.name }, { revoked });
     return { revoked };
   });

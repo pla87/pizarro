@@ -747,7 +747,7 @@ model ColumnShare {
   expiryDays      Int       @default(30)
   taskIds         String[]  @default([])
   generatedAt     DateTime?
-  /// Quién generó o actualizó la web por última vez (sin clave ajena: el nombre se conserva).
+  /// Quién generó o actualizó la web por última vez (sin clave ajena; al borrar la cuenta se vacían los dos).
   generatedById   String?
   generatedByName String?
   /// Último uso (abrir la página o generar/actualizar): de aquí cuenta la caducidad.

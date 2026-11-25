@@ -207,12 +207,21 @@ describe("/api/attachments: caché y acceso", () => {
     assert.equal(res.headers.get("cache-control"), "private, max-age=10");
     await res.arrayBuffer();
     assert.equal((await get(img.id, { download: true, dest: "image", etag: res.headers.get("etag") })).status, 304);
-    // Un fichero que no es imagen pedido desde un <img>: sigue sin servirse en línea, pero tampoco se registra.
+    // Un fichero que no es imagen pedido desde un <img> (o con la cabecera escrita a mano): 404, ni se sirve ni se
+    // registra. Antes se servía entero como descarga sin dejar rastro en Logs.
     const file = await get(pdf.id, { dest: "image" });
-    assert.match(file.headers.get("content-disposition") ?? "", /^attachment/);
-    await file.arrayBuffer();
+    assert.equal(file.status, 404);
+    assert.equal(file.headers.get("content-disposition"), null);
+    assert.ok(!(await file.text()).includes("pdf-data"), "sin el contenido del archivo");
     await flushLogs();
     assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 0);
+    // Sin la cabecera, el mismo archivo se descarga y queda en Logs.
+    const pdfDl = await get(pdf.id);
+    assert.equal(pdfDl.status, 200);
+    await pdfDl.arrayBuffer();
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 1);
+    await db.appLog.deleteMany({ where: { action: "attachments.download", projectId: f.project.id } });
     // La descarga de verdad (enlace con download: Sec-Fetch-Dest document o empty) sí.
     const dl = await get(img.id, { download: true, dest: "document" });
     assert.match(dl.headers.get("content-disposition") ?? "", /^attachment/);

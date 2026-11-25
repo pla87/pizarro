@@ -12,17 +12,33 @@ export const dynamic = "force-dynamic";
 // formularios POST a /x/<token>/t/<tarea>. Un enlace caducado o revocado dice «ha caducado» 30 días; después, o si nunca
 // existió, «no encontrado». El token nunca llega a los registros (ruta «/x/…», secret-path.ts).
 
-const html = (body: string, status: number) =>
+const html = (body: string | null, status: number) =>
   new Response(body, { status, headers: { ...shareResponseHeaders(), "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": SHARE_PAGE_CSP } });
 
-export async function GET(req: Request, ctx: { params: Promise<{ token: string }> }) {
+type Ctx = { params: Promise<{ token: string }> };
+
+export function GET(req: Request, ctx: Ctx) {
+  return serve(req, ctx, false);
+}
+
+/**
+ * HEAD: el mismo estado (200, 404, 410 o 429) y las mismas cabeceras, sin cuerpo: no cuenta como uso, no deja «Abrieron la
+ * web» en Logs ni lee las tareas (derivado de GET, Next montaba la página entera para tirarla).
+ */
+export function HEAD(req: Request, ctx: Ctx) {
+  return serve(req, ctx, true);
+}
+
+async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   const ip = clientIp(req.headers);
   const { locale, t } = await shareLocale();
-  if (!shareIpAllowed(ip)) return html(shareMessageHtml("rate", locale, t), 429);
+  const reply = (body: () => string, status: number) => html(head ? null : body(), status);
+  if (!shareIpAllowed(ip)) return reply(() => shareMessageHtml("rate", locale, t), 429);
   const { token } = await ctx.params;
   const resolved = await resolveShareToken(token);
-  if (!resolved) return html(shareMessageHtml("notFound", locale, t), 404);
-  if (resolved.kind === "expired") return html(shareMessageHtml("expired", locale, t), 410);
+  if (!resolved) return reply(() => shareMessageHtml("notFound", locale, t), 404);
+  if (resolved.kind === "expired") return reply(() => shareMessageHtml("expired", locale, t), 410);
+  if (head) return html(null, 200);
   const { share } = resolved;
   const first = !share.lastUsedAt || Date.now() - share.lastUsedAt.getTime() >= SHARE_USE_WRITE_MS;
   await noteShareUse(share);

@@ -374,12 +374,11 @@ describe("compartir fuera: volver a ver la dirección", () => {
     const { ana, f } = await setup();
     const first = await generate(f.columns.todo);
     const token = tokenOf(first.url);
-    assert.equal(first.fresh, true);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.match(row.tokenEnc!, /^v2\./, "cifrado con ENCRYPTION_KEY");
     assert.ok(!row.tokenEnc!.includes(token));
     const again = await generate(f.columns.todo);
-    assert.deepEqual([again.url, again.fresh, again.lost], [first.url, false, false]);
+    assert.deepEqual([again.url, again.lost], [first.url, false]);
     // Otra persona del proyecto, que no la generó.
     await loginAs(ana);
     const link = expectOk(await getShareLink(f.columns.todo));
@@ -445,7 +444,7 @@ describe("compartir fuera: arreglos de la revisión", () => {
     assert.equal((await page(next)).status, 200);
   });
 
-  test("borrar la cuenta de quien generó la web: generatedById a null; marcar hecha una tarea fija desde fuera no da 500", async () => {
+  test("borrar la cuenta de quien generó la web: ni su id ni su nombre; marcar hecha una tarea fija desde fuera no da 500", async () => {
     const { me, f } = await setup();
     const fixed = await makeTask(f, { title: "Revisión semanal", recurrence: "WEEKLY", dueDate: new Date("2026-12-07T00:00:00Z"), position: 3000 });
     const token = tokenOf((await generate(f.columns.todo)).url);
@@ -453,7 +452,7 @@ describe("compartir fuera: arreglos de la revisión", () => {
     assert.ok(res);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.equal(row.generatedById, null);
-    assert.equal(row.generatedByName, "Marta Ruiz", "el nombre se conserva");
+    assert.equal(row.generatedByName, null, "como en el historial, no queda su nombre");
     assert.equal(noticeOf(await post(token, fixed.id, { op: "done" })), "done");
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixed.id } })).columnId, f.columns.done);
     const spawned = await db.task.findFirst({ where: { recurrenceFromId: fixed.id } });

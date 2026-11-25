@@ -4,7 +4,7 @@ import { clientIp } from "@/lib/request";
 import { isRowId } from "@/lib/row-id";
 import { shareFormAllowed, shareResponseHeaders } from "@/lib/share-out-core";
 import { applyShareChange, noteShareUse, resolveShareToken, shareIpAllowed } from "@/lib/share-out";
-import { BodyTooLargeError, readBodyLimited } from "@/lib/upload-slots";
+import { readBodyLimited } from "@/lib/upload-slots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,22 +37,33 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string;
   if (resolved?.kind !== "active") return back(token);
   if (!isRowId(taskId)) return back(token, "?m=gone");
   const start = performance.now();
+  const hash = `#t-${encodeURIComponent(taskId)}`;
+  // El cuerpo: demasiado grande, demasiado lento o mal formado (un multipart roto hace que formData() lance un
+  // TypeError) es un formulario que no vale, no un fallo del servidor: vuelve con «no se ha podido» y sin registrar nada.
+  let form: FormData | URLSearchParams;
   try {
     const type = req.headers.get("content-type") ?? "";
-    const form = type.startsWith("multipart/form-data")
+    form = type.startsWith("multipart/form-data")
       ? await readBodyLimited(req, MAX_BODY, "formData")
       : new URLSearchParams(await readBodyLimited(req, MAX_BODY, "text"));
-    const field = (name: string) => {
-      const v = form.get(name);
-      return typeof v === "string" ? v : undefined;
-    };
-    const notice = await applyShareChange(resolved.share, taskId, { op: field("op") ?? "", due: field("due"), body: field("body") }, ip);
-    // Hacer algo en la página también es usarla.
-    await noteShareUse(resolved.share);
-    return back(token, `?m=${notice}`, `#t-${encodeURIComponent(taskId)}`);
+  } catch {
+    return back(token, "?m=invalid", hash);
+  }
+  const field = (name: string) => {
+    const v = form.get(name);
+    return typeof v === "string" ? v : undefined;
+  };
+  const op = field("op") ?? "";
+  let notice: string;
+  try {
+    notice = await applyShareChange(resolved.share, taskId, { op, due: field("due"), body: field("body") }, ip);
   } catch (err) {
-    if (err instanceof BodyTooLargeError) return back(token, "?m=invalid", `#t-${encodeURIComponent(taskId)}`);
-    logEvent({ level: "error", category: "api", action: "shareOut.failed", label: { k: "Fallo de una acción de «Compartir fuera»: {error}", p: { error: logError(err) } }, projectId: resolved.share.projectId, path: "/x/…", ip, durationMs: performance.now() - start });
+    // Una sola fila por fallo (applyShareChange no registra los suyos); la acción, solo si es una de las conocidas.
+    const action = op === "done" || op === "due" || op === "comment" ? `shareOut.${op}Failed` : "shareOut.failed";
+    logEvent({ level: "error", category: "api", action, label: { k: "Fallo de una acción de «Compartir fuera»: {error}", p: { error: logError(err) } }, projectId: resolved.share.projectId, path: "/x/…", ip, durationMs: performance.now() - start });
     return plain("Internal error", 500);
   }
+  // Hacer algo en la página también es usarla (si no se puede apuntar, el cambio ya está hecho: no es un 500).
+  await noteShareUse(resolved.share).catch((err) => console.error("[share-out] uso", err));
+  return back(token, `?m=${notice}`, hash);
 }

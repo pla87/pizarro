@@ -10,8 +10,6 @@ export interface BoardShareInfo {
   /** Terminado porque se revocó («Revocar enlace», apagar «Compartir fuera»), no porque caducara sin uso. */
   revoked: boolean;
   expiryDays: number;
-  generatedAt: string | null;
-  generatedByName: string | null;
   /** Tareas publicadas en la última generación. */
   published: number;
 }
@@ -73,7 +71,7 @@ export function shareLinkState(row: ShareLinkRow, now: Date = new Date()): { sta
 }
 
 /** Campos de ColumnShare que necesita el tablero (con `columns: { select: { share: … } } }`). */
-export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, generatedByName: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
+export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
 
 /**
  * ¿Terminó al revocarlo (y no por caducar)? Con `revokedAt` y sin haber caducado antes. El selector de caducidad deja
@@ -88,15 +86,13 @@ function wasRevoked(row: ShareLinkRow): boolean {
   return !SHARE_EXPIRY_DAYS.some((d) => used + d * DAY === at) && used + row.expiryDays * DAY > at;
 }
 
-export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; generatedByName: string | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
+export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
   const { state, endsAt } = shareLinkState(row, now);
   return {
     state,
     endsAt: endsAt?.toISOString() ?? null,
     revoked: state === "ended" && wasRevoked(row),
     expiryDays: row.expiryDays,
-    generatedAt: row.generatedAt?.toISOString() ?? null,
-    generatedByName: row.generatedByName,
     published: row.taskIds.length,
   };
 }

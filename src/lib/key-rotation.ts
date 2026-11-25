@@ -2,9 +2,11 @@ import { decryptSecretInfo, encryptSecret } from "./keyring";
 import { MAIL_PASS_KEY } from "./mail-settings-core";
 import { GOOGLE_SECRET_KEY } from "./google-config-core";
 import { TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY, WHATSAPP_TOKEN_KEY } from "./messaging-core";
+import { hashShareToken, isShareTokenShape } from "./share-out-core";
 
-// Re-cifrado de todos los secretos guardados con la clave actual (node dist/rotate-keys.mjs). Sin «server-only»:
-// lo usa el script de línea de órdenes. Cada valor se actualiza solo si nadie lo ha cambiado mientras tanto.
+// Re-cifrado de todos los secretos guardados con la clave actual (node dist/rotate-keys.mjs), y las huellas de
+// «Compartir fuera» rehechas con la clave actual de TOKEN_SECRET. Sin «server-only»: lo usa el script de línea de
+// órdenes. Cada valor se actualiza solo si nadie lo ha cambiado mientras tanto.
 
 /** Los campos cifrados de la base de datos: tabla, columna y nombre legible (`idField`: clave de la fila, «id» salvo en AppState; `where`: filtro fijo). */
 interface EncryptedField {
@@ -85,4 +87,47 @@ export async function rotateEncryptedSecrets(
     out.push(count);
   }
   return out;
+}
+
+/**
+ * «Compartir fuera»: la huella con la que se busca cada enlace (tokenHash) es un HMAC con TOKEN_SECRET. Si esa clave
+ * cambia, se rehace con la actual a partir del token cifrado (tokenEnc, que solo tienen los enlaces activos): así la
+ * dirección sigue funcionando aunque se quite TOKEN_SECRET_PREVIOUS (o aunque no se pusiera). Un enlace sin token
+ * legible no se puede rehacer: si su huella era de otra clave, ya no funciona (en su columna, «Crear un enlace nuevo»).
+ * Se cuenta como en rotateEncryptedSecrets (`unreadable`: los que ninguna clave de cifrado abre).
+ */
+export async function rehashShareTokens(
+  db: Pick<RotationDb, "columnShare">,
+  opts: { dryRun?: boolean; env?: Record<string, string | undefined> } = {},
+): Promise<RotationCount> {
+  const env = opts.env ?? process.env;
+  const rows = await db.columnShare.findMany({ where: { tokenEnc: { not: null }, tokenHash: { not: null } }, select: { id: true, tokenEnc: true, tokenHash: true } });
+  const count: RotationCount = { label: "Compartir fuera: huellas de las direcciones (TOKEN_SECRET)", total: rows.length, current: 0, rotated: 0, unreadable: 0 };
+  for (const row of rows) {
+    let token: string;
+    try {
+      token = decryptSecretInfo(row.tokenEnc!, env).plain;
+    } catch {
+      count.unreadable++;
+      continue;
+    }
+    if (!isShareTokenShape(token)) {
+      count.unreadable++;
+      continue;
+    }
+    const hash = hashShareToken(token, env);
+    if (hash === row.tokenHash) {
+      count.current++;
+      continue;
+    }
+    if (opts.dryRun) {
+      count.rotated++;
+      continue;
+    }
+    // Solo si sigue con la misma huella (la app pudo crear otro enlace entre medias, ya con la clave actual).
+    const { count: n } = await db.columnShare.updateMany({ where: { id: row.id, tokenHash: row.tokenHash }, data: { tokenHash: hash } });
+    if (n > 0) count.rotated++;
+    else count.current++;
+  }
+  return count;
 }
