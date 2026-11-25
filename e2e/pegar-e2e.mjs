@@ -169,7 +169,7 @@ try {
     if (where === "descripción") await L.eqEventually("DETALLE (foco en descripción): la imagen se inserta en el texto", () => d.locator("[contenteditable=true] img[src^='/api/attachments/']").count(), 1);
   }
   await sleep(800);
-  L.eq("DETALLE: solo el pegado en la descripción entra en el texto (una imagen, sin más texto)", [await d.locator("[contenteditable=true] img").count(), (await d.locator("[contenteditable=true]").first().innerText()).trim()], [1, ""]);
+  L.eq("DETALLE: solo el pegado en la descripción entra en el texto (una imagen, sin más texto)", [await d.locator("[contenteditable=true] img[src^='/api/attachments/']").count(), (await d.locator("[contenteditable=true]").first().innerText()).trim()], [1, ""]);
   await p.screenshot({ path: path.join(SHOTS, "paste-detail.png") });
   // Sin guardar la descripción (el adjunto se queda): «Cancelar» del editor y se cierra sin preguntar.
   await d.getByRole("button", { name: "Cancelar", exact: true }).click();

@@ -216,8 +216,9 @@ if (only.includes("conflicto")) {
   // Guardar ahora choca con la descripción de la otra persona: se avisa y se puede copiar lo escrito (no se pisa la suya).
   await saveDesc(da).click();
   await L.eqEventually("CONFLICTO 2: al guardar choca y no pisa la descripción de la otra persona", async () => [(await row(id)).description, await saveDesc(da).count()], ["Descripción de B", 0], { timeout: 10000 });
-  // El aviso más reciente lleva «Copiar tu texto» con lo escrito (el del primer conflicto copiaba el título).
-  const copy = toastWith(a.page, "ha cambiado el texto de esta tarea").getByRole("button", { name: "Copiar tu texto" });
+  // El aviso más reciente lleva «Copiar tu texto» con lo escrito (el del primer conflicto copiaba el título). La
+  // descripción de B se cambió por SQL sin cambiar quién la tocó por última vez, así que este aviso dice «Has cambiado…».
+  const copy = toastWith(a.page, /[Hh]as? cambiado el texto de esta tarea/).getByRole("button", { name: "Copiar tu texto" });
   await L.waitFor(async () => (await copy.count()) > 0, { timeout: 10000 });
   await copy.last().click();
   await L.eqEventually("CONFLICTO 2: «Copiar tu texto» copia lo escrito", () => a.page.evaluate(() => navigator.clipboard.readText()), "Texto sin guardar de A y más");
