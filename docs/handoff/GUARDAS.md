@@ -79,6 +79,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `dragItemsNow` (ref), no el estado del dibujo anterior (una tarjeta rápida se quedaba en una columna intermedia).
 - (Ronda 66) Lo que entra en una columna «Asignación a persona» enseña `showAssignedNotice` (assignNotice.ts) con
   «Deshacer»: `moveTask`/`moveTasks` devuelven `undo`. Una vía nueva de mover tarjetas, igual.
+- (Ronda 67) «Organizar por personas»: las personas son `projectPeopleWhere` (`access.ts`; miembros y, en uno de equipo, los
+  administradores con `AdminProjectPick`), no `projectUsersWhere` (que sigue dando a todos los administradores para el
+  selector de responsable y lo demás). El diálogo cuenta con `project.peopleIds`, que la página del tablero calcula con
+  la misma función (una consulta, solo en proyectos de equipo de «Casa y familia»): lo que ve y lo que crea
+  `createPersonColumns` deben coincidir.
 
 ## Navegador e interfaz
 

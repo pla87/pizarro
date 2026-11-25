@@ -11,7 +11,7 @@ import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/l
 import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
 import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
-import { listKinds, projectUsers } from "@/lib/board";
+import { listKinds, projectPeople } from "@/lib/board";
 import { logText } from "@/lib/log";
 import { COLUMN_ROLE_LABEL, DEFAULT_WAITING_DAYS, EVERGREEN_COLUMN_ROLES, hasEvergreenTasks, isUniqueColumnRole, MAX_WAITING_DAYS, type ColumnRoleValue } from "@/lib/constants";
 import { POSITION_STEP } from "@/lib/positions";
@@ -60,8 +60,9 @@ export async function createColumn(projectId: string, name: string) {
 }
 
 /**
- * «Organizar por personas» (proyectos de «Casa y familia»): una columna «Asignación a persona» por cada persona que puede
- * tener tareas del proyecto y aún no tiene la suya, con su nombre y sin plazo, al final del tablero. Nacen vacías (no entra
+ * «Organizar por personas» (proyectos de «Casa y familia»): una columna «Asignación a persona» por cada persona del
+ * proyecto (projectPeople: sus miembros y, si es de equipo, los administradores que lo tienen en su lista; el diálogo
+ * cuenta con las mismas, `project.peopleIds`) que aún no tiene la suya, con su nombre y sin plazo, al final del tablero. Nacen vacías (no entra
  * ninguna tarea: nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer.
  */
 export async function createPersonColumns(projectId: string) {
@@ -70,7 +71,7 @@ export async function createPersonColumns(projectId: string) {
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { isPrivate: true } });
-    const people = await projectUsers(id, project);
+    const people = await projectPeople(id, project);
     const created = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(id)}))`;
       const columns = await tx.column.findMany({ where: { projectId: id }, select: { assigneeId: true, position: true } });

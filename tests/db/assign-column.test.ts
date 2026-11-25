@@ -10,6 +10,7 @@ import { ADMIN_EXPORT, db, expectFail, expectOk, loginAs, makeProject, makeTask,
 import { archiveTask, createTask, createTasks, moveTask, moveTasks, restoreTask } from "../../src/actions/tasks";
 import { createPersonColumns, setColumnAssignee, setColumnRole, setColumnWaitingDays } from "../../src/actions/columns";
 import { removeProjectMember } from "../../src/actions/projects";
+import { projectPeople, projectUsers } from "../../src/lib/board";
 import { templateFromProject } from "../../src/actions/templates";
 import { applyTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
 import { undoEntry, undoLast } from "../../src/actions/undo";
@@ -455,7 +456,7 @@ describe("asignación a persona: nombre de la columna, columnas por persona y de
   });
 
   test("«Organizar por personas»: una columna por cada persona sin la suya, con su nombre y sin plazo; un deshacer las quita", async () => {
-    // Privado: las personas son sus miembros (en uno de equipo también cuentan todos los administradores).
+    // Privado: las personas son sus miembros (en uno de equipo, también los administradores que lo tienen en su lista).
     const me = await makeUser();
     const ana = await makeUser();
     const f = await makeProject({ visibility: "PRIVATE", owner: me, members: [me, ana] });
@@ -475,6 +476,24 @@ describe("asignación a persona: nombre de la columna, columnas por persona y de
     await db.column.createMany({ data: Array.from({ length: 30 - before }, (_, i) => ({ projectId: f.project.id, name: `C${i}`, position: 10_000 + i })) });
     expectFail(await createPersonColumns(f.project.id));
     assert.equal(await db.column.count({ where: { projectId: f.project.id } }), 30);
+  });
+
+  test("«Organizar por personas» en un proyecto de equipo: sus miembros y los administradores que lo tienen en su lista", async () => {
+    const ana = await makeUser();
+    const picked = await makeUser({ role: "ADMIN" });
+    const outside = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [ana] });
+    await db.adminProjectPick.create({ data: { projectId: f.project.id, userId: picked.id } });
+    // El selector de responsable sigue ofreciendo a todos los administradores; las columnas, solo a quien lo tiene en su lista.
+    const team = { isPrivate: false };
+    assert.ok((await projectUsers(f.project.id, team)).some((u) => u.id === outside.id));
+    assert.deepEqual((await projectPeople(f.project.id, team)).map((u) => u.id).sort(), [ana.id, picked.id].sort());
+    await loginAs(outside);
+    const created = expectOk(await createPersonColumns(f.project.id));
+    assert.deepEqual(created.map((c) => c.assigneeId).sort(), [ana.id, picked.id].sort());
+    // Un administrador asignado al proyecto cuenta como miembro aunque no lo tenga en su lista.
+    await db.projectMember.create({ data: { projectId: f.project.id, userId: outside.id } });
+    assert.deepEqual(expectOk(await createPersonColumns(f.project.id)).map((c) => c.assigneeId), [outside.id]);
   });
 
   test("mover a la columna devuelve la entrada de deshacer: el «Deshacer» del aviso la deshace entera", async () => {

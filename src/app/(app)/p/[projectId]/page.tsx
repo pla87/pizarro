@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { cache } from "react";
 import { visibleProjectsWhere } from "@/lib/access";
-import { appTimeZone, listKinds, loadBoardTasks, projectReleaseTemplates, projectUsers, userTemplates } from "@/lib/board";
+import { appTimeZone, listKinds, loadBoardTasks, projectPeople, projectReleaseTemplates, projectUsers, userTemplates } from "@/lib/board";
+import { PEOPLE_TEMPLATE } from "@/lib/column-assign-core";
 import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
@@ -51,7 +52,9 @@ export default async function BoardPage({ params, searchParams }: Params) {
   const { task } = await searchParams;
 
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
-  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates] = await Promise.all([
+  // «Organizar por personas» en un proyecto de equipo: quiénes tienen columna (en uno privado, todos los de `users`).
+  const peopleTeam = !project.isPrivate && project.templateKey === PEOPLE_TEMPLATE;
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, people] = await Promise.all([
     db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, assigneeId: true, assignDueDays: true, defaultKindId: true } }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
@@ -64,6 +67,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
     listKinds(projectId),
     userTemplates(user.id),
     projectReleaseTemplates(projectId),
+    peopleTeam ? projectPeople(projectId, project) : null,
   ]);
 
   const data: BoardPageData = {
@@ -71,6 +75,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
       id: project.id, name: project.name, attachMaxMb: project.taskAttachMaxMb, fileMaxMb: effectiveFileMaxMb(project.fileMaxMb), taskFields: normalizeTaskFields(project.taskFields),
       templateKey: project.templateKey,
       suggestedRoles: suggestedColumnRoles(project.templateKey, columns),
+      peopleIds: people?.map((p) => p.id) ?? null,
     },
     columns,
     // Sin los campos que valen lo de por defecto: el navegador lee bastante menos (el tablero los completa al llegar).

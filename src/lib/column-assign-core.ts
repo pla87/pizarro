@@ -8,6 +8,9 @@
 import { addDaysIso, isoWeekday } from "./dates";
 import { FORM_LABEL_ONLY, withoutEmptyFormSections } from "./form-sections";
 
+/** Plantilla cuyos proyectos ofrecen «Organizar por personas» (una columna «Asignación a persona» por cada una). */
+export const PEOPLE_TEMPLATE = "casa-familia";
+
 /** Plazo máximo de «Vence en N días». */
 export const MAX_ASSIGN_DUE_DAYS = 365;
 

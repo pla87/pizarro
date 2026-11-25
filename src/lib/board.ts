@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
-import { projectUsersWhere } from "./access";
+import { projectPeopleWhere, projectUsersWhere } from "./access";
 import { db } from "./db";
 import { TASK_ORDER } from "./task-positions";
 import type { AttachmentTotals, BoardTask } from "./types";
@@ -194,6 +194,18 @@ export async function loadBoardTask(id: string): Promise<BoardTask> {
 export async function projectUsers(projectId: string, project: { isPrivate: boolean }) {
   return db.user.findMany({
     where: { active: true, ...projectUsersWhere(project, projectId) },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * Personas activas para «Organizar por personas» (projectPeopleWhere): en un proyecto privado, las mismas que projectUsers;
+ * en uno de equipo, sin los administradores que no lo tienen en su lista.
+ */
+export async function projectPeople(projectId: string, project: { isPrivate: boolean }) {
+  return db.user.findMany({
+    where: { active: true, ...projectPeopleWhere(project, projectId) },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });

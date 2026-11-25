@@ -4,15 +4,13 @@ import { Plus, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createColumn, createPersonColumns } from "@/actions/columns";
 import { useT } from "@/i18n/client";
+import { PEOPLE_TEMPLATE } from "@/lib/column-assign-core";
 import { cn } from "../ui/cn";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import { afterModalHistory } from "../ui/useBackToClose";
 import { AddPeopleLink } from "./AssignColumn";
 import { useBoard } from "./context";
-
-/** Plantilla cuyos proyectos ofrecen «Organizar por personas» (una columna «Asignación a persona» por cada una). */
-const PEOPLE_TEMPLATE = "casa-familia";
 
 /** Lleva a la vista (escritorio: scroll lateral del tablero) la columna recién creada. */
 function revealColumn(columnId: string): void {
@@ -96,9 +94,13 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
     close();
   };
 
-  // Personas sin columna propia (las que ya tienen una «Asignación a persona» no se repiten).
+  // Personas del proyecto, las mismas que cuenta el servidor (createPersonColumns): en uno de equipo, sin los
+  // administradores que no lo tienen en su lista (`peopleIds`). Las que ya tienen su columna no se repiten.
   const peopleTemplate = project.templateKey === PEOPLE_TEMPLATE;
-  const missing = users.filter((u) => !columns.some((c) => c.assigneeId === u.id));
+  const peopleIds = project.peopleIds;
+  const people = peopleIds ? users.filter((u) => peopleIds.includes(u.id)) : users;
+  const adminsLeftOut = people.length < users.length;
+  const missing = people.filter((u) => !columns.some((c) => c.assigneeId === u.id));
   const createForPeople = async () => {
     setBusy(true);
     const res = await track(createPersonColumns(project.id));
@@ -138,9 +140,11 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
       <Modal open={open} onClose={close} title={byPeople ? t("Organizar por personas") : t("Nueva columna")} size="sm">
         {byPeople ? (
           <div className="space-y-4" data-people-columns>
-            {users.length <= 1 ? (
+            {people.length <= 1 ? (
               <>
-                <p className="text-sm text-slate-600 dark:text-slate-400">{t("En el proyecto solo hay una persona: añade antes a las demás.")}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {people.length === 0 ? t("Aún no hay nadie en el proyecto: añade antes a las personas.") : t("En el proyecto solo hay una persona: añade antes a las demás.")}
+                </p>
                 {canManageMembers && <AddPeopleLink projectId={project.id} />}
               </>
             ) : missing.length === 0 ? (
@@ -152,9 +156,12 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
                   : t("Se crearán {n} columnas «Asignación a persona», una por persona ({names}): lo que entre en cada una será de esa persona.", { n: missing.length, names: missing.map((u) => u.name).join(", ") })}
               </p>
             )}
+            {adminsLeftOut && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t("Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».")}</p>
+            )}
             <div className="flex justify-end gap-2">
               <button type="button" className="btn-secondary" onClick={() => setByPeople(false)}>{t("Volver")}</button>
-              {users.length > 1 && missing.length > 0 && (
+              {people.length > 1 && missing.length > 0 && (
                 <button type="button" className="btn-primary" disabled={busy} onClick={createForPeople}>{missing.length === 1 ? t("Crear la columna") : t("Crear {n} columnas", { n: missing.length })}</button>
               )}
             </div>
