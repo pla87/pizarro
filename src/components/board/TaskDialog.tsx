@@ -428,16 +428,25 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
   };
 
-  /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). */
-  const reload = async () => {
+  /**
+   * Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). `discardTyped`:
+   * la persona ya ha aceptado descartar lo escrito en la descripción («Pegar tarea», «Deshacer todo»).
+   */
+  const reload = async (discardTyped = false) => {
     // Sin red la acción lanza: no se recarga (y no queda una promesa rechazada sin atender).
     const res = await getTaskDetail(task.id).catch(() => null);
     if (!res?.ok) return;
-    descBase.current = res.data.description;
+    // Con la descripción abierta y cambios sin guardar, lo escrito se queda en el editor (no se vuelve a montar): antes un
+    // conflicto al guardar otra cosa (p. ej. el título que pone un cambio de tipo, si otra persona lo había cambiado)
+    // recargaba el editor con lo guardado y lo escrito se perdía. Se sigue escribiendo sobre la descripción que se abrió
+    // (`descBase` no avanza): si otra persona también la ha cambiado, al guardarla el servidor avisa del conflicto.
+    const keepTyped = !discardTyped && editingDescription();
+    if (!keepTyped) descBase.current = res.data.description;
     knownBase.current = true;
     descReloads.current++;
     setDetail(res.data);
-    setDescVersion((n) => n + 1);
+    if (keepTyped) setDescRemote((n) => n + 1);
+    else setDescVersion((n) => n + 1);
     board.refresh();
   };
   const reloadRef = useRef(reload);
@@ -592,8 +601,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (!res.ok) {
         closeGuard.current = "idle";
         toast(res.error, "error");
-        // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
-        await reload();
+        // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto (lo escrito ya se descartó).
+        await reload(true);
         return;
       }
       board.upsertTask(res.data.task);
@@ -997,14 +1006,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const res = await tracked(pasteTaskJson(task.id, text, one.task.title !== undefined || one.task.description !== undefined ? textSince() : undefined));
       if (!res.ok) {
         if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
-        if (!isSessionExpiredMessage(res.error, t) && !isOfflineMessage(res.error, t)) await reload();
+        if (!isSessionExpiredMessage(res.error, t) && !isOfflineMessage(res.error, t)) await reload(true);
         return false;
       }
       textVersion.current = ownTextVersion.current = res.data.task.textVersion;
       board.upsertTask(res.data.task);
       res.data.spawned.forEach(board.upsertTask);
-      // Descripción, subtareas y documentos se vuelven a leer (y las etiquetas nuevas del proyecto, con el tablero).
-      await reload();
+      // Descripción, subtareas y documentos se vuelven a leer (y las etiquetas nuevas del proyecto, con el tablero). Lo
+      // escrito en la descripción ya se aceptó descartarlo (arriba).
+      await reload(true);
       showNotice(res.data.changed ? t("Tarea pegada") : t("Sin cambios"));
       const { skipped } = res.data;
       if (skipped.length) {
@@ -1809,11 +1819,24 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   }, [replaceRef]);
   // Descripción nueva guardada desde fuera: se muestra, también en el editor abierto si no hay cambios propios (que no se
   // pisan: al guardarlos, el servidor avisa del conflicto). Sin remontar, para no cerrar el editor ni perder el foco.
+  // Si hay cambios propios, se avisa junto a los botones de que la guardada ha cambiado (lo escrito sigue ahí).
   const appliedRemote = useRef(remote);
+  const [remoteChanged, setRemoteChanged] = useState(false);
+  // La descripción guardada que se conoce mientras se edita (al cerrar el editor sigue a `initial`).
+  const knownInitial = useRef(initial);
+  useEffect(() => {
+    if (!editing) knownInitial.current = initial;
+  });
   useEffect(() => {
     if (remote === appliedRemote.current) return;
     appliedRemote.current = remote;
-    if (initial === null || (editing && value !== baseline.current)) return;
+    const changed = initial !== knownInitial.current;
+    knownInitial.current = initial;
+    if (initial === null) return;
+    if (editing && value !== baseline.current) {
+      if (changed) setRemoteChanged(true);
+      return;
+    }
     baseline.current = initial;
     setValue(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando llega un cambio de fuera
@@ -1876,6 +1899,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     refocus.current = true;
     closedAt.current = section.current?.getBoundingClientRect().top ?? null;
     setKindChanged(false);
+    setRemoteChanged(false);
     setEditing(false);
   };
 
@@ -1909,6 +1933,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
 
   const clear = () => {
     setKindChanged(false);
+    setRemoteChanged(false);
     setEditing(false);
     setValue("");
     if (initial.trim()) onClear();
@@ -1952,7 +1977,11 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             {/* «Guardar descripción»: el pie del detalle tiene otro «Guardar» (guarda todo y cierra). */}
             <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar descripción")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
-            {kindChanged ? (
+            {remoteChanged ? (
+              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status" data-desc-remote>
+                {t("Otra persona ha cambiado la descripción mientras escribías; lo tuyo sigue aquí, sin guardar")}
+              </span>
+            ) : kindChanged ? (
               <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">
                 {kindChanged === "template"
                   ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción")

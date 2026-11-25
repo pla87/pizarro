@@ -86,4 +86,7 @@ export const detalle: Record<string, string> = {
   // (Ronda 68) Cambiar de tipo: la plantilla del anterior se quita y el nuevo no tiene (kindChangeNotice)
   "plantilla de la descripción quitada": "description template removed",
   "Tipo cambiado y plantilla quitada; falta guardar la descripción": "Type changed and template removed; description not saved yet",
+
+  // (Ronda 68) Descripción en edición cuando otra persona la cambia (o tras un conflicto): lo escrito no se pierde
+  "Otra persona ha cambiado la descripción mientras escribías; lo tuyo sigue aquí, sin guardar": "Someone else changed the description while you were typing; your text is still here, unsaved",
 };
