@@ -641,7 +641,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 1. Sigue la guía de getpizarro.com (*Instalar → Railway*) en un proyecto nuevo: dominio y volumen primero, variables con **Generar mis variables** (sin `APP_URL`) y un solo **Deploy**.
 2. Qué debe pasar: el servicio no sale *Active* hasta que Pizarro está listo; al final del log aparece `PIZARRO ESTÁ SIN CONFIGURAR` con el código y la dirección `https://…up.railway.app/setup` (no `localhost`). *Administración → Ajustes → Instalación* dice que la dirección sale de Railway.
 3. En *Settings → Deploy* del servicio, comprueba que *Healthcheck Path* es `/api/health` con *Healthcheck Timeout* `600` (se pone a mano: Railway ya no lee `railway.json`, que se quitó del repositorio; ver `docs/INSTALL.md`, «Railway», paso 5) y que el log de construcción del despliegue trae `Starting Healthcheck` con `Path: /api/health`.
-4. Si falla: *Logs*, busca `appUrl` y `migrate`; la línea «Base de datos al día (migraciones: … s; espera a PostgreSQL: … s)» dice en qué se fue el tiempo.
+4. Si falla: *Logs*, busca `appUrl` y `migrate`; la línea «Base de datos al día (migraciones: … s; espera a PostgreSQL: … s)» dice en qué se fue el tiempo. Desde la v1.71, si no había migraciones nuevas, la línea es «Base de datos al día: N migraciones aplicadas, sin lanzar Prisma».
 
 ### 13.2 Copias de seguridad en R2 con bloqueo de retención
 
@@ -878,3 +878,29 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 - En el menú «⋯» de una columna, *Mover a la izquierda* y *Mover a la derecha* la cambian de sitio y las pestañas lo reflejan.
 - En el detalle de una tarea, el botón del pie dice **Deshacer** (en el ordenador, **Deshacer todo**); tras cambiar algo, pregunta «¿Deshacer todos los cambios?».
 - En un proyecto *Casa y familia* con dos personas, *Nueva columna → Organizar por personas* crea una columna por persona; al mover una tarjeta a una de ellas (con *Mover a…*) sale «Asignada a … » con **Deshacer**.
+
+## 20. Novedades de la v1.71.0
+
+### 20.1 Arranque sin Prisma (tu instalación y la de prueba)
+
+1. Despliega la v1.71.0 (trae una versión sin migraciones nuevas respecto a la v1.70.0).
+2. En los *Deploy Logs* del arranque busca `[start]`.
+
+**Qué debe pasar:** «Base de datos al día: N migraciones aplicadas, sin lanzar Prisma (comprobación: 0,… s)». En la siguiente versión que traiga una migración, la línea será «Aplicando migraciones (1 pendiente: …)…».
+
+**Si falla:** si sale «Aplicando migraciones (… quedó a medias o falló)», hay una migración rota de antes: mira «Problemas al desplegar» en la guía de instalación. No es un fallo del arranque nuevo, que ante cualquier duda hace lo de siempre.
+
+### 20.2 Railway sin margen de apagado (solo si alguna instalación no tiene la variable)
+
+- En una instalación de Railway sin `RAILWAY_DEPLOYMENT_DRAINING_SECONDS`, el log del arranque dice «[boot] Aviso: Falta RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15…» y *Administración → Ajustes → Descargar diagnóstico* lo lista en `warnings` (`railway_no_draining`). Con la variable puesta, no sale.
+
+### 20.3 «¿Olvidaste tu contraseña?» y códigos por email (con SMTP configurado)
+
+__TOPES_PRUEBAS__
+
+### 20.4 Organizar por personas en un proyecto de equipo (tu instalación)
+
+1. En un proyecto **de equipo** creado con *Casa y familia*, con un miembro y tú como administrador, quita el proyecto de *Proyectos en los que trabajo*.
+2. *Añadir columna → Organizar por personas*: solo cuenta al miembro, y sale la nota «Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».».
+3. Vuelve a añadirlo a tu lista y recarga: ahora te cuenta a ti también.
+

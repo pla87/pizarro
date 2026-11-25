@@ -156,6 +156,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   enum; `INPUT_COLUMN_ROLES` + `liveColumnRole` convierten el texto que entra (ZIP/JSON de la v1.67, plantillas,
   deshacer y su instantánea). La v1.68 funciona sobre esta base; con la v1.67 fallan elegir esos roles y crear proyectos
   con «Casa y familia» o «Eventos y viajes».
+- (Ronda 67) Arranque: `scripts/migrate.mjs` no lanza `prisma migrate deploy` si `_prisma_migrations` tiene todas las
+  migraciones de la carpeta terminadas, sin revertir y con el mismo checksum (sha256 del `migration.sql`), y ninguna a
+  medias (`migrationsUpToDate`). Ante cualquier duda (pendiente, fallida, otro checksum, tabla ausente, error al leer,
+  `?schema=` distinto de `public`) se lanza Prisma como antes. Si Prisma cambia cómo calcula el checksum, lo detecta
+  `tests/db/start-migrate.test.ts`.
 
 ## Base de datos
 

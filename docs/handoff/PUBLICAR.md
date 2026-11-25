@@ -87,9 +87,10 @@ Visto en las sesiones de la nube (antes en §0 del núcleo). Desde el PC del pro
 - La PR se fusiona aplastada (squash): después, la rama remota de trabajo conserva la historia vieja. Al empezar la
   ronda siguiente, `git checkout -B <rama> origin/main` y `git push --force-with-lease` (solo contiene lo ya fusionado);
   y borra los worktrees de la ronda anterior (`git worktree remove --force` + `git branch -D`), que ya están en `main`.
-- Publicar desde la sesión: PR con las herramientas de GitHub, esperar sus dos comprobaciones (tipos/lint/pruebas y
-  «Caddyfile»), fusionar aplastando, lanzar *Release* con `actions_run_trigger` (`release.yml`, ref `main`) y comprobar
-  que `origin/stable` y la etiqueta `vX.Y.Z` apuntan al commit fusionado (unos 6 min).
+- Publicar desde la sesión: PR con las herramientas de GitHub, esperar sus tres comprobaciones (tipos/lint/pruebas,
+  pruebas con base de datos y «Caddyfile»), fusionar aplastando, lanzar *Release* con `actions_run_trigger` (`release.yml`, ref `main`) y comprobar
+  que `origin/stable` y la etiqueta `vX.Y.Z` apuntan al commit fusionado (unos 7 min; antes de la imagen pasan los
+  jobs «Comprobaciones» y «Pruebas con base de datos» sobre el commit que se publica).
 
 ## Actualizaciones de dependencias (Dependabot)
 

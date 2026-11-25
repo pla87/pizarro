@@ -133,8 +133,8 @@ propio worktree (más lento, pero nunca toca el `node_modules` del repositorio p
 - `git push` normal a la rama de trabajo; **nunca forzar** (`--force`) desde el PC. Tras la fusión aplastada, la
   ronda siguiente empieza en una rama recién sacada de `origin/main` (o con `git merge origin/main` sobre la anterior
   y push normal).
-- PR con `gh pr create --base main` (o la web), esperar sus dos comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas
-  y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
+- PR con `gh pr create --base main` (o la web), esperar sus tres comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas,
+  pruebas con base de datos y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
 - Publicar: en GitHub, **Actions → Release → Run workflow** sobre `main` (o `gh workflow run release.yml --ref main`);
   después `git fetch origin --tags` y comprobar que `origin/stable` y `vX.Y.Z` apuntan al commit fusionado. Detalle en
   `docs/handoff/PUBLICAR.md`.
@@ -332,10 +332,10 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
    `changelog.json` (`changes` y `en`) y `npm run version:bump -- --render`.
 2. Actualizar `docs/MANUAL.md` (las dos líneas de versión y las secciones afectadas), `docs/PRUEBAS.md` y
    `docs/PRUEBAS-CHROME.md`. Los PDF se revisan en local (`node scripts/build-manual-pdf.mjs`) y **no se suben**.
-3. Commit «vX.Y.Z: …», PR a `main` (esperar sus dos comprobaciones), fusionar aplastando.
-4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasa antes el job `checks`: tipos,
-   lint, pruebas y traducciones, y si falla no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
-   al commit fusionado (unos 6 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
+3. Commit «vX.Y.Z: …», PR a `main` (esperar sus tres comprobaciones), fusionar aplastando.
+4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasan antes los jobs `checks` (tipos,
+   lint, pruebas y traducciones) y `db` (pruebas con base de datos, en orden al azar), y si falla alguno no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
+   al commit fusionado (unos 7 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
 5. Una actualización de Dependabot se aprueba solo si pasan **todas** las comprobaciones (PUBLICAR, «Dependabot»).
 
 ## 6. Estado y pendientes
