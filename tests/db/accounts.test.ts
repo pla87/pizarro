@@ -1,10 +1,13 @@
 // Miembros de proyectos privados, contraseñas y cambio forzado, contra PostgreSQL real.
 import assert from "node:assert/strict";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout, waitForLockWaiter } from "./helpers";
+import { afterDone, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND, saveSession, restoreSession, logout, waitForLockWaiter } from "./helpers";
 import { addProjectMember, deleteProject, removeProjectMember, updateProject } from "../../src/actions/projects";
 import { getTaskDetail, updateTask } from "../../src/actions/tasks";
-import { login, resetPassword, setNewPassword } from "../../src/actions/auth";
+import { login, requestPasswordReset, resetPassword, setNewPassword } from "../../src/actions/auth";
 import * as usersActions from "../../src/actions/users";
 import { forcePasswordChange, updateUser } from "../../src/actions/users";
 import { getCurrentUser, getPendingUser } from "../../src/lib/session";
@@ -15,10 +18,11 @@ import { createResetLink } from "../../src/lib/reset-link";
 import { findUsableToken, consumeToken } from "../../src/lib/auth-token";
 import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
-import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached } from "../../src/lib/rate-limit";
+import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } from "../../src/lib/rate-limit";
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
 import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
-import { CHALLENGE_COOKIE, readChallenge, startChallenge } from "../../src/lib/two-factor";
+import { CHALLENGE_COOKIE, readChallenge, sendEmailCode, startChallenge } from "../../src/lib/two-factor";
+import { flushLogs } from "../../src/lib/log";
 import { changePassword } from "../../src/actions/profile";
 import { encryptSecret } from "../../src/lib/crypto";
 import { hashFeedToken, newFeedToken } from "../../src/lib/calendar-feed-core";
@@ -682,5 +686,92 @@ describe("editar un usuario: dos administradores a la vez (Administración → U
     expectOk(await promote!);
     const picks = await db.adminProjectPick.findMany({ where: { userId: x.id }, select: { projectId: true } });
     assert.deepEqual(picks.map((p) => p.projectId).sort(), [before.project.id, meanwhile.project.id].sort(), "los dos quedan elegidos");
+  });
+});
+
+/** Ejecuta `fn` con el buzón de pruebas en una carpeta nueva y devuelve cuántos emails se han escrito en ella. */
+async function countMails(fn: () => Promise<void>): Promise<number> {
+  const dir = await mkdtemp(path.join(tmpdir(), "pz-mails-"));
+  const prev = process.env.MAIL_OUTBOX_DIR;
+  process.env.MAIL_OUTBOX_DIR = dir;
+  try {
+    await fn();
+    await afterDone();
+    return (await readdir(dir)).length;
+  } finally {
+    process.env.MAIL_OUTBOX_DIR = prev ?? "";
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+describe("topes de los emails de «¿Olvidaste tu contraseña?»", () => {
+  // La IP de las pruebas (sin cabeceras): sus topes de 15 min se vacían entre peticiones, como si pasara el tiempo.
+  const freshWindow = (email: string) => {
+    resetRateLimit(`reset:email:${email}`);
+    for (const ip of ["unknown", "127.0.0.1", "::1"]) resetRateLimit(`reset:ip:${ip}`);
+  };
+
+  test("5 al día a una dirección: la 6.ª petición responde igual y no envía nada", async () => {
+    resetRateLimit("reset:all");
+    const user = await makeUser();
+    const email = (await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { email: true } })).email;
+    resetRateLimit(`reset:email-day:${email}`);
+    const sent = await countMails(async () => {
+      for (let i = 0; i < 6; i++) {
+        freshWindow(email);
+        expectOk(await requestPasswordReset(email));
+        await afterDone();
+      }
+    });
+    assert.equal(sent, 5);
+    // Una dirección sin cuenta no gasta el tope de nadie (ni el global): tampoco se envía nada.
+    resetRateLimit("reset:all");
+    assert.equal(await countMails(async () => expectOk(await requestPasswordReset("nadie-reset@example.com"))), 0);
+    assert.equal(rateLimitReached("reset:all", 1), false);
+    resetRateLimit(`reset:email-day:${email}`);
+  });
+
+  test("30 por hora en total: después, no sale ninguno, la respuesta es la misma y queda una línea en Logs (una por hora)", async () => {
+    resetRateLimit("reset:all");
+    resetRateLimit("reset:all:logged");
+    rateLimit("reset:all", 30, 60 * 60_000, 30); // ya se han enviado 30 esta hora
+    const a = await makeUser();
+    const b = await makeUser();
+    const emails = await Promise.all([a, b].map(async (u) => (await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { email: true } })).email));
+    const since = new Date();
+    const sent = await countMails(async () => {
+      for (const email of emails) {
+        freshWindow(email);
+        expectOk(await requestPasswordReset(email));
+        await afterDone();
+      }
+    });
+    assert.equal(sent, 0);
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "auth.resetMailCapped", createdAt: { gte: since } } }), 1);
+    // El tope por dirección no se ha gastado.
+    for (const email of emails) assert.equal(rateLimitReached(`reset:email-day:${email}`, 1), false, email);
+    resetRateLimit("reset:all");
+    resetRateLimit("reset:all:logged");
+  });
+});
+
+describe("códigos de la verificación en dos pasos por email: tope por persona", () => {
+  test("10 por hora entre todos sus desafíos: el 11.º (en un desafío nuevo) no se envía", async () => {
+    const user = await makeUser();
+    const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { name: true, email: true, locale: true } });
+    const challenge = () => db.loginChallenge.create({ data: { userId: user.id, kind: "LOGIN", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + 600_000) }, select: { id: true, userId: true } });
+    let refused: unknown = null;
+    const sent = await countMails(async () => {
+      for (let i = 0; i < 10; i++) await sendEmailCode(await challenge(), me);
+      await sendEmailCode(await challenge(), me).catch((err: unknown) => { refused = err; });
+    });
+    assert.equal(sent, 10);
+    assert.match(String((refused as Error | null)?.message), /Demasiados envíos/);
+    // Otra persona no se ve afectada.
+    const other = await makeUser();
+    const them = await db.user.findUniqueOrThrow({ where: { id: other.id }, select: { name: true, email: true, locale: true } });
+    const theirs = await db.loginChallenge.create({ data: { userId: other.id, kind: "LOGIN", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + 600_000) }, select: { id: true, userId: true } });
+    assert.equal(await countMails(() => sendEmailCode(theirs, them)), 1);
   });
 });

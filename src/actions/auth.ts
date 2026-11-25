@@ -145,7 +145,17 @@ export async function logout(): Promise<void> {
   redirect("/login");
 }
 
-/** «¿Olvidaste tu contraseña?»: la respuesta es siempre la misma exista o no la cuenta (el texto lo pone la pantalla). */
+/** Emails de restablecimiento: como mucho estos al día a una dirección y estos por hora en total (cuota del SMTP). */
+const RESET_MAILS_PER_ADDRESS_DAY = 5;
+const RESET_MAILS_PER_HOUR = 30;
+
+/**
+ * «¿Olvidaste tu contraseña?»: la respuesta es siempre la misma exista o no la cuenta (el texto lo pone la pantalla).
+ * Además de los topes por IP y por dirección (cada 15 min), los del envío: RESET_MAILS_PER_ADDRESS_DAY al día a cada
+ * dirección y RESET_MAILS_PER_HOUR por hora entre todas. Sin ellos, cualquiera, sin cuenta, mandaba un email cada 5 min
+ * a cada usuario y agotaba la cuota diaria del SMTP (y con ella los códigos de la verificación en dos pasos). Pasado uno
+ * de esos dos, no sale el email y la respuesta es la misma (el tope global deja una línea en Logs, una vez por hora).
+ */
 export async function requestPasswordReset(email: string) {
   return runAction({ name: "auth.requestPasswordReset", args: [] }, async () => {
     if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
@@ -162,6 +172,16 @@ export async function requestPasswordReset(email: string) {
       sendMailInBackground("restablecer contraseña", async () => {
         const user = await db.user.findUnique({ where: { email: address }, select: { id: true, name: true, email: true, locale: true, active: true } });
         if (!user?.active) return;
+        const day = `reset:email-day:${address}`;
+        if (rateLimitReached(day, RESET_MAILS_PER_ADDRESS_DAY)) return;
+        if (!rateLimit("reset:all", RESET_MAILS_PER_HOUR, 60 * 60_000)) {
+          releaseRateLimit("reset:all");
+          if (rateLimit("reset:all:logged", 1, 60 * 60_000)) {
+            logEvent({ level: "warn", category: "auth", action: "auth.resetMailCapped", label: { k: "Tope de emails para restablecer la contraseña: {n} en una hora. Los siguientes no se envían hasta que pase.", p: { n: RESET_MAILS_PER_HOUR } }, ip });
+          }
+          return;
+        }
+        rateLimit(day, RESET_MAILS_PER_ADDRESS_DAY, 24 * 60 * 60_000);
         const token = await issueAuthToken(user.id, "PASSWORD_RESET");
         await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
         logEvent({ category: "auth", action: "auth.resetRequested", label: { k: "Enlace de restablecimiento enviado a {name}", p: { name: user.name } }, userId: user.id, userName: user.name, ip });

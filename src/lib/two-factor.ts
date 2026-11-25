@@ -10,7 +10,7 @@ import { isTrustedDevice, revokeTrustedDevices } from "./devices";
 import { AppError } from "./errors";
 import { emailEnabled } from "./mail";
 import { logMailError } from "./mask-email";
-import { rateLimit } from "./rate-limit";
+import { rateLimit, rateLimitReached } from "./rate-limit";
 import { cookieSecure } from "./session-config";
 import {
   EMAIL_CODE_TTL_MS, RECOVERY_CODE_COUNT, emailCodeHashes, generateEmailCode, generateRecoveryCodes, hashEmailCode, hashRecoveryCode, normalizeRecoveryCode,
@@ -77,10 +77,19 @@ export async function dropChallenge(id: string): Promise<void> {
 
 const safeEq = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-/** Envía un código de 6 dígitos al email de la cuenta y lo deja anotado (solo su HMAC) en el desafío. */
-export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: string; email: string; locale: string }): Promise<void> {
+/** Códigos por email que se envían como mucho a una persona por hora, entre todos sus desafíos. */
+const EMAIL_CODES_PER_USER_HOUR = 10;
+
+/**
+ * Envía un código de 6 dígitos al email de la cuenta y lo deja anotado (solo su HMAC) en el desafío. Dos topes: por
+ * desafío (5 en la vida del código) y por persona (EMAIL_CODES_PER_USER_HOUR por hora): cada inicio de sesión con la
+ * contraseña crea un desafío nuevo, así que sin el de la persona quien la tuviera podía mandarle un código tras otro.
+ */
+export async function sendEmailCode(ch: Pick<Challenge, "id" | "userId">, user: { name: string; email: string; locale: string }): Promise<void> {
   if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
-  if (!rateLimit(`2fa:send:${ch.id}`, 5, EMAIL_CODE_TTL_MS)) throw new AppError("Demasiados envíos. Espera unos minutos.");
+  const perUser = `2fa:send-user:${ch.userId}`;
+  if (rateLimitReached(perUser, EMAIL_CODES_PER_USER_HOUR) || !rateLimit(`2fa:send:${ch.id}`, 5, EMAIL_CODE_TTL_MS)) throw new AppError("Demasiados envíos. Espera unos minutos.");
+  rateLimit(perUser, EMAIL_CODES_PER_USER_HOUR, 60 * 60_000);
   const code = generateEmailCode();
   await db.loginChallenge.update({ where: { id: ch.id }, data: { codeHash: hashEmailCode(ch.id, code), codeExpiresAt: new Date(Date.now() + EMAIL_CODE_TTL_MS) } });
   try {
