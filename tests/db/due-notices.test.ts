@@ -80,6 +80,23 @@ describe("avisos de cambio de fecha agrupados", () => {
     assert.equal((await dueNotices(b.task.id)).length, 0);
   });
 
+  // Antes salía «X ha cambiado la fecha límite…» (también por email) aunque la tarea ya estuviera en «Hecho».
+  test("tarea terminada antes del envío: no se avisa; si vuelve a abrirse antes, sí", async () => {
+    const a = await setup();
+    expectOk(await updateTask(a.task.id, { dueDate: "2026-11-09" }));
+    await db.task.update({ where: { id: a.task.id }, data: { columnId: a.f.columns.done } });
+    assert.equal(await deliverDueNotices(after(DUE_NOTIFY_DELAY_MS + 30_000)), 0);
+    assert.equal((await dueNotices(a.task.id)).length, 0);
+    assert.equal(await db.pendingDueNotice.count({ where: { taskId: a.task.id } }), 0, "la fila se descarta");
+
+    const b = await setup();
+    expectOk(await updateTask(b.task.id, { dueDate: "2026-11-09" }));
+    await db.task.update({ where: { id: b.task.id }, data: { columnId: b.f.columns.done } });
+    await db.task.update({ where: { id: b.task.id }, data: { columnId: b.f.columns.doing } });
+    assert.equal(await deliverDueNotices(after(DUE_NOTIFY_DELAY_MS + 30_000)), 1);
+    assert.equal((await dueNotices(b.task.id)).length, 1);
+  });
+
   test("desasignada o reasignada: no se avisa a quien dejó de ser responsable", async () => {
     const { actor, f, task } = await setup();
     expectOk(await updateTask(task.id, { dueDate: "2026-11-09" }));
