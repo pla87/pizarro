@@ -14,6 +14,8 @@ import { applyTextareaEdit } from "./textarea-edit";
 import { tablesOnlyMarkdown } from "@/lib/paste-table";
 import type { EditAnchor } from "@/lib/edit-anchor";
 import { anchorFromTextarea, placeEditorAt, placeTextareaAt } from "./editAnchorDom";
+import { attachablePasteFiles, claimDrop, claimPaste, pasteClaimed, recoverEmptyImages } from "./pasteFiles";
+import { isUntypedImage } from "@/lib/document-kind";
 
 import type { EditorModeValue, UserOption } from "@/lib/types";
 
@@ -52,6 +54,25 @@ interface Props {
    * (en vez del foco al final, que desplazaba el panel hasta el final de una descripción larga). Sustituye a `autoFocus`.
    */
   startAt?: EditAnchor | null;
+  /**
+   * Imágenes pegadas (Ctrl+V de una captura) o soltadas en el campo: las sube (como adjuntos de la tarea) y devuelve las
+   * subidas, que se insertan donde está el cursor (`![nombre](/api/attachments/<id>)`). Sin él, el pegado y el soltado
+   * siguen su curso (el diálogo los adjunta). Lo pegado o soltado sin imágenes también.
+   */
+  onFiles?: (files: File[]) => Promise<InlineImage[]>;
+}
+
+/** Imagen subida que se inserta en el texto. */
+interface InlineImage {
+  id: string;
+  name: string;
+}
+
+const isImage = (f: File) => f.type.startsWith("image/") || isUntypedImage(f.name, f.type);
+
+/** Markdown de una imagen subida (el texto alternativo, con los corchetes escapados como los guarda el editor con barra). */
+function imageMarkdown(img: InlineImage): string {
+  return `![${img.name.replace(/[[\]\\]/g, "\\$&")}](/api/attachments/${img.id})`;
 }
 
 /**
@@ -62,11 +83,70 @@ interface Props {
  * conserva su función de mover el foco, así que el teclado nunca queda atrapado. Los botones de la barra están fuera del orden
  * de Tab; se entra con Alt+F10 (flechas para moverse; Tab o Escape vuelven al texto).
  */
-export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName, startAt }: Props) {
+export function DescriptionField({ id, mode, value, onValueChange, users, placeholder, autoFocus, onCommand, onSubmit, onCancel, textareaRef, textareaClassName, startAt, onFiles }: Props) {
   const t = useT();
   const inner = useRef<HTMLTextAreaElement | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useImperativeHandle(textareaRef, () => inner.current!);
+  // El editor con barra, cuando ya existe (para insertar las imágenes subidas en su cursor).
+  const editorOutRef = useRef<Editor | null>(null);
+  const changeRef = useRef(onValueChange);
+  useEffect(() => {
+    changeRef.current = onValueChange;
+  });
+  /**
+   * Inserta las imágenes subidas donde está el cursor ahora (la subida tarda: se puede haber seguido escribiendo). En el
+   * campo de texto, separadas por espacios de lo que haya alrededor; sin quitarle el foco a otro sitio si ya no lo tiene.
+   */
+  const insertImages = (images: InlineImage[]) => {
+    if (!images.length) return;
+    const ed = editorOutRef.current;
+    if (mode === "WYSIWYG" && ed && !ed.isDestroyed) {
+      ed.chain().insertContent(images.flatMap((img, i) => [
+        ...(i ? [{ type: "text", text: " " }] : []),
+        { type: "markdownImage", attrs: { raw: imageMarkdown(img), src: `/api/attachments/${img.id}`, alt: img.name } },
+      ])).run();
+      return;
+    }
+    const el = inner.current;
+    if (!el?.isConnected) return;
+    const md = images.map(imageMarkdown).join(" ");
+    const start = el.selectionStart, end = el.selectionEnd;
+    const before = el.value.slice(0, start), after = el.value.slice(end);
+    const lead = before && !/\s$/.test(before) ? " " : "";
+    const trail = after && !/^\s/.test(after) ? " " : "";
+    const next = before + lead + md + trail + after;
+    const caret = before.length + lead.length + md.length + trail.length;
+    if (document.activeElement === el) applyTextareaEdit(el, { value: next, start: caret, end: caret }, changeRef.current);
+    else changeRef.current(next);
+  };
+  const upload = (files: File[]) => {
+    void onFiles?.(files).then(insertImages, () => undefined);
+  };
+  // En captura: antes que el editor (que deja los archivos sin pegar) y que el diálogo (que solo los adjunta).
+  const fileHandlers = onFiles
+    ? {
+        onPasteCapture: (e: React.ClipboardEvent) => {
+          const native = e.nativeEvent as ClipboardEvent;
+          if (pasteClaimed(native)) return;
+          const files = attachablePasteFiles(native);
+          if (!files.some(isImage)) return;
+          claimPaste(native);
+          // Una captura que llega vacía (Windows) se pide otra vez al portapapeles, como al adjuntar.
+          void recoverEmptyImages(files).then(upload);
+        },
+        onDropCapture: (e: React.DragEvent) => {
+          const files = Array.from(e.dataTransfer?.files ?? []);
+          if (!files.some(isImage)) return;
+          claimDrop(e.nativeEvent);
+          // En el editor con barra, el cursor va al punto donde se suelta (en el campo de texto se queda donde estaba).
+          const ed = editorOutRef.current;
+          const at = mode === "WYSIWYG" && ed && !ed.isDestroyed ? ed.view.posAtCoords({ left: e.clientX, top: e.clientY }) : null;
+          if (ed && at) ed.chain().focus().setTextSelection(at.pos).run();
+          upload(files);
+        },
+      }
+    : {};
   const run = useCallback(
     (edit: (value: string, start: number, end: number) => EditResult | null) => {
       const el = inner.current;
@@ -109,12 +189,14 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
   }, []);
 
   if (mode === "WYSIWYG") {
-    return <WysiwygField fieldRef={inner} id={id} value={value} onValueChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} startAt={startAt} users={users} onCommand={onCommand} />;
+    const field = <WysiwygField fieldRef={inner} editorOutRef={editorOutRef} id={id} value={value} onValueChange={onValueChange} onSubmit={onSubmit} onCancel={onCancel} placeholder={placeholder} autoFocus={autoFocus} startAt={startAt} users={users} onCommand={onCommand} />;
+    return onFiles ? <div {...fileHandlers}>{field}</div> : field;
   }
   return (
     <>
     <div
       ref={root}
+      {...fileHandlers}
       className={cn(FORMAT_BOX_CLASS, "[&_textarea:focus]:border-transparent [&_textarea:focus]:ring-0 [&_textarea]:rounded-t-none [&_textarea]:border-0 [&_textarea]:bg-transparent")}
     >
       <FormatToolbar
@@ -195,8 +277,9 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
  * antes solo se veía un hueco gris y las primeras teclas se perdían («Hola equipo» quedaba en «equipo»). Cuando el editor
  * está listo (montado oculto con lo escrito) ocupa su sitio en la misma pasada, con el texto y el foco al final.
  */
-function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, autoFocus, startAt, onCommand, onSubmit, onCancel }: Omit<Props, "mode" | "textareaRef" | "textareaClassName"> & {
+function WysiwygField({ fieldRef, editorOutRef, id, value, onValueChange, users, placeholder, autoFocus, startAt, onCommand, onSubmit, onCancel }: Omit<Props, "mode" | "textareaRef" | "textareaClassName" | "onFiles"> & {
   fieldRef: React.MutableRefObject<HTMLTextAreaElement | null>;
+  editorOutRef: React.MutableRefObject<Editor | null>;
 }) {
   const [Loaded, setLoaded] = useState<RichEditor | null>(() => richEditor);
   const [provisional, setProvisional] = useState(() => !richEditor);
@@ -240,6 +323,7 @@ function WysiwygField({ fieldRef, id, value, onValueChange, users, placeholder, 
     ed.view.focus();
   }, [provisional]);
   const onReady = (ed: Editor) => {
+    editorOutRef.current = ed;
     if (!provisional) {
       // Abierto con doble clic: el cursor al punto del clic cuando el editor ya está en la página (siguiente fotograma).
       if (startAt && autoFocus) requestAnimationFrame(() => !ed.isDestroyed && placeEditorAt(ed, startAt));

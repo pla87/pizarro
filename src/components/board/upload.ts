@@ -5,6 +5,7 @@ import { CLIPBOARD_IMAGE_NAME } from "@/lib/clipboard-files";
 import { QueueStopped, runQueue, summarizeSkipped, uploadCap, uploadGate, withRetry, type SkippedFile } from "@/lib/upload-queue";
 import { shrinkImage } from "@/lib/image-shrink";
 import { isUntypedImage } from "@/lib/document-kind";
+import { pasteClaimed } from "../ui/pasteFiles";
 
 /** Archivos (de cualquier tipo) de un FileList o de los items de un arrastre. Para pegar, ver ui/pasteFiles. */
 export function filesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
@@ -260,8 +261,9 @@ export function useFileDrop(onFiles: (files: File[]) => void): boolean {
       if (!has(e)) return;
       e.preventDefault();
       reset();
-      // Soltado sobre «Documentación» del menú: lo gestiona el menú (sube a la documentación del proyecto).
-      if (e.target instanceof Element && e.target.closest("[data-docs-drop]")) return;
+      // Soltado sobre «Documentación» del menú: lo gestiona el menú (sube a la documentación del proyecto). Sobre la
+      // descripción en edición, el editor (los sube y los inserta en el texto, ver claimDrop).
+      if (pasteClaimed(e) || (e.target instanceof Element && e.target.closest("[data-docs-drop]"))) return;
       const files = filesFrom(e.dataTransfer?.files);
       if (files.length) cb.current(files);
     };

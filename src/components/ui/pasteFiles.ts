@@ -48,6 +48,15 @@ export function claimPaste(e: ClipboardEvent): void {
 }
 
 /**
+ * Archivos soltados que ya se ha quedado un campo (la descripción en edición los sube y los inserta donde se sueltan): la
+ * zona de soltar del diálogo (useFileDrop) no los vuelve a adjuntar. Como en el pegado, el navegador no hace nada más.
+ */
+export function claimDrop(e: DragEvent): void {
+  claimed.add(e);
+  e.preventDefault();
+}
+
+/**
  * Imágenes que el evento dio vacías (0 bytes: el navegador no pudo leerlas del portapapeles del sistema, algo que pasa
  * con capturas en Windows): se piden otra vez con la API asíncrona del portapapeles. Si no se puede, quedan como estaban
  * (y se avisa una vez al adjuntar).

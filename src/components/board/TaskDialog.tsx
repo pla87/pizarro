@@ -17,7 +17,7 @@ import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { COLOR_NAME, hasEvergreenTasks, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, swatchBorder } from "@/lib/constants";
-import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
+import type { AttachmentInfo, BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { LabelToggles } from "./LabelToggles";
 import { cn } from "../ui/cn";
@@ -714,16 +714,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
-  const upload = async (list: File[]) => {
-    if (!list.length) return;
+  /** Sube archivos a la tarea; devuelve los adjuntos subidos (la descripción en edición inserta las imágenes). */
+  const upload = async (list: File[]): Promise<AttachmentInfo[]> => {
+    const uploaded: AttachmentInfo[] = [];
+    if (!list.length) return uploaded;
     // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
     const used = (detail?.attachments ?? []).reduce((n, a) => n + a.size, 0);
     const { fileMaxMb, attachMaxMb } = board.project;
     const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - used });
     if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
     if (skipped.some((s) => s.reason === "total")) setTotalRejected(true);
-    if (!accepted.length) return;
-    if (uploadAbort.current.signal.aborted) return;
+    if (!accepted.length || uploadAbort.current.signal.aborted) return uploaded;
     setUploading((n) => n + accepted.length);
     // Lo que aún reserva hueco de esta tanda (la clase la confirma el servidor al subir: `att.isImage`).
     const left = { images: accepted.filter(isImageFile).length, files: 0 };
@@ -742,6 +743,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           left[kind]--;
           setPending((p) => ({ ...p, [kind]: p[kind] - 1 }));
         }
+        uploaded.push(att);
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         // Con el diálogo ya cerrado nadie recalcula desde la lista: los contadores de la tarjeta se ponen aquí.
         board.patchTask(task.id, monotonicTotals(board.getTask(task.id), att.totals));
@@ -754,6 +756,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (res.totalRejected) setTotalRejected(true);
     const msg = batchErrorMessage(t, res.errors, res.notSent);
     if (msg) toast(msg, "error");
+    return uploaded;
   };
 
   // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
@@ -790,7 +793,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     await reloadRef.current();
   };
 
-  const dropping = useFileDrop(upload);
+  const dropping = useFileDrop((files) => void upload(files));
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después."), confirmLabel: t("Borrar"), danger: true }))) return;
@@ -1281,6 +1284,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             liveRef={descLive}
             dirtyRef={descDirtyCheck}
             replaceRef={descReplace}
+            // Imágenes pegadas o soltadas con el editor abierto: adjuntos de la tarea e insertadas en el texto.
+            onFiles={async (files) => (await upload(files)).filter((a) => a.isImage).map((a) => ({ id: a.id, name: a.originalName }))}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -1308,11 +1313,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <div className="flex items-center gap-1">
                 <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
-                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { void upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
                 <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
                   <ImagePlus size={15} /> {t("Añadir")}
-                  <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" multiple className="sr-only" onChange={(e) => { void upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
               </div>
             </div>
@@ -1775,7 +1780,7 @@ function focusFromElsewhere(e: React.FocusEvent<HTMLElement>): boolean {
   return e.relatedTarget !== null && e.currentTarget.matches(":focus-visible");
 }
 
-function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef }: {
+function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef, onFiles }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
   remote?: number;
@@ -1795,6 +1800,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
   replaceRef?: React.MutableRefObject<((markdown: string, templated: KindTemplateChange) => () => void) | null>;
+  /** Sube las imágenes pegadas o soltadas en el editor y devuelve las que se insertan en el texto (ver DescriptionField). */
+  onFiles?: (files: File[]) => Promise<{ id: string; name: string }[]>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -2022,6 +2029,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             placeholder={t("Markdown · @persona · @docs / @sheets / @slides")}
             onCancel={() => void escapeCancel()}
             onSubmit={finish}
+            onFiles={onFiles}
           />
           </div>
           <div className="flex gap-2">
