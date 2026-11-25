@@ -30,3 +30,46 @@ export function shareStateText(info: Pick<BoardShareInfo, "state" | "endsAt">): 
   if (info.state === "ended") return { key: "Enlace caducado", date: null };
   return { key: "Web sin generar", date: null };
 }
+
+const DAY = 86_400_000;
+
+/** Lo que importa de una fila para saber cómo está su enlace. */
+export interface ShareLinkRow {
+  columnId: string | null;
+  tokenHash: string | null;
+  expiryDays: number;
+  generatedAt: Date | null;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+}
+
+/**
+ * Estado del enlace actual: `none` (sin generar), `active` (vale hasta `endsAt` si no se usa) o `ended` (caducó o se
+ * revocó en `endsAt`). Una fila sin columna (borrada o sin la función) cuenta como terminada.
+ */
+export function shareLinkState(row: ShareLinkRow, now: Date = new Date()): { state: "none" | "active" | "ended"; endsAt: Date | null } {
+  if (!row.tokenHash) return { state: "none", endsAt: null };
+  const used = row.lastUsedAt ?? row.generatedAt;
+  const expires = used ? new Date(used.getTime() + row.expiryDays * DAY) : null;
+  if (row.revokedAt) return { state: "ended", endsAt: expires && expires < row.revokedAt ? expires : row.revokedAt };
+  if (!row.columnId) return { state: "ended", endsAt: expires && expires < now ? expires : (used ?? now) };
+  if (!expires || expires <= now) return { state: "ended", endsAt: expires ?? now };
+  return { state: "active", endsAt: expires };
+}
+
+/** Campos de ColumnShare que necesita el tablero (con `columns: { select: { share: … } } }`). */
+export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, generatedByName: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
+
+export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; generatedByName: string | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
+  const { state, endsAt } = shareLinkState(row, now);
+  return {
+    state,
+    endsAt: endsAt?.toISOString() ?? null,
+    expiryDays: row.expiryDays,
+    linkId: row.tokenHash && state === "active" ? row.tokenHash.slice(0, 12) : null,
+    generatedAt: row.generatedAt?.toISOString() ?? null,
+    generatedByName: row.generatedByName,
+    published: row.taskIds.length,
+  };
+}
+

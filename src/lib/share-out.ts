@@ -4,7 +4,7 @@ import { getMaxCommentsPerTask } from "./app-settings";
 import { appTimeZone } from "./board";
 import { assertColumnRoom } from "./column-capacity";
 import { assignOnEnter, assignUndoOps, finishAssignOnEnter } from "./column-assign";
-import { isShareColumn, type BoardShareInfo } from "./share-out-board";
+import { isShareColumn, shareLinkState } from "./share-out-board";
 import { dateToIso, isoToDate } from "./dates";
 import { db } from "./db";
 import { AppError } from "./errors";
@@ -19,7 +19,7 @@ import { publishChange } from "./realtime";
 import { spawnRecurrences } from "./recurrence";
 import {
   inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, parseShareDate, sameHash, SHARE_LIMITS, SHARE_USE_WRITE_MS, shareAuthorLabel,
-  shareKeyOf, shareLinkState, shareTokenHashes, type ShareNotice,
+  shareKeyOf, shareTokenHashes, type ShareNotice,
 } from "./share-out-core";
 import type { SharePageData } from "./share-out-page";
 import { eventsOf } from "./task-events";
@@ -34,22 +34,6 @@ import { intlLocale, makeT, type Locale, type T } from "../i18n/core";
 // responsable, refresca los tableros abiertos y se puede deshacer desde la app (ver applyShareChange).
 
 // --- Tablero ---------------------------------------------------------------------------------------------------------
-
-/** Campos de ColumnShare que necesita el tablero (con `columns: { select: { share: … } } }`). */
-export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, generatedByName: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
-
-export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; generatedByName: string | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
-  const { state, endsAt } = shareLinkState(row, now);
-  return {
-    state,
-    endsAt: endsAt?.toISOString() ?? null,
-    expiryDays: row.expiryDays,
-    linkId: row.tokenHash && state === "active" ? row.tokenHash.slice(0, 12) : null,
-    generatedAt: row.generatedAt?.toISOString() ?? null,
-    generatedByName: row.generatedByName,
-    published: row.taskIds.length,
-  };
-}
 
 /**
  * Termina el enlace de la columna (quitar la función, borrar la columna, revocar): la fila se queda sin columna para que

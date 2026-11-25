@@ -22,8 +22,7 @@ import { PROGRAM_MAX_SESSIONS } from "./program-limit";
 import { buildAssignPlan, descriptionSummary, PLAN_DESCRIPTION_READ, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
 import { descriptionHeads } from "./description-heads";
 import { calendarWeekStart } from "./calendar";
-import { boardShareOf, SHARE_BOARD_SELECT } from "./share-out";
-import { isShareColumn } from "./share-out-board";
+import { boardShareOf, isShareColumn, SHARE_BOARD_SELECT } from "./share-out-board";
 import type { T } from "../i18n/core";
 import type { Prisma } from "@/generated/prisma/client";
 

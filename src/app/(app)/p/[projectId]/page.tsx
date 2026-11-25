@@ -10,7 +10,7 @@ import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
 import { liveCursor } from "@/lib/realtime";
-import { boardShareOf, SHARE_BOARD_SELECT } from "@/lib/share-out";
+import { boardShareOf, SHARE_BOARD_SELECT } from "@/lib/share-out-board";
 import { db } from "@/lib/db";
 import { noteProjectVisit } from "@/lib/project-visit";
 import { COLUMN_ORDER } from "@/lib/task-positions";

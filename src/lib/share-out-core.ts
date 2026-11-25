@@ -65,30 +65,6 @@ export const SHARE_LIMITS = {
 
 const DAY = 86_400_000;
 
-/** Lo que importa de una fila para saber cómo está su enlace. */
-export interface ShareLinkRow {
-  columnId: string | null;
-  tokenHash: string | null;
-  expiryDays: number;
-  generatedAt: Date | null;
-  lastUsedAt: Date | null;
-  revokedAt: Date | null;
-}
-
-/**
- * Estado del enlace actual: `none` (sin generar), `active` (vale hasta `endsAt` si no se usa) o `ended` (caducó o se
- * revocó en `endsAt`). Una fila sin columna (borrada o sin la función) cuenta como terminada.
- */
-export function shareLinkState(row: ShareLinkRow, now: Date = new Date()): { state: "none" | "active" | "ended"; endsAt: Date | null } {
-  if (!row.tokenHash) return { state: "none", endsAt: null };
-  const used = row.lastUsedAt ?? row.generatedAt;
-  const expires = used ? new Date(used.getTime() + row.expiryDays * DAY) : null;
-  if (row.revokedAt) return { state: "ended", endsAt: expires && expires < row.revokedAt ? expires : row.revokedAt };
-  if (!row.columnId) return { state: "ended", endsAt: expires && expires < now ? expires : (used ?? now) };
-  if (!expires || expires <= now) return { state: "ended", endsAt: expires ?? now };
-  return { state: "active", endsAt: expires };
-}
-
 /** ¿Sigue en los 30 días en que la dirección dice «ha caducado»? */
 export const inShareGrace = (endedAt: Date, now: Date = new Date()): boolean => now.getTime() < endedAt.getTime() + SHARE_GRACE_DAYS * DAY;
 
