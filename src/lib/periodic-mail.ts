@@ -321,6 +321,11 @@ type Creator = { id: string; name: string; email: string; locale: string | null 
 async function sendReport(s: Schedule, creator: Creator, now: Date, generate: GenerateReport): Promise<boolean | { smtpDown: unknown }> {
   const claim = await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: s.lastSentAt }, data: { lastSentAt: now } });
   if (claim.count !== 1) return false;
+  // El apagado pudo empezar mientras se reservaba (su gancho ya pasó): se devuelve y lo manda el proceso nuevo.
+  if (isShuttingDown()) {
+    await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
+    return false;
+  }
   pendingReports.set(s.projectId, { previous: s.lastSentAt, claimedAt: now });
   const t0 = performance.now();
   const base = { category: "notify", userId: creator.id, userName: creator.name, projectId: s.projectId };
@@ -349,6 +354,13 @@ async function sendReport(s: Schedule, creator: Creator, now: Date, generate: Ge
   } catch (err) {
     // El catch decide qué pasa con la reserva (devolverla o dejarla): el apagado ya no la toca.
     pendingReports.delete(s.projectId);
+    // Aplazado por un apagado (sin haber empezado a enviar): no es un fallo. La reserva se devuelve (si el gancho no lo
+    // hizo ya) y el proceso nuevo lo manda; ni error en Logs ni el aviso de «demasiado grande».
+    if (isShuttingDown() && !sending) {
+      await db.reportSchedule.updateMany({ where: { projectId: s.projectId, lastSentAt: now }, data: { lastSentAt: s.lastSentAt } });
+      logEvent({ ...base, action: "report.scheduledDeferred", label: { k: "Informe semanal a {to} aplazado por un reinicio: sale al volver a arrancar", p: { to: maskEmail(s.recipient) } }, details: { to: maskEmail(s.recipient) } });
+      return false;
+    }
     if (pdfOutOfMemory(err)) {
       // Sin memoria para el PDF: reintentarlo cada hora volvería a fallar y ocuparía la cola de PDF todo el día. Se deja
       // la reserva (ya no se intenta más hasta el próximo envío, tampoco en otro proceso) y se avisa una vez a quien lo

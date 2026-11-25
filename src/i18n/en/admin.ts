@@ -593,6 +593,7 @@ export const admin: Record<string, string> = {
   "Informe semanal de «{project}» enviado a {to}": "Weekly report for “{project}” sent to {to}",
   "Informe semanal no enviado a {to}: {error}. No se reintenta hasta el próximo envío; se avisa a quien lo configuró":
     "Weekly report not sent to {to}: {error}. Not retried until the next send; whoever set it up is notified",
+  "Informe semanal a {to} aplazado por un reinicio: sale al volver a arrancar": "Weekly report to {to} postponed by a restart: it goes out when the server is back up",
   "Fallo al enviar el informe semanal a {to}: {error}": "Failed to send the weekly report to {to}: {error}",
   "Aviso a {name}: el informe semanal de «{project}» es demasiado grande": "Notice to {name}: the weekly report for “{project}” is too large",
   "Fallo al avisar a {name} del informe demasiado grande: {error}": "Failed to notify {name} about the too-large report: {error}",
