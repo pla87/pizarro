@@ -8,8 +8,9 @@ extensión del navegador, herramientas `mcp__claude-in-chrome__*`), en lugar de 
 cambian el entorno, los recursos y cómo se publica.
 
 **Qué leer al empezar en local:** el núcleo, este anexo, el índice del manual
-(`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la ronda, `e2e/README.md` y `docs/PRUEBAS-CHROME.md`.
-Los anexos (§7 del núcleo), cuando toque su tema.
+(`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la ronda, y `e2e/README.md`.
+Los anexos (§7 del núcleo) y `docs/PRUEBAS-CHROME.md`, cuando toque su tema (este último, si la ronda tiene pruebas con
+Claude in Chrome).
 
 **Requisitos** (cualquier sistema; notas para Windows y macOS):
 
