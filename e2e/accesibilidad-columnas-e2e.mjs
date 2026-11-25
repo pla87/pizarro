@@ -130,10 +130,14 @@ if (only.includes("columnas")) {
     const b = L.colLoc(page, col).locator("[data-column-action] button").first();
     L.check(`COLUMNAS: «${col}»: aria-disabled y sin el atributo disabled`, (await b.getAttribute("aria-disabled")) === "true" && !(await b.evaluate((e) => e.hasAttribute("disabled"))));
     L.check(`COLUMNAS: «${col}»: sigue en el orden de tabulación (se puede enfocar)`, await b.evaluate((e) => { e.focus(); return document.activeElement === e; }));
+    const alerts = await page.locator("[role=alert]").count();
     await b.click({ force: true }); // Playwright no pulsa lo que está aria-disabled si no se fuerza
-    // La release dice qué hacer («Añade tarjetas…»); las demás, que no hay tarjetas.
+    // La release dice qué hacer («Añade tarjetas…»); las demás, que no hay tarjetas. (Ronda 68) El motivo está a la vista
+    // bajo el botón: tocarlo ya no lo repite en un aviso rojo.
     const reason = col === "Salto" ? EMPTY_RELEASE : `No hay tarjetas en «${col}»`;
-    await L.checkEventually(`COLUMNAS: «${col}» («${label}»): al tocarlo sale el motivo como aviso`, async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes(reason), { timeout: 4000 });
+    L.eq(`COLUMNAS: «${col}» («${label}»): el motivo, a la vista bajo el botón`, (await L.colLoc(page, col).locator("[data-column-action-reason]").first().innerText()).trim(), reason);
+    await sleep(400);
+    L.eq(`COLUMNAS: «${col}»: al tocarlo no sale un aviso que lo repita`, await page.locator("[role=alert]").count(), alerts);
   }
   L.check("COLUMNAS: tocar el botón vacío no abre ningún diálogo", (await page.locator("[role=dialog]").count()) === 0);
   // Opciones del menú de la columna.
@@ -151,7 +155,7 @@ if (only.includes("columnas")) {
   const lista = L.colLoc(page, "Lista").locator("[data-column-action] button").first();
   L.check("COLUMNAS: «Ver lista» sin subtareas: aria-disabled", (await lista.getAttribute("aria-disabled")) === "true");
   await lista.click({ force: true });
-  await L.checkEventually("COLUMNAS: …y avisa «Ninguna tarjeta tiene subtareas»", async () => (await page.locator("[role=alert]").allInnerTexts()).join(" ").includes("Ninguna tarjeta tiene subtareas"), { timeout: 4000 });
+  L.check("COLUMNAS: …y dice bajo el botón «Ninguna tarjeta tiene subtareas»", (await L.colLoc(page, "Lista").locator("[data-column-action-reason]").first().innerText()).includes("Ninguna tarjeta tiene subtareas"));
   // Con tarjetas el botón funciona.
   await L.q(`INSERT INTO "Task"(id,"projectId","columnId",title,"kindId",position,description,"createdById","updatedAt") VALUES ('bh52b_p1',$1,'bh52b_plan','Una tarjeta','kind_funcionalidad',1024,'',$2,NOW())`, [PID, adm.id]);
   await page.reload();

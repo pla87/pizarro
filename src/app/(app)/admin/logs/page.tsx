@@ -137,10 +137,13 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           {filters.reads && <input type="hidden" name="consultas" value="1" />}
-          {/* La explicación, como descripción (no `title`: algunos lectores y herramientas nombraban el botón con ella). */}
+          {/* La explicación, como descripción accesible (`aria-describedby`) y, para quien usa ratón, también en el `title`:
+              con texto propio el botón se sigue llamando «Descargar CSV» (el `title` solo nombra lo que no tiene nombre) y,
+              con `aria-describedby`, la descripción es la de ese texto, no la del `title`. */}
           <button
             type="submit"
             aria-describedby="logs-csv-hint"
+            title={t("Con el periodo y los filtros de la lista")}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
@@ -225,7 +228,7 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
             </Link>
           ) : (
             <>
-              <span role="link" aria-disabled="true" aria-describedby="logs-clear-hint" className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm opacity-50 dark:border-slate-700">
+              <span role="link" aria-disabled="true" aria-describedby="logs-clear-hint" title={t("No hay filtros aplicados")} className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm opacity-50 dark:border-slate-700">
                 {t("Limpiar")}
               </span>
               <span id="logs-clear-hint" className="sr-only">{t("No hay filtros aplicados")}</span>

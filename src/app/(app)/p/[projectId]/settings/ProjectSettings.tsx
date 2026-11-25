@@ -501,7 +501,8 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
     start(async () => {
       const res = await addProjectMember(projectId, candidate);
       if (!res.ok) return toast(res.error, "error");
-      toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
+      // Quien se añade a sí mismo (un administrador en un proyecto de equipo): «Miembro añadido» parecía hablar de otra persona.
+      toast(candidate === currentUserId ? t("Te has añadido al proyecto") : res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
       // Con la invitación sin aceptar, el enlace al tablero no le sirve: lo que necesita es el de invitación. Quien se añade
       // a sí mismo no necesita que le pasen nada (antes salía «Enlace al tablero para pasárselo a <yo>»).
@@ -616,7 +617,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           {/* Para quien no sabe de servidores: qué botón pulsar y qué pasa, sin «email configurado». */}
           {canResend
             ? t("Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).")
-            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). El que le pasaste antes dejará de funcionar.")}
+            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.")}
         </p>
       )}
       <div className="flex gap-2">

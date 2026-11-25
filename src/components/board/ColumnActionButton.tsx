@@ -4,7 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useId } from "react";
 import { Menu, MenuItem } from "../ui/Menu";
-import { useToast } from "../ui/Toast";
 
 /**
  * Botón de acción de una columna con rol especial («Generar release», «Generar plan de trabajo», «Publicar programa
@@ -13,8 +12,9 @@ import { useToast } from "../ui/Toast";
  */
 const CLASS = "btn-primary w-full py-1.5";
 /**
- * Desactivado «a medias» (aria-disabled, no `disabled`): se ve apagado y el lector de pantalla lo anuncia, pero se puede
- * tocar y entonces el motivo (el `title`, que en el móvil no se ve) sale como aviso, como el «+» flotante con el programa lleno.
+ * Desactivado «a medias» (aria-disabled, no `disabled`): se ve apagado y el lector de pantalla lo anuncia, y sigue en el
+ * orden de Tab. Tocarlo no hace nada: el motivo ya está a la vista bajo él (OffReason). Antes salía además como aviso
+ * rojo, que repetía lo que ya se leía debajo.
  */
 const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
@@ -40,7 +40,6 @@ export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title
   title?: string;
   busy?: boolean;
 }) {
-  const toast = useToast();
   const reasonId = useId();
   const off = disabled && !busy;
   return (
@@ -48,7 +47,7 @@ export function ColumnActionButton({ icon: Icon, label, onClick, disabled, title
       <button
         type="button"
         className={`${CLASS} ${OFF} aria-busy:cursor-progress`}
-        onClick={busy ? undefined : disabled ? () => title && toast(title, "error") : onClick}
+        onClick={busy || disabled ? undefined : onClick}
         aria-disabled={off ? true : undefined}
         aria-busy={busy || undefined}
         aria-describedby={off && title ? reasonId : undefined}
@@ -73,7 +72,6 @@ export function ColumnActionMenu({ icon: Icon, label, title, items, disabled, bu
   busy?: boolean;
   items: { label: string; icon: LucideIcon; onClick: () => void }[];
 }) {
-  const toast = useToast();
   const reasonId = useId();
   if (busy) {
     return (
@@ -87,7 +85,7 @@ export function ColumnActionMenu({ icon: Icon, label, title, items, disabled, bu
   if (disabled) {
     return (
       <div className="px-2 pb-1.5" data-column-action>
-        <button type="button" className={`${CLASS} ${OFF}`} title={title} aria-disabled aria-describedby={title ? reasonId : undefined} onClick={() => title && toast(title, "error")}>
+        <button type="button" className={`${CLASS} ${OFF}`} title={title} aria-disabled aria-describedby={title ? reasonId : undefined}>
           <Icon size={15} /> {label} <ChevronDown size={14} className="opacity-80" />
         </button>
         <OffReason id={reasonId} text={title} />
