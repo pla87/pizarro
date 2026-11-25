@@ -269,7 +269,8 @@ export function shareReportStatus(
   if (!c.share || !isShareColumn(c)) return null;
   const info = boardShareOf(c.share);
   if (info.state === "active" && info.endsAt) return t("enlace activo, caduca el {date}", { date: formatDay(todayIso(appTimeZone(), new Date(info.endsAt)), today, locale) });
-  return info.state === "ended" ? t("enlace caducado") : t("web sin generar");
+  if (info.state === "ended") return info.revoked ? t("enlace revocado") : t("enlace caducado");
+  return t("web sin generar");
 }
 
 /**

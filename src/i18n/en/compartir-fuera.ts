@@ -109,4 +109,6 @@ export const compartirFuera: Record<string, string> = {
   "«Compartir fuera» apagado: 1 enlace ha dejado de funcionar": "“Share outside” turned off: 1 link has stopped working",
   "«Compartir fuera» apagado: {n} enlaces han dejado de funcionar": "“Share outside” turned off: {n} links have stopped working",
   "La web compartida dejará de funcionar y no vuelve al deshacer.": "The shared page will stop working and won't come back if you undo.",
+  // Ronda 68, segunda vuelta (servidor): el informe distingue revocado de caducado.
+  "enlace revocado": "link revoked",
 };

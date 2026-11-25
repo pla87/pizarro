@@ -34,7 +34,6 @@ export function mentionsToMarkdown(text: string): string {
  * los avisos de lo hecho desde fuera (notification-text.ts) no se puede colar en un comentario normal.
  */
 export function excerpt(text: string, max = 180): string {
-  // eslint-disable-next-line no-control-regex -- se quitan justo los caracteres de control
   const plain = decodeEntities(mentionsToPlain(text)).replace(/\s+/g, " ").replace(/[\u0000-\u001F\u007F]/g, "").trim();
   return ellipsize(plain, max);
 }

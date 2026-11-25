@@ -47,10 +47,17 @@ export async function endColumnShare(client: Pick<typeof db, "columnShare">, col
   return rows.length > 0;
 }
 
-/** Apagar la función en un proyecto: todos sus enlaces dejan de funcionar al momento (se revocan). */
+/**
+ * Apagar la función en un proyecto: todos sus enlaces dejan de funcionar al momento (se revocan). Devuelve cuántos
+ * funcionaban (como countActiveShares): los que ya habían caducado por tiempo también se cierran, pero no cuentan, y su
+ * fin sigue siendo la caducidad (shareLinkState toma la fecha anterior).
+ */
 export async function revokeProjectShares(projectId: string, now: Date = new Date(), client: Pick<typeof db, "columnShare"> = db): Promise<number> {
-  const { count } = await client.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now, tokenEnc: null } });
-  return count;
+  const where = { projectId, tokenHash: { not: null }, revokedAt: null };
+  const rows = await client.columnShare.findMany({ where, select: { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, column: { select: { role: true, assigneeId: true, assignDueDays: true } } } });
+  const active = rows.filter((r) => r.column && isShareColumn({ ...r.column, share: true }) && shareLinkState(r, now).state === "active").length;
+  await client.columnShare.updateMany({ where, data: { revokedAt: now, tokenEnc: null } });
+  return active;
 }
 
 /**

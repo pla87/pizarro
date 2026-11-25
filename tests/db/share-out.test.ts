@@ -5,16 +5,18 @@
 // selector de caducidad no resucita, borrar la cuenta de quien la generó, comentarios publicados, recuento de Ajustes y
 // deshacer o rehacer sin resucitar un enlace.
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
-import { ADMIN_EXPORT, db, expectApplied, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import { ADMIN_EXPORT, db, expectApplied, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { deleteColumn, setColumnAssignee, setColumnRole, setColumnShareOut } from "../../src/actions/columns";
 import { generateShareWeb, getShareLink, revokeShareLink, setProjectShareOut, setShareExpiry } from "../../src/actions/share-out";
-import { archiveTask, moveTask } from "../../src/actions/tasks";
+import { archiveTask, deleteAttachment, moveTask } from "../../src/actions/tasks";
 import { redoChecked, undoLast } from "../../src/actions/undo";
-import { rotateEncryptedSecrets, type RotationDb } from "../../src/lib/key-rotation";
+import { rehashShareTokens, rotateEncryptedSecrets, type RotationDb } from "../../src/lib/key-rotation";
+import { flushLogs } from "../../src/lib/log";
+import { subscribeProject } from "../../src/lib/realtime";
 import { eraseUser } from "../../src/lib/user-delete";
 import { externalNotice } from "../../src/lib/notification-text";
 import { buildProjectExport } from "../../src/lib/project-export/export";
@@ -22,14 +24,14 @@ import { importProjectFile } from "../../src/lib/project-export/import";
 import { rateLimit } from "../../src/lib/rate-limit";
 import { shareReportStatus } from "../../src/lib/report-build";
 import { boardShareOf, SHARE_BOARD_SELECT } from "../../src/lib/share-out-board";
-import { countActiveShares, purgeEndedShares } from "../../src/lib/share-out";
+import { countActiveShares, purgeEndedShares, revokeProjectShares } from "../../src/lib/share-out";
 import { hashShareToken, MAX_SHARE_PAGE_COMMENTS, revokeUnsharedLinks, SHARE_LIMITS, shareKeyOf } from "../../src/lib/share-out-core";
 import { attachmentPath } from "../../src/lib/uploads";
 import { streamZip } from "../../src/lib/zip-stream";
 import { makeT } from "../../src/i18n/core";
-import { GET as pageGet } from "../../src/app/x/[token]/route";
+import { GET as pageGet, HEAD as pageHeadRoute } from "../../src/app/x/[token]/route";
 import { POST as actionPost } from "../../src/app/x/[token]/t/[taskId]/route";
-import { GET as fileGet } from "../../src/app/x/[token]/a/[attachmentId]/route";
+import { GET as fileGet, HEAD as fileHeadRoute } from "../../src/app/x/[token]/a/[attachmentId]/route";
 
 process.env.UPLOAD_DIR = await mkdtemp(path.join(tmpdir(), "pz-share-out-"));
 const work = await mkdtemp(path.join(tmpdir(), "pz-share-out-zip-"));
@@ -174,8 +176,13 @@ describe("compartir fuera: activar y generar", () => {
   test("apagar la función en el proyecto revoca todos sus enlaces y no deja generar", async () => {
     const { admin, me, f } = await setup();
     const token = tokenOf((await generate(f.columns.todo)).url);
+    // Otro enlace que ya caducó por tiempo (sin revocar): se cierra igual, pero no cuenta como «ha dejado de funcionar».
+    expectOk(await setColumnShareOut(f.columns.doing));
+    await generate(f.columns.doing);
+    await db.columnShare.updateMany({ where: { columnId: f.columns.doing }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });
     await loginAs(admin);
     assert.equal(expectOk(await setProjectShareOut(f.project.id, false)).revoked, 1);
+    assert.equal(await db.columnShare.count({ where: { projectId: f.project.id, revokedAt: null, tokenHash: { not: null } } }), 0, "todos cerrados");
     assert.equal((await page(token)).status, 410);
     await loginAs(me);
     expectFail(await generateShareWeb(f.columns.todo), /no está activado/);
@@ -333,6 +340,10 @@ describe("compartir fuera: informe y exportar", () => {
     assert.ok(!board.includes(token) && !board.includes(row.tokenHash!.slice(0, 12)) && !board.includes(row.tokenEnc!), "el tablero no lleva nada del enlace");
     assert.ok(!JSON.stringify(col).includes(row.tokenEnc!), "lo que lee el informe no trae el token cifrado");
     expectOk(await revokeShareLink(f.columns.todo));
+    assert.equal(shareReportStatus(await read(), t, "es-ES", "2026-11-25"), "enlace revocado");
+    // Uno que caduca por tiempo dice «caducado».
+    await generate(f.columns.todo);
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });
     assert.equal(shareReportStatus(await read(), t, "es-ES", "2026-11-25"), "enlace caducado");
   });
 
@@ -521,5 +532,165 @@ describe("compartir fuera: arreglos de la revisión", () => {
     await db.column.update({ where: { id: f.columns.todo }, data: { role: "NONE" } });
     assert.equal((await page(token)).status, 410);
     assert.equal(await revokeUnsharedLinks(db, f.project.id), 0, "sin nada más que revocar");
+  });
+});
+
+describe("compartir fuera: segunda vuelta de la revisión", () => {
+  const pageHead = (token: string) => pageHeadRoute(new Request(`http://localhost:3000/x/${token}`, { method: "HEAD", headers: { "x-real-ip": ip() } }), { params: Promise.resolve({ token }) });
+  const fileHead = (token: string, attachmentId: string) =>
+    fileHeadRoute(new Request(`http://localhost:3000/x/${token}/a/${attachmentId}`, { method: "HEAD", headers: { "x-real-ip": ip() } }), { params: Promise.resolve({ token, attachmentId }) });
+
+  test("HEAD de la página y de un adjunto: mismas cabeceras sin cuerpo, sin contar como uso ni descarga y sin registrar", async () => {
+    const { f, t1 } = await setup();
+    const att = await db.taskAttachment.create({ data: { taskId: t1.id, originalName: "presupuesto.pdf", size: 8, isImage: false, mimeType: "application/pdf" } });
+    await writeFile(attachmentPath(att.id, "file"), "pdf-data");
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    const old = new Date(Date.now() - 2 * 60 * 60_000);
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: old } });
+    const head = await pageHead(token);
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get("cache-control"), "no-store");
+    assert.ok(head.headers.get("content-security-policy"));
+    assert.equal(await head.text(), "");
+    assert.equal((await pageHead("x".repeat(43))).status, 404);
+    // Se agota el cupo de descargas del enlace: HEAD no lo necesita (ni lo gasta); GET, sí.
+    for (let i = 0; i < SHARE_LIMITS.downloads.limit; i++) rateLimit(`share-out:dl:${shareKeyOf(token)}`, SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
+    const fh = await fileHead(token, att.id);
+    assert.equal(fh.status, 200);
+    assert.equal(fh.headers.get("content-length"), "8");
+    assert.match(fh.headers.get("content-disposition")!, /^attachment;/);
+    assert.equal(await fh.text(), "");
+    assert.equal((await fileHead(token, "noexiste1")).status, 404);
+    assert.equal((await file(token, att.id)).status, 429);
+    await flushLogs();
+    assert.equal((await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).lastUsedAt?.getTime(), old.getTime(), "no cuenta como uso");
+    assert.equal(await db.appLog.count({ where: { projectId: f.project.id, action: { in: ["shareOut.open", "shareOut.download"] } } }), 0);
+  });
+
+  test("formulario multipart mal formado: vuelve con «no se ha podido» (sin 500 ni error en Logs)", async () => {
+    const { f, t1 } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    const res = await actionPost(new Request(`http://localhost:3000/x/${token}/t/${t1.id}`, {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=x", "x-real-ip": ip(), host: "localhost:3000", "sec-fetch-site": "same-origin" },
+      body: "esto no es un formulario",
+    }), { params: Promise.resolve({ token, taskId: t1.id }) });
+    assert.equal(noticeOf(res), "invalid");
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { projectId: f.project.id, level: "error" } }), 0);
+  });
+
+  test("lo de fuera no vacía la pila de deshacer del responsable: como mucho una entrada de fuera, que sustituye a la anterior", async () => {
+    const { ana, f, t1, t2 } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    await loginAs(ana);
+    // Su primera entrada guarda un adjunto borrado (el fichero se conserva mientras se pueda deshacer).
+    const att = await db.taskAttachment.create({ data: { taskId: t2.id, originalName: "plano.pdf", size: 8, isImage: false, mimeType: "application/pdf" } });
+    await writeFile(attachmentPath(att.id, "file"), "pdf-data");
+    expectOk(await deleteAttachment(att.id));
+    for (let i = 0; i < 9; i++) expectOk(await moveTask(t2.id, i % 2 ? f.columns.todo : f.columns.doing, null, null));
+    const mine = { userId: ana.id, projectId: f.project.id, kind: "UNDO" as const };
+    assert.equal(await db.undoEntry.count({ where: mine }), 10);
+    for (let i = 0; i < 5; i++) assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: `Desde fuera ${i}` })), "comment");
+    assert.equal(noticeOf(await post(token, t1.id, { op: "due", due: "2026-12-03" })), "due");
+    const entries = await db.undoEntry.findMany({ where: mine, orderBy: { createdAt: "desc" }, select: { label: true, ops: true } });
+    assert.equal(entries.length, 11, "sus 10 y una de fuera");
+    assert.equal(entries.filter((e) => e.label.startsWith('{"k":"{who}:')).length, 1);
+    assert.ok(entries[0]!.label.includes("cambió la fecha"), "la de fuera es la última");
+    assert.ok(entries.some((e) => JSON.stringify(e.ops).includes(att.id)), "la del adjunto sigue");
+    await access(attachmentPath(att.id, "file"));
+    // Deshacer: primero lo último de fuera (la fecha); los comentarios anteriores ya no están en la pila y se quedan.
+    expectOk(await undoLast(f.project.id));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: t1.id } })).dueDate, null);
+    assert.equal(await db.taskComment.count({ where: { taskId: t1.id } }), 5);
+    assert.equal(await db.undoEntry.count({ where: mine }), 10, "quedan las suyas");
+  });
+
+  test("«Generar web» mientras se apaga la función: espera al apagado y no deja un enlace que reviva al encenderla", async () => {
+    const { admin, me, f } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    expectOk(await revokeShareLink(f.columns.todo));
+    // El apagado (la misma transacción que setProjectShareOut) se queda a medias con la fila del proyecto escrita.
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const isLocked = new Promise<void>((r) => (locked = r));
+    const off = db.$transaction(async (tx) => {
+      await tx.project.update({ where: { id: f.project.id }, data: { shareOutEnabled: false } });
+      locked();
+      await held;
+      await revokeProjectShares(f.project.id, new Date(), tx);
+    }, { timeout: 20_000 });
+    await isLocked;
+    await loginAs(me);
+    const racing = generateShareWeb(f.columns.todo, {});
+    await waitForLockWaiter();
+    release();
+    await off;
+    expectFail(await racing, /no está activado/);
+    await loginAs(admin);
+    expectOk(await setProjectShareOut(f.project.id, true));
+    const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.ok(row.revokedAt, "sin enlace vivo");
+    assert.equal(row.tokenHash, hashShareToken(token));
+    assert.equal((await page(token)).status, 410);
+  });
+
+  test("abrir el botón del enlace no avisa a los tableros abiertos (no los recarga)", async () => {
+    const { f } = await setup();
+    await generate(f.columns.todo);
+    const seen: string[] = [];
+    const unsub = subscribeProject(f.project.id, (ch) => seen.push(ch.action));
+    try {
+      assert.ok(expectOk(await getShareLink(f.columns.todo)).url);
+    } finally {
+      unsub();
+    }
+    assert.deepEqual(seen, []);
+  });
+
+  test("comentario de fuera: el extracto del aviso no trae caracteres de control", async () => {
+    const { ana, f, t1 } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    assert.equal(noticeOf(await post(token, t1.id, { op: "comment", body: "hola\u001Edone\u001Eadiós" })), "comment");
+    const n = await db.notification.findFirstOrThrow({ where: { userId: ana.id, taskId: t1.id, type: "COMMENT" } });
+    assert.deepEqual(externalNotice(n.excerpt), { author: "Por hacer (fuera)", what: "comment", text: "holadoneadiós" });
+  });
+
+  // Al final del fichero: cambiar TOKEN_SECRET rehace las huellas de todas las filas de esta base.
+  test("sin pasar rotate-keys, el botón del enlace rehace la huella antes de dar la dirección (no entrega una muerta)", async () => {
+    const A = "a".repeat(48);
+    const B = "b".repeat(48);
+    const { f } = await setup();
+    const url = await withEnv({ TOKEN_SECRET: A, TOKEN_SECRET_PREVIOUS: undefined }, async () => (await generate(f.columns.todo)).url);
+    const token = tokenOf(url);
+    await withEnv({ TOKEN_SECRET: B, TOKEN_SECRET_PREVIOUS: undefined }, async () => {
+      assert.equal((await page(token)).status, 404, "con otra clave y sin la anterior, la huella guardada no casa");
+      const link = expectOk(await getShareLink(f.columns.todo));
+      assert.deepEqual([link.url, link.lost], [url, false]);
+      assert.equal((await page(token)).status, 200, "la dirección que entrega funciona");
+    });
+  });
+
+  test("cambiar TOKEN_SECRET: rotate-keys rehace la huella desde el token cifrado y el enlace sigue funcionando", async () => {
+    const A = "c".repeat(48);
+    const B = "d".repeat(48);
+    const { f } = await setup();
+    const token = await withEnv({ TOKEN_SECRET: A, TOKEN_SECRET_PREVIOUS: undefined }, async () => tokenOf((await generate(f.columns.todo)).url));
+    const rowHash = async () => (await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).tokenHash;
+    await withEnv({ TOKEN_SECRET: B, TOKEN_SECRET_PREVIOUS: A }, async () => {
+      const before = await rowHash();
+      const dry = await rehashShareTokens(db as unknown as RotationDb, { dryRun: true });
+      assert.ok(dry.rotated >= 1);
+      assert.equal(await rowHash(), before, "en seco no se toca");
+      const done = await rehashShareTokens(db as unknown as RotationDb);
+      assert.ok(done.rotated >= 1);
+      assert.equal(await rowHash(), hashShareToken(token));
+      assert.equal((await rehashShareTokens(db as unknown as RotationDb)).rotated, 0, "repetirlo no cambia nada");
+    });
+    // Ya sin la anterior: la dirección sigue funcionando.
+    await withEnv({ TOKEN_SECRET: B, TOKEN_SECRET_PREVIOUS: undefined }, async () => {
+      assert.equal((await page(token)).status, 200);
+    });
   });
 });
