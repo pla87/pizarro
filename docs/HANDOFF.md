@@ -364,6 +364,11 @@ Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v
 **Preguntas abiertas al propietario (tras la v1.70.0)**, con la numeración del informe final de la ronda 66 (entre
 paréntesis, la recomendación que se le dio):
 
+0. **Primer pendiente técnico (no es una decisión):** `interfaz-carga-e2e` falla en «LOAD: el de Releases»: al ir del
+   tablero a Releases con la red lenta sale el esqueleto del tablero y no el de Releases. Con la v1.69.0 pasa; lo trae
+   anotar la visita del proyecto («Usados recientemente», `noteProjectVisit` en `p/[projectId]/page.tsx`): sin esa línea
+   pasa 38/38, y lanzarla sin `after()` no lo arregla. Es solo estético (qué esqueleto se ve unos instantes). Investigar
+   (¿el layout cambia de orden de proyectos entre la precarga y la navegación?) y arreglar en la ronda 67.
 1. WhatsApp en la instalación real: el propietario dijo «inténtalo, tenemos que ver que funciona». Necesita su cuenta de
    Meta (WhatsApp Business), el número y la plantilla aprobada; cada aviso cuesta dinero. Hacerlo con él delante, con la
    guía `docs/guias/whatsapp.md` y la prueba de Integraciones (tope de 10 al día). (SÍ, en la próxima sesión, juntos)
