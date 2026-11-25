@@ -165,7 +165,7 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
             )}
             {/* Una tarjeta está en una sola columna: ponerla en la de una persona la saca de «Esta semana» o de donde esté. */}
             {people.length > 1 && missing.length > 0 && (
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t("Las tarjetas que pongas en estas columnas salen de su columna actual.")}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t("Las tareas que pongas en estas columnas salen de su columna actual.")}</p>
             )}
             {/* Solo a quien puede hacer algo con ella (un administrador, que puede ponerse el proyecto en su lista) y mientras
                 queden columnas por crear. En un proyecto de equipo (el único con administradores fuera, `peopleIds`),

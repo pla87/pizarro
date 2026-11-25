@@ -38,7 +38,7 @@ export const columnas: Record<string, string> = {
   "1 columna creada: {names}": "1 column created: {names}",
   "{n} columnas creadas: {names}": "{n} columns created: {names}",
   "{n} más": "{n} more",
-  "Las tarjetas que pongas en estas columnas salen de su columna actual.": "Cards you put in these columns leave their current column.",
+  "Las tareas que pongas en estas columnas salen de su columna actual.": "Tasks you put in these columns leave their current column.",
   "«{name}» va ahora después de «{prev}»": "“{name}” now comes after “{prev}”",
   "«{name}» va ahora la primera": "“{name}” is now first",
   "No hay tarjetas en «{name}»": "There are no cards in “{name}”",
