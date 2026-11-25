@@ -1,12 +1,14 @@
 // Columna «Compartir fuera» (rol NONE con su fila ColumnShare): un administrador la activa en Ajustes del proyecto →
-// Tablero; «Rol de la columna › Compartir fuera» pone al pie «Generar web», el aviso de los adjuntos y el selector de
-// caducidad (7 días / 1 mes / 3 meses); «Generar web» abre el diálogo con la dirección (copiar, «Enviar por email» con
-// mailto:) y la marca de la cabecera pasa a «activo». Desde fuera, sin cuenta: la página (sin scripts, noindex,
+// Tablero; «Rol de la columna › Compartir fuera» pone al pie «Generar web», el aviso de lo que se publica y el selector
+// de caducidad (7 días / 1 mes / 3 meses); «Generar web» abre el diálogo con la dirección (copiar, «Enviar por email» con
+// mailto:) y la marca de la cabecera pasa a «activo»; «Actualizar web» y el botón del enlace vuelven a enseñar la misma
+// dirección, también a otra persona del proyecto. Desde fuera, sin cuenta: la página (sin scripts, noindex,
 // no-referrer, no-store), marcar como hecha (va arriba de «Hecho» y el tablero abierto lo ve sin recargar), cambiar la
 // fecha, comentar (firmado «<columna> (fuera)») y descargar un adjunto (attachment). Ctrl+Z en la app deshace lo de
-// fuera. «Revocar enlace» deja la dirección en «ha caducado»; apagar la función la quita del menú. Crea y borra su
-// proyecto (`fuera68_*`). Misma base y servidor que tablero-e2e.mjs:
-//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fuera-e2e.mjs   # PART=activar,rol,generar,fuera,revocar,apagar
+// fuera. Sin la dirección recuperable, «Crear un enlace nuevo» (con confirmación). «Revocar enlace» deja la dirección en
+// «ha caducado»; apagar la función la quita del menú. Crea y borra su proyecto (`fuera68_*`). Misma base y servidor que
+// tablero-e2e.mjs:
+//   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fuera-e2e.mjs   # PART=activar,rol,generar,fuera,nuevo,revocar,apagar
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +16,7 @@ import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { sleep } = L;
 const SHOTS = process.env.SHOTS_DIR || os.tmpdir();
-const only = (process.env.PART || "activar,rol,generar,fuera,revocar,apagar").split(",");
+const only = (process.env.PART || "activar,rol,generar,fuera,nuevo,revocar,apagar").split(",");
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "fuera68-"));
 
 const P = "fuera68_proj";
@@ -28,11 +30,12 @@ async function cleanup() {
 await L.prepareUsers();
 await cleanup();
 const [adm] = await L.q(`SELECT * FROM "User" WHERE email=$1`, [L.ADMIN]);
-// prepareUsers deja a todos como MEMBER: para el interruptor de Ajustes hace falta un administrador (se devuelve al final).
-await L.q(`UPDATE "User" SET role='ADMIN', locale='ES' WHERE id=$1`, [adm.id]);
+const [usr2] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.USER2]);
+await L.q(`UPDATE "User" SET locale='ES' WHERE id=$1`, [adm.id]);
 await L.q(`INSERT INTO "Project"(id,name,description,"isPrivate","privateOwnerId",position,"updatedAt") VALUES ($1,'Fuera 68','',true,$2,999970,NOW())`, [P, adm.id]);
 await L.q(`INSERT INTO "Column"(id,"projectId",name,position,"isDone") VALUES ($1,$4,'Backlog',1000,false),($2,$4,$5,2000,false),($3,$4,'Hecho',3000,true)`, [COL.back, COL.share, COL.done, P, SHARE_COL]);
-await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [P, adm.id]);
+// La segunda persona también es del proyecto: ve la dirección con el botón del enlace aunque no la haya generado.
+await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2),($1,$3)`, [P, adm.id, usr2.id]);
 const [kind] = await L.q(`SELECT id FROM "TaskKind" WHERE "projectId" IS NULL ORDER BY position LIMIT 1`);
 let seq = 0;
 async function seed(columnId, title) {
@@ -54,7 +57,7 @@ try {
   fs.writeFileSync(attFile, "f68-datos");
 } catch { attFile = null; }
 
-const shareRow = async () => (await L.q(`SELECT "tokenHash","expiryDays","revokedAt","columnId" FROM "ColumnShare" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [P]))[0];
+const shareRow = async () => (await L.q(`SELECT "tokenHash","tokenEnc","expiryDays","revokedAt","columnId" FROM "ColumnShare" WHERE "projectId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [P]))[0];
 const taskCol = async (id) => (await L.q(`SELECT "columnId" FROM "Task" WHERE id=$1`, [id]))[0]?.columnId;
 const shareCol = (page) => L.colLoc(page, SHARE_COL);
 async function openBoard(page) {
@@ -79,6 +82,10 @@ try {
   const s = await L.session({ viewport: { width: 1500, height: 900 } });
   sessions.push(s);
   const { page } = s;
+  // prepareUsers deja a todos como MEMBER: para el interruptor de Ajustes hace falta un administrador. Se le sube con la
+  // sesión ya abierta (como cuentas-borrar-e2e): un administrador que inicia sesión pasa por la verificación en dos pasos.
+  // Se devuelve a MEMBER al final.
+  await L.q(`UPDATE "User" SET role='ADMIN' WHERE id=$1`, [adm.id]);
 
   if (only.includes("activar")) {
     L.scenario("activar: Ajustes del proyecto → Tablero, solo administradores");
@@ -89,8 +96,10 @@ try {
     await page.keyboard.press("Escape");
     const box = await settingsToggle(page);
     L.eq("ACTIVAR: apagada por defecto", await box.isChecked(), false);
-    await box.check();
+    // La casilla es controlada (se marca cuando responde el servidor): un clic y se espera a la base, no check().
+    await box.click();
     await L.eqEventually("ACTIVAR: el proyecto la tiene activada", async () => (await L.q(`SELECT "shareOutEnabled" FROM "Project" WHERE id=$1`, [P]))[0].shareOutEnabled, true);
+    await L.eqEventually("ACTIVAR: la casilla queda marcada", () => box.isChecked(), true);
   }
 
   if (only.includes("rol")) {
@@ -105,7 +114,7 @@ try {
     L.check("ROL: queda la fila (rol NONE)", !!(await shareRow())?.columnId);
     const footer = shareCol(page).locator("[data-share-footer]");
     L.eq("ROL: botón «Generar web»", (await footer.locator("[data-share-generate]").innerText()).trim(), "Generar web");
-    L.check("ROL: el aviso de los adjuntos", (await footer.innerText()).includes("Todos los archivos adjuntos de estas tareas se podrán descargar desde la web."));
+    L.check("ROL: el aviso de lo que se publica", (await footer.innerText()).includes("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar."));
     const expiry = footer.locator("[data-share-expiry]");
     L.eq("ROL: caducidad por defecto «1 mes»", (await expiry.innerText()).trim(), "1 mes");
     await expiry.click();
@@ -133,11 +142,30 @@ try {
     L.check("GENERAR: «Enviar por email» es un mailto: con asunto y la dirección", mail.startsWith("mailto:?subject=") && decodeURIComponent(mail).includes(url), mail.slice(0, 120));
     L.check("GENERAR: dice hasta cuándo vale", (await d.innerText()).includes("Vale hasta el"));
     const row = await shareRow();
-    L.check("GENERAR: en la base, solo la huella", !!row.tokenHash && !url.includes(row.tokenHash) && !row.tokenHash.includes(url.split("/x/")[1]));
+    const token = url.split("/x/")[1];
+    L.check("GENERAR: en la base, la huella y el token cifrado (nunca en claro)", !!row.tokenHash && !url.includes(row.tokenHash) && !row.tokenHash.includes(token) && /^v2\./.test(row.tokenEnc ?? "") && !row.tokenEnc.includes(token));
     await page.screenshot({ path: `${SHOTS}/fuera68-dialogo.png` });
     await d.getByRole("button", { name: "Cerrar" }).last().click();
     await L.eqEventually("GENERAR: la marca de la cabecera pasa a activo", async () => shareCol(page).locator("[data-share-badge]").getAttribute("data-share-badge"), "active");
     L.eq("GENERAR: el botón pasa a «Actualizar web»", (await shareCol(page).locator("[data-share-generate]").innerText()).trim(), "Actualizar web");
+    // «Actualizar web» vuelve a abrir el diálogo con la misma dirección.
+    await shareCol(page).locator("[data-share-generate]").click();
+    const again = U.dialog(page).locator("[data-share-url]");
+    await again.waitFor();
+    L.eq("GENERAR: «Actualizar web» enseña la misma dirección", (await again.innerText()).trim(), url);
+    await U.dialog(page).getByRole("button", { name: "Cerrar" }).last().click();
+    // Otra persona del proyecto la ve con el botón del enlace (no la generó ella).
+    const other = await L.session({ email: L.USER2 });
+    sessions.push(other);
+    await openBoard(other.page);
+    await shareCol(other.page).getByRole("button", { name: "Enlace de la web" }).click();
+    const theirs = U.dialog(other.page).locator("[data-share-url]");
+    await theirs.waitFor();
+    L.eq("GENERAR: otra persona del proyecto ve la misma dirección", (await theirs.innerText()).trim(), url);
+    const tokenLogs = await L.q(`SELECT 1 FROM "AppLog" WHERE "projectId"=$1 AND (strpos(message,$2)>0 OR strpos(COALESCE(details::text,''),$2)>0)`, [P, token]);
+    L.eq("GENERAR: ningún registro lleva el token", tokenLogs.length, 0);
+    await other.ctx.close();
+    sessions.splice(sessions.indexOf(other), 1);
   }
 
   if (only.includes("fuera") && url) {
@@ -180,8 +208,10 @@ try {
     L.check("FUERA: el comentario sale en la página", (await op.content()).includes("Listo para revisar, F68"));
     const hist = await L.q(`SELECT "userName" FROM "TaskEvent" WHERE "taskId"=$1 ORDER BY "createdAt"`, [taskA]);
     L.check("FUERA: el historial lo firma la columna (fuera)", hist.length > 0 && hist.every((e) => e.userName === `${SHARE_COL} (fuera)`), hist.map((e) => e.userName).join(" | "));
-    const logs = await L.q(`SELECT path FROM "AppLog" WHERE action LIKE 'shareOut.%' AND "projectId"=$1`, [P]);
-    L.check("LOGS: con «/x/…», nunca el token", logs.length > 0 && logs.every((l) => !l.path || l.path === "/x/…") && !JSON.stringify(logs).includes(url.split("/x/")[1]));
+    // Lo de fuera (shareOut.done/due/comment) va con «/x/…»; lo de la app (generar, el enlace…), con la página del tablero.
+    const logs = await L.q(`SELECT path FROM "AppLog" WHERE action IN ('shareOut.done','shareOut.due','shareOut.comment') AND "projectId"=$1`, [P]);
+    const all = await L.q(`SELECT action,path,message,details FROM "AppLog" WHERE "projectId"=$1`, [P]);
+    L.check("LOGS: con «/x/…», nunca el token", logs.length > 0 && logs.every((l) => l.path === "/x/…") && !JSON.stringify(all).includes(url.split("/x/")[1]));
     // Adjunto.
     if (attFile) {
       const [dl] = await Promise.all([op.waitForEvent("download", { timeout: 15000 }), card.getByRole("link", { name: "presupuesto-f68.txt" }).click()]);
@@ -191,6 +221,30 @@ try {
     L.eq("FUERA: un adjunto ajeno da 404", foreign.status(), 404);
     await op.screenshot({ path: `${SHOTS}/fuera68-pagina.png`, fullPage: true });
     await octx.close();
+  }
+
+  if (only.includes("nuevo") && url) {
+    L.scenario("nuevo: sin la dirección recuperable, «Crear un enlace nuevo» con confirmación");
+    // Como si la clave de cifrado hubiese cambiado sin rotarla (o el enlace fuese de una versión anterior).
+    await L.q(`UPDATE "ColumnShare" SET "tokenEnc"=NULL WHERE "projectId"=$1`, [P]);
+    await openBoard(page);
+    await shareCol(page).getByRole("button", { name: "Enlace de la web" }).click();
+    const d = U.dialog(page);
+    await d.locator("[data-share-lost]").waitFor();
+    L.eq("NUEVO: sin dirección en el diálogo", await d.locator("[data-share-url]").count(), 0);
+    await d.locator("[data-share-fresh]").click();
+    const ask = page.getByRole("dialog").filter({ hasText: "¿Crear uno nuevo?" });
+    await ask.waitFor();
+    L.eq("NUEVO: pide confirmación y no cambia nada aún", (await shareRow()).tokenEnc, null);
+    await ask.getByRole("button", { name: "Crear un enlace nuevo" }).click();
+    const fresh = d.locator("[data-share-url]");
+    await fresh.waitFor();
+    const next = (await fresh.innerText()).trim();
+    L.check("NUEVO: otra dirección", next !== url && /\/x\/[A-Za-z0-9_-]{43}$/.test(next), next);
+    const old = await fetch(url);
+    L.eq("NUEVO: la anterior dice «ha caducado» (410)", old.status, 410);
+    url = next;
+    await d.getByRole("button", { name: "Cerrar" }).last().click();
   }
 
   if (only.includes("revocar") && url) {
@@ -209,9 +263,12 @@ try {
   if (only.includes("apagar")) {
     L.scenario("apagar: la función deja de ofrecerse y sus enlaces de funcionar");
     const box = await settingsToggle(page);
-    if (!(await box.isChecked())) await box.check();
+    if (!(await box.isChecked())) {
+      await box.click();
+      await L.eqEventually("APAGAR: encendida antes de apagarla", () => box.isChecked(), true);
+    }
     await sleep(500);
-    await box.uncheck();
+    await box.click();
     const confirm = page.getByRole("dialog").filter({ hasText: "Apagar «Compartir fuera»" });
     if (await confirm.count()) await confirm.getByRole("button", { name: "Apagar" }).click();
     await L.eqEventually("APAGAR: apagada en el proyecto", async () => (await L.q(`SELECT "shareOutEnabled" FROM "Project" WHERE id=$1`, [P]))[0].shareOutEnabled, false);
