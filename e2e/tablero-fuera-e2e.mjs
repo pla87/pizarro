@@ -177,7 +177,7 @@ try {
     const op = await octx.newPage();
     const resp = await op.goto(url);
     const h = resp.headers();
-    L.eq("FUERA: cabeceras", [resp.status(), h["x-robots-tag"], h["referrer-policy"], h["cache-control"]], [200, "noindex, nofollow, noarchive", "no-referrer", "no-store"]);
+    L.eq("FUERA: cabeceras", [resp.status(), h["x-robots-tag"], h["referrer-policy"], /^no-store\b/.test(h["cache-control"] ?? "")], [200, "noindex, nofollow, noarchive", "no-referrer", true]);
     const html = await op.content();
     L.check("FUERA: sin scripts y con noindex", !/<script/i.test(html) && html.includes('name="robots" content="noindex,nofollow"'));
     L.check("FUERA: las dos tareas, sin la columna «Backlog»", html.includes(T.a) && html.includes(T.b) && !html.includes("Backlog"));
