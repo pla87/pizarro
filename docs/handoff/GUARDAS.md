@@ -26,6 +26,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 17. [Pruebas y código sin uso](#pruebas-y-código-sin-uso)
 18. [e2e](#e2e)
 19. [Entorno](#entorno)
+20. [Compartir fuera](#compartir-fuera)
 
 ## Tablero
 
@@ -121,6 +122,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   (Next vuelve a escribir la dirección vieja en el siguiente refresco).
 - (Ronda 62) Modales que se abren al cerrarse otro: `useBackToClose` espera a que no haya «atrás» silenciosos pendientes
   (`whenNoSilentPops`) antes de apilar su entrada; si no, Atrás salía de la página.
+- (Ronda 68) Detalle: `reload()` no vuelve a montar el editor de la descripción si tiene cambios propios (lo escrito no se
+  pierde en un conflicto); `reload(true)` solo cuando la persona ya aceptó descartar lo escrito («Pegar tarea», «Deshacer
+  todo»). Un campo que quiera tratar un pegado o un soltado de archivos usa `claimPaste`/`claimDrop` (`pasteFiles.ts`) y
+  solo si el evento va a su propia caja; las subidas que acaban con el editor cerrado no guardan ni cierran nada.
+- (Ronda 68) Avisos: uno nuevo con «Deshacer» anula el de los anteriores (`placeToast`, salvo `independent`); la pila no se
+  cierra ni se recorta con el ratón encima o con el foco del teclado dentro; los que se sustituyen en su sitio llevan `group`.
+  Los paneles de menú en portal nunca llevan `w-full`/`w-screen` (`tests/menus.test.ts`).
 
 ## Logs
 
@@ -374,6 +382,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 66) `Project.templateKey`: clave de serie o `custom`; al importar solo `knownTemplateKey()`; las búsquedas en
   mapas por clave con `Object.hasOwn` (una clave «constructor» tiraba el tablero). La huella de «modificada»
   (`comparable()`) cuenta los tipos por defecto solo si alguna columna tiene uno (las demás conservan su huella).
+- (Ronda 68) El aviso del cambio de tipo sale de `kindDescriptionChange` («aplicada», «quitada» o nada) y el deshacer nombra
+  la tarea con `titleWithoutKindPrefix`.
 
 ## Deshacer
 
@@ -462,3 +472,27 @@ las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la C
   salida. Los agentes tampoco pueden descargar binarios (Caddy): el `Caddyfile` lo valida el job «Caddyfile» de CI.
 - `tests/report-render.test.ts` («sin memoria…») falla a veces con la CPU cargada por varios agentes; sola, y con
   `NODE_OPTIONS=--use-openssl-ca`, pasa.
+
+## Compartir fuera
+
+- (Ronda 68) Columna «Compartir fuera»: rol NONE + fila en `ColumnShare` (sin valor de enum nuevo: la v1.71 la ve como
+  columna normal). `/x/<token>` (página), `/x/<token>/t/<id>` (formularios) y `/x/<token>/a/<id>` (adjuntos) quedan fuera
+  del proxy y de las cabeceras generales de `next.config.ts` **solo esas tres** (`x/[^/]+$`, `x/[^/]+/t/[^/]+$`,
+  `x/[^/]+/a/[^/]+$`) y ponen las suyas (`shareResponseHeaders`, `SHARE_PAGE_CSP`/`SHARE_FILE_CSP`). Una ruta nueva bajo
+  `/x/` se añade a las dos listas y a `tests/hardening.test.ts`. El token nunca va a Logs (`path: "/x/…"`); `/x/` está en
+  `SECRET_PATH_PREFIXES` y `redactPath`. Las rutas de ficheros llevan `HEAD` propio (solo `stat`, sin contar ni registrar).
+- El token se guarda como huella (`tokenHash`, HMAC con TOKEN_SECRET) y cifrado (`tokenEnc`, ENCRYPTION_KEY, en
+  `ENCRYPTED_FIELDS`). Solo lo descifran `getShareLink` y `generateShareWeb` (`activeShareUrl`, que rehace la huella si no
+  es la de la clave actual); nunca va al tablero en vivo, al PDF ni a las exportaciones. Toda vía que termina un enlace
+  vacía `tokenEnc`. `rotate-keys` recifra `tokenEnc` y rehace las huellas (`rehashShareTokens`).
+- Un enlace vivo solo existe mientras la columna sea «Compartir fuera»: quitar el rol, borrar la columna, apagar la
+  función, deshacer/rehacer el cambio de rol o aplicar una plantilla lo terminan (`revokeUnsharedLinks`); el selector de
+  caducidad no revive uno terminado. Generar y apagar no se cruzan (`FOR SHARE` sobre el proyecto en la misma
+  transacción; apagar revoca en la misma transacción).
+- Lo de fuera pasa por `applyShareChange`: historial firmado «<columna> (fuera)», aviso al responsable (o a quien generó
+  la web, si sigue activo y ve el proyecto) con su propio cubo `notify:share:<shareId>` (10/h), y deshacer en su pila: como
+  mucho una entrada de fuera por persona y proyecto (`SHARE_UNDO_KEYS`/`externalUndoWhere`), que no cuenta para el límite
+  de 10. Lo que va después de guardar, en `sideEffect` (nunca un 500 con el cambio hecho). Un cuerpo ilegible da
+  `?m=invalid` sin registrar. El tope por IP usa `shareout-ip:` (mapa general: no puede desalojar los bloqueos de acceso);
+  los de cambios, descargas y avisos, el mapa de seguridad. `excerpt()` quita los caracteres de control (el separador
+  `\u001E` de los avisos de fuera no puede venir de un comentario). `shareOut.getLink` está en `UNPUBLISHED_ACTIONS`.
