@@ -105,6 +105,10 @@ function assertSafeDb() {
   if (!/^pz_/.test(name) && process.env.QA_ALLOW_ANY_DB !== "1") throw new Error(`Por seguridad solo se resetean bases pz_* (es «${name}»)`);
   return name;
 }
+/** `prisma migrate deploy` con el mismo node y la CLI del proyecto (sin npx: en Windows es un .cmd que no se encuentra sin shell). */
+export function prismaMigrate(appDir, env) {
+  execFileSync(process.execPath, [path.join(appDir, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"], { cwd: appDir, env, stdio: "pipe" });
+}
 export async function resetDatabase(appDir) {
   const name = assertSafeDb();
   const u = new URL(DATABASE_URL); u.pathname = "/postgres";
@@ -114,7 +118,7 @@ export async function resetDatabase(appDir) {
   await admin.query(`CREATE DATABASE "${name}"`);
   await admin.end();
   const env = { ...process.env, DATABASE_URL };
-  execFileSync("npx", ["prisma", "migrate", "deploy"], { cwd: appDir, env, stdio: "pipe" });
+  prismaMigrate(appDir, env);
   execFileSync("node", ["--env-file-if-exists=.env", "dist/boot.mjs"], { cwd: appDir, env, stdio: "pipe" });
 }
 let server = null;
