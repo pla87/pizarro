@@ -2,6 +2,32 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.71.0 — 2026-11-25 12:33
+
+Arranque más rápido, pruebas con base de datos antes de publicar, «Organizar por personas» solo con quien trabaja en el proyecto, topes de emails que no bloquean a nadie, el esqueleto correcto al ir a Releases, menos memoria y consultas en el servidor, plan para IA más corto con adjuntos, y revisión y caza de bugs
+
+### Mejoras
+
+- «Organizar por personas» en un proyecto de equipo crea columnas solo para sus miembros y para los administradores que lo tienen en «Proyectos en los que trabajo».
+- Al mover varias tarjetas a una columna «Asignación a persona», el aviso dice cuántas se movieron y cuántas se asignaron («5 tarjetas movidas · 2 asignadas a Ana»).
+- Plan de trabajo para IA con adjuntos: una imagen pegada en la descripción ya no se repite en «Adjuntos» y, con varios adjuntos, la carpeta se escribe una vez (menos texto para la IA).
+- En Railway, el arranque y el diagnóstico avisan si falta RAILWAY_DEPLOYMENT_DRAINING_SECONDS (sin ella se corta lo que está a medias en cada despliegue).
+
+### Correcciones
+
+- Al ir a Releases justo después de cambiar de proyecto, con la red lenta, sale el esqueleto de carga de Releases y no el del tablero.
+- Si el cambio de tipo en el detalle no se guarda (sin conexión, sesión caducada), el título y la descripción vuelven a los de antes junto con el tipo.
+- La descripción ya no se abre sola en edición al volver a la pestaña después de guardarla con el teclado.
+- Mover una columna con Alt+flechas deshace solo las columnas que cambió, no lo que otra persona movió después; y las columnas ya no saltan si llegan cambios mientras arrastras una cabecera.
+- «Más roles…» vuelve a salir plegado cada vez que se abre el menú de la columna.
+
+### Cambios técnicos / DB
+
+- El arranque no lanza Prisma si la base ya tiene todas las migraciones aplicadas: unos segundos menos sin servicio en cada despliegue.
+- La publicación de una versión pasa también las pruebas con base de datos antes de crear la imagen.
+- Los hilos que comprueban las contraseñas se cierran tras 90 s sin uso (unos 13 MB menos cada uno) y el tablero ya no lee las plantillas del plan para IA.
+- Topes de emails de «¿Olvidaste tu contraseña?» y de los códigos de verificación, y los de invitaciones, avisos, informes y Telegram en la zona protegida del limitador.
+
 ## v1.70.0 — 2026-11-25 01:11
 
 Columnas que se mueven arrastrando su cabecera, roles según la plantilla, «Organizar por personas», orden de los proyectos a elegir, aviso al asignar con Deshacer, historial del cambio de tipo, «Bloquea a» y volver, Logs con un solo periodo, plantillas de serie con tipo por defecto, pruebas con base de datos en cada PR, y revisión y caza de bugs

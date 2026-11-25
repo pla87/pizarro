@@ -1,6 +1,59 @@
 {
   "versions": [
     {
+      "version": "1.71.0",
+      "date": "2026-11-25",
+      "releasedAt": "2026-11-25T12:33:46+01:00",
+      "summary": "Arranque más rápido, pruebas con base de datos antes de publicar, «Organizar por personas» solo con quien trabaja en el proyecto, topes de emails que no bloquean a nadie, el esqueleto correcto al ir a Releases, menos memoria y consultas en el servidor, plan para IA más corto con adjuntos, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "«Organizar por personas» en un proyecto de equipo crea columnas solo para sus miembros y para los administradores que lo tienen en «Proyectos en los que trabajo».",
+          "Al mover varias tarjetas a una columna «Asignación a persona», el aviso dice cuántas se movieron y cuántas se asignaron («5 tarjetas movidas · 2 asignadas a Ana»).",
+          "Plan de trabajo para IA con adjuntos: una imagen pegada en la descripción ya no se repite en «Adjuntos» y, con varios adjuntos, la carpeta se escribe una vez (menos texto para la IA).",
+          "En Railway, el arranque y el diagnóstico avisan si falta RAILWAY_DEPLOYMENT_DRAINING_SECONDS (sin ella se corta lo que está a medias en cada despliegue)."
+        ],
+        "correcciones": [
+          "Al ir a Releases justo después de cambiar de proyecto, con la red lenta, sale el esqueleto de carga de Releases y no el del tablero.",
+          "Si el cambio de tipo en el detalle no se guarda (sin conexión, sesión caducada), el título y la descripción vuelven a los de antes junto con el tipo.",
+          "La descripción ya no se abre sola en edición al volver a la pestaña después de guardarla con el teclado.",
+          "Mover una columna con Alt+flechas deshace solo las columnas que cambió, no lo que otra persona movió después; y las columnas ya no saltan si llegan cambios mientras arrastras una cabecera.",
+          "«Más roles…» vuelve a salir plegado cada vez que se abre el menú de la columna."
+        ],
+        "tecnicos": [
+          "El arranque no lanza Prisma si la base ya tiene todas las migraciones aplicadas: unos segundos menos sin servicio en cada despliegue.",
+          "La publicación de una versión pasa también las pruebas con base de datos antes de crear la imagen.",
+          "Los hilos que comprueban las contraseñas se cierran tras 90 s sin uso (unos 13 MB menos cada uno) y el tablero ya no lee las plantillas del plan para IA.",
+          "Topes de emails de «¿Olvidaste tu contraseña?» y de los códigos de verificación, y los de invitaciones, avisos, informes y Telegram en la zona protegida del limitador."
+        ]
+      },
+      "en": {
+        "summary": "Faster startup, database tests before publishing, “Organize by person” only with the people who work on the project, email limits that lock nobody out, the right skeleton when going to Releases, less memory and fewer queries on the server, a shorter AI plan with attachments, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "“Organize by person” in a team project creates columns only for its members and for the admins who have it in “Projects I work on”.",
+            "When several cards move into a “Person assignment” column, the notice says how many moved and how many were assigned (“5 cards moved · 2 assigned to Ana”).",
+            "AI work plan with attachments: an image pasted in the description is no longer repeated under “Attachments”, and with several attachments the folder is written once (less text for the AI).",
+            "On Railway, startup and the diagnostics warn when RAILWAY_DEPLOYMENT_DRAINING_SECONDS is missing (without it, whatever is in progress is cut off on every deploy)."
+          ],
+          "correcciones": [
+            "Going to Releases right after switching projects on a slow connection shows the Releases loading skeleton, not the board's.",
+            "If a type change in the task detail is not saved (offline, expired session), the title and description go back with the type.",
+            "The description no longer opens for editing by itself when you return to the tab after saving it with the keyboard.",
+            "Moving a column with Alt+arrows undoes only the columns it changed, not what someone else moved afterwards; and columns no longer jump if changes arrive while you drag a header.",
+            "“More roles…” is collapsed again every time the column menu opens."
+          ],
+          "tecnicos": [
+            "Startup skips Prisma when the database already has every migration applied: a few seconds less downtime on each deploy.",
+            "Publishing a version also runs the database tests before building the image.",
+            "The password-hashing threads close after 90 s idle (about 13 MB less each) and the board no longer reads the AI-plan templates.",
+            "Limits on “Forgot your password?” emails and verification codes, and the invitation, notice, report and Telegram limits kept in the protected area of the rate limiter."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.70.0",
       "date": "2026-11-25",
       "releasedAt": "2026-11-25T01:11:37+01:00",
