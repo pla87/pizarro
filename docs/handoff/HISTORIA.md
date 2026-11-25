@@ -14,6 +14,16 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 67 (ya aplicadas):** esqueleto de Releases con el puntero sobre el enlace (precarga al cambiar
+`href`, `HoverPrefetchLink`); arranque sin la CLI de Prisma si la base está al día; la Release pasa también `test:db`;
+«Organizar por personas» en equipo, solo miembros y admins con el proyecto en su lista; WhatsApp real con Claude in Chrome
+y el propietario delante (prompt 4 de `docs/PRUEBAS-CHROME.md`); «Varias tareas» sin el prefijo de título (NO); sin
+«Orden manual» de proyectos (usados recientemente o alfabético, en el perfil); la cabecera de columna sigue siendo una
+parada de Tab; «Agenda» de Eventos y viajes no se renombra; una URL por tarea, SÍ, en una ronda propia. Revisión: hilos de
+bcrypt que se cierran a los 90 s, topes de mensajes a terceros en el mapa de seguridad, topes de emails que no bloquean a
+nadie, Alt+flechas que solo toca las columnas que cambian, plan para IA con ZIP sin adjuntos repetidos, aviso de Railway sin
+margen de apagado, `e2e-all.sh` que no se cuelga. Propuesta del enlace externo para proveedores (R67F1), pendiente.
+
 **Decisiones de la ronda 66 (ya aplicadas):** ideas de la auditoría en esta ronda (arrastrar cabeceras de columna, roles
 según la plantilla con «Más roles…», «Organizar por personas» en Casa y familia); avisar antes de perder una plantilla a
 medio editar; línea en el historial con las subtareas que cambia el tipo; pruebas con base de datos en cada PR y en orden
