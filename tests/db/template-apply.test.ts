@@ -399,7 +399,9 @@ test("la plantilla queda apuntada en el proyecto (Project.templateKey): cambiarl
   assert.equal(await key(), "custom");
   expectOk(await undoTemplateChange(f.project.id));
   assert.equal(await key(), null);
-  // Cambiar a una de serie: su clave; añadir después lo de otra no la cambia.
+  // Cambiar a una de serie: su clave; añadir después lo de otra no la cambia. La de serie, recién sembrada: otro fichero
+  // que pasa antes en la misma base (con --shuffle) puede haberla cambiado (p. ej. con más etiquetas de las que caben).
+  await db.projectTemplate.deleteMany({ where: { builtinKey: "casa-familia" } });
   expectOk(await applyTemplateChange(f.project.id, await builtinRef("casa-familia"), "REPLACE"));
   assert.equal(await key(), "casa-familia");
   expectOk(await applyTemplateChange(f.project.id, { source: "template", id: tpl.id }, "ADD"));
