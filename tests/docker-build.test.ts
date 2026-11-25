@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 // @ts-expect-error: script .mjs sin tipos
-import { FIXED_VERSION, withFixedVersion } from "../scripts/docker-manifests.mjs";
+import { FIXED_VERSION, INSTALL_SCRIPTS, withFixedVersion } from "../scripts/docker-manifests.mjs";
 
 const fix = withFixedVersion as (text: string, kind: "package" | "lock") => string;
 const dockerfile = readFileSync("Dockerfile", "utf8");
@@ -30,7 +30,24 @@ test("package.json y package-lock.json con otra versión dan los mismos bytes; l
   assert.deepEqual({ ...fixedLock.packages, "": undefined }, { ...original.packages, "": undefined });
   assert.deepEqual(fixedLock.packages[""].dependencies, original.packages[""].dependencies);
   const fixedPkg = JSON.parse(fix(pkg, "package"));
-  assert.deepEqual({ ...fixedPkg, version: undefined }, { ...JSON.parse(pkg), version: undefined });
+  // Sin `scripts` (npm ci no usa ninguno); lo demás, igual.
+  assert.equal("scripts" in fixedPkg, false);
+  const { scripts: _scripts, ...rest } = JSON.parse(pkg);
+  assert.deepEqual({ ...fixedPkg, version: undefined }, { ...rest, version: undefined });
+});
+
+test("cambiar un script de package.json no cambia los manifiestos; un script que npm ci ejecutaría hace fallar la etapa", () => {
+  const pkg = readFileSync("package.json", "utf8");
+  const json = JSON.parse(pkg) as { scripts: Record<string, string> };
+  // El proyecto no tiene ninguno de los que ejecuta `npm ci` (si se añade, hay que revisar la etapa «manifests»).
+  for (const name of INSTALL_SCRIPTS as string[]) assert.equal(json.scripts[name], undefined, name);
+  const changed = JSON.stringify({ ...json, scripts: { ...json.scripts, test: "node otra-cosa.mjs", nuevo: "echo hola" } }, null, 2);
+  assert.equal(fix(changed, "package"), fix(pkg, "package"));
+  for (const name of ["postinstall", "prepare"]) {
+    assert.throws(() => fix(JSON.stringify({ ...json, scripts: { ...json.scripts, [name]: "node x.mjs" } }), "package"), new RegExp(name));
+  }
+  // El lockfile no tiene scripts: con kind "lock" no se toca más que la versión.
+  assert.doesNotThrow(() => fix(readFileSync("package-lock.json", "utf8"), "lock"));
 });
 
 test("Dockerfile: las dependencias se instalan con los manifiestos de versión fija, antes de copiar el código", () => {

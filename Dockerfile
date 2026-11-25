@@ -17,8 +17,9 @@ WORKDIR /app
 # --- 0. package.json y package-lock.json con la versión fija ----------------------
 # La versión de la app cambia en cada publicación y está en los dos ficheros: copiados tal cual, invalidaban la caché de
 # `npm ci` (aquí y en el migrador) aunque las dependencias fueran las mismas. Esta etapa se repite siempre (un segundo),
-# pero su resultado solo cambia si cambian las dependencias (o los scripts de package.json): entonces Docker reutiliza
-# las capas de instalación. La versión real la trae el package.json que la etapa de build copia con el código.
+# pero su resultado solo cambia si cambian las dependencias (los `scripts` de package.json también se quitan: `npm ci`
+# no usa ninguno): si no, Docker reutiliza las capas de instalación. La versión y los scripts reales los trae el
+# package.json que la etapa de build copia con el código.
 FROM base AS manifests
 WORKDIR /tmp/manifests
 COPY package.json package-lock.json ./
