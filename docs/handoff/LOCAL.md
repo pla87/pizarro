@@ -57,9 +57,9 @@ Build de producción, la que prueban las suites e2e y la que hay que mirar antes
 
 - El binario SWC `@next/swc-linux-x64-gnu` extraído a mano: *solo nube*. En local `npm ci` instala el de tu sistema
   (Windows, macOS Intel o ARM).
-- `NODE_OPTIONS=--use-openssl-ca` para `npm test` y las pruebas de PDF: *solo nube* (allí `NODE_OPTIONS` traía
-  `--max-old-space-size=8192`). En local no lo pongas; si tu `NODE_OPTIONS` lleva `--max-old-space-size`, quítalo para
-  `npm test` (anula el tope del worker de PDF).
+- `NODE_OPTIONS=--use-openssl-ca` para las pruebas de PDF sueltas: *solo nube* (allí `NODE_OPTIONS` traía
+  `--max-old-space-size=8192`, que anula el tope del worker de PDF). `npm test` ya quita ese flag solo
+  (`scripts/run-tests.mjs`), en la nube y en local, también en Windows.
 - `pg_ctlcluster 16 main start` y el `alter user postgres password`: *solo nube*. En local, el servicio o el
   contenedor de PostgreSQL.
 - `PGPASSWORD=postgres … </dev/null` para que `createdb`/`dropdb` no se queden esperando: *solo nube* (en local te lo

@@ -428,8 +428,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 ## Entorno
 
 - Entorno de la nube: `NODE_OPTIONS` trae `--max-old-space-size=8192`, que anula el tope de memoria del worker de PDF
-  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. Lanza `npm test` (y las pruebas de PDF) con
-  `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
+  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. `npm test` ya lo quita solo (`scripts/run-tests.mjs`,
+  ronda 68); las pruebas de PDF sueltas (`node --test tests/report-render.test.ts`), con `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
   sesión principal.
 - `npm install` en este entorno reescribe el `package-lock.json` quitando los campos `libc`: para añadir una dependencia,
   edita a mano `package.json` y su entrada del lock (o usa `npm ci` para instalar, que no lo toca).
@@ -448,8 +448,8 @@ falta las de `PGPASSWORD`, `NODE_OPTIONS`, memoria, permisos y reinicios del con
 las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la CPU cargada valen también en local:
 
 - `createdb`/`dropdb` con `PGPASSWORD=postgres … -h localhost … </dev/null` (sin eso se quedan esperando la contraseña).
-- `NODE_OPTIONS` trae `--max-old-space-size=8192`: lanza `npm test` y las pruebas de PDF con
-  `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
+- `NODE_OPTIONS` trae `--max-old-space-size=8192`: `npm test` lo quita solo (`scripts/run-tests.mjs`); las pruebas de
+  PDF sueltas, con `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
 - Las bases de `tests/db/` sueltas deben llamarse `pizarro_test_<hex>` (lo exige `tests/db/helpers.ts`).
 - Tras borrar una página, `rm -rf .next/types` antes de `tsc` (los tipos viejos de la build la siguen citando).
 - Los agentes no pueden lanzar `npx --yes knip@5` ni instalar paquetes del sistema (p. ej. Caddy): lo hace la sesión
