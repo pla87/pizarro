@@ -2,6 +2,44 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.72.0 — 2026-11-25 20:14
+
+Columna «Compartir fuera» con una web sin cuenta para proveedores y clientes, imágenes pegadas dentro de la descripción, avisos con «Deshacer» que no confunden, guía de Railway en una sola página con ayuda de una IA, plan para IA más corto, imagen más ligera, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Columna «Compartir fuera»: sus tareas se publican en una web sin cuenta para alguien de fuera (un proveedor, un cliente), que puede marcarlas como hechas, cambiar la fecha, comentar y descargar los adjuntos. La activa un administrador en cada proyecto; el enlace caduca tras 7 días, 1 mes o 3 meses sin uso, no aparece en buscadores y se puede revocar.
+- Una imagen pegada o soltada en la descripción mientras se edita se adjunta y además se inserta en el texto donde está el cursor; guardar espera a que termine de subirse.
+
+### Mejoras
+
+- Al llegar un aviso nuevo con «Deshacer», el de los anteriores se apaga, y con el ratón o el teclado encima los avisos no se cierran ni se mueven.
+- Mover una columna con Alt+flechas deja un solo aviso que dice junto a qué columna queda.
+- «Organizar por personas» crea las columnas antes de «Hecho» y el aviso nombra a cada persona; en «Casa y familia», «Planificación semanal» sale la primera en «Rol de la columna».
+- «Generar plan» pasa a «Descargar plan (PDF)» y avisa al terminar; los botones de columna apagados dicen el motivo debajo.
+- Plan de trabajo para IA más corto (hasta una cuarta parte menos de texto): «Depende de: la tarea N», la prioridad y las etiquetas comunes una sola vez, y las imágenes de la descripción con su ruta dentro del ZIP.
+- Una sola guía para instalar en Railway, más corta, con qué hacer si falla y un texto para que una IA del navegador haga la instalación pidiéndote los inicios de sesión.
+- El aviso del cambio de tipo dice si la plantilla de la descripción se aplica o se quita, y el botón del pie dice «Deshacer todo» siempre que cabe.
+- Verificación en dos pasos: «Volver a iniciar sesión» y «Reenviar código» centrados y subrayados; la invitación pendiente dice cuándo se envió y que vale 72 horas.
+- Resumen diario: «Asignadas a ti» solo con lo que sigue siendo tuyo y con todas las tareas de un lote.
+
+### Correcciones
+
+- Un cambio de otra persona mientras escribes la descripción ya no recarga el editor ni pierde lo escrito.
+- Un bloque de código que acaba en una línea vacía, con sangría o con otro bloque dentro ya no cambia al guardarlo.
+- El menú «PDF de la semana» se abre bajo su botón también en ventanas muy anchas.
+- El «Deshacer» de «Descripción borrada» y de «Cambios descartados» deshace eso y no otra cosa.
+- Descargar un PDF de columna con la sesión caducada muestra el aviso de sesión con «Iniciar sesión».
+- Ya no llega el aviso de cambio de fecha de una tarea que se ha terminado mientras tanto.
+- Las imágenes de una descripción ya no se registran como descargas en Logs.
+
+### Cambios técnicos / DB
+
+- Los scripts de dist/ comparten código (24,5 → 7 MB) y la imagen Docker reutiliza la instalación de dependencias entre versiones.
+- npm test funciona aunque NODE_OPTIONS traiga --max-old-space-size.
+- Retirados la redirección /admin/types, las anclas antiguas de Ajustes y los iconos PNG sin uso.
+- Dependencias: lucide-react 1.74.0, marked 18.2.1 y nodemailer 10.6.0.
+
 ## v1.71.0 — 2026-11-25 12:33
 
 Arranque más rápido, pruebas con base de datos antes de publicar, «Organizar por personas» solo con quien trabaja en el proyecto, topes de emails que no bloquean a nadie, el esqueleto correcto al ir a Releases, menos memoria y consultas en el servidor, plan para IA más corto con adjuntos, y revisión y caza de bugs

@@ -14,6 +14,19 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 68 (ya aplicadas):** columna «Compartir fuera» en vez de una página por contacto: una web por
+columna (rol NONE + `ColumnShare`), activable solo por administradores y proyecto a proyecto, caducidad 7 días / 1 mes /
+3 meses sin uso (1 mes por defecto), 30 días de «ha caducado», sin indexar, desde fuera marcar hecha, cambiar la fecha,
+comentar y descargar adjuntos, diálogo con la dirección (copiar y `mailto:`; Pizarro no envía), dirección guardada cifrada
+para volver a verla; plan para IA más corto; sin reducir las consultas en reposo (NO por ahora); topes de emails como
+estaban (SÍ); leer menos al arrancar (§0b a `docs/handoff/LOCAL.md`, PRUEBAS-CHROME solo cuando toca); migrador propio
+más adelante; `npm test` sin la trampa de `NODE_OPTIONS`; `dist/` con trozos compartidos y caché de `npm ci`; e2e con
+esperas a una condición al tocar cada suite; una sola guía de Railway con texto para una IA del navegador; retirados
+`MovedSectionRedirect`, `/admin/types`, `public/icons/*.png`, `SERIAL` y la historia de `railway.json`; `legacyLogLabel`
+hasta marzo de 2027; Dependabot (marked 18.2.1) aceptado con el arreglo del editor. Revisión: imágenes de la descripción
+que no cuentan como descarga, subidas que no guardan con el editor cerrado, avisos con «Deshacer» anulado y pausa,
+resumen diario con los lotes completos, sin aviso de fecha de tareas terminadas.
+
 **Decisiones de la ronda 67 (ya aplicadas):** esqueleto de Releases con el puntero sobre el enlace (precarga al cambiar
 `href`, `HoverPrefetchLink`); arranque sin la CLI de Prisma si la base está al día; la Release pasa también `test:db`;
 «Organizar por personas» en equipo, solo miembros y admins con el proyecto en su lista; WhatsApp real con Claude in Chrome

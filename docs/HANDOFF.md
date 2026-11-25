@@ -236,46 +236,39 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 67:** v1.71.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
-(Claude Code web), sin Claude in Chrome. Hechas las decisiones de la ronda 66 (esqueleto de Releases, arranque sin Prisma,
-«Organizar por personas» solo con miembros y admins que lo tienen en su lista, pruebas con base de datos en la Release) y
-tres vueltas de revisión y caza de bugs (servidor y coste; usuario; atacante; administración, instalación y coste; diff de
-la ronda en servidor y en cliente): la tercera halló que los topes nuevos de emails podían bloquear a gente legítima y se
-rediseñaron. Propuesta del enlace externo para proveedores (R67F1) a la espera de decisión. Pendientes de Claude in
-Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real de la v1.70/v1.71, auditoría de la v1.71, DMARC y WhatsApp real con el
-propietario delante; en la nube los prompts los pega el propietario).
+**Estado al cerrar la ronda 68:** v1.72.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
+(Claude Code web), sin Claude in Chrome. Hechas las respuestas de R68R1: columna «Compartir fuera» (fase 1, con la
+dirección guardada cifrada para volver a enseñarla), decisiones 2, 5, 7, 8, 9 (al tocar cada suite), 10, 11, 12, 14 (a–d y
+f) y 16 (marked), los informes de Claude in Chrome de la v1.70/v1.71 y las capturas R68C1/R68C2. Dos vueltas de revisión de
+código y dos de caza de bugs (usuario, administración/instalación/coste, programación, atacante, «Compartir fuera» y toda la
+herramienta). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.72.0, DMARC y
+WhatsApp real con el propietario delante).
 
-**Preguntas abiertas al propietario (tras la v1.71.0)**, con la numeración del informe final de la ronda 67 (entre
+**Preguntas abiertas al propietario (tras la v1.72.0)**, con la numeración del informe final de la ronda 68 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Enlace externo para proveedores (R67F1): una página por contacto externo con sus tareas (sin columna especial); desde
-   fuera, marcar hecha, cambiar la fecha y comentar; activable solo por admins, proyecto a proyecto, apagado por defecto;
-   token con huella HMAC en `/x/<token>` (en `SECRET_PATH_PREFIXES`), caduca a los 90 días sin uso; email al proveedor y
-   adjuntos en una fase 2. (SÍ, fase 1 en una ronda propia)
-2. Plan para IA más corto: «Depende de» como «la tarea N» y prioridad/etiquetas comunes dichas una vez (unos 14 % menos).
-   (SÍ)
-3. Menos consultas con el servidor quieto (de ~5.760 a ~600 al día; con dos procesos, un aviso de vencimiento hasta 10 min
-   tarde). (NO por ahora: ahorro pequeño)
-4. Topes de emails: 5 al día por dirección desde navegadores desconocidos, 100 repetidos al día en total, 10 códigos de 2FA
-   por hora y persona desde navegadores desconocidos; ventanas de 24 h móviles. (SÍ, así)
-5. Leer menos al arrancar cada sesión (PRUEBAS-CHROME solo cuando toque; §0b a un anexo): de ~74 KB a ~35 KB.
-   (SÍ)
-6. Migrador propio sin la CLI de Prisma (−20 % de imagen). (SÍ, más adelante, ronda propia)
-7. `npm test` sin la trampa de `NODE_OPTIONS` del entorno (envoltorio que quita `--max-old-space-size`). (SÍ, pequeño)
-8. Imagen y build: `dist/` con *splitting* (−4 MB) y caché de `npm ci` que no se pierda con cada versión. (SÍ, pequeño)
-9. e2e más rápidas: cambiar esperas fijas (~284 s) por esperas a una condición, suite a suite. (SÍ, al tocar cada una)
-10. Guía de Railway repartida en cinco documentos: dejar una sola fuente y enlazarla. (SÍ)
-11. Fallo previo: con la descripción abierta y escrita, un cambio de tipo que cambia el título y choca con un cambio de
-    otra persona recarga el editor y se pierde lo escrito. (SÍ, arreglarlo en la ronda 68)
-12. e2e de los arreglos del detalle de esta ronda (tipo que vuelve si no se guarda, foco de la descripción, «Más roles…»).
-    (SÍ, ronda 68)
-13. Un admin que quita el proyecto de su lista conserva la columna que ya tenía. (SÍ, así)
-14. Retirar (sí/no por letra): a) `MovedSectionRedirect.tsx` y su comprobación e2e (SÍ); b) la redirección `/admin/types`
-    de `next.config.ts` (SÍ); c) `public/icons/*.png`, sin uso desde la v1.54 (SÍ); d) `SERIAL` vacío de
-    `scripts/test-db.mjs` (SÍ); e) `legacyLogLabel` (NO hasta marzo de 2027); f) la historia de `railway.json` en INSTALL y
-    MANUAL (SÍ). `YATERMINE.md` (el resumen para pasar de la sesión local a la nube) se retiró en esta ronda a petición del
-    propietario: el resumen va en el informe final.
-15. Pendiente aprobado de la ronda 66: una URL por tarea (`?tarea=ID`), en una ronda propia.
+1. Creador de un proyecto de equipo: no es miembro (modelo de la v1.17, `adminPicks`). A) explicar en Ajustes quién lo ve
+   sin ser miembro (SÍ) o B) hacerle miembro al crear.
+2. «Compartir fuera», opcionales: a) mostrar solo las tareas que siguen en la columna o están terminadas (NO: se actualiza
+   con el botón); b) tope de MB en las descargas (NO por ahora); c) 30 días de «caducado» también para el penúltimo enlace
+   (NO); d) no publicar los comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios por enlace (NO
+   por ahora); f) Ctrl+Z al elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones);
+   g) el «Deshacer» de un aviso propio falla si lo último de la pila vino de fuera (SÍ, ronda 69); h) dejar de escribir
+   `ColumnShare.generatedByName` y quitar la columna en la versión siguiente (SÍ).
+3. «Guardar» del pie del detalle → «Guardar y cerrar» con explicación (SÍ, pequeño).
+4. «Nueva tarea» desde una columna sin tipo por defecto: no prefijar el título cuando el tipo viene solo de «el último
+   usado» (SÍ).
+5. «Organizar por personas» también en la tarjeta de bienvenida de «Casa y familia» (SÍ).
+6. Ocultar «Release con selección» y Releases en proyectos sin columna «Siguiente salto» ni releases (SÍ).
+7. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
+8. `npm start` (sin Docker): lanzar `dist/boot.mjs` en un proceso aparte para liberar ~170 MB (SÍ; cambia una guarda).
+9. Caché de la imagen en la Release (`cache-from/to: gha`): menos minutos de Actions (SÍ).
+10. Retirar: a) `parseProfileTab` (SÍ); b) `listProjectDocuments`/`listTrashedDocuments`, que solo usan las pruebas (SÍ,
+    pasando sus pruebas a las variantes `…Of`); c) `htmlTableToMarkdown` (SÍ); d) `export` sin uso en scripts de entrada
+    (SÍ); e) `/x/` en robots, redundante con `/` (NO: explícito).
+11. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
+12. Pendiente aprobado: una URL por tarea (`?tarea=ID`, abre el tablero con la tarea abierta), en una ronda propia; y el
+    migrador propio sin Prisma, en otra.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.

@@ -1,6 +1,79 @@
 {
   "versions": [
     {
+      "version": "1.72.0",
+      "date": "2026-11-25",
+      "releasedAt": "2026-11-25T20:14:44+01:00",
+      "summary": "Columna «Compartir fuera» con una web sin cuenta para proveedores y clientes, imágenes pegadas dentro de la descripción, avisos con «Deshacer» que no confunden, guía de Railway en una sola página con ayuda de una IA, plan para IA más corto, imagen más ligera, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Columna «Compartir fuera»: sus tareas se publican en una web sin cuenta para alguien de fuera (un proveedor, un cliente), que puede marcarlas como hechas, cambiar la fecha, comentar y descargar los adjuntos. La activa un administrador en cada proyecto; el enlace caduca tras 7 días, 1 mes o 3 meses sin uso, no aparece en buscadores y se puede revocar.",
+          "Una imagen pegada o soltada en la descripción mientras se edita se adjunta y además se inserta en el texto donde está el cursor; guardar espera a que termine de subirse."
+        ],
+        "mejoras": [
+          "Al llegar un aviso nuevo con «Deshacer», el de los anteriores se apaga, y con el ratón o el teclado encima los avisos no se cierran ni se mueven.",
+          "Mover una columna con Alt+flechas deja un solo aviso que dice junto a qué columna queda.",
+          "«Organizar por personas» crea las columnas antes de «Hecho» y el aviso nombra a cada persona; en «Casa y familia», «Planificación semanal» sale la primera en «Rol de la columna».",
+          "«Generar plan» pasa a «Descargar plan (PDF)» y avisa al terminar; los botones de columna apagados dicen el motivo debajo.",
+          "Plan de trabajo para IA más corto (hasta una cuarta parte menos de texto): «Depende de: la tarea N», la prioridad y las etiquetas comunes una sola vez, y las imágenes de la descripción con su ruta dentro del ZIP.",
+          "Una sola guía para instalar en Railway, más corta, con qué hacer si falla y un texto para que una IA del navegador haga la instalación pidiéndote los inicios de sesión.",
+          "El aviso del cambio de tipo dice si la plantilla de la descripción se aplica o se quita, y el botón del pie dice «Deshacer todo» siempre que cabe.",
+          "Verificación en dos pasos: «Volver a iniciar sesión» y «Reenviar código» centrados y subrayados; la invitación pendiente dice cuándo se envió y que vale 72 horas.",
+          "Resumen diario: «Asignadas a ti» solo con lo que sigue siendo tuyo y con todas las tareas de un lote."
+        ],
+        "correcciones": [
+          "Un cambio de otra persona mientras escribes la descripción ya no recarga el editor ni pierde lo escrito.",
+          "Un bloque de código que acaba en una línea vacía, con sangría o con otro bloque dentro ya no cambia al guardarlo.",
+          "El menú «PDF de la semana» se abre bajo su botón también en ventanas muy anchas.",
+          "El «Deshacer» de «Descripción borrada» y de «Cambios descartados» deshace eso y no otra cosa.",
+          "Descargar un PDF de columna con la sesión caducada muestra el aviso de sesión con «Iniciar sesión».",
+          "Ya no llega el aviso de cambio de fecha de una tarea que se ha terminado mientras tanto.",
+          "Las imágenes de una descripción ya no se registran como descargas en Logs."
+        ],
+        "tecnicos": [
+          "Los scripts de dist/ comparten código (24,5 → 7 MB) y la imagen Docker reutiliza la instalación de dependencias entre versiones.",
+          "npm test funciona aunque NODE_OPTIONS traiga --max-old-space-size.",
+          "Retirados la redirección /admin/types, las anclas antiguas de Ajustes y los iconos PNG sin uso.",
+          "Dependencias: lucide-react 1.74.0, marked 18.2.1 y nodemailer 10.6.0."
+        ]
+      },
+      "en": {
+        "summary": "“Share outside” column with an account-free web page for suppliers and clients, images pasted into the description, undo notices that don’t confuse, one-page Railway guide with help from an AI, shorter AI plan, lighter image, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "“Share outside” column: its tasks are published on an account-free web page for someone outside (a supplier, a client), who can mark them done, change the due date, comment and download the attachments. An admin turns it on per project; the link expires after 7 days, 1 month or 3 months without use, is not indexed by search engines and can be revoked.",
+            "An image pasted or dropped into the description while editing is attached and also inserted in the text at the cursor; saving waits for the upload to finish."
+          ],
+          "mejoras": [
+            "When a new notice with “Undo” arrives, the older ones’ button is turned off, and notices don’t close or move while the mouse or keyboard is on them.",
+            "Moving a column with Alt+arrows leaves a single notice that says which column it now follows.",
+            "“Organize by person” creates the columns before “Done” and the notice names each person; in “Home and family”, “Weekly plan” comes first in “Column role”.",
+            "“Generate plan” becomes “Download plan (PDF)” and confirms when done; disabled column buttons show the reason below.",
+            "Shorter AI work plan (up to a quarter less text): “Depends on: task N”, shared priority and labels said once, and description images with their path inside the ZIP.",
+            "A single guide to install on Railway, shorter, with what to do if it fails and a prompt for a browser AI to do the install, asking you to sign in.",
+            "The type change notice says whether the description template is applied or removed, and the footer button says “Undo all” whenever it fits.",
+            "Two-step verification: “Back to sign in” and “Resend code” centered and underlined; a pending invitation says when it was sent and that it lasts 72 hours.",
+            "Daily digest: “Assigned to you” only lists what is still yours and every task in a batch."
+          ],
+          "correcciones": [
+            "Someone else’s change while you write the description no longer reloads the editor or loses what you wrote.",
+            "A code block ending in an empty line, indented or containing another block no longer changes when saved.",
+            "The “Week PDF” menu opens under its button on very wide windows too.",
+            "“Undo” on “Description cleared” and “Changes discarded” undoes that and nothing else.",
+            "Downloading a column PDF with an expired session shows the session notice with “Sign in”.",
+            "No more due date change notice for a task finished in the meantime.",
+            "Images in a description are no longer logged as downloads."
+          ],
+          "tecnicos": [
+            "The dist/ scripts share code (24.5 → 7 MB) and the Docker image reuses the dependency install across versions.",
+            "npm test works even if NODE_OPTIONS includes --max-old-space-size.",
+            "Removed the /admin/types redirect, the old Settings anchors and the unused PNG icons.",
+            "Dependencies: lucide-react 1.74.0, marked 18.2.1 and nodemailer 10.6.0."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.71.0",
       "date": "2026-11-25",
       "releasedAt": "2026-11-25T12:33:46+01:00",
