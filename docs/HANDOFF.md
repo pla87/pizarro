@@ -375,7 +375,7 @@ paréntesis, la recomendación que se le dio):
    tarde). (NO por ahora: ahorro pequeño)
 4. Topes de emails: 5 al día por dirección desde navegadores desconocidos, 100 repetidos al día en total, 10 códigos de 2FA
    por hora y persona desde navegadores desconocidos; ventanas de 24 h móviles. (SÍ, así)
-5. Leer menos al arrancar cada sesión (PRUEBAS-CHROME y YATERMINE solo cuando toque; §0b a un anexo): de ~74 KB a ~30 KB.
+5. Leer menos al arrancar cada sesión (PRUEBAS-CHROME solo cuando toque; §0b a un anexo): de ~74 KB a ~35 KB.
    (SÍ)
 6. Migrador propio sin la CLI de Prisma (−20 % de imagen). (SÍ, más adelante, ronda propia)
 7. `npm test` sin la trampa de `NODE_OPTIONS` del entorno (envoltorio que quita `--max-old-space-size`). (SÍ, pequeño)
@@ -390,7 +390,8 @@ paréntesis, la recomendación que se le dio):
 14. Retirar (sí/no por letra): a) `MovedSectionRedirect.tsx` y su comprobación e2e (SÍ); b) la redirección `/admin/types`
     de `next.config.ts` (SÍ); c) `public/icons/*.png`, sin uso desde la v1.54 (SÍ); d) `SERIAL` vacío de
     `scripts/test-db.mjs` (SÍ); e) `legacyLogLabel` (NO hasta marzo de 2027); f) la historia de `railway.json` en INSTALL y
-    MANUAL (SÍ); g) `YATERMINE.md` en la raíz (NO: es el resumen que se lee al empezar).
+    MANUAL (SÍ). `YATERMINE.md` (el resumen para pasar de la sesión local a la nube) se retiró en esta ronda a petición del
+    propietario: el resumen va en el informe final.
 15. Pendiente aprobado de la ronda 66: una URL por tarea (`?tarea=ID`), en una ronda propia.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
