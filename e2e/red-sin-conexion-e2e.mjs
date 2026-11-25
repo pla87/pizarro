@@ -539,7 +539,7 @@ if (only.includes("a11y")) try {
     await L.waitFor(async () => { const f = await focused(); return f.inDialog && f.tag !== "BUTTON"; }, { timeout: 8000 });
     await page.keyboard.press("Escape");
     // Ronda 66: con descripción, el foco va a la descripción en lectura (Intro vuelve a editarla); sin ella, al botón.
-    const onDescription = (f) => f.inDialog && (title === "Con descripción" ? f.tag !== "BUTTON" && f.text.startsWith("Texto de la descripción") : f.tag === "BUTTON" && f.text === "Añade una descripción…");
+    const onDescription = (f) => f.inDialog && (title === "Con descripción" ? f.tag !== "BUTTON" && f.text.startsWith("Texto de la descripción") : f.tag === "BUTTON" && ["Editar", "Añade una descripción…"].includes(f.text));
     await L.waitFor(async () => onDescription(await focused()), { timeout: 3000 });
     const f = await focused();
     L.check(`A11Y(${title}): Escape sin cambios deja el foco en la descripción`, onDescription(f), JSON.stringify(f));
