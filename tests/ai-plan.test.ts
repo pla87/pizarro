@@ -62,11 +62,14 @@ describe("texto del plan de trabajo para IA", () => {
       "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Urgente, Backend", "- **Fecha de inicio:** 2026-11-24", "- **Fecha límite:** 2026-11-30",
       "- **Enlace:** [https://github.com/example/web/issues/1](<https://github.com/example/web/issues/1>)",
       "- **Documentos:** [Diseño \\[v2\\]](<https://docs.google.com/document/d/x>)",
-      "- **Adjuntos:** `log.txt`, `mi_registro*.txt`",
+      "**Adjuntos:** `log.txt`, `mi_registro*.txt`",
       "**Checklist:**", "- [x] Reproducir", "- [ ] Corregir y probar",
     ]) assert.ok(t1.includes(line), line);
     // La descripción va sin rótulo, justo después de los datos (la cabecera ya dice que las subtareas son los criterios).
-    assert.ok(t1.includes("- **Adjuntos:** `log.txt`, `mi_registro*.txt`\n\nFalla al entrar."), t1);
+    assert.ok(t1.includes("- **Documentos:** [Diseño \\[v2\\]](<https://docs.google.com/document/d/x>)\n\nFalla al entrar."), t1);
+    // Los adjuntos, al final de la tarea, en un párrafo (una viñeta tras la checklist sería otra subtarea).
+    assert.ok(t1.endsWith("- [ ] Corregir y probar\n\n**Adjuntos:** `log.txt`, `mi_registro*.txt`\n\n"), t1);
+    assert.ok(!t1.includes("- **Adjuntos"), t1);
     assert.ok(!md.includes("**Descripción:**") && !md.includes("criterios de aceptación):"), md);
     // Salvo si empieza con una lista: la línea en blanco no la separa de la de los datos (en Markdown, serían más datos).
     const listed = buildAiPlanMarkdown(base({ project: { name: "Web", description: "1. Uno" }, tasks: [{ id: "t1", title: "A", kind: "Bug", description: "- Reproducir\n- Corregir" }, { id: "t2", title: "B", description: "- Sin datos" }] }));
@@ -83,7 +86,8 @@ describe("texto del plan de trabajo para IA", () => {
     // Sin datos que no tiene: ni «Fecha límite» ni checklist en la 2.
     const t2 = md.slice(md.indexOf("### 2."), md.indexOf("### 3."));
     assert.ok(!t2.includes("Fecha límite") && !t2.includes("Checklist"));
-    assert.ok(t2.includes("- **Depende de:** la tarea 1 («Arreglar el login»)"));
+    // Una tarea del plan, por su número (sin repetir su título); la 3 depende de una de fuera, por su título.
+    assert.ok(t2.includes("- **Depende de:** la tarea 1\n") && !t2.includes("Arreglar el login"), t2);
   });
 
   test("dependencia de una tarea que no está en el plan; las fijas no llevan nota (es cosa de Pizarro, no de la IA)", () => {
@@ -289,14 +293,16 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(md.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…»"));
     // La imagen ya está en la descripción con su ruta: la tarea no la repite en «Adjuntos» (y sin más adjuntos, no hay línea).
     assert.ok(!md.slice(md.indexOf("### 1.")).includes("**Adjuntos"), md);
-    assert.ok(md.includes("![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
-    assert.ok(md.includes("![c](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
+    // La imagen del ZIP, con su ruta escrita (como imagen de Markdown, el editor con barra solo enseñaba «[imagen: captura]»).
+    assert.ok(md.includes("imagen «captura» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
+    assert.ok(md.includes("imagen «c» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
+    assert.ok(!md.includes("!["), md);
     // Una imagen que no es adjunto de ninguna tarea del plan se queda en su texto alternativo (sin enlace a Pizarro).
-    assert.ok(md.includes("Mira ![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp) y otra y "), md);
+    assert.ok(md.includes("Mira imagen «captura» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`) y otra y "), md);
     assert.ok(md.includes("(descomprímelo junto a este fichero)") && md.includes("Las imágenes van en WebP."), md);
     const plain = withPaths(false);
     assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("Mira captura y otra y c"), plain);
-    assert.ok(plain.includes("- **Adjuntos:** `Plano final.png`"));
+    assert.ok(plain.includes("\n**Adjuntos:** `Plano final.png`\n"), plain);
     // Sin ZIP (más de 200 tareas con adjuntos): el contexto aclara que solo van sus nombres (por si la cabecera habla de un ZIP).
     assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos"));
     for (const text of [md, plain]) assert.ok(!text.includes("pz.example.com") && !text.includes("Pizarro"), text);
@@ -312,28 +318,29 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     const f = "adjuntos/01-arreglar-ana-el-login-nandu";
     // Una captura pegada y dos ficheros más: la captura, solo en la descripción; los otros, con la carpeta una vez.
     const md = plan(["a1", "a2", "a3"], "Falla así: ![captura](/api/attachments/a1)");
-    assert.ok(md.includes(`- **Adjuntos** (en la carpeta \`${f}/\`): \`plano_final-2.webp\`, \`log.txt\`\n`), md);
-    assert.ok(md.includes(`Falla así: ![captura](${f}/Plano_final.webp)`), md);
-    assert.ok(!md.includes("`Plano_final.webp`") && !md.includes(`\`${f}/Plano_final.webp\``), md);
+    assert.ok(md.endsWith(`\n\n**Adjuntos** (en la carpeta \`${f}/\`): \`plano_final-2.webp\`, \`log.txt\`\n`), md);
+    assert.ok(md.includes(`Falla así: imagen «captura» (\`${f}/Plano_final.webp\`)`), md);
+    const list = md.slice(md.lastIndexOf("**Adjuntos**"));
+    assert.ok(!list.includes("Plano_final.webp"), list);
     // Uno solo (el resto, citados): su ruta completa en la misma línea.
-    assert.ok(plan(["a1", "a3"], "![c](/api/attachments/a1)").includes(`- **Adjuntos:** \`${f}/log.txt\`\n`));
+    assert.ok(plan(["a1", "a3"], "![c](/api/attachments/a1)").endsWith(`\n\n**Adjuntos:** \`${f}/log.txt\`\n`));
     // Un enlace dentro de un bloque de código no se cambia ni cuenta como citado.
     const code = plan(["a1", "a3"], "```\n![c](/api/attachments/a1)\n```");
-    assert.ok(code.includes(`- **Adjuntos** (en la carpeta \`${f}/\`): \`Plano_final.webp\`, \`log.txt\``), code);
+    assert.ok(code.includes(`**Adjuntos** (en la carpeta \`${f}/\`): \`Plano_final.webp\`, \`log.txt\``) && code.includes("```\n![c](/api/attachments/a1)\n```"), code);
     // Sin citar ninguno, todos; en inglés, con su texto.
     const en = buildAiPlanMarkdown({
       header: "", footer: "", project: { name: "Web" }, date: "2026-11-23",
       tasks: [{ id: "t1", title: "Fix", attachments: [{ id: "a1", name: "x", path: "attachments/01-fix/a.webp" }, { id: "a3", name: "y", path: "attachments/01-fix/log.txt" }] }],
     }, makeT("en"));
-    assert.ok(en.includes("- **Attachments** (in the folder `attachments/01-fix/`): `a.webp`, `log.txt`\n"), en);
+    assert.ok(en.includes("\n**Attachments** (in the folder `attachments/01-fix/`): `a.webp`, `log.txt`\n"), en);
   });
 
   test("planDescription: sin enlaces a Pizarro (relativos o con su origen); los adjuntos del ZIP, por su ruta; los demás enlaces, igual", () => {
     const origin = "https://pz.example.com";
     const zip = new Map([["x1", "adjuntos/01-t/a.webp"]]);
     assert.equal(planDescription("![a](/api/attachments/x1)", origin), "a");
-    assert.equal(planDescription("![a](/api/attachments/x1)", origin, zip), "![a](adjuntos/01-t/a.webp)");
-    assert.equal(planDescription("[plano](</api/attachments/x1?download=1> \"t\")", origin, zip), "[plano](<adjuntos/01-t/a.webp> \"t\")");
+    assert.equal(planDescription("![a](/api/attachments/x1)", origin, zip), "imagen «a» (`adjuntos/01-t/a.webp`)");
+    assert.equal(planDescription("[plano](</api/attachments/x1?download=1> \"t\")", origin, zip), "plano (`adjuntos/01-t/a.webp`)");
     // A la tarea, al tablero, con el origen en mayúsculas o con «/» al final: el texto, sin el enlace.
     assert.equal(planDescription("Ver [la tarea](https://pz.example.com/p/p1?task=t2) y [el **tablero**](HTTPS://PZ.example.com/p/p1).", `${origin}/`), "Ver la tarea y el **tablero**.");
     assert.equal(planDescription("[inicio](https://pz.example.com) y [panel](https://pz.example.com#x)", origin), "inicio y panel");
@@ -362,7 +369,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
   test("la plantilla de serie no habla del ZIP (va en todos los planes): lo explica el contexto, solo cuando hay adjuntos", () => {
     for (const l of ["es", "en"] as const) assert.ok(!/ZIP|adjuntos|attachments/.test(AI_PLAN_DEFAULTS[l].header), l);
     const withZip = buildAiPlanMarkdown(base({ tasks: [{ id: "t1", title: "A", attachments: [{ id: "a1", name: "p.png", path: "adjuntos/01-a/p.webp" }] }] }));
-    assert.ok(withZip.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.\n"), withZip);
+    assert.ok(withZip.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción. Las imágenes van en WebP.\n"), withZip);
     const without = buildAiPlanMarkdown(base({ tasks: [{ id: "t1", title: "A" }] }));
     assert.ok(!without.includes("ZIP"), without);
   });
@@ -391,7 +398,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(md.includes("- **Attachments:** 1 file(s) in the “attachments/…” ZIP that goes with this plan"), md);
     assert.ok(!md.slice(md.indexOf("### 1.")).includes("**Attachments"), md);
     assert.ok(!md.includes("Pizarro"), md);
-    assert.ok(md.includes("![shot](attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
+    assert.ok(md.includes("See image “shot” (`attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
     assert.ok(!md.includes("adjuntos/"), md);
   });
 
@@ -430,6 +437,61 @@ describe("plan de trabajo: tipo común", () => {
     assert.equal(saved, 500 * "\n\n- **Tipo:** Corrección".length - "- **Tipo de todas las tareas:** Corrección\n".length);
     assert.equal(saved, 11_957);
     assert.ok(saved / before.length > 0.4, `${saved} de ${before.length}`);
+  });
+});
+
+describe("plan de trabajo más corto: lo común, una vez; las dependencias, por número; las imágenes, por su ruta", () => {
+  const many = (n: number, over: (i: number) => Partial<AiPlanInput["tasks"][number]> = () => ({})) =>
+    Array.from({ length: n }, (_, i) => ({ id: `t${i + 1}`, title: `Tarea ${i + 1}`, ...over(i) }));
+
+  test("la prioridad y las etiquetas que comparten todas las tareas van en el contexto y no en cada una", () => {
+    const md = buildAiPlanMarkdown(base({ tasks: many(3, (i) => ({ priority: "Alta", labels: i === 1 ? ["Backend", "Urgente"] : ["Urgente", "Backend", ...(i ? ["API"] : [])] })) }));
+    assert.ok(md.includes("- **Tareas:** 3\n- **Prioridad de todas las tareas:** Alta\n- **Etiquetas de todas las tareas:** Urgente, Backend\n"), md);
+    assert.ok(!md.includes("- **Prioridad:**"), md);
+    // Cada tarea, solo las suyas propias (la 3 lleva «API»); las demás, sin línea de etiquetas.
+    assert.equal(md.match(/- \*\*Etiquetas:\*\*/g)?.length, 1, md);
+    assert.ok(md.includes("### 3. Tarea 3\n\n- **Etiquetas:** API"), md);
+    // Alguna distinta o sin prioridad, o ninguna etiqueta en todas: como siempre, en cada tarea.
+    const mixed = buildAiPlanMarkdown(base({ tasks: many(3, (i) => ({ priority: i ? "Alta" : null, labels: i ? ["Backend"] : [] })) }));
+    assert.ok(!mixed.includes("de todas las tareas") && mixed.includes("### 2. Tarea 2\n\n- **Prioridad:** Alta\n- **Etiquetas:** Backend"), mixed);
+    // Una sola tarea: en la tarea.
+    assert.ok(buildAiPlanMarkdown(base({ tasks: many(1, () => ({ priority: "Alta", labels: ["x"] })) })).includes("### 1. Tarea 1\n\n- **Prioridad:** Alta\n- **Etiquetas:** x"));
+    const en = buildAiPlanMarkdown(base({ tasks: many(2, () => ({ priority: "High", labels: ["x"] })) }), makeT("en"));
+    assert.ok(en.includes("- **Priority of all tasks:** High\n- **Labels of all tasks:** x\n"), en);
+  });
+
+  test("«Depende de» cita la tarea del plan por su número, sin repetir su título", () => {
+    const md = buildAiPlanMarkdown(base({ tasks: many(2, (i) => (i ? { blockedBy: { title: "Tarea 1", index: 1 } } : {})) }));
+    assert.ok(md.includes("### 2. Tarea 2\n\n- **Depende de:** la tarea 1\n"), md);
+    assert.ok(buildAiPlanMarkdown(base({ tasks: many(2, (i) => (i ? { blockedBy: { title: "Tarea 1", index: 1 } } : {})) }), makeT("en")).includes("- **Depends on:** task 1\n"));
+  });
+
+  test("una imagen pegada en la descripción sale con su ruta del ZIP (también en inglés) y no se repite en «Adjuntos»", () => {
+    const att = (root: string) => [
+      { id: "a1", name: "pegada-descripcion.png", path: `${root}/03-c/pegada-descripcion.webp` },
+      { id: "a2", name: "captura.png", path: `${root}/03-c/captura.webp` },
+    ];
+    const plan = (root: string, l: "es" | "en") => buildAiPlanMarkdown(base({
+      tasks: [{ id: "t1", title: "A" }, { id: "t2", title: "B" }, { id: "t3", title: "C", description: "Así:\n\n![pegada-descripcion.png](/api/attachments/a1)", attachments: att(root) }],
+    }), makeT(l));
+    const es = plan("adjuntos", "es");
+    // Con el nombre del fichero como texto alternativo (el que pone el editor al pegar), solo la ruta.
+    assert.ok(es.includes("Así:\n\nimagen `adjuntos/03-c/pegada-descripcion.webp`\n\n**Adjuntos:** `adjuntos/03-c/captura.webp`\n"), es);
+    assert.equal(es.split("pegada-descripcion.webp").length, 2, es);
+    // El contexto sigue diciendo la verdad: las rutas de las imágenes de la descripción también van citadas.
+    assert.ok(es.includes("cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción"), es);
+    const en = plan("attachments", "en");
+    assert.ok(en.includes("Así:\n\nimage `attachments/03-c/pegada-descripcion.webp`\n\n**Attachments:** `attachments/03-c/captura.webp`\n"), en);
+    assert.ok(en.includes("each task cites the path of its own, including that of the images in its description"), en);
+  });
+
+  test("un plan de 20 tareas con la misma prioridad y etiqueta, encadenadas: nada repetido en cada tarea", () => {
+    const twenty = buildAiPlanMarkdown(base({
+      tasks: many(20, (i) => ({ priority: "Alta", labels: ["Backend"], description: "Corta.", blockedBy: i ? { title: `Tarea ${i}`, index: i } : null })),
+    }));
+    for (const once of ["- **Prioridad de todas las tareas:** Alta\n", "- **Etiquetas de todas las tareas:** Backend\n"]) assert.equal(twenty.split(once).length, 2, once);
+    assert.ok(!twenty.includes("- **Prioridad:**") && !twenty.includes("- **Etiquetas:**") && !twenty.includes("(«Tarea"), twenty);
+    assert.equal(twenty.match(/^- \*\*Depende de:\*\* la tarea \d+$/gm)?.length, 19, twenty);
   });
 });
 

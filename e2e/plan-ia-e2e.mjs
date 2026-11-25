@@ -66,22 +66,24 @@ const planCol = (page, name = "Plan IA") => L.colLoc(page, name);
 async function openBoard(page) {
   await page.goto(`${L.BASE}/p/${PID}`);
   await planCol(page).waitFor({ timeout: 20000 });
-  await sleep(500);
+  await L.liveOpen(page);
 }
 const planDialog = (page) => page.locator("[role=dialog]").filter({ hasText: /Generar plan de trabajo|Generate work plan/ }).first();
 /** Abre el diálogo desde el botón de la columna y espera a que lleguen las plantillas y la versión. */
 async function openPlan(page, col = "Plan IA", label = "Generar plan de trabajo") {
   await planCol(page, col).getByRole("button", { name: label }).click();
   const dlg = planDialog(page);
-  await dlg.locator("[data-plan-step=select]").waitFor({ timeout: 10000 });
-  await sleep(1200);
+  // Las plantillas y la versión han llegado (antes, una pausa fija de 1,2 s).
+  await dlg.locator("[data-plan-step=select][data-plan-setup=ready]").waitFor({ timeout: 10000 });
   return dlg;
 }
 async function toStep2(dlg, n, english = false) {
   await dlg.getByRole("button", { name: new RegExp(english ? `Generate with ${n} task` : `Generar con ${n} tarea`) }).click();
   await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
-  await sleep(300);
+  await planReady(dlg);
 }
+/** Espera a que el texto generado esté en el editor del paso 2 (el de Markdown o el con barra), sin pausas fijas. */
+const planReady = (dlg) => L.waitFor(async () => (await dlg.locator("[data-plan-editor=rich] .ProseMirror").count()) > 0 || (await dlg.locator("textarea").first().inputValue().catch(() => "")).startsWith("# "), { timeout: 10000 });
 const planText = (dlg) => dlg.getByRole("textbox", { name: /Texto del plan de trabajo|Work plan text/ }).inputValue();
 async function download(page, dlg, ext) {
   const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), dlg.getByRole("button", { name: `.${ext}`, exact: true }).click()]);
@@ -167,8 +169,8 @@ if (only.includes("plan")) {
   for (const piece of [
     `# Plan de trabajo – ${NAME}`, "## Instrucciones para la IA", "Claude Code", "## Contexto del proyecto", `- **Proyecto:** ${NAME}\n`, "- **Columna:** Plan IA",
     "Tienda en línea con Next.js.", "- **Tareas:** 3", "### 1. Arreglar el login r51", "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Backend",
-    "- **Fecha límite:** 2026-12-31", "- **Adjuntos:** `adjuntos/01-arreglar-el-login-r51/error.log`\n",
-    "#### Pasos", "- [x] Reproducir", "- [ ] Corregir y probar", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1 («Arreglar el login r51»)",
+    "- **Fecha límite:** 2026-12-31", "- [ ] Corregir y probar\n\n**Adjuntos:** `adjuntos/01-arreglar-el-login-r51/error.log`\n\n### 2.",
+    "#### Pasos", "- [x] Reproducir", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1\n",
     "### 3. Revisar estilo r51", "## Entrega",
   ]) L.check(`PLAN: el texto incluye «${piece.slice(0, 70)}»`, text.includes(piece), text.slice(0, 200));
   // Más corto: sin «Tarea fija…» (es cosa de Pizarro), sin el rótulo «Descripción:» y la checklist sin «(criterios de aceptación)».
@@ -180,8 +182,7 @@ if (only.includes("plan")) {
   await page.screenshot({ path: `${SHOTS}/r51-plan-paso2.png` });
 
   await dlg.getByRole("button", { name: "Copiar todo" }).click();
-  await sleep(300);
-  L.eq("PLAN: «Copiar todo» copia el texto", await page.evaluate(() => navigator.clipboard.readText()), text);
+  await L.eqEventually("PLAN: «Copiar todo» copia el texto", () => page.evaluate(() => navigator.clipboard.readText()), text);
   const md = await download(page, dlg, "md");
   L.eq("PLAN: .md con su nombre y el texto", [md.name, md.text], [`Plan de trabajo - ${today}_v1.md`, text]);
   const txt = await download(page, dlg, "txt");
@@ -189,8 +190,7 @@ if (only.includes("plan")) {
 
   // Cambiar la cabecera en el paso 2 la sustituye en el texto; quitar el pie lo quita.
   await dlg.locator("#plan-footer").selectOption("");
-  await sleep(200);
-  L.check("PLAN: sin pie, el texto ya no lleva «## Entrega»", !(await planText(dlg)).includes("## Entrega"));
+  await L.checkEventually("PLAN: sin pie, el texto ya no lleva «## Entrega»", async () => !(await planText(dlg)).includes("## Entrega"));
   await dlg.locator("#plan-footer").selectOption({ label: "Entrega (de serie)" });
 
   // Con el texto cambiado, cerrar pregunta antes.
@@ -201,7 +201,7 @@ if (only.includes("plan")) {
   await ask.waitFor({ timeout: 5000 });
   L.check("PLAN: al cerrar con cambios pregunta", (await ask.innerText()).includes("Has cambiado el texto del plan"));
   await ask.getByRole("button", { name: "Seguir editando" }).click();
-  await sleep(300);
+  await ask.waitFor({ state: "detached", timeout: 5000 });
   L.eq("PLAN: «Seguir editando» conserva el texto", await planText(dlg), edited);
 
   await dlg.getByRole("button", { name: "Guardar en Documentación" }).click();
@@ -483,12 +483,11 @@ if (only.includes("en")) {
     const { page } = s;
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto(`${L.BASE}/p/${PID}`);
+    await L.liveOpen(page);
     await page.locator("button").filter({ hasText: /^Plan IA/ }).first().tap();
-    await sleep(500);
     await page.getByRole("button", { name: "Generate work plan" }).filter({ visible: true }).first().tap();
     const dlg = planDialog(page);
-    await dlg.locator("[data-plan-step=select]").waitFor({ timeout: 10000 });
-    await sleep(1200);
+    await dlg.locator("[data-plan-step=select][data-plan-setup=ready]").waitFor({ timeout: 10000 });
     L.eq("EN: cabecera y pie de serie en inglés", [await dlg.locator("#plan-header option:checked").innerText(), await dlg.locator("#plan-footer option:checked").innerText()], ["Claude Code (built-in)", "Delivery (built-in)"]);
     L.check("EN: el diálogo cabe en 390 px", await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     await page.screenshot({ path: `${SHOTS}/r51-en-paso1.png` });
