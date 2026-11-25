@@ -50,8 +50,12 @@ async function serve(req: Request, ctx: { params: Promise<{ attachmentId: string
   const url = new URL(req.url);
   const thumb = url.searchParams.has("thumb");
   const variant: Variant = !attachment.isImage ? "file" : thumb ? "thumb" : "full";
+  // Una petición de imagen (<img> de una descripción: Sec-Fetch-Dest: image) nunca es una descarga ni se registra,
+  // aunque la dirección lleve ?download=1 o el adjunto no sea imagen: si no, `![x](/api/attachments/<id>?download=1)`
+  // en una descripción dejaba en Logs una «Descarga» a nombre de cada persona que abría la tarea.
+  const asImage = req.headers.get("sec-fetch-dest") === "image";
   // Los que no son imagen siempre se descargan (nunca inline: evita XSS almacenado con HTML/SVG/JS).
-  const download = !attachment.isImage || url.searchParams.has("download");
+  const download = !attachment.isImage || (url.searchParams.has("download") && !asImage);
   // Para el 304 basta el tamaño y la fecha en caché; para enviar el cuerpo se lee del disco (si el fichero ya no está, 404).
   let size: number;
   let mtimeMs: number;
@@ -64,7 +68,7 @@ async function serve(req: Request, ctx: { params: Promise<{ attachmentId: string
   // Solo se registran las descargas explícitas (también si el navegador revalida con 304); ver una imagen
   // (en línea, miniatura o visor) no deja rastro.
   const logDownload = () => {
-    if (!download || head) return;
+    if (!download || asImage || head) return;
     logEvent({
       category: "api", action: "attachments.download", label: { k: "Descarga de «{name}»", p: { name: attachment.originalName } },
       userId: user.id, userName: user.name, projectId: attachment.projectId, path: url.pathname, ip: clientIp(req.headers), details: { attachmentId: attachment.id, taskId: attachment.taskId, size },

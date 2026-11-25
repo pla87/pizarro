@@ -32,11 +32,12 @@ async function makeAttachment(f: Awaited<ReturnType<typeof makeProject>>, opts: 
   return { task, att };
 }
 
-function get(id: string, opts: { thumb?: boolean; etag?: string | null; download?: boolean } = {}) {
+function get(id: string, opts: { thumb?: boolean; etag?: string | null; download?: boolean; dest?: string } = {}) {
   const qs = new URLSearchParams();
   if (opts.thumb) qs.set("thumb", "1");
   if (opts.download) qs.set("download", "1");
   const headers: Record<string, string> = opts.etag ? { "if-none-match": opts.etag } : {};
+  if (opts.dest) headers["sec-fetch-dest"] = opts.dest;
   return GET(new Request(`http://localhost/api/attachments/${id}?${qs}`, { headers }), { params: Promise.resolve({ attachmentId: id }) });
 }
 
@@ -191,6 +192,33 @@ describe("/api/attachments: caché y acceso", () => {
     // logEvent escribe en segundo plano
     await flushLogs();
     assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 2);
+  });
+
+  test("una petición de imagen (<img> de una descripción) nunca cuenta como descarga, aunque lleve ?download=1", async () => {
+    const member = await makeUser();
+    const f = await makeProject({ members: [member] });
+    const { att: img } = await makeAttachment(f);
+    const { att: pdf } = await makeAttachment(f, { isImage: false });
+    await loginAs(member);
+    // `![x](/api/attachments/<id>?download=1)`: se sirve en línea, con la caché de una imagen, y no se registra.
+    const res = await get(img.id, { download: true, dest: "image" });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-disposition") ?? "", /^inline/);
+    assert.equal(res.headers.get("cache-control"), "private, max-age=10");
+    await res.arrayBuffer();
+    assert.equal((await get(img.id, { download: true, dest: "image", etag: res.headers.get("etag") })).status, 304);
+    // Un fichero que no es imagen pedido desde un <img>: sigue sin servirse en línea, pero tampoco se registra.
+    const file = await get(pdf.id, { dest: "image" });
+    assert.match(file.headers.get("content-disposition") ?? "", /^attachment/);
+    await file.arrayBuffer();
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 0);
+    // La descarga de verdad (enlace con download: Sec-Fetch-Dest document o empty) sí.
+    const dl = await get(img.id, { download: true, dest: "document" });
+    assert.match(dl.headers.get("content-disposition") ?? "", /^attachment/);
+    await dl.arrayBuffer();
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "attachments.download", projectId: f.project.id } }), 1);
   });
 
   test("formatos del material de un curso (.md, .pdf, .html, .docx, .pptx): se suben y se descargan; ninguno como página", async () => {
