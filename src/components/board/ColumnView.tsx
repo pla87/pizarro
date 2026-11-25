@@ -750,7 +750,6 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
   );
 }
 
-/** Una opción del submenú «Rol de la columna» (`choice` null: «Sin rol»). `more`: la primera de las de «Más roles…». */
 /**
  * Opciones del submenú del rol. «Más roles…» despliega los que no encajan con la plantilla del proyecto. Su estado vive
  * aquí, dentro del submenú, que se desmonta al cerrarlo (o al cerrar el menú): la próxima vez vuelven a salir primero los
@@ -784,6 +783,7 @@ function RoleChoices({ choices, current, onPick }: { choices: { first: ColumnRol
   );
 }
 
+/** Una opción del submenú «Rol de la columna» (`choice` null: «Sin rol»). `more`: la primera de las de «Más roles…». */
 function RoleItem({ choice, current, onPick, more }: { choice: ColumnRoleChoice | null; current: ColumnRoleChoice | null; onPick: (c: ColumnRoleChoice | null) => void; more?: boolean }) {
   const t = useT();
   const on = choice === current;

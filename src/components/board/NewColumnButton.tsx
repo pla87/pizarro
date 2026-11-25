@@ -156,7 +156,10 @@ export function NewColumnButton({ variant, onCreated }: { variant: "desktop" | "
                   : t("Se crearán {n} columnas «Asignación a persona», una por persona ({names}): lo que entre en cada una será de esa persona.", { n: missing.length, names: missing.map((u) => u.name).join(", ") })}
               </p>
             )}
-            {adminsLeftOut && (
+            {/* Solo a quien puede hacer algo con ella (un administrador, que puede ponerse el proyecto en su lista) y mientras
+                queden columnas por crear. En un proyecto de equipo (el único con administradores fuera, `peopleIds`),
+                `canManageMembers` es lo mismo que ser administrador. */}
+            {adminsLeftOut && canManageMembers && (people.length <= 1 || missing.length > 0) && (
               <p className="text-xs text-slate-500 dark:text-slate-400">{t("Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».")}</p>
             )}
             <div className="flex justify-end gap-2">
