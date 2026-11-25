@@ -155,3 +155,51 @@ test("el editor solo pinta como <img> las imágenes de un adjunto con la ruta fi
   // Y se guarda igual: el texto no se pierde aunque no se pinte.
   assert.equal(saved("![x](/api/attachments/../auth/reset)"), "![x](/api/attachments/../auth/reset)");
 });
+
+test("un bloque cercado con 1 a 3 espacios delante de la valla no se borra al abrir el editor", () => {
+  for (const md of ["Texto\n\n  ```\n  npm i\n  ```\n\nfin", " ```js\n a()\n ```", "   ~~~\n   a\n\n   ~~~", "  ```\n  a\n\n  ```"]) {
+    const first = editorMarkdown(md);
+    assert.match(first, /```/, JSON.stringify(md));
+    let now = first;
+    for (let i = 0; i < 4; i++) now = editorMarkdown(now);
+    assert.equal(now, first, JSON.stringify(md));
+  }
+  assert.equal(editorMarkdown("Texto\n\n  ```\n  npm i\n  ```\n\nfin"), "Texto\n\n```\nnpm i\n```\n\nfin");
+  // La sangría de la valla se quita también a las líneas de dentro con tildes (marked solo lo hace con acentos).
+  assert.equal(editorMarkdown("   ~~~\n   a\n\n   ~~~"), "```\na\n\n```");
+});
+
+test("un bloque «~~~» o «````» con «```» dentro se guarda con una valla más larga y no se rompe", () => {
+  const cases = ["~~~\n```\nx\n```\n~~~", "````\n```\nx\n```\n````", "~~~md\n````js\ny\n````\n~~~", "```\na ``` b\n```"];
+  for (const md of cases) {
+    const first = editorMarkdown(md);
+    let now = first;
+    for (let i = 0; i < 4; i++) now = editorMarkdown(now);
+    assert.equal(now, first, JSON.stringify(md));
+    // Sigue siendo un solo bloque.
+    assert.equal(manager.parse(first).content!.filter((n) => n.type === "codeBlock").length, 1, JSON.stringify(md));
+  }
+  assert.equal(editorMarkdown("~~~\n```\nx\n```\n~~~"), "````\n```\nx\n```\n````");
+  assert.equal(editorMarkdown("~~~md\n````js\ny\n````\n~~~"), "`````md\n````js\ny\n````\n`````");
+  // Sin vallas dentro, como siempre: tres acentos.
+  assert.equal(editorMarkdown("~~~\na ``` b\n~~~"), "```\na ``` b\n```");
+});
+
+test("una imagen pegada como HTML solo conserva su Markdown original si es exactamente una imagen", () => {
+  const rule = schema.nodes.markdownImage!.spec.parseDOM![0]!;
+  type Attrs = { raw: string; src: string; alt: string };
+  const attrs = (a: Record<string, string>) =>
+    (rule.getAttrs as (e: HTMLElement) => Attrs)({ getAttribute: (k: string) => a[k] ?? null } as unknown as HTMLElement);
+  assert.equal(attrs({ "data-md-image": "![captura](/api/attachments/abc)" }).raw, "![captura](/api/attachments/abc)");
+  assert.equal(attrs({ "data-md-image": "![a \\[1\\]](/api/attachments/abc)" }).raw, "![a \\[1\\]](/api/attachments/abc)");
+  for (const raw of ["@[Ana](user:u1) [clic](https://example.com)", "![a](x) [clic](https://example.com)", "![x [y](z)", "![a](x \"t\")", "![a](x)\n\n# t", "texto"]) {
+    assert.equal(attrs({ "data-md-image": raw, "data-alt": "a", "data-src": "/api/attachments/abc" }).raw, "", raw);
+  }
+  // Sin el original, se vuelve a escribir con el texto y la dirección, sin que estos puedan cerrar la imagen antes.
+  const md = (a: Record<string, string>) => {
+    const doc = schema.nodes.doc!.create(null, schema.nodes.paragraph!.create(null, schema.nodes.markdownImage!.create(attrs(a))));
+    return normalizeEditorMarkdown(full.serialize(doc.toJSON())).trim();
+  };
+  assert.equal(md({ "data-md-image": "@[Ana](user:u1)", "data-alt": "captura", "data-src": "/api/attachments/abc" }), "![captura](/api/attachments/abc)");
+  assert.equal(md({ "data-alt": "a] [b\\", "data-src": "x) @[Ana](user:u1" }), "![a\\] \\[b\\\\](x%29%20@[Ana]%28user:u1)");
+});
