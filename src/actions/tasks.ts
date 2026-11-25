@@ -622,7 +622,7 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     // Nombre del tipo nuevo si el tipo cambia de verdad (para el texto de la acción y del deshacer).
     let kindName: string | null = null;
     // Prefijos de título del tipo anterior y del nuevo: el texto de la acción nombra la tarea sin ellos.
-    let kindPrefixes: { titleTemplate: string; descriptionTemplate: string }[] = [];
+    let kindPrefixes: { titleTemplate: string }[] = [];
     await applyTaskUpdate(user, taskId, data, since, async (tx, prev) => {
       if (prev.kindId === data.kindId) return;
       // La tarea ya está bloqueada (el UPDATE de arriba): nadie añade subtareas a la vez. Las subtareas se leen con su
@@ -635,7 +635,7 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
       const next = kinds.find((k) => k.id === data.kindId);
       if (!next) return;
       kindName = next.name;
-      kindPrefixes = kinds.map((k) => ({ titleTemplate: k.titleTemplate, descriptionTemplate: "" }));
+      kindPrefixes = kinds;
       const { remove, add } = switchKindSubtaskRows(kinds.find((k) => k.id === prev.kindId), next, subs, MAX_SUBTASKS);
       if (!remove.length && !add.length) return;
       if (remove.length) await tx.subtask.deleteMany({ where: { id: { in: remove.map((s) => s.id) } } });

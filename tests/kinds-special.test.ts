@@ -345,9 +345,9 @@ test("aviso del cambio de tipo: cuenta por separado lo añadido, lo quitado y la
   assert.equal(kindChangeNotice(es, { added: 3, removed: 2 }), "Tipo cambiado: 3 subtareas añadidas y 2 quitadas");
   assert.equal(kindChangeNotice(es, { added: 1, removed: 0 }), "Tipo cambiado: 1 subtarea añadida");
   assert.equal(kindChangeNotice(es, { added: 0, removed: 1 }), "Tipo cambiado: 1 subtarea quitada");
-  assert.equal(kindChangeNotice(es, { added: 0, removed: 2, description: true }), "Tipo cambiado: 2 subtareas quitadas y plantilla de la descripción aplicada");
-  assert.equal(kindChangeNotice(es, { added: 3, removed: 1, description: true }), "Tipo cambiado: 3 subtareas añadidas, 1 quitada y plantilla de la descripción aplicada");
-  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: true }), "Tipo cambiado: plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 2, description: "applied" }), "Tipo cambiado: 2 subtareas quitadas y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 3, removed: 1, description: "applied" }), "Tipo cambiado: 3 subtareas añadidas, 1 quitada y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: "applied" }), "Tipo cambiado: plantilla de la descripción aplicada");
   assert.equal(kindChangeNotice(es, { added: 0, removed: 0 }), null);
   assert.equal(kindChangeNotice(en, { added: 3, removed: 2 }), "Type changed: 3 subtasks added and 2 removed");
   assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: "removed" }), "Tipo cambiado: plantilla de la descripción quitada");
