@@ -180,6 +180,22 @@
       "src/lib/connection.ts",
       "src/app/api/tasks/**"
     ],
+    "detalle-edicion-e2e": [
+      "src/components/board/TaskDialog.tsx",
+      "src/components/board/TitleField.tsx",
+      "src/components/board/upload.ts",
+      "src/components/ui/DescriptionField.tsx",
+      "src/components/ui/RichTextEditor.tsx",
+      "src/components/ui/pasteFiles.ts",
+      "src/components/ui/Toast.tsx",
+      "src/lib/kinds-special.ts",
+      "src/lib/undo-label.ts",
+      "src/lib/text-version.ts",
+      "src/lib/editor-*.ts",
+      "src/lib/clipboard-files.ts",
+      "src/actions/tasks.ts",
+      "src/app/api/tasks/[taskId]/attachments/**"
+    ],
     "copias-adjuntos-e2e": [
       "src/components/board/TaskTransfer.tsx",
       "src/components/board/ReleaseDialog.tsx",

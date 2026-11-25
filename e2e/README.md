@@ -33,8 +33,9 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos (ronda 65: copia del botón de informar y «Nueva tarea» entera con la pareja), CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 119 (123 con build oficial) | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
 | Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Descargar plan (PDF)» (PDF descargado con su aviso, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 85 | ~1 min |
-| [**Detalle de la tarea**](SUITES.md#detalle-de-la-tarea) | | **56** | |
+| [**Detalle de la tarea**](SUITES.md#detalle-de-la-tarea) | | **119** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
+| Editar en el detalle: cambio de tipo sin guardar, foco tras «Guardar descripción», volver a la pestaña, conflicto con la descripción a medias, aviso y deshacer del cambio de tipo, imagen pegada o soltada en la descripción y «Deshacer todo» (rondas 67 y 68; cifra provisional) | `e2e/detalle-edicion-e2e.mjs` | 63 | ~1,5 min |
 | [**Copias de tareas**](SUITES.md#copias-de-tareas) | | **120** | |
 | Copias con adjuntos y release con barra de formato | `e2e/copias-adjuntos-e2e.mjs` | 93 | ~2 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/copias-imagen-sin-red-e2e.mjs` | 27 | ~1 min |
@@ -74,7 +75,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Red, sin conexión y formularios**](SUITES.md#red-sin-conexión-y-formularios) | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3430** | |
+| **Total** | | **3493** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en

@@ -218,6 +218,24 @@ servidor:
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs   # PART=comments,edit,desc,tabs,rel
 ```
 
+### Editar en el detalle: tipo, foco, conflicto, avisos e imágenes en la descripción (rondas 67 y 68)
+
+Un cambio de tipo sin conexión no se guarda y el selector, el título y la descripción vuelven a los de antes (con red sí se
+guarda); tras «Guardar descripción» el foco queda en la descripción guardada, la sección no se mueve e Intro la vuelve a
+editar; al volver a la pestaña (otra pestaña delante y el foco devuelto sin elemento de origen) la descripción no se abre
+sola; con la descripción a medio escribir, un cambio de tipo que choca con el título que otra persona acaba de cambiar
+(su canal en vivo cortado para que no lo vea) avisa del conflicto y deja lo escrito en el editor, que luego se guarda; si
+la otra persona cambió también la descripción, se avisa junto a los botones y al guardar choca sin pisarla, con «Copiar tu
+texto»; el aviso del cambio de tipo dice «plantilla de la descripción aplicada» o «quitada» (y nada con una descripción
+escrita por la persona) y su «Deshacer» nombra la tarea sin el prefijo del tipo; una imagen pegada (`ClipboardEvent`
+sintético con un `File`) o soltada en la descripción en edición se adjunta y se inserta donde está el cursor (editor con
+barra y Markdown), y fuera del editor solo se adjunta; y el pie dice «Deshacer todo» a 1500 y 2100 px. Misma base y
+servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-edicion-e2e.mjs   # PART=tipo,foco,pestana,conflicto,aviso,imagen,pie
+```
+
 
 ## Copias de tareas
 
