@@ -20,13 +20,14 @@ Arranque más rápido, pruebas con base de datos antes de publicar, «Organizar 
 - La descripción ya no se abre sola en edición al volver a la pestaña después de guardarla con el teclado.
 - Mover una columna con Alt+flechas deshace solo las columnas que cambió, no lo que otra persona movió después; y las columnas ya no saltan si llegan cambios mientras arrastras una cabecera.
 - «Más roles…» vuelve a salir plegado cada vez que se abre el menú de la columna.
+- Si el código de verificación por email no se puede enviar por el tope, la pantalla de verificación lo dice en vez de asegurar que se ha enviado.
 
 ### Cambios técnicos / DB
 
 - El arranque no lanza Prisma si la base ya tiene todas las migraciones aplicadas: unos segundos menos sin servicio en cada despliegue.
 - La publicación de una versión pasa también las pruebas con base de datos antes de crear la imagen.
 - Los hilos que comprueban las contraseñas se cierran tras 90 s sin uso (unos 13 MB menos cada uno) y el tablero ya no lee las plantillas del plan para IA.
-- Topes de emails de «¿Olvidaste tu contraseña?» y de los códigos de verificación, y los de invitaciones, avisos, informes y Telegram en la zona protegida del limitador.
+- «¿Olvidaste tu contraseña?» y los códigos de verificación por email tienen topes contra el envío masivo que no bloquean a nadie (el primer email del día y los pedidos desde un dispositivo conocido siempre salen); los topes de invitaciones, avisos, informes y Telegram ya no se pueden vaciar inundando el servidor.
 
 ## v1.70.0 — 2026-11-25 01:11
 

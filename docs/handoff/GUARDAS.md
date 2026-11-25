@@ -316,6 +316,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   token) debe llevar ese atributo**.
 - (Ronda 64) Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
   `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
+- (Ronda 67) Más prefijos en el mapa de seguridad: `project-invite:`, `resend-invite:`, `project-added-mail:`,
+  `report-schedule:`, `telegram:link:`, `telegram:reply:` y `2fa:send-user:` (`reset:` ya lo cubría). Un tope contra el envío
+  masivo no debe poder usarse para bloquear a nadie: «¿Olvidaste tu contraseña?» deja salir siempre el primer email del día
+  a cada dirección y los pedidos desde un dispositivo conocido (`knownDeviceCheck`, leído en la petición); solo los
+  repetidos desde navegadores desconocidos cuentan (5 al día por dirección, 100 al día en total, `reset:repeat-day`). Los
+  códigos de 2FA por email, 10/h por persona solo desde navegadores desconocidos, y la pantalla de verificación dice si el
+  tope impidió enviarlo (`emailCodeStatus`).
 
 ## Emails y mensajería
 

@@ -896,7 +896,9 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 20.3 «¿Olvidaste tu contraseña?» y códigos por email (con SMTP configurado)
 
-__TOPES_PRUEBAS__
+1. Desde tu navegador de siempre, pide «¿Olvidaste tu contraseña?» para tu cuenta: llega el email (desde un dispositivo conocido no hay tope diario).
+2. En una ventana privada (navegador desconocido), pídelo seis veces para la cuenta de prueba, dejando más de 5 minutos entre una y otra o desde otra conexión: llegan 5; el sexto no llega y la pantalla dice lo mismo que siempre.
+3. Con la verificación en dos pasos por email activada, entra desde una ventana privada: llega el código. (El tope de 10 por hora no hace falta gastarlo; si se pasa, la pantalla de verificación dice «Demasiados envíos. Espera unos minutos.».)
 
 ### 20.4 Organizar por personas en un proyecto de equipo (tu instalación)
 

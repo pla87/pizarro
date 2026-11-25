@@ -18,13 +18,14 @@
           "Si el cambio de tipo en el detalle no se guarda (sin conexión, sesión caducada), el título y la descripción vuelven a los de antes junto con el tipo.",
           "La descripción ya no se abre sola en edición al volver a la pestaña después de guardarla con el teclado.",
           "Mover una columna con Alt+flechas deshace solo las columnas que cambió, no lo que otra persona movió después; y las columnas ya no saltan si llegan cambios mientras arrastras una cabecera.",
-          "«Más roles…» vuelve a salir plegado cada vez que se abre el menú de la columna."
+          "«Más roles…» vuelve a salir plegado cada vez que se abre el menú de la columna.",
+          "Si el código de verificación por email no se puede enviar por el tope, la pantalla de verificación lo dice en vez de asegurar que se ha enviado."
         ],
         "tecnicos": [
           "El arranque no lanza Prisma si la base ya tiene todas las migraciones aplicadas: unos segundos menos sin servicio en cada despliegue.",
           "La publicación de una versión pasa también las pruebas con base de datos antes de crear la imagen.",
           "Los hilos que comprueban las contraseñas se cierran tras 90 s sin uso (unos 13 MB menos cada uno) y el tablero ya no lee las plantillas del plan para IA.",
-          "Topes de emails de «¿Olvidaste tu contraseña?» y de los códigos de verificación, y los de invitaciones, avisos, informes y Telegram en la zona protegida del limitador."
+          "«¿Olvidaste tu contraseña?» y los códigos de verificación por email tienen topes contra el envío masivo que no bloquean a nadie (el primer email del día y los pedidos desde un dispositivo conocido siempre salen); los topes de invitaciones, avisos, informes y Telegram ya no se pueden vaciar inundando el servidor."
         ]
       },
       "en": {
@@ -42,13 +43,14 @@
             "If a type change in the task detail is not saved (offline, expired session), the title and description go back with the type.",
             "The description no longer opens for editing by itself when you return to the tab after saving it with the keyboard.",
             "Moving a column with Alt+arrows undoes only the columns it changed, not what someone else moved afterwards; and columns no longer jump if changes arrive while you drag a header.",
-            "“More roles…” is collapsed again every time the column menu opens."
+            "“More roles…” is collapsed again every time the column menu opens.",
+            "When the email verification code can't be sent because of the limit, the verification screen says so instead of claiming it was sent."
           ],
           "tecnicos": [
             "Startup skips Prisma when the database already has every migration applied: a few seconds less downtime on each deploy.",
             "Publishing a version also runs the database tests before building the image.",
             "The password-hashing threads close after 90 s idle (about 13 MB less each) and the board no longer reads the AI-plan templates.",
-            "Limits on “Forgot your password?” emails and verification codes, and the invitation, notice, report and Telegram limits kept in the protected area of the rate limiter."
+            "“Forgot your password?” and email verification codes have limits against mass sending that lock nobody out (the first email of the day and requests from a known device always go out); the invitation, notice, report and Telegram limits can no longer be emptied by flooding the server."
           ]
         }
       }
