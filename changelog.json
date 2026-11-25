@@ -1,6 +1,89 @@
 {
   "versions": [
     {
+      "version": "1.70.0",
+      "date": "2026-11-25",
+      "releasedAt": "2026-11-25T01:11:37+01:00",
+      "summary": "Columnas que se mueven arrastrando su cabecera, roles según la plantilla, «Organizar por personas», orden de los proyectos a elegir, aviso al asignar con Deshacer, historial del cambio de tipo, «Bloquea a» y volver, Logs con un solo periodo, plantillas de serie con tipo por defecto, pruebas con base de datos en cada PR, y revisión y caza de bugs",
+      "changes": {
+        "nuevas": [
+          "Las columnas se reordenan arrastrando su cabecera (o con Alt+← / Alt+→ con el foco en su nombre), con un solo paso de deshacer.",
+          "El submenú «Rol de la columna» enseña primero los roles que encajan con la plantilla del proyecto; el resto, tras «Más roles…».",
+          "«Organizar por personas» en los proyectos de Casa y familia: una columna «Asignación a persona» por cada persona, de una vez.",
+          "Orden de los proyectos a elegir en Mi perfil: usados recientemente (de serie) o alfabético.",
+          "Al entrar una tarjeta en una columna «Asignación a persona», aviso «Asignada a X · vence el …» con «Deshacer»; al asignar la columna se propone el nombre de la persona.",
+          "El historial de la tarea dice qué subtareas quitó y añadió un cambio de tipo.",
+          "«Bloquea a» en la tarea que bloquea y «← Volver a…» al abrir una tarea enlazada.",
+          "Aviso antes de perder una plantilla a medio editar al cambiar de pestaña, irse a otra página, recargar o cerrar."
+        ],
+        "mejoras": [
+          "El aviso del cambio de tipo cuenta bien las subtareas añadidas y quitadas y dice si se aplicó la plantilla de la descripción; los avisos con «Deshacer» duran 10 s y el texto tras deshacer es más natural.",
+          "Detalle de la tarea: «Descartar cambios» se llama ahora «Deshacer todo»; al guardar la descripción el foco se queda en ella y la columna no salta.",
+          "«Varias tareas» pone la descripción de plantilla de cada tipo y avisa de la persona de una columna de asignación.",
+          "Logs: un solo «Periodo» (con «Personalizado…») que usan la lista y el CSV; fechas en el idioma de la interfaz; el email de un acceso fallido que no es de ninguna cuenta se guarda enmascarado, y el de una cuenta atacada, entero.",
+          "Historial de versiones: el buscador resalta lo encontrado y «Cambios técnicos» solo lo ven los administradores.",
+          "Plantillas de serie: «De serie» en vez de «Por defecto» y tipo por defecto en las columnas donde encaja.",
+          "Copias de seguridad sin jerga; Avisos enlaza a las tareas vencidas; Administración → Proyectos y Ajustes del proyecto explican qué administradores lo ven sin ser miembros.",
+          "Calendario: siglas de proyecto en un cuadro y una leyenda de siglas y entregables.",
+          "PDF de la semana y de la lista consolidada con el modo en el nombre del fichero; el plan para IA, con la fecha en el formato de la app.",
+          "Seguridad: el email propio de un administrador ya no se cambia desde Usuarios (solo en Mi perfil); «Cerrar las demás sesiones» quita también «Recordar este dispositivo»; tope diario a la prueba de WhatsApp de Integraciones.",
+          "Railway: la guía pide 15 s de apagado ordenado (Teardown); con ellos Pizarro espera hasta 10 s a lo que está en curso, y los avisos y el informe semanal ya no se pierden por un reinicio."
+        ],
+        "correcciones": [
+          "Una tarjeta arrastrada deprisa a varias columnas de distancia ya no se queda en una columna intermedia.",
+          "La descripción del proyecto recién creado ya no desaparece al crear una columna.",
+          "Tras usar «Bloqueada por», el color ya no pasa a un desplegable «Sin color».",
+          "El enlace a una versión antigua del Historial de versiones baja hasta ella.",
+          "Importar un .pizarro.zip con una clave de plantilla rara ya no rompe el tablero del proyecto."
+        ],
+        "tecnicos": [
+          "Migraciones que solo añaden: orden de los proyectos (User.projectOrder, tabla ProjectVisit) y plantilla del proyecto (Project.templateKey).",
+          "Las pruebas con base de datos se pasan en cada PR, en orden al azar (npm run test:db -- --shuffle, repetible con la semilla).",
+          "Comprobaciones, pruebas y suites e2e que funcionan también en Windows."
+        ]
+      },
+      "en": {
+        "summary": "Columns that move by dragging their header, roles by template, “Organize by person”, a choice of project order, an assignment notice with Undo, type-change history, “Blocks” and back, Logs with a single period, built-in templates with default types, database tests on every PR, plus code review and bug hunt",
+        "changes": {
+          "nuevas": [
+            "Columns can be reordered by dragging their header (or with Alt+← / Alt+→ with focus on their name), in a single undo step.",
+            "The “Column role” submenu shows the roles that fit the project's template first; the rest under “More roles…”.",
+            "“Organize by person” in Home and family projects: one “Assign to person” column per person, in one go.",
+            "Choose your project order in My profile: recently used (default) or alphabetical.",
+            "When a card enters an “Assign to person” column, an “Assigned to X · due …” notice with Undo; assigning the column suggests the person's name.",
+            "Task history lists the subtasks a type change removed and added.",
+            "“Blocks” on the blocking task and “← Back to…” after opening a linked task.",
+            "Warning before losing a half-edited template when switching tabs, leaving the page, reloading or closing."
+          ],
+          "mejoras": [
+            "The type-change notice counts added and removed subtasks correctly and says whether the description template was applied; notices with Undo stay 10 s and the undone text reads naturally.",
+            "Task details: “Discard changes” is now “Undo all”; after saving the description focus stays on it and the column no longer jumps.",
+            "“Several tasks” adds each type's description template and shows the person of an assignment column.",
+            "Logs: a single “Period” (with “Custom…”) used by the list and the CSV; dates in the interface language; the email of a failed sign-in that matches no account is stored masked, and that of an attacked account in full.",
+            "Version history: search highlights matches and “Technical / DB changes” is shown to administrators only.",
+            "Built-in templates: “Built-in” instead of “Default”, and a default type in the columns where it fits.",
+            "Backups without jargon; Notifications links to overdue tasks; Admin → Projects and Project settings explain which admins see a project without being members.",
+            "Calendar: project initials in a square and a legend for initials and deliverables.",
+            "Weekly and consolidated-list PDFs with the mode in the file name; the AI plan date in the app's format.",
+            "Security: an admin's own email can no longer be changed from Users (only in My profile); “Sign out other sessions” also removes “Remember this device”; daily cap on the WhatsApp test in Integrations.",
+            "Railway: the guide asks for a 15 s graceful shutdown (Teardown); with it Pizarro waits up to 10 s for work in progress, and notices and the weekly report are no longer lost on a restart."
+          ],
+          "correcciones": [
+            "A card dragged quickly several columns away no longer lands in an intermediate column.",
+            "The new project's description no longer disappears when a column is created.",
+            "After using “Blocked by”, the color palette no longer turns into a “No color” dropdown.",
+            "A link to an older version in Version history scrolls to it.",
+            "Importing a .pizarro.zip with an odd template key no longer breaks the project's board."
+          ],
+          "tecnicos": [
+            "Additive migrations: project order (User.projectOrder, ProjectVisit table) and the project's template (Project.templateKey).",
+            "Database tests run on every PR, in random order (npm run test:db -- --shuffle, repeatable with the seed).",
+            "Checks, tests and e2e suites that also work on Windows."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.69.0",
       "date": "2026-11-24",
       "releasedAt": "2026-11-24T20:11:29+01:00",

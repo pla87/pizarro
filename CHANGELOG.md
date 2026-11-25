@@ -2,6 +2,49 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.70.0 — 2026-11-25 01:11
+
+Columnas que se mueven arrastrando su cabecera, roles según la plantilla, «Organizar por personas», orden de los proyectos a elegir, aviso al asignar con Deshacer, historial del cambio de tipo, «Bloquea a» y volver, Logs con un solo periodo, plantillas de serie con tipo por defecto, pruebas con base de datos en cada PR, y revisión y caza de bugs
+
+### Nuevas funcionalidades
+
+- Las columnas se reordenan arrastrando su cabecera (o con Alt+← / Alt+→ con el foco en su nombre), con un solo paso de deshacer.
+- El submenú «Rol de la columna» enseña primero los roles que encajan con la plantilla del proyecto; el resto, tras «Más roles…».
+- «Organizar por personas» en los proyectos de Casa y familia: una columna «Asignación a persona» por cada persona, de una vez.
+- Orden de los proyectos a elegir en Mi perfil: usados recientemente (de serie) o alfabético.
+- Al entrar una tarjeta en una columna «Asignación a persona», aviso «Asignada a X · vence el …» con «Deshacer»; al asignar la columna se propone el nombre de la persona.
+- El historial de la tarea dice qué subtareas quitó y añadió un cambio de tipo.
+- «Bloquea a» en la tarea que bloquea y «← Volver a…» al abrir una tarea enlazada.
+- Aviso antes de perder una plantilla a medio editar al cambiar de pestaña, irse a otra página, recargar o cerrar.
+
+### Mejoras
+
+- El aviso del cambio de tipo cuenta bien las subtareas añadidas y quitadas y dice si se aplicó la plantilla de la descripción; los avisos con «Deshacer» duran 10 s y el texto tras deshacer es más natural.
+- Detalle de la tarea: «Descartar cambios» se llama ahora «Deshacer todo»; al guardar la descripción el foco se queda en ella y la columna no salta.
+- «Varias tareas» pone la descripción de plantilla de cada tipo y avisa de la persona de una columna de asignación.
+- Logs: un solo «Periodo» (con «Personalizado…») que usan la lista y el CSV; fechas en el idioma de la interfaz; el email de un acceso fallido que no es de ninguna cuenta se guarda enmascarado, y el de una cuenta atacada, entero.
+- Historial de versiones: el buscador resalta lo encontrado y «Cambios técnicos» solo lo ven los administradores.
+- Plantillas de serie: «De serie» en vez de «Por defecto» y tipo por defecto en las columnas donde encaja.
+- Copias de seguridad sin jerga; Avisos enlaza a las tareas vencidas; Administración → Proyectos y Ajustes del proyecto explican qué administradores lo ven sin ser miembros.
+- Calendario: siglas de proyecto en un cuadro y una leyenda de siglas y entregables.
+- PDF de la semana y de la lista consolidada con el modo en el nombre del fichero; el plan para IA, con la fecha en el formato de la app.
+- Seguridad: el email propio de un administrador ya no se cambia desde Usuarios (solo en Mi perfil); «Cerrar las demás sesiones» quita también «Recordar este dispositivo»; tope diario a la prueba de WhatsApp de Integraciones.
+- Railway: la guía pide 15 s de apagado ordenado (Teardown); con ellos Pizarro espera hasta 10 s a lo que está en curso, y los avisos y el informe semanal ya no se pierden por un reinicio.
+
+### Correcciones
+
+- Una tarjeta arrastrada deprisa a varias columnas de distancia ya no se queda en una columna intermedia.
+- La descripción del proyecto recién creado ya no desaparece al crear una columna.
+- Tras usar «Bloqueada por», el color ya no pasa a un desplegable «Sin color».
+- El enlace a una versión antigua del Historial de versiones baja hasta ella.
+- Importar un .pizarro.zip con una clave de plantilla rara ya no rompe el tablero del proyecto.
+
+### Cambios técnicos / DB
+
+- Migraciones que solo añaden: orden de los proyectos (User.projectOrder, tabla ProjectVisit) y plantilla del proyecto (Project.templateKey).
+- Las pruebas con base de datos se pasan en cada PR, en orden al azar (npm run test:db -- --shuffle, repetible con la semilla).
+- Comprobaciones, pruebas y suites e2e que funcionan también en Windows.
+
 ## v1.69.0 — 2026-11-24 20:11
 
 Botones siempre visibles sobre los diálogos, Historial de versiones más ligero, Mis tareas con resumen por grupos, Logs que se buscan en inglés, subtareas que siguen al tipo, tipo por defecto en plantillas y Varias tareas, roles Agenda y Entrega fuera de la base, pruebas más rápidas, y revisión y caza de bugs
