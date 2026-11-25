@@ -233,7 +233,8 @@ export function listKinds(projectId?: string) {
 
 export async function userTemplates(userId: string) {
   const rows = await db.releaseTemplate.findMany({
-    where: { userId },
+    // Solo los de release: los del plan para IA (PLAN_HEADER/PLAN_FOOTER) van en la misma tabla y aquí no se usan.
+    where: { userId, kind: { in: ["HEADER", "FOOTER"] } },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     select: { id: true, kind: true, name: true, content: true },
   });
@@ -244,7 +245,7 @@ export async function userTemplates(userId: string) {
 /** Cabeceras y pies de release definidos en el proyecto, en el orden que se les dio. */
 export async function projectReleaseTemplates(projectId: string) {
   const rows = await db.projectReleaseTemplate.findMany({
-    where: { projectId },
+    where: { projectId, kind: { in: ["HEADER", "FOOTER"] } },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     select: { id: true, kind: true, name: true, content: true },
   });

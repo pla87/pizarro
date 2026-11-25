@@ -81,4 +81,6 @@ export const planIa: Record<string, string> = {
   // Plan para IA demasiado largo para Documentación: botón apagado con el motivo (y el mismo aviso del servidor)
   "El plan tiene {n} caracteres y en Documentación caben como mucho {max}: cópialo con «Copiar todo» o descárgalo en .md, o genera uno con menos tareas.":
     "The plan has {n} characters and Documentation holds at most {max}: copy it with “Copy all” or download it as .md, or generate one with fewer tasks.",
+  // Plan para IA con ZIP: varios adjuntos de una tarea, con su carpeta una sola vez
+  "en la carpeta {folder}": "in the folder {folder}",
 };

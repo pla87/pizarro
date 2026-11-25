@@ -104,9 +104,10 @@ if (only.includes("zip")) {
   await toStep2(dlg, 3);
   const text = await planText(dlg);
   const f1 = "adjuntos/01-arreglar-el-login-nandu";
-  L.check("ZIP: el texto cita la imagen por su ruta en el ZIP", text.includes(`\`${f1}/Plano_final.webp\``), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
-  L.check("ZIP: …y el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`\`${f1}/notas.txt\``) && text.includes("`adjuntos/03-con-un-registro/registro.txt`"));
-  L.check("ZIP: cada ruta va sola, sin enlace a Pizarro detrás", text.includes(`  - \`${f1}/Plano_final.webp\`\n`) && !text.includes(L.BASE), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
+  // La imagen pegada en la descripción ya va ahí con su ruta: la lista «Adjuntos» de la tarea no la repite.
+  L.check("ZIP: la lista de adjuntos de la tarea 1 no repite la imagen de la descripción", !text.includes(`\`${f1}/Plano_final.webp\``) && !text.includes("`Plano_final.webp`"), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
+  L.check("ZIP: …y cita el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`- **Adjuntos:** \`${f1}/notas.txt\`\n`) && text.includes("- **Adjuntos:** `adjuntos/03-con-un-registro/registro.txt`\n"), text.slice(text.indexOf("### 1.")));
+  L.check("ZIP: sin enlace a Pizarro", !text.includes(L.BASE), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   L.check("ZIP: la imagen pegada en la descripción apunta a la misma ruta del ZIP", text.includes(`![captura](${f1}/Plano_final.webp)`));
   L.check("ZIP: una imagen que no es adjunto del plan se queda en su texto alternativo (sin enlace a Pizarro)", text.includes("y esto ajena") && !text.includes("/api/attachments/zzzzzz"));
   L.check("ZIP: el contexto explica el ZIP «adjuntos/…» (3 archivos)", text.includes("- **Adjuntos:** 3 archivo(s) en el ZIP «adjuntos/…» que va con este plan"));
@@ -185,8 +186,8 @@ if (only.includes("en")) {
     await sleep(300);
     const text = await planText(dlg);
     const f1 = "attachments/01-fix-the-login";
-    L.check("EN: el texto cita la imagen por su ruta «attachments/…» (sin enlace a Pizarro)", text.includes(`  - \`${f1}/Final_plan.webp\`\n`) && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
-    L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("`attachments/02-task/notes.txt`"), text.slice(text.indexOf("### 2.")));
+    L.check("EN: la imagen de la descripción no se repite en la lista de adjuntos (sin enlace a Pizarro)", !text.includes(`\`${f1}/Final_plan.webp\``) && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
+    L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("- **Attachments:** `attachments/02-task/notes.txt`\n"), text.slice(text.indexOf("### 2.")));
     L.check("EN: la imagen de la descripción apunta a la misma ruta", text.includes(`![shot](${f1}/Final_plan.webp)`));
     L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
     L.check("EN: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(unzip it next to this file)") && text.includes("Images are in WebP.") && !text.includes("`attachments/03-task-title/drawing.webp`"));

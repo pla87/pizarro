@@ -6,6 +6,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
+import pg from "pg";
 import { db, expectFail, expectOk, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
 import { getAiPlanSetup, getAiPlanTaskDetails, saveAiPlan } from "../../src/actions/ai-plan";
 import { setColumnRole } from "../../src/actions/columns";
@@ -13,7 +14,7 @@ import { createReleaseTemplate } from "../../src/actions/profile";
 import { createProjectReleaseTemplate } from "../../src/actions/project-release-templates";
 import { createTask, makeEvergreen, moveTask, updateTask } from "../../src/actions/tasks";
 import { undoLast } from "../../src/actions/undo";
-import { userTemplates } from "../../src/lib/board";
+import { projectReleaseTemplates, userTemplates } from "../../src/lib/board";
 import { todayIso } from "../../src/lib/dates";
 import { appTimeZone } from "../../src/lib/format";
 import { documentPath } from "../../src/lib/uploads";
@@ -96,6 +97,46 @@ describe("plantillas del plan", () => {
     expectFail(await getAiPlanSetup({ projectId: f.project.id, columnId: f.columns.doing }), /ya no es un plan/);
     const other = await makeProject({ members: [] });
     expectFail(await getAiPlanSetup({ projectId: other.project.id, columnId: other.columns.todo }), NOT_FOUND);
+  });
+
+  test("el tablero no lee de la base las del plan: solo trae filas de release", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    expectOk(await createReleaseTemplate("FOOTER", { name: "Pie de release", content: "r" }));
+    expectOk(await createReleaseTemplate("PLAN_HEADER", { name: "Plan", content: "p".repeat(2000) }));
+    expectOk(await createProjectReleaseTemplate(f.project.id, "HEADER", { name: "Cabecera de release", content: "r" }));
+    expectOk(await createProjectReleaseTemplate(f.project.id, "PLAN_FOOTER", { name: "Plan", content: "p".repeat(2000) }));
+    // Las filas que devuelve la base (las del plan llevan 2.000 caracteres: si se leyeran, se notaría).
+    const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+    const orig = proto.query;
+    let bytes = 0;
+    proto.query = function (this: unknown, ...args: unknown[]) {
+      const count = (res: unknown) => {
+        const rows = (res as { rows?: unknown[] } | undefined)?.rows;
+        if (rows?.length) bytes += JSON.stringify(rows).length;
+      };
+      // El adaptador de Prisma llama con una función de vuelta; otros, con una promesa.
+      const cb = args.findIndex((a) => typeof a === "function");
+      if (cb >= 0) {
+        const inner = args[cb] as (err: unknown, res: unknown) => void;
+        args[cb] = (err: unknown, res: unknown) => {
+          count(res);
+          inner(err, res);
+        };
+      }
+      const out = orig.apply(this, args);
+      if (out && typeof (out as Promise<unknown>).then === "function") return (out as Promise<unknown>).then((res) => (count(res), res));
+      return out;
+    };
+    try {
+      const own = await userTemplates(user.id);
+      const proj = await projectReleaseTemplates(f.project.id);
+      assert.deepEqual([own.footers.map((x) => x.name), proj.headers.map((x) => x.name)], [["Pie de release"], ["Cabecera de release"]]);
+    } finally {
+      proto.query = orig;
+    }
+    assert.ok(bytes > 0 && bytes < 2000, `${bytes} bytes leídos`);
   });
 });
 

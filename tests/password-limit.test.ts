@@ -258,3 +258,40 @@ describe("hilos de bcrypt: fallos", () => {
     assert.equal(bcryptWorkersEnabled(), true);
   });
 });
+
+describe("hilos de bcrypt: cierre sin uso", () => {
+  const hash = bcrypt.hashSync("una-clave-larga-123", 4);
+  const check = (idleMs: number) => runBcrypt<boolean>({ op: "compare", plain: "una-clave-larga-123", hash }, async () => assert.fail("no debe ir al hilo principal"), { idleMs });
+  const waitFor = async (cond: () => boolean, ms = 5_000) => {
+    const end = Date.now() + ms;
+    while (!cond() && Date.now() < end) await new Promise((r) => setTimeout(r, 10));
+    return cond();
+  };
+
+  test("un hilo sin trabajo se cierra pasado el plazo, sin contar como fallo, y el siguiente abre otro", async () => {
+    await closeBcryptWorkers();
+    assert.equal(await check(60_000), true);
+    assert.equal(bcryptPoolStats().workers, 1);
+    // Con un plazo corto, la siguiente operación reutiliza el hilo y, al acabar, programa su cierre.
+    assert.equal(await check(30), true);
+    assert.equal(bcryptPoolStats().workers, 1, "no se cierra al acabar, sino pasado el plazo");
+    assert.ok(await waitFor(() => bcryptPoolStats().workers === 0), "el hilo sin uso se cierra");
+    assert.deepEqual(bcryptPoolStats(), { workers: 0, busy: 0, failures: 0 });
+    assert.equal(await check(60_000), true);
+    assert.equal(bcryptPoolStats().workers, 1);
+    await closeBcryptWorkers();
+  });
+
+  test("operaciones que llegan justo al vencer el plazo no se rompen ni caen al hilo principal", async () => {
+    await closeBcryptWorkers();
+    for (let i = 0; i < 25; i++) {
+      assert.equal(await check(2), true);
+      await new Promise((r) => setTimeout(r, i % 5)); // 0–4 ms: antes, en o después del cierre
+    }
+    // Y dos a la vez mientras otro se cierra.
+    assert.deepEqual(await Promise.all([check(1), check(1)]), [true, true]);
+    assert.equal(bcryptPoolStats().failures, 0);
+    assert.ok(await waitFor(() => bcryptPoolStats().workers === 0));
+    await closeBcryptWorkers();
+  });
+});

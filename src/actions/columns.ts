@@ -93,40 +93,56 @@ export async function createPersonColumns(projectId: string) {
   });
 }
 
+type ColumnSlot = { id: string; position: number };
+
 /**
- * Lleva la columna a la posición `index` (0 = la primera), al arrastrar su cabecera. Como moveColumn: con el bloqueo de
- * las columnas del proyecto, renumeradas y un solo paso de deshacer.
+ * Cambia el orden de las columnas del proyecto de `column` (arrastre de la cabecera y Alt+flechas). Se leen y renumeran
+ * dentro de la transacción, con el bloqueo de las columnas del proyecto (el de crear y borrar): dos movimientos a la vez
+ * no parten de las mismas posiciones ni se pisan. `reorder` recibe las columnas en su orden y devuelve el nuevo y el
+ * índice al que va la columna, o null si no hay nada que mover (ni que deshacer, ni que anotar). Solo se escriben, y solo
+ * guarda el deshacer, las columnas cuya posición cambia: deshacer no devuelve a su sitio columnas que otra persona mueva
+ * después. Devuelve el índice de destino, o null.
  */
+async function reorderColumns(column: FoundColumn, reorder: (columns: ColumnSlot[]) => { order: ColumnSlot[]; target: number } | null): Promise<number | null> {
+  const moved = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
+    const columns = await tx.column.findMany({ where: { projectId: column.projectId }, orderBy: COLUMN_ORDER, select: { id: true, position: true } });
+    const next = reorder(columns);
+    if (!next) return null;
+    const changed: ColumnSlot[] = [];
+    for (const [i, c] of next.order.entries()) {
+      const position = (i + 1) * POSITION_STEP;
+      if (c.position === position) continue;
+      changed.push(c);
+      await tx.column.update({ where: { id: c.id }, data: { position }, select: { id: true } });
+    }
+    return { changed, target: next.target };
+  });
+  if (!moved) return null;
+  addUndo(...moved.changed.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
+  return moved.target;
+}
+
 /**
  * Soltar la cabecera de una columna sobre otra (`overColumnId`): ocupa su sitio, detrás de ella si viene de la izquierda
  * y delante si viene de la derecha. Se manda la columna de destino y no un índice: si otra persona ha creado, borrado o
- * movido columnas y el tablero aún no lo ha recibido, la columna acaba igualmente junto a la que se veía.
+ * movido columnas y el tablero aún no lo ha recibido, la columna acaba igualmente junto a la que se veía. Con el bloqueo
+ * de las columnas, un solo paso de deshacer y solo las que cambian (reorderColumns).
  */
 export async function placeColumn(columnId: string, overColumnId: string) {
   return runAction({ name: "columns.placeColumn", args: [columnId, overColumnId] }, async () => {
     const column = await findColumn(columnId);
     const overId = v.id.parse(overColumnId);
-    const moved = await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
-      const columns = await tx.column.findMany({ where: { projectId: column.projectId }, orderBy: COLUMN_ORDER, select: { id: true, position: true } });
+    const target = await reorderColumns(column, (columns) => {
       const from = columns.findIndex((c) => c.id === columnId);
-      const target = columns.findIndex((c) => c.id === overId);
-      // En su sitio, o una de las dos borrada entretanto (o de otro proyecto): nada que mover, ni que deshacer, ni que anotar.
-      if (from < 0 || target < 0 || from === target) return null;
+      const to = columns.findIndex((c) => c.id === overId);
+      // En su sitio, o una de las dos borrada entretanto (o de otro proyecto).
+      if (from < 0 || to < 0 || from === to) return null;
       const order = columns.filter((c) => c.id !== columnId);
-      order.splice(target, 0, columns[from]!);
-      for (const [i, c] of order.entries()) {
-        const position = (i + 1) * POSITION_STEP;
-        if (c.position !== position) await tx.column.update({ where: { id: c.id }, data: { position }, select: { id: true } });
-      }
-      return { before: columns, order, target };
+      order.splice(to, 0, columns[from]!);
+      return { order, target: to };
     });
-    if (!moved) return;
-    // Solo las que han cambiado de posición: deshacer no devuelve a su sitio columnas que otra persona mueva después.
-    const placed = new Map(moved.order.map((c, i) => [c.id, (i + 1) * POSITION_STEP]));
-    const changed = moved.before.filter((c) => placed.get(c.id) !== c.position);
-    addUndo(...changed.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
-    describeAction("Movió la columna «{name}» a la posición {n}", { name: column.name, n: moved.target + 1 });
+    if (target !== null) describeAction("Movió la columna «{name}» a la posición {n}", { name: column.name, n: target + 1 });
   });
 }
 
@@ -378,33 +394,24 @@ export async function setColumnDone(columnId: string, isDone: boolean) {
   });
 }
 
-/** Mueve la columna una posición a la izquierda (-1) o derecha (+1). */
+/**
+ * Mueve la columna una posición a la izquierda (-1) o derecha (+1) (Alt+flechas y el menú de la columna). Como placeColumn:
+ * con el bloqueo de las columnas y solo las que cambian, en la base y en el deshacer (reorderColumns).
+ */
 export async function moveColumn(columnId: string, direction: number) {
   return runAction({ name: "columns.moveColumn", args: [columnId, direction] }, async () => {
     const column = await findColumn(columnId);
     const dir = z.union([z.literal(-1), z.literal(1)]).parse(direction);
-    // Se leen y renumeran dentro de la transacción, con el bloqueo de las columnas del proyecto (el de crear y borrar):
-    // dos movimientos a la vez ya no parten de las mismas posiciones ni se pisan.
-    const before = await db.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(column.projectId)}))`;
-      const columns = await tx.column.findMany({
-        where: { projectId: column.projectId },
-        orderBy: COLUMN_ORDER,
-        select: { id: true, position: true },
-      });
+    const target = await reorderColumns(column, (columns) => {
       const idx = columns.findIndex((c) => c.id === columnId);
-      const target = idx + dir;
-      // Ya en el extremo (o borrada entretanto): no hay nada que mover, ni que deshacer, ni que anotar.
-      if (idx < 0 || target < 0 || target >= columns.length) return null;
+      const to = idx + dir;
+      // Ya en el extremo (o borrada entretanto).
+      if (idx < 0 || to < 0 || to >= columns.length) return null;
       const order = [...columns];
-      [order[idx], order[target]] = [order[target]!, order[idx]!];
-      for (const [i, c] of order.entries()) {
-        await tx.column.update({ where: { id: c.id }, data: { position: (i + 1) * POSITION_STEP }, select: { id: true } });
-      }
-      return columns;
+      [order[idx], order[to]] = [order[to]!, order[idx]!];
+      return { order, target: to };
     });
-    if (!before) return;
-    addUndo(...before.map((c) => ({ t: "column.set" as const, id: c.id, data: { position: c.position } })));
+    if (target === null) return;
     describeAction(dir < 0 ? "Movió la columna «{name}» a la izquierda" : "Movió la columna «{name}» a la derecha", { name: column.name });
   });
 }

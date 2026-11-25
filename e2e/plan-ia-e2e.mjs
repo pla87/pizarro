@@ -167,7 +167,7 @@ if (only.includes("plan")) {
   for (const piece of [
     `# Plan de trabajo – ${NAME}`, "## Instrucciones para la IA", "Claude Code", "## Contexto del proyecto", `- **Proyecto:** ${NAME}\n`, "- **Columna:** Plan IA",
     "Tienda en línea con Next.js.", "- **Tareas:** 3", "### 1. Arreglar el login r51", "- **Tipo:** Corrección", "- **Prioridad:** Alta", "- **Etiquetas:** Backend",
-    "- **Fecha límite:** 2026-12-31", "- **Adjuntos:**\n  - `adjuntos/01-arreglar-el-login-r51/error.log`\n",
+    "- **Fecha límite:** 2026-12-31", "- **Adjuntos:** `adjuntos/01-arreglar-el-login-r51/error.log`\n",
     "#### Pasos", "- [x] Reproducir", "- [ ] Corregir y probar", "### 2. Añadir pruebas r51", "- **Depende de:** la tarea 1 («Arreglar el login r51»)",
     "### 3. Revisar estilo r51", "## Entrega",
   ]) L.check(`PLAN: el texto incluye «${piece.slice(0, 70)}»`, text.includes(piece), text.slice(0, 200));
