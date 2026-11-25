@@ -351,6 +351,35 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.equal(planDescription("```\n[a](/p/1)\n```\n# [Título](/p/1)", origin), "```\n[a](/p/1)\n```\n#### Título");
   });
 
+  test("planDescription: un adjunto citado en un código en línea no se reescribe (la ruta entre comillas invertidas lo cerraba)", () => {
+    const zip = new Map([["abc", "adjuntos/01-x/pegada.webp"]]);
+    const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
+    assert.equal(d("`![x](/api/attachments/abc)`"), "`![x](/api/attachments/abc)`");
+    // Cierre con tantas comillas como la apertura; el resto de la línea sí se sustituye.
+    assert.equal(d("Antes ``a ` ![x](/api/attachments/abc)`` y ![y](/api/attachments/abc)"), "Antes ``a ` ![x](/api/attachments/abc)`` y imagen «y» (`adjuntos/01-x/pegada.webp`)");
+    // Una comilla escapada o sin cerrar no abre un código.
+    assert.equal(d("\\`![x](/api/attachments/abc)"), "\\`imagen «x» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("`suelta ![x](/api/attachments/abc)"), "`suelta imagen «x» (`adjuntos/01-x/pegada.webp`)");
+  });
+
+  test("planDescription: una imagen enlazada no deja el enlace a Pizarro de fuera", () => {
+    const zip = new Map([["abc", "adjuntos/01-x/pegada.webp"], ["def", "adjuntos/01-x/plano.pdf"]]);
+    const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
+    assert.equal(d("[![a](/api/attachments/abc)](/api/attachments/abc)"), "imagen «a» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("[![a](/api/attachments/abc)](https://pz.example.com/p/p1?task=t2)"), "imagen «a» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("[![a](/api/attachments/abc)](/api/attachments/def)"), "imagen «a» (`adjuntos/01-x/pegada.webp`) (`adjuntos/01-x/plano.pdf`)");
+    // Un enlace a otro sitio se queda.
+    assert.equal(d("[![a](/api/attachments/abc)](https://example.com)"), "[imagen «a» (`adjuntos/01-x/pegada.webp`)](https://example.com)");
+  });
+
+  test("planDescription: solo un texto alternativo con extensión de imagen o de fichero se toma por el nombre del fichero", () => {
+    const zip = new Map([["abc", "adjuntos/01-x/pegada.webp"]]);
+    const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
+    for (const name of ["pegada.png", "Foto.JPEG", "captura.webp", "informe.pdf", "notas.docx"]) assert.equal(d(`![${name}](/api/attachments/abc)`), "imagen `adjuntos/01-x/pegada.webp`", name);
+    assert.equal(d("Ver ![Figura 3.14](/api/attachments/abc)"), "Ver imagen «Figura 3.14» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("![Ver www.ejemplo.com](/api/attachments/abc)"), "imagen «Ver www.ejemplo.com» (`adjuntos/01-x/pegada.webp`)");
+  });
+
   test("el enlace externo de una tarea que lleva a Pizarro no entra; los de otros sitios, sí", () => {
     const md = (linkUrl: string) => buildAiPlanMarkdown({ header: "", footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com", tasks: [{ id: "t1", title: "A", linkUrl }] });
     assert.ok(!md("https://pz.example.com/p/p2?task=x").includes("Enlace"));

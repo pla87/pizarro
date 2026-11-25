@@ -223,8 +223,66 @@ function appPathOf(url: string, origin: string | null | undefined): string | nul
   return url.slice(base.length) || "/";
 }
 
-/** Texto alternativo que solo repite el nombre del fichero («pegada.png», el que pone el editor al pegar una imagen). */
-const FILE_NAME_ALT = /\.[a-z0-9]{2,5}$/i;
+/**
+ * Texto alternativo que solo repite el nombre del fichero («pegada.png», el que pone el editor al pegar una imagen): acaba
+ * en una extensión de imagen o de fichero habitual. Cualquier punto no basta: «Figura 3.14» o «Ver www.ejemplo.com» son
+ * texto de verdad y se conservan.
+ */
+const FILE_NAME_ALT = /\.(?:png|jpe?g|gif|webp|heic|heif|avif|bmp|svg|tiff?|ico|pdf|txt|md|csv|json|xml|log|zip|docx?|xlsx?|pptx?|od[tsp]|rtf)$/i;
+
+/** Marca de un código en línea apartado (maskCodeSpans): dos caracteres de uso privado que el texto normal no lleva. */
+const CODE_MARK = /\uE000(\d+)\uE001/g;
+
+/**
+ * Aparta los códigos en línea de una línea (`` `…` ``, con tantas comillas invertidas de cierre como de apertura, como en
+ * CommonMark; `\`` fuera de código es una comilla suelta) y los cambia por una marca. Lo de dentro de un código es texto
+ * literal: un `![x](/api/attachments/…)` citado así no se reescribe (la ruta entre comillas invertidas cerraba el código).
+ */
+function maskCodeSpans(line: string): { masked: string; spans: string[] } {
+  const spans: string[] = [];
+  if (!line.includes("`") || line.includes("\uE000")) return { masked: line, spans };
+  let masked = "";
+  let i = 0;
+  while (i < line.length) {
+    const c = line[i]!;
+    if (c === "\\") {
+      masked += line.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c !== "`") {
+      masked += c;
+      i++;
+      continue;
+    }
+    let open = i;
+    while (line[open] === "`") open++;
+    const run = open - i;
+    let close = -1;
+    for (let k = open; k < line.length; ) {
+      if (line[k] !== "`") {
+        k++;
+        continue;
+      }
+      let end = k;
+      while (line[end] === "`") end++;
+      if (end - k === run) {
+        close = k;
+        break;
+      }
+      k = end;
+    }
+    if (close < 0) {
+      masked += line.slice(i, open);
+      i = open;
+      continue;
+    }
+    masked += `\uE000${spans.length}\uE001`;
+    spans.push(line.slice(i, close + run));
+    i = close + run;
+  }
+  return { masked, spans };
+}
 
 /**
  * Enlaces e imágenes de una línea de descripción que llevan a Pizarro (appPathOf): un adjunto que va en el ZIP pasa a su
@@ -235,7 +293,8 @@ const FILE_NAME_ALT = /\.[a-z0-9]{2,5}$/i;
  */
 function withoutAppLinks(line: string, t: T, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
   if (!line.includes("](")) return line;
-  return line.replace(INLINE_LINK, (whole: string, bang: string, text: string, _space: string, dest: string) => {
+  const { masked, spans } = maskCodeSpans(line);
+  const replace = (from: string) => from.replace(INLINE_LINK, (whole: string, bang: string, text: string, _space: string, dest: string) => {
     const appPath = appPathOf(dest.startsWith("<") ? dest.slice(1, -1) : dest, origin);
     if (appPath === null) return whole;
     const id = ATTACHMENT_PATH.exec(appPath)?.[1] ?? "";
@@ -244,9 +303,14 @@ function withoutAppLinks(line: string, t: T, origin: string | null | undefined, 
     cited?.add(id);
     const path = `\`${zipped}\``;
     const alt = text.trim();
-    if (!bang) return alt ? `${alt} (${path})` : path;
+    // El enlace de fuera de una imagen enlazada al mismo adjunto: la ruta ya está en su texto, no se repite.
+    if (!bang) return !alt ? path : alt.includes(path) ? alt : `${alt} (${path})`;
     return alt && !FILE_NAME_ALT.test(alt) ? t("imagen «{alt}» ({path})", { alt, path }) : t("imagen {path}", { path });
   });
+  // Dos pasadas: una imagen enlazada (`[![a](…)](…)`) solo deja ver el enlace de fuera cuando ya se ha sustituido la imagen.
+  const once = replace(masked);
+  const twice = once === masked ? once : replace(once);
+  return spans.length ? twice.replace(CODE_MARK, (_m, n: string) => spans[Number(n)]!) : twice;
 }
 
 /**
