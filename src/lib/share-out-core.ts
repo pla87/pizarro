@@ -2,8 +2,9 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { labelledHmac, labelledHmacCandidates } from "./keyring";
 
 // «Compartir fuera» (columna cuyas tareas se publican en /x/<token>, una página sin cuenta): la parte pura, sin base de
-// datos. Token y huella, caducidad, estado del enlace, textos del enlace por email y la comprobación de mismo origen de
-// los formularios de la página. La lógica con base está en share-out.ts y la página en share-out-page.ts.
+// datos. Token y huella, topes, plazos, cabeceras y la comprobación de mismo origen de los formularios de la página. Lo que
+// también usa el navegador (estado del enlace, caducidad, mailto:) está en share-out-board.ts, sin dependencias de Node;
+// la lógica con base, en share-out.ts, y la página, en share-out-page.ts.
 
 /** Bytes aleatorios del token (256 bits); en la dirección son 43 caracteres base64url. */
 const SHARE_TOKEN_BYTES = 32;
@@ -28,21 +29,6 @@ export function sameHash(a: string, b: string): boolean {
 
 /** Clave corta del enlace para el limitador y los registros (nunca el token en claro). */
 export const shareKeyOf = (token: string): string => createHash("sha256").update(`share-out:${token}`).digest("hex").slice(0, 16);
-
-/** Días sin uso tras los que caduca el enlace: lo que rota el selector del pie de la columna. */
-export const SHARE_EXPIRY_DAYS = [7, 30, 90] as const;
-export type ShareExpiryDays = (typeof SHARE_EXPIRY_DAYS)[number];
-export const DEFAULT_SHARE_EXPIRY_DAYS: ShareExpiryDays = 30;
-export const isShareExpiry = (n: unknown): n is ShareExpiryDays => SHARE_EXPIRY_DAYS.includes(n as ShareExpiryDays);
-/** Siguiente valor del selector (7 días → 1 mes → 3 meses → 7 días). Uno desconocido vuelve al de por defecto. */
-export function nextShareExpiry(n: number): ShareExpiryDays {
-  const i = SHARE_EXPIRY_DAYS.indexOf(n as ShareExpiryDays);
-  return i < 0 ? DEFAULT_SHARE_EXPIRY_DAYS : SHARE_EXPIRY_DAYS[(i + 1) % SHARE_EXPIRY_DAYS.length]!;
-}
-/** Texto del selector (clave de traducción). */
-export function shareExpiryLabel(n: number): "7 días" | "1 mes" | "3 meses" {
-  return n === 7 ? "7 días" : n === 90 ? "3 meses" : "1 mes";
-}
 
 /** Tras caducar o revocarse, la misma dirección dice «ha caducado» estos días; después, «no encontrado». */
 export const SHARE_GRACE_DAYS = 30;
@@ -72,14 +58,6 @@ export const inShareGrace = (endedAt: Date, now: Date = new Date()): boolean => 
 export const shareAuthorLabel = (columnName: string): { k: string; p: { name: string } } => ({ k: "{name} (fuera)", p: { name: columnName } });
 
 export const shareUrl = (appUrl: string, token: string): string => `${appUrl.replace(/\/$/, "")}/x/${token}`;
-
-/**
- * Enlace `mailto:` para mandar la dirección desde el correo de quien comparte (Pizarro no envía nada). Asunto y cuerpo ya
- * traducidos; sin destinatario (lo pone quien lo envía).
- */
-export function shareMailto(subject: string, body: string): string {
-  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
 
 /**
  * Formularios de la página (POST normales): ¿vienen de la propia página? La página va con `Referrer-Policy: no-referrer`,
@@ -120,7 +98,7 @@ export function parseShareDate(raw: string): string | null | undefined {
 }
 
 /** Códigos del aviso que enseña la página tras un formulario (`?m=`): solo estos se pintan. */
-export const SHARE_NOTICES = ["done", "due", "comment", "rate", "invalid", "full", "gone"] as const;
+const SHARE_NOTICES = ["done", "due", "comment", "rate", "invalid", "full", "gone"] as const;
 export type ShareNotice = (typeof SHARE_NOTICES)[number];
 export const isShareNotice = (s: unknown): s is ShareNotice => SHARE_NOTICES.includes(s as ShareNotice);
 

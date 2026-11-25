@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Copy, Globe, Link2, Mail } from "lucide-react";
 import { setColumnShareOut } from "@/actions/columns";
 import { generateShareWeb, revokeShareLink, setShareExpiry } from "@/actions/share-out";
-import { shareStateText, type BoardShareInfo } from "@/lib/share-out-board";
+import { DEFAULT_SHARE_EXPIRY_DAYS, nextShareExpiry, shareExpiryLabel, shareMailto, shareStateText, type BoardShareInfo } from "@/lib/share-out-board";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -18,11 +18,6 @@ import { useBoard } from "./context";
 // de fuera. Aquí, la marca de la cabecera, el pie con «Generar web» / «Actualizar web», el aviso de los adjuntos y el
 // selector de caducidad, y el diálogo con la dirección. Pizarro no guarda la dirección (solo su huella): la ve quien la
 // genera, en el diálogo; este navegador la recuerda mientras el enlace siga siendo el mismo (localStorage, por comodidad).
-
-/** Días sin uso del selector (como share-out-core.ts, sin sus dependencias de servidor). */
-const EXPIRY = [7, 30, 90] as const;
-const nextExpiry = (n: number) => EXPIRY[(Math.max(0, EXPIRY.indexOf(n as (typeof EXPIRY)[number])) + 1) % EXPIRY.length]!;
-const expiryLabelKey = (n: number) => (n === 7 ? "7 días" : n === 90 ? "3 meses" : "1 mes");
 
 /** La dirección que recuerda este navegador para el enlace `linkId` de la columna, si es la del enlace actual. */
 function rememberedUrl(columnId: string, linkId: string | null): string | null {
@@ -98,7 +93,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   const info = column.share ?? null;
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<{ url: string | null; fresh: boolean; published?: number; left?: number } | null>(null);
-  const days = info?.expiryDays ?? 30;
+  const days = info?.expiryDays ?? DEFAULT_SHARE_EXPIRY_DAYS;
   const active = info?.state === "active";
   const apply = (next: BoardShareInfo) => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, share: next } : c)));
 
@@ -114,7 +109,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   };
 
   const cycle = async () => {
-    const next = nextExpiry(days);
+    const next = nextShareExpiry(days);
     if (info) apply({ ...info, expiryDays: next });
     const res = await track(setShareExpiry(column.id, next));
     if (!res.ok) {
@@ -123,7 +118,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
     } else apply(res.data);
   };
 
-  const label = expiryLabelKey(days);
+  const label = shareExpiryLabel(days);
   return (
     <div className="space-y-1.5 border-t border-slate-200 px-2 pt-2 pb-2 dark:border-slate-700/70" data-share-footer>
       <div className="flex items-center gap-1.5">
@@ -147,7 +142,7 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
           title={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
           className={cn(
             "inline-flex h-4 shrink-0 items-center gap-1 rounded-full border border-progress px-1.5 text-[10px] leading-none text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-progress dark:text-slate-300",
-            days !== 30 ? "bg-progress/20 font-semibold" : "bg-transparent opacity-80 hover:opacity-100",
+            days !== DEFAULT_SHARE_EXPIRY_DAYS ? "bg-progress/20 font-semibold" : "bg-transparent opacity-80 hover:opacity-100",
           )}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-progress" aria-hidden />
@@ -185,9 +180,10 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
     toast((await copyText(url)) ? t("Enlace copiado") : t("No se ha podido copiar"), undefined);
   };
   const mailto = url
-    ? `mailto:?subject=${encodeURIComponent(t("Tareas de «{name}»", { name: column.name }))}&body=${encodeURIComponent(
+    ? shareMailto(
+      t("Tareas de «{name}»", { name: column.name }),
       t("Hola:\n\nEn esta página puedes ver las tareas de «{name}», marcarlas como hechas, cambiar su fecha, comentar y descargar sus archivos adjuntos, sin necesidad de cuenta:\n\n{url}\n\nEl enlace deja de funcionar si nadie lo usa hasta el {date}.", { name: column.name, url, date: until ?? "" }),
-    )}`
+    )
     : null;
 
   const revoke = async () => {

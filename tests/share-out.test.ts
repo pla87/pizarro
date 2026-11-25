@@ -5,10 +5,10 @@ import { test } from "node:test";
 import { hashFeedToken } from "../src/lib/calendar-feed-core";
 import { splitRoleChoices, currentRoleChoice, ROLE_CHOICES } from "../src/lib/column-role-choices";
 import { externalExcerpt, externalNotice, noticeActorName, notificationBody, notificationHeadline } from "../src/lib/notification-text";
-import { isShareColumn, shareLinkState, shareStateText } from "../src/lib/share-out-board";
+import { DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, nextShareExpiry, shareExpiryLabel, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
 import {
-  DEFAULT_SHARE_EXPIRY_DAYS, hashShareToken, inShareGrace, isShareExpiry, isShareNotice, isShareTokenShape, newShareToken, nextShareExpiry, parseShareDate,
-  SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareExpiryLabel, shareFormAllowed, shareKeyOf, shareMailto, shareResponseHeaders, shareUrl,
+  hashShareToken, inShareGrace, isShareNotice, isShareTokenShape, newShareToken, parseShareDate,
+  SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareKeyOf, shareResponseHeaders, shareUrl,
 } from "../src/lib/share-out-core";
 import { shareAttachmentPath, shareMarkdownHtml, shareMessageHtml, sharePageHtml, type SharePageData } from "../src/lib/share-out-page";
 import { makeT } from "../src/i18n/core";

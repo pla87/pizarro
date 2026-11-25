@@ -71,7 +71,7 @@ export async function purgeEndedShares(now: Date = new Date()): Promise<number> 
 // --- Resolver un token ------------------------------------------------------------------------------------------------
 
 /** Un enlace que funciona: lo que necesitan la página, las descargas y las acciones. */
-export interface ActiveShare {
+interface ActiveShare {
   id: string;
   projectId: string;
   projectPrivate: boolean;
@@ -85,7 +85,7 @@ export interface ActiveShare {
   key: string;
 }
 
-export type ResolvedShare = { kind: "active"; share: ActiveShare } | { kind: "expired" } | null;
+type ResolvedShare = { kind: "active"; share: ActiveShare } | { kind: "expired" } | null;
 
 /**
  * Qué hay detrás de un token: un enlace activo, uno que terminó hace menos de 30 días (`expired`) o nada (null: forma mala,
@@ -206,7 +206,7 @@ export async function shareAttachment(share: ActiveShare, attachmentId: string):
 // --- Acciones desde fuera ---------------------------------------------------------------------------------------------
 
 /** Lo que manda un formulario de la página. */
-export interface ShareChangeInput {
+interface ShareChangeInput {
   op: string;
   due?: string;
   body?: string;

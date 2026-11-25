@@ -31,10 +31,25 @@ export function shareStateText(info: Pick<BoardShareInfo, "state" | "endsAt">): 
   return { key: "Web sin generar", date: null };
 }
 
+/** Días sin uso tras los que caduca el enlace: lo que rota el selector del pie de la columna. */
+const SHARE_EXPIRY_DAYS = [7, 30, 90] as const;
+type ShareExpiryDays = (typeof SHARE_EXPIRY_DAYS)[number];
+export const DEFAULT_SHARE_EXPIRY_DAYS: ShareExpiryDays = 30;
+export const isShareExpiry = (n: unknown): n is ShareExpiryDays => SHARE_EXPIRY_DAYS.includes(n as ShareExpiryDays);
+/** Siguiente valor del selector (7 días → 1 mes → 3 meses → 7 días). Uno desconocido vuelve al de por defecto. */
+export function nextShareExpiry(n: number): ShareExpiryDays {
+  const i = SHARE_EXPIRY_DAYS.indexOf(n as ShareExpiryDays);
+  return i < 0 ? DEFAULT_SHARE_EXPIRY_DAYS : SHARE_EXPIRY_DAYS[(i + 1) % SHARE_EXPIRY_DAYS.length]!;
+}
+/** Texto del selector (clave de traducción). */
+export function shareExpiryLabel(n: number): "7 días" | "1 mes" | "3 meses" {
+  return n === 7 ? "7 días" : n === 90 ? "3 meses" : "1 mes";
+}
+
 const DAY = 86_400_000;
 
 /** Lo que importa de una fila para saber cómo está su enlace. */
-export interface ShareLinkRow {
+interface ShareLinkRow {
   columnId: string | null;
   tokenHash: string | null;
   expiryDays: number;
@@ -73,3 +88,11 @@ export function boardShareOf(row: { columnId: string | null; tokenHash: string |
   };
 }
 
+
+/**
+ * Enlace `mailto:` para mandar la dirección desde el correo de quien comparte (Pizarro no envía nada). Asunto y cuerpo ya
+ * traducidos; sin destinatario (lo pone quien lo envía).
+ */
+export function shareMailto(subject: string, body: string): string {
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}

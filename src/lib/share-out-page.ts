@@ -13,7 +13,7 @@ import type { T } from "../i18n/core";
 // internos de Pizarro (relativos o a la propia instalación) se quitan dejando su texto.
 
 /** Lo que la página necesita de cada tarea publicada. */
-export interface SharePageTask {
+interface SharePageTask {
   id: string;
   title: string;
   description: string;

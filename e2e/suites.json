@@ -156,6 +156,20 @@
       "src/components/board/assignNotice.ts",
       "src/lib/column-role-choices.ts"
     ],
+    "tablero-fuera-e2e": [
+      "src/app/x/**",
+      "src/lib/share-out*.ts",
+      "src/actions/share-out.ts",
+      "src/actions/columns.ts",
+      "src/components/board/ShareColumn.tsx",
+      "src/components/board/ColumnView.tsx",
+      "src/app/(app)/p/[projectId]/settings/ShareOutSettings.tsx",
+      "src/app/(app)/p/[projectId]/settings/ProjectSettings.tsx",
+      "src/lib/column-role-choices.ts",
+      "src/lib/notification-text.ts",
+      "src/lib/secret-path.ts",
+      "src/lib/redact-path.ts"
+    ],
     "tablero-compartir-e2e": [
       "src/app/api/share/**",
       "src/app/(app)/share/**",

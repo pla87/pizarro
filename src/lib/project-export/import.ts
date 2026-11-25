@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { DEFAULT_SHARE_EXPIRY_DAYS, isShareExpiry } from "../share-out-core";
+import { DEFAULT_SHARE_EXPIRY_DAYS, isShareExpiry } from "../share-out-board";
 import type { Prisma } from "@/generated/prisma/client";
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";

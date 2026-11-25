@@ -202,6 +202,35 @@ Misma base y servidor (necesita `pdftotext`):
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-asignacion-e2e.mjs   # PART=rol,entrar,cambiar,plan,tipo,quitar,movil,en
 ```
 
+### Columna «Compartir fuera» (ronda 68)
+
+Una columna cuyas tareas se publican en una página sin cuenta (`/x/<token>`) para alguien de fuera. Crea su proyecto
+privado (`fuera68_*`) con una columna «Proveedor F68», otra «Hecho» terminada, dos tareas y un adjunto de texto (su fichero
+en `UPLOAD_DIR`, que el script comparte con el servidor; por defecto `../uploads`). Pone al administrador de las pruebas
+como ADMIN mientras dura (lo devuelve a MEMBER al final).
+
+- `activar`: apagada, el submenú «Rol de la columna» no la ofrece; *Ajustes del proyecto → Tablero → Permitir columnas
+  «Compartir fuera»* la enciende.
+- `rol`: «Rol de la columna › Compartir fuera» deja la fila en la base y el pie con «Generar web», el aviso de los adjuntos
+  y la caducidad, que rota «1 mes → 3 meses → 7 días → 1 mes» (y se guarda); la marca de la cabecera dice «sin generar».
+- `generar`: el diálogo enseña la dirección `/x/<token>` (con `data-pz-no-capture`), «Enviar por email» es un `mailto:`
+  con la dirección, dice hasta cuándo vale; en la base solo está la huella. La marca pasa a activo y el botón a
+  «Actualizar web».
+- `fuera`: en otro contexto sin sesión, la página responde con `X-Robots-Tag`, `Referrer-Policy: no-referrer` y
+  `Cache-Control: no-store`, sin `<script>`; enseña solo las tareas publicadas. «Marcar como hecha» la lleva a «Hecho»
+  y el tablero abierto la ve sin recargar; Ctrl+Z en la app la devuelve. Cambiar la fecha y comentar (firmado
+  «Proveedor F68 (fuera)», también en el historial); los registros llevan «/x/…» y nunca el token; el adjunto se
+  descarga con su nombre y uno ajeno da 404.
+- `revocar`: «Enlace de la web» → «Revocar enlace» (con confirmación): la dirección responde 410 con «Esta lista de
+  tareas ha caducado…» y la marca deja de decir activo.
+- `apagar`: apagarla en Ajustes (confirmando si hay enlaces) quita el pie y la opción del submenú.
+
+Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fuera-e2e.mjs   # PART=activar,rol,generar,fuera,revocar,apagar
+```
+
 ## Detalle de la tarea
 
 ### Comentarios a la vez, red lenta, dos pestañas y release renombrada (caza de bugs 48c)

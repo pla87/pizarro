@@ -9,8 +9,8 @@ import { AppError, notFound } from "@/lib/errors";
 import { appUrl } from "@/lib/mail";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { revokeProjectShares } from "@/lib/share-out";
-import { boardShareOf, isShareColumn, shareLinkState, type BoardShareInfo } from "@/lib/share-out-board";
-import { hashShareToken, isShareExpiry, MAX_SHARE_TASKS, newShareToken, shareUrl } from "@/lib/share-out-core";
+import { boardShareOf, isShareColumn, isShareExpiry, shareLinkState, type BoardShareInfo } from "@/lib/share-out-board";
+import { hashShareToken, MAX_SHARE_TASKS, newShareToken, shareUrl } from "@/lib/share-out-core";
 import { TASK_ORDER } from "@/lib/task-positions";
 import * as v from "@/lib/validation";
 
