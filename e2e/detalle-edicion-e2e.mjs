@@ -4,14 +4,15 @@
 // descripción a medio escribir no pierde lo escrito (dos personas, con el canal en vivo de la primera cortado para que
 // no vea el cambio de la otra); el aviso del cambio de tipo dice si la plantilla de la descripción se aplica o se quita
 // (o nada) y su «Deshacer» nombra la tarea sin el prefijo del tipo; una imagen pegada o soltada con el editor abierto se
-// adjunta y se inserta en el texto (editor con barra y Markdown; fuera del editor solo se adjunta); y el botón del pie
+// adjunta y se inserta en el texto (editor con barra y Markdown; fuera del editor solo se adjunta); una subida lenta que
+// acaba con el editor ya cerrado no guarda ni cierra nada, y el «Guardar» del pie la espera; y el botón del pie
 // dice «Deshacer todo» en una ventana ancha. Esperas a una condición, nunca pausas fijas. Misma base y servidor que
 // tablero-e2e.mjs:
 //   cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-edicion-e2e.mjs
 import * as L from "./qa/lib.mjs";
 import * as U from "./qa/ui.mjs";
 const { COL } = L;
-const only = (process.env.PART || "tipo,foco,pestana,conflicto,aviso,imagen,pie").split(",");
+const only = (process.env.PART || "tipo,foco,pestana,conflicto,aviso,imagen,lenta,pie").split(",");
 
 await L.prepareUsers();
 await L.cleanBoard();
@@ -214,12 +215,15 @@ if (only.includes("conflicto")) {
   await L.checkEventually("CONFLICTO 2: aviso de que la descripción guardada ha cambiado", async () => (await da.locator("[data-desc-remote]").count()) === 1);
   L.eq("CONFLICTO 2: lo escrito sigue en el editor", (await editor(da).innerText()).trim(), "Texto sin guardar de A y más");
   // Guardar ahora choca con la descripción de la otra persona: se avisa y se puede copiar lo escrito (no se pisa la suya).
+  // La descripción de B se cambió por SQL sin cambiar quién la tocó por última vez (A, en el primer conflicto), así que
+  // este aviso dice «Has cambiado…». Solo ese: los del cambio de tipo («Segunda Persona ha cambiado…») también llevan
+  // «Copiar tu texto», pero copian el título, y antes la prueba pulsaba uno de ellos sin esperar al de la descripción.
+  const copy = toastWith(a.page, /Has cambiado el texto de esta tarea/).getByRole("button", { name: "Copiar tu texto" });
+  const copiesBefore = await copy.count();
   await saveDesc(da).click();
-  await L.eqEventually("CONFLICTO 2: al guardar choca y no pisa la descripción de la otra persona", async () => [(await row(id)).description, await saveDesc(da).count()], ["Descripción de B", 0], { timeout: 10000 });
-  // El aviso más reciente lleva «Copiar tu texto» con lo escrito (el del primer conflicto copiaba el título). La
-  // descripción de B se cambió por SQL sin cambiar quién la tocó por última vez, así que este aviso dice «Has cambiado…».
-  const copy = toastWith(a.page, /[Hh]as? cambiado el texto de esta tarea/).getByRole("button", { name: "Copiar tu texto" });
-  await L.waitFor(async () => (await copy.count()) > 0, { timeout: 10000 });
+  await L.waitFor(async () => (await copy.count()) > copiesBefore, { timeout: 10000 });
+  L.eq("CONFLICTO 2: al guardar choca y no pisa la descripción de la otra persona", (await row(id)).description, "Descripción de B");
+  await L.eqEventually("CONFLICTO 2: el detalle enseña la descripción de la otra persona (recargada, sin el editor)", async () => [await saveDesc(da).count(), (await da.getByRole("group", { name: "Descripción" }).innerText()).trim()], [0, "Descripción de B"]);
   await copy.last().click();
   await L.eqEventually("CONFLICTO 2: «Copiar tu texto» copia lo escrito", () => a.page.evaluate(() => navigator.clipboard.readText()), "Texto sin guardar de A y más");
   L.assertNoErrors("CONFLICTO", [b]);
@@ -344,6 +348,81 @@ if (only.includes("imagen")) {
   await U.closeDialog(m.page);
   await m.ctx.close();
   await L.q(`UPDATE "User" SET "editorMode"='WYSIWYG'`);
+}
+
+// --- (Ronda 68, segunda vuelta) Una subida lenta que acaba con el editor ya cerrado no guarda ni cierra nada -------------
+if (only.includes("lenta")) {
+  L.scenario("lenta: imagen subiéndose, «Guardar descripción» y cerrar con «Descartar cambios»");
+  const [id] = await L.seedTasks(COL.backlog, ["Subida lenta"]);
+  await L.q(`UPDATE "Task" SET description='Guardada antes' WHERE id=$1`, [id]);
+  const s = await L.session();
+  // La subida se queda esperando hasta que la prueba la suelta (sin pausas fijas).
+  let release = () => {};
+  const gate = () => new Promise((r) => (release = r));
+  let held = gate();
+  await s.page.route(/\/api\/tasks\/[^/]+\/attachments/, async (r) => {
+    if (r.request().method() === "POST") await held;
+    await r.continue();
+  });
+  const uploading = (d) => d.locator("[data-desc-uploading]");
+  await U.openTask(s.page, "Subida lenta");
+  let d = U.dialog(s.page);
+  await openDesc(d);
+  await editor(d).click();
+  await s.page.keyboard.press("Control+End");
+  await s.page.keyboard.type(" y escrito sin guardar");
+  await pasteImage(s.page, "lenta.png");
+  await L.eqEventually("LENTA: dice «Subiendo imagen…»", async () => (await uploading(d).innerText()).trim(), "Subiendo imagen…");
+  await saveDesc(d).click();
+  await L.eqEventually("LENTA: «Guardar descripción» espera a la imagen", async () => (await uploading(d).innerText()).trim(), "Subiendo imagen…; se guardará al terminar");
+  await d.getByRole("button", { name: "Cerrar", exact: true }).first().click();
+  await s.page.getByRole("button", { name: "Descartar cambios" }).click();
+  await U.dialog(s.page).waitFor({ state: "detached", timeout: 5000 });
+  release();
+  await L.eqEventually("LENTA: la imagen llega igual (adjunto de la tarea)", async () => (await attachments(id)).length, 1, { timeout: 15000 });
+  await L.checkEventually("LENTA: y avisa de que el editor ya estaba cerrado", async () => (await toastWith(s.page, "el editor ya estaba cerrado").count()) > 0, { timeout: 10000 });
+  await U.settle(s.page);
+  L.eq("LENTA: la descripción guardada no cambia (se había descartado)", (await row(id)).description, "Guardada antes");
+
+  L.scenario("lenta: pegar, «Cancelar» y volver a abrir el editor");
+  held = gate();
+  await U.openTask(s.page, "Subida lenta");
+  d = U.dialog(s.page);
+  await openDesc(d);
+  await editor(d).click();
+  await pasteImage(s.page, "cancelada.png");
+  await L.eqEventually("LENTA 2: dice «Subiendo imagen…»", () => uploading(d).count(), 1);
+  await d.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await openDesc(d);
+  L.eq("LENTA 2: el editor nuevo no hereda la subida del anterior", await uploading(d).count(), 0);
+  await editor(d).click();
+  await s.page.keyboard.press("Control+End");
+  await s.page.keyboard.type(" otra vez");
+  release();
+  await L.eqEventually("LENTA 2: la imagen cancelada llega (adjunto)", async () => (await attachments(id)).length, 2, { timeout: 15000 });
+  await frames(s.page);
+  L.eq("LENTA 2: el editor nuevo sigue abierto (la subida vieja no lo cierra)", await saveDesc(d).count(), 1);
+  L.eq("LENTA 2: … con lo escrito", (await editor(d).innerText()).trim(), "Guardada antes otra vez");
+  L.eq("LENTA 2: … y sin guardar nada", (await row(id)).description, "Guardada antes");
+  await d.getByRole("button", { name: "Cancelar", exact: true }).click();
+
+  L.scenario("lenta: el «Guardar» del pie espera a la imagen");
+  held = gate();
+  await openDesc(d);
+  await editor(d).click();
+  await s.page.keyboard.press("Control+End");
+  await pasteImage(s.page, "pie.png");
+  await L.eqEventually("LENTA 3: dice «Subiendo imagen…»", () => uploading(d).count(), 1);
+  await d.getByRole("button", { name: "Guardar", exact: true }).click();
+  await L.eqEventually("LENTA 3: el pie también espera a la imagen", async () => (await uploading(d).innerText()).trim(), "Subiendo imagen…; se guardará al terminar");
+  L.eq("LENTA 3: … con el detalle abierto", await U.dialog(s.page).count(), 1);
+  release();
+  await L.eqEventually("LENTA 3: la imagen llega", async () => (await attachments(id)).length, 3, { timeout: 15000 });
+  const pie = (await attachments(id))[2];
+  await L.eqEventually("LENTA 3: se guarda con la imagen en el texto", async () => (await row(id)).description.includes(`(/api/attachments/${pie.id})`), true, { timeout: 15000 });
+  await L.eqEventually("LENTA 3: … y el detalle se cierra", () => U.dialog(s.page).count(), 0);
+  L.assertNoErrors("LENTA", [s]);
+  await s.ctx.close();
 }
 
 // --- (Ronda 68) El botón del pie dice «Deshacer todo» si cabe --------------------------------------------------------

@@ -103,6 +103,16 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     changeRef.current = onValueChange;
     uploadsRef.current = onUploadsChange;
   });
+  // ¿Sigue montado el campo? Una subida que acaba con el editor ya cerrado (Cancelar, cerrar el detalle, «Deshacer todo»)
+  // no avisa a quien lo pintaba: su `onUploadsChange` es el del último dibujo con el editor abierto y, si se había pedido
+  // guardar, guardaba (o cerraba el editor abierto después) aunque se hubiera descartado lo escrito.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   // Imágenes subiéndose desde este campo (las que se insertarán al llegar).
   const pendingImages = useRef(0);
   /**
@@ -150,7 +160,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
       .then(insertImages, () => undefined)
       .finally(() => {
         pendingImages.current -= count;
-        uploadsRef.current?.(pendingImages.current);
+        if (alive.current) uploadsRef.current?.(pendingImages.current);
       });
   };
   /**

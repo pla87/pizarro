@@ -130,6 +130,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
   // Devuelve cómo volver al texto y al aviso de antes si el cambio de tipo no se guarda (solo si nada ha cambiado después).
   const descReplace = useRef<((markdown: string, templated: KindTemplateChange) => () => void) | null>(null);
+  // Espera a las imágenes que se suben en la descripción abierta (lo da el editor; ver saveAndClose).
+  const descUploadWait = useRef<(() => Promise<string | null> | null) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -488,12 +490,22 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   /**
    * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
    * descripción abierta, enlace, subtarea nueva o en renombrado) y cierra. Si algo falla, no cierra.
+   * Con una imagen aún subiéndose en la descripción, espera a que llegue (como «Guardar descripción», y el editor dice
+   * «…; se guardará al terminar»): antes guardaba el texto sin ella y luego avisaba de que no estaba en la descripción.
+   * Si mientras tanto se cancela o se cierra el editor, no se guarda nada. `typedDesc`: el texto ya con la imagen.
    */
-  const saveAndClose = async () => {
+  const saveAndClose = async (typedDesc?: string) => {
+    const waiting = typedDesc === undefined ? descUploadWait.current?.() : null;
+    if (waiting) {
+      const text = await waiting;
+      // Con lo último dibujado (título, enlace y campos pueden haber cambiado mientras se esperaba).
+      if (text !== null) void shortcutRef.current.saveAndClose(text);
+      return;
+    }
     const value = title.trim();
     const patch: { title?: string; description?: string; linkUrl?: string } = {};
     if (value && value !== task.title) patch.title = value;
-    const desc = descLive.current;
+    const desc = typedDesc ?? descLive.current;
     if (desc !== null && desc.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
     const linkValue = normalizeLinkUrl(link);
@@ -1207,7 +1219,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
         {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
       </div>
     </div>
   );
@@ -1307,6 +1319,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             liveRef={descLive}
             dirtyRef={descDirtyCheck}
             replaceRef={descReplace}
+            uploadWaitRef={descUploadWait}
             // Imágenes pegadas o soltadas con el editor abierto: adjuntos de la tarea e insertadas en el texto.
             onFiles={async (files) => (await upload(files)).filter((a) => a.isImage).map((a) => ({ id: a.id, name: a.originalName }))}
             onDraftChange={(md) => {
@@ -1816,7 +1829,7 @@ function focusFromElsewhere(e: React.FocusEvent<HTMLElement>): boolean {
   return e.relatedTarget !== null && e.currentTarget.matches(":focus-visible");
 }
 
-function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef, onFiles }: {
+function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef, uploadWaitRef, onFiles }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
   remote?: number;
@@ -1836,6 +1849,11 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
   replaceRef?: React.MutableRefObject<((markdown: string, templated: KindTemplateChange) => () => void) | null>;
+  /**
+   * Para el «Guardar» del pie (y Alt+S): con imágenes aún subiéndose en el editor, devuelve una promesa que se resuelve con
+   * el texto ya con ellas al acabar (o null si antes se cierra o se cancela el editor); sin subidas, null.
+   */
+  uploadWaitRef?: React.MutableRefObject<(() => Promise<string | null> | null) | null>;
   /** Sube las imágenes pegadas o soltadas en el editor y devuelve las que se insertan en el texto (ver DescriptionField). */
   onFiles?: (files: File[]) => Promise<{ id: string; name: string }[]>;
 }) {
@@ -1888,7 +1906,38 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   // «Guardar descripción» o Ctrl+Intro esperan a que lleguen para guardarlas en el texto (antes se guardaba sin ellas y,
   // al llegar, el editor ya estaba cerrado: solo quedaban como adjunto).
   const [uploads, setUploads] = useState(0);
+  // Las subidas en curso al instante (sin esperar al dibujo) y el guardado pedido mientras tanto: «desc» con «Guardar
+  // descripción» o Ctrl+Intro; una función con el «Guardar» del pie (ver `uploadWaitRef`), que recibe el texto o null.
+  // En ref: la subida avisa con el `uploadsChanged` del último dibujo y ha de ver lo pedido después.
+  const uploadsNow = useRef(0);
+  const afterUploads = useRef<null | "desc" | ((text: string | null) => void)>(null);
+  // Para el texto «…; se guardará al terminar».
   const [saveAfterUploads, setSaveAfterUploads] = useState(false);
+  const setAfterUploads = (next: null | "desc" | ((text: string | null) => void)) => {
+    const before = afterUploads.current;
+    afterUploads.current = next;
+    if (typeof before === "function" && before !== next) before(null);
+    setSaveAfterUploads(next !== null);
+  };
+  // Al cerrar o cancelar el editor (o desmontarse) no queda nada pendiente: un editor nuevo no hereda subidas del
+  // anterior ni su guardado pedido (las subidas de un campo ya cerrado no avisan, ver DescriptionField).
+  const forgetUploads = () => {
+    uploadsNow.current = 0;
+    setUploads(0);
+    setAfterUploads(null);
+  };
+  useEffect(() => () => {
+    const pending = afterUploads.current;
+    afterUploads.current = null;
+    if (typeof pending === "function") pending(null);
+  }, []);
+  useEffect(() => {
+    if (!uploadWaitRef) return;
+    uploadWaitRef.current = () => (uploadsNow.current > 0 ? new Promise<string | null>((resolve) => setAfterUploads(resolve)) : null);
+    return () => {
+      uploadWaitRef.current = null;
+    };
+  }, [uploadWaitRef]);
   // Lo escrito al instante: la imagen se inserta (onEditorChange) justo antes de avisar de que ha acabado la subida, sin
   // que se haya vuelto a dibujar.
   const typed = useRef(value);
@@ -2006,7 +2055,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     closedAt.current = section.current?.getBoundingClientRect().top ?? null;
     setKindChanged(false);
     setRemoteChanged(false);
-    setSaveAfterUploads(false);
+    forgetUploads();
     setEditing(false);
   };
 
@@ -2023,15 +2072,19 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   };
   const finish = () => {
     // Con una imagen aún subiéndose, se guarda al llegar (ya en el texto); el editor sigue abierto y lo dice.
-    if (uploads > 0) return setSaveAfterUploads(true);
+    if (uploadsNow.current > 0) return setAfterUploads("desc");
     saveText(value);
   };
   // Acaba una subida: si se había pedido guardar, se guarda ahora, con la imagen ya en el texto (`typed`: aún sin dibujar).
   const uploadsChanged = (n: number) => {
+    uploadsNow.current = n;
     setUploads(n);
-    if (n > 0 || !saveAfterUploads || !editing) return;
+    const pending = afterUploads.current;
+    if (n > 0 || !pending) return;
+    afterUploads.current = null;
     setSaveAfterUploads(false);
-    saveText(typed.current);
+    if (pending === "desc") saveText(typed.current);
+    else pending(typed.current);
   };
   const cancel = () => {
     setValue(initial);
@@ -2053,6 +2106,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   const clear = () => {
     setKindChanged(false);
     setRemoteChanged(false);
+    forgetUploads();
     setEditing(false);
     setValue("");
     if (initial.trim()) onClear();

@@ -262,11 +262,13 @@ la otra persona cambió también la descripción, se avisa junto a los botones y
 texto»; el aviso del cambio de tipo dice «plantilla de la descripción aplicada» o «quitada» (y nada con una descripción
 escrita por la persona) y su «Deshacer» nombra la tarea sin el prefijo del tipo; una imagen pegada (`ClipboardEvent`
 sintético con un `File`) o soltada en la descripción en edición se adjunta y se inserta donde está el cursor (editor con
-barra y Markdown), y fuera del editor solo se adjunta; y el pie dice «Deshacer todo» a 1500 y 2100 px. Misma base y
-servidor:
+barra y Markdown), y fuera del editor solo se adjunta; con la subida retenida (`page.route`), «Guardar descripción» y
+cerrar con «Descartar cambios» no guarda nada al llegar la imagen, «Cancelar» y volver a abrir no hereda la subida ni la
+deja cerrar el editor nuevo, y el «Guardar» del pie espera a la imagen y la guarda en el texto; y el pie dice «Deshacer
+todo» a 1500 y 2100 px. Misma base y servidor:
 
 ```sh
-cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-edicion-e2e.mjs   # PART=tipo,foco,pestana,conflicto,aviso,imagen,pie
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-edicion-e2e.mjs   # PART=tipo,foco,pestana,conflicto,aviso,imagen,lenta,pie
 ```
 
 
