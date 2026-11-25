@@ -92,7 +92,7 @@ test("Markdown de la página: imágenes de la tarea a la ruta de descarga, ajena
       "Hola @[Ana López](user:u1)",
       "![plano](/api/attachments/att1) ![otra](/api/attachments/ajena)",
       "[ver en Pizarro](/p/abc?task=1) [externa](https://example.com/doc) [app](https://pizarro.example.com/p/x) [mal](javascript:alert(1))",
-      "[descargar](/api/attachments/att1) <script>alert(1)</script> ++subrayado++",
+      "[descargar](/api/attachments/att1) <script>alert(1)</script> ++subrayado++ https://pizarro.example.com/p/autolink",
     ].join("\n\n"),
     { token, attachments: new Set(["att1"]), appOrigin: "https://pizarro.example.com" },
   );
@@ -102,6 +102,7 @@ test("Markdown de la página: imágenes de la tarea a la ruta de descarga, ajena
   assert.ok(html.includes(">otra") || html.includes("otra"));
   assert.ok(!html.includes('href="/p/abc') && html.includes("ver en Pizarro"), "enlace interno: solo su texto");
   assert.ok(!html.includes("pizarro.example.com/p/x"), "enlace a la propia instalación: fuera");
+  assert.ok(!html.includes("autolink"), "una dirección interna escrita tal cual desaparece");
   assert.ok(html.includes('href="https://example.com/doc" rel="noopener noreferrer nofollow" target="_blank"'));
   assert.ok(!html.includes("javascript:"));
   assert.ok(html.includes(`href="${shareAttachmentPath(token, "att1")}"`), "enlace al adjunto: a la descarga");

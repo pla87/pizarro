@@ -80,7 +80,8 @@ export function shareMarkdownHtml(markdown: string, opts: { token: string; attac
         if (href === UNDERLINE_HREF) return `<u>${inner}</u>`;
         const id = own(href);
         if (id) return `<a href="${escapeHtml(shareAttachmentPath(opts.token, id))}">${inner}</a>`;
-        if (internalHref(href, opts.appOrigin)) return inner;
+        // Interno: solo su texto; si el texto es la propia dirección (un enlace escrito tal cual), nada.
+        if (internalHref(href, opts.appOrigin)) return inner.trim() === escapeHtml(href.trim()) ? "" : inner;
         if (!/^(https?:|mailto:|tel:)/i.test(href.trim())) return inner;
         return `<a href="${escapeHtml(href.trim())}" rel="noopener noreferrer nofollow" target="_blank">${inner}</a>`;
       },
