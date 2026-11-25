@@ -699,7 +699,6 @@ export const admin: Record<string, string> = {
   "Borró el usuario «{name}»{deleted}{toTeam}": "Deleted the user “{name}”{deleted}{toTeam}",
   "«{name}» borró su cuenta{deleted}{toTeam}": "“{name}” deleted their account{deleted}{toTeam}",
   " y su proyecto privado": " and their private project",
-  " y su proyecto privado «{project}»": " and their private project “{project}”",
   " y sus {n} proyectos privados": " and their {n} private projects",
   "; su proyecto privado pasa a ser de equipo": "; their private project becomes a team project",
   "; su proyecto privado «{project}» pasa a ser de equipo": "; their private project “{project}” becomes a team project",
@@ -817,4 +816,7 @@ export const admin: Record<string, string> = {
   // Ronda 66: el propio email, desde «Mi perfil».
   "Para cambiar tu email usa «Mi perfil».": "To change your own email, use “My profile”.",
   "Tu propio email se cambia en «Mi perfil».": "Your own email is changed in “My profile”.",
+  // Baja de una cuenta con su proyecto privado nombrado, en las filas de Logs de la v1.67 a la v1.69.
+  // (textos guardados por versiones anteriores: se traducen al leerlas)
+  " y su proyecto privado «{project}»": " and their private project “{project}”",
 };

@@ -13,5 +13,5 @@
     "site/static/style.css"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{mjs,ts}", "tests/**/*.{ts,mjs}", "e2e/**/*.mjs", "*.{ts,mjs}"],
-  "ignoreDependencies": ["@prisma/client", "tailwindcss", "postcss"]
+  "ignoreDependencies": ["@prisma/client", "postcss"]
 }
