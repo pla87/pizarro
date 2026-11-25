@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revokeOtherTrustedDevices } from "@/lib/devices";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
@@ -275,6 +276,7 @@ export async function revokeOtherSessions() {
     const where = { userId: user.id, ...(current ? { id: { not: current } } : {}) };
     const others = await db.session.findMany({ where, select: { id: true } });
     await db.session.deleteMany({ where });
+    await revokeOtherTrustedDevices(user.id);
     for (const s of others) cutSessionStreams(s.id);
     describeAction("Cerró {n} sesión(es) en otros dispositivos", { n: others.length });
     revalidatePath("/settings");
@@ -368,7 +370,8 @@ export async function deleteMyAccount(input: z.input<typeof deleteAccountSchema>
     const { toTeam, deleted } = await eraseUser(user.id, { self: true, deleteProjects: data.deleteProjects, actor: { id: user.id, name: me.name } });
     describeAction("«{name}» borró su cuenta{deleted}{toTeam}", {
       name: me.name,
-      deleted: !deleted.length ? "" : deleted.length === 1 ? { k: " y su proyecto privado «{project}»", p: { project: deleted[0]!.name } } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
+      deleted: !deleted.length ? "" : // Sin el nombre: el proyecto privado ya no existe y la fila no se enmascara en Logs (como deleteUser).
+      deleted.length === 1 ? { k: " y su proyecto privado" } : { k: " y sus {n} proyectos privados", p: { n: deleted.length } },
       toTeam: !toTeam.length ? "" : toTeam.length === 1 ? { k: "; su proyecto privado «{project}» pasa a ser de equipo", p: { project: toTeam[0]!.name } } : { k: "; sus {n} proyectos privados pasan a ser de equipo", p: { n: toTeam.length } },
     });
     // Sus sesiones ya no existen: aquí solo queda quitar la cookie de este navegador.

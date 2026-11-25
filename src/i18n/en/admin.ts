@@ -813,4 +813,7 @@ export const admin: Record<string, string> = {
   "Carpeta {dir}.": "Folder {dir}.",
   "Carpeta {dir}. Los ficheros no se guardan aquí porque hay un destino externo (o por BACKUP_LOCAL_FILES=0); con BACKUP_LOCAL_FILES=1 se guardan también aquí.": "Folder {dir}. The files are not stored here because there is an external destination (or because of BACKUP_LOCAL_FILES=0); with BACKUP_LOCAL_FILES=1 they are stored here too.",
   "Un almacenamiento S3 compatible (variables BACKUP_S3_*: R2, B2, MinIO…) o una carpeta montada (BACKUP_EXTERNAL_DIR).": "S3-compatible storage (BACKUP_S3_* variables: R2, B2, MinIO…) or a mounted folder (BACKUP_EXTERNAL_DIR).",
+  // Ronda 66: el propio email, desde «Mi perfil».
+  "Para cambiar tu email usa «Mi perfil».": "To change your own email, use “My profile”.",
+  "Tu propio email se cambia en «Mi perfil».": "Your own email is changed in “My profile”.",
 };

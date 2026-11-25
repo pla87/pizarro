@@ -278,7 +278,8 @@ function UserForm({ user, isMe, emailAvailable, defaultLocale = "ES", onClose, o
         </div>
         <div>
           <label className="label" htmlFor="u-email">Email</label>
-          <input id="u-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} required autoComplete="off" />
+          <input id="u-email" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={200} required autoComplete="off" disabled={isMe} aria-describedby={isMe ? "u-email-me" : undefined} />
+          {isMe && <p id="u-email-me" className="mt-1 text-xs text-slate-500">{t("Tu propio email se cambia en «Mi perfil».")}</p>}
         </div>
         {!user && emailAvailable && (
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">

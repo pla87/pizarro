@@ -12,7 +12,7 @@
 // --no-reset (o SKIP_RESET=1): usa la base y el servidor tal cual; solo prepara usuarios (MEMBER, qa2@example.com,
 //   ProjectMember) y cada escenario vacía las tareas del proyecto de ejemplo al empezar.
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import fs from "node:fs";
 import * as L from "./lib.mjs";
 
@@ -51,7 +51,7 @@ for (const [n, file] of SCENARIOS) {
   if (only.length && !only.includes(n)) continue;
   const start = Date.now();
   try {
-    const mod = await import(path.join(path.dirname(fileURLToPath(import.meta.url)), file));
+    const mod = await import(pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), file)).href);
     await mod.run();
   } catch (e) {
     L.check(`escenario ${n}: terminó sin excepción`, false, e.stack || String(e));

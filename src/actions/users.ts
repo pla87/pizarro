@@ -265,6 +265,9 @@ export async function updateUser(userId: string, input: z.input<typeof updateSch
     }
     const keys = ["name", "email", "role", "active"] as const;
     const changed = new Set(keys.filter((k) => wanted[k] !== expected[k]));
+    // El propio email, desde «Mi perfil» (pide la contraseña y confirma la dirección nueva): aquí lo cambiaría una sesión
+    // robada sin contraseña, y una errata dejaría al administrador sin poder restablecerla.
+    if (id === admin.id && changed.has("email")) throw new AppError("Para cambiar tu email usa «Mi perfil».");
     // Solo al cambiar el nombre: los que ya existen se pueden seguir guardando tal cual.
     if (changed.has("name") && isReservedName(wanted.name)) throw new AppError("Ese nombre está reservado porque podría confundirse con un mensaje de Pizarro. Elige otro.");
     const unassigned = { count: 0, projectIds: [] as string[] };
