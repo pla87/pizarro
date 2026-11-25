@@ -57,6 +57,7 @@ Cómo usar esta lista:
 | ☐ | 19.2 WhatsApp: tope de la prueba | WhatsApp configurado |
 | ☐ | 19.3 Informe semanal tras un despliegue | Email configurado |
 | ☐ | 19.5 Logs: emails en los accesos fallidos | Una persona de prueba |
+| ☐ | 21.1 Compartir fuera: la web sin cuenta, desde fuera y desde el tablero | Una ventana privada, una segunda cuenta y un móvil |
 
 ## 1. Baja de cuenta con Google
 
@@ -640,7 +641,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 1. Sigue la guía de getpizarro.com (*Instalar → Railway*) en un proyecto nuevo: dominio y volumen primero, variables con **Generar mis variables** (sin `APP_URL`) y un solo **Deploy**.
 2. Qué debe pasar: el servicio no sale *Active* hasta que Pizarro está listo; al final del log aparece `PIZARRO ESTÁ SIN CONFIGURAR` con el código y la dirección `https://…up.railway.app/setup` (no `localhost`). *Administración → Ajustes → Instalación* dice que la dirección sale de Railway.
-3. En *Settings → Deploy* del servicio, comprueba que *Healthcheck Path* es `/api/health` con *Healthcheck Timeout* `600` (se pone a mano: Railway ya no lee `railway.json`, que se quitó del repositorio; ver `docs/INSTALL.md`, «Railway», paso 5) y que el log de construcción del despliegue trae `Starting Healthcheck` con `Path: /api/health`.
+3. En *Settings → Deploy* del servicio, comprueba que *Healthcheck Path* es `/api/health` con *Healthcheck Timeout* `600` (se pone a mano: paso 7 de la guía de Railway de getpizarro.com) y que el log de construcción del despliegue trae `Starting Healthcheck` con `Path: /api/health`.
 4. Si falla: *Logs*, busca `appUrl` y `migrate`; la línea «Base de datos al día (migraciones: … s; espera a PostgreSQL: … s)» dice en qué se fue el tiempo. Desde la v1.71, si no había migraciones nuevas, la línea es «Base de datos al día: N migraciones aplicadas, sin lanzar Prisma».
 
 ### 13.2 Copias de seguridad en R2 con bloqueo de retención
@@ -850,7 +851,7 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 **Qué debe pasar:** el adjunto se sube entero o el navegador dice que ha fallado y lo puedes repetir; no queda un adjunto roto. En los *Deploy Logs* del despliegue viejo, el apagado termina en unos segundos (como mucho 14) y en *Administración → Logs* (busca `system.shutdown`) no aparecen conexiones ni envíos pendientes.
 
-**Si falla:** comprueba que la variable está en el servicio de Pizarro (no como *Shared Variable*) y que el despliegue es posterior a añadirla. Sin la variable, Pizarro espera solo 5 segundos.
+**Si falla:** comprueba que la variable está en el servicio de Pizarro (si la tienes como *Shared Variable*, en el servicio tiene que estar `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=${{shared.RAILWAY_DEPLOYMENT_DRAINING_SECONDS}}`: una compartida no llega sola) y que el despliegue es posterior a añadirla. Sin la variable, Pizarro espera solo 5 segundos.
 
 ### 19.2 WhatsApp: tope de la prueba (solo si lo usas; cada prueba son dos mensajes de pago)
 
@@ -905,4 +906,29 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 1. En un proyecto **de equipo** creado con *Casa y familia*, con un miembro y tú como administrador, quita el proyecto de *Proyectos en los que trabajo*.
 2. *Añadir columna → Organizar por personas*: solo cuenta al miembro, y sale la nota «Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».».
 3. Vuelve a añadirlo a tu lista y recarga: ahora te cuenta a ti también.
+
+## 21. Novedades de la v1.72.0
+
+### 21.1 Compartir fuera (instalación de prueba; una ventana privada, una segunda cuenta y el móvil)
+
+**Necesitas:** un proyecto con una columna terminada («Hecho») y otra con 2 o 3 tareas: una con una imagen en la descripción, otra con un adjunto y algún comentario, y una asignada a la persona de prueba. La persona de prueba, con acceso al proyecto, en otro navegador. Una ventana privada (o un navegador sin sesión) y tu móvil.
+
+1. **Activar:** *Ajustes del proyecto → Tablero → Compartir fuera*, marca **Permitir columnas «Compartir fuera»**: sale ««Compartir fuera» activado». En el tablero, menú «⋯» de la columna de las tareas → *Rol de la columna ›* → **Compartir fuera** (al final de la lista).
+2. **Generar:** al pie de la columna salen **Generar web**, el aviso «Se publican la descripción, las subtareas, los comentarios y los adjuntos…» y el selector **1 mes** (púlsalo: 3 meses, 7 días, 1 mes). Pulsa **Generar web**: el diálogo dice «Se han publicado N tareas.» y muestra la dirección (`…/x/…`), **Copiar** y **Enviar por email** (abre tu programa de correo con el mensaje preparado; no hace falta enviarlo). En la cabecera, un globo verde: al pasar el ratón, «Compartir fuera: Enlace activo hasta el …».
+3. **Abrir desde fuera:** pega la dirección en la ventana privada. Se ven las tareas con su descripción (con la imagen), subtareas, adjuntos y comentarios, y al pie «Este enlace deja de funcionar si nadie lo usa hasta el …». No sale nada más del proyecto ni el menú de Pizarro, y no pide iniciar sesión.
+4. **Marcar hecha:** en la tarea asignada a la persona de prueba, **Marcar como hecha**: «Tarea marcada como hecha.». En tu tablero, sin recargar, la tarea está arriba de «Hecho»; en su *Historial*, firmado «<columna> (fuera)».
+5. **Fecha:** en otra tarea, cambia la fecha y pulsa **Cambiar fecha**: «Fecha cambiada.»; el tablero la muestra.
+6. **Comentar:** en una tarea que no sea de la persona de prueba, escribe un comentario con una @mención: «Comentario publicado.». En la app, el comentario va firmado «<columna> (fuera)» y la mención sale como texto (no avisa a esa persona).
+7. **Descargar:** pulsa un adjunto en la página: se descarga con su nombre (una imagen, como .webp).
+8. **Aviso:** la persona de prueba (responsable de la tarea) recibe en la campana «<columna> (fuera) ha marcado como hecha «…»» o el del comentario o la fecha (y por email, Telegram o WhatsApp si los tiene activados).
+9. **Deshacer:** con la persona de prueba, en el tablero, Ctrl+Z (o la flecha ↶) deshace lo último hecho desde fuera en su tarea (la tarea del paso 4 vuelve a su columna).
+10. **Misma dirección para todos:** con la persona de prueba, en la misma columna, el botón del enlace (junto a **Actualizar web**): ve la misma dirección que tú.
+11. **Actualizar:** saca una tarea de la columna y crea otra en ella. Recarga la ventana privada: la que sacaste sigue y la nueva no sale. Pulsa **Actualizar web** (la dirección es la misma) y recarga: ahora sale la nueva y no la que sacaste.
+12. **Móvil:** abre la dirección en el teléfono: se lee bien, sin desplazamiento lateral, y los botones y el campo de fecha se pueden usar.
+13. **Revocar:** en el diálogo, **Revocar enlace** y confirma: «Enlace revocado» y el globo pasa a gris («Enlace caducado»). Recarga la ventana privada: «Esta lista de tareas ha caducado. Contacta con la persona que te ha dado el enlace.».
+14. **Apagar:** pulsa **Generar web** otra vez (enlace nuevo) y, en *Ajustes del proyecto*, desmarca la casilla: pide confirmar («Hay 1 enlace activo: dejará de funcionar al momento. ¿Apagarlo?»). La dirección nueva pasa a decir que ha caducado y *Compartir fuera* deja de salir en el menú de las columnas.
+
+**Qué debe pasar además:** en *Administración → Logs* (busca `shareOut`) salen «Generó la web de «…»», «Abrieron la web de «Compartir fuera» de la columna «…»», «Descarga de «…» desde la web de «Compartir fuera»», lo hecho desde fuera y «Revocó el enlace…», siempre con la ruta `/x/…` y nunca el token.
+
+**Si falla:** *Logs*, busca `shareOut` (nivel Error). La página no debe mostrar nunca un error del servidor: si una dirección recién generada da «No encontrado», comprueba que abres la misma instalación que la generó (su `APP_URL` o la dirección de Railway).
 
