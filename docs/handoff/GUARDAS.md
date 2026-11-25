@@ -110,8 +110,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
 - Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
-  Telegram y WhatsApp). Las anclas antiguas (`#avisos-email`, `#acceso-google`, `#mensajeria`) redirigen. Las guías de
-  `docs/guias/` y los textos de la app dicen «Administración → Integraciones».
+  Telegram y WhatsApp). Las anclas antiguas de *Ajustes* (`#avisos-email`, `#acceso-google`, `#mensajeria`) ya no
+  redirigen (se retiró `MovedSectionRedirect` en la ronda 68). Las guías de `docs/guias/` y los textos de la app dicen
+  «Administración → Integraciones».
 - Menús: `MenuSub` (`src/components/ui/Menu.tsx`) es el submenú accesible (se abre dentro del mismo panel; → o Intro,
   ← o Escape). Lo usa el rol de la columna.
 - Aviso de cambio simultáneo (`src/lib/edit-conflict*.ts`, `EditConflictNotice.tsx`): versión por valor de las claves de

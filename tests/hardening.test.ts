@@ -32,6 +32,8 @@ test("matcher del proxy (compilado como lo compila Next): las rutas que reciben 
   for (const path of [
     "/", "/login", "/p/abc123", "/api/tasks/abc123/viewers", "/api/tasks/abc123/attachments/x", "/api/tasks/a/b/attachments", "/api/projects/abc123/documents/x", "/api/projects/abc123/import-tasks/x",
     "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar", "/api/telegram/webhooks", "/api/telegram/webhook/x", "/x", "/xyz", "/p/x/y",
+    // public/icons/ ya no existe: sin esa excepción, /icons/… pasa por el proxy como cualquier otra ruta (CSP y sesión).
+    "/icons/icon-192.png",
   ]) {
     assert.equal(passes(path), true, `${path} pasa por el proxy`);
   }
