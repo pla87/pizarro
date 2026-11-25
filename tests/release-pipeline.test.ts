@@ -30,7 +30,7 @@ test("workflow de release: etiquetas v*.*.*, GHCR con amd64+arm64 en máquinas n
   assert.match(wf, /push-by-digest=true/);
   assert.match(wf, /docker buildx imagetools create/);
   assert.doesNotMatch(wf, /setup-qemu-action/);
-  assert.match(wf, /needs: \[version, build, pdf, checks\]/);
+  assert.match(wf, /needs: \[version, build, pdf, checks, db\]/);
   assert.match(wf, /ghcr\.io\/pla87\/pizarro:\$\{VERSION\}/);
   assert.match(wf, /pizarro:latest/);
   // Sin caché de Docker: subirla costaba ~3 min por arquitectura y casi no se reutilizaba (la versión cambia
@@ -74,7 +74,7 @@ test("workflow de release: genera MANUAL.pdf y PRUEBAS.pdf con el Chrome del run
   assert.match(pdf, /node scripts\/build-manual-pdf\.mjs pruebas\n/);
   assert.match(pdf, /uses: actions\/upload-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales\n\s+path: \|\n\s+MANUAL\.pdf\n\s+PRUEBAS\.pdf/);
   // Sin los PDF no se etiqueta la imagen (ni, por tanto, se crea la release).
-  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks\]/);
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks, db\]/);
   const release = releaseJob("release");
   assert.match(release, /uses: actions\/download-artifact@[0-9a-f]{40} # v[\d.]+\n\s+with:\n\s+name: manuales/);
   // Los dos `gh release create` (a mano y con etiqueta) llevan los dos PDF.
@@ -505,7 +505,26 @@ test("workflow de release: «Comprobaciones» con los mismos pasos que ci.yml an
   assert.match(checks, /permissions:\n {6}contents: read\n/);
   assert.match(checks, /cache: npm/);
   assert.doesNotMatch(checks, /secrets\./);
-  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks\]/);
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks, db\]/);
   assert.match(releaseJob("release"), /needs: image\n/);
   assert.match(releaseJob("stable"), /needs: release\n/);
+});
+
+// Y las pruebas con base de datos (npm run test:db), como el job «db» de ci.yml: el mismo PostgreSQL 16, las mismas
+// variables y los mismos pasos. La imagen las espera, así que si fallan no se publica nada.
+test("workflow de release: «Pruebas con base de datos» igual que en ci.yml antes de etiquetar la imagen", () => {
+  const ci = readFileSync(".github/workflows/ci.yml", "utf8");
+  const ciDb = ci.slice(ci.indexOf("\n  db:\n"));
+  const db = releaseJob("db");
+  // Desde «services:» hasta el final del job, sin el comentario del job siguiente.
+  const fromServices = (job: string) => job.slice(job.indexOf("\n    services:\n")).trimEnd().replace(/(\n *#[^\n]*)+$/, "").trimEnd();
+  assert.ok(ciDb.includes("\n    services:\n") && db.includes("\n    services:\n"));
+  assert.equal(fromServices(db), fromServices(ciDb));
+  assert.match(db, /^ {8}image: postgres:16$/m);
+  assert.match(db, /^ {8}run: npm run test:db -- --shuffle$/m);
+  assert.match(db, /needs: version\n/);
+  assert.match(db, /if: github\.event_name == 'push' \|\| github\.ref == 'refs\/heads\/main'\n/);
+  assert.match(db, /permissions:\n {6}contents: read\n/);
+  assert.doesNotMatch(db, /secrets\./);
+  assert.match(releaseJob("image"), /needs: \[version, build, pdf, checks, db\]/);
 });

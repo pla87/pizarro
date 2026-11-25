@@ -2,9 +2,10 @@
 // migración fallida (P3009) que va entera entre BEGIN; y COMMIT; se marca como revertida y se vuelve a aplicar una sola
 // vez; una antigua (sin transacción) no. Cada caso en una base propia (pizarro_test_<base de las pruebas>_<n>), que se
 // borra al terminar, con una carpeta de migraciones de prueba en un migrador falso (migrator/ con el node_modules del
-// proyecto), como el de la imagen.
+// proyecto), como el de la imagen. Y con la base al día (todas aplicadas, mismo checksum) no se lanza Prisma.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -131,4 +132,39 @@ test("migrate.mjs + Prisma: una migración antigua (sin BEGIN;/COMMIT;) que fall
   assert.match(second.stdout, /no se reintenta sola: 20261120000000_vieja es de las antiguas/);
   assert.match(second.stderr, /falló a medias \(P3009\): 20261120000000_vieja/);
   assert.equal((await rowsOf(url, name)).filter((r) => r.rolled_back_at).length, 0);
+});
+
+test("migrate.mjs + Prisma: con todas las migraciones aplicadas y el mismo checksum no lanza Prisma; si falta una o cambia el fichero, sí", async () => {
+  const nueva = "20270101000000_nueva";
+  const sqls = { ...INIT, [nueva]: 'BEGIN;\nCREATE TABLE "Nueva" (id int);\nCOMMIT;\n' };
+  const { dir, url } = await setup("aldia", sqls);
+  const migrations = join(dir, "migrator", "prisma", "migrations");
+  // Primer arranque: base vacía, sin _prisma_migrations; lo aplica Prisma.
+  const first = await start(dir, url);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, /Aplicando migraciones \(2 pendientes, desde 20260101000000_init\)\.\.\./);
+  assert.match(first.stdout, /Loaded Prisma config/);
+  // El sha256 del fichero tal cual es el checksum que guarda Prisma.
+  const { rows } = await admin("SELECT migration_name, checksum FROM _prisma_migrations ORDER BY migration_name", url);
+  assert.deepEqual(rows, Object.entries(sqls).map(([n, sql]) => ({ migration_name: n, checksum: createHash("sha256").update(sql).digest("hex") })));
+  // Segundo: al día, sin lanzar Prisma.
+  const second = await start(dir, url);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  assert.match(second.stdout, /^\[start\] Base de datos al día: 2 migraciones aplicadas, sin lanzar Prisma \(comprobación: [\d,]+ s\)\.$/m);
+  assert.doesNotMatch(second.stdout + second.stderr, /Loaded Prisma config|Aplicando migraciones/);
+  // Migración nueva (versión siguiente): la aplica Prisma.
+  const otra = "20270201000000_otra";
+  mkdirSync(join(migrations, otra));
+  writeFileSync(join(migrations, otra, "migration.sql"), 'BEGIN;\nCREATE TABLE "Otra" (id int);\nCOMMIT;\n');
+  const third = await start(dir, url);
+  assert.equal(third.status, 0, third.stdout + third.stderr);
+  assert.match(third.stdout, /Aplicando migraciones \(1 pendiente: 20270201000000_otra\)\.\.\./);
+  assert.equal(await tableExists(url, "Otra"), true);
+  assert.match((await start(dir, url)).stdout, /sin lanzar Prisma/);
+  // Un fichero ya aplicado que cambia (otro checksum): se lanza Prisma, como antes.
+  writeFileSync(join(migrations, otra, "migration.sql"), 'BEGIN;\nCREATE TABLE "Otra" (id int);\nCOMMIT;\n-- comentario\n');
+  const fourth = await start(dir, url);
+  assert.equal(fourth.status, 0, fourth.stdout + fourth.stderr);
+  assert.match(fourth.stdout, /Aplicando migraciones \(el checksum de 20270201000000_otra no coincide con el aplicado\)\.\.\./);
+  assert.match(fourth.stdout, /Base de datos al día \(migraciones: [\d,]+ s\)/);
 });
