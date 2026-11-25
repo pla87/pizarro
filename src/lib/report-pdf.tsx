@@ -402,6 +402,8 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
   const k = r.kpis;
   const num = (n: number) => n.toLocaleString(locale);
   const pendingColumns = r.columns.filter((c) => !c.isDone && c.count > 0);
+  // Columnas «Compartir fuera» (con su estado; sin la dirección), también las que no tienen tareas pendientes.
+  const shared = r.columns.filter((c) => c.share);
   const people = r.people.filter((p) => p.open > 0);
   const attention = [
     k.unassignedOpen ? t("{n} sin responsable", { n: num(k.unassignedOpen) }) : null,
@@ -416,7 +418,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
 
   const build = (big: boolean): Block[] => [
     {
-      units: 22 + (r.omittedTasks || trimmed ? 2 : 0) + (r.project.description ? textUnits(r.project.description, 110) : 0),
+      units: 22 + (r.omittedTasks || trimmed ? 2 : 0) + (shared.length ? 1 : 0) + (r.project.description ? textUnits(r.project.description, 110) : 0),
       node: (
         <>
           <View style={s.header}>
@@ -440,6 +442,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
               <Kv label={t("Terminadas")} value={k.done} locale={locale} color={C.green} />
             </View>
             {pendingTypes ? <Text style={[s.small, { marginTop: 6 }]}>{t("Por tipo: {types}", { types: pendingTypes })}</Text> : null}
+            {shared.length ? <Text style={[s.small, { marginTop: 2 }]}>{t("Compartidas fuera: {list}", { list: shared.map((c) => `${t("«{title}»", { title: c.name })} (${c.share})`).join(" · ") })}</Text> : null}
             {k.fixed ? <Text style={[s.small, { marginTop: 2 }]}>{t("Tareas fijas: {n} (siempre en la release o el plan; no cuentan en el avance ni en las pendientes)", { n: num(k.fixed) })}</Text> : null}
             {attention.length ? <Text style={[s.small, { marginTop: 2, color: C.amber }]}>{t("Atención: {items}", { items: attention.join(" · ") })}</Text> : null}
             {trimmed ? (
@@ -470,7 +473,7 @@ function reportDoc(r: Report, t: T, locale: string): PagedDoc {
         <>
           {ci === 0 && first ? h2(t("Pendiente")) : null}
           <View style={{ marginBottom: last ? 6 : 0 }}>
-            {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {num(c.count)}</Text> : null}
+            {first ? <Text style={s.h3} minPresenceAhead={60}>{c.name} · {num(c.count)}{c.share ? ` · ${t("compartida fuera")}` : ""}</Text> : null}
             {table}
             {last && c.more ? <MoreLine n={c.more} url={r.boardUrl} t={t} locale={locale} /> : null}
           </View>

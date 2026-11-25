@@ -18,7 +18,8 @@ export interface ReportInput {
   time?: string;
   /** Zona horaria de la app: los instantes de cierre se pasan a día natural en ella (por defecto UTC). */
   timeZone?: string;
-  columns: { id: string; name: string; isDone: boolean }[];
+  /** `share`: estado de una columna «Compartir fuera», ya traducido («enlace activo, caduca el …»); nunca la dirección. */
+  columns: { id: string; name: string; isDone: boolean; share?: string | null }[];
   /** Nombres de los tipos de tarea, en su orden. */
   kinds: string[];
   tasks: {
@@ -145,7 +146,7 @@ export interface Report {
     fixed: number;
   };
   /** `more`: tareas de la columna que no salen en `tasks` (por `listLimit`; 0 sin él). */
-  columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[]; more: number }[];
+  columns: { name: string; isDone: boolean; count: number; overdue: number; byType: { label: string; count: number }[]; tasks: ReportTask[]; more: number; share: string | null }[];
   deliverables: { name: string; description: string; dueDate: string | null; daysLeft: number | null; total: number; done: number; pct: number; status: DeliverableStatus }[];
   overdue: ReportTask[];
   upcoming: ReportTask[];
@@ -249,6 +250,7 @@ export function buildReport(fullInput: ReportInput, tr: T = esT): Report {
     return {
       name: c.name,
       isDone: c.isDone,
+      share: c.share ?? null,
       count,
       overdue: c.isDone ? 0 : sum(rows, (r) => r.overdue),
       byType: kindNames.map((kind) => ({ label: kind, count: sum(rows.filter((r) => r.kind === kind), (r) => r.count) })).filter((x) => x.count > 0),

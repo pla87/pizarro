@@ -61,6 +61,8 @@ interface Props {
   reportSchedule?: React.ReactNode;
   /** «Aplicar plantilla» (pestaña Tablero, quien gestiona el proyecto; la monta la página). */
   applyTemplate?: React.ReactNode;
+  /** «Compartir fuera» (pestaña Tablero, solo administradores; la monta la página). */
+  shareOutSection?: React.ReactNode;
   /** Cabeceras y pies de release del proyecto. */
   releaseTemplates: { headers: TemplateOption[]; footers: TemplateOption[] };
   /** Cabeceras y pies del plan de trabajo para IA del proyecto. */
@@ -98,7 +100,7 @@ function Section({ title, description, tip, children, id }: { title: string; des
   );
 }
 
-export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, emailAvailable, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate }: Props) {
+export function ProjectSettings({ isAdmin, currentUserId, project, deliverables, kinds, generalKinds, labels: initialLabels, users, emailAvailable, editorMode, google, reportSchedule, storageSection, releaseTemplates, planTemplates, tab, unknownTab, restrictedTab, applyTemplate, shareOutSection }: Props) {
   const t = useT();
   const uiLocale = useLocale();
   const router = useRouter();
@@ -333,6 +335,12 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
           {t("El rol «Siguiente salto» muestra el botón «Generar release»; el rol «En producción» es el destino de las tarjetas al marcar una release como desplegada.")}
         </>}
       />
+
+      {shareOutSection && (
+        <Section id="share-out" title="Compartir fuera" description="Columnas cuyas tareas se publican en una web sin cuenta. Solo lo activan los administradores.">
+          {shareOutSection}
+        </Section>
+      )}
 
       {canManage && applyTemplate && (
         <Section

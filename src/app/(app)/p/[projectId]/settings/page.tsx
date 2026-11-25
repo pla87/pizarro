@@ -21,6 +21,7 @@ import { resolveProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
 import { reportRecipientPeople, reportRecipientView, reportUnsubscribedView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
+import { ShareOutSettings } from "./ShareOutSettings";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
@@ -46,6 +47,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       googleShareMode: true,
       fileMaxMb: true,
       taskFields: true,
+      shareOutEnabled: true,
       _count: { select: { columns: { where: { role: "BUDGET" } } } },
       hiddenKinds: { select: { kindId: true } },
       members: {
@@ -99,6 +101,10 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
     tab === "informes" ? reportRecipientPeople(project.id) : Promise.resolve([]),
   ]);
   const unsubscribed = tab === "informes" && schedule ? await reportUnsubscribedView(schedule, reportPeople, user) : null;
+  // «Compartir fuera» (solo administradores): cuántos enlaces activos dejarían de funcionar al apagarla.
+  const shareLinks = tab === "tablero" && isAdmin && project.shareOutEnabled
+    ? await db.columnShare.count({ where: { projectId: project.id, columnId: { not: null }, tokenHash: { not: null }, revokedAt: null } })
+    : 0;
   const hidden = new Set(project.hiddenKinds.map((h) => h.kindId));
   const usage = new Map(generalUsage.map((g) => [g.kindId, g._count._all]));
   const kindTasks = new Map(kindUsage.map((g) => [g.kindId, g._count._all]));
@@ -116,6 +122,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
         // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
         key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
         storageSection={storageSection}
+        shareOutSection={tab === "tablero" && isAdmin ? <ShareOutSettings projectId={project.id} enabled={project.shareOutEnabled} activeLinks={shareLinks} /> : null}
         applyTemplate={tab === "tablero" && canManage ? (
           <ApplyTemplate
             projectId={project.id}

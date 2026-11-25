@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { crc32 } from "node:zlib";
+import { isShareColumn } from "../share-out-board";
 import pkg from "../../../package.json";
 import { Prisma } from "@/generated/prisma/client";
 import { dateToIso, todayIso } from "../dates";
@@ -150,7 +151,7 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
       name: true, description: true, isPrivate: true, taskFields: true, releaseZipMaxMb: true, taskAttachMaxMb: true, fileMaxMb: true, googleShareMode: true, storageQuotaMb: true, programVersion: true, templateKey: true,
       reportSchedule: { select: { enabled: true, weekday: true, hour: true } },
       releaseTemplates: { orderBy: [{ kind: "asc" }, { position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { kind: true, name: true, content: true, position: true, createdAt: true } },
-      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKindId: true, defaultKind: { select: { name: true } } } },
+      columns: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { id: true, name: true, position: true, role: true, isDone: true, waitingDays: true, routineTargetColumnId: true, wipLimit: true, planCount: true, assigneeId: true, assignDueDays: true, defaultKindId: true, defaultKind: { select: { name: true } }, share: { select: { expiryDays: true } } } },
       kinds: { orderBy: [{ position: "asc" }, { createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true, position: true, titleTemplate: true, descriptionTemplate: true, subtaskTemplate: true, createdAt: true } },
       hiddenKinds: { select: { kind: { select: { name: true } } } },
       labels: { orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true, color: true } },
@@ -471,6 +472,8 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
       assignDueDays: c.assignDueDays,
       // Tipo por defecto, por su nombre (al importar se empareja con los tipos del proyecto y los generales).
       defaultKindName: c.defaultKind?.name ?? null,
+      // «Compartir fuera»: solo la marca y la caducidad; el enlace (ni su huella) nunca viaja.
+      ...(c.share && isShareColumn(c) ? { shareOut: { expiryDays: c.share.expiryDays } } : {}),
     })),
     kinds: kindList.map((k) => ({
       ref: kindRef.get(k.id)!, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate,

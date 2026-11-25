@@ -85,6 +85,8 @@ const columnSchema = z.object({
   assignDueDays: z.number().int().min(1).max(365).nullable().optional(),
   /** Tipo por defecto de «Nueva tarea» en la columna, por nombre. Opcional: los archivos anteriores no lo traen. */
   defaultKindName: text(80).nullable().optional(),
+  /** «Compartir fuera»: la marca y los días de caducidad (nunca el enlace). Opcional: los archivos anteriores no la traen. */
+  shareOut: z.object({ expiryDays: z.number().int().min(1).max(365) }).optional(),
 });
 
 const kindSchema = z.object({

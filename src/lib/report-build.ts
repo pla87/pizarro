@@ -2,7 +2,7 @@ import "server-only";
 import { intlLocale, type Locale, makeT } from "../i18n/core";
 import { appTimeZone, listKinds } from "./board";
 import { localizeGeneralKind, localizeGeneralKinds } from "./kinds-localize";
-import { addDaysIso, dateToIso, isoToDate, todayIso, weekBoundsIso } from "./dates";
+import { addDaysIso, dateToIso, formatDay, isoToDate, todayIso, weekBoundsIso } from "./dates";
 import { formatTimeZone } from "./format";
 import { normalizeTaskFields } from "./task-fields";
 import { db } from "./db";
@@ -22,6 +22,9 @@ import { PROGRAM_MAX_SESSIONS } from "./program-limit";
 import { buildAssignPlan, descriptionSummary, PLAN_DESCRIPTION_READ, PLAN_SUBTASKS_SHOWN, type AssignPlanTask } from "./column-assign-core";
 import { descriptionHeads } from "./description-heads";
 import { calendarWeekStart } from "./calendar";
+import { boardShareOf, SHARE_BOARD_SELECT } from "./share-out";
+import { isShareColumn } from "./share-out-board";
+import type { T } from "../i18n/core";
 import type { Prisma } from "@/generated/prisma/client";
 
 // Genera el informe PDF de un proyecto. Lo usan la descarga (API) y el envío semanal por email;
@@ -156,12 +159,13 @@ interface PdfRequestOpts {
  */
 export async function generateProjectReportPdf(projectId: string, opts: PdfRequestOpts & { generatedBy: string; listLimit?: number; boardUrl?: string }): Promise<ProjectReportPdf | null> {
   const t = makeT(opts.locale);
-  const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true } });
+  const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, description: true, taskFields: true, shareOutEnabled: true } });
   if (!project) return null;
 
   const today = todayIso(appTimeZone());
   const [columns, tasks, deliverables, releases, archivedCount, kinds, [doneEvents, released], counts, subtaskGroups] = await Promise.all([
-    db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, isDone: true } }),
+    // «Compartir fuera»: solo el estado del enlace (SHARE_BOARD_SELECT no lleva el token ni nada que lo revele).
+    db.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, name: true, isDone: true, role: true, assigneeId: true, assignDueDays: true, ...(project.shareOutEnabled ? { share: { select: SHARE_BOARD_SELECT } } : {}) } }),
     db.task.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ position: "asc" }, { id: "asc" }],
@@ -222,7 +226,7 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
     timeZone: appTimeZone(),
     // Con la zona («14:05 CET»): el PDF se envía por email y puede leerse en otra.
     time: formatTimeZone(new Date(), locale),
-    columns,
+    columns: columns.map((c) => ({ id: c.id, name: c.name, isDone: c.isDone, share: shareReportStatus(c, t, locale, today) })),
     kinds: localizeGeneralKinds(kinds, opts.locale).map((k) => k.name),
     tasks: tasks.map((task) => ({
       id: task.id,
@@ -254,6 +258,19 @@ export async function generateProjectReportPdf(projectId: string, opts: PdfReque
   const pdf = await renderPdf({ kind: "report", locale: opts.locale, input: report }, opts.signal);
   const slug = slugify(project.name) || t("proyecto");
   return { project: { id: project.id, name: project.name }, pdf, today, filename: `${t("informe")}-${slug}-${today}.pdf`, taskCount: tasks.length };
+}
+
+/**
+ * Estado de una columna «Compartir fuera» para el informe: «enlace activo, caduca el 3 dic», «caducado» o «sin generar»
+ * (sin la dirección: del token solo se guarda su huella y tampoco se lee). null si no es una columna compartida.
+ */
+export function shareReportStatus(
+  c: { role: string; assigneeId: string | null; assignDueDays: number | null; share?: Parameters<typeof boardShareOf>[0] | null }, t: T, locale: string, today: string,
+): string | null {
+  if (!c.share || !isShareColumn(c)) return null;
+  const info = boardShareOf(c.share);
+  if (info.state === "active" && info.endsAt) return t("enlace activo, caduca el {date}", { date: formatDay(todayIso(appTimeZone(), new Date(info.endsAt)), today, locale) });
+  return info.state === "ended" ? t("enlace caducado") : t("web sin generar");
 }
 
 /**

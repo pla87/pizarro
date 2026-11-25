@@ -211,6 +211,9 @@ export interface ShareChangeInput {
   body?: string;
 }
 
+/** La tarea se archivó o cambió de proyecto mientras se marcaba como hecha. */
+class ShareTaskGone extends Error {}
+
 /** Sin menciones de verdad: lo de fuera no puede avisar a nadie escribiendo `@[Nombre](user:id)`. */
 const plainMentions = (text: string): string => text.replace(mentionRegex(), (_m, name: string) => `@${name}`);
 
@@ -253,7 +256,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
           const first = await tx.task.findFirst({ where: { columnId: target.id, archivedAt: null, id: { not: taskId } }, orderBy: TASK_ORDER, select: { id: true } });
           const placed = await placeInColumn(tx, target.id, null, first?.id ?? null, taskId);
           const { count } = await tx.task.updateMany({ where: { id: taskId, archivedAt: null }, data: { columnId: target.id, position: placed.position, evergreen: false, evergreenEvery: 1 } });
-          if (!count) throw new AppError("gone");
+          if (!count) throw new ShareTaskGone();
           return assignOnEnter(tx, room, [taskId]);
         });
         const assignUndo = assignUndoOps(assigned)[0]?.data ?? {};
@@ -300,7 +303,7 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
     label = out.label;
     if (!label.k) return notice;
   } catch (err) {
-    if (err instanceof AppError && err.message === "gone") return "gone";
+    if (err instanceof ShareTaskGone) return "gone";
     if (err instanceof AppError) return "invalid";
     logEvent({ level: "error", category: "api", action: `shareOut.${op}Failed`, label: { k: "Fallo de una acción de «Compartir fuera»: {error}", p: { error: logError(err) } }, projectId: share.projectId, path: "/x/…", ip, durationMs: performance.now() - start });
     throw err;
