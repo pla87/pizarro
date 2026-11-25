@@ -137,13 +137,15 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
           {filters.userId && <input type="hidden" name="user" value={filters.userId} />}
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           {filters.reads && <input type="hidden" name="consultas" value="1" />}
+          {/* La explicación, como descripción (no `title`: algunos lectores y herramientas nombraban el botón con ella). */}
           <button
             type="submit"
-            title={t("Con el periodo y los filtros de la lista")}
+            aria-describedby="logs-csv-hint"
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             <Download className="size-4" aria-hidden /> {t("Descargar CSV")}
           </button>
+          <span id="logs-csv-hint" className="sr-only">{t("Con el periodo y los filtros de la lista")}</span>
         </form>
       </div>
 
@@ -222,9 +224,12 @@ export default async function LogsPage({ searchParams }: { searchParams: Promise
               {t("Limpiar")}
             </Link>
           ) : (
-            <span role="link" aria-disabled="true" title={t("No hay filtros aplicados")} className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm opacity-50 dark:border-slate-700">
-              {t("Limpiar")}
-            </span>
+            <>
+              <span role="link" aria-disabled="true" aria-describedby="logs-clear-hint" className="cursor-not-allowed rounded-lg border border-slate-300 px-3 py-1.5 text-sm opacity-50 dark:border-slate-700">
+                {t("Limpiar")}
+              </span>
+              <span id="logs-clear-hint" className="sr-only">{t("No hay filtros aplicados")}</span>
+            </>
           )}
         </div>
       </form>
