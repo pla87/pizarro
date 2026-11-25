@@ -611,7 +611,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       // Solo había cambios de otras personas («Descartar cambios» no los toca): nada que descartar ni que deshacer.
       if (!res.data.changed) return;
       board.refresh();
-      toast(t("Cambios descartados"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+      // «Deshacer» devuelve justo lo descartado (su entrada), no lo último que se haga después en la tarea.
+      const undoId = res.data.undo?.id;
+      toast(t("Cambios descartados"), "undo", undoId ? { label: t("Deshacer"), onClick: () => void undoLastChange(undoId) } : undefined);
     } finally {
       setCancelling(false);
     }
@@ -621,12 +623,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, lo
   // que le ha pasado a la descripción guardada: la plantilla del tipo nuevo aplicada o la del anterior quitada (el aviso lo dice).
   type KindChange = false | { description: KindTemplateChange };
-  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> =>
+    saveWithUndo(patch, optimistic, kindChange).then((r) => r !== false);
+  /** Como save, pero si se guarda da el id de su entrada de deshacer (para el «Deshacer» de su aviso); `false` si no. */
+  const saveWithUndo = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<false | { undoId?: string }> => {
     const done = saveNow(patch, optimistic, kindChange);
-    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.then((r) => r !== false, () => false);
     return done;
   };
-  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<false | { undoId?: string }> => {
     const before = board.getTask(task.id);
     const send = (since: ReturnType<typeof textSince> | undefined): Promise<Awaited<ReturnType<typeof changeTaskKind>>> =>
       kindChange && patch.kindId ? changeTaskKind(task.id, { kindId: patch.kindId, title: patch.title, description: patch.description }, since) : updateTask(task.id, patch, since);
@@ -671,7 +676,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return false;
     }
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
-    const { kindSubtasks, kindUndo, titleClipped, ...saved } = res.data;
+    const { kindSubtasks, kindUndo, titleClipped, undo: savedUndo, ...saved } = res.data;
     board.upsertTask(saved);
     // El servidor recortó el título (p. ej. la plantilla de título del tipo nuevo lo alarga): se dice, como en el tablero.
     if (titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped }));
@@ -683,7 +688,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const undo = kindSubtasks?.undo ?? kindUndo;
     // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
     if (text) toast(text, "undo", undo?.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
-    return true;
+    return { undoId: savedUndo.id };
   };
 
   const changeColumn = async (columnId: string) => {
@@ -784,9 +789,13 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id), independent: true });
   };
 
-  /** Deshace lo último hecho en esta tarea, o la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle. */
+  /**
+   * Deshace la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle; sin id (no debería faltar), lo
+   * último hecho en la tarea. Con id, esa entrada y no otra: si después se ha hecho otra cosa, el servidor lo dice («Solo
+   * se puede deshacer el último cambio…») en vez de deshacer lo que no era (antes, «Descripción borrada» y «Cambios
+   * descartados» deshacían lo último de la tarea: marcar una subtarea entretanto y pulsar «Deshacer» la desmarcaba).
+   */
   const undoLastChange = async (entryId?: string) => {
-    // Con id (aviso «Adjunto borrado») se deshace exactamente esa entrada, no la última de la tarea.
     const res = await board.track(entryId ? undoEntry(entryId) : undoLast(board.project.id, task.id));
     if (!res.ok) return toast(res.error, "error");
     toast(undoneText(t, res.data), "undo");
@@ -1301,7 +1310,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             onClear={async () => {
               setDetail((d) => (d ? { ...d, description: "" } : d));
               // Pasa por el guardado normal: queda en el historial y se deshace como cualquier cambio.
-              if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+              // «Deshacer» devuelve esta descripción (su entrada), no lo último que se haya hecho después en la tarea.
+              const saved = await saveWithUndo({ description: "" }, { hasDescription: false });
+              const undoId = saved && saved.undoId;
+              if (saved) toast(t("Descripción borrada"), "undo", undoId ? { label: t("Deshacer"), onClick: () => void undoLastChange(undoId) } : undefined);
             }}
           />
           <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} draftRef={subtaskDraftPending} blurHeld={blurHeld} onUndo={(id) => void undoLastChange(id)} />

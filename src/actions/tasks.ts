@@ -602,7 +602,9 @@ export async function updateTask(taskId: string, patch: z.input<typeof updateSch
   return runAction({ name: "tasks.updateTask", args: [taskId, patch, since] }, async () => {
     const user = await requireUser();
     await applyTaskUpdate(user, taskId, patch, since);
-    return withClip(await loadBoardTask(taskId), clipOf(patch.title));
+    // `undo`: la entrada de deshacer de este guardado, para que el «Deshacer» de un aviso («Descripción borrada») deshaga
+    // eso y no lo último que se haya hecho en la tarea después.
+    return { ...withClip(await loadBoardTask(taskId), clipOf(patch.title)), undo: trackUndoEntry() };
   });
 }
 
@@ -673,6 +675,7 @@ export async function changeTaskKind(taskId: string, patch: z.input<typeof kindC
     const undo = trackUndoEntry();
     return {
       ...task,
+      undo,
       ...(kindName !== null ? { kindUndo: undo } : {}),
       ...(done ? { kindSubtasks: { subtasks: done.subtasks, removed: done.removed.length, added: done.added.length, undo } } : {}),
     };
@@ -1472,7 +1475,7 @@ async function passes(check: () => Promise<unknown>): Promise<boolean> {
  * Si no hay nada que restaurar, no hace nada ni deja entrada de deshacer.
  */
 export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnapshot, since?: string | null) {
-  return runAction({ name: "tasks.restoreTaskSnapshot", args: [taskId, snapshot, since] }, async (): Promise<{ task: BoardTask; changed: boolean; removed: string[] }> => {
+  return runAction({ name: "tasks.restoreTaskSnapshot", args: [taskId, snapshot, since] }, async (): Promise<{ task: BoardTask; changed: boolean; removed: string[]; undo?: { id?: string } }> => {
     const user = await requireUser();
     const snap = snapshotSchema.parse(snapshot);
     const id = v.id.parse(taskId);
@@ -1688,7 +1691,8 @@ export async function restoreTaskSnapshot(taskId: string, snapshot: TaskEditSnap
     if (fields.columnId !== undefined) await resolvePositionTies([id]);
     describeAction("Canceló los cambios en «{title}»", { title: mentionsToPlain(task.title) }, { taskId: id });
     // `removed`: tareas que han desaparecido del tablero (la siguiente aparición retirada), para quitarlas sin esperar al refresco.
-    return { task: await loadBoardTask(id), changed: true, removed: spawned };
+    // `undo`: la entrada que devuelve lo descartado (el «Deshacer» de «Cambios descartados» deshace eso y nada más).
+    return { task: await loadBoardTask(id), changed: true, removed: spawned, undo: trackUndoEntry() };
   });
 }
 

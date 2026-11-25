@@ -55,6 +55,28 @@ describe("undoEntry: deshacer exactamente una entrada", () => {
   });
 });
 
+describe("updateTask devuelve su entrada de deshacer («Descripción borrada»)", () => {
+  test("con otro cambio después, deshacer esa entrada no deshace el otro: lo rechaza; si es la última, devuelve la descripción", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    const task = await makeTask(f, { title: "Original" });
+    expectOk(await updateTask(task.id, { description: "texto" }));
+    const cleared = expectOk(await updateTask(task.id, { description: "" }));
+    assert.ok(cleared.undo.id, "updateTask devuelve el id de la entrada");
+    // Otro cambio entretanto (como marcar una subtarea): el «Deshacer» del aviso no lo toca.
+    expectOk(await updateTask(task.id, { title: "Cambiado" }));
+    expectFail(await undoEntry(cleared.undo.id!), /Solo se puede deshacer el último cambio/);
+    const now = await db.task.findUniqueOrThrow({ where: { id: task.id } });
+    assert.equal(now.title, "Cambiado");
+    assert.equal(now.description, "");
+    // Sin nada después, sí: vuelve la descripción.
+    const again = expectOk(await updateTask(task.id, { description: "otro" }));
+    expectOk(await undoEntry(again.undo.id!));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).description, "");
+  });
+});
+
 describe("unlinkGoogle", () => {
   test("un admin desvincula, se cierran las sesiones y un miembro no puede", async () => {
     const admin = await makeUser({ role: "ADMIN" });

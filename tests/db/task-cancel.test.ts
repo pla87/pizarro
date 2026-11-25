@@ -104,6 +104,8 @@ describe("Cancelar la edición (restoreTaskSnapshot)", () => {
     assert.equal(await undoCount(user.id, f.project.id), before + 1);
     const entry = await db.undoEntry.findFirstOrThrow({ where: { userId: user.id, kind: "UNDO" }, orderBy: { createdAt: "desc" } });
     assert.match(entry.label, /Canceló los cambios en/);
+    // Devuelve el id de esa entrada: el «Deshacer» del aviso «Cambios descartados» deshace eso (undoEntry), no otra cosa.
+    assert.equal(res.undo?.id, entry.id);
     assert.equal(await db.taskEvent.count({ where: { taskId: task.id, label: { contains: "Canceló los cambios" } } }), 1);
 
     // Deshacer esa única entrada devuelve la edición.
