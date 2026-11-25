@@ -1182,20 +1182,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
 
-  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Descartar cambios» y Guardar, quepan en una línea
+  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Deshacer todo» y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px). Todos del mismo alto (h-8) y sin saltos de línea:
-  // si el pie no da para «Descartar cambios» (consulta de contenedor), se lee «Descartar» y el nombre accesible sigue entero.
+  // solo si de verdad no cabe «Deshacer todo» se lee «Deshacer» (ver DiscardAllButton) y el nombre accesible sigue entero.
   const actionButtons = (
     <div className="@container w-full min-w-0">
       <div className="flex flex-nowrap items-center gap-2 @max-[24rem]:gap-1 md:gap-1 [&>button]:h-8 [&>button]:py-0">
         <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
         <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-        <button className="btn-secondary ml-auto min-w-0 px-2 whitespace-nowrap" onClick={discardEdits} disabled={cancelling} aria-label={t("Deshacer todo")} title={t("Deshace los cambios hechos desde que abriste la tarea y la cierra")}>
-          <span className="@max-[24rem]:hidden">{t("Deshacer todo")}</span>
-          <span className="@min-[24rem]:hidden">{t("Deshacer")}</span>
-        </button>
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden" /> {t("Guardar")}</button>
+        <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
+        {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
       </div>
     </div>
   );
@@ -1268,7 +1266,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : "md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
+      <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : ASIDE_COLS, flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
         <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}>
           <TaskViewers taskId={task.id} />
@@ -1637,12 +1635,65 @@ export function ColorPopover({ value, onChange }: { value: string | null; onChan
   );
 }
 
+/**
+ * «Deshacer todo» del pie del detalle. Se lee «Deshacer» solo cuando «Deshacer todo» no cabe en lo que deja libre la fila
+ * (se mide: el texto entero, en una copia invisible, frente al ancho de la fila menos el de los demás botones). Antes lo
+ * decidía una consulta de contenedor con un ancho fijo (24 rem) y en la columna de campos del escritorio, que es más
+ * estrecha, se leía siempre «Deshacer», también en una ventana muy ancha. La medida no depende del texto que se muestra,
+ * así que no oscila.
+ */
+function DiscardAllButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  const t = useT();
+  const ref = useRef<HTMLButtonElement>(null);
+  const fullRef = useRef<HTMLSpanElement>(null);
+  const [short, setShort] = useState(false);
+  useLayoutEffect(() => {
+    const button = ref.current;
+    const full = fullRef.current;
+    const row = button?.parentElement;
+    if (!button || !full || !row) return;
+    const px = (v: string) => parseFloat(v) || 0;
+    const check = () => {
+      // Oculto (el pie del móvil en escritorio o la columna de campos en el móvil): no hay nada que medir.
+      if (!button.offsetParent) return;
+      const bs = getComputedStyle(button);
+      const rs = getComputedStyle(row);
+      const others = [...row.children].filter((el) => el !== button && (el as HTMLElement).offsetParent !== null);
+      const used = others.reduce((n, el) => n + el.getBoundingClientRect().width, 0) + px(rs.columnGap) * others.length;
+      const room = row.clientWidth - px(rs.paddingLeft) - px(rs.paddingRight) - used;
+      const need = full.getBoundingClientRect().width + px(bs.paddingLeft) + px(bs.paddingRight) + px(bs.borderLeftWidth) + px(bs.borderRightWidth);
+      setShort(need > room + 0.5);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(row);
+    ro.observe(full);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <button
+      ref={ref}
+      className="btn-secondary relative ml-auto min-w-0 overflow-hidden px-2 whitespace-nowrap"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={t("Deshacer todo")}
+      title={t("Deshace los cambios hechos desde que abriste la tarea y la cierra")}
+      data-discard-all
+    >
+      <span>{short ? t("Deshacer") : t("Deshacer todo")}</span>
+      <span ref={fullRef} aria-hidden className="pointer-events-none invisible absolute top-0 left-0 whitespace-nowrap">{t("Deshacer todo")}</span>
+    </button>
+  );
+}
+
 /** Lo que le ha hecho un cambio de tipo a la descripción: plantilla aplicada, la del anterior quitada o nada. */
 type KindTemplateChange = ReturnType<typeof kindDescriptionChange>;
 
 /** Ver `crowdedAside` en el detalle. */
 const CROWDED_ASIDE_ITEMS = 12;
 const CROWDED_ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_24rem]";
+/** Columna de campos normal: 18 rem y, en una ventana muy ancha, 21 rem (cabe «Deshacer todo» en el pie; ver DiscardAllButton). */
+const ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_21rem]";
 
 /**
  * Campo lateral del detalle con su etiqueta. Con una función como contenido, la etiqueta es un <label> del control que

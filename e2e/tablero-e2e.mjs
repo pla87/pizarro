@@ -1389,12 +1389,13 @@ if (only.includes("r46")) {
       discard: btns.find((b) => b.getAttribute("aria-label") === "Deshacer todo")?.innerText.trim(),
     };
   });
-  for (const [width, label] of [[430, "Deshacer todo"], [390, "Deshacer"], [320, "Deshacer"]]) {
+  // (Ronda 68) «Deshacer» solo cuando de verdad no cabe «Deshacer todo» (se mide): a 390 px depende de la fuente.
+  for (const [width, label] of [[430, "Deshacer todo"], [390, null], [320, "Deshacer"]]) {
     await mp.setViewportSize({ width, height: 844 });
     await sleep(300);
     const fit = await footFit();
     L.eq(`R61C1 móvil ${width} px: pie del detalle con cinco botones del mismo alto, en una fila y dentro`, [fit.n, fit.heights, fit.rows, fit.inside], [5, 1, 1, true]);
-    L.eq(`R61C1 móvil ${width} px: el botón de deshacer todo dice «${label}»`, fit.discard, label);
+    if (label) L.eq(`R61C1 móvil ${width} px: el botón de deshacer todo dice «${label}»`, fit.discard, label);
   }
   await mp.setViewportSize({ width: 390, height: 844 });
   await U.closeDialog(mp);
