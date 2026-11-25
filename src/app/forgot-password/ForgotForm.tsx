@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { requestPasswordReset } from "@/actions/auth";
+import { AUTH_TEXT_LINK } from "@/components/auth/AuthCard";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
 
@@ -45,8 +46,8 @@ export function ForgotForm() {
         {pending && <Loader2 size={16} className="animate-spin" />}
         {t("Enviar enlace")}
       </button>
-      <p className="text-center text-sm">
-        <Link href="/login" className="text-brand-700 hover:underline dark:text-brand-300">{t("Volver a iniciar sesión")}</Link>
+      <p className="text-center">
+        <Link href="/login" className={AUTH_TEXT_LINK}>{t("Volver a iniciar sesión")}</Link>
       </p>
     </form>
   );

@@ -6,6 +6,7 @@ import { resendLoginCode, verifyLoginCode, type VerifyState } from "@/actions/tw
 import { reloadForNewVersion } from "@/components/VersionWatcher";
 import { useLocale, useT } from "@/i18n/client";
 import { installSectionUrl } from "@/lib/product";
+import { AUTH_TEXT_LINK } from "@/components/auth/AuthCard";
 import { BackToLogin } from "./BackToLogin";
 import { guardFormAction } from "@/lib/guard-action";
 import { useActionTransition } from "@/components/useActionTransition";
@@ -27,7 +28,8 @@ export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; 
   return (
     <div className="space-y-4">
       <form action={action} className="space-y-4">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
+        {/* text-pretty: sin una palabra sola en la última línea (con el borde derecho irregular, la caja parecía descentrada). */}
+        <p className="text-sm text-pretty text-slate-600 dark:text-slate-300">
           {method === "EMAIL" && emailStatus === "capped"
             ? t("Escribe un código de recuperación o, pasados unos minutos, pulsa «Reenviar código» y escribe el de 6 dígitos del email.")
             : method === "EMAIL"
@@ -49,11 +51,12 @@ export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; 
           {t("Verificar")}
         </button>
       </form>
-      <div className="flex items-center justify-between text-sm">
-        {method === "EMAIL" ? (
+      {/* Centrados y subrayados, como «Volver a iniciar sesión» de Recuperar contraseña (antes «Volver» iba a la derecha). */}
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+        {method === "EMAIL" && (
           <button
             type="button"
-            className="text-brand-700 hover:underline dark:text-brand-300"
+            className={AUTH_TEXT_LINK}
             disabled={resending}
             onClick={() => startResend(async () => {
               const res = await resendLoginCode();
@@ -62,11 +65,12 @@ export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; 
           >
             {t("Reenviar código")}
           </button>
-        ) : <span />}
+        )}
         <BackToLogin />
       </div>
-      {/* Sin el móvil, la app o el email no hay forma de pasar de aquí: a quién pedírselo y, si no hay nadie, la guía. */}
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      {/* Sin el móvil, la app o el email no hay forma de pasar de aquí: a quién pedírselo y, si no hay nadie, la guía. Una
+          nota al pie, centrada y con las líneas equilibradas (alineada a la izquierda, sus saltos descentraban la caja). */}
+      <p className="border-t border-slate-200 pt-4 text-center text-xs text-balance text-slate-500 dark:border-slate-800 dark:text-slate-400">
         {t("¿Sin acceso a tus códigos? Pide a un administrador que restablezca tu verificación en dos pasos; si eres el único administrador, sigue la guía")}{" "}
         <a href={installSectionUrl("lockedOut", locale)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-700 underline dark:text-brand-300">
           {t("«Nadie puede entrar como administrador»")}

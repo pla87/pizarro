@@ -1,5 +1,11 @@
 import { BrandMark } from "@/components/ui/BrandMark";
 
+/**
+ * Estilo de los enlaces de texto de las pantallas de acceso («Volver» y «Reenviar código» del segundo paso, «Volver a
+ * iniciar sesión», «¿Olvidaste tu contraseña?»): subrayados siempre (se ven como enlace sin pasar el ratón) y centrados.
+ */
+export const AUTH_TEXT_LINK = "text-sm text-brand-700 underline underline-offset-2 hover:text-brand-800 disabled:opacity-60 dark:text-brand-300 dark:hover:text-brand-200";
+
 /** Marco común de las pantallas de cuenta sin barra lateral (acceso, restablecer, confirmar…). */
 export function AuthCard({ title, children, footer, wide }: { title: string; children: React.ReactNode; footer?: React.ReactNode; wide?: boolean }) {
   return (
