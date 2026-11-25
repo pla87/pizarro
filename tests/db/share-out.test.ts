@@ -18,6 +18,7 @@ import { importProjectFile } from "../../src/lib/project-export/import";
 import { rateLimit } from "../../src/lib/rate-limit";
 import { shareReportStatus } from "../../src/lib/report-build";
 import { boardShareOf, SHARE_BOARD_SELECT } from "../../src/lib/share-out-board";
+import { purgeEndedShares } from "../../src/lib/share-out";
 import { hashShareToken, SHARE_LIMITS, shareKeyOf } from "../../src/lib/share-out-core";
 import { attachmentPath } from "../../src/lib/uploads";
 import { streamZip } from "../../src/lib/zip-stream";
@@ -140,6 +141,10 @@ describe("compartir fuera: activar y generar", () => {
     assert.notEqual(fresh, token);
     assert.equal((await page(fresh)).status, 200);
     assert.equal((await page(token)).status, 404);
+    // El mantenimiento olvida el enlace anterior pasados los 30 días (ya era «no encontrado»).
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { oldEndedAt: new Date(Date.now() - 31 * DAY) } });
+    assert.ok((await purgeEndedShares()) >= 1);
+    assert.equal((await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).oldTokenHash, null);
     // Abrir la página cuenta como uso.
     await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: new Date(Date.now() - 2 * DAY) } });
     await page(fresh);
@@ -193,6 +198,13 @@ describe("compartir fuera: activar y generar", () => {
     const t3 = tokenOf((await generate(f.columns.doing)).url);
     expectOk(await deleteColumn(f.columns.doing));
     assert.equal((await page(t3)).status, 410);
+    // Pasados los 30 días, el mantenimiento borra las filas sin columna.
+    const loose = await db.columnShare.count({ where: { projectId: f.project.id, columnId: null } });
+    assert.ok(loose >= 3);
+    await db.columnShare.updateMany({ where: { projectId: f.project.id, columnId: null }, data: { revokedAt: new Date(Date.now() - 40 * DAY) } });
+    await purgeEndedShares();
+    assert.equal(await db.columnShare.count({ where: { projectId: f.project.id, columnId: null, oldTokenHash: null } }), 0);
+    assert.equal((await page(t3)).status, 404);
   });
 });
 

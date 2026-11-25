@@ -18,7 +18,7 @@ import { rateLimit, rateIp } from "./rate-limit";
 import { publishChange } from "./realtime";
 import { spawnRecurrences } from "./recurrence";
 import {
-  inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, parseShareDate, sameHash, SHARE_LIMITS, SHARE_USE_WRITE_MS, shareAuthorLabel,
+  inShareGrace, isShareTokenShape, MAX_SHARE_COMMENT, parseShareDate, sameHash, SHARE_GRACE_DAYS, SHARE_LIMITS, SHARE_USE_WRITE_MS, shareAuthorLabel,
   shareKeyOf, shareTokenHashes, type ShareNotice,
 } from "./share-out-core";
 import type { SharePageData } from "./share-out-page";
@@ -49,6 +49,23 @@ export async function endColumnShare(client: Pick<typeof db, "columnShare">, col
 export async function revokeProjectShares(projectId: string, now: Date = new Date()): Promise<number> {
   const { count } = await db.columnShare.updateMany({ where: { projectId, tokenHash: { not: null }, revokedAt: null }, data: { revokedAt: now } });
   return count;
+}
+
+/**
+ * Mantenimiento diario (con los enlaces de email caducados): olvida los enlaces que terminaron hace más de 30 días (ya
+ * no dicen «ha caducado», sino «no encontrado») y borra las filas sin columna que ya no sirven para nada. Devuelve cuántas.
+ */
+export async function purgeEndedShares(now: Date = new Date()): Promise<number> {
+  const limit = new Date(now.getTime() - SHARE_GRACE_DAYS * 86_400_000);
+  const old = await db.columnShare.updateMany({ where: { oldEndedAt: { lt: limit } }, data: { oldTokenHash: null, oldEndedAt: null } });
+  const loose = await db.columnShare.findMany({ where: { columnId: null }, select: { id: true, columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, oldTokenHash: true } });
+  const ids = loose.filter((r) => {
+    if (r.oldTokenHash) return false;
+    const { state, endsAt } = shareLinkState(r, now);
+    return state === "none" || (endsAt !== null && endsAt < limit);
+  }).map((r) => r.id);
+  const gone = ids.length ? (await db.columnShare.deleteMany({ where: { id: { in: ids } } })).count : 0;
+  return old.count + gone;
 }
 
 // --- Resolver un token ------------------------------------------------------------------------------------------------
