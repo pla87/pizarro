@@ -133,8 +133,8 @@ propio worktree (más lento, pero nunca toca el `node_modules` del repositorio p
 - `git push` normal a la rama de trabajo; **nunca forzar** (`--force`) desde el PC. Tras la fusión aplastada, la
   ronda siguiente empieza en una rama recién sacada de `origin/main` (o con `git merge origin/main` sobre la anterior
   y push normal).
-- PR con `gh pr create --base main` (o la web), esperar sus dos comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas
-  y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
+- PR con `gh pr create --base main` (o la web), esperar sus tres comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas,
+  pruebas con base de datos y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
 - Publicar: en GitHub, **Actions → Release → Run workflow** sobre `main` (o `gh workflow run release.yml --ref main`);
   después `git fetch origin --tags` y comprobar que `origin/stable` y `vX.Y.Z` apuntan al commit fusionado. Detalle en
   `docs/handoff/PUBLICAR.md`.
@@ -332,10 +332,10 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
    `changelog.json` (`changes` y `en`) y `npm run version:bump -- --render`.
 2. Actualizar `docs/MANUAL.md` (las dos líneas de versión y las secciones afectadas), `docs/PRUEBAS.md` y
    `docs/PRUEBAS-CHROME.md`. Los PDF se revisan en local (`node scripts/build-manual-pdf.mjs`) y **no se suben**.
-3. Commit «vX.Y.Z: …», PR a `main` (esperar sus dos comprobaciones), fusionar aplastando.
-4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasa antes el job `checks`: tipos,
-   lint, pruebas y traducciones, y si falla no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
-   al commit fusionado (unos 6 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
+3. Commit «vX.Y.Z: …», PR a `main` (esperar sus tres comprobaciones), fusionar aplastando.
+4. **Actions → Release → Run workflow** sobre `main` (desde otra rama no hace nada; pasan antes los jobs `checks` (tipos,
+   lint, pruebas y traducciones) y `db` (pruebas con base de datos, en orden al azar), y si falla alguno no publica) y comprobar que `origin/stable` y la etiqueta `vX.Y.Z` apuntan
+   al commit fusionado (unos 7 min). «Comprobaciones» (`ci.yml`) solo corre en las PR y a mano.
 5. Una actualización de Dependabot se aprueba solo si pasan **todas** las comprobaciones (PUBLICAR, «Dependabot»).
 
 ## 6. Estado y pendientes
@@ -353,37 +353,46 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 66:** v1.70.0 fusionada en `main` y publicada con *Actions → Release* (rama `stable` movida).
-Primera ronda hecha en el PC del propietario (§0b) con Claude Code y Claude in Chrome. Se pasaron los tres prompts de
-Claude in Chrome que quedaban (pruebas en real de la v1.68/v1.69, DMARC con `rua` de Cloudflare y auditoría como usuario
-de la v1.69); sus hallazgos se arreglaron en esta ronda. Cinco vueltas de revisión y caza de bugs (servidor y seguridad;
-tablero y ficheros; páginas, e2e, i18n y accesibilidad; avisos, administración y cuenta; convergencia): la última solo
-halló casos límite, ya arreglados. Railway de prueba: *Teardown* con 15 s de *Draining* puesto y comprobado. Pendientes de
-Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.70.0, primeros informes DMARC).
+**Estado al cerrar la ronda 67:** v1.71.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
+(Claude Code web), sin Claude in Chrome. Hechas las decisiones de la ronda 66 (esqueleto de Releases, arranque sin Prisma,
+«Organizar por personas» solo con miembros y admins que lo tienen en su lista, pruebas con base de datos en la Release) y
+tres vueltas de revisión y caza de bugs (servidor y coste; usuario; atacante; administración, instalación y coste; diff de
+la ronda en servidor y en cliente): la tercera halló que los topes nuevos de emails podían bloquear a gente legítima y se
+rediseñaron. Propuesta del enlace externo para proveedores (R67F1) a la espera de decisión. Pendientes de Claude in
+Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real de la v1.70/v1.71, auditoría de la v1.71, DMARC y WhatsApp real con el
+propietario delante; en la nube los prompts los pega el propietario).
 
-**Preguntas abiertas al propietario (tras la v1.70.0)**, con la numeración del informe final de la ronda 66 (entre
+**Preguntas abiertas al propietario (tras la v1.71.0)**, con la numeración del informe final de la ronda 67 (entre
 paréntesis, la recomendación que se le dio):
 
-0. **Primer pendiente técnico (no es una decisión):** `interfaz-carga-e2e` falla en «LOAD: el de Releases»: al ir del
-   tablero a Releases con la red lenta sale el esqueleto del tablero y no el de Releases. Con la v1.69.0 pasa; lo trae
-   anotar la visita del proyecto («Usados recientemente», `noteProjectVisit` en `p/[projectId]/page.tsx`): sin esa línea
-   pasa 38/38, y lanzarla sin `after()` no lo arregla. Es solo estético (qué esqueleto se ve unos instantes). Investigar
-   (¿el layout cambia de orden de proyectos entre la precarga y la navegación?) y arreglar en la ronda 67.
-1. WhatsApp en la instalación real: el propietario dijo «inténtalo, tenemos que ver que funciona». Necesita su cuenta de
-   Meta (WhatsApp Business), el número y la plantilla aprobada; cada aviso cuesta dinero. Hacerlo con él delante, con la
-   guía `docs/guias/whatsapp.md` y la prueba de Integraciones (tope de 10 al día). (SÍ, en la próxima sesión, juntos)
-2. «Varias tareas»: aplicar también el prefijo de título del tipo, como «Nueva tarea». (Lo revisa más adelante)
-3. «Orden manual» de los proyectos (arrastrar en el selector; tabla por usuario). (Lo revisa más adelante; recomendación NO)
-4. Cabeceras de columna con `tabIndex` (Alt+flechas sobre el nombre): una parada de Tab más por columna. ¿Quitarla y
-   dejar solo el menú «⋯»? (NO: se queda, es la alternativa de teclado al arrastre)
-5. `migrate.mjs`: no lanzar la CLI de Prisma si `_prisma_migrations` ya está al día (unos segundos menos de corte por
-   despliegue). (SÍ, pequeño)
-6. «Organizar por personas» en proyectos de equipo: solo miembros y admins que lo tienen en su lista (hoy, todos los
-   admins de la instalación). (SÍ)
-7. Workflow Release: pasar también las pruebas con base de datos antes de publicar (+3 min por versión). (SÍ)
-8. Una URL por tarea (`?tarea=ID`) para enlazarla y abrir dos en pestañas (idea de la auditoría). (SÍ, ronda propia)
-9. Columna «Agenda» de la plantilla Eventos y viajes: renombrarla a «Programa» (cambia las instalaciones sin tocar). (NO)
-10. Railway real: el apagado de 15 s se dejó con la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` (la lee Pizarro).
+1. Enlace externo para proveedores (R67F1): una página por contacto externo con sus tareas (sin columna especial); desde
+   fuera, marcar hecha, cambiar la fecha y comentar; activable solo por admins, proyecto a proyecto, apagado por defecto;
+   token con huella HMAC en `/x/<token>` (en `SECRET_PATH_PREFIXES`), caduca a los 90 días sin uso; email al proveedor y
+   adjuntos en una fase 2. (SÍ, fase 1 en una ronda propia)
+2. Plan para IA más corto: «Depende de» como «la tarea N» y prioridad/etiquetas comunes dichas una vez (unos 14 % menos).
+   (SÍ)
+3. Menos consultas con el servidor quieto (de ~5.760 a ~600 al día; con dos procesos, un aviso de vencimiento hasta 10 min
+   tarde). (NO por ahora: ahorro pequeño)
+4. Topes de emails: 5 al día por dirección desde navegadores desconocidos, 100 repetidos al día en total, 10 códigos de 2FA
+   por hora y persona desde navegadores desconocidos; ventanas de 24 h móviles. (SÍ, así)
+5. Leer menos al arrancar cada sesión (PRUEBAS-CHROME solo cuando toque; §0b a un anexo): de ~74 KB a ~35 KB.
+   (SÍ)
+6. Migrador propio sin la CLI de Prisma (−20 % de imagen). (SÍ, más adelante, ronda propia)
+7. `npm test` sin la trampa de `NODE_OPTIONS` del entorno (envoltorio que quita `--max-old-space-size`). (SÍ, pequeño)
+8. Imagen y build: `dist/` con *splitting* (−4 MB) y caché de `npm ci` que no se pierda con cada versión. (SÍ, pequeño)
+9. e2e más rápidas: cambiar esperas fijas (~284 s) por esperas a una condición, suite a suite. (SÍ, al tocar cada una)
+10. Guía de Railway repartida en cinco documentos: dejar una sola fuente y enlazarla. (SÍ)
+11. Fallo previo: con la descripción abierta y escrita, un cambio de tipo que cambia el título y choca con un cambio de
+    otra persona recarga el editor y se pierde lo escrito. (SÍ, arreglarlo en la ronda 68)
+12. e2e de los arreglos del detalle de esta ronda (tipo que vuelve si no se guarda, foco de la descripción, «Más roles…»).
+    (SÍ, ronda 68)
+13. Un admin que quita el proyecto de su lista conserva la columna que ya tenía. (SÍ, así)
+14. Retirar (sí/no por letra): a) `MovedSectionRedirect.tsx` y su comprobación e2e (SÍ); b) la redirección `/admin/types`
+    de `next.config.ts` (SÍ); c) `public/icons/*.png`, sin uso desde la v1.54 (SÍ); d) `SERIAL` vacío de
+    `scripts/test-db.mjs` (SÍ); e) `legacyLogLabel` (NO hasta marzo de 2027); f) la historia de `railway.json` en INSTALL y
+    MANUAL (SÍ). `YATERMINE.md` (el resumen para pasar de la sesión local a la nube) se retiró en esta ronda a petición del
+    propietario: el resumen va en el informe final.
+15. Pendiente aprobado de la ronda 66: una URL por tarea (`?tarea=ID`), en una ronda propia.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.

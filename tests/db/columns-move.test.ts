@@ -2,10 +2,11 @@
 // crear y borrar columnas), así que un movimiento parte siempre de lo que dejó el anterior y ninguno se pierde.
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import pg from "pg";
 import { columnsLockName } from "../../src/lib/advisory-locks";
-import { db, expectOk, loginAs, makeProject, makeUser, waitForLockWaiter } from "./helpers";
+import { db, expectApplied, expectOk, loginAs, makeProject, makeUser, waitForLockWaiter } from "./helpers";
 import { moveColumn, placeColumn } from "../../src/actions/columns";
-import { undoLast } from "../../src/actions/undo";
+import { undoChecked, undoLast } from "../../src/actions/undo";
 
 const names = async (projectId: string) =>
   (await db.column.findMany({ where: { projectId }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { name: true, position: true } }));
@@ -85,5 +86,61 @@ describe("arrastrar una columna a otro sitio (placeColumn)", () => {
     await db.column.delete({ where: { id: gone.id } });
     expectOk(await placeColumn(f.columns.doing, gone.id));
     assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Nueva", "Hecho", "Por hacer", "En curso"]);
+  });
+});
+
+/** Las consultas SQL que se lanzan mientras corre `fn` (el adaptador de Prisma llama a pg.Client.query). */
+async function sqlDuring(fn: () => Promise<unknown>): Promise<string[]> {
+  const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+  const orig = proto.query;
+  const sql: string[] = [];
+  proto.query = function (this: unknown, ...args: unknown[]) {
+    const q = args[0];
+    sql.push(typeof q === "string" ? q : String((q as { text?: string } | undefined)?.text ?? ""));
+    return orig.apply(this, args);
+  };
+  try {
+    await fn();
+    return sql;
+  } finally {
+    proto.query = orig;
+  }
+}
+
+describe("Alt+flechas sobre una columna (moveColumn): solo las que cambian", () => {
+  test("con seis columnas, cambia y guarda en el deshacer solo las dos que se intercambian", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    await db.column.deleteMany({ where: { projectId: f.project.id } });
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) ids.push((await db.column.create({ data: { projectId: f.project.id, name: `C${i}`, position: (i + 1) * 1024 }, select: { id: true } })).id);
+    const sql = await sqlDuring(async () => expectOk(await moveColumn(ids[2]!, 1)));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["C0", "C1", "C3", "C2", "C4", "C5"]);
+    assert.equal(sql.filter((q) => /^\s*UPDATE "public"\."Column"/.test(q)).length, 2, "solo se escriben las dos");
+    const entry = await db.undoEntry.findFirstOrThrow({ where: { userId: user.id, projectId: f.project.id, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { ops: true } });
+    const ops = entry.ops as { t: string; id: string; data: { position: number } }[];
+    assert.deepEqual(ops.map((op) => [op.t, op.id, op.data.position]).sort(), [["column.set", ids[2]!, 3072], ["column.set", ids[3]!, 4096]].sort());
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["C0", "C1", "C2", "C3", "C4", "C5"]);
+  });
+
+  test("deshacer no devuelve a su sitio las columnas que otra persona movió después", async () => {
+    const ana = await makeUser();
+    const luis = await makeUser();
+    const f = await makeProject({ members: [ana, luis] });
+    // Posiciones ya numeradas (las de makeProject, 1000/2000/3000, se renumerarían todas al primer movimiento).
+    for (const [i, id] of [f.columns.todo, f.columns.doing, f.columns.done].entries()) await db.column.update({ where: { id }, data: { position: (i + 1) * 1024 } });
+    await db.column.create({ data: { projectId: f.project.id, name: "Cuarta", position: 4096 } });
+    // Ana: «Por hacer» a la derecha. Luis: «Hecho» a la derecha (las dos últimas).
+    await loginAs(ana);
+    expectOk(await moveColumn(f.columns.todo, 1));
+    await loginAs(luis);
+    expectOk(await moveColumn(f.columns.done, 1));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["En curso", "Por hacer", "Cuarta", "Hecho"]);
+    // Ana deshace sin que se le pregunte (Luis no tocó las suyas) y lo de Luis se queda.
+    await loginAs(ana);
+    expectApplied(await undoChecked(f.project.id));
+    assert.deepEqual((await names(f.project.id)).map((r) => r.name), ["Por hacer", "En curso", "Cuarta", "Hecho"]);
   });
 });

@@ -64,7 +64,17 @@ for s in ${SUITES:-$ALL}; do
   case $s in documentacion-formatos-e2e|cuentas-borrar-restos-e2e|documentacion-enlaces-e2e) EXTRA="GOOGLE_CLIENT_ID=r50 GOOGLE_CLIENT_SECRET=r50";; *) EXTRA="";; esac
   env $EXTRA DATABASE_URL=$DBURL PORT=$E2E_PORT APP_URL=$URL node --env-file-if-exists=.env --env-file=scripts/server.env scripts/start-local.mjs > "$OUT/srv-$s.log" 2>&1 &
   SP=$!
-  until curl -sf -o /dev/null $URL/api/health; do sleep 1; done
+  # Como mucho 120 s y solo mientras el servidor siga vivo (puerto ocupado, base sin migrar…): si no, la suite no se lanza.
+  up=0
+  for _ in $(seq 120); do
+    curl -sf -o /dev/null $URL/api/health && { up=1; break; }
+    kill -0 $SP 2>/dev/null || break
+    sleep 1
+  done
+  if [ $up = 0 ]; then
+    echo "$s: el servidor no arrancó (ver $OUT/srv-$s.log: $(tail -1 "$OUT/srv-$s.log"))"; BAD="$BAD $s"
+    kill $SP 2>/dev/null; wait $SP 2>/dev/null; continue
+  fi
   (cd e2e && BASE=$URL DATABASE_URL=$DBURL APP_DIR=$PWD/.. CHROME=$CHROME node "$s.mjs" > "$OUT/$s.log" 2>&1)
   report "$s"
   kill $SP; wait $SP 2>/dev/null

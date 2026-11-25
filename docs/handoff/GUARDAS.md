@@ -79,6 +79,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `dragItemsNow` (ref), no el estado del dibujo anterior (una tarjeta rápida se quedaba en una columna intermedia).
 - (Ronda 66) Lo que entra en una columna «Asignación a persona» enseña `showAssignedNotice` (assignNotice.ts) con
   «Deshacer»: `moveTask`/`moveTasks` devuelven `undo`. Una vía nueva de mover tarjetas, igual.
+- (Ronda 67) «Organizar por personas»: las personas son `projectPeopleWhere` (`access.ts`; miembros y, en uno de equipo, los
+  administradores con `AdminProjectPick`), no `projectUsersWhere` (que sigue dando a todos los administradores para el
+  selector de responsable y lo demás). El diálogo cuenta con `project.peopleIds`, que la página del tablero calcula con
+  la misma función (una consulta, solo en proyectos de equipo de «Casa y familia»): lo que ve y lo que crea
+  `createPersonColumns` deben coincidir.
 
 ## Navegador e interfaz
 
@@ -98,6 +103,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
   adelantado (diálogos del tablero en reposo, `HoverPrefetchLink`, el detalle adelantado al hacer clic). Una precarga
   nueva debe mirarlo. Los `Link` de Next con su precarga normal no lo miran (Next solo lo hace en el router de `pages/`).
+- (Ronda 67) Precarga y esqueletos: una página de proyecto solo enseña SU `loading.tsx` si se precargó antes de pulsar;
+  si no, Next enseña el de más arriba (el del tablero, en `p/[projectId]/loading.tsx`). `HoverPrefetchLink` precarga
+  también cuando cambia su `href` con el ratón ya encima o con el foco (al cambiar de proyecto en el selector, el
+  puntero puede quedar sobre «Releases» de la barra lateral sin otro `mouseenter`). Prueba: `e2e/interfaz-carga-e2e.mjs`.
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
 - Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
@@ -147,6 +156,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   enum; `INPUT_COLUMN_ROLES` + `liveColumnRole` convierten el texto que entra (ZIP/JSON de la v1.67, plantillas,
   deshacer y su instantánea). La v1.68 funciona sobre esta base; con la v1.67 fallan elegir esos roles y crear proyectos
   con «Casa y familia» o «Eventos y viajes».
+- (Ronda 67) Arranque: `scripts/migrate.mjs` no lanza `prisma migrate deploy` si `_prisma_migrations` tiene todas las
+  migraciones de la carpeta terminadas, sin revertir y con el mismo checksum (sha256 del `migration.sql`), y ninguna a
+  medias (`migrationsUpToDate`). Ante cualquier duda (pendiente, fallida, otro checksum, tabla ausente, error al leer,
+  `?schema=` distinto de `public`) se lanza Prisma como antes. Si Prisma cambia cómo calcula el checksum, lo detecta
+  `tests/db/start-migrate.test.ts`.
 
 ## Base de datos
 
@@ -302,6 +316,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   token) debe llevar ese atributo**.
 - (Ronda 64) Limitador: los topes de lo que cuesta dinero o molesta a terceros (`whatsapp:`, `messaging:`, `mail:test:`,
   `notify:`) van en el mapa de seguridad. Un tope nuevo de ese tipo, igual.
+- (Ronda 67) Más prefijos en el mapa de seguridad: `project-invite:`, `resend-invite:`, `project-added-mail:`,
+  `report-schedule:`, `telegram:link:`, `telegram:reply:` y `2fa:send-user:` (`reset:` ya lo cubría). Un tope contra el envío
+  masivo no debe poder usarse para bloquear a nadie: «¿Olvidaste tu contraseña?» deja salir siempre el primer email del día
+  a cada dirección y los pedidos desde un dispositivo conocido (`knownDeviceCheck`, leído en la petición); solo los
+  repetidos desde navegadores desconocidos cuentan (5 al día por dirección, 100 al día en total, `reset:repeat-day`). Los
+  códigos de 2FA por email, 10/h por persona solo desde navegadores desconocidos, y la pantalla de verificación dice si el
+  tope impidió enviarlo (`emailCodeStatus`).
 
 ## Emails y mensajería
 

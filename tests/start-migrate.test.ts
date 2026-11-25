@@ -17,6 +17,10 @@ type Mod = {
   dbTarget: (url: string | undefined) => string;
   autoResolvePlan: (names: string[], sqlOf: (name: string) => string | null, rows: { migration_name: string; rolled_back_at: Date | null }[] | null) => { ok: boolean; reason?: string };
   isPrismaInfoLine: (line: string) => boolean;
+  migrationsUpToDate: (
+    local: { name: string; checksum: string }[] | null,
+    rows: { migration_name: string; checksum: string; finished_at: Date | null; rolled_back_at: Date | null }[] | null,
+  ) => { ok: true; count: number } | { ok: false; reason: string | null };
 };
 // Especificador no literal: el script es .mjs (lo ejecuta node sin compilar) y tsc no tiene sus tipos.
 const SCRIPT = new URL("../scripts/migrate.mjs", import.meta.url);
@@ -221,6 +225,30 @@ test("migrate.mjs: las líneas informativas de Prisma van a stdout (Railway pint
   } finally {
     await close(pg);
   }
+});
+
+test("migrate.mjs: no lanza Prisma solo si todas las migraciones de la carpeta están aplicadas, terminadas y con el mismo checksum", () => {
+  const local = [{ name: "20260101000000_init", checksum: "a".repeat(64) }, { name: "20270101000000_nueva", checksum: "b".repeat(64) }];
+  const t = new Date();
+  const row = (name: string, checksum: string, finished: Date | null = t, rolledBack: Date | null = null) => ({ migration_name: name, checksum, finished_at: finished, rolled_back_at: rolledBack });
+  const applied = [row("20260101000000_init", "a".repeat(64)), row("20270101000000_nueva", "b".repeat(64))];
+  assert.deepEqual(m.migrationsUpToDate(local, applied), { ok: true, count: 2 });
+  // Una revertida y vuelta a aplicar (el reintento de P3009) cuenta como aplicada; las de una versión posterior no estorban.
+  assert.deepEqual(m.migrationsUpToDate(local, [row("20270101000000_nueva", "b".repeat(64), null, t), ...applied, row("20280101000000_futura", "c".repeat(64))]), { ok: true, count: 2 });
+  // Pendientes (también la base recién creada, sin filas).
+  assert.deepEqual(m.migrationsUpToDate(local, applied.slice(0, 1)), { ok: false, reason: "1 pendiente: 20270101000000_nueva" });
+  assert.deepEqual(m.migrationsUpToDate(local, []), { ok: false, reason: "2 pendientes, desde 20260101000000_init" });
+  // Solo revertida (sin volver a aplicarla): pendiente.
+  assert.equal(m.migrationsUpToDate(local, [applied[0]!, row("20270101000000_nueva", "b".repeat(64), null, t)]).ok, false);
+  // A medias o fallida (la de P3009), aunque sea de una migración que no está en la carpeta.
+  assert.deepEqual(m.migrationsUpToDate(local, [...applied, row("20280101000000_futura", "c".repeat(64), null)]), { ok: false, reason: "20280101000000_futura quedó a medias o falló" });
+  assert.equal(m.migrationsUpToDate(local, [applied[0]!, row("20270101000000_nueva", "b".repeat(64), null)]).ok, false);
+  // Otro checksum (alguien editó una migración publicada): que lo vea Prisma.
+  assert.deepEqual(m.migrationsUpToDate(local, [applied[0]!, row("20270101000000_nueva", "d".repeat(64))]), { ok: false, reason: "el checksum de 20270101000000_nueva no coincide con el aplicado" });
+  // Sin poder leer la carpeta o la base, o sin migraciones: se lanza Prisma, sin más explicación.
+  assert.deepEqual(m.migrationsUpToDate(null, applied), { ok: false, reason: null });
+  assert.deepEqual(m.migrationsUpToDate([], applied), { ok: false, reason: null });
+  assert.deepEqual(m.migrationsUpToDate(local, null), { ok: false, reason: null });
 });
 
 test("start.sh usa migrate.mjs y el Dockerfile lo copia a la imagen", () => {

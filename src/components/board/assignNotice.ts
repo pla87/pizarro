@@ -1,5 +1,5 @@
 import { undoEntry } from "@/actions/undo";
-import { formatDay } from "@/lib/dates";
+import { assignedNoticeText } from "@/lib/column-assign-core";
 import { undoneText } from "../undo-text";
 import type { T } from "@/i18n/shared";
 
@@ -19,18 +19,13 @@ interface NoticeContext {
 /**
  * Tras mover tarjetas a una columna «Asignación a persona» (arrastrar, Alt+flechas, «Mover a…»): «Asignada a Ana · vence el
  * 27 nov», con «Deshacer» (`undoId`: la entrada del movimiento, que devuelve también el responsable y la fecha de antes).
- * Así no pasa inadvertido que la tarjeta ha cambiado de manos. Devuelve si ha avisado (si no, quien llama da su aviso).
+ * Así no pasa inadvertido que la tarjeta ha cambiado de manos. `moved`: cuántas tarjetas se movieron (por defecto, las
+ * asignadas; ver assignedNoticeText). Devuelve si ha avisado (si no, quien llama da su aviso).
  */
-export function showAssignedNotice(assigned: readonly Assigned[], undoId: string | undefined, ctx: NoticeContext): boolean {
-  const first = assigned[0];
-  if (!first) return false;
+export function showAssignedNotice(assigned: readonly Assigned[], undoId: string | undefined, ctx: NoticeContext, moved = assigned.length): boolean {
+  const message = assignedNoticeText(assigned, moved, ctx);
+  if (message === null) return false;
   const { t } = ctx;
-  const name = ctx.users.find((u) => u.id === first.assigneeId)?.name ?? "?";
-  const message = assigned.length > 1
-    ? t("{n} tarjetas asignadas a {name}", { n: assigned.length, name })
-    : first.dueDate
-      ? t("Asignada a {name} · vence el {date}", { name, date: formatDay(first.dueDate, ctx.today, ctx.locale) })
-      : t("Asignada a {name}", { name });
   const undo = undoId
     ? {
         label: t("Deshacer"),

@@ -1,8 +1,8 @@
 // Solo tipos de dnd-kit: así el módulo se prueba en Node sin cargar React.
 import type { CollisionDetection } from "@dnd-kit/core";
 
-/** Prefijo del id de los droppables de columna (el resto de droppables son tarjetas). */
-const COLUMN_DROPPABLE_PREFIX = "col:";
+/** Prefijo del id de los droppables de columna (el resto de droppables son tarjetas); el tablero los crea con él. */
+export const COLUMN_DROPPABLE_PREFIX = "col:";
 /** Prefijo del id de la cabecera de una columna que se arrastra para cambiarla de sitio (no es un droppable). */
 export const COLUMN_DRAG_PREFIX = "colmove:";
 

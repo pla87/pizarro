@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { pdfRuns } from "./pdf-runs";
 import { calendarWeekStart } from "../src/lib/calendar";
 import {
-  assignedDueDate, assignPlanBounds, buildAssignPlan, descriptionSummary, isAssignColumn, isValidAssignDays, parseAssignDays,
+  assignedDueDate, assignedNoticeText, assignPlanBounds, buildAssignPlan, descriptionSummary, isAssignColumn, isValidAssignDays, parseAssignDays,
   type AssignPlanTask,
 } from "../src/lib/column-assign-core";
 
@@ -150,4 +150,22 @@ test("PDF: título con la persona, columna y proyecto, grupos traducidos y fecha
   assert.ok(!es.includes("Hoy"), "sin tareas de hoy, no sale el grupo");
   const en = await text("en");
   for (const s of ["Ana's plan", "Overdue", "This week", "No date", "Priority: High", "Due Nov 20", "and 2 more subtasks"]) assert.ok(en.includes(s), `${s} en: ${en}`);
+});
+
+test("aviso al mover a una columna «Asignación a persona»: dice cuántas se movieron si no todas cambian", async () => {
+  const { makeT } = await import("../src/i18n/core");
+  const ctx = (locale: "es" | "en") => ({ users: [{ id: "ana", name: "Ana" }], today: "2026-11-25", locale, t: makeT(locale) });
+  const a = (id: string, dueDate: string | null = null) => ({ id, assigneeId: "ana", dueDate });
+  const es = ctx("es");
+  assert.equal(assignedNoticeText([], 3, es), null);
+  // Todas las movidas cambian: como hasta ahora.
+  assert.equal(assignedNoticeText([a("1")], 1, es), "Asignada a Ana");
+  assert.equal(assignedNoticeText([a("1", "2026-11-27")], 1, es), "Asignada a Ana · vence el 27 nov");
+  assert.equal(assignedNoticeText([a("1"), a("2")], 2, es), "2 tarjetas asignadas a Ana");
+  // Algunas ya eran suyas (y tenían fecha): un solo aviso con las dos cifras.
+  assert.equal(assignedNoticeText([a("1"), a("2")], 5, es), "5 tarjetas movidas · 2 asignadas a Ana");
+  assert.equal(assignedNoticeText([a("1", "2026-11-27")], 4, es), "4 tarjetas movidas · 1 asignada a Ana");
+  const en = ctx("en");
+  assert.equal(assignedNoticeText([a("1"), a("2")], 5, en), "5 cards moved · 2 assigned to Ana");
+  assert.equal(assignedNoticeText([a("1")], 4, en), "4 cards moved · 1 assigned to Ana");
 });

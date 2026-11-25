@@ -33,4 +33,7 @@ export const columnas: Record<string, string> = {
   "{n} columnas creadas": "{n} columns created",
   "Creó 1 columna «Asignación a persona»": "Created 1 “Assign to person” column",
   "Creó {n} columnas «Asignación a persona»": "Created {n} “Assign to person” columns",
+  // «Organizar por personas» en proyectos de equipo: los administradores cuentan si tienen el proyecto en su lista.
+  "Aún no hay nadie en el proyecto: añade antes a las personas.": "There is nobody in the project yet: add people first.",
+  "Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».": "Admins only count if the project is in their “Projects I work on”.",
 };

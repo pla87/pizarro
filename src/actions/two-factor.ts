@@ -90,11 +90,11 @@ export async function chooseSetupMethod(method: string) {
     const m = methodSchema.parse(method);
     const ch = await readChallenge();
     if (!ch || ch.kind !== "SETUP" || ch.confirmed) throw new AppError("La verificación ha caducado. Vuelve a entrar.");
-    const started = await startMethod(ch.id, ch.user, m);
+    const started = await startMethod(ch, ch.user, m);
     // App nueva con email disponible: también se pide un código enviado al email, para que quien solo tenga
     // la contraseña (filtrada) no pueda registrar su propia app en una cuenta que aún no tenía segundo paso.
     if (m === "TOTP" && emailEnabled()) {
-      await sendEmailCode({ id: ch.id }, ch.user);
+      await sendEmailCode(ch, ch.user);
       return { ...started, emailCodeSent: true };
     }
     return started;
@@ -130,11 +130,12 @@ export async function finishSetup(): Promise<void> {
   redirect(ch.user.mustChangePassword ? "/change-password" : safeNextPath(ch.next ?? ""));
 }
 
-async function startMethod(challengeId: string, user: { name: string; email: string; locale: string }, method: "TOTP" | "EMAIL") {
+async function startMethod(ch: { id: string; userId: string }, user: { name: string; email: string; locale: string }, method: "TOTP" | "EMAIL") {
+  const challengeId = ch.id;
   if (method === "EMAIL") {
     if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
     await db.loginChallenge.update({ where: { id: challengeId }, data: { method, pendingSecretEnc: null, codeHash: null, codeExpiresAt: null } });
-    await sendEmailCode({ id: challengeId }, user);
+    await sendEmailCode(ch, user);
     return { method };
   }
   const secret = generateTotpSecret();
@@ -169,9 +170,9 @@ export async function beginEnrollment(method: string, password: string) {
     await db.loginChallenge.deleteMany({ where: { userId: user.id, kind: "ENROLL" } });
     const row = await db.loginChallenge.create({
       data: { userId: user.id, kind: "ENROLL", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + CHALLENGE_TTL_MS) },
-      select: { id: true },
+      select: { id: true, userId: true },
     });
-    return startMethod(row.id, me, m);
+    return startMethod(row, me, m);
   });
 }
 

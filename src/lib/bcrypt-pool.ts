@@ -5,6 +5,8 @@
 // El hilo carga bcryptjs desde node_modules (en la salida standalone de Next está porque va en serverExternalPackages).
 // Si no se encuentra o los hilos fallan, se calcula en el hilo principal como antes: nunca deja de funcionar.
 // Quien lo usa (password.ts) limita cuántas operaciones van a la vez, así que basta un hilo por operación en curso.
+// Un hilo sin trabajo durante BCRYPT_WORKER_IDLE_MS se cierra (cada uno retiene ~13 MB): el siguiente inicio de sesión
+// abre otro (~35 ms, frente a los ~200 ms del propio bcrypt).
 
 import path from "node:path";
 import { Worker } from "node:worker_threads";
@@ -32,7 +34,14 @@ class WorkerUnavailable extends Error {
 // Por nombre: los hilos (en globalThis) pueden haberlos creado otros paquetes de Next, con su propia copia de la clase.
 const isWorkerUnavailable = (err: unknown) => err instanceof Error && err.name === "BcryptWorkerUnavailable";
 
-type Slot = { worker: Worker; busy: boolean; ready: Promise<void>; pending: { id: number; resolve: (v: unknown) => void; reject: (e: Error) => void } | null };
+type Slot = {
+  worker: Worker;
+  busy: boolean;
+  ready: Promise<void>;
+  pending: { id: number; resolve: (v: unknown) => void; reject: (e: Error) => void } | null;
+  /** Cierre por inactividad programado (solo mientras está libre). */
+  idleTimer?: ReturnType<typeof setTimeout> | null;
+};
 
 interface PoolState {
   slots: Slot[];
@@ -44,6 +53,8 @@ interface PoolState {
 }
 
 const MAX_FAILURES = 3;
+/** Tras este tiempo sin trabajo, el hilo se cierra. */
+const BCRYPT_WORKER_IDLE_MS = 90_000;
 // En una variable (no literal) para que el empaquetador no intente resolverlo por su cuenta.
 const BCRYPT_PACKAGE = ["bcrypt", "js"].join("");
 const g = globalThis as unknown as { __pzBcryptPool?: PoolState };
@@ -70,7 +81,27 @@ export function bcryptWorkersEnabled(): boolean {
   return state.failures < MAX_FAILURES && bcryptPath() !== null;
 }
 
+function clearIdle(slot: Slot) {
+  if (slot.idleTimer) clearTimeout(slot.idleTimer);
+  slot.idleTimer = null;
+}
+
+/** Programa el cierre del hilo si sigue libre dentro de `idleMs` (el temporizador no retiene el proceso). */
+function scheduleIdle(slot: Slot, idleMs: number) {
+  clearIdle(slot);
+  if (!state.slots.includes(slot)) return; // ya se quitó (tiempo agotado, error): se está cerrando
+  slot.idleTimer = setTimeout(() => {
+    slot.idleTimer = null;
+    if (slot.busy || !state.slots.includes(slot)) return;
+    // Fuera de la lista antes de terminarlo: una operación que llegue ahora abre otro hilo. El «exit» no cuenta como fallo.
+    state.slots = state.slots.filter((s) => s !== slot);
+    void slot.worker.terminate().catch(() => 0);
+  }, idleMs);
+  slot.idleTimer.unref();
+}
+
 function dropSlot(slot: Slot, err: Error) {
+  clearIdle(slot);
   state.slots = state.slots.filter((s) => s !== slot);
   const p = slot.pending;
   slot.pending = null;
@@ -124,7 +155,7 @@ const BCRYPT_OP_TIMEOUT_MS = 10_000;
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-async function runInWorker(file: string, job: BcryptOp, timeoutMs: number): Promise<unknown> {
+async function runInWorker(file: string, job: BcryptOp, timeoutMs: number, idleMs: number): Promise<unknown> {
   let slot: Slot;
   try {
     slot = state.slots.find((s) => !s.busy) ?? newSlot(file);
@@ -134,6 +165,7 @@ async function runInWorker(file: string, job: BcryptOp, timeoutMs: number): Prom
     console.error("[bcrypt] no se pudo crear el hilo de trabajo", messageOf(err));
     throw new WorkerUnavailable(messageOf(err));
   }
+  clearIdle(slot);
   slot.busy = true;
   slot.worker.ref();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -167,19 +199,24 @@ async function runInWorker(file: string, job: BcryptOp, timeoutMs: number): Prom
     clearTimeout(timer);
     slot.busy = false;
     slot.worker.unref();
+    scheduleIdle(slot, idleMs);
   }
 }
 
 /**
  * Ejecuta la operación en un hilo de trabajo; si no hay hilos (o el hilo falla o no responde a tiempo), con `fallback`
  * en el hilo principal. Un error del propio bcrypt (p. ej. un hash con formato inválido) se propaga igual que en el hilo
- * principal. `timeoutMs`: solo para pruebas.
+ * principal. `timeoutMs` e `idleMs` (cuánto sigue abierto el hilo sin trabajo): solo para pruebas.
  */
-export async function runBcrypt<T>(job: BcryptOp, fallback: () => Promise<T>, { timeoutMs = BCRYPT_OP_TIMEOUT_MS }: { timeoutMs?: number } = {}): Promise<T> {
+export async function runBcrypt<T>(
+  job: BcryptOp,
+  fallback: () => Promise<T>,
+  { timeoutMs = BCRYPT_OP_TIMEOUT_MS, idleMs = BCRYPT_WORKER_IDLE_MS }: { timeoutMs?: number; idleMs?: number } = {},
+): Promise<T> {
   const file = bcryptWorkersEnabled() ? bcryptPath() : null;
   if (!file) return fallback();
   try {
-    return (await runInWorker(file, job, timeoutMs)) as T;
+    return (await runInWorker(file, job, timeoutMs, idleMs)) as T;
   } catch (err) {
     if (isWorkerUnavailable(err)) return fallback();
     throw err;
@@ -196,5 +233,6 @@ export async function closeBcryptWorkers(): Promise<void> {
   const slots = state.slots;
   state.slots = [];
   state.failures = 0;
+  for (const s of slots) clearIdle(s);
   await Promise.all(slots.map((s) => s.worker.terminate().catch(() => 0)));
 }

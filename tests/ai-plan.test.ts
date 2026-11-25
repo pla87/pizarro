@@ -287,7 +287,8 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     });
     const md = withPaths(true);
     assert.ok(md.includes("- **Adjuntos:** 1 archivo(s) en el ZIP «adjuntos/…»"));
-    assert.ok(md.includes("- **Adjuntos:**\n  - `adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`\n"), md);
+    // La imagen ya está en la descripción con su ruta: la tarea no la repite en «Adjuntos» (y sin más adjuntos, no hay línea).
+    assert.ok(!md.slice(md.indexOf("### 1.")).includes("**Adjuntos"), md);
     assert.ok(md.includes("![captura](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     assert.ok(md.includes("![c](adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     // Una imagen que no es adjunto de ninguna tarea del plan se queda en su texto alternativo (sin enlace a Pizarro).
@@ -300,6 +301,31 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(plain.includes("- **Adjuntos:** Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos"));
     for (const text of [md, plain]) assert.ok(!text.includes("pz.example.com") && !text.includes("Pizarro"), text);
     assert.ok(!md.includes("no lleva ZIP"));
+  });
+
+  test("con ZIP: lo que la descripción ya cita no se repite en «Adjuntos»; con varios, la carpeta va una vez", () => {
+    const { byAttachment } = planAttachmentPaths(tasks);
+    const plan = (attachments: string[], description: string, l: "es" | "en" = "es") => buildAiPlanMarkdown({
+      header: "", footer: "", project: { name: "Web" }, date: "2026-11-23", origin: "https://pz.example.com",
+      tasks: [{ id: "t1", title: "Arreglar", description, attachments: attachments.map((id) => ({ id, name: id, path: byAttachment.get(id) })) }],
+    }, makeT(l));
+    const f = "adjuntos/01-arreglar-ana-el-login-nandu";
+    // Una captura pegada y dos ficheros más: la captura, solo en la descripción; los otros, con la carpeta una vez.
+    const md = plan(["a1", "a2", "a3"], "Falla así: ![captura](/api/attachments/a1)");
+    assert.ok(md.includes(`- **Adjuntos** (en la carpeta \`${f}/\`): \`plano_final-2.webp\`, \`log.txt\`\n`), md);
+    assert.ok(md.includes(`Falla así: ![captura](${f}/Plano_final.webp)`), md);
+    assert.ok(!md.includes("`Plano_final.webp`") && !md.includes(`\`${f}/Plano_final.webp\``), md);
+    // Uno solo (el resto, citados): su ruta completa en la misma línea.
+    assert.ok(plan(["a1", "a3"], "![c](/api/attachments/a1)").includes(`- **Adjuntos:** \`${f}/log.txt\`\n`));
+    // Un enlace dentro de un bloque de código no se cambia ni cuenta como citado.
+    const code = plan(["a1", "a3"], "```\n![c](/api/attachments/a1)\n```");
+    assert.ok(code.includes(`- **Adjuntos** (en la carpeta \`${f}/\`): \`Plano_final.webp\`, \`log.txt\``), code);
+    // Sin citar ninguno, todos; en inglés, con su texto.
+    const en = buildAiPlanMarkdown({
+      header: "", footer: "", project: { name: "Web" }, date: "2026-11-23",
+      tasks: [{ id: "t1", title: "Fix", attachments: [{ id: "a1", name: "x", path: "attachments/01-fix/a.webp" }, { id: "a3", name: "y", path: "attachments/01-fix/log.txt" }] }],
+    }, makeT("en"));
+    assert.ok(en.includes("- **Attachments** (in the folder `attachments/01-fix/`): `a.webp`, `log.txt`\n"), en);
   });
 
   test("planDescription: sin enlaces a Pizarro (relativos o con su origen); los adjuntos del ZIP, por su ruta; los demás enlaces, igual", () => {
@@ -363,7 +389,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
       }],
     }, makeT("en"));
     assert.ok(md.includes("- **Attachments:** 1 file(s) in the “attachments/…” ZIP that goes with this plan"), md);
-    assert.ok(md.includes("  - `attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp`\n"), md);
+    assert.ok(!md.slice(md.indexOf("### 1.")).includes("**Attachments"), md);
     assert.ok(!md.includes("Pizarro"), md);
     assert.ok(md.includes("![shot](attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp)"));
     assert.ok(!md.includes("adjuntos/"), md);

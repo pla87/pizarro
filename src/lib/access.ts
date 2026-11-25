@@ -37,6 +37,16 @@ export function projectUsersWhere(project: { isPrivate: boolean }, projectId: st
 }
 
 /**
+ * Personas del proyecto para «Organizar por personas» (una columna cada una): sus miembros y, si es de equipo, los
+ * administradores que lo tienen en «Proyectos en los que trabajo» (AdminProjectPick). Los demás administradores lo ven y
+ * pueden ser responsables (projectUsersWhere), pero no tienen columna propia. Un administrador miembro cuenta como miembro.
+ */
+export function projectPeopleWhere(project: { isPrivate: boolean }, projectId: string): Prisma.UserWhereInput {
+  const member: Prisma.UserWhereInput = { memberships: { some: { projectId } } };
+  return project.isPrivate ? member : { OR: [member, { role: "ADMIN", projectPicks: { some: { projectId } } }] };
+}
+
+/**
  * Proyectos para menús y selectores, en el orden que el usuario ha elegido en su perfil (`projectOrder`: usados
  * recientemente o alfabético). Con `all`, todos los accesibles (p. ej. pantallas de administración).
  */

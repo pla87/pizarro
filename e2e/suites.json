@@ -403,6 +403,8 @@
       "src/app/(app)/**/loading.tsx",
       "src/components/ui/ProjectLoading.tsx",
       "src/components/ui/PageSkeleton.tsx",
+      "src/components/ui/HoverPrefetchLink.tsx",
+      "src/lib/project-visit.ts",
       "src/components/board/AttachLimitHint.tsx",
       "src/lib/attachment-limit.ts",
       "src/lib/upload-size.ts",

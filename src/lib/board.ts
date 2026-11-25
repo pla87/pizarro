@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { dateToIso } from "./dates";
-import { projectUsersWhere } from "./access";
+import { projectPeopleWhere, projectUsersWhere } from "./access";
 import { db } from "./db";
 import { TASK_ORDER } from "./task-positions";
 import type { AttachmentTotals, BoardTask } from "./types";
@@ -199,6 +199,18 @@ export async function projectUsers(projectId: string, project: { isPrivate: bool
   });
 }
 
+/**
+ * Personas activas para «Organizar por personas» (projectPeopleWhere): en un proyecto privado, las mismas que projectUsers;
+ * en uno de equipo, sin los administradores que no lo tienen en su lista.
+ */
+export async function projectPeople(projectId: string, project: { isPrivate: boolean }) {
+  return db.user.findMany({
+    where: { active: true, ...projectPeopleWhere(project, projectId) },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 /** Zona horaria de referencia para «hoy» en plazos e informes (la misma que usa el navegador, ver format.ts). */
 export { appTimeZone } from "./format";
 
@@ -221,7 +233,8 @@ export function listKinds(projectId?: string) {
 
 export async function userTemplates(userId: string) {
   const rows = await db.releaseTemplate.findMany({
-    where: { userId },
+    // Solo los de release: los del plan para IA (PLAN_HEADER/PLAN_FOOTER) van en la misma tabla y aquí no se usan.
+    where: { userId, kind: { in: ["HEADER", "FOOTER"] } },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     select: { id: true, kind: true, name: true, content: true },
   });
@@ -232,7 +245,7 @@ export async function userTemplates(userId: string) {
 /** Cabeceras y pies de release definidos en el proyecto, en el orden que se les dio. */
 export async function projectReleaseTemplates(projectId: string) {
   const rows = await db.projectReleaseTemplate.findMany({
-    where: { projectId },
+    where: { projectId, kind: { in: ["HEADER", "FOOTER"] } },
     orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     select: { id: true, kind: true, name: true, content: true },
   });

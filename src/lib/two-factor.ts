@@ -6,11 +6,11 @@ import { sendTwoFactorCodeMail } from "./auth-mail";
 import { authTokenHashes, hashAuthToken, newToken } from "./auth-token-core";
 import { decryptSecretInfo, encryptSecret } from "./crypto";
 import { db } from "./db";
-import { isTrustedDevice, revokeTrustedDevices } from "./devices";
+import { isKnownDevice, isTrustedDevice, revokeTrustedDevices } from "./devices";
 import { AppError } from "./errors";
 import { emailEnabled } from "./mail";
 import { logMailError } from "./mask-email";
-import { rateLimit } from "./rate-limit";
+import { rateLimit, rateLimitReached } from "./rate-limit";
 import { cookieSecure } from "./session-config";
 import {
   EMAIL_CODE_TTL_MS, RECOVERY_CODE_COUNT, emailCodeHashes, generateEmailCode, generateRecoveryCodes, hashEmailCode, hashRecoveryCode, normalizeRecoveryCode,
@@ -77,10 +77,31 @@ export async function dropChallenge(id: string): Promise<void> {
 
 const safeEq = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-/** Envía un código de 6 dígitos al email de la cuenta y lo deja anotado (solo su HMAC) en el desafío. */
-export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: string; email: string; locale: string }): Promise<void> {
+/** Códigos por email que se envían como mucho a una persona por hora, entre todos sus desafíos (salvo a un dispositivo conocido). */
+const EMAIL_CODES_PER_USER_HOUR = 10;
+const perUserSendKey = (userId: string) => `2fa:send-user:${userId}`;
+
+/** ¿Está lleno el tope de la persona para este navegador? Un dispositivo conocido de la cuenta no lo tiene. */
+async function perUserSendCapped(userId: string): Promise<boolean> {
+  return rateLimitReached(perUserSendKey(userId), EMAIL_CODES_PER_USER_HOUR) && !(await isKnownDevice(userId));
+}
+
+/**
+ * Envía un código de 6 dígitos al email de la cuenta y lo deja anotado (solo su HMAC) en el desafío. Dos topes: por
+ * desafío (5 en la vida del código) y por persona (EMAIL_CODES_PER_USER_HOUR por hora): cada inicio de sesión con la
+ * contraseña crea un desafío nuevo, así que sin el de la persona quien la tuviera podía mandarle un código tras otro.
+ * El de la persona no frena a quien lo pide desde un dispositivo conocido de la cuenta (ya ha entrado desde ese
+ * navegador): con la contraseña filtrada, un tercero lo llenaba y dejaba al dueño una hora sin código. Vale igual para
+ * el código de borrar la cuenta (con sesión, el navegador quedó anotado al entrar; el tope por desafío sigue).
+ */
+export async function sendEmailCode(ch: Pick<Challenge, "id" | "userId">, user: { name: string; email: string; locale: string }): Promise<void> {
   if (!emailEnabled()) throw new AppError("El envío de emails no está configurado.");
-  if (!rateLimit(`2fa:send:${ch.id}`, 5, EMAIL_CODE_TTL_MS)) throw new AppError("Demasiados envíos. Espera unos minutos.");
+  const perUser = perUserSendKey(ch.userId);
+  // El dispositivo solo se mira con el tope ya lleno (perUserSendCapped); si no lo está, ningún await hasta anotar el
+  // envío: dos peticiones a la vez no pueden ver el mismo contador.
+  const capped = rateLimitReached(perUser, EMAIL_CODES_PER_USER_HOUR) && !(await isKnownDevice(ch.userId));
+  if (capped || !rateLimit(`2fa:send:${ch.id}`, 5, EMAIL_CODE_TTL_MS)) throw new AppError("Demasiados envíos. Espera unos minutos.");
+  rateLimit(perUser, EMAIL_CODES_PER_USER_HOUR, 60 * 60_000);
   const code = generateEmailCode();
   await db.loginChallenge.update({ where: { id: ch.id }, data: { codeHash: hashEmailCode(ch.id, code), codeExpiresAt: new Date(Date.now() + EMAIL_CODE_TTL_MS) } });
   try {
@@ -89,6 +110,16 @@ export async function sendEmailCode(ch: Pick<Challenge, "id">, user: { name: str
     logMailError("[2fa] envío del código", err);
     throw new AppError("No se pudo enviar el código por email.");
   }
+}
+
+/**
+ * Pantalla del segundo paso con código por email: «sent» si el código salió; «capped» si no salió porque la persona ha
+ * llegado a su tope de envíos (la pantalla lo dice en vez de esperar un email que no va a llegar). Solo llega aquí quien
+ * ha escrito la contraseña correcta (el desafío), así que no delata nada a un tercero.
+ */
+export async function emailCodeStatus(ch: Pick<Challenge, "userId" | "codeHash">): Promise<"sent" | "capped" | null> {
+  if (ch.codeHash) return "sent";
+  return (await perUserSendCapped(ch.userId)) ? "capped" : null;
 }
 
 export async function verifyEmailCode(ch: Challenge, code: string): Promise<boolean> {

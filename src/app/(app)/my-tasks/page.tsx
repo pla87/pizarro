@@ -46,7 +46,7 @@ export default async function MyTasksPage({ searchParams }: { searchParams: Prom
       linkUrl: true,
       dueDate: true,
       project: { select: { id: true, name: true } },
-      column: { select: { name: true, role: true, isDone: true } },
+      column: { select: { name: true, isDone: true } },
     },
   });
   // Más de las que caben: se muestran las primeras y se avisa con el total (nunca se cortan en silencio).

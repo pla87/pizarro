@@ -128,7 +128,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // ¿La descripción abierta tiene cambios de la persona? (la comunica el editor; ver DescriptionEditor).
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
   // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
-  const descReplace = useRef<((markdown: string, templated: boolean) => void) | null>(null);
+  // Devuelve cómo volver al texto y al aviso de antes si el cambio de tipo no se guarda (solo si nada ha cambiado después).
+  const descReplace = useRef<((markdown: string, templated: boolean) => () => void) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -358,6 +359,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // editando un campo, se queda en la versión sobre la que se escribe y, al guardarlo, el servidor avisa si otra persona
   // cambió ese mismo campo (un cambio en el otro campo no es un conflicto, ver `textSince`).
   const seenText = useRef(task.textVersion);
+  // Cuántas veces se ha vuelto a leer la descripción del servidor (`reload`, cambio desde fuera). `textState` va un dibujo
+  // por detrás: justo después de un `reload` aún tiene el detalle de antes, así que no sirve para saber si se recargó.
+  const descReloads = useRef(0);
   const textState = useRef({ detail, title, shownTitle, version: task.textVersion, link });
   useEffect(() => {
     textState.current = { detail, title, shownTitle, version: task.textVersion, link };
@@ -379,7 +383,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (!alive || !res?.ok || !d || res.data.textVersion !== version) return;
       const fresh = res.data.description;
       const reloadDesc = fresh !== d.description && !editingDescription();
-      if (reloadDesc) descBase.current = fresh;
+      if (reloadDesc) {
+        descBase.current = fresh;
+        descReloads.current++;
+      }
       const advance = !editingText();
       if (!reloadDesc && !advance) return;
       setDetail((cur) => (cur ? { ...cur, ...(reloadDesc ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
@@ -428,6 +435,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (!res?.ok) return;
     descBase.current = res.data.description;
     knownBase.current = true;
+    descReloads.current++;
     setDetail(res.data);
     setDescVersion((n) => n + 1);
     board.refresh();
@@ -1083,10 +1091,22 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción (y, si
       // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado).
       const nextDesc = switchKindDescription(prev, kind, typed);
-      descReplace.current?.(nextDesc, nextDesc !== typed);
+      const undoReplace = descReplace.current?.(nextDesc, nextDesc !== typed);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
+      const prevTitle = title;
+      const prevFailed = textSaveFailed.current;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
       const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: false });
+      // Sin guardar, el título que puso el tipo vuelve al de antes (como abajo), y el editor, a lo escrito antes del cambio
+      // y sin el aviso «Tipo cambiado…» (el selector ya enseña el tipo de antes) si no se ha tocado desde entonces; si se ha
+      // escrito algo después, se queda como está.
+      void saved.then((ok) => {
+        if (ok) return;
+        undoReplace?.();
+        if (nextTitleKept === prevTitle) return;
+        setTitle((cur) => (cur === nextTitleKept ? prevTitle : cur));
+        textSaveFailed.current = prevFailed;
+      });
       // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
       // Más rato que «Guardado»: el aviso de la cabecera queda lejos del selector de tipo y se pasaba por alto.
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
@@ -1094,14 +1114,34 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
     if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: false });
+    // Si no se guarda (sin conexión, sesión caducada, otro error), el selector vuelve al tipo de antes (saveNow) y con él
+    // el título y la descripción: los puso el tipo, no la persona. Antes se quedaban los de la plantilla nueva: la
+    // descripción parecía guardada y el título, pendiente, se podía acabar guardando con el tipo anterior.
+    const prevTitle = title;
+    const prevDesc = detail?.description ?? "";
+    const prevFailed = textSaveFailed.current;
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
-    save(
+    const reloadsAt = descReloads.current;
+    return save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
       { description: preset.description !== detail?.description },
-    );
+    ).then((ok) => {
+      if (ok) return ok;
+      // Solo lo que sigue como lo dejó el cambio de tipo: lo que haya cambiado después (lo escrito, lo recargado tras un
+      // conflicto) se queda. Lo recargado se sabe por `descReloads` y lo demás, dentro del actualizador: `textState` aún
+      // no tiene lo que acaba de traer `reload` (se dibuja después) y devolver lo de antes pisaba el texto de otra persona.
+      setTitle((cur) => (cur === preset.title ? prevTitle : cur));
+      if (prevDesc !== preset.description && descReloads.current === reloadsAt && !editingDescription()) {
+        setDetail((d) => (d && d.description === preset.description ? { ...d, description: prevDesc } : d));
+        // Sin remontar el editor: lo muestra si no hay cambios propios en él (como un cambio desde fuera).
+        setDescRemote((n) => n + 1);
+      }
+      textSaveFailed.current = prevFailed;
+      return ok;
+    });
   };
 
   // `next`: título recién escrito (el dictado sin campo visible lo cambia sin pasar por un estado ya renderizado).
@@ -1655,6 +1695,15 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
+/**
+ * ¿El foco llega con el teclado desde otro elemento (Tab)? Al volver a la pestaña o a la ventana (Alt+Tab), el navegador
+ * vuelve a dar el foco al elemento que lo tenía, con `:focus-visible` si lo tenía, pero sin elemento de origen
+ * (`relatedTarget` nulo): tras guardar la descripción con Ctrl+Intro, eso abría el editor sin pedirlo.
+ */
+function focusFromElsewhere(e: React.FocusEvent<HTMLElement>): boolean {
+  return e.relatedTarget !== null && e.currentTarget.matches(":focus-visible");
+}
+
 function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
@@ -1674,7 +1723,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
-  replaceRef?: React.MutableRefObject<((markdown: string, templated: boolean) => void) | null>;
+  replaceRef?: React.MutableRefObject<((markdown: string, templated: boolean) => () => void) | null>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -1719,13 +1768,29 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado
   // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; ver switchKindDescription).
   const [kindChanged, setKindChanged] = useState<false | "kind" | "template">(false);
+  // Lo último que se ha dibujado, para `replaceRef` (que se llama desde fuera, sin el estado del dibujo).
+  const shown = useRef({ value, kindChanged, editing });
+  useEffect(() => {
+    shown.current = { value, kindChanged, editing };
+  });
+  const replaces = useRef(0);
   useEffect(() => {
     if (!replaceRef) return;
     replaceRef.current = (markdown, templated) => {
+      const before = shown.current;
+      const turn = ++replaces.current;
       touched.current = true;
       setValue(markdown);
       // Una vez aplicada, el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
       setKindChanged((k) => (templated || k === "template" ? "template" : "kind"));
+      // El cambio de tipo no se ha guardado: vuelven el texto y el aviso de antes, salvo que después se haya escrito algo,
+      // cambiado otra vez de tipo o cerrado el editor (guardada o descartada la descripción): entonces no se toca nada.
+      return () => {
+        const now = shown.current;
+        if (turn !== replaces.current || !now.editing || now.value !== markdown) return;
+        setValue(before.value);
+        setKindChanged(before.kindChanged);
+      };
     };
     return () => {
       replaceRef.current = null;
@@ -1894,9 +1959,10 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
           role="group"
           aria-label={t("Descripción")}
           // Solo con el teclado (Tab): el clic con el ratón no debe abrir la edición, y un enlace del texto conserva su foco.
-          // Tampoco el foco que pone el editor al cerrarse (ver `placingFocus`).
+          // Tampoco el foco que pone el editor al cerrarse (ver `placingFocus`), ni el que el navegador le devuelve al volver
+          // a la pestaña o a la ventana (ver `focusFromElsewhere`).
           onFocus={(e) => {
-            if (!placingFocus.current && e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setEditing(true);
+            if (!placingFocus.current && e.target === e.currentTarget && focusFromElsewhere(e)) setEditing(true);
           }}
           onKeyDown={(e) => {
             if (e.target === e.currentTarget && e.key === "Enter") setEditing(true);
@@ -1909,7 +1975,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
           className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700"
           onClick={() => setEditing(true)}
           onFocus={(e) => {
-            if (e.currentTarget.matches(":focus-visible")) setEditing(true);
+            if (focusFromElsewhere(e)) setEditing(true);
           }}
         >
           {t("Añade una descripción…")}

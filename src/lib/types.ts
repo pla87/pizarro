@@ -109,6 +109,11 @@ export interface BoardData {
     id: string; name: string; attachMaxMb: number; fileMaxMb: number; taskFields: TaskFieldKey[];
     /** Plantilla de la que salió (Project.templateKey): «casa-familia» ofrece «Organizar por personas». Solo en el tablero. */
     templateKey?: string | null;
+    /**
+     * Ids de las personas con columna en «Organizar por personas» (projectPeople), solo en proyectos de equipo de
+     * «Casa y familia»: sin los administradores que no lo tienen en su lista. Sin él, son todas las de `users`. Solo en el tablero.
+     */
+    peopleIds?: string[] | null;
     /** Roles que el menú de la columna enseña primero (suggestedColumnRoles); sin ellos, todos. Solo en el tablero. */
     suggestedRoles?: ColumnRoleChoice[] | null;
   };

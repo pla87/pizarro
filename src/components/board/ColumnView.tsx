@@ -675,7 +675,6 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
   // Submenú del rol: «Asignación a persona» abre su diálogo; «Sin rol» y los demás cambian el rol.
   const currentChoice = currentRoleChoice({ role: column.role, assign });
   const roleChoices = splitRoleChoices(project.suggestedRoles, currentChoice);
-  const [moreRoles, setMoreRoles] = useState(false);
   const pickRole = (choice: ColumnRoleChoice | null) => {
     // La que ya tiene: nada que cambiar (antes anotaba «Cambió el rol de la columna» sin cambio).
     // «Asignación a persona» otra vez: abre su diálogo (cambiar la persona o el plazo), como antes del submenú nuevo.
@@ -711,25 +710,7 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
       {/* Los roles en un submenú (antes, mezclados con las acciones, el menú tenía unas 30 opciones). Primero los que encajan
           con la plantilla del proyecto; el resto tras «Más roles…» (column-role-choices.ts). */}
       <MenuSub icon={Tag} label={t("Rol de la columna")} summary={assign ? t("Asignación a persona") : t(COLUMN_ROLE_LABEL[column.role])}>
-        <RoleItem choice={null} current={currentChoice} onPick={pickRole} />
-        {roleChoices.first.map((r) => <RoleItem key={r} choice={r} current={currentChoice} onPick={pickRole} />)}
-        {roleChoices.more.length > 0 && !moreRoles && (
-          <MenuItem
-            data-keep-open
-            icon={MoreHorizontal}
-            className="py-1.5 text-xs text-slate-600 dark:text-slate-400"
-            title={t("Roles pensados para otro tipo de proyecto")}
-            onClick={(e) => {
-              setMoreRoles(true);
-              // El foco pasa a la primera de las que aparecen (el botón desaparece).
-              const list = e.currentTarget.closest('[role="menu"]');
-              requestAnimationFrame(() => list?.querySelector<HTMLElement>("[data-more-role]")?.focus());
-            }}
-          >
-            {t("Más roles…")}
-          </MenuItem>
-        )}
-        {moreRoles && roleChoices.more.map((r, i) => <RoleItem key={r} choice={r} current={currentChoice} onPick={pickRole} more={i === 0} />)}
+        <RoleChoices choices={roleChoices} current={currentChoice} onPick={pickRole} />
       </MenuSub>
       {column.role === "WAITING" && (
         <MenuItem icon={Hourglass} onClick={editWaitingDays}>
@@ -765,6 +746,39 @@ function ColumnMenu({ column, index, total, empty, cardCount, openDialog: setDia
         {empty ? t("Borrar columna") : t("Borrar (debe estar vacía)")}
       </MenuItem>
     </Menu>
+    </>
+  );
+}
+
+/**
+ * Opciones del submenú del rol. «Más roles…» despliega los que no encajan con la plantilla del proyecto. Su estado vive
+ * aquí, dentro del submenú, que se desmonta al cerrarlo (o al cerrar el menú): la próxima vez vuelven a salir primero los
+ * que encajan. Antes vivía en el menú de la columna, que no se desmonta, y se quedaba desplegado hasta recargar.
+ */
+function RoleChoices({ choices, current, onPick }: { choices: { first: ColumnRoleChoice[]; more: ColumnRoleChoice[] }; current: ColumnRoleChoice | null; onPick: (c: ColumnRoleChoice | null) => void }) {
+  const t = useT();
+  const [moreRoles, setMoreRoles] = useState(false);
+  return (
+    <>
+      <RoleItem choice={null} current={current} onPick={onPick} />
+      {choices.first.map((r) => <RoleItem key={r} choice={r} current={current} onPick={onPick} />)}
+      {choices.more.length > 0 && !moreRoles && (
+        <MenuItem
+          data-keep-open
+          icon={MoreHorizontal}
+          className="py-1.5 text-xs text-slate-600 dark:text-slate-400"
+          title={t("Roles pensados para otro tipo de proyecto")}
+          onClick={(e) => {
+            setMoreRoles(true);
+            // El foco pasa a la primera de las que aparecen (el botón desaparece).
+            const list = e.currentTarget.closest('[role="menu"]');
+            requestAnimationFrame(() => list?.querySelector<HTMLElement>("[data-more-role]")?.focus());
+          }}
+        >
+          {t("Más roles…")}
+        </MenuItem>
+      )}
+      {moreRoles && choices.more.map((r, i) => <RoleItem key={r} choice={r} current={current} onPick={onPick} more={i === 0} />)}
     </>
   );
 }

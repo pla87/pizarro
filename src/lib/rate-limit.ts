@@ -13,10 +13,11 @@ const stores = (g.__pzRateStores ??= {
 /**
  * Prefijos de las claves de bloqueo de seguridad (guardadas en su propio mapa). Las de una IP terminan en ella, así que
  * cualquier clave que empiece por uno de estos prefijos cuenta. También los topes de lo que cuesta dinero o molesta a
- * terceros (avisos externos, WhatsApp, pruebas de mensajería y de email): en el mapa general, un aluvión de peticiones baratas sin sesión
- * podía vaciarlo y borrarlos.
+ * terceros (avisos externos, WhatsApp, pruebas de mensajería y de email, invitaciones, «te han añadido a un proyecto» e informes semanales,
+ * respuestas del bot de Telegram) y el de los intentos de enlazar Telegram con un código: en el mapa general, un aluvión de
+ * peticiones baratas sin sesión podía vaciarlo y borrarlos.
  */
-const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:", "account-delete:", "backup-dl:", "feedback:", "feedback-try:", "whatsapp:", "messaging:", "mail:test:", "notify:"] as const;
+const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:", "account-delete:", "backup-dl:", "feedback:", "feedback-try:", "whatsapp:", "messaging:", "mail:test:", "notify:", "project-invite:", "resend-invite:", "project-added-mail:", "report-schedule:", "telegram:link:", "telegram:reply:"] as const;
 
 const storeFor = (key: string): Store => (SECURITY_KEY_PREFIXES.some((p) => key.startsWith(p)) ? stores.security : stores.general);
 

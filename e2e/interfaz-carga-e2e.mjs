@@ -33,12 +33,34 @@ const slowNav = (ms) => async (route) => {
 };
 
 /**
+ * Precargas ya llegadas en cada página (rutas): `slowClick` no espera otra vez la de un enlace que ya se precargó. Al
+ * cargar la página entera (recargar, `goto`) se vacía: la caché del enrutador de Next empieza de cero.
+ */
+const prefetchedPaths = new WeakMap();
+function recordPrefetches(page) {
+  if (prefetchedPaths.has(page)) return;
+  const seen = new Set();
+  prefetchedPaths.set(page, seen);
+  page.on("request", (r) => {
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) seen.clear();
+  });
+  page.on("response", (r) => {
+    if (r.request().headers()["next-router-prefetch"]) seen.add(new URL(r.url()).pathname);
+  });
+}
+
+/**
  * Navegación lenta a `link`: primero deja que el enlace se precargue (como al pasar el ratón o al verse en pantalla; la
  * precarga trae el loading.tsx) y después retrasa `ms` la respuesta de la navegación. Así se simula un servidor que
- * tarda en tener los datos: sin precarga, Next espera a la respuesta entera y no hay nada que enseñar mientras.
+ * tarda en tener los datos: sin precarga, Next espera a la respuesta entera y no hay nada que enseñar mientras. Si la
+ * precarga de ese enlace ya ha llegado (Releases, al cambiar de proyecto), no se espera otra: no llegaría ninguna más y
+ * se agotaban los 4 s.
  */
 async function slowClick(page, link, ms) {
-  const prefetched = page.waitForResponse((r) => isProjectPage(new URL(r.url())) && !!r.request().headers()["next-router-prefetch"], { timeout: 4000 }).catch(() => null);
+  recordPrefetches(page);
+  const href = await link.getAttribute("href");
+  const done = !!href && prefetchedPaths.get(page).has(new URL(href, L.BASE).pathname);
+  const prefetched = done ? null : page.waitForResponse((r) => isProjectPage(new URL(r.url())) && !!r.request().headers()["next-router-prefetch"], { timeout: 4000 }).catch(() => null);
   await link.hover();
   await prefetched;
   await sleep(300);
@@ -68,6 +90,7 @@ if (only.includes("load")) {
   L.scenario("load: indicador de carga al cambiar de proyecto");
   const s = await L.session({ viewport: { width: 1400, height: 900 }, init: watcher });
   const page = s.page;
+  recordPrefetches(page); // desde el principio: la precarga de Releases llega al elegir el proyecto, antes de pulsarlo
   await createProject();
   await L.reload(page); // el nuevo proyecto en el selector
   const sidebar = page.locator("aside").first();
@@ -117,7 +140,9 @@ if (only.includes("load")) {
   L.check("LOAD: al llegar el tablero, el indicador desaparece", w.gone !== null && (await loader.count()) === 0);
   await page.unroute(isProjectPage);
 
-  // Releases del mismo proyecto: su propio esqueleto (la barra lateral no cambia).
+  // Releases del mismo proyecto: su propio esqueleto (la barra lateral no cambia). Con «Usados recientemente», «R49 carga»
+  // es la segunda del selector y el puntero queda sobre «Releases» tras elegirlo: el enlace cambia de proyecto sin otro
+  // mouseenter y debe precargarse igualmente (HoverPrefetchLink); si no, salía el esqueleto del tablero.
   await slowClick(page, page.locator(`a[href="/p/${ID}/releases"]`).filter({ visible: true }).first(), 2000);
   L.check("LOAD: Releases con respuesta lenta también lo muestra", await loader.waitFor({ timeout: 3000 }).then(() => true, () => false));
   L.eq("LOAD: el de Releases", await loader.getAttribute("data-project-loading").catch(() => null), "releases");

@@ -11,8 +11,14 @@
 //
 // Las líneas informativas que Prisma escribe en stderr («Loaded Prisma config…», «Prisma schema loaded…») pasan a stdout:
 // Railway pinta en rojo todo lo que llega por stderr y parecían errores.
+//
+// Si _prisma_migrations ya tiene aplicadas y terminadas todas las migraciones de migrator/prisma/migrations, con el mismo
+// checksum (sha256 del migration.sql, el que guarda Prisma), no se lanza el Prisma CLI: arrancarlo para que diga «No
+// pending migrations to apply» costaba de uno a varios segundos en cada despliegue (ver migrationsUpToDate). Ante cualquier
+// duda (una pendiente, una a medias o fallida, otro checksum, la tabla sin crear, un error al leer) se lanza como siempre.
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -295,8 +301,11 @@ function runPrisma(cwd, args) {
   });
 }
 
-/** Filas de _prisma_migrations de estas migraciones, o null si no se pueden leer. */
-async function migrationRows(url, names) {
+/**
+ * Filas de _prisma_migrations (solo las de `names`, o todas con null), o null si no se pueden leer. Sin la tabla
+ * (base recién creada, aún sin migrar), ninguna fila.
+ */
+async function migrationRows(url, names = null) {
   let pg;
   try {
     pg = (await import("pg")).default;
@@ -307,12 +316,61 @@ async function migrationRows(url, names) {
   client.on("error", () => {});
   try {
     await client.connect();
-    const { rows } = await client.query("SELECT migration_name, finished_at, rolled_back_at FROM _prisma_migrations WHERE migration_name = ANY($1)", [names]);
+    const cols = "SELECT migration_name, checksum, finished_at, rolled_back_at FROM _prisma_migrations";
+    const { rows } = names ? await client.query(`${cols} WHERE migration_name = ANY($1)`, [names]) : await client.query(cols);
     return rows;
-  } catch {
-    return null;
+  } catch (e) {
+    return e?.code === "42P01" ? [] : null;
   } finally {
     await client.end().catch(() => {});
+  }
+}
+
+/**
+ * Las migraciones de la carpeta del migrador, como las lee Prisma (cada subcarpeta de prisma/migrations, en orden), con
+ * el sha256 en hexadecimal de su migration.sql tal cual (el `checksum` que Prisma guarda en _prisma_migrations). null si
+ * no se puede leer la carpeta o alguna no tiene migration.sql.
+ */
+function localMigrations(migratorDir) {
+  const dir = path.join(migratorDir, "prisma", "migrations");
+  try {
+    const names = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    return names.map((name) => ({ name, checksum: createHash("sha256").update(readFileSync(path.join(dir, name, "migration.sql"))).digest("hex") }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿Está la base al día sin lanzar Prisma? Solo si cada migración de `local` ({ name, checksum }) tiene en `rows`
+ * (_prisma_migrations, null si no se pudo leer) una fila terminada (finished_at) y no revertida, con su mismo checksum, y
+ * no hay ninguna fila a medias o fallida (sin finished_at ni rolled_back_at, la que da P3009, sea de la migración que
+ * sea). Las filas revertidas no cuentan (las deja el reintento de P3009 o `migrate resolve --rolled-back`). Las filas de
+ * migraciones que no están en la carpeta (de una versión posterior, si se volvió atrás) se ignoran, como hace Prisma.
+ * Devuelve { ok: true, count } o { ok: false, reason } (por qué hay que lanzar Prisma, para el log; null si no hace falta
+ * decirlo).
+ */
+export function migrationsUpToDate(local, rows) {
+  if (!local || local.length === 0) return { ok: false, reason: null };
+  if (!rows) return { ok: false, reason: null };
+  const failed = rows.find((r) => !r.finished_at && !r.rolled_back_at);
+  if (failed) return { ok: false, reason: `${failed.migration_name} quedó a medias o falló` };
+  const live = new Map();
+  for (const r of rows) if (!r.rolled_back_at) live.set(r.migration_name, [...(live.get(r.migration_name) ?? []), r]);
+  const pending = local.filter((m) => !live.has(m.name));
+  if (pending.length) return { ok: false, reason: pending.length === 1 ? `1 pendiente: ${pending[0].name}` : `${pending.length} pendientes, desde ${pending[0].name}` };
+  const changed = local.find((m) => live.get(m.name).some((r) => r.checksum !== m.checksum));
+  if (changed) return { ok: false, reason: `el checksum de ${changed.name} no coincide con el aplicado` };
+  return { ok: true, count: local.length };
+}
+
+/** ¿Lee pg la misma tabla que Prisma? Prisma usa el esquema de `?schema=` (public si no hay); pg, siempre el de search_path. */
+function defaultSchema(url) {
+  try {
+    const schema = new URL(url).searchParams.get("schema");
+    return !schema || schema === "public";
+  } catch {
+    return false;
   }
 }
 
@@ -343,7 +401,18 @@ async function main() {
   const waitStart = Date.now();
   if (!(await waitForDb(url, { waitS }))) return 1;
   const migrator = path.resolve("migrator");
-  log("Aplicando migraciones...");
+  // Solo lectura y sin bloqueo: si otro arranque está migrando, su fila sin terminar (o la que aún falta) manda a Prisma,
+  // que espera a su bloqueo. Sin migraciones en la carpeta no se consulta la base.
+  const checkStart = Date.now();
+  const local = localMigrations(migrator);
+  const state = local?.length && defaultSchema(url) ? migrationsUpToDate(local, await migrationRows(url)) : { ok: false, reason: null };
+  const waited = checkStart - waitStart;
+  const waitedNote = waited >= 1000 ? `; espera a PostgreSQL: ${seconds(waited)}` : "";
+  if (state.ok) {
+    log(`Base de datos al día: ${state.count} migraciones aplicadas, sin lanzar Prisma (comprobación: ${seconds(Date.now() - checkStart)}${waitedNote}).`);
+    return 0;
+  }
+  log(state.reason ? `Aplicando migraciones (${state.reason})...` : "Aplicando migraciones...");
   const started = Date.now();
   let { code, out } = await runPrisma(migrator, ["migrate", "deploy"]);
   let retried = false;
@@ -378,8 +447,7 @@ async function main() {
   }
   if (code === 0) {
     // Cuánto ha tardado cada parte: así se ve en el log si el arranque espera a la base o a las migraciones.
-    const waited = started - waitStart;
-    log(`Base de datos al día (migraciones: ${seconds(Date.now() - started)}${waited >= 1000 ? `; espera a PostgreSQL: ${seconds(waited)}` : ""}${retried ? "; con un reintento" : ""}).`);
+    log(`Base de datos al día (migraciones: ${seconds(Date.now() - started)}${waitedNote}${retried ? "; con un reintento" : ""}).`);
     return 0;
   }
   if (/\bP3009\b/.test(out)) for (const l of p3009Help(failedMigrations(out))) err(l);

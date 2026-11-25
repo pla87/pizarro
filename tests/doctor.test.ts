@@ -205,6 +205,13 @@ describe("avisos de configuración", () => {
     assert.deepEqual(codes({ NODE_OPTIONS: "--use-openssl-ca", APP_HEAP_MB: " " }), []);
   });
 
+  test("Railway sin RAILWAY_DEPLOYMENT_DRAINING_SECONDS: avisa (fuera de Railway, o con la variable, no)", () => {
+    assert.deepEqual(codes({ RAILWAY_ENVIRONMENT: "production" }), ["railway_no_draining"]);
+    assert.deepEqual(codes({ RAILWAY_PROJECT_ID: "p", RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "0" }), ["railway_no_draining"]);
+    assert.deepEqual(codes({ RAILWAY_ENVIRONMENT: "production", RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "15" }), []);
+    assert.deepEqual(codes({ RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "" }), []);
+  });
+
   test("el aviso no lleva el valor de ninguna variable", () => {
     const text = JSON.stringify(configWarnings({ SMTP_HOST: "smtp.example.com", SMTP_PORT: "2525", SMTP_PASS: "clave-del-correo-123" }));
     assert.ok(!text.includes("example.com") && !text.includes("2525") && !text.includes("clave-del-correo"));

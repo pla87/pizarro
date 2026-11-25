@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ComponentProps } from "react";
+import { useEffect, useRef, type ComponentProps } from "react";
 import { saveDataOn } from "@/lib/connection";
 
-type Props = Omit<ComponentProps<typeof Link>, "href" | "prefetch"> & { href: string };
+type Props = Omit<ComponentProps<typeof Link>, "href" | "prefetch" | "ref"> & { href: string };
 
 /**
  * Enlace de la barra lateral y los menús fijos: no se precarga al verse, sino al pasar el ratón, enfocarlo con el
@@ -16,12 +16,22 @@ type Props = Omit<ComponentProps<typeof Link>, "href" | "prefetch"> & { href: st
  */
 export function HoverPrefetchLink({ href, onMouseEnter, onFocus, onTouchStart, ...props }: Props) {
   const router = useRouter();
+  const ref = useRef<HTMLAnchorElement>(null);
   const prefetch = () => {
     if (!saveDataOn()) router.prefetch(href);
   };
+  // Si el destino cambia con el ratón ya encima (o con el foco), no llega otro mouseenter: se precarga el nuevo. Pasa al
+  // cambiar de proyecto en el selector si el puntero queda sobre «Releases» de la barra lateral: el enlace pasa a ser el
+  // del proyecto nuevo sin que el ratón salga y entre. Sin precarga, al pulsarlo Next no tiene el loading.tsx de Releases
+  // y, mientras llega la página, enseña el de más arriba (el esqueleto del tablero).
+  useEffect(() => {
+    const el = ref.current;
+    if (el && (el.matches(":hover") || el === document.activeElement) && !saveDataOn()) router.prefetch(href);
+  }, [href, router]);
   return (
     <Link
       {...props}
+      ref={ref}
       href={href}
       prefetch={false}
       onMouseEnter={(e) => {

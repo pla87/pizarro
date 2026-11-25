@@ -35,7 +35,7 @@ Lo aprendido en las pruebas (sirve para todos los prompts):
   no se guarda). Lo que recomienda la guía es la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` en *Variables* del
   servicio de Pizarro: da el mismo margen y Pizarro la lee para esperar hasta 10 s. *Overlap* siempre en 0.
 
-Estado tras la ronda 66 (v1.70.0):
+Estado tras la ronda 67 (v1.71.0):
 
 - Hecho: revisión de Cloudflare y R2 (ronda 60), instalación desde cero en Railway con la web (ronda 60), copias en R2 y
   primera regla de bloqueo (ronda 61), pruebas en real de la v1.64/v1.65 y auditoría como usuario (ronda 62),
@@ -47,15 +47,16 @@ Estado tras la ronda 66 (v1.70.0):
     habiendo un solo registro `_dmarc` y Email Routing está en «Enabled»;
   - auditoría como usuario de la v1.69.0 (sus propuestas entraron en la v1.70.0);
   - margen del apagado en Railway comprobado en la instalación de prueba.
-- Pendientes, en este orden: 1 (pruebas en real de la v1.70.0), 2 (auditoría como usuario de la v1.70.0) y 3 (primeros
-  informes DMARC, a las 24-48 h de activarlos; solo mirar).
+- Ronda 67: no se pasó ninguno (sesión en la nube, sin el navegador del propietario).
+- Pendientes, en este orden: 1 (pruebas en real de la v1.70.0 y la v1.71.0), 2 (auditoría como usuario de la v1.71.0),
+  3 (primeros informes DMARC; solo mirar) y 4 (WhatsApp en la instalación real, con el propietario delante).
 
-## 1. Pruebas en real de la versión 1.70.0 (instalación de prueba)
+## 1. Pruebas en real de las versiones 1.70.0 y 1.71.0 (instalación de prueba)
 
 ```text
-Quiero que compruebes en real las novedades de Pizarro v1.70.0 y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves ni datos personales. Los PDF se descargan: lee su texto interceptando el Blob de la descarga con javascript_tool (como en el informe de la v1.68) o, si no puedes, por captura. Los textos que salen al pasar el ratón léelos con read_page. No puedes arrastrar: lo que sea arrastrar me lo dejas a mí y lo apuntas.
+Quiero que compruebes en real las novedades de Pizarro v1.70.0 y v1.71.0 y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves ni datos personales. Los PDF se descargan: lee su texto interceptando el Blob de la descarga con javascript_tool (como en el informe de la v1.68) o, si no puedes, por captura. Los textos que salen al pasar el ratón léelos con read_page. No puedes arrastrar: lo que sea arrastrar me lo dejas a mí y lo apuntas.
 
-0. «Historial de versiones» debe decir v1.70.0. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine. En Railway, servicio de Pizarro → Variables, apunta si existe `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` y con qué valor (debe ser 15; si no está, pregúntame antes de añadirla).
+0. «Historial de versiones» debe decir v1.71.0. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine. En Railway, servicio de Pizarro → Variables, apunta si existe `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` y con qué valor (debe ser 15; si no está, pregúntame antes de añadirla).
 1. Mover columnas con el teclado: en «Proyecto de prueba», pon el foco en el nombre de una columna (Tab) y pulsa Alt+→: la columna pasa un sitio a la derecha y sale el aviso ««…» movida a la posición N». Pulsa Ctrl+Z: vuelve a su sitio. Lee con read_page la descripción del nombre de la columna: «… (arrastra la cabecera o pulsa Alt+flechas para moverla)». En Administración → Logs, busca «Movió la columna».
 2. Roles según la plantilla: en un proyecto creado con «Casa y familia», menú «⋯» de una columna → Rol de la columna ›: deben salir primero unos pocos roles (Planificación semanal, Esperando, Lista consolidada, Rutinas, Presupuesto, Asignación a persona) y el resto tras «Más roles…» («Siguiente salto» debe estar ahí, no a la vista). En «Proyecto de prueba» (en blanco o anterior), deben salir todos sin «Más roles…».
 3. Organizar por personas: en el proyecto «Casa y familia» con al menos dos personas (añade a «Persona Prueba» como miembro si hace falta), pulsa «Añadir columna»: el diálogo «Nueva columna» ofrece «Organizar por personas: una columna para cada una». Púlsalo: debe explicar «Se crearán N columnas «Asignación a persona», una por persona (…)» (o «Se creará una columna…» si solo falta una). Confirma con «Crear N columnas»: sale «N columnas creadas», con el nombre de cada persona. Ctrl+Z las quita todas de una vez. Vuelve a crearlas para el punto 4. Si solo hubiera una persona, debe decir «En el proyecto solo hay una persona: añade antes a las demás.» con el enlace «Añadir personas al proyecto (se abre en otra pestaña)».
@@ -80,18 +81,25 @@ Quiero que compruebes en real las novedades de Pizarro v1.70.0 y me des un infor
 22. Administración → Copias de seguridad: los textos no deben nombrar variables («Se guardan en el disco de este servidor…»); las variables están en las notas «Para quien instala». Apunta si alguna frase se entiende mal.
 23. Administración → Tipos y plantillas → Plantillas: las de serie llevan la etiqueta «De serie» (no «Por defecto»). Abre «Eventos y viajes»: su descripción ya no habla de «la agenda» y las columnas «Por confirmar» y «Reservado» traen el tipo por defecto «Proveedor».
 24. Integraciones → WhatsApp: si está configurado, NO pulses «Probar» sin preguntarme (cada prueba son dos mensajes de pago). Solo apunta si muestra un último error.
+25. (v1.71) Railway → servicio de Pizarro → Deploy Logs del último despliegue: busca la línea «[start] Base de datos al día: N migraciones aplicadas, sin lanzar Prisma» y apunta el tiempo de «comprobación».
+26. (v1.71) Organizar por personas en un proyecto DE EQUIPO de «Casa y familia» con «Persona Prueba» como miembro: si el proyecto no está en tus «Proyectos en los que trabajo», el diálogo cuenta solo a Persona Prueba y muestra «Los administradores cuentan solo si tienen el proyecto en «Proyectos en los que trabajo».». Añádelo a tu lista, recarga y vuelve a abrirlo: ahora cuenta también contigo. No crees las columnas si ya existen.
+27. (v1.71) En una columna «Asignación a persona» con plazo, deja una tarjeta que ya sea de esa persona y tenga fecha; selecciona esa y otra sin responsable de otra columna y «Mover a…» esa columna: un solo aviso «2 tarjetas movidas · 1 asignada a …» con «Deshacer».
+28. (v1.71) Menú «⋯» de una columna → Rol de la columna › → «Más roles…»; cierra el menú y ábrelo otra vez: «Más roles…» vuelve a salir plegado.
+29. (v1.71) Alt+→ sobre el nombre de una columna y Ctrl+Z: vuelve a su sitio; en Logs, «Movió la columna». (Con dos personas a la vez lo prueba el propietario.)
+30. (v1.71) Abre una tarea, edita la descripción, guárdala con Ctrl+Intro, cambia a otra pestaña del navegador y vuelve: la descripción NO debe abrirse sola en edición.
+31. (v1.71) Plan de trabajo para IA de «Proyecto de prueba» con una tarea que tenga una imagen pegada en la descripción y otro adjunto: en el texto del paso 2, la imagen sale en la descripción pero no se repite en «Adjuntos».
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```
 
-## 2. Auditoría como usuario de la v1.70.0 (instalación de prueba)
+## 2. Auditoría como usuario de la v1.71.0 (instalación de prueba)
 
 ```text
 Quiero que uses Pizarro como lo haría una persona nueva en su trabajo y me des un informe de todo lo que confunda, falle o se pueda mejorar. Trabaja en una pestaña nueva y, si algo no coincide con lo que te describo, para y pregúntame.
 
 Dónde: la instalación de PRUEBA en Railway (proyecto `pizarro-prueba-instalacion`, administrador `admin-prueba@example.com`). No toques la real. Antes de cualquier paso que cueste dinero, para y pregúntame. No pongas en tu informe claves, contraseñas ni datos personales.
 
-0. En Historial de versiones, comprueba que es la v1.70.0 (si no: Railway, servicio de Pizarro, rama `stable`, «Deploy»).
+0. En Historial de versiones, comprueba que es la v1.71.0 (si no: Railway, servicio de Pizarro, rama `stable`, «Deploy»).
 1. Crea un proyecto «Casa y familia» con tarjetas de ejemplo para una familia de tres personas: «Organizar por personas», reordena las columnas con Alt+flechas, mueve tareas entre las columnas de cada persona (con «Columna» en el detalle y con «Mover a…») y usa «Deshacer» en los avisos. Descarga el plan de cada persona y el PDF de la semana.
 2. Crea tareas de varios tipos (también con «Varias tareas»), cambia de tipo en el detalle con y sin la descripción a medias, usa «Deshacer todo», enlaza tareas con «Bloqueada por» y navega con «Bloquea a» y «← Volver».
 3. Mi perfil: cambia el orden de los proyectos y edita una plantilla sin guardar antes de cambiar de pestaña. ¿Se entiende cada opción?
@@ -115,4 +123,27 @@ Hace uno o dos días se activó DMARC Management de Cloudflare en getpizarro.com
 4. Comprueba que en DNS → Records sigue habiendo un solo registro `_dmarc` con `p=none`.
 
 Informe en español: una tabla con fuente, mensajes, SPF, DKIM y DMARC, y debajo lo que convendría revisar antes de pasar a `p=quarantine` (solo como propuesta).
+```
+
+## 4. WhatsApp en la instalación real (contigo delante)
+
+Se hace con el propietario delante: Claude in Chrome guía y rellena; el propietario entra en sus cuentas, pega el token y
+autoriza cada paso que pueda costar dinero. Empieza con el **número de prueba de Meta** (gratis, hasta 5 destinatarios
+verificados); el número propio y el método de pago, solo si el propietario lo decide después.
+
+```text
+Quiero dejar funcionando los avisos de Pizarro por WhatsApp en mi instalación REAL, siguiendo la guía de Pizarro «Avisos por WhatsApp» (en la web de Pizarro, Guías → WhatsApp, o docs/guias/whatsapp.md del repositorio pla87/pizarro). Estoy delante: trabaja en una pestaña nueva y ve paso a paso. Reglas: (1) Antes de cualquier paso que cueste dinero (añadir un método de pago, un número propio, pulsar «Probar» en Pizarro o enviar un código), para y pregúntame. (2) NO copies, leas en voz alta ni pongas en tu informe el token de Meta, mi número de teléfono ni datos personales: el token lo genero y lo pego yo. (3) Si algo no coincide con la guía (nombres de menús de Meta, pasos nuevos), para, descríbeme lo que ves y pregúntame. (4) No toques nada de Pizarro fuera de Administración → Integraciones → WhatsApp y Mi perfil → Avisos.
+
+1. Meta Business (business.facebook.com): comprueba si ya tengo un portfolio empresarial. Si no, dime qué pide para crearlo y espera a que yo lo rellene.
+2. Meta for Developers (developers.facebook.com → Mis apps): comprueba si ya hay una app con el producto WhatsApp. Si no, créala con el caso de uso «Conectar con clientes a través de WhatsApp», asociada a mi portfolio, y añade el producto WhatsApp.
+3. WhatsApp → Configuración de la API: usaremos el NÚMERO DE PRUEBA de Meta. Apunta (para ti, sin ponerlo en el informe) el «Phone number ID». En el campo «Para», pídeme que añada y verifique mi móvil (lo hago yo).
+4. Token permanente: guíame en business.facebook.com/settings → Usuarios del sistema → Añadir (nombre «pizarro», rol Administrador) → Asignar activos (la app y la cuenta de WhatsApp, control total) → Generar nuevo token (caducidad «Nunca», permisos whatsapp_business_messaging y whatsapp_business_management). Cuando salga el token, PARA: lo copio yo.
+5. Plantillas (WhatsApp Manager → Plantillas de mensajes): crea «aviso_pizarro» (Utilidad, Predeterminado, idioma Español «es») con el cuerpo EXACTO de la guía (paso 5, con sus saltos de línea) y los ejemplos de las variables de la guía (en {{3}} usa una dirección de ejemplo, no la mía real). Crea «codigo_pizarro» (Autenticación, «Copiar código», mismo idioma, caducidad 15 minutos). Envía las dos y dime su estado; si alguna no está «Aprobada», espera y vuelve a mirar cada pocos minutos (hasta 30 min) antes de seguir.
+6. Pizarro → Administración → Integraciones → 3. Avisos por Telegram y WhatsApp → WhatsApp: rellena el Phone number ID, plantilla «aviso_pizarro», idioma exactamente el aprobado («es» o el que muestre Meta), plantilla de verificación «codigo_pizarro». En «Token de acceso», PARA y déjame pegarlo. Pulsa Guardar y después Activar. Apunta el texto exacto de lo que muestra (sin el token).
+7. Prueba: pregúntame antes. Si te digo que sí, escribe en «Probar» el número que yo te diga (lo escribo yo si prefieres) y pulsa una sola vez. Deben llegar dos WhatsApp («Mensaje de prueba de Pizarro…» y el código 123456). Apunta lo que dice Pizarro y, si falla, el código de error de Meta y qué dice la guía («Problemas frecuentes»).
+8. Mi perfil → Avisos → Avisos en el móvil → WhatsApp: guíame para poner mi número, marcar el consentimiento y «Guardar y enviar código» (pregúntame antes de pulsar). Yo te digo el código de 6 cifras o lo escribo yo; pulsa Confirmar. Deja marcadas solo menciones y asignaciones.
+9. Aviso real: en un proyecto de prueba de mi instalación, crea una tarea «Prueba WhatsApp» y asígnamela (o pídeme que me mencione otra persona). Pregúntame si me ha llegado el WhatsApp y cuánto ha tardado. Abre el enlace del mensaje: debe abrir esa tarea.
+10. Administración → Logs: busca las líneas de WhatsApp de hoy (envíos, fallos) y apunta lo que dicen (el teléfono sale enmascarado; no copies el token si apareciera).
+
+Informe en español: para cada paso, «hecho», «falló» o «pendiente», con los textos exactos de Meta y de Pizarro (sin token ni teléfono), el estado de las dos plantillas y lo que te haya parecido confuso o distinto de la guía (para corregirla). No borres nada.
 ```

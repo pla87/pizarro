@@ -226,15 +226,20 @@ function appPathOf(url: string, origin: string | null | undefined): string | nul
 /**
  * Enlaces e imágenes de una línea de descripción que llevan a Pizarro (appPathOf): un adjunto que va en el ZIP pasa a su
  * ruta dentro de él (la imagen se sigue viendo en un visor que abra el ZIP); los demás se quedan en su texto (la imagen,
- * en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros sitios no cambian.
+ * en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros sitios no cambian. `cited` recoge los ids de
+ * los adjuntos que han pasado a su ruta del ZIP.
  */
-function withoutAppLinks(line: string, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined): string {
+function withoutAppLinks(line: string, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
   if (!line.includes("](")) return line;
   return line.replace(INLINE_LINK, (whole: string, bang: string, text: string, space: string, dest: string, rest: string) => {
     const appPath = appPathOf(dest.startsWith("<") ? dest.slice(1, -1) : dest, origin);
     if (appPath === null) return whole;
-    const zipped = paths?.get(ATTACHMENT_PATH.exec(appPath)?.[1] ?? "");
-    if (zipped) return `${bang}[${text}](${space}${dest.startsWith("<") ? `<${zipped}>` : zipped}${rest})`;
+    const id = ATTACHMENT_PATH.exec(appPath)?.[1] ?? "";
+    const zipped = paths?.get(id);
+    if (zipped) {
+      cited?.add(id);
+      return `${bang}[${text}](${space}${dest.startsWith("<") ? `<${zipped}>` : zipped}${rest})`;
+    }
     return text;
   });
 }
@@ -246,9 +251,10 @@ function withoutAppLinks(line: string, origin: string | null | undefined, paths:
  * nada; uno sin cerrar se cierra al final (si no, se tragaría el resto del plan: las demás tareas y el pie). Por lo mismo,
  * una línea que abriría un bloque HTML sin fin (`<!-- nota`, `<pre`, `<script`…) empieza con «\<». Sin líneas en blanco
  * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan. Sin los
- * apartados del formulario del tipo que siguen vacíos (withoutEmptyFormSections).
+ * apartados del formulario del tipo que siguen vacíos (withoutEmptyFormSections). `cited`: recoge los ids de los adjuntos que
+ * la descripción cita por su ruta en el ZIP (la lista «Adjuntos» de la tarea ya no los repite).
  */
-export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
+export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>, cited?: Set<string>): string {
   const text = decodeEntities(mentionsToPlain(description ?? ""));
   const out: string[] = [];
   /** Apertura del bloque de código en curso («```», «````», «~~~»…). */
@@ -283,7 +289,7 @@ export function planDescription(description: string | null | undefined, origin?:
       continue;
     }
     // Fuera de los bloques de código: sin enlaces a Pizarro (un adjunto del ZIP, por su ruta en él).
-    const line = withoutAppLinks(raw, origin, paths);
+    const line = withoutAppLinks(raw, origin, paths, cited);
     const heading = ATX_HEADING.exec(line);
     if (heading) {
       out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
@@ -324,14 +330,24 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
   // El enlace externo de la tarea, salvo que lleve a Pizarro (a otra tarea, al tablero…).
   if (task.linkUrl && appPathOf(task.linkUrl, origin) === null) fact(t("Enlace"), `[${linkText(task.linkUrl)}](${linkTarget(task.linkUrl)})`);
   if (task.links?.length) fact(t("Documentos"), task.links.map((l) => `[${linkText(oneLine(l.title))}](${linkTarget(l.url)})`).join(", "));
-  if (task.attachments?.length) {
-    // Con ZIP, su ruta dentro de él (una por línea); sin él, solo su nombre (sin enlace a Pizarro: la IA no puede abrirlo).
-    if (task.attachments.some((a) => a.path)) facts.push(`- **${t("Adjuntos")}:**`, ...task.attachments.map((a) => `  - ${a.path ? `\`${a.path}\`` : fileName(a.name)}`));
-    else fact(t("Adjuntos"), task.attachments.map((a) => fileName(a.name)).join(", "));
+  // Antes que la lista de adjuntos: los que la descripción ya cita por su ruta del ZIP no se repiten en ella.
+  const cited = new Set<string>();
+  const description = planDescription(task.description, origin, paths, cited);
+  const files = (task.attachments ?? []).filter((a) => !(a.id && a.path && cited.has(a.id)));
+  if (files.some((a) => a.path)) {
+    // Con ZIP, su ruta dentro de él. Todos los de una tarea van en su carpeta: con varios, la carpeta se dice una vez.
+    const folderOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
+    const folder = files[0]!.path ? folderOf(files[0]!.path) : "";
+    if (files.length === 1) fact(t("Adjuntos"), `\`${files[0]!.path}\``);
+    else if (folder && files.every((a) => a.path && folderOf(a.path) === folder)) {
+      facts.push(`- **${t("Adjuntos")}** (${t("en la carpeta {folder}", { folder: `\`${folder}\`` })}): ${files.map((a) => `\`${a.path!.slice(folder.length)}\``).join(", ")}`);
+    } else facts.push(`- **${t("Adjuntos")}:**`, ...files.map((a) => `  - ${a.path ? `\`${a.path}\`` : fileName(a.name)}`));
+  } else if (files.length) {
+    // Sin ZIP, solo su nombre (sin enlace a Pizarro: la IA no puede abrirlo).
+    fact(t("Adjuntos"), files.map((a) => fileName(a.name)).join(", "));
   }
   const parts = [`### ${index}. ${oneLine(task.title)}`];
   if (facts.length) parts.push(facts.join("\n"));
-  const description = planDescription(task.description, origin, paths);
   // La descripción va sin rótulo (sigue a los datos; ver afterFacts) y la checklist sin «criterios de aceptación» (lo dice
   // la cabecera).
   if (description) parts.push(facts.length ? afterFacts(description, t) : description);
