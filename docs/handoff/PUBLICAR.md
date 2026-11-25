@@ -9,6 +9,7 @@ PC del propietario, ver también `docs/handoff/LOCAL.md` («Ramas y publicación
 1. [Cerrar una versión paso a paso](#cerrar-una-versión-paso-a-paso)
 2. [Publicar desde la sesión y rama de trabajo tras la fusión](#publicar-desde-la-sesión-y-rama-de-trabajo-tras-la-fusión)
 3. [Actualizaciones de dependencias (Dependabot)](#actualizaciones-de-dependencias-dependabot)
+4. [Plantilla de Railway (pendiente)](#plantilla-de-railway-pendiente)
 
 ## Cerrar una versión paso a paso
 
@@ -127,3 +128,35 @@ Cómo se revisa cada PR:
    «arregla» una prueba para que pase con la dependencia nueva sin entender por qué fallaba.
 4. Se fusiona en `main` como cualquier otro cambio; llega a los usuarios con la siguiente versión publicada (nunca
    antes: las instalaciones siguen las releases o la rama `stable`).
+
+## Plantilla de Railway (pendiente)
+
+Todavía no existe: la guía de Railway (`docs/web/instalar.md#railway`) se hace a mano. Una plantilla se crea desde la
+cuenta de Railway del propietario, no desde el repositorio:
+
+1. Crea un proyecto limpio siguiendo la guía, **ya funcionando**: `Postgres` + el repositorio oficial en la rama
+   `stable`, volumen en `/app/uploads` y *Settings → Deploy* con *Healthcheck Path* `/api/health` y *Timeout* `600`
+   (la plantilla copia lo que tenga el servicio).
+2. *Workspace Settings → Templates* (o `railway.com/new/template`) → **Create template** → *Generate from existing
+   project* y elige ese proyecto.
+3. En el servicio de Pizarro, en *Variables*, estos valores por defecto (la plantilla los resuelve al desplegar), con
+   una descripción en cada uno (p. ej. «No la cambies después: invalida sesiones»):
+
+   ```env
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   SESSION_SECRET=${{secret(48)}}
+   TOKEN_SECRET=${{secret(48)}}
+   ENCRYPTION_KEY=${{secret(48)}}
+   BACKUP_KEY=${{secret(64, "0123456789abcdef")}}
+   UPLOAD_DIR=/app/uploads
+   RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
+   ```
+
+   `secret(longitud)` y `secret(longitud, "alfabeto")` son funciones de plantilla de Railway; `BACKUP_KEY` en
+   hexadecimal (64 caracteres = 32 bytes) también vale. Sin `APP_URL` (con *Generate Domain*, Pizarro usa
+   `RAILWAY_PUBLIC_DOMAIN`). **Sintaxis escrita de memoria: verifícala en la documentación de plantillas de Railway.**
+4. *Create template*, copia el enlace y pon el botón «Deploy on Railway» en la guía (`docs/web/instalar.md` y
+   `docs/web/en/install.md`, sección `#railway`) y en el README.
+5. Pruébala en un proyecto nuevo de una cuenta limpia: arranca, `/setup` pide el código del log, la dirección es la de
+   Railway, la rama es `stable` (si la plantilla no la conserva, dilo en su descripción) y *Build Logs* trae
+   `Starting Healthcheck` con `Path: /api/health`.

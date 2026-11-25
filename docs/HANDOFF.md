@@ -228,8 +228,8 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Lo hecho de la paquetización (instalación, web, guías, recordatorio y modelo de venta, publicación):
   `docs/handoff/HISTORIA.md`, «Paquetización: lo hecho».
 - Pendiente de confirmar por el propietario: prueba real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de
-  Railway (pasos en `docs/INSTALL.md`; la sintaxis de variables generadas debe verificarse en Railway); las pruebas en
-  real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
+  Railway (pasos en `docs/handoff/PUBLICAR.md`, «Plantilla de Railway»; la sintaxis de variables generadas debe
+  verificarse en Railway); las pruebas en real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.

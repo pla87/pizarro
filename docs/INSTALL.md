@@ -66,67 +66,7 @@ docker compose up -d --build                                  # las veces siguie
 
 ### Railway
 
-Railway se configura en su panel, sin fichero de configuración en el repositorio. Pizarro traía un `railway.json`, pero Railway ha retirado ese formato («Config as Code»): los servicios nuevos ya no lo aceptan, deja de leerse en todos el 1 de diciembre de 2026, y lo que lo sustituye se aplica con la CLI de Railway, no al desplegar, así que no le sirve a quien instala desde una plantilla o un fork. Por eso se quitó del repositorio. Lo que hacía se cubre así: Railway construye con el `Dockerfile`, cuyo `CMD` ya arranca con `sh scripts/start.sh` (no hace falta *Custom Start Command*); una réplica y el reinicio en fallo son lo que Railway pone por defecto; y **el healthcheck hay que ponerlo a mano** (paso 5). Hay dos formas:
-
-**A. Con la plantilla publicada** (cuando exista el enlace «Deploy on Railway» de la plantilla de Pizarro): pulsa el botón, acepta las variables propuestas, espera al despliegue y sigue en «Primeros pasos». Los secretos se generan solos.
-
-**B. A mano** (paso a paso, con un botón que genera las claves en el navegador: <https://getpizarro.com/instalar/#railway>; más detalle en el README, «Guía de despliegue en Railway»). Railway no despliega cada cambio: los junta en el aviso «Apply N changes» (arriba a la izquierda) con un botón **Deploy**. Prepáralo todo y pulsa **Deploy** una sola vez, al final; si llega a desplegar antes de tener las variables o el volumen, manda un email «Build failed», que no importa.
-
-1. <https://railway.com/new> → **Database → PostgreSQL** (servicio `Postgres`). El nombre del proyecto se cambia en *Settings → General*.
-2. **+ Add → GitHub Repository**: el repositorio de Pizarro (o tu fork). Railway usa el `Dockerfile` (y su `CMD` para arrancar). En *Settings → Source → **Branch connected to production*** elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar): solo avanza al publicarse una versión, así que Railway no redespliega con cada commit de `main` (detalle y cómo cambiar una instalación que ya usa `main`: README, «Guía de despliegue en Railway», paso 2). Con un fork, `stable` no se actualiza sola: tienes que sincronizarla tú desde el original (y la app no ofrecerá *Informar de un error*, porque no puede saber si el código está modificado).
-3. *Settings → Networking → **Generate Domain*** y volumen: clic derecho en el servicio → *Attach volume* → *Mount path* `/app/uploads`. Sin volumen, los adjuntos y las copias locales se pierden en cada despliegue. El dominio no responde hasta el primer despliegue.
-4. Variables del servicio de la app (*Variables → Raw Editor*):
-
-   | Variable | Valor | Origen |
-   |---|---|---|
-   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | Referencia al servicio Postgres (nombre exacto de tu servicio) |
-   | `SESSION_SECRET` | 48+ caracteres | **Generar:** `openssl rand -base64 48` (o el botón de la web) |
-   | `TOKEN_SECRET` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
-   | `ENCRYPTION_KEY` | 48+ caracteres | **Generar** (recomendada; otra distinta) |
-   | `BACKUP_KEY` | 32 bytes en base64 | **Generar:** `openssl rand -base64 32` (activa las copias diarias cifradas) |
-   | `UPLOAD_DIR` | `/app/uploads` | Fija |
-   | `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` | `15` | Fija: margen para el apagado ordenado (ver paso 5) |
-   | `APP_URL` | `https://<tu-dominio>` | **Solo con dominio propio.** Sin ella, Pizarro usa `https://` + `RAILWAY_PUBLIC_DOMAIN` (el dominio de *Generate Domain*, que Railway pone en el entorno) |
-
-   No definas `SEED_ADMIN_*`: así el primer administrador se crea en `/setup` con un código de un solo uso. `PORT` lo inyecta Railway.
-5. **Ajustes de despliegue** (servicio de Pizarro → *Settings → Deploy*), antes de desplegar:
-   - **Healthcheck Path:** `/api/health`. Así Railway no da el despliegue por bueno hasta que Pizarro responde, y si falla (una migración, por ejemplo) mantiene el anterior.
-   - **Healthcheck Timeout:** `600` (10 minutos: el primer arranque aplica las migraciones). El campo aparece en esa misma pantalla en cuanto rellenas *Healthcheck Path*; no hace falta ninguna variable.
-   - **Restart Policy:** *On Failure* (lo que pone Railway por defecto).
-   - **Réplicas:** **1** (lo que pone por defecto). Con un volumen, Railway no deja subirlas, así que el servicio de Pizarro se queda en una, que es lo que necesita (ver arriba).
-   - **Margen para el apagado:** la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` del paso 4 (si no la pusiste, añádela en *Variables*). Por defecto Railway da 0 segundos entre el aviso de apagado (SIGTERM) y el corte (SIGKILL), y corta el apagado ordenado de Pizarro: una subida, un email o un registro que estuviera a medias se perdería. Railway usa esa variable como margen y Pizarro también la lee: con ella espera hasta 10 segundos a lo que está en curso (14 en total); sin ella, 5, como en las demás plataformas. El panel tiene el ajuste equivalente (*Settings → Deploy → Teardown*, **Draining** `15`; al activarlo propone *Draining* 0 y *Overlap* 0, y el valor hay que confirmarlo con el ✓ del campo antes de pulsar **Deploy**), pero solo la variable deja a Pizarro aprovechar el margen entero. *Overlap* se deja en 0 (con un volumen, Railway no solapa el contenedor viejo y el nuevo). En una instalación que ya funciona, añádela igual: vale desde el siguiente despliegue.
-
-   No rellenes *Custom Start Command*: lo da el `Dockerfile`.
-6. Pulsa **Deploy** (una vez). Revisa antes lo que lista «Apply N changes»: si Railway propone por su cuenta más réplicas, no lo apliques; la región da igual mientras `Postgres` esté en la misma.
-
-   **Cómo comprobar que el healthcheck está activo:** en *Deployments*, abre el despliegue y mira el log de construcción (*Build Logs*, no *Deploy Logs*): al final, después de construir la imagen, sale el bloque `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s`; durante el primer arranque verás algunas líneas `Attempt #N failed with service unavailable` (normales mientras se aplican las migraciones) y al final `Healthcheck succeeded!`. Si ese bloque no sale, el servicio no tiene healthcheck: vuelve al paso 5. El panel puede tardar en mostrar los valores; lo que cuenta es el log.
-
-   El primer arranque aplica las migraciones y tarda 2–3 minutos más aunque Railway ya marque *Active*: en *Deployments → View logs*, al final, sale el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR` con la dirección de `/setup` y el código (`introduce el código:`). Las líneas en rojo del principio del log son normales.
-
-Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` fuera de Railway (gestor de contraseñas): sin `BACKUP_KEY` las copias no se pueden leer y sin `ENCRYPTION_KEY` todos pierden la verificación en dos pasos.
-
-#### Publicar la plantilla de Railway (solo el propietario del proyecto)
-
-Una plantilla se crea desde la cuenta de Railway del propietario; no se puede hacer desde el repositorio.
-
-1. En Railway crea un proyecto limpio con los dos servicios de arriba (Postgres + el repositorio) **ya funcionando**, con el volumen en `/app/uploads`.
-2. Abre *Workspace Settings → Templates* (o `railway.com/new/template`) y pulsa **Create template**. Elige *Generate from existing project* y selecciona ese proyecto.
-3. Revisa cada servicio. En el servicio de Pizarro, en *Variables*, pon estos valores por defecto (la plantilla los resuelve al desplegar):
-
-   ```env
-   DATABASE_URL=${{Postgres.DATABASE_URL}}
-   SESSION_SECRET=${{secret(48)}}
-   TOKEN_SECRET=${{secret(48)}}
-   ENCRYPTION_KEY=${{secret(48)}}
-   BACKUP_KEY=${{secret(64, "0123456789abcdef")}}
-   UPLOAD_DIR=/app/uploads
-   ```
-
-   `secret(longitud)` y `secret(longitud, "alfabeto")` son las funciones de plantilla de Railway; `BACKUP_KEY` en hexadecimal (64 caracteres = 32 bytes) también vale para la app. La plantilla no necesita `APP_URL`: activa *Generate Domain* y Pizarro usa la dirección que Railway pone en `RAILWAY_PUBLIC_DOMAIN`. **Esta sintaxis está escrita de memoria: verifícala en la documentación de plantillas de Railway y haz un despliegue de prueba antes de publicar.**
-4. En el servicio de Pizarro configura el volumen (`/app/uploads`), los ajustes de despliegue del paso 5 (*Settings → Deploy*: healthcheck `/api/health` con 600 s, *On Failure*, una réplica; la plantilla copia lo que tenga el servicio) y la descripción de cada variable (por ejemplo: «No la cambies después: invalida sesiones»).
-5. En el servicio de Pizarro, la fuente debe ser el repositorio oficial con la rama **`stable`** (*Settings → Source → Branch* en el proyecto de origen antes de generar la plantilla). Comprueba en el despliegue de prueba (punto 7) que el servicio creado sigue `stable` y no `main`; si la plantilla no conserva la rama, indícalo en su descripción («tras desplegar: Settings → Source → Branch → stable»).
-6. Pulsa *Create template* y copia el enlace. Pon el botón «Deploy on Railway» en el README apuntando a ese enlace.
-7. Prueba la plantilla en un proyecto nuevo de una cuenta limpia: comprueba que arranca, que `/setup` pide el código del log, que `APP_URL` es correcta, que la rama es `stable` y que el log de construcción del despliegue (*Build Logs*) trae `Starting Healthcheck` con `Path: /api/health`.
+Railway tiene una sola guía, la de la web: <https://getpizarro.com/instalar/#railway> (en el repositorio, [docs/web/instalar.md](web/instalar.md#instalar-en-railway-sin-servidor-propio-railway); en inglés, [docs/web/en/install.md](web/en/install.md#install-on-railway-with-no-server-of-your-own-railway)). Trae los pasos, qué hacer si falla, lo de después (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS`, réplicas, copias, dominio) y un texto para que una IA que use el navegador haga la instalación. Railway construye la imagen con el `Dockerfile` del repositorio (arranca con su `CMD`) y lo demás se pone en su panel; lo propio de Railway en el resto de esta referencia (dominio, copias, actualizar, consola, problemas) está en cada sección.
 
 ### Render
 
@@ -311,7 +251,7 @@ Configura el email para tener invitaciones y «¿Olvidaste tu contraseña?»: de
 
 ### 2.4 Administrador inicial por variables (alternativa)
 
-Para instalaciones automatizadas puedes saltarte el asistente definiendo `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` y, opcionalmente, `SEED_ADMIN_NAME` en `.env`. Si la base de datos no tiene usuarios, el administrador se crea al arrancar y `/setup` queda desactivado (es lo que usa Railway). Entra con esos datos, configura la verificación en dos pasos, cambia la contraseña y borra `SEED_ADMIN_PASSWORD` del `.env`.
+Para instalaciones automatizadas puedes saltarte el asistente definiendo `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` y, opcionalmente, `SEED_ADMIN_NAME` en `.env`. Si la base de datos no tiene usuarios, el administrador se crea al arrancar y `/setup` queda desactivado. Entra con esos datos, configura la verificación en dos pasos, cambia la contraseña y borra `SEED_ADMIN_PASSWORD` del `.env`.
 
 ## 3. Configuración
 
@@ -513,7 +453,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/pla87/pi
 
 Instala el código de la etiqueta `v1.49.0` y fija la imagen `ghcr.io/pla87/pizarro:1.49.0` (`PIZARRO_IMAGE` en `deploy/.env`). Admite de la 1.38.0 en adelante (la primera con imagen publicada); una anterior se rechaza con un aviso. Las versiones publicadas están en <https://github.com/pla87/pizarro/releases>. Para volver a seguir siempre la última: repite el comando sin `--version`. Sirve igual para actualizar a una versión concreta (no solo para volver atrás). Si la versión nueva no arranca, puedes volver a la anterior así, pero las migraciones de la base de datos solo avanzan: si la versión nueva ya migró los datos, volver puede exigir restaurar antes la copia de seguridad (sección 6), porque una versión anterior puede no entender una base migrada por otra posterior. Por eso la copia previa a actualizar es imprescindible.
 
-**Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada). Despliega desde la rama **`stable`**: el workflow *Release* la mueve al commit de cada versión publicada, así que Railway se actualiza solo al publicarse una versión, nunca con commits sueltos de `main`. Para quedarte en una versión, desactiva el despliegue automático del servicio (o apúntalo a la etiqueta `vX.Y.Z` si tu Railway lo permite). Cambiar una instalación que hoy sigue `main`: README, «Guía de despliegue en Railway», paso 2.
+**Railway** sigue construyendo desde el repositorio de GitHub con su `Dockerfile` (no usa la imagen publicada). Despliega desde la rama **`stable`**: el workflow *Release* la mueve al commit de cada versión publicada, así que Railway se actualiza solo al publicarse una versión, nunca con commits sueltos de `main`. Para quedarte en una versión, desactiva el despliegue automático del servicio (o apúntalo a la etiqueta `vX.Y.Z` si tu Railway lo permite). Para cambiar a `stable` una instalación que hoy sigue `main`: mira qué versión tienes (*Historial de versiones*) y cuál es la última publicada (<https://github.com/pla87/pizarro/releases>); si la tuya es más nueva (desplegaste commits de `main` posteriores), espera a la siguiente versión, porque una anterior puede no entender la base ya migrada. Haz una copia (*Administración → Copias de seguridad*) y, en el servicio de Pizarro, *Settings → Source → Branch* → `stable`: Railway despliega la última versión publicada. Si `stable` se ha quedado en una versión anterior a la última (falló el job «Rama stable» de *Release*), un mantenedor la pone al día con **Actions → Mover stable → Run workflow** (rama `main`).
 
 **Render y Fly.io** usan la imagen publicada: en Render, *Manual Deploy → Deploy latest reference* en el servicio; en Fly.io, `fly deploy` en la carpeta de su `fly.toml`. Las dos descargan la `latest` del momento (o la versión que hayas fijado en la imagen) y aplican las migraciones al arrancar. Detalle en sus secciones, al principio de esta guía.
 

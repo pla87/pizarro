@@ -21,10 +21,10 @@ const FLUSH_MS = 3_000;
 const LONG_GRACE_MS = 10_000;
 /**
  * Plazo de espera a lo que está en curso (una subida grande, un PDF, un ZIP). En Railway con la variable
- * RAILWAY_DEPLOYMENT_DRAINING_SECONDS (docs/INSTALL.md: 15 s), lo que quepa en ese margen dejando FLUSH_MS y 1 s, hasta
- * LONG_GRACE_MS (10 s + 3 s + 1 s = 14 s con 15). Sin ella (Railway da 0 s por defecto, o el margen solo está en el panel),
- * GRACE_MS, como en las demás plataformas: así nunca se espera más de lo que la plataforma concede. Sin nada en curso se
- * sale al momento.
+ * RAILWAY_DEPLOYMENT_DRAINING_SECONDS (15 s en la guía, docs/web/instalar.md#railway), lo que quepa en ese margen dejando
+ * FLUSH_MS y 1 s, hasta LONG_GRACE_MS (10 s + 3 s + 1 s = 14 s con 15). Sin ella (Railway da 0 s por defecto, o el
+ * margen solo está en el panel), GRACE_MS, como en las demás plataformas: así nunca se espera más de lo que la plataforma
+ * concede. Sin nada en curso se sale al momento.
  */
 export function shutdownGraceMs(env: Record<string, string | undefined> = process.env): number {
   const draining = Number(env.RAILWAY_DEPLOYMENT_DRAINING_SECONDS);
