@@ -213,31 +213,38 @@ screen.
 
 ## Install on Railway, with no server of your own {#railway}
 
-[Railway](https://railway.com) runs Pizarro and its database from the GitHub repository, with HTTPS. It is all done
-from its web dashboard, with no terminal.
+[Railway](https://railway.com) runs Pizarro and its database from the GitHub repository, with HTTPS. It is all done on
+its website, with no terminal, in about 15 minutes. Railway charges every month for what you use: see its prices at
+<https://railway.com/pricing>.
+
+> [!TIP]
+> **Would you rather an AI did it?** If you use an AI that can drive your browser, such as Claude in Chrome, paste it
+> the text in [Install with the help of an AI in your browser](#railway-ai): it follows these same steps and asks you
+> to sign in yourself.
 
 > [!NOTE]
-> **How Railway deploys.** While you set up the service, Railway doesn't deploy each change: it collects them in a
-> notice at the top left, "Apply N changes", with a **Deploy** button. In this guide you click it **only once**, at the
-> end (step 7), when everything is ready.
+> Railway doesn't apply each change straight away: it collects them in a notice at the top left, "Apply N changes",
+> with a **Deploy** button. Click it **only once**, in step 8. If you get a "Build failed" email before that, it doesn't
+> matter.
 
-1. **Create the project and the database.** Open <https://railway.com/new> and choose **Database → PostgreSQL**.
-   Railway creates a service called `Postgres`. If you like, give the project a name in *Settings → General*.
-2. **Add Pizarro.** In the same project, click **+ Add → GitHub Repository** and choose `pla87/pizarro` (or your copy).
-   The first time, Railway asks for permission to see your GitHub repositories. A second box appears: Pizarro's
-   service.
-3. **Choose the `stable` branch.** Click Pizarro's box and go to *Settings → Source → **Branch connected to
-   production***. The drop-down lists every branch: type `stable` to filter and pick it. That branch only moves when a
-   version is published, so Railway only updates with finished versions, never with half-done changes.
-4. **Generate the address and attach the volume.**
+1. **Create the accounts.** One on [GitHub](https://github.com/signup) (free) and one on [Railway](https://railway.com)
+   (sign in with *Login with GitHub*). If Railway asks you to choose a plan or add a payment method, do it: that is
+   where what Pizarro uses is billed.
+2. **Create the project with the database.** Open <https://railway.com/new> and choose **Database → PostgreSQL**. A box
+   called `Postgres` appears. If you like, give the project a name in *Settings → General*.
+3. **Add Pizarro.** In the same project, click **+ Add → GitHub Repository** and choose `pla87/pizarro`. The first
+   time, Railway asks for permission to see your GitHub repositories. A second box appears, Pizarro's: click it. Steps
+   4 to 7 are done in it.
+4. **Choose the `stable` branch.** In *Settings → Source → **Branch connected to production***, type `stable` and pick
+   it. That way Railway only installs published versions, never half-done changes.
+5. **Generate the address and attach the volume.**
    - In *Settings → Networking*, click **Generate Domain**. Railway reserves an address such as
-     `pizarro-production.up.railway.app`. It doesn't work until the first deploy: that's normal.
-   - Right-click Pizarro's box → **Attach volume** and, as the *Mount path*, type `/app/uploads`. Files and backups
-     are kept there; without a volume they would be lost on every deploy.
-5. **Paste the variables.** Click **Generate my variables**: the page creates four random keys in your browser and puts
-   them in the block below. They aren't sent anywhere, neither to this website nor to Railway: they only exist on your
-   screen until you copy them. Click **Copy**, go to Pizarro's service → *Variables* → *Raw Editor*, paste and click
-   *Update Variables*.
+     `pizarro-production.up.railway.app` (it doesn't answer until step 8).
+   - Right-click Pizarro's box → **Attach volume** and type `/app/uploads` as the *Mount path*. Files and backups are
+     kept there; without a volume they would be lost on every deploy.
+6. **Paste the variables.** Click **Generate my variables**: the page creates four random keys in your browser and puts
+   them in the block below (they aren't sent anywhere). Click **Copy**, go to Pizarro's service → *Variables → Raw
+   Editor*, paste and click *Update Variables*.
 
    ```railway-env
    DATABASE_URL=${{Postgres.DATABASE_URL}}
@@ -249,44 +256,26 @@ from its web dashboard, with no terminal.
    RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
    ```
 
-   - **`RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15`** gives Pizarro 15 seconds to shut down cleanly when it updates or
-     restarts (by default Railway gives none and cuts off whatever is in progress: an upload, an email, the logs).
-   - **`APP_URL` isn't needed:** Pizarro uses the address Railway reserved in step 4 by itself. You only have to add
-     it if you set up [your own domain](#domain).
-   - `${{Postgres.DATABASE_URL}}` stays as it is: Railway replaces it with the database's address. If your database
-     service isn't called `Postgres`, change that name.
-   - **Save the four keys now** in a password manager (see the notice below).
-   - **Without the button:** you can also generate them in the terminal of a Mac or Linux computer (on Windows, in Git
-     Bash). Each key must be different. Run this command three times, for `SESSION_SECRET`, `TOKEN_SECRET` and
-     `ENCRYPTION_KEY`:
+   - **Save the four keys now** in a password manager: without `BACKUP_KEY` the backups cannot be opened, and without
+     `ENCRYPTION_KEY` everyone would have to set up their two-step verification again.
+   - **Without the button** (for example, if you are reading this guide on GitHub), generate the keys in the terminal
+     of a Mac or Linux computer (on Windows, in Git Bash). You get four lines, in this order: `SESSION_SECRET`,
+     `TOKEN_SECRET`, `ENCRYPTION_KEY` and `BACKUP_KEY`.
 
      ```bash
-     openssl rand -base64 48
+     openssl rand -base64 48; openssl rand -base64 48; openssl rand -base64 48; openssl rand -base64 32
      ```
 
-     And this one for `BACKUP_KEY`:
-
-     ```bash
-     openssl rand -base64 32
-     ```
-
-6. **Turn on the health check.** In Pizarro's service, go to *Settings → Deploy* and type `/api/health` in
-   **Healthcheck Path** and `600` in **Healthcheck Timeout** (that field shows up as soon as you fill in the first
-   one). That way Railway doesn't treat a deploy as good until Pizarro
-   answers, and if something fails during an update, it keeps the previous version. On the same screen, leave
-   *Restart Policy* on *On Failure* and a single replica (that's the default; with the volume, Railway doesn't let you
-   raise it) and *Custom Start Command* empty.
-7. **Deploy, just once.** At the top left you will see "Apply N changes": click **Deploy**. Railway builds Pizarro and
-   starts it, which takes a few minutes. If Railway got to deploy before you had added the variables or the volume, you
-   may get a "Build failed" email: that's normal and there's nothing to do. The deploy that counts is this one, with
-   everything in place. To see that the health check is on, open the deployment in *Deployments* and look at the end
-   of *Build Logs* (not *Deploy Logs*): it should show `Starting Healthcheck` with `Path: /api/health` and
-   `Retry window: 10m0s` and, once Pizarro answers,
-   `Healthcheck succeeded!` (before that, a few `Attempt #… failed` lines: that's normal while it gets ready).
-8. **Wait for Pizarro to prepare the database.** The first time it takes 2 or 3 more minutes, even if Railway already
-   shows *Active*. In Pizarro's service, open *Deployments → View logs*, scroll to the end of the log and wait for the
-   line `PIZARRO ESTÁ SIN CONFIGURAR` ("Pizarro is not set up yet"). The red lines at the start are normal. You will
-   see something like this:
+   - `${{Postgres.DATABASE_URL}}` stays as it is: Railway replaces it with the database's address (if your database
+     isn't called `Postgres`, change that name). Put the variables in Pizarro's service, not as the project's *Shared
+     Variables*, and don't add `APP_URL` (only needed with [your own domain](#domain)) or `SEED_ADMIN_*`.
+7. **Turn on the health check.** In *Settings → Deploy*, type `/api/health` in **Healthcheck Path** and `600` in
+   **Healthcheck Timeout** (that field shows up once you fill in the first one). Leave the rest of that screen as it is.
+8. **Deploy, just once.** At the top left, in "Apply N changes", click **Deploy**. If Railway suggests more than one
+   replica in that list on its own, discard that change: Pizarro runs as a single one.
+9. **Wait for the code.** The first time it takes a few minutes to build and another 2 or 3 to prepare the database,
+   even if Railway already shows *Active*. In *Deployments → View logs*, scroll to the end and wait for this box (the
+   red lines at the start are normal):
 
    ```text
    ================================================================
@@ -296,29 +285,81 @@ from its web dashboard, with no terminal.
    ================================================================
    ```
 
-   The second line gives the address of the setup wizard and the code (*código*).
-9. **Open the wizard.** Go to your address ending in `/setup` and follow the [first steps](#first-steps) from step 2,
-   with the code from the log.
+   `PIZARRO ESTÁ SIN CONFIGURAR` means "Pizarro is not set up yet"; the second line gives the address of the setup
+   wizard and the code (*código*).
+10. **Sign in for the first time.** Open the address from the log ending in `/setup` and follow the
+    [first steps](#first-steps) from step 2, with the code from the log.
 
-> [!IMPORTANT]
-> Keep `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` and `BACKUP_KEY` **outside Railway** as well, in a password
-> manager. Without `BACKUP_KEY` the backups cannot be opened, and without `ENCRYPTION_KEY` everyone would have to set up
-> their two-step verification again.
+### If something goes wrong {#railway-trouble}
 
-> [!WARNING]
-> **Railway may suggest changes you didn't ask for.** Sometimes the notice at the top left says, for example, "Apply 2
-> changes" with region or replica changes you never touched. Open it to see what they are before clicking **Deploy**:
->
-> - **Replicas:** don't apply a change that sets more than one. Pizarro runs as a single instance (that's Railway's
->   default); with two or more, live updates and the sign-in attempt limits would break. Discard that change or
->   set it back to 1.
-> - **Region:** it doesn't matter which one, as long as the database (`Postgres`) is in the same one. If they are in
->   different regions, Pizarro is slower.
+- **The log says `faltan variables de entorno`** (environment variables missing): one of those from step 6 is missing
+  or too short. Check *Variables* and deploy again (*Deployments*, the *⋮* menu of the latest one → *Redeploy*).
+- **The log says `PostgreSQL aún no responde` or `No se puede conectar con PostgreSQL`** (PostgreSQL isn't answering):
+  check that the `Postgres` box is active and that `DATABASE_URL` is exactly `${{Postgres.DATABASE_URL}}`, with your
+  database's name.
+- **The address doesn't load** (*Application failed to respond*): the first time, wait 2 or 3 more minutes. If it
+  goes on, look at the end of *Deploy Logs*.
+- **Is the health check on?** In the deployment, at the end of *Build Logs* (not *Deploy Logs*), you should see
+  `Starting Healthcheck` with `Path: /api/health` and, once Pizarro answers, `Healthcheck succeeded!` (before that, a
+  few `Attempt #… failed` lines, normal while it gets ready). If it isn't there, repeat step 7 and deploy again.
+- **You lost the code or it expired:** in *Deployments*, the *⋮* menu of the active deployment → *Restart*, and look for
+  it again at the end of the log.
+- More cases in [Troubleshooting](#troubleshooting).
+
+### Afterwards {#railway-after}
+
+- **Email, Google, Telegram and WhatsApp:** set up from the app itself ([optional settings](#settings)).
+- **Backups outside Railway** (Cloudflare R2, Backblaze B2 or any S3 service): add the `BACKUP_S3_*` variables in
+  *Variables* ([backups](#backups)).
+- **Your own domain:** [your own domain and HTTPS](#domain).
+- **Updating:** there's nothing to do; on the `stable` branch, Railway updates by itself with every version
+  ([updating](#update)).
+- **Time to shut down (`RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15`, already in the block in step 6):** without it,
+  Railway cuts Pizarro off as soon as it asks it to stop, and an upload, an email or a log entry in progress would be
+  lost; with it, Railway waits 15 seconds and Pizarro finishes what it's doing. If it's missing, the startup log warns
+  about it. You can also create it as a project shared variable (*Shared Variables*) and, in the *Variables* of
+  Pizarro's service, set `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=${{shared.RAILWAY_DEPLOYMENT_DRAINING_SECONDS}}` (a
+  shared variable doesn't reach the service on its own). The *Teardown* setting in *Settings → Deploy* doesn't replace
+  it: Railway would wait, but Pizarro can't see it and only uses 5 seconds.
+- **A single replica:** Pizarro runs as one instance (live updates and the sign-in attempt limits live in it) and,
+  with the volume, Railway doesn't let you raise it. The region doesn't matter as long as `Postgres` is in the same one.
+- **The service console** (for example, to get an administrator back in):
+  [no administrator can sign in](#locked-out).
+
+### Install with the help of an AI in your browser {#railway-ai}
+
+An AI that can use your browser, such as Claude in Chrome, can do the steps in this section for you. You only sign in
+to GitHub and Railway, choose the plan and the payment, and type your own details at the first sign-in.
 
 > [!NOTE]
-> Create the variables in Pizarro's service, not as the project's *Shared Variables*: those don't reach the service on
-> their own. And don't add the `SEED_ADMIN_*` variables: without them, the first administrator is created with the
-> wizard.
+> The AI sees what it does in your browser. If it generates and pastes the four secret keys of step 6 itself, the keys
+> go through the AI and its provider. If you'd rather they didn't, add the line "I'll set the keys myself" at the end of
+> the text: when it gets to that step, the AI will stop and ask you to click **Generate my variables** yourself and paste
+> the block into Railway.
+
+Open the extension and paste this text:
+
+```prompt
+I want to install Pizarro (a kanban board) on Railway, with no server of my own. Do it for me in my browser, following this guide to the letter, the section "Install on Railway, with no server of your own" and its subsections:
+https://github.com/pla87/pizarro/blob/main/docs/web/en/install.md#install-on-railway-with-no-server-of-your-own-railway
+
+Rules:
+1. Work in a new tab and don't touch the ones I already have open.
+2. Don't sign in for me and don't type passwords or verification codes. Whenever signing in to GitHub or Railway is needed (or giving Railway permission on GitHub), stop, tell me what I have to do and wait until I say "done".
+3. I choose the Railway plan and enter the payment method myself. Stop before any step that costs money or commits to it (choosing or changing a plan, adding a card, accepting a charge) and ask me.
+4. Create a new project on Railway (step 2 of the guide) and tell me its name as soon as it exists. Don't change or delete any other project or service.
+5. The four keys (SESSION_SECRET, TOKEN_SECRET, ENCRYPTION_KEY and BACKUP_KEY) must be truly random: don't make them up. Generate them with the "Generate my variables" button at https://getpizarro.com/en/install/#railway if that page opens; if not, run this in the console of the tab where you have this guide open (the GitHub one, not a blank tab), which uses the browser's random generator:
+   const k = (n) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))); `SESSION_SECRET=${k(48)}\nTOKEN_SECRET=${k(48)}\nENCRYPTION_KEY=${k(48)}\nBACKUP_KEY=${k(32)}`
+   Paste them, with the other lines of the block in step 6, straight into Variables → Raw Editor of Pizarro's service. If you can do neither, or if at the end of this text I tell you I'll set the keys myself, stop at step 6 and ask me to generate the variables and paste them myself into Variables → Raw Editor of Pizarro's service. Wait until I say "done", carry on with step 7 and don't open the Raw Editor yourself (the keys show there).
+6. Don't write the keys, or anything you copy from the screen (passwords, tokens, emails or other personal details), in the chat, in your report or anywhere else.
+7. If something doesn't match the guide (a button with another name, an error you don't understand, a Railway notice suggesting changes I didn't ask for), stop, tell me what you see and ask me. Don't apply replica changes.
+
+When you finish:
+1. Check that the address you reserved with Generate Domain loads and that the end of the deployment log shows "PIZARRO ESTÁ SIN CONFIGURAR" with the code.
+2. Open that address ending in /setup and guide me through the first sign-in: you may type the one-time code yourself; the organisation's name, my name, my email and my password I type myself.
+3. Remind me to save the four keys in my password manager (I can see them in Railway, Pizarro's service → Variables) and to turn on two-step verification when I sign in.
+4. Give me a short report: each step of the guide (done, not done or with a problem, and what you saw), the name of the Railway project, Pizarro's address and what is still left for me to do. No keys or passwords.
+```
 
 ## Install on Render {#render}
 

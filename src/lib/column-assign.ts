@@ -142,7 +142,7 @@ export function assignUndoOps(res: AssignOnEnterResult | null): Extract<UndoOp, 
  * Después de la transacción: el deshacer (con `undo` en false, quien llama ya lo ha juntado con el suyo), el historial y
  * los avisos. Un solo aviso a la persona para todo el lote (enlaza a la primera tarea), como al crear varias asignadas.
  */
-export async function finishAssignOnEnter(res: AssignOnEnterResult | null, actorId: string, opts: { undo?: boolean; personName?: string } = {}): Promise<void> {
+export async function finishAssignOnEnter(res: AssignOnEnterResult | null, actorId: string | null, opts: { undo?: boolean; personName?: string } = {}): Promise<void> {
   if (!res) return;
   if (opts.undo !== false) addUndo(...assignUndoOps(res));
   const name = opts.personName ?? (await db.user.findUnique({ where: { id: res.rule.assigneeId }, select: { name: true } }))?.name ?? "?";
@@ -152,7 +152,7 @@ export async function finishAssignOnEnter(res: AssignOnEnterResult | null, actor
 }
 
 /** Aviso «te han asignado» a la persona de la columna: uno por lote. También descarta los avisos de fecha pendientes de otros. */
-export async function notifyAssigned(rule: { projectId: string; assigneeId: string }, taskIds: readonly string[], actorId: string, rows: readonly { id: string; title: string }[]): Promise<void> {
+export async function notifyAssigned(rule: { projectId: string; assigneeId: string }, taskIds: readonly string[], actorId: string | null, rows: readonly { id: string; title: string }[]): Promise<void> {
   if (!taskIds.length) return;
   // Como dropPendingDueChanges (updateTask), de una vez para todo el lote.
   await db.pendingDueNotice.deleteMany({ where: { taskId: { in: [...taskIds] }, recipientId: { not: rule.assigneeId } } });

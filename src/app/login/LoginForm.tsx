@@ -1,5 +1,6 @@
 "use client";
 
+import { AUTH_TEXT_LINK } from "@/components/auth/AuthCard";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -57,8 +58,8 @@ export function LoginForm({ next, google, password, emergency, notice, info = nu
         {t("Entrar")}
       </button>
       {/* Siempre visible: sin email configurado, /forgot-password explica las alternativas. */}
-      <p className="text-center text-sm">
-        <Link href="/forgot-password" className="text-brand-700 hover:underline dark:text-brand-300">{t("¿Olvidaste tu contraseña?")}</Link>
+      <p className="text-center">
+        <Link href="/forgot-password" className={AUTH_TEXT_LINK}>{t("¿Olvidaste tu contraseña?")}</Link>
       </p>
     </form>
   );

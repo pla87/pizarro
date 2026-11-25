@@ -1,7 +1,7 @@
 // Instalación en la nube sin servidor propio: el Blueprint de Render (render.yaml), el ejemplo de Fly.io (deploy/fly.toml)
-// y Railway, que ya no lee railway.json (se configura en su panel; docs/INSTALL.md). Comprueba que los ficheros dicen lo
-// mismo que la imagen: la carpeta de adjuntos del Dockerfile, /api/health, una sola instancia y las claves que pide
-// scripts/start.sh y genera el botón de la guía web. Sin dependencias para leer YAML o TOML: basta con buscar las líneas.
+// y Railway, que no lee ningún fichero del repositorio (se configura en su panel; guía en docs/web/instalar.md#railway).
+// Comprueba que los ficheros dicen lo mismo que la imagen: la carpeta de adjuntos del Dockerfile, /api/health, una sola
+// instancia y las claves que pide scripts/start.sh y genera el botón de la guía web. Sin dependencias para leer YAML o TOML: basta con buscar las líneas.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";

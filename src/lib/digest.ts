@@ -18,13 +18,15 @@ export interface DigestItem {
   projectName: string;
   /** Comentarios nuevos de la tarea (sección «comments»). */
   count?: number;
+  /** Otras tareas del mismo aviso que no salen en la lista (el lote de «Asignación a persona»: «y N más»). */
+  more?: number;
 }
 
 export type DigestInput = Record<DigestSectionKey, DigestItem[]>;
 
 interface DigestSection {
   key: DigestSectionKey;
-  /** Tareas de la sección (también las que no caben en el correo). */
+  /** Tareas de la sección (también las que no caben en el correo y las «y N más» de un lote). */
   total: number;
   /** Las que se muestran, agrupadas por proyecto (orden alfabético). */
   projects: { projectId: string; projectName: string; items: DigestItem[] }[];
@@ -38,15 +40,19 @@ export function emptyDigestInput(): DigestInput {
 
 /**
  * Agrupa por sección y proyecto, sin repetir tareas dentro de una sección, y descarta las secciones vacías. `taskCount`:
- * tareas distintas entre todas las secciones (una tarea asignada, vencida y comentada cuenta una vez).
+ * tareas distintas entre todas las secciones (una tarea asignada, vencida y comentada cuenta una vez), más las «y N más»
+ * de los lotes (de esas no se sabe cuáles son: pueden estar también en otra sección).
  */
 export function buildDigest(input: DigestInput): { sections: DigestSection[]; empty: boolean; taskCount: number } {
   const sections: DigestSection[] = [];
   const all = new Set<string>();
+  let more = 0;
   for (const key of DIGEST_ORDER) {
     const seen = new Set<string>();
     const unique = input[key].filter((i) => !seen.has(i.taskId) && !!seen.add(i.taskId));
     if (!unique.length) continue;
+    const extra = unique.reduce((n, i) => n + (i.more ?? 0), 0);
+    more += extra;
     for (const i of unique) all.add(i.taskId);
     const shown = unique.slice(0, DIGEST_MAX_ITEMS);
     const byProject = new Map<string, DigestSection["projects"][number]>();
@@ -57,12 +63,12 @@ export function buildDigest(input: DigestInput): { sections: DigestSection[]; em
     }
     sections.push({
       key,
-      total: unique.length,
+      total: unique.length + extra,
       projects: [...byProject.values()].sort((a, b) => a.projectName.localeCompare(b.projectName)),
       hidden: unique.length - shown.length,
     });
   }
-  return { sections, empty: sections.length === 0, taskCount: all.size };
+  return { sections, empty: sections.length === 0, taskCount: all.size + more };
 }
 
 function heading(key: DigestSectionKey, t: T): string {
@@ -78,6 +84,7 @@ function heading(key: DigestSectionKey, t: T): string {
 
 function itemText(i: DigestItem, t: T): string {
   const title = t("«{title}»", { title: mentionsToPlain(i.title) });
+  if (i.more) return `${title} ${t("y {n} más", { n: i.more })}`;
   return i.count && i.count > 1 ? `${title} (${t("{n} comentarios", { n: i.count })})` : title;
 }
 

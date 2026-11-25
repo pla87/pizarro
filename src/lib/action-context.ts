@@ -37,6 +37,11 @@ export interface ActionContext {
   undoRef?: { id?: string };
   /** La acción no cambió nada (p. ej. un deshacer que espera confirmación): no se avisa a las demás pestañas. */
   noPublish?: boolean;
+  /**
+   * Cubo propio del tope de envíos externos de los avisos que provoca la acción (notify.ts), en lugar del de su autor o
+   * del sistema, con su tope por hora: lo hecho desde «Compartir fuera» cuenta por enlace (`share:<id>`).
+   */
+  notifyBucket?: { key: string; limit: number };
 }
 
 export const actionContext = new AsyncLocalStorage<ActionContext>();

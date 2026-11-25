@@ -103,9 +103,9 @@ export function configWarnings(env: Env = process.env): { code: string; text: st
   if (env.APP_HEAP_MB?.trim()) {
     out.push({ code: "app_heap_mb_unused", text: "APP_HEAP_MB ya no se usa: Node ajusta su memoria al límite del contenedor (APP_MEM_LIMIT). Puedes borrarla de deploy/.env." });
   }
-  // Railway da 0 s entre SIGTERM y SIGKILL si no se le pide margen: sin la variable (docs/INSTALL.md, paso 4) cada despliegue
-  // corta lo que esté a medias. Las instalaciones anteriores a la 1.70 no la tienen. Con el margen solo en el panel
-  // (Teardown) también sale: Pizarro no lo ve y solo aprovecha 5 s (shutdown.ts).
+  // Railway da 0 s entre SIGTERM y SIGKILL si no se le pide margen: sin la variable (guía de Railway,
+  // docs/web/instalar.md#railway) cada despliegue corta lo que esté a medias. Las instalaciones anteriores a la 1.70 no
+  // la tienen. Con el margen solo en el panel (Teardown) también sale: Pizarro no lo ve y solo aprovecha 5 s (shutdown.ts).
   const railway = Boolean(env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID);
   if (railway && !(Number(env.RAILWAY_DEPLOYMENT_DRAINING_SECONDS) > 0)) {
     out.push({

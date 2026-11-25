@@ -240,7 +240,9 @@ export async function undoEntry(entryId: string) {
     const onlyAttachments = (entry.ops as unknown as UndoOp[]).every((op) => op.t === "attachment.restore");
     if (!onlyAttachments) {
       const latest = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: entry.projectId, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { id: true } });
-      if (latest?.id !== entry.id) throw new AppError("Esa acción ya no se puede deshacer desde aquí: usa Deshacer.");
+      // El botón ↶ de la cabecera («Deshacer la última acción»): los avisos con «Deshacer» de antes se apagan solos al
+      // llegar otro (placeToast, toast-queue.ts), pero puede haberse hecho otro cambio sin aviso entretanto.
+      if (latest?.id !== entry.id) throw new AppError("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.");
     }
     return applyEntry("UNDO", user, entry.projectId, entry);
   });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeKindAutomation, kindChangeNotice, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle } from "../src/lib/kinds-special";
+import { describeKindAutomation, kindChangeNotice, kindDescriptionChange, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle, titleWithoutKindPrefix } from "../src/lib/kinds-special";
 
 const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
 
@@ -345,11 +345,43 @@ test("aviso del cambio de tipo: cuenta por separado lo añadido, lo quitado y la
   assert.equal(kindChangeNotice(es, { added: 3, removed: 2 }), "Tipo cambiado: 3 subtareas añadidas y 2 quitadas");
   assert.equal(kindChangeNotice(es, { added: 1, removed: 0 }), "Tipo cambiado: 1 subtarea añadida");
   assert.equal(kindChangeNotice(es, { added: 0, removed: 1 }), "Tipo cambiado: 1 subtarea quitada");
-  assert.equal(kindChangeNotice(es, { added: 0, removed: 2, description: true }), "Tipo cambiado: 2 subtareas quitadas y plantilla de la descripción aplicada");
-  assert.equal(kindChangeNotice(es, { added: 3, removed: 1, description: true }), "Tipo cambiado: 3 subtareas añadidas, 1 quitada y plantilla de la descripción aplicada");
-  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: true }), "Tipo cambiado: plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 2, description: "applied" }), "Tipo cambiado: 2 subtareas quitadas y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 3, removed: 1, description: "applied" }), "Tipo cambiado: 3 subtareas añadidas, 1 quitada y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: "applied" }), "Tipo cambiado: plantilla de la descripción aplicada");
   assert.equal(kindChangeNotice(es, { added: 0, removed: 0 }), null);
   assert.equal(kindChangeNotice(en, { added: 3, removed: 2 }), "Type changed: 3 subtasks added and 2 removed");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: "removed" }), "Tipo cambiado: plantilla de la descripción quitada");
+  assert.equal(kindChangeNotice(es, { added: 1, removed: 0, description: "applied" }), "Tipo cambiado: 1 subtarea añadida y plantilla de la descripción aplicada");
+  assert.equal(kindChangeNotice(es, { added: 0, removed: 0, description: null }), null);
+  assert.equal(kindChangeNotice(en, { added: 0, removed: 0, description: "removed" }), "Type changed: description template removed");
+});
+
+test("aviso del cambio de tipo: dice lo que de verdad le ha pasado a la descripción", () => {
+  const CORRECCION = { titleTemplate: "", descriptionTemplate: "" };
+  const CASA = { titleTemplate: "", descriptionTemplate: "**Qué hay que hacer:**\n\n**Material necesario:**\n" };
+  const change = (prev: typeof CASA | null, next: typeof CASA, before: string) => kindDescriptionChange(next, before, switchKindDescription(prev, next, before));
+  // De un tipo con plantilla («Respuesta») a uno sin ella («Corrección»).
+  assert.equal(change(RESP, CORRECCION, ""), null);
+  assert.equal(change(RESP, CORRECCION, "Lo que escribí yo"), null);
+  assert.equal(change(RESP, CORRECCION, `${RESPUESTA_LINE}\n`), "removed");
+  assert.equal(change(RESP, CORRECCION, `${RESPUESTA_LINE}\n\nLo que escribí yo`), "removed");
+  // El formulario respondido se queda (solo cambian los saltos de línea): nada que avisar.
+  assert.equal(change(RESP, CORRECCION, `${RESPUESTA_LINE}\nMi respuesta`), null);
+  // A un tipo con plantilla: aplicada (también si sustituye a la del anterior).
+  assert.equal(change(CORRECCION, RESP, ""), "applied");
+  assert.equal(change(CORRECCION, RESP, "Lo que escribí yo"), "applied");
+  assert.equal(change(RESP, CASA, `${RESPUESTA_LINE}\n`), "applied");
+  // Ya la tenía: no cambia.
+  assert.equal(change(CORRECCION, RESP, `${RESPUESTA_LINE}\n`), null);
+});
+
+test("el título sin el prefijo del tipo (para nombrar la tarea en Logs y en el deshacer)", () => {
+  const kinds = [{ titleTemplate: "Mudanza: ", descriptionTemplate: "" }, { titleTemplate: "Gestionar", descriptionTemplate: "" }, { titleTemplate: "", descriptionTemplate: "" }];
+  assert.equal(titleWithoutKindPrefix("Mudanza: Varias dos", kinds), "Varias dos");
+  assert.equal(titleWithoutKindPrefix("Gestionar Varias dos", kinds), "Varias dos");
+  assert.equal(titleWithoutKindPrefix("Gestionarlo todo", kinds), "Gestionarlo todo");
+  assert.equal(titleWithoutKindPrefix("Mudanza:", kinds), "Mudanza:");
+  assert.equal(titleWithoutKindPrefix("Varias dos", kinds), "Varias dos");
 });
 
 test("la descripción a medio editar: al cambiar de tipo no se pierde nada de lo escrito", () => {

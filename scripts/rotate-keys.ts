@@ -1,14 +1,17 @@
-// Vuelve a cifrar con ENCRYPTION_KEY todos los secretos guardados (TOTP y tokens de Google) que sigan cifrados
+// Vuelve a cifrar con ENCRYPTION_KEY todos los secretos guardados (TOTP, tokens de Google, Telegram y WhatsApp, la
+// contraseña SMTP y las direcciones de «Compartir fuera»; lista en lib/key-rotation.ts) que sigan cifrados
 // con la clave anterior (ENCRYPTION_KEY_PREVIOUS) o en el formato antiguo. Después se puede quitar la anterior.
+// También rehace con la clave actual de TOKEN_SECRET la huella de cada enlace activo de «Compartir fuera» (a partir de
+// su token cifrado): sus direcciones siguen funcionando después de quitar TOKEN_SECRET_PREVIOUS.
 //
 //   npm run keys:rotate [-- --dry-run]
 //   (en el contenedor ya compilado: node dist/rotate-keys.mjs [--dry-run])
 //
-// Variables: DATABASE_URL, SESSION_SECRET, ENCRYPTION_KEY y ENCRYPTION_KEY_PREVIOUS (las mismas que la app).
+// Variables: DATABASE_URL, SESSION_SECRET, ENCRYPTION_KEY, ENCRYPTION_KEY_PREVIOUS y TOKEN_SECRET (las mismas que la app).
 // Se puede ejecutar con la app en marcha y repetir sin peligro.
 import { db } from "@/lib/db";
 import { encryptionKeys } from "@/lib/keyring";
-import { rotateEncryptedSecrets, type RotationDb } from "@/lib/key-rotation";
+import { rehashShareTokens, rotateEncryptedSecrets, type RotationDb } from "@/lib/key-rotation";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -22,19 +25,22 @@ async function main() {
   const { current, previous } = encryptionKeys();
   console.log(`[keys] Clave actual: ${current.id}${process.env.ENCRYPTION_KEY ? " (ENCRYPTION_KEY)" : " (derivada de SESSION_SECRET)"}`);
   console.log(`[keys] Clave anterior: ${previous ? previous.id + " (ENCRYPTION_KEY_PREVIOUS)" : "ninguna"}`);
-  const counts = await rotateEncryptedSecrets(db as unknown as RotationDb, { dryRun });
+  const counts = [...await rotateEncryptedSecrets(db as unknown as RotationDb, { dryRun }), await rehashShareTokens(db as unknown as RotationDb, { dryRun })];
   let unreadable = 0;
   for (const c of counts) {
     unreadable += c.unreadable;
-    console.log(`[keys] ${c.label}: ${c.total} en total, ${c.current} ya al día, ${c.rotated} ${dryRun ? "por re-cifrar" : "re-cifrados"}, ${c.unreadable} ilegibles.`);
+    console.log(`[keys] ${c.label}: ${c.total} en total, ${c.current} ya al día, ${c.rotated} ${dryRun ? "por poner al día" : "puestos al día"}, ${c.unreadable} ilegibles.`);
   }
   if (unreadable > 0) {
     console.log("[keys] AVISO: hay secretos que ninguna clave configurada abre. Si tienes la clave con la que se cifraron,");
     console.log("[keys] ponla en ENCRYPTION_KEY_PREVIOUS y repite. Si no, esas personas tendrán que volver a configurar la");
-    console.log("[keys] verificación en dos pasos (un administrador la restablece) o reconectar Google.");
+    console.log("[keys] verificación en dos pasos (un administrador la restablece) o reconectar Google. Una web de");
+    console.log("[keys] «Compartir fuera» ilegible sigue funcionando, pero su dirección ya no se puede volver a ver: en su");
+    console.log("[keys] columna, «Crear un enlace nuevo».");
     process.exitCode = 3;
   } else if (!dryRun) {
     console.log(previous ? "[keys] Hecho. Ya puedes quitar ENCRYPTION_KEY_PREVIOUS." : "[keys] Hecho.");
+    if (process.env.TOKEN_SECRET_PREVIOUS) console.log("[keys] Las webs de «Compartir fuera» ya no necesitan TOKEN_SECRET_PREVIOUS (lo demás que comprueba con ella, sí: ver el manual).");
   }
 }
 

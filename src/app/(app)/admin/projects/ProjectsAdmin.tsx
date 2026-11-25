@@ -113,13 +113,17 @@ function ProjectCard({ project, users, byId }: { project: Row; users: AdminUser[
                 type="button"
                 aria-pressed={on}
                 disabled={pending}
-                title={on ? t("Quitar «{project}» de los proyectos en los que trabaja {name}", { project: project.name, name: u.name }) : t("Añadir «{project}» a los proyectos en los que trabaja {name}", { project: project.name, name: u.name })}
+                aria-describedby={`admin-pick-${project.id}-${u.id}`}
                 className={`inline-flex max-w-full items-center rounded-full border border-dashed px-2.5 py-0.5 text-sm hover:bg-slate-50 disabled:opacity-60 dark:hover:bg-slate-800 ${on ? "border-brand-500 text-slate-700 dark:text-slate-200" : "border-slate-300 text-slate-500 dark:border-slate-700"}`}
                 onClick={() => run(() => setAdminProjectPick(project.id, u.id, !on), on ? t("Proyecto quitado de sus proyectos de trabajo") : t("Proyecto añadido a sus proyectos de trabajo"))}
               >
                 <span className="truncate">{u.name}</span>
                 <span className="ml-1 shrink-0 text-xs text-slate-500">{on ? t("(admin, no miembro; lo tiene en su lista)") : t("(admin, no miembro; no lo tiene en su lista)")}</span>
               </button>
+              {/* Qué hace, como descripción (con `title`, algunas herramientas nombraban el botón con ella). */}
+              <span id={`admin-pick-${project.id}-${u.id}`} className="sr-only">
+                {on ? t("Quitar «{project}» de los proyectos en los que trabaja {name}", { project: project.name, name: u.name }) : t("Añadir «{project}» a los proyectos en los que trabaja {name}", { project: project.name, name: u.name })}
+              </span>
             </li>
           );
         })}

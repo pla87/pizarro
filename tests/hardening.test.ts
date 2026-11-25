@@ -26,14 +26,31 @@ test("matcher del proxy (compilado como lo compila Next): las rutas que reciben 
   const { getMiddlewareRouteMatcher } = nextRequire("next/dist/shared/lib/router/utils/middleware-route-matcher.js");
   const match = getMiddlewareRouteMatcher(getMiddlewareMatchers(proxyConfig.matcher, {})) as (path: string, req: unknown, query: unknown) => boolean;
   const passes = (path: string) => match(path, { headers: {} }, {});
-  for (const path of ["/api/tasks/abc123/attachments", "/api/projects/abc123/documents", "/api/projects/abc123/import-tasks", "/api/projects/import", "/api/health", "/api/auth/google/callback", "/api/telegram/webhook"]) {
+  for (const path of ["/api/tasks/abc123/attachments", "/api/projects/abc123/documents", "/api/projects/abc123/import-tasks", "/api/projects/import", "/api/health", "/api/auth/google/callback", "/api/telegram/webhook", "/x/tok", "/x/tok/a/att1", "/x/tok/t/task1"]) {
     assert.equal(passes(path), false, `${path} no pasa por el proxy`);
   }
   for (const path of [
     "/", "/login", "/p/abc123", "/api/tasks/abc123/viewers", "/api/tasks/abc123/attachments/x", "/api/tasks/a/b/attachments", "/api/projects/abc123/documents/x", "/api/projects/abc123/import-tasks/x",
-    "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar", "/api/telegram/webhooks", "/api/telegram/webhook/x",
+    "/api/documents/abc123", "/api/attachments/abc123", "/api/projects/abc123/release-attachments", "/api/projects/abc123/export", "/api/client-errors", "/api/projects/importar", "/api/telegram/webhooks", "/api/telegram/webhook/x", "/x", "/xyz", "/p/x/y",
+    // public/icons/ ya no existe: sin esa excepción, /icons/… pasa por el proxy como cualquier otra ruta (CSP y sesión).
+    "/icons/icon-192.png",
+    // Bajo /x/ solo quedan fuera sus tres rutas: una dirección inventada es un «No encontrado» con las cabeceras normales.
+    "/x/", "/x/abc/loquesea/otra", "/x/tok/t", "/x/tok/t/task1/mas", "/x/tok/a/att1/mas", "/x/tok/z/att1",
   ]) {
     assert.equal(passes(path), true, `${path} pasa por el proxy`);
+  }
+});
+
+test("cabeceras generales de next.config (compiladas como las compila Next): todas las rutas salvo el informe, los documentos y las tres de /x/", async () => {
+  const { default: nextConfig } = await import("../next.config");
+  const { getPathMatch } = nextRequire("next/dist/shared/lib/router/utils/path-match.js");
+  const general = (await nextConfig.headers!()).find((h) => h.headers.some((x) => x.key === "X-Frame-Options"))!;
+  const match = getPathMatch(general.source, { strict: true, removeUnnamedParams: true }) as (path: string) => unknown;
+  for (const path of ["/x/tok", "/x/tok/t/task1", "/x/tok/a/att1", "/api/projects/abc/report", "/api/documents/abc"]) {
+    assert.equal(match(path), false, `${path} pone sus propias cabeceras`);
+  }
+  for (const path of ["/", "/login", "/p/abc", "/x/abc/loquesea/otra", "/x/tok/t/task1/mas", "/x/tok/z/att1", "/xyz", "/api/attachments/abc"]) {
+    assert.notEqual(match(path), false, `${path} lleva las cabeceras generales`);
   }
 });
 
@@ -168,9 +185,9 @@ test("robots.txt: público (fuera del proxy, sin ir a /login) y no deja rastrear
   assert.equal(match("/robots.txt/x", { headers: {} }, {}), true, "lo que cuelga de él, sí");
   assert.equal(match("/robots.txtx", { headers: {} }, {}), true);
   const { robotsRules, productPageRobots, landingIsPublic } = await import("../src/lib/robots");
-  assert.deepEqual(robotsRules(false), { rules: { userAgent: "*", disallow: "/" } });
+  assert.deepEqual(robotsRules(false), { rules: { userAgent: "*", disallow: ["/", "/x/"] } });
   // Con LANDING_AT_ROOT=1 solo la presentación y la licencia (y «/», que la muestra) se pueden rastrear.
-  assert.deepEqual(robotsRules(true), { rules: { userAgent: "*", allow: ["/$", "/presentacion", "/licencia"], disallow: "/" } });
+  assert.deepEqual(robotsRules(true), { rules: { userAgent: "*", allow: ["/$", "/presentacion", "/licencia"], disallow: ["/", "/x/"] } });
   assert.deepEqual(productPageRobots(false), { index: false, follow: false });
   assert.deepEqual(productPageRobots(true), { index: true, follow: true });
   assert.equal(landingIsPublic(undefined), false);
@@ -181,7 +198,7 @@ test("robots.txt: público (fuera del proxy, sin ir a /login) y no deja rastrear
   const prev = process.env.LANDING_AT_ROOT;
   delete process.env.LANDING_AT_ROOT;
   try {
-    assert.equal(resolveRobots(robots()), "User-Agent: *\nDisallow: /\n\n");
+    assert.equal(resolveRobots(robots()), "User-Agent: *\nDisallow: /\nDisallow: /x/\n\n");
   } finally {
     if (prev === undefined) delete process.env.LANDING_AT_ROOT;
     else process.env.LANDING_AT_ROOT = prev;

@@ -96,7 +96,7 @@ export async function run() {
   await L.eqEventually("selección: UI Siguiente salto (orden de columna y posición)", () => U.uiOrder(p, COL.next), ["B", "C", "X"]);
   L.eq("selección: orígenes en BD", [await L.dbOrder(COL.backlog), await L.dbOrder(COL.doing)], [["A", "D"], ["Y"]]);
   await L.checkEventually("selección: la barra desaparece", async () => !(await bar.isVisible().catch(() => false)));
-  L.check("selección: toast «3 tarjetas movidas»", await p.getByText("3 tarjetas movidas a «Siguiente salto a producción»").waitFor({ timeout: 8000 }).then(() => true, () => false));
+  L.check("selección: toast «3 tareas movidas»", await p.getByText("3 tareas movidas a «Siguiente salto a producción»").waitFor({ timeout: 8000 }).then(() => true, () => false));
   await L.checkEventually("selección: último evento «move» de cada tarea con «Movió la tarea a «…»»", async () => {
     const evs = [];
     for (const title of ["B", "C", "X"]) evs.push((await L.events(title)).slice(-1));

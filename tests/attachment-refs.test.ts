@@ -26,12 +26,12 @@ test("sin mapa o sin enlaces devuelve el mismo texto", () => {
 // quien abría la tarea) o cualquier otro GET de la app (informes, ZIP de una versión).
 const EVIL = ["/api/attachments/../auth/reset", "/api/attachments/%2e%2e/auth/reset", "/api/attachments/%2E%2E/auth/reset", "/api/attachments/..%2fauth/reset"];
 
-test("isAttachmentSrc: solo /api/attachments/<id> con consulta opcional", async () => {
+test("isAttachmentSrc: solo /api/attachments/<id>, sin consulta o con ?thumb=1", async () => {
   const { isAttachmentSrc } = await import("../src/lib/attachment-refs");
-  for (const ok of ["/api/attachments/abc", "/api/attachments/cmabc123xyz0000def456ghi7", "/api/attachments/abc?thumb=1", "/api/attachments/a_b-c?download=1"]) {
+  for (const ok of ["/api/attachments/abc", "/api/attachments/cmabc123xyz0000def456ghi7", "/api/attachments/abc?thumb=1", "/api/attachments/a_b-c"]) {
     assert.equal(isAttachmentSrc(ok), true, ok);
   }
-  for (const bad of [...EVIL, "/api/attachments/a/b", "/api/attachments/", "/api/attachments", "//x", "//example.com/api/attachments/abc", "https://example.com/api/attachments/abc", "/api/attachments/abc#x", "/api/attachments/abc/", " /api/attachments/abc", "/api/attachments/abc\n", `/api/attachments/${"a".repeat(41)}`, null, undefined, 1]) {
+  for (const bad of [...EVIL, "/api/attachments/a/b", "/api/attachments/", "/api/attachments", "//x", "//example.com/api/attachments/abc", "https://example.com/api/attachments/abc", "/api/attachments/abc#x", "/api/attachments/abc/", " /api/attachments/abc", "/api/attachments/abc\n", "/api/attachments/abc?download=1", "/api/attachments/abc?thumb=1&download=1", "/api/attachments/abc?download=1&thumb=1", "/api/attachments/abc?thumb=2", "/api/attachments/abc?", `/api/attachments/${"a".repeat(41)}`, null, undefined, 1]) {
     assert.equal(isAttachmentSrc(bad), false, JSON.stringify(bad));
   }
 });
@@ -50,10 +50,12 @@ test("el Markdown pintado (react-markdown, como en la tarea) no saca <img> con u
     const text = process.argv[1];
     process.stdout.write(renderToStaticMarkup(createElement(ReactMarkdown, { remarkPlugins: [remarkGfm], urlTransform: safeMarkdownUrl, components: markdownComponents(t) }, markdownSource(text))));
   `;
-  const text = [...EVIL.map((s) => `![x](${s})`), "![ok](/api/attachments/abc?thumb=1)"].join("\n\n");
+  // `?download=1` tampoco: cada apertura de la tarea pedía una «descarga» a nombre de quien la abría.
+  const text = [...EVIL.map((s) => `![x](${s})`), "![ok](/api/attachments/abc?thumb=1)", "![dl](/api/attachments/abc?download=1)"].join("\n\n");
   const html = execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script, text], { encoding: "utf8" });
   assert.deepEqual([...html.matchAll(/<img[^>]*src="([^"]*)"/g)].map((m) => m[1]), ["/api/attachments/abc?thumb=1"], html);
   assert.equal((html.match(/\[imagen: x\]/g) ?? []).length, EVIL.length, html);
+  assert.match(html, /\[imagen: dl\]/, html);
 });
 
 test("el HTML copiado (markdownToHtml) tampoco lleva esas imágenes", async () => {

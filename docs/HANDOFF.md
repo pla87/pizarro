@@ -8,9 +8,10 @@ repositorio es público y debe seguir sin ellos.
 ## 0. Arranque de una sesión nueva
 
 1. Lee este núcleo entero, el índice del manual (`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la
-   ronda, `e2e/README.md` y `docs/PRUEBAS-CHROME.md`. Los anexos (§7), solo cuando toque su tema.
+   ronda, y `e2e/README.md`. Los anexos (§7) y `docs/PRUEBAS-CHROME.md`, solo cuando toque su tema (este último, si la
+   ronda trae informes de Claude in Chrome o al cerrarla, para actualizar sus prompts).
 2. Rama de trabajo: la que indique la sesión, igual que `main` (`git fetch origin main && git checkout -B <rama> origin/main`).
-3. Entorno. **En el PC del propietario:** sección 0b. **En la nube** (si no está hecho): `pg_ctlcluster 16 main start`;
+3. Entorno. **En el PC del propietario:** `docs/handoff/LOCAL.md`. **En la nube** (si no está hecho): `pg_ctlcluster 16 main start`;
    si `postgres` no tiene contraseña,
    `su postgres -c "psql -c \"alter user postgres password 'postgres'\""`; `.env` a partir de `.env.example` con
    `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pizarro"`, un `SESSION_SECRET` aleatorio,
@@ -31,129 +32,11 @@ repositorio es público y debe seguir sin ellos.
 9. Las capturas, los informes de Claude in Chrome y las auditorías pueden traer el dominio real de la instalación del
    propietario y su email: nunca se copian a ficheros, briefs ni commits (el grep de privacidad antes de cada fusión).
 
-## 0b. Sesión local en el PC del propietario (Claude Code + Claude in Chrome)
+## 0b. Sesión local en el PC del propietario
 
-Desde la ronda 65 el propietario puede seguir en **Claude Code en el terminal de su PC**, con **Claude in Chrome** (la
-extensión del navegador, herramientas `mcp__claude-in-chrome__*`), en lugar de la nube. El método (§2–§5) es el mismo;
-cambian el entorno, los recursos y cómo se publica.
-
-**Qué leer al empezar en local:** este núcleo (incluida esta sección), el índice del manual
-(`grep -n '^#' docs/MANUAL.md`) y solo las secciones del tema de la ronda, `e2e/README.md` y `docs/PRUEBAS-CHROME.md`.
-Los anexos (§7), cuando toque su tema.
-
-**Requisitos** (cualquier sistema; notas para Windows y macOS):
-
-- **Git.** Windows: Git for Windows, que trae **Git Bash** (los scripts `scripts/*.sh`, como `scripts/e2e-all.sh`, son de
-  bash: lánzalos desde Git Bash o WSL, no desde PowerShell ni cmd). macOS: el de las *Command Line Tools*
-  (`xcode-select --install`) o Homebrew.
-- **Node 22** (`package.json` pide `"engines": { "node": ">=22" }`; no hay `.nvmrc`; las imágenes Docker y las
-  builds usan Node 22). Windows: instalador de nodejs.org (LTS 22) o `nvm-windows`/`fnm`. macOS: `brew install node@22`,
-  `nvm install 22` o `fnm`. Comprueba con `node -v`.
-- **PostgreSQL 16** (ni 15 ni 17: la imagen de Compose usa `postgres:16-alpine`). Instalado (Windows: instalador de
-  EDB; macOS: Postgres.app o `brew install postgresql@16`) con usuario `postgres` y contraseña `postgres`, o con Docker:
-
-  ```sh
-  docker run -d --name pizarro-pg -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
-  ```
-
-  Tras reiniciar el PC: `docker start pizarro-pg` (o el servicio de PostgreSQL instalado). El usuario debe poder crear
-  bases (`npm run test:db` crea y borra `pizarro_test_*`; las suites e2e, `pz_qa`).
-- **`gh`** (GitHub CLI) autenticado con `gh auth login`, o la web de GitHub para la PR y el workflow.
-
-**Puesta en marcha:**
-
-```sh
-git clone https://github.com/pla87/pizarro.git && cd pizarro
-cp .env.example .env        # y edítalo (abajo)
-npm ci                      # nunca npm install: reescribe el package-lock.json
-createdb -h localhost -U postgres pizarro   # o: docker exec pizarro-pg createdb -U postgres pizarro
-npx prisma migrate deploy
-npm run dev                 # desarrollo en http://localhost:3000
-```
-
-En el `.env`, los mismos valores que en §0: `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/pizarro"`, un
-`SESSION_SECRET` aleatorio (`openssl rand -base64 48`, que trae Git Bash, o
-`node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`), `APP_URL="http://localhost:3000"`,
-`UPLOAD_DIR="./uploads"`, `SEED_ADMIN_EMAIL="admin@example.com"`, `SEED_ADMIN_PASSWORD="cambia-esta-clave"` y
-`SEED_ADMIN_NAME="Administrador"` (valores de ejemplo: nunca los reales del propietario). `createdb` pide la contraseña
-(`postgres`) si no tienes `PGPASSWORD`. Añade `.claude/` a `.git/info/exclude` (worktrees de los agentes).
-
-Build de producción, la que prueban las suites e2e y la que hay que mirar antes de fusionar (§4):
-`npx prisma generate && npx next build --webpack && node scripts/postbuild.mjs && npm run build:boot` y después
-`npm start` (funciona también en Windows: el script `start` no lleva `exec`).
-
-**Lo que en la nube hacía falta y en local no («solo nube»):**
-
-- El binario SWC `@next/swc-linux-x64-gnu` extraído a mano: *solo nube*. En local `npm ci` instala el de tu sistema
-  (Windows, macOS Intel o ARM).
-- `NODE_OPTIONS=--use-openssl-ca` para `npm test` y las pruebas de PDF: *solo nube* (allí `NODE_OPTIONS` traía
-  `--max-old-space-size=8192`). En local no lo pongas; si tu `NODE_OPTIONS` lleva `--max-old-space-size`, quítalo para
-  `npm test` (anula el tope del worker de PDF).
-- `pg_ctlcluster 16 main start` y el `alter user postgres password`: *solo nube*. En local, el servicio o el
-  contenedor de PostgreSQL.
-- `PGPASSWORD=postgres … </dev/null` para que `createdb`/`dropdb` no se queden esperando: *solo nube* (en local te lo
-  pregunta y contestas).
-- Los límites de la nube (sin descargar binarios, sin `npx --yes knip@5` para los agentes, reinicios del contenedor):
-  *solo nube*. En local, `npx --yes knip@5` lo puede pasar la sesión principal con normalidad.
-- Valen también en local: las bases sueltas de `tests/db/` se llaman `pizarro_test_<hex>`; tras borrar una página,
-  `rm -rf .next/types` antes de `tsc`; `tests/report-render.test.ts` puede fallar con la CPU cargada (sola, pasa).
-
-**Chromium para e2e:** `npx playwright-core install chromium` (las suites usan el de `playwright-core` si no hay otro),
-o `CHROME=` a un Chrome instalado (Windows: `CHROME="/c/Program Files/Google/Chrome/Application/chrome.exe"` en Git
-Bash; macOS: `CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"`). Para los PDF del manual,
-`CHROME_PATH` con la misma ruta. Las suites corren en su propio Chromium sin interfaz, no en el Chrome del propietario.
-
-**Trampas de Windows (ronda 66, PC del propietario):**
-
-- La carpeta real es `D:\Pizarro` (con mayúscula). **Compila, arranca y pasa las e2e desde `D:\Pizarro`**: desde
-  `D:\pizarro` webpack ve dos copias de `next`/`react` («multiple modules with names that only differ in casing») y la
-  build falla al prerenderizar `/_global-error` («Cannot read properties of null (reading 'useContext')»).
-- La `isolation: "worktree"` automática de los agentes falla por esa misma mayúscula: crea los worktrees a mano
-  (`git worktree add -b r66-x .claude/worktrees/r66-x <rama>`, copia el `.env` con la base `pz_<agente>`) y dale al
-  agente la ruta. Al terminar, `git worktree remove --force` (si un `next dev` del agente sigue vivo, páralo antes).
-- Git: en el repositorio, `core.autocrlf=input` y `core.eol=lf` (Git for Windows trae `autocrlf=true`, y varias pruebas
-  que leen ficheros con expresiones regulares fallaban con CRLF).
-- PostgreSQL local con zona horaria UTC (`ALTER ROLE postgres SET timezone TO 'UTC'`): con la de España, lo que las
-  suites crean con `NOW()` quedaba una hora «en el futuro» frente a lo que crea la app y la QA confundía filas.
-- `npm test` en Windows: ~16 fallos solo del entorno (get.sh/install.sh, `start-signals`, `migrate.mjs`, symlinks,
-  rutas con `\`, worker de PDF); con la CPU cargada, alguna suite da *timeout* de 120 s y sola pasa. `npm run test:db`:
-  fallan solo por el entorno `health-shutdown` (ruta `/dev/null`), `start-migrate` y `backup-restore` (spawn de `npx`,
-  mensajes de PostgreSQL en español) y, a veces, `notifications` (un email de la prueba anterior llega tarde). En
-  GitHub (Linux) pasan todas: el job «Pruebas con base de datos» de la PR es la referencia.
-- Las e2e funcionan en Windows desde la ronda 66 (servidor con `node` y parada con `taskkill /T`, Prisma sin `npx`,
-  escenarios con `file://`). Chromium: el de `playwright-core` (`npx playwright-core install chromium`).
-
-**Recursos:** en un portátil, **no más de 2–3 agentes a la vez**, y que no compilen ni pasen e2e salvo encargo (la
-build de producción y las suites las pasa la sesión principal al final, una cada vez). Cada agente con su base
-(`pz_<agente>`), su puerto y `OUT=` propio. En Windows y macOS `cp -al` puede no existir: el agente hace `npm ci` en su
-propio worktree (más lento, pero nunca toca el `node_modules` del repositorio principal).
-
-**Ramas y publicación desde local:**
-
-- `git push` normal a la rama de trabajo; **nunca forzar** (`--force`) desde el PC. Tras la fusión aplastada, la
-  ronda siguiente empieza en una rama recién sacada de `origin/main` (o con `git merge origin/main` sobre la anterior
-  y push normal).
-- PR con `gh pr create --base main` (o la web), esperar sus tres comprobaciones (`gh pr checks --watch`: tipos/lint/pruebas,
-  pruebas con base de datos y «Caddyfile») y fusionar aplastando (`gh pr merge --squash` o el botón *Squash and merge*).
-- Publicar: en GitHub, **Actions → Release → Run workflow** sobre `main` (o `gh workflow run release.yml --ref main`);
-  después `git fetch origin --tags` y comprobar que `origin/stable` y `vX.Y.Z` apuntan al commit fusionado. Detalle en
-  `docs/handoff/PUBLICAR.md`.
-- Minutos de Actions solo al final (la PR y la Release): las comprobaciones de §4 se pasan en local antes.
-
-**Claude in Chrome.** La propia sesión de Claude Code puede ejecutar los prompts de `docs/PRUEBAS-CHROME.md` en el
-Chrome del propietario (instalación de prueba de Railway, Cloudflare, GitHub). Reglas:
-
-- Siempre en una **pestaña nueva**; no tocar las pestañas que el propietario tenga abiertas.
-- En Railway, **comprobar el nombre del proyecto antes de tocar nada** (el de prueba y el real se llaman parecido).
-- **Nunca la instalación real** salvo que el propietario lo pida expresamente en esa ronda.
-- **Nunca copiar claves, tokens ni datos personales** (emails, dominios, nombres) a ficheros, briefs ni commits.
-- Si hace falta una contraseña o un segundo factor, **pedir al propietario que inicie sesión él**; no escribirla.
-- Capturas y descargas solo en una **carpeta temporal fuera del repositorio**.
-- Lo aprendido en `PRUEBAS-CHROME.md` («Lo aprendido en las pruebas») sigue valiendo: sin incógnito ni 390 px ni
-  arrastres, PDF por captura, tooltips con read_page, etc.
-
-**Privacidad:** antes de cada fusión en `main`, el grep de los términos personales en el diff, los PDF y los mensajes
-de commit (los términos los da el propietario; no se apuntan en el repositorio).
+Desde la ronda 65 el propietario puede trabajar con Claude Code en el terminal de su PC y Claude in Chrome. El método
+(§2–§5) es el mismo; cambian el entorno, los recursos y la publicación: **`docs/handoff/LOCAL.md`** (léelo solo en esa
+sesión).
 
 ## 1. Qué es Pizarro
 
@@ -345,54 +228,65 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Lo hecho de la paquetización (instalación, web, guías, recordatorio y modelo de venta, publicación):
   `docs/handoff/HISTORIA.md`, «Paquetización: lo hecho».
 - Pendiente de confirmar por el propietario: prueba real en un VPS siguiendo `docs/PRUEBA-VPS.md`; plantilla de
-  Railway (pasos en `docs/INSTALL.md`; la sintaxis de variables generadas debe verificarse en Railway); las pruebas en
-  real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
+  Railway (pasos en `docs/handoff/PUBLICAR.md`, «Plantilla de Railway»; la sintaxis de variables generadas debe
+  verificarse en Railway); las pruebas en real de `PRUEBAS.pdf` (Google, WhatsApp, Telegram, email, Stripe).
 - Siguientes pasos: revisión de la licencia por un abogado (en especial las definiciones de «centro educativo» y
   «uso educativo» de §2: academias privadas, gestión del centro, administraciones educativas y formadores autónomos), vídeo para la presentación (sustituye a la demo),
   capturas reales sin datos personales, poner en marcha getpizarro.com (`docs/VENTA.md` §8) y el Payment Link.
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 67:** v1.71.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
-(Claude Code web), sin Claude in Chrome. Hechas las decisiones de la ronda 66 (esqueleto de Releases, arranque sin Prisma,
-«Organizar por personas» solo con miembros y admins que lo tienen en su lista, pruebas con base de datos en la Release) y
-tres vueltas de revisión y caza de bugs (servidor y coste; usuario; atacante; administración, instalación y coste; diff de
-la ronda en servidor y en cliente): la tercera halló que los topes nuevos de emails podían bloquear a gente legítima y se
-rediseñaron. Propuesta del enlace externo para proveedores (R67F1) a la espera de decisión. Pendientes de Claude in
-Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real de la v1.70/v1.71, auditoría de la v1.71, DMARC y WhatsApp real con el
-propietario delante; en la nube los prompts los pega el propietario).
+**Estado al cerrar la ronda 68:** v1.72.0 fusionada en `main` y publicada con *Actions → Release*. Ronda en la nube
+(Claude Code web), sin Claude in Chrome. Hechas las respuestas de R68R1: columna «Compartir fuera» (fase 1, con la
+dirección guardada cifrada para volver a enseñarla), decisiones 2, 5, 7, 8, 9 (al tocar cada suite), 10, 11, 12, 14 (a–d y
+f) y 16 (marked), los informes de Claude in Chrome de la v1.70/v1.71 y las capturas R68C1/R68C2. Dos vueltas de revisión de
+código y dos de caza de bugs (usuario, administración/instalación/coste, programación, atacante, «Compartir fuera» y toda la
+herramienta). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.72.0, DMARC y
+WhatsApp real con el propietario delante).
 
-**Preguntas abiertas al propietario (tras la v1.71.0)**, con la numeración del informe final de la ronda 67 (entre
+**Siguiente sesión: local, en el PC del propietario, con Claude in Chrome** (`docs/handoff/LOCAL.md`). En este orden:
+
+1. Arranque local (LOCAL.md, «Puesta en marcha»): rama de trabajo nueva desde `origin/main`, `npm ci`, PostgreSQL en
+   marcha, `npx prisma migrate deploy` (la v1.72 trae dos migraciones: `20261202100000_compartir_fuera` y
+   `20261203100000_compartir_fuera_token_cifrado`). Comprobar que `git log -1 origin/main` es «v1.72.0: …» y que
+   `origin/stable` y la etiqueta `v1.72.0` apuntan a ese commit.
+2. Claude in Chrome, con las reglas de LOCAL.md («Claude in Chrome») y los prompts de `docs/PRUEBAS-CHROME.md`:
+   - **Prompt 1, pruebas en real de la v1.72.0** en la instalación de PRUEBA (primero comprobar en Railway que ha
+     desplegado la v1.72.0 desde `stable`). Incluye «Compartir fuera»: lo de la ventana privada, el móvil, el Ctrl+V real
+     de una imagen en la descripción y la ventana muy ancha los hace el propietario; la sesión le guía.
+   - **Prompt 2, auditoría como usuario de la v1.72.0.**
+   - **Prompt 3, primeros informes DMARC** (solo mirar).
+   - **Prompt 4, WhatsApp en la instalación REAL**, solo con el propietario delante y si lo pide en esa sesión.
+   Los informes van a una carpeta temporal fuera del repositorio (sin datos personales en ficheros ni commits). Lo que
+   falle se arregla en la ronda 69; al cerrarla, «Estado» de PRUEBAS-CHROME y los prompts al día.
+3. Ronda 69: las respuestas del propietario a las preguntas de abajo (recomendadas para empezar: 2g, 3, 4 y 8) y lo que
+   salga de los informes de Chrome. Comprobaciones y e2e en local (§4); minutos de Actions solo para la PR y la Release.
+
+**Preguntas abiertas al propietario (tras la v1.72.0)**, con la numeración del informe final de la ronda 68 (entre
 paréntesis, la recomendación que se le dio):
 
-1. Enlace externo para proveedores (R67F1): una página por contacto externo con sus tareas (sin columna especial); desde
-   fuera, marcar hecha, cambiar la fecha y comentar; activable solo por admins, proyecto a proyecto, apagado por defecto;
-   token con huella HMAC en `/x/<token>` (en `SECRET_PATH_PREFIXES`), caduca a los 90 días sin uso; email al proveedor y
-   adjuntos en una fase 2. (SÍ, fase 1 en una ronda propia)
-2. Plan para IA más corto: «Depende de» como «la tarea N» y prioridad/etiquetas comunes dichas una vez (unos 14 % menos).
-   (SÍ)
-3. Menos consultas con el servidor quieto (de ~5.760 a ~600 al día; con dos procesos, un aviso de vencimiento hasta 10 min
-   tarde). (NO por ahora: ahorro pequeño)
-4. Topes de emails: 5 al día por dirección desde navegadores desconocidos, 100 repetidos al día en total, 10 códigos de 2FA
-   por hora y persona desde navegadores desconocidos; ventanas de 24 h móviles. (SÍ, así)
-5. Leer menos al arrancar cada sesión (PRUEBAS-CHROME solo cuando toque; §0b a un anexo): de ~74 KB a ~35 KB.
-   (SÍ)
-6. Migrador propio sin la CLI de Prisma (−20 % de imagen). (SÍ, más adelante, ronda propia)
-7. `npm test` sin la trampa de `NODE_OPTIONS` del entorno (envoltorio que quita `--max-old-space-size`). (SÍ, pequeño)
-8. Imagen y build: `dist/` con *splitting* (−4 MB) y caché de `npm ci` que no se pierda con cada versión. (SÍ, pequeño)
-9. e2e más rápidas: cambiar esperas fijas (~284 s) por esperas a una condición, suite a suite. (SÍ, al tocar cada una)
-10. Guía de Railway repartida en cinco documentos: dejar una sola fuente y enlazarla. (SÍ)
-11. Fallo previo: con la descripción abierta y escrita, un cambio de tipo que cambia el título y choca con un cambio de
-    otra persona recarga el editor y se pierde lo escrito. (SÍ, arreglarlo en la ronda 68)
-12. e2e de los arreglos del detalle de esta ronda (tipo que vuelve si no se guarda, foco de la descripción, «Más roles…»).
-    (SÍ, ronda 68)
-13. Un admin que quita el proyecto de su lista conserva la columna que ya tenía. (SÍ, así)
-14. Retirar (sí/no por letra): a) `MovedSectionRedirect.tsx` y su comprobación e2e (SÍ); b) la redirección `/admin/types`
-    de `next.config.ts` (SÍ); c) `public/icons/*.png`, sin uso desde la v1.54 (SÍ); d) `SERIAL` vacío de
-    `scripts/test-db.mjs` (SÍ); e) `legacyLogLabel` (NO hasta marzo de 2027); f) la historia de `railway.json` en INSTALL y
-    MANUAL (SÍ). `YATERMINE.md` (el resumen para pasar de la sesión local a la nube) se retiró en esta ronda a petición del
-    propietario: el resumen va en el informe final.
-15. Pendiente aprobado de la ronda 66: una URL por tarea (`?tarea=ID`), en una ronda propia.
+1. Creador de un proyecto de equipo: no es miembro (modelo de la v1.17, `adminPicks`). A) explicar en Ajustes quién lo ve
+   sin ser miembro (SÍ) o B) hacerle miembro al crear.
+2. «Compartir fuera», opcionales: a) mostrar solo las tareas que siguen en la columna o están terminadas (NO: se actualiza
+   con el botón); b) tope de MB en las descargas (NO por ahora); c) 30 días de «caducado» también para el penúltimo enlace
+   (NO); d) no publicar los comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios por enlace (NO
+   por ahora); f) Ctrl+Z al elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones);
+   g) el «Deshacer» de un aviso propio falla si lo último de la pila vino de fuera (SÍ, ronda 69); h) dejar de escribir
+   `ColumnShare.generatedByName` y quitar la columna en la versión siguiente (SÍ).
+3. «Guardar» del pie del detalle → «Guardar y cerrar» con explicación (SÍ, pequeño).
+4. «Nueva tarea» desde una columna sin tipo por defecto: no prefijar el título cuando el tipo viene solo de «el último
+   usado» (SÍ).
+5. «Organizar por personas» también en la tarjeta de bienvenida de «Casa y familia» (SÍ).
+6. Ocultar «Release con selección» y Releases en proyectos sin columna «Siguiente salto» ni releases (SÍ).
+7. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
+8. `npm start` (sin Docker): lanzar `dist/boot.mjs` en un proceso aparte para liberar ~170 MB (SÍ; cambia una guarda).
+9. Caché de la imagen en la Release (`cache-from/to: gha`): menos minutos de Actions (SÍ).
+10. Retirar: a) `parseProfileTab` (SÍ); b) `listProjectDocuments`/`listTrashedDocuments`, que solo usan las pruebas (SÍ,
+    pasando sus pruebas a las variantes `…Of`); c) `htmlTableToMarkdown` (SÍ); d) `export` sin uso en scripts de entrada
+    (SÍ); e) `/x/` en robots, redundante con `/` (NO: explícito).
+11. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
+12. Pendiente aprobado: una URL por tarea (`?tarea=ID`, abre el tablero con la tarea abierta), en una ronda propia; y el
+    migrador propio sin Prisma, en otra.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
@@ -403,6 +297,8 @@ Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y me
 |---|---|---|
 | `docs/handoff/GUARDAS.md` | Las guardas técnicas de §4 (y las de cada ronda) por tema: tablero, navegador, logs, migraciones, base de datos, PDF, subidas, importar, i18n, fechas, servidor, seguridad, emails, tareas de fondo, plantillas, deshacer, pruebas, e2e, entorno | Al repartir una ronda, la sección del tema de cada agente (cópiala a su brief); al revisar una entrega de ese tema |
 | `docs/handoff/HISTORIA.md` | Decisiones de cada ronda ya aplicadas, lo hecho de la paquetización, ideas pospuestas, límites conocidos y menores sin numerar | Cuando el propietario pregunte por algo ya decidido, antes de proponer algo que pudo descartarse, y al cerrar la ronda (para añadir sus decisiones) |
+| `docs/handoff/LOCAL.md` | Sesión en el PC del propietario: requisitos, puesta en marcha, trampas de Windows, recursos, publicar desde local y reglas de Claude in Chrome | Solo si la sesión corre en el PC del propietario |
+| `docs/PRUEBAS-CHROME.md` | Prompts para Claude in Chrome pendientes y lo aprendido al usarlos | Si la ronda trae informes de Claude in Chrome y al cerrarla (para actualizar los prompts) |
 | `docs/handoff/PUBLICAR.md` | Cerrar y publicar una versión paso a paso, `STABLE_PUSH_TOKEN`, mover `stable`, publicar desde la sesión, Dependabot | Al cerrar una versión o si falla el workflow Release; al revisar un PR de Dependabot |
 | `e2e/SUITES.md` | Qué prueba cada suite e2e y cómo se lanza sola (las cifras, en `e2e/README.md`) | Al tocar o lanzar una suite concreta |
 | `docs/MANUAL.md` | Cómo funciona todo (para el usuario y el administrador) | Su índice al empezar; las secciones del tema de la ronda |

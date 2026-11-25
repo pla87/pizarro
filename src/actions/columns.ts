@@ -9,7 +9,9 @@ import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { assertAssignable, assertProjectAccess, visibleProjectsWhere } from "@/lib/access";
 import { assignOnEnter, finishAssignOnEnter } from "@/lib/column-assign";
-import { isAssignColumn, MAX_ASSIGN_DUE_DAYS } from "@/lib/column-assign-core";
+import { endColumnShare } from "@/lib/share-out";
+import { isShareColumn } from "@/lib/share-out-board";
+import { isAssignColumn, MAX_ASSIGN_DUE_DAYS, personColumnSlots } from "@/lib/column-assign-core";
 import { AppError, notFound } from "@/lib/errors";
 import { listKinds, projectPeople } from "@/lib/board";
 import { logText } from "@/lib/log";
@@ -30,7 +32,7 @@ async function findColumn(columnId: string) {
   const user = await requireUser();
   const column = await db.column.findFirst({
     where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
-    select: { ...columnSelect, projectId: true, planCount: true },
+    select: { ...columnSelect, projectId: true, planCount: true, share: { select: { id: true } } },
   });
   if (!column) throw notFound();
   noteProject(column.projectId);
@@ -62,34 +64,42 @@ export async function createColumn(projectId: string, name: string) {
 /**
  * «Organizar por personas» (proyectos de «Casa y familia»): una columna «Asignación a persona» por cada persona del
  * proyecto (projectPeople: sus miembros y, si es de equipo, los administradores que lo tienen en su lista; el diálogo
- * cuenta con las mismas, `project.peopleIds`) que aún no tiene la suya, con su nombre y sin plazo, al final del tablero. Nacen vacías (no entra
- * ninguna tarea: nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer.
+ * cuenta con las mismas, `project.peopleIds`) que aún no tiene la suya, con su nombre y sin plazo, justo antes de la
+ * primera columna terminada («Hecho») o, si no hay, al final (personColumnSlots). Nacen vacías (no entra ninguna tarea:
+ * nada que asignar todavía). Todo o nada si no caben (máximo 30 columnas). Un solo paso de deshacer, que quita las nuevas
+ * y devuelve a su posición las que se corrieron. Devuelve las nuevas (`created`) y las posiciones nuevas de las demás que
+ * cambian (`moved`), para que el tablero las coloque sin recargar.
  */
 export async function createPersonColumns(projectId: string) {
-  return runAction({ name: "columns.createPersonColumns", args: [projectId] }, async (): Promise<BoardColumn[]> => {
+  return runAction({ name: "columns.createPersonColumns", args: [projectId] }, async (): Promise<{ created: BoardColumn[]; moved: { id: string; position: number }[] }> => {
     const user = await requireUser();
     const id = v.id.parse(projectId);
     await assertProjectAccess(user, id);
     const project = await db.project.findUniqueOrThrow({ where: { id }, select: { isPrivate: true } });
     const people = await projectPeople(id, project);
-    const created = await db.$transaction(async (tx) => {
+    const result = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(id)}))`;
-      const columns = await tx.column.findMany({ where: { projectId: id }, select: { assigneeId: true, position: true } });
+      const columns = await tx.column.findMany({ where: { projectId: id }, orderBy: COLUMN_ORDER, select: { id: true, assigneeId: true, position: true, isDone: true } });
       const taken = new Set(columns.flatMap((c) => (c.assigneeId ? [c.assigneeId] : [])));
       const missing = people.filter((p) => !taken.has(p.id));
-      if (!missing.length) return [];
+      if (!missing.length) return { created: [], moved: [] };
       if (columns.length + missing.length > 30) throw new AppError("Máximo 30 columnas por proyecto.");
-      let pos = Math.max(0, ...columns.map((c) => c.position));
-      const rows: BoardColumn[] = [];
-      for (const p of missing) {
-        rows.push(await tx.column.create({ data: { projectId: id, name: v.name.parse(p.name.slice(0, 80).trim() || "?"), position: (pos += POSITION_STEP), assigneeId: p.id }, select: columnSelect }));
+      const slots = personColumnSlots(columns, missing.length);
+      for (const m of slots.moved) await tx.column.update({ where: { id: m.id }, data: { position: m.position }, select: { id: true } });
+      const created: BoardColumn[] = [];
+      for (const [i, p] of missing.entries()) {
+        created.push(await tx.column.create({ data: { projectId: id, name: v.name.parse(p.name.slice(0, 80).trim() || "?"), position: slots.positions[i]!, assigneeId: p.id }, select: columnSelect }));
       }
-      return rows;
+      return { created, moved: slots.moved };
     });
-    if (!created.length) return created;
-    addUndo(...created.map((c) => ({ t: "column.remove" as const, id: c.id })));
-    describeAction(created.length === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n: created.length }, {});
-    return created;
+    if (!result.created.length) return { created: [], moved: [] };
+    addUndo(
+      ...result.created.map((c) => ({ t: "column.remove" as const, id: c.id })),
+      ...result.moved.map((m) => ({ t: "column.set" as const, id: m.id, data: { position: m.before } })),
+    );
+    const n = result.created.length;
+    describeAction(n === 1 ? "Creó 1 columna «Asignación a persona»" : "Creó {n} columnas «Asignación a persona»", { n }, {});
+    return { created: result.created, moved: result.moved.map(({ id: columnId, position }) => ({ id: columnId, position })) };
   });
 }
 
@@ -161,12 +171,38 @@ export async function setColumnRole(columnId: string, role: string) {
     const column = await findColumn(columnId);
     const value = v.columnRole.parse(role);
     // Elegir el rol que ya tiene no cambia nada: ni entrada en el historial ni deshacer. «Sin rol» en una columna
-    // «Asignación a persona» (rol NONE con persona o plazo) sí: deja de asignar.
-    if (value === column.role && !isAssignColumn(column)) return { costEnabled: false };
+    // «Asignación a persona» (rol NONE con persona o plazo) o «Compartir fuera» sí: deja de asignar o de compartir.
+    const shared = isShareColumn(column);
+    if (value === column.role && !isAssignColumn(column) && !shared) return { costEnabled: false };
     // De qué rol a qué rol: los nombres van como plantilla anidada (se traducen al leer el registro).
-    const from = isAssignColumn(column) ? "Asignación a persona" : COLUMN_ROLE_LABEL[column.role as ColumnRoleValue];
+    const from = isAssignColumn(column) ? "Asignación a persona" : shared ? "Compartir fuera" : COLUMN_ROLE_LABEL[column.role as ColumnRoleValue];
     describeAction("Cambió el rol de la columna «{name}» de «{from}» a «{to}»", { name: column.name, from: logText(from), to: logText(COLUMN_ROLE_LABEL[value]) });
-    return changeColumnRole(column, value, null);
+    // Deja de compartir: su enlace deja de funcionar al momento (no se deshace: un enlace revocado no vuelve).
+    return changeColumnRole(column, value, null, column.share ? (tx) => endColumnShare(tx, column.id) : undefined);
+  });
+}
+
+/**
+ * «Compartir fuera» (rol NONE con su fila ColumnShare): la columna publica sus tareas en una página sin cuenta (botón
+ * «Generar web» al pie). Solo si un administrador la ha activado en el proyecto. Quita el rol que tuviera (y sus ajustes,
+ * como cualquier cambio de rol: ese cambio sí se deshace) y «Asignación a persona». Una fila anterior de la columna (un
+ * deshacer le devolvió otro rol) termina: el enlace nuevo se genera desde cero.
+ */
+export async function setColumnShareOut(columnId: string) {
+  return runAction({ name: "columns.setColumnShareOut", args: [columnId] }, async () => {
+    const column = await findColumn(columnId);
+    const project = await db.project.findUniqueOrThrow({ where: { id: column.projectId }, select: { shareOutEnabled: true } });
+    if (!project.shareOutEnabled) throw new AppError("«Compartir fuera» no está activado en este proyecto.");
+    if (isShareColumn(column)) return;
+    const from = isAssignColumn(column) ? "Asignación a persona" : COLUMN_ROLE_LABEL[column.role as ColumnRoleValue];
+    describeAction("Cambió el rol de la columna «{name}» de «{from}» a «{to}»", { name: column.name, from: logText(from), to: logText("Compartir fuera") });
+    const share = async (tx: Prisma.TransactionClient) => {
+      await endColumnShare(tx, column.id);
+      await tx.columnShare.create({ data: { projectId: column.projectId, columnId: column.id }, select: { id: true } });
+    };
+    // Ya era una columna sin rol: solo la fila (no hay nada que deshacer en la columna).
+    if (column.role === "NONE" && !isAssignColumn(column)) await db.$transaction(share);
+    else await changeColumnRole(column, "NONE", null, share);
   });
 }
 
@@ -299,6 +335,8 @@ export async function setColumnAssignee(columnId: string, input: { assigneeId: s
       { col: column.name, name },
     );
     const { inside: reassigned } = await changeColumnRole(column, "NONE", { assigneeId: data.assigneeId, dueDays: data.dueDays }, async (tx) => {
+      // «Compartir fuera» y «Asignación a persona» son exclusivas: el enlace deja de funcionar.
+      if (column.share) await endColumnShare(tx, columnId);
       // Con la columna bloqueada: nadie mete ni saca tarjetas mientras se reasignan.
       await lockColumns(tx, [columnId]);
       const ids = (await tx.task.findMany({ where: { columnId, archivedAt: null }, select: { id: true } })).map((t) => t.id);
@@ -448,6 +486,8 @@ export async function deleteColumn(columnId: string) {
       if (!target) throw new AppError("Un proyecto necesita al menos una columna.");
       const active = await tx.task.count({ where: { columnId, archivedAt: null } });
       if (active > 0) throw new AppError("La columna todavía tiene tarjetas. Muévelas antes de borrarla.");
+      // «Compartir fuera»: su enlace deja de funcionar (la fila se queda para el aviso de «ha caducado»).
+      await endColumnShare(tx, columnId);
       // Solo se reubican las archivadas, al final de la otra columna y en su orden (sin compartir posición con
       // las de allí). Si alguien suelta una tarjeta activa a la vez, la clave foránea (Restrict) hace fallar el
       // borrado en lugar de moverla en silencio.

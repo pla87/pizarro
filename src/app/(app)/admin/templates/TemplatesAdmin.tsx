@@ -287,9 +287,11 @@ export function TemplatesAdmin({ templates, generalKinds, projects, missingBuilt
 
       <div className="flex flex-wrap gap-2">
         <button className="btn-primary" onClick={() => setEditing({ id: null, draft: emptyDraft() })}><Plus size={16} /> {t("Nueva plantilla")}</button>
-        <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0} title={projects.length === 0 ? t("No hay proyectos.") : undefined}>
+        {/* Apagado, el motivo se ve al lado y es su descripción (con `title`, algunas herramientas nombraban el botón con él). */}
+        <button className="btn-secondary" onClick={() => { setSourceId(projects[0]?.id ?? ""); setPicking(true); }} disabled={projects.length === 0} aria-describedby={projects.length === 0 ? "template-from-project-why" : undefined}>
           <Copy size={15} /> {t("Crear desde un proyecto…")}
         </button>
+        {projects.length === 0 && <span id="template-from-project-why" className="self-center text-xs text-slate-500">{t("No hay proyectos.")}</span>}
         {missingBuiltins > 0 && (
           <button className="btn-secondary" disabled={pending} onClick={restoreDefaults}>
             <RotateCcw size={15} /> {t("Recuperar plantillas de serie")}

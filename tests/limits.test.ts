@@ -41,7 +41,8 @@ test("Administración → Usuarios: «N activos · M invitaciones pendientes», 
   // Las invitaciones sin aceptar no cuentan como activas en el resumen (sí en el tope) y solo salen si hay alguna.
   assert.match(src, /const joinedCount = activeCount - pendingCount;/);
   assert.match(src, /\.\.\.\(pendingCount \? \[/);
-  assert.match(src, /disabled=\{maxUsers !== null && activeCount >= maxUsers\}/);
+  assert.match(src, /const atMax = maxUsers !== null && activeCount >= maxUsers;/);
+  assert.match(src, /disabled=\{atMax\} aria-describedby=\{atMax \? "new-user-why" : undefined\}/);
   // La documentación de instalación dice que es opcional.
   const env = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(env, /^# MAX_USERS=\S*\s+# Opcional/m);

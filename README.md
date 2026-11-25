@@ -4,7 +4,7 @@ Kanban ligero y generador de *release notes* para equipos pequeños (sin tope de
 
 - **Stack:** Next.js 16 (App Router, TypeScript, Tailwind CSS 4) · PostgreSQL · Prisma 7 · `@dnd-kit` · `sharp` · `lucide-react`.
 - **Instalar:** guía paso a paso en la web, [getpizarro.com/instalar](https://getpizarro.com/instalar/) ([English](https://getpizarro.com/en/install/)): requisitos, instalación en un comando, primeros pasos, Railway, copias, actualizar y problemas frecuentes. Se genera desde `docs/web/instalar.md` y `docs/web/en/install.md`.
-- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas). También en **Render** (Blueprint `render.yaml`, botón [Deploy to Render](https://render.com/deploy?repo=https://github.com/pla87/pizarro)) y en **Fly.io** (`deploy/fly.toml`), las dos con la imagen publicada: pasos, coste y cómo actualizar en [docs/INSTALL.md](docs/INSTALL.md) («Render» y «Fly.io»).
+- **Despliegue:** un único contenedor Docker (monolito) en Railway, con un volumen persistente para las capturas. También se instala en un servidor propio con Docker Compose (Caddy + Pizarro + PostgreSQL): referencia técnica completa en [docs/INSTALL.md](docs/INSTALL.md). Instalación en un paso en un servidor Linux: `curl -fsSL https://raw.githubusercontent.com/pla87/pizarro/stable/deploy/get.sh | sh -s -- --domain pizarro.example.com`. Cada versión se publica como imagen Docker ya construida (`ghcr.io/pla87/pizarro`, amd64 y arm64); actualizar o volver a una versión anterior: [getpizarro.com/instalar/#actualizar](https://getpizarro.com/instalar/#actualizar) (detalle técnico: [docs/INSTALL.md](docs/INSTALL.md), sección 5). Railway sigue construyendo desde el repositorio, desde la rama `stable` (solo versiones publicadas): guía en [Instalar en Railway](#instalar-en-railway). También en **Render** (Blueprint `render.yaml`, botón [Deploy to Render](https://render.com/deploy?repo=https://github.com/pla87/pizarro)) y en **Fly.io** (`deploy/fly.toml`), las dos con la imagen publicada: pasos, coste y cómo actualizar en [docs/INSTALL.md](docs/INSTALL.md) («Render» y «Fly.io»).
 - **Web:** [getpizarro.com](https://getpizarro.com) (qué es, cómo se instala y precios; se genera desde `site/`, ver [docs/VENTA.md](docs/VENTA.md), sección 8).
 - **Documentación:** [Manual de operaciones (PDF)](https://github.com/pla87/pizarro/releases/latest/download/MANUAL.pdf) (adjunto de la última versión publicada) · [fuente Markdown](docs/MANUAL.md) · [Changelog](CHANGELOG.md).
 - **Errores:** con el formulario de [incidencias](https://github.com/pla87/pizarro/issues/new/choose) (o *Informar de un error* en *Historial de versiones* dentro de la app). Solo se atienden versiones publicadas sin modificar. Los fallos de seguridad, en privado: [SECURITY.md](SECURITY.md).
@@ -151,90 +151,25 @@ steps:
 | `EXIT_ON_UNCAUGHT_EXCEPTION` | No | (desactivado) | `1`: en producción, una excepción no capturada se anota en *Logs* y la app sale para que la plataforma la reinicie (lo fija `deploy/compose.yml`). Sin él, solo se anota. |
 | `GIT_SHA` | No (solo al compilar) | commit | Commit para el identificador de versión (en Railway se usa `RAILWAY_GIT_COMMIT_SHA`). Sin él, la hora de la compilación. |
 | `LOG_RETENTION_DAYS` | No | `7` | Días que se conservan los logs de *Administración → Logs* (máx. 90). |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets/Slides | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs, Sheets y Slides](#71-google-docs-sheets-y-slides). |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Para Google Docs/Sheets/Slides | (de Google Cloud) | Cliente OAuth «Aplicación web». Ver [Google Docs, Sheets y Slides](#google-docs-sheets-y-slides). |
 | `GOOGLE_WORKSPACE_DOMAIN` | Recomendada con Google | `tu-dominio.com` | Solo admite cuentas de ese dominio y comparte cada archivo nuevo con él, para que todo el equipo pueda abrirlo desde la tarjeta. |
 | `GOOGLE_SHARE_ROLE` | No | `writer` | Rol con el que se comparte con el dominio (o, en proyectos privados, con los emails de sus miembros): `writer`, `commenter`, `reader` o `none` (no compartir). Es el valor por defecto: cada proyecto puede elegir otro modo en sus ajustes. |
-| `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#74-acceso-con-google-y-verificación-en-dos-pasos). |
+| `AUTH_GOOGLE_ONLY` | No | `true` | Solo se entra con Google (necesita `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL`; sin ellos no tiene efecto). Ver [Acceso con Google y dos pasos](#acceso-con-google-y-verificación-en-dos-pasos). |
 | `AUTH_ALLOW_ADMIN_PASSWORD` | No | `true` | Con `AUTH_GOOGLE_ONLY`, deja entrar con contraseña (y segundo paso) a los administradores: acceso de emergencia. |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#72-avisos-por-email). |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Para avisos por email | `smtp.gmail.com` / `465` / … | Servidor de correo saliente. Ver [Email](#avisos-por-email). |
 | `SMTP_ALLOW_PLAINTEXT` | No | `1` | Con las variables `SMTP_*` y un puerto distinto de `465`, STARTTLS es obligatorio salvo con un servidor local (`localhost`, `127.0.0.1`, `::1`). Con `1`, se permite enviar sin cifrar a propósito (un relay de la red privada sin TLS): la contraseña y los enlaces irían en claro. |
-| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Integraciones*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#73-avisos-por-telegram-y-whatsapp). |
+| `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_TEMPLATE_NAME` | No | (de Meta) / `aviso_pizarro` | WhatsApp Cloud API. Lo normal es configurarlo en *Administración → Integraciones*; estas variables rellenan los campos que no se guarden allí. Ver [WhatsApp](#avisos-por-telegram-y-whatsapp). |
 | `WHATSAPP_TEMPLATE_LANG` / `WHATSAPP_API_VERSION` | No | `es` / `v23.0` | Idioma de la plantilla y versión de la API de Meta. |
 
 Las integraciones son **opcionales**: si faltan sus variables, la app funciona igual y esas opciones aparecen como «no configuradas».
 
 ---
 
-## Guía de despliegue en Railway
+## Instalar en Railway
 
-> Paso a paso para quien no ha usado Railway, con un botón que genera las claves en el navegador: <https://getpizarro.com/instalar/#railway>.
+La guía de Railway es una sola: [docs/web/instalar.md](docs/web/instalar.md#instalar-en-railway-sin-servidor-propio-railway), publicada en <https://getpizarro.com/instalar/#railway> con un botón que genera las claves en el navegador (en inglés, [docs/web/en/install.md](docs/web/en/install.md#install-on-railway-with-no-server-of-your-own-railway)). Trae los pasos numerados, qué hacer si falla, lo de después (email, Google, copias en R2/S3, dominio, `RAILWAY_DEPLOYMENT_DRAINING_SECONDS`, réplicas) y un texto para que una IA que use tu navegador, como Claude in Chrome, haga la instalación.
 
-Railway no despliega cada cambio por separado: los junta en un aviso arriba a la izquierda, **«Apply N changes»**, con un botón **Deploy**. Haz los pasos 1 a 4 y el primero del 5, y pulsa **Deploy** una sola vez, al final. Si Railway llega a desplegar antes de tener las variables o el volumen, manda un email «Build failed»: es normal.
-
-### 1. Crear el proyecto y la base de datos
-
-1. Abre [railway.com/new](https://railway.com/new) y elige **Database → PostgreSQL**. Railway crea el servicio `Postgres` con sus variables (`DATABASE_URL`, `PGHOST`, etc.).
-2. Si quieres, ponle nombre al proyecto en *Settings → General*.
-
-### 2. Vincular este repositorio
-
-1. En el mismo proyecto: **+ Add → GitHub Repository** y selecciona este repositorio. Si es la primera vez, autoriza la app de Railway en GitHub.
-2. Railway detecta el `Dockerfile`: construye con él y arranca con su `CMD` (`sh scripts/start.sh`). No hay `railway.json`: Railway retiró ese formato («Config as Code»; los servicios nuevos no lo aceptan y deja de leerse el 1 de diciembre de 2026), así que la comprobación de salud se pone en el panel (paso 5).
-3. En el servicio, **Settings → Source → Branch connected to production**: elige **`stable`** (el desplegable lista todas las ramas; escribe `stable` para filtrar). Esa rama solo avanza cuando se publica una versión (la mueve el workflow *Release* al commit de esa versión), así que Railway solo redespliega con versiones con nombre (`v1.49.0`, `v1.50.0`…), nunca con cada commit de `main`. `main` es la rama de desarrollo: despliégala solo si quieres probar cambios aún sin publicar (y entonces la app no ofrece *Informar de un error*, porque no es una versión oficial).
-
-#### Cambiar una instalación existente de `main` a `stable`
-
-1. Mira qué versión tienes (*Historial de versiones* en la app) y cuál es la última publicada ([Releases](https://github.com/pla87/pizarro/releases)). Si la tuya es **más nueva** que la última publicada (desplegaste commits de `main` posteriores), espera a que se publique la siguiente versión antes de cambiar: volver atrás puede no entender una base de datos ya migrada.
-2. Haz una copia de seguridad (*Administración → Copias de seguridad*).
-3. En el servicio de Pizarro: **Settings → Source → Branch** → `stable`. Railway despliega el commit de la última versión publicada; a partir de ahí, solo cuando se publique otra.
-4. Comprueba en *Historial de versiones* que la versión es la esperada. Si `stable` no aparece en la lista, es que aún no se ha publicado ninguna versión con este flujo: sigue en `main` (o en la etiqueta de la última versión) hasta entonces. Si `stable` existe pero se ha quedado en una versión anterior a la última publicada (el job «Rama stable» de *Release* falló), un mantenedor la pone al día con **Actions → Mover stable → Run workflow** (rama `main`), sin publicar otra versión (ver `docs/HANDOFF.md`, «Cerrar una versión»).
-
-### 3. Dirección y volumen persistente
-
-1. **Settings → Networking → Generate Domain**. Railway reserva una dirección `*.up.railway.app`, que no responde hasta el primer despliegue. Pizarro la usa sola (variable `RAILWAY_PUBLIC_DOMAIN`): no hace falta `APP_URL` salvo con un dominio propio.
-2. Clic derecho sobre el servicio → **Attach volume**, con **Mount path** `/app/uploads` (debe coincidir con `UPLOAD_DIR`). Sin volumen, los adjuntos y las copias locales se pierden en cada despliegue.
-
-> El `Dockerfile` **no** usa la instrucción `VOLUME`: Railway la rechaza al construir la imagen ("The VOLUME keyword is banned"). El punto de montaje se define con el Volume del panel. Para Docker local usa `-v pizarro_uploads:/app/uploads`.
->
-> Railway monta los volúmenes como `root`. El script de arranque ajusta el propietario de `/app/uploads` y después ejecuta la app como el usuario sin privilegios `node`. No hace falta `RAILWAY_RUN_UID`.
-
-### 4. Variables de entorno
-
-> Crea las variables **en el servicio de la app** (`pizarro` → *Variables*), no como *Shared Variables* del proyecto. Las compartidas no llegan solas a los servicios: hay que enlazarlas en cada uno con `${{shared.NOMBRE}}`. Además, una variable compartida no puede apuntar a otra de un servicio, como `${{Postgres.DATABASE_URL}}`, y llega vacía.
-
-En el servicio de la app → **Variables** → **Raw Editor**, pega lo siguiente con tus claves (la web las genera en el navegador con el botón «Generar mis variables»; o con `openssl`, como se indica):
-
-```env
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-SESSION_SECRET=<resultado de: openssl rand -base64 48>
-TOKEN_SECRET=<otra: openssl rand -base64 48>
-ENCRYPTION_KEY=<otra: openssl rand -base64 48>
-BACKUP_KEY=<resultado de: openssl rand -base64 32>
-UPLOAD_DIR=/app/uploads
-RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
-```
-
-- `${{Postgres.DATABASE_URL}}` es una *reference variable*: Railway la sustituye por la URL interna del servicio Postgres (`postgres.railway.internal`), sin salir a internet.
-- `PORT` no hace falta: Railway lo inyecta y la app lo respeta.
-- `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` da margen al apagado ordenado. Por defecto Railway da 0 segundos entre el aviso de apagado (SIGTERM) y el corte (SIGKILL), y una subida, un email o un registro a medias se perdería. Railway usa la variable como margen y Pizarro también la lee: con ella espera hasta 10 s a lo que está en curso (14 s en total); sin ella, 5 s, como en las demás plataformas. El ajuste del panel (*Settings → Deploy → Teardown*, *Draining* 15, confirmado con el ✓ del campo) da el mismo margen en Railway, pero solo la variable deja a Pizarro aprovecharlo entero. *Overlap* se deja en 0.
-- `APP_URL` solo con dominio propio (ver «Dominio propio en Railway» en `docs/INSTALL.md`).
-- No definas `SEED_ADMIN_*`: el primer administrador se crea con el asistente `/setup`.
-- Guarda `SESSION_SECRET`, `TOKEN_SECRET`, `ENCRYPTION_KEY` y `BACKUP_KEY` también fuera de Railway (gestor de contraseñas).
-
-### 5. Desplegar y primer arranque
-
-1. **Settings → Deploy** del servicio de Pizarro, antes de desplegar: **Healthcheck Path** `/api/health`, **Healthcheck Timeout** `600` (el campo aparece al rellenar *Healthcheck Path*), **Restart Policy** *On Failure* y **1** réplica (estas dos son lo que pone Railway por defecto; con el volumen, Railway no deja subir las réplicas). *Custom Start Command*, vacío. El margen del apagado lo da la variable `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15` del paso 4 (no hace falta activar también *Teardown* aquí; si lo activas, *Draining* 15 y *Overlap* 0). Sin healthcheck, Railway da por bueno un despliegue en cuanto arranca el contenedor, aunque Pizarro no llegue a responder (una migración fallida, por ejemplo), en vez de mantener el anterior.
-2. Pulsa **Deploy** en el aviso «Apply N changes». Antes, revisa lo que lista: si Railway propone por su cuenta cambios de **réplicas**, no los apliques (Pizarro funciona con una sola instancia); la **región** da igual mientras `Postgres` esté en la misma.
-3. **No tienes que ejecutar nada a mano.** En cada arranque, `scripts/start.sh` espera a la base de datos, aplica las migraciones pendientes (`prisma migrate deploy`), sincroniza `changelog.json` con la tabla `AppVersionLog`, ejecuta el seed idempotente (si no hay proyectos, crea un *Proyecto de ejemplo*) y arranca el servidor.
-4. Para comprobar que el healthcheck está activo, abre el despliegue en *Deployments*: al final del log de construcción (*Build Logs*, no *Deploy Logs*) sale `Starting Healthcheck` con `Path: /api/health` y `Retry window: 10m0s` y, cuando Pizarro ya responde, `Healthcheck succeeded!` (antes, unas cuantas líneas `Attempt #N failed`, normales mientras se aplican las migraciones). Si no sale, vuelve al punto 1.
-5. La primera vez tarda 2–3 minutos más, aunque Railway ya marque *Active*. En **Deployments → View logs**, baja al final y espera el recuadro `[setup] PIZARRO ESTÁ SIN CONFIGURAR`; la línea siguiente da la dirección de `/setup` y el código de un solo uso (`introduce el código:`). Las líneas en rojo del principio del log son normales.
-6. Abre `/setup`, escribe el código, crea la organización y el primer administrador y activa la verificación en dos pasos. Después invita al equipo desde *Administración → Usuarios*.
-
-**Alternativa sin asistente:** con `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` (y opcionalmente `SEED_ADMIN_NAME`) el seed crea ese administrador al arrancar si no hay usuarios. Entra con esos datos, cambia la contraseña en *Mi perfil* y borra `SEED_ADMIN_PASSWORD` de las variables.
-
-**Consola en el contenedor.** El panel web de Railway no tiene terminal. Para órdenes como `node dist/reset-link.mjs` (enlace de recuperación cuando nadie puede entrar) instala la [CLI de Railway](https://docs.railway.com/guides/cli) (`brew install railway` o `npm install -g @railway/cli`), y ejecuta `railway login`, `railway link` y `railway ssh`. `railway run` no sirve para eso: ejecuta el comando en tu máquina con las variables del servicio (y para llegar a la base de datos desde fuera hace falta la URL pública, `DATABASE_PUBLIC_URL` del servicio Postgres).
-
-### 6. Copias de seguridad (recomendado)
+## Copias de seguridad
 
 - **Automáticas (base de datos y ficheros):** con `BACKUP_KEY` definida, cada día se vuelca toda la base de datos (instantánea consistente `REPEATABLE READ`, sin `pg_dump`) a `UPLOAD_DIR/backups/pizarro-backup-AAAAMMDDTHHMMSSZ.pzbak` (NDJSON → gzip → AES-256-GCM, con su manifiesto dentro y en un `.json` al lado) y se copian todos los ficheros de `UPLOAD_DIR` (adjuntos, miniaturas, copias de releases, documentos) a un almacén incremental `backups/files/`: cada fichero se cifra por separado y se guarda una sola vez. Un manifiesto cifrado por copia (`.pzman`) lista el volcado y los ficheros. Se conservan las últimas 14 diarias, 6 mensuales y siempre las 3 más recientes, y se borran los ficheros del almacén que ya no nombra ninguna. Cada mes, una **prueba de restauración** restaura la última copia en una base temporal (si el usuario de la base puede crearla; si no, la descifra y la comprueba) y comprueba que están todos sus ficheros. Todo se ve en *Administración → Copias de seguridad* y en los logs (categoría *system*).
 - **Destino externo:** en Railway, pon las variables `BACKUP_S3_*` en *Variables* del servicio de Pizarro y vuelve a desplegar. Con Cloudflare R2, conviene una *Bucket Lock Rule* (retención) de 31 días sobre el prefijo de las copias (`<BACKUP_S3_PREFIX>pizarro-backup-`) y, si el espacio lo permite, otra indefinida o de 180 días sobre `<BACKUP_S3_PREFIX>files/`, para que nadie pueda borrarlas antes (Pizarro salta lo retenido y lo cuenta en *Copias de seguridad*). Con `BACKUP_S3_*` (R2, B2, MinIO…) y/o `BACKUP_EXTERNAL_DIR`, tras cada copia se sube lo que falte (reanudable) y se aplica la misma retención; firma AWS SigV4 propia, sin SDK. Si la copia nueva tiene menos de la mitad de personas, proyectos y tareas o de ficheros que la última del destino (con al menos 50 de esas filas o 20 ficheros allí; con copias antiguas, sin cuentas por tabla, el total de filas con al menos 500; p. ej. la primera copia tras perder la base de datos o el volumen), no se sube ni se poda: queda como error. Si la última subida correcta tiene más de 48 h, se avisa como con la copia local. Botón *Copiar ahora a destino externo* (sube aunque la copia sea mucho menor).
@@ -243,9 +178,9 @@ RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
 
 ---
 
-### 7. Integraciones opcionales (v1.1)
+## Integraciones opcionales
 
-#### 7.1 Google Docs, Sheets y Slides
+### Google Docs, Sheets y Slides
 
 1. Entra en [console.cloud.google.com](https://console.cloud.google.com) con una cuenta de tu Google Workspace y crea un proyecto (por ejemplo, «Pizarro»).
 2. **APIs y servicios → Biblioteca** → busca **Google Drive API** → **Habilitar**. Es la única API necesaria: los Docs, Sheets y Slides se crean a través de Drive.
@@ -254,19 +189,19 @@ RAILWAY_DEPLOYMENT_DRAINING_SECONDS=15
    - **Audience / Público**: tipo **Interno**. Solo podrán conectarse las cuentas de tu Workspace y no hace falta verificación de Google.
    - **Data access / Acceso a datos**: añade los permisos `openid`, `email` y `https://www.googleapis.com/auth/drive.file`. `drive.file` solo da acceso a los archivos que crea Pizarro, no al resto de tu Drive.
 4. **Clients / Credenciales → Crear cliente → Aplicación web**:
-   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([7.4](#74-acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
-5. Copia el **ID de cliente** y el **secreto** a Railway: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
+   - **URI de redirección autorizados**: `https://<tu-dominio>.up.railway.app/api/google/callback`. Debe coincidir exactamente con `APP_URL` + `/api/google/callback`. Si además usarás «Iniciar sesión con Google» ([abajo](#acceso-con-google-y-verificación-en-dos-pasos)), añade también `APP_URL` + `/api/auth/google/callback` (las dos URI en el mismo cliente).
+5. Copia el **ID de cliente** y el **secreto** a las variables del servicio (en Railway, *Variables*): `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`, y añade `GOOGLE_WORKSPACE_DOMAIN=tu-dominio.com`. Así, cada archivo creado se comparte automáticamente con tu dominio como editor (`GOOGLE_SHARE_ROLE`), y el resto del equipo puede abrirlo desde la tarjeta. En un proyecto privado el archivo no se comparte con el dominio, solo con los emails de los miembros del proyecto. Sin dominio, solo lo ve quien lo crea hasta que lo comparta a mano.
 6. Redespliega. Cada usuario entra en **Mi perfil → Google Docs, Sheets y Slides → Conectar con Google**.
 
 > Los tokens de Google se guardan cifrados con `ENCRYPTION_KEY` (o, si no está definida, con una clave derivada de `SESSION_SECRET`). Si cambias esa clave sin poner la anterior en `ENCRYPTION_KEY_PREVIOUS`, cada usuario tendrá que volver a conectar Google (ver el manual, 4.4).
 
-#### 7.2 Avisos por email
+### Avisos por email
 
 Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por ejemplo `avisos@tu-dominio.com`) con una **contraseña de aplicación**:
 
 1. En esa cuenta, activa la **verificación en dos pasos**. Tu administrador de Workspace debe permitirla.
 2. Ve a [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) y crea una contraseña de aplicación llamada «Pizarro».
-3. En Railway:
+3. En las variables del servicio (en Railway, *Variables*):
    ```env
    SMTP_HOST=smtp.gmail.com
    SMTP_PORT=465
@@ -277,7 +212,7 @@ Con Google Workspace, lo más sencillo es enviar desde una cuenta dedicada (por 
 
 Sirve cualquier otro SMTP (Resend, Brevo, Mailgun…) con sus datos. Con el puerto `465` se usa TLS directo; con `587`, STARTTLS obligatorio (sin cifrar solo con un servidor local o con `SMTP_ALLOW_PLAINTEXT=1`).
 
-#### 7.3 Avisos por Telegram y WhatsApp
+### Avisos por Telegram y WhatsApp
 
 Los dos se activan en **Administración → Integraciones → 3. Avisos por Telegram y WhatsApp**, sin tocar variables ni
 redesplegar. Después cada persona conecta su canal en *Mi perfil → Avisos* y elige qué avisos recibe por él (por
@@ -306,7 +241,7 @@ cobrar dos veces), y el apagado ordenado espera a los que están en curso. Los f
 
 English guides: [docs/guias/en/telegram.md](docs/guias/en/telegram.md), [docs/guias/en/whatsapp.md](docs/guias/en/whatsapp.md).
 
-#### 7.4 Acceso con Google y verificación en dos pasos
+### Acceso con Google y verificación en dos pasos
 
 **Iniciar sesión con Google.** Con `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_URL` definidos, la pantalla de acceso muestra «Iniciar sesión con Google» (OpenID Connect con PKCE, `state` y `nonce`; solo los permisos `openid email profile`, Drive sigue siendo una conexión aparte). Requisitos:
 

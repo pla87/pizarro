@@ -14,7 +14,6 @@ import type { StorageAdminView } from "@/lib/storage-stats";
 import { TechInfoButton } from "./TechInfoButton";
 import { InstallationSettingsSection, type InstallationView } from "./InstallationSettingsSection";
 import { AppIconSettingsSection } from "./AppIconSettingsSection";
-import { MovedSectionRedirect } from "./MovedSectionRedirect";
 import type { AppIconAccent } from "@/lib/app-icon-core";
 
 // Mismos márgenes que el servidor (src/lib/app-settings.ts, que no se puede importar desde el cliente).
@@ -75,7 +74,6 @@ export function SettingsAdmin({ maxComments, storage, installation, appIcon, app
 
   return (
     <div className="space-y-4">
-      <MovedSectionRedirect />
       <InstallationSettingsSection view={installation} version={versions.installation} />
       <AppIconSettingsSection initial={appIcon} orgName={installation.orgName} shortName={appShortName?.value} shortNameVersion={appShortName?.version} />
       <section className="card space-y-3 p-5">

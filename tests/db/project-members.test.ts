@@ -229,10 +229,20 @@ describe("Invitar por email desde un proyecto", () => {
     const res = expectOk(await addProjectMember(second.project.id, user.id));
     assert.equal(res.invite?.userId, user.id);
     assert.ok(res.invite?.expiresAt && new Date(res.invite.expiresAt).getTime() > Date.now(), "con la invitación vigente, hasta cuándo vale");
+    // Vale 72 horas desde que se emitió (ni la zona horaria del servidor ni la de la base la acortan).
+    const left = new Date(res.invite.expiresAt).getTime() - Date.now();
+    assert.ok(Math.abs(left - 72 * 3_600_000) < 5 * 60_000, `quedan ${(left / 3_600_000).toFixed(2)} h`);
+    // …y se dice cuándo se emitió: las 72 horas cuentan desde entonces, no desde que se le añade a otro proyecto.
+    assert.ok(res.invite.issuedAt && Math.abs(new Date(res.invite.issuedAt).getTime() - Date.now()) < 5 * 60_000, res.invite.issuedAt ?? "sin fecha");
+    const issued = new Date(Date.now() - 68 * 3_600_000);
+    await db.authToken.updateMany({ where: { userId: user.id, purpose: "INVITE" }, data: { createdAt: issued, expiresAt: new Date(issued.getTime() + 72 * 3_600_000) } });
+    expectOk(await removeProjectMember(second.project.id, user.id));
+    const later = expectOk(await addProjectMember(second.project.id, user.id)).invite;
+    assert.equal(later?.issuedAt, issued.toISOString(), "emitida hace 68 horas: le quedan 4");
     // Caducada: sin fecha (la interfaz ofrece «Generar enlace de invitación nuevo»).
     await db.authToken.updateMany({ where: { userId: user.id, purpose: "INVITE" }, data: { expiresAt: new Date(Date.now() - 1000) } });
     expectOk(await removeProjectMember(second.project.id, user.id));
-    assert.deepEqual(expectOk(await addProjectMember(second.project.id, user.id)).invite, { userId: user.id, expiresAt: null });
+    assert.deepEqual(expectOk(await addProjectMember(second.project.id, user.id)).invite, { userId: user.id, expiresAt: null, issuedAt: null });
     // Quien ya ha entrado alguna vez: el enlace al tablero, como siempre.
     const known = await makeUser();
     assert.equal(expectOk(await addProjectMember(second.project.id, known.id)).invite, null);

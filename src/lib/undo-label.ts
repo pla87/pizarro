@@ -136,5 +136,14 @@ export function undoneLabel(label: Label, redo: boolean): Label | null {
   if (label.k === "Modificó «{title}»: {changes}" && p.title !== undefined && p.changes !== undefined && !(isLabel(p.changes) && p.changes.k === "sin cambios")) {
     return { k: redo ? "Rehecho el cambio de {changes} en «{title}»" : "Deshecho el cambio de {changes} en «{title}»", p: { title: p.title, changes: p.changes } };
   }
+  // Mover tarjetas (ronda 68): «Deshecho: Movió 2 tareas a «Hecho»» sonaba a registro; ahora dice adónde vuelven.
+  if (label.k === "Movió {count} a «{col}»" && isLabel(p.count) && p.col !== undefined) {
+    const one = p.count.k === "1 tarea";
+    if (redo) return one ? { k: "Rehecho: 1 tarea movida a «{col}»", p: { col: p.col } } : { k: "Rehecho: {count} movidas a «{col}»", p: { count: p.count, col: p.col } };
+    return one ? { k: "Deshecho: 1 tarea vuelve a su columna" } : { k: "Deshecho: {count} vuelven a su columna", p: { count: p.count } };
+  }
+  if (label.k === "Movió «{title}» de «{from}» a «{to}»" && p.title !== undefined && p.from !== undefined && p.to !== undefined) {
+    return redo ? { k: "Rehecho: «{title}» otra vez en «{to}»", p: { title: p.title, to: p.to } } : { k: "Deshecho: «{title}» vuelve a «{from}»", p: { title: p.title, from: p.from } };
+  }
   return null;
 }

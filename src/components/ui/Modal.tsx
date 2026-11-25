@@ -27,6 +27,13 @@ interface ModalProps {
   ariaLabel?: string;
   /** En móvil: "bottom" (por defecto) es una hoja inferior; "top" ancla el panel arriba para que el teclado no lo tape. */
   placement?: "bottom" | "top";
+  /**
+   * Con `placement="top"`, también en tableta y escritorio (sm+) va anclado arriba en lugar de centrado: un diálogo que
+   * cambia de alto mientras se escribe («Crear varias tareas») crece hacia abajo y su cabecera no se mueve (centrado,
+   * crecía hacia arriba y hacia abajo a la vez). En pareja de escritorio (`side` "left"/"right", lg+) no: va centrado
+   * como el otro diálogo.
+   */
+  topOnDesktop?: boolean;
   /** Clases extra para el panel (p. ej. una altura fija en escritorio). */
   panelClassName?: string;
   /** Escritorio (lg+): "left"/"right" colocan el modal en una mitad de la pantalla (pareja de modales); "center" por defecto. */
@@ -153,7 +160,7 @@ function inertBackground(keep: HTMLElement, keepModals: boolean): () => void {
   };
 }
 
-export function Modal({ open, onClose, title, children, footer, size = "md", header, headerActions, ariaLabel, placement = "bottom", panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", header, headerActions, ariaLabel, placement = "bottom", topOnDesktop = false, panelClassName, bodyClassName, side = "center", pairLeftWidth: pairLeftProp, onAddSecond, onAddSecondBulk, mobileAdd = false }: ModalProps) {
   const t = useT();
   const pairLeftCtx = useContext(PairLeftWidthContext);
   const pairLeftWidth = pairLeftProp ?? pairLeftCtx ?? PAIR_RIGHT;
@@ -305,9 +312,15 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
         style={{ "--mw": SIZE_REM[size], ...(vv ? { "--vvh": `${vv.h}px` } : {}) } as React.CSSProperties}
         className={cn(
           "relative flex w-full flex-col border border-slate-200 bg-white shadow-2xl outline-none sm:rounded-2xl dark:border-slate-600/70 dark:bg-slate-900",
-          top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl sm:max-h-[calc(100dvh-2rem)]" : "max-h-[min(92dvh,var(--vvh,100dvh))] rounded-t-2xl",
+          top ? "max-h-[calc(var(--vvh,100dvh)-env(safe-area-inset-top))] rounded-b-2xl" : "max-h-[min(92dvh,var(--vvh,100dvh))] rounded-t-2xl",
+          top && !topOnDesktop && "sm:max-h-[calc(100dvh-2rem)]",
+          // Arriba, a un 8 % de la altura (como mucho 4rem), y el alto máximo descuenta ese margen.
+          top && topOnDesktop && "sm:mt-[min(8dvh,4rem)] sm:max-h-[calc(100dvh-2rem-min(8dvh,4rem))] sm:self-start",
+          // En pareja (lg+, uno al lado del otro) va centrado como el otro: si no, quedaba más arriba y no formaban un bloque.
+          top && topOnDesktop && side !== "center" && "lg:mt-0 lg:max-h-[calc(100dvh-2rem)] lg:self-auto",
           SIZES[size],
-          side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-9rem))]", // hueco para el «+»
+          // Hueco para el «+» y «Varias tareas» de fuera del panel (1,25rem de separación + 3,5rem del botón, a cada lado).
+          side === "center" && onAddSecond && "lg:max-w-[min(var(--mw),calc(100vw-11rem))]",
           // En pareja, los dos juntos forman un bloque centrado.
           side !== "center" && "lg:max-w-none lg:pointer-events-auto",
           side === "left" && "lg:ml-[var(--x0)] lg:w-[var(--wl)]",
@@ -344,7 +357,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <button
             type="button"
             onClick={onAddSecondBulk}
-            className={cn("absolute bottom-[4.25rem] left-full ml-[1.125rem]", BULK_BTN, "hidden lg:flex")}
+            // Centrado sobre el «+» (0,375rem más a la derecha: es 0,75rem más estrecho).
+            className={cn("absolute bottom-[4.25rem] left-full ml-[1.625rem]", BULK_BTN, "hidden lg:flex")}
             aria-label={t("Abrir «Varias tareas» al lado")}
             title={t("Abrir «Varias tareas» al lado")}
           >
@@ -355,7 +369,8 @@ export function Modal({ open, onClose, title, children, footer, size = "md", hea
           <button
             type="button"
             onClick={onAddSecond}
-            className={cn("absolute bottom-0 left-full ml-3", NEW_BTN, "hidden lg:flex")}
+            // Separado del borde del panel (con 0,75rem quedaba pegado y su sombra caía sobre el diálogo).
+            className={cn("absolute bottom-0 left-full ml-5", NEW_BTN, "hidden lg:flex")}
             aria-label={t("Abrir otra tarea nueva al lado")}
             title={t("Abrir otra tarea nueva al lado")}
           >

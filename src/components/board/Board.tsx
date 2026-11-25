@@ -1144,7 +1144,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     if (assignedNotice(res.data.assigned, res.data.undo.id, res.data.moved.length)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
     const n = res.data.moved.length;
-    toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
+    toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarea movida") : t("{n} tareas movidas", { n }), name }));
   };
 
   const cardActions = useCardActions({ currentUserId: data.currentUserId, getTask, sortedColumns, getItems: itemsNow, moveTurns, patchTask, upsertTask, track, toast, t, confirmLeaveReview, getSelected: stores.selection.get, moveBlock, assignedNotice: (a, undoId) => assignedNotice(a, undoId) });
@@ -1271,7 +1271,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
     if (assignedNotice(res.data.assigned, res.data.undo.id, res.data.moved.length)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
-    toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
+    toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarea movida") : t("{n} tareas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
 
   const archiveSelected = async () => {

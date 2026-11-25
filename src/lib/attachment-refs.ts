@@ -5,12 +5,13 @@
 const ATTACHMENT_REF = /\/api\/attachments\/([A-Za-z0-9_-]+)/g;
 
 /**
- * ¿Es la dirección de un adjunto de la app (`/api/attachments/<id>`, con consulta opcional como `?thumb=1`)? Sin «..»,
+ * ¿Es la dirección de una imagen de adjunto de la app (`/api/attachments/<id>`, sola o con `?thumb=1`)? Sin «..»,
  * «%2e» ni más segmentos: la ruta queda fija. Comprobar solo el prefijo dejaba pasar `/api/attachments/../auth/reset`,
- * que el navegador normaliza y pide desde el mismo origen al pintar la imagen.
+ * que el navegador normaliza y pide desde el mismo origen al pintar la imagen. Ninguna otra consulta: con
+ * `?download=1` cada apertura de la tarea pedía una «descarga» (la ruta además no registra las peticiones de imagen).
  */
 export function isAttachmentSrc(src: unknown): src is string {
-  return typeof src === "string" && /^\/api\/attachments\/[A-Za-z0-9_-]{1,40}(?:\?[^#\s]*)?$/.test(src);
+  return typeof src === "string" && /^\/api\/attachments\/[A-Za-z0-9_-]{1,40}(?:\?thumb=1)?$/.test(src);
 }
 
 /**

@@ -81,7 +81,7 @@ interface KindTemplate extends KindAutomation {
 }
 
 /** Título sin el prefijo del tipo `prev` (lo que va detrás, sin espacios); null si no empieza por él. */
-function titleWithoutPrefix(prev: KindAutomation | null | undefined, title: string): string | null {
+function titleWithoutPrefix(prev: Pick<KindAutomation, "titleTemplate"> | null | undefined, title: string): string | null {
   const prefix = prev?.titleTemplate.trim() ?? "";
   if (!prefix || !title.startsWith(prefix)) return null;
   const rest = title.slice(prefix.length);
@@ -116,7 +116,7 @@ export function switchKindTitle(prev: KindAutomation | null | undefined, next: K
       .filter((p) => p && p !== prefix && !/[\p{L}\p{N}]$/u.test(p))
       .sort((a, b) => b.length - a.length);
     for (const p of others) {
-      rest = titleWithoutPrefix({ titleTemplate: p, descriptionTemplate: "" }, title);
+      rest = titleWithoutPrefix({ titleTemplate: p }, title);
       if (rest !== null) break;
     }
   }
@@ -351,11 +351,38 @@ export function switchKindText(
 }
 
 /**
+ * Qué le pasa a la descripción al cambiar del tipo anterior a `next` (de `before` a `after`, lo que da
+ * switchKindDescription): «applied» si el tipo nuevo pone su plantilla (sustituya o no a la del anterior), «removed» si
+ * solo se quita la del anterior (el nuevo no tiene) y null si no cambia nada más que espacios y saltos de línea (en ese
+ * caso se deja `before` tal cual: un formulario respondido que pasa a un tipo sin plantilla sale igual, con algún salto
+ * de más). Antes cualquier diferencia se avisaba como «plantilla de la descripción aplicada», también al quitarla.
+ */
+export function kindDescriptionChange(next: KindAutomation, before: string, after: string): "applied" | "removed" | null {
+  const flat = (s: string) => s.replace(/\s+/g, " ").trim();
+  if (flat(before) === flat(after)) return null;
+  return next.descriptionTemplate.trim() ? "applied" : "removed";
+}
+
+/**
+ * Título sin el prefijo automático de los tipos `kinds` (el más largo primero; «Mudanza: Varias dos» → «Varias dos»), para
+ * nombrar la tarea en el historial y en el deshacer de un cambio de tipo. Si no queda nada detrás, el título tal cual.
+ */
+export function titleWithoutKindPrefix(title: string, kinds: readonly Pick<KindAutomation, "titleTemplate">[]): string {
+  const prefixes = [...new Set(kinds.map((k) => k.titleTemplate.trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+  for (const p of prefixes) {
+    const rest = titleWithoutPrefix({ titleTemplate: p }, title);
+    if (rest) return rest;
+  }
+  return title;
+}
+
+/**
  * Aviso tras cambiar el tipo en el detalle: lo que ha cambiado además del tipo, contado por separado
  * («Tipo cambiado: 3 subtareas añadidas, 2 quitadas y plantilla de la descripción aplicada»). Solo las partes que aplican;
- * null si solo ha cambiado el tipo. `description`: la descripción guardada ha pasado a la plantilla del tipo nuevo.
+ * null si solo ha cambiado el tipo. `description`: la descripción guardada ha pasado a la plantilla del tipo nuevo
+ * («applied») o ha perdido la del anterior sin recibir otra («removed»; ver kindDescriptionChange).
  */
-export function kindChangeNotice(t: T, change: { added: number; removed: number; description?: boolean }): string | null {
+export function kindChangeNotice(t: T, change: { added: number; removed: number; description?: ReturnType<typeof kindDescriptionChange> }): string | null {
   const { added, removed } = change;
   const parts: string[] = [];
   if (added) parts.push(added === 1 ? t("1 subtarea añadida") : t("{n} subtareas añadidas", { n: added }));
@@ -364,7 +391,8 @@ export function kindChangeNotice(t: T, change: { added: number; removed: number;
     if (added) parts.push(removed === 1 ? t("1 quitada") : t("{n} quitadas", { n: removed }));
     else parts.push(removed === 1 ? t("1 subtarea quitada") : t("{n} subtareas quitadas", { n: removed }));
   }
-  if (change.description) parts.push(t("plantilla de la descripción aplicada"));
+  if (change.description === "removed") parts.push(t("plantilla de la descripción quitada"));
+  else if (change.description === "applied") parts.push(t("plantilla de la descripción aplicada"));
   if (!parts.length) return null;
   const list = parts.length === 1 ? parts[0]! : t("{list} y {last}", { list: parts.slice(0, -1).join(", "), last: parts.at(-1)! });
   return t("Tipo cambiado: {changes}", { changes: list });

@@ -10,7 +10,7 @@ import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { formatDate } from "@/lib/format";
 import { bucketAnchor } from "@/lib/my-tasks";
-import { assignedBatchCount, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
+import { assignedBatchCount, noticeActorName, notificationBody, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "@/lib/notification-text";
 import { announceUnreadCount, latestOnly, restoreUnread } from "@/lib/unread-core";
 import { useToast } from "@/components/ui/Toast";
 import { useSafeRefresh } from "@/components/useSafeRefresh";
@@ -224,7 +224,7 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                         // Aviso de proyecto: la cuenta borrada (o quien se dio de baja del informe) va en el extracto y el
                         // proyecto en lugar de la tarea.
                         ? notificationHeadline(n.type, t, { actor: n.excerpt || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }) })
-                        : notificationHeadline(n.type, t, { actor: n.actor?.name ?? t("Alguien"), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
+                        : notificationHeadline(n.type, t, { actor: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
                     </p>
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}

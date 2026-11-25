@@ -5,7 +5,7 @@ import { pdfRuns } from "./pdf-runs";
 import { calendarWeekStart } from "../src/lib/calendar";
 import {
   assignedDueDate, assignedNoticeText, assignPlanBounds, buildAssignPlan, descriptionSummary, isAssignColumn, isValidAssignDays, parseAssignDays,
-  type AssignPlanTask,
+  personColumnSlots, personColumnsNotice, type AssignPlanTask,
 } from "../src/lib/column-assign-core";
 
 process.env.SESSION_SECRET ??= "x".repeat(48);
@@ -161,11 +161,37 @@ test("aviso al mover a una columna «Asignación a persona»: dice cuántas se m
   // Todas las movidas cambian: como hasta ahora.
   assert.equal(assignedNoticeText([a("1")], 1, es), "Asignada a Ana");
   assert.equal(assignedNoticeText([a("1", "2026-11-27")], 1, es), "Asignada a Ana · vence el 27 nov");
-  assert.equal(assignedNoticeText([a("1"), a("2")], 2, es), "2 tarjetas asignadas a Ana");
+  assert.equal(assignedNoticeText([a("1"), a("2")], 2, es), "2 tareas asignadas a Ana");
   // Algunas ya eran suyas (y tenían fecha): un solo aviso con las dos cifras.
-  assert.equal(assignedNoticeText([a("1"), a("2")], 5, es), "5 tarjetas movidas · 2 asignadas a Ana");
-  assert.equal(assignedNoticeText([a("1", "2026-11-27")], 4, es), "4 tarjetas movidas · 1 asignada a Ana");
+  assert.equal(assignedNoticeText([a("1"), a("2")], 5, es), "5 tareas movidas · 2 asignadas a Ana");
+  assert.equal(assignedNoticeText([a("1", "2026-11-27")], 4, es), "4 tareas movidas · 1 asignada a Ana");
   const en = ctx("en");
-  assert.equal(assignedNoticeText([a("1"), a("2")], 5, en), "5 cards moved · 2 assigned to Ana");
-  assert.equal(assignedNoticeText([a("1")], 4, en), "4 cards moved · 1 assigned to Ana");
+  assert.equal(assignedNoticeText([a("1"), a("2")], 5, en), "5 tasks moved · 2 assigned to Ana");
+  assert.equal(assignedNoticeText([a("1")], 4, en), "4 tasks moved · 1 assigned to Ana");
+});
+
+test("«Organizar por personas»: las columnas nuevas van antes de la primera terminada («Hecho») o, si no hay, al final", () => {
+  const col = (id: string, position: number, isDone = false) => ({ id, position, isDone });
+  // Casa y familia: … Rutinas, Hecho. Las dos nuevas entre Rutinas y Hecho; solo se corre «Hecho».
+  const casa = [col("a", 1024), col("b", 2048), col("rut", 3072), col("hecho", 4096, true)];
+  assert.deepEqual(personColumnSlots(casa, 2), { positions: [4096, 5120], moved: [{ id: "hecho", position: 6144, before: 4096 }] });
+  // Sin terminadas: al final, sin mover ninguna.
+  assert.deepEqual(personColumnSlots([col("a", 1024), col("b", 2048)], 1), { positions: [3072], moved: [] });
+  // Posiciones irregulares (columnas antiguas): se renumeran; las de detrás de la primera terminada también se corren.
+  const odd = [col("a", 1000), col("hecho", 3000, true), col("archivo", 5000, true)];
+  assert.deepEqual(personColumnSlots(odd, 1), {
+    positions: [2048],
+    moved: [{ id: "a", position: 1024, before: 1000 }, { id: "hecho", position: 3072, before: 3000 }, { id: "archivo", position: 4096, before: 5000 }],
+  });
+  // Tablero vacío.
+  assert.deepEqual(personColumnSlots([], 2), { positions: [1024, 2048], moved: [] });
+});
+
+test("«Organizar por personas»: el aviso nombra a las personas («2 columnas creadas: Ana y Luis»)", async () => {
+  const { makeT } = await import("../src/i18n/core");
+  const es = makeT("es");
+  assert.equal(personColumnsNotice(["Ana"], es, "es"), "1 columna creada: Ana");
+  assert.equal(personColumnsNotice(["Ana", "Luis"], es, "es"), "2 columnas creadas: Ana y Luis");
+  assert.equal(personColumnsNotice(["A", "B", "C", "D", "E", "F"], es, "es"), "6 columnas creadas: A, B, C, D y 2 más");
+  assert.equal(personColumnsNotice(["Ana", "Luis"], makeT("en"), "en"), "2 columns created: Ana and Luis");
 });

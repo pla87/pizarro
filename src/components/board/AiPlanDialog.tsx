@@ -317,7 +317,7 @@ export function AiPlanDialog({ column, onClose }: { column: BoardColumn; onClose
       }
     >
       {step === "select" ? (
-        <div className="space-y-3" data-plan-step="select">
+        <div className="space-y-3" data-plan-step="select" data-plan-setup={setup ? "ready" : "loading"}>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {t("Un texto en Markdown para que una IA (p. ej. Claude Code) haga estas tareas: contexto del proyecto, instrucciones y, por cada tarea, su descripción, subtareas, etiquetas, fechas, enlaces y adjuntos.")}
           </p>

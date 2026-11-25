@@ -8,7 +8,7 @@
 //  - ritmo: las tareas fijas «cada dos» cuentan los planes guardados en SU columna (guardar en una no adelanta a las demás),
 //    mientras la versión del documento (_vN) sigue siendo del proyecto.
 //  - vacias: «Publicar programa», «Ver lista», «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas
-//    (botón y menú de la columna), con el título «No hay tarjetas en esta columna»; la lista sin subtareas, también, con su
+//    (botón y menú de la columna), con el motivo («No hay tarjetas en «Semana»» bajo el botón; «… en esta columna» en el menú); la lista sin subtareas, también, con su
 //    motivo.
 //  - salir: con el texto del paso 2 cambiado, un enlace del pie («tus plantillas») pide confirmar como cerrar; sin cambios
 //    navega directo. En el plan y en la release.
@@ -65,21 +65,22 @@ async function openBoard(page) {
   await page.goto(`${L.BASE}/p/${PID}`);
   await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
   await L.liveOpen(page);
-  await sleep(500);
 }
 const planDialog = (page) => page.locator("[role=dialog]").filter({ hasText: /Generar plan de trabajo|Generate work plan/ }).first();
 async function openPlan(page, col = "Plan A") {
   await L.colLoc(page, col).getByRole("button", { name: "Generar plan de trabajo" }).click();
   const dlg = planDialog(page);
-  await dlg.locator("[data-plan-step=select]").waitFor({ timeout: 10000 });
-  await sleep(1200);
+  // Las plantillas y la versión han llegado (antes, una pausa fija de 1,2 s).
+  await dlg.locator("[data-plan-step=select][data-plan-setup=ready]").waitFor({ timeout: 10000 });
   return dlg;
 }
 async function toStep2(dlg, n) {
   await dlg.getByRole("button", { name: new RegExp(`Generar con ${n} tarea`) }).click();
   await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
-  await sleep(300);
+  await planReady(dlg);
 }
+/** Espera a que el texto generado esté en el editor del paso 2 (el de Markdown o el con barra), sin pausas fijas. */
+const planReady = (dlg) => L.waitFor(async () => (await dlg.locator("[data-plan-editor=rich] .ProseMirror").count()) > 0 || (await dlg.locator("textarea").first().inputValue().catch(() => "")).startsWith("# "), { timeout: 10000 });
 const planText = (dlg) => dlg.getByRole("textbox", { name: /Texto del plan de trabajo|Work plan text/ }).inputValue();
 const appToday = (page) => page.evaluate(() => new Intl.DateTimeFormat("en-CA", { timeZone: document.documentElement.dataset.tz || undefined }).format(new Date()));
 const docs = () => L.q(`SELECT id,name,kind,"mimeType" FROM "ProjectDocument" WHERE "projectId"=$1 AND "deletedAt" IS NULL ORDER BY "createdAt"`, [PID]);
@@ -105,13 +106,14 @@ if (only.includes("zip")) {
   const text = await planText(dlg);
   const f1 = "adjuntos/01-arreglar-el-login-nandu";
   // La imagen pegada en la descripción ya va ahí con su ruta: la lista «Adjuntos» de la tarea no la repite.
-  L.check("ZIP: la lista de adjuntos de la tarea 1 no repite la imagen de la descripción", !text.includes(`\`${f1}/Plano_final.webp\``) && !text.includes("`Plano_final.webp`"), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
-  L.check("ZIP: …y cita el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`- **Adjuntos:** \`${f1}/notas.txt\`\n`) && text.includes("- **Adjuntos:** `adjuntos/03-con-un-registro/registro.txt`\n"), text.slice(text.indexOf("### 1.")));
+  L.check("ZIP: la lista de adjuntos de la tarea 1 no repite la imagen de la descripción", text.split("Plano_final.webp").length === 2 && !text.includes("`Plano_final.webp`"), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
+  L.check("ZIP: …y cita el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`\n**Adjuntos:** \`${f1}/notas.txt\`\n\n### 2.`) && text.includes("\n**Adjuntos:** `adjuntos/03-con-un-registro/registro.txt`\n"), text.slice(text.indexOf("### 1.")));
   L.check("ZIP: sin enlace a Pizarro", !text.includes(L.BASE), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
-  L.check("ZIP: la imagen pegada en la descripción apunta a la misma ruta del ZIP", text.includes(`![captura](${f1}/Plano_final.webp)`));
+  // Con su ruta escrita: como imagen de Markdown, el editor con barra solo enseñaba «[imagen: captura]».
+  L.check("ZIP: la imagen pegada en la descripción cita la misma ruta del ZIP", text.includes(`Falla así: imagen «captura» (\`${f1}/Plano_final.webp\`)`), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   L.check("ZIP: una imagen que no es adjunto del plan se queda en su texto alternativo (sin enlace a Pizarro)", text.includes("y esto ajena") && !text.includes("/api/attachments/zzzzzz"));
   L.check("ZIP: el contexto explica el ZIP «adjuntos/…» (3 archivos)", text.includes("- **Adjuntos:** 3 archivo(s) en el ZIP «adjuntos/…» que va con este plan"));
-  L.check("ZIP: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(descomprímelo junto a este fichero)") && text.includes("Las imágenes van en WebP.") && !text.includes("que acompaña a este plan"));
+  L.check("ZIP: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción.") && text.includes("Las imágenes van en WebP.") && !text.includes("que acompaña a este plan"));
   const btn = dlg.getByRole("button", { name: "Descargar adjuntos (3)" });
   L.check("ZIP: botón «Descargar adjuntos (3)» en el paso 2", await btn.isVisible());
   const today = await appToday(page);
@@ -176,19 +178,17 @@ if (only.includes("en")) {
     await page.goto(`${L.BASE}/p/${PID}`);
     await L.colLoc(page, "Plan A").waitFor({ timeout: 20000 });
     await L.liveOpen(page);
-    await sleep(500);
     await L.colLoc(page, "Plan A").getByRole("button", { name: "Generate work plan" }).click();
     const dlg = planDialog(page);
-    await dlg.locator("[data-plan-step=select]").waitFor({ timeout: 10000 });
-    await sleep(1200);
+    await dlg.locator("[data-plan-step=select][data-plan-setup=ready]").waitFor({ timeout: 10000 });
     await dlg.getByRole("button", { name: /Generate with 2 task/ }).click();
     await dlg.locator("[data-plan-step=edit]").waitFor({ timeout: 15000 });
-    await sleep(300);
+    await planReady(dlg);
     const text = await planText(dlg);
     const f1 = "attachments/01-fix-the-login";
-    L.check("EN: la imagen de la descripción no se repite en la lista de adjuntos (sin enlace a Pizarro)", !text.includes(`\`${f1}/Final_plan.webp\``) && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
-    L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("- **Attachments:** `attachments/02-task/notes.txt`\n"), text.slice(text.indexOf("### 2.")));
-    L.check("EN: la imagen de la descripción apunta a la misma ruta", text.includes(`![shot](${f1}/Final_plan.webp)`));
+    L.check("EN: la imagen de la descripción no se repite en la lista de adjuntos (sin enlace a Pizarro)", text.split("Final_plan.webp").length === 2 && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
+    L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("\n**Attachments:** `attachments/02-task/notes.txt`\n"), text.slice(text.indexOf("### 2.")));
+    L.check("EN: la imagen de la descripción cita la misma ruta", text.includes(`Fails like this: image “shot” (\`${f1}/Final_plan.webp\`)`), text.slice(text.indexOf("### 1.")));
     L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
     L.check("EN: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(unzip it next to this file)") && text.includes("Images are in WebP.") && !text.includes("`attachments/03-task-title/drawing.webp`"));
     L.check("EN: en el plan en inglés no queda ninguna ruta «adjuntos/»", !text.includes("adjuntos"), text);
@@ -266,7 +266,12 @@ if (only.includes("vacias")) {
   };
   for (const [col, label] of Object.entries(LABEL)) {
     L.check(`VACIAS: «${col}» tiene su botón «${label}»`, (await L.colLoc(page, col).locator("[data-column-action] button").first().innerText()).includes(label));
-    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, col === "Salto" ? "Añade tarjetas a esta columna para generar la release" : EMPTY]);
+    // Ronda 68: el motivo nombra la columna y se ve bajo el botón (y es su descripción accesible), no solo en el `title`.
+    const why = col === "Salto" ? "Añade tarjetas a esta columna para generar la release" : `No hay tarjetas en «${col}»`;
+    L.eq(`VACIAS: «${col}» vacía: botón desactivado con su título`, await state(col), [true, why]);
+    const btn = L.colLoc(page, col).locator("[data-column-action] button").first();
+    L.eq(`VACIAS: «${col}»: el motivo a la vista bajo el botón`, (await L.colLoc(page, col).locator("[data-column-action-reason]").first().innerText()).trim(), why);
+    L.eq(`VACIAS: «${col}»: y como descripción accesible`, await btn.evaluate((b) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null), why);
   }
   /** Estado de las opciones del menú de la columna (… → opciones): [desactivada, título]. */
   const menuItems = async (col, names) => {
@@ -277,7 +282,7 @@ if (only.includes("vacias")) {
       out.push([n, await it.isDisabled(), await it.getAttribute("title")]);
     }
     await page.keyboard.press("Escape");
-    await sleep(200);
+    await page.getByRole("menu").waitFor({ state: "detached", timeout: 5000 });
     return out;
   };
   for (const [col, names] of Object.entries({

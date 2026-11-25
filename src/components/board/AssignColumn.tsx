@@ -16,7 +16,7 @@ import { downloadFile, useDownloadBusy } from "./columnDownload";
 import { useBoard } from "./context";
 
 // Columna «Asignación a persona» (reglas en lib/column-assign-core.ts): la persona y el plazo en la cabecera, el diálogo
-// para elegirlos y el botón «Generar plan» (bajo la cabecera). La columna tiene rol NONE: la marcan su persona y su plazo.
+// para elegirlos y el botón «Descargar plan (PDF)» (bajo la cabecera). La columna tiene rol NONE: la marcan su persona y su plazo.
 
 /**
  * Cabecera: la persona (avatar y nombre) y el plazo, si lo hay; pulsando se cambian. Si la columna no tiene persona (venía
@@ -58,7 +58,7 @@ export function AssignHeader({ column, onEdit }: { column: BoardColumn; onEdit: 
 }
 
 /**
- * «Generar plan»: el PDF con el plan de la persona en esta columna. Se descarga sin salir del tablero (columnDownload.ts):
+ * «Descargar plan (PDF)»: el plan de la persona en esta columna. Se descarga sin salir del tablero (columnDownload.ts):
  * mientras se genera, el botón está ocupado y otro clic (aquí o en el menú) no pide otro. `reason`: por qué no se puede
  * (sin persona o sin tarjetas), o null.
  */
@@ -68,25 +68,30 @@ export function useAssignPlan(column: BoardColumn, cardCount: number): { reason:
   const { users, project } = useBoard();
   const key = `plan:${column.id}`;
   const busy = useDownloadBusy(key);
-  const reason = !column.assigneeId || !users.some((u) => u.id === column.assigneeId)
+  const person = column.assigneeId ? users.find((u) => u.id === column.assigneeId) : undefined;
+  const reason = !person
     ? t("Elige antes la persona de la columna")
-    : cardCount === 0 ? t("No hay tarjetas en esta columna") : null;
+    : cardCount === 0 ? t("No hay tarjetas en «{name}»", { name: column.name }) : null;
   const run = () => void downloadFile(key, `/api/projects/${project.id}/columns/${column.id}/plan`, {
     fallbackName: "plan.pdf",
     failed: t("No se pudo generar el plan."),
     offline: t("Sin conexión: no se ha podido generar el plan."),
+    done: t("Plan de {name} descargado", { name: person?.name ?? "" }),
   }, t, toast);
   return { reason, busy, run };
 }
 
-/** Botón «Generar plan», bajo la cabecera como los de las demás columnas especiales. Apagado sin tarjetas o sin persona, con el motivo. */
+/**
+ * Botón «Descargar plan (PDF)» (antes «Generar plan»: no decía que descarga un PDF, como «Publicar programa (PDF)»), bajo
+ * la cabecera como los de las demás columnas especiales. Apagado sin tarjetas o sin persona, con el motivo a la vista.
+ */
 export function AssignPlanButton({ column, cardCount }: { column: BoardColumn; cardCount: number }) {
   const t = useT();
   const { reason, busy, run } = useAssignPlan(column, cardCount);
   return (
     <ColumnActionButton
       icon={FileDown}
-      label={busy ? t("Generando plan…") : t("Generar plan")}
+      label={busy ? t("Generando PDF…") : t("Descargar plan (PDF)")}
       onClick={run}
       disabled={reason != null}
       busy={busy}
@@ -143,7 +148,7 @@ export function AssignDialog({ column, onClose }: { column: BoardColumn; onClose
     const res = await track(setColumnAssignee(column.id, { assigneeId: personId, dueDays, ...(rename ? { rename: true } : {}) }));
     if (!res.ok) return toast(res.error, "error");
     refresh();
-    if (res.data.reassigned) toast(res.data.reassigned === 1 ? t("1 tarjeta asignada a {name}", { name: person.name }) : t("{n} tarjetas asignadas a {name}", { n: res.data.reassigned, name: person.name }));
+    if (res.data.reassigned) toast(res.data.reassigned === 1 ? t("1 tarea asignada a {name}", { name: person.name }) : t("{n} tareas asignadas a {name}", { n: res.data.reassigned, name: person.name }));
   };
 
   return (

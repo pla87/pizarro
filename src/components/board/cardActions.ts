@@ -79,7 +79,7 @@ export function useCardActions(deps: Deps) {
         return false;
       }
       // El servidor recorta un título demasiado largo: se avisa, y el aviso no se guarda en la tarea.
-      const { titleClipped, ...saved } = res.data;
+      const { titleClipped, undo: _undo, ...saved } = res.data;
       upsertTask(saved);
       if (titleClipped) ref.current.toast(ref.current.t("Título recortado a {max} caracteres", { max: titleClipped }));
       return true;

@@ -195,6 +195,8 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
       }
       size="md"
       placement="top"
+      // Crece hacia abajo al escribir (centrado crecía hacia arriba y el botón se movía bajo el ratón).
+      topOnDesktop
       footer={
         <>
           <button type="button" className="btn-secondary" onClick={onClose}>{t("Cancelar")}</button>

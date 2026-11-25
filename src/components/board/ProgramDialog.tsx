@@ -9,6 +9,8 @@ import { appTimeZone } from "@/lib/format";
 import { PROGRAM_MAX_SESSIONS } from "@/lib/program-limit";
 import type { BoardColumn } from "@/lib/types";
 import { Modal } from "../ui/Modal";
+import { useToast } from "../ui/Toast";
+import { downloadErrorText } from "./download-error";
 import { useBoard, useTasks } from "./context";
 
 type State =
@@ -37,6 +39,7 @@ const header = (res: Response, name: string) => {
 export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClose: () => void }) {
   const { project } = useBoard();
   const t = useT();
+  const toast = useToast();
   const sessions = useTasks().filter((x) => x.columnId === column.id).length;
   const [withAssignee, setWithAssignee] = useState(false);
   const [save, setSave] = useState(true);
@@ -55,8 +58,14 @@ export function ProgramDialog({ column, onClose }: { column: BoardColumn; onClos
     try {
       const res = await fetch(`${endpoint(withAssignee)}&save=${save ? 1 : 0}`, { method: "POST", cache: "no-store" });
       if (!res.ok) {
-        const text = (await res.text().catch(() => "")).trim();
-        throw new Error(res.status === 429 ? t("Demasiadas peticiones, espera un momento.") : text.length && text.length < 300 ? text : t("No se pudo generar el programa."));
+        // Como los demás PDF de columna (downloadErrorText): sin sesión, el aviso de sesión caducada con «Iniciar sesión»
+        // (antes, el JSON del proxy tal cual), y el tope por minuto dice qué hacer.
+        const message = downloadErrorText(res.status, await res.text().catch(() => ""), t("No se pudo generar el programa."), t);
+        if (res.status === 401) {
+          toast(message, "error");
+          return setState({ status: "form" });
+        }
+        throw new Error(message);
       }
       const blob = await res.blob();
       const filename = /filename="?([^";]+)"?/i.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? docName;

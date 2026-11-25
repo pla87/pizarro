@@ -16,4 +16,7 @@ export const instalar: Record<string, string> = {
   "Generar otras": "Generate new ones",
   "Listo: claves nuevas, creadas en tu navegador. Pulsa «Copiar» y pégalas en Railway.":
     "Done: new keys, created in your browser. Click \"Copy\" and paste them into Railway.",
+
+  // Bloque «```prompt» de la guía (texto para pegar en una IA que use el navegador)
+  "Texto para la IA": "Text for the AI",
 };

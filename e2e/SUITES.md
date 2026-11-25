@@ -185,13 +185,14 @@ En un proyecto privado propio con tres personas (lo crea y lo borra la suite, co
   persona y conserva su fecha; Ctrl+Z la devuelve con su responsable y su fecha anteriores.
 - `cambiar`: cambiar solo el plazo no pregunta ni toca las tarjetas; cambiar la persona pide confirmación con cuántas
   tarjetas cambian («Las 2 tarjetas…») y las reasigna.
-- `plan`: «Generar plan», bajo la cabecera, descarga el PDF sin salir del tablero (`plan-…pdf`, `Content-Disposition:
-  attachment`); con la respuesta retrasada (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled) y otro
-  clic no lanza otra descarga; con un 429 simulado sale el aviso. El texto (`pdftotext`) va por vencimiento (Vencidas,
+- `plan`: «Descargar plan (PDF)» (antes «Generar plan»), bajo la cabecera, descarga el PDF sin salir del tablero
+  (`plan-…pdf`, `Content-Disposition: attachment`) y avisa «Plan de <persona> descargado»; con la respuesta retrasada
+  (`page.route`) el botón queda ocupado (aria-busy, sin aria-disabled, «Generando PDF…») y otro clic no pide otro PDF;
+  con un 429 simulado sale el aviso «Has pedido muchos PDF seguidos…». El texto (`pdftotext`) va por vencimiento (Vencidas,
   Hoy, Más adelante, Sin fecha), con lo rellenado de la descripción sin los apartados vacíos, las etiquetas y el aviso de
   la tarjeta de otra persona.
 - `tipo`: «Tipo por defecto…» del menú: el «+» de la columna lo preselecciona; con «Ninguno» vuelve el último usado.
-- `quitar`: «Sin rol» quita persona, plazo y «Generar plan»; las tarjetas conservan su responsable y su fecha.
+- `quitar`: «Sin rol» quita persona, plazo y «Descargar plan (PDF)»; las tarjetas conservan su responsable y su fecha.
 - `movil`: a 390 px (nombre largo) la cabecera, el botón y el diálogo caben, sin scroll horizontal.
 - `en`: cabecera, menú, diálogo, nota de «New task» y PDF en inglés.
 
@@ -199,6 +200,39 @@ Misma base y servidor (necesita `pdftotext`):
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-asignacion-e2e.mjs   # PART=rol,entrar,cambiar,plan,tipo,quitar,movil,en
+```
+
+### Columna «Compartir fuera» (ronda 68)
+
+Una columna cuyas tareas se publican en una página sin cuenta (`/x/<token>`) para alguien de fuera. Crea su proyecto
+privado (`fuera68_*`) con una columna «Proveedor F68», otra «Hecho» terminada, dos tareas y un adjunto de texto (su fichero
+en `UPLOAD_DIR`, que el script comparte con el servidor; por defecto `../uploads`); la segunda persona de las pruebas
+también es del proyecto. Pone al administrador de las pruebas como ADMIN mientras dura, ya con la sesión abierta (si
+iniciase sesión como administrador pasaría por la verificación en dos pasos), y lo devuelve a MEMBER al final.
+
+- `activar`: apagada, el submenú «Rol de la columna» no la ofrece; *Ajustes del proyecto → Tablero → Permitir columnas
+  «Compartir fuera»* la enciende.
+- `rol`: «Rol de la columna › Compartir fuera» deja la fila en la base y el pie con «Generar web», el aviso de lo que se publica
+  y la caducidad, que rota «1 mes → 3 meses → 7 días → 1 mes» (y se guarda); la marca de la cabecera dice «sin generar».
+- `generar`: el diálogo enseña la dirección `/x/<token>` (con `data-pz-no-capture`), «Enviar por email» es un `mailto:`
+  con la dirección, dice hasta cuándo vale; en la base, la huella y el token cifrado (`v2.…`, nunca en claro). La marca
+  pasa a activo y el botón a «Actualizar web», que vuelve a enseñar la misma dirección; la segunda persona del proyecto
+  también la ve con «Enlace de la web». Ningún registro lleva el token.
+- `fuera`: en otro contexto sin sesión, la página responde con `X-Robots-Tag`, `Referrer-Policy: no-referrer` y
+  `Cache-Control: no-store`, sin `<script>`; enseña solo las tareas publicadas. «Marcar como hecha» la lleva a «Hecho»
+  y el tablero abierto la ve sin recargar; Ctrl+Z en la app la devuelve. Cambiar la fecha y comentar (firmado
+  «Proveedor F68 (fuera)», también en el historial); los registros de lo de fuera llevan «/x/…» y ninguno el token; el
+  adjunto se descarga con su nombre y uno ajeno da 404.
+- `nuevo`: sin el token cifrado (como tras cambiar la clave sin rotarla), «Enlace de la web» explica que no puede
+  enseñar la dirección; «Crear un enlace nuevo» pide confirmación y da otra dirección; la anterior responde 410.
+- `revocar`: «Enlace de la web» → «Revocar enlace» (con confirmación): la dirección responde 410 con «Esta lista de
+  tareas ha caducado…» y la marca deja de decir activo.
+- `apagar`: apagarla en Ajustes (confirmando si hay enlaces) quita el pie y la opción del submenú.
+
+Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-fuera-e2e.mjs   # PART=activar,rol,generar,fuera,nuevo,revocar,apagar
 ```
 
 ## Detalle de la tarea
@@ -215,6 +249,26 @@ servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-comentarios-e2e.mjs   # PART=comments,edit,desc,tabs,rel
+```
+
+### Editar en el detalle: tipo, foco, conflicto, avisos e imágenes en la descripción (rondas 67 y 68)
+
+Un cambio de tipo sin conexión no se guarda y el selector, el título y la descripción vuelven a los de antes (con red sí se
+guarda); tras «Guardar descripción» el foco queda en la descripción guardada, la sección no se mueve e Intro la vuelve a
+editar; al volver a la pestaña (otra pestaña delante y el foco devuelto sin elemento de origen) la descripción no se abre
+sola; con la descripción a medio escribir, un cambio de tipo que choca con el título que otra persona acaba de cambiar
+(su canal en vivo cortado para que no lo vea) avisa del conflicto y deja lo escrito en el editor, que luego se guarda; si
+la otra persona cambió también la descripción, se avisa junto a los botones y al guardar choca sin pisarla, con «Copiar tu
+texto»; el aviso del cambio de tipo dice «plantilla de la descripción aplicada» o «quitada» (y nada con una descripción
+escrita por la persona) y su «Deshacer» nombra la tarea sin el prefijo del tipo; una imagen pegada (`ClipboardEvent`
+sintético con un `File`) o soltada en la descripción en edición se adjunta y se inserta donde está el cursor (editor con
+barra y Markdown), y fuera del editor solo se adjunta; con la subida retenida (`page.route`), «Guardar descripción» y
+cerrar con «Descartar cambios» no guarda nada al llegar la imagen, «Cancelar» y volver a abrir no hereda la subida ni la
+deja cerrar el editor nuevo, y el «Guardar» del pie espera a la imagen y la guarda en el texto; y el pie dice «Deshacer
+todo» a 1500 y 2100 px. Misma base y servidor:
+
+```sh
+cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node detalle-edicion-e2e.mjs   # PART=tipo,foco,pestana,conflicto,aviso,imagen,lenta,pie
 ```
 
 
@@ -369,7 +423,7 @@ texto cita cada adjunto por su ruta en el ZIP (también la imagen pegada en la d
 Documentación solo va el .md. Las tareas fijas «cada dos» o «cada tres» cuentan los planes guardados en su columna (no los
 del proyecto), mientras el `_vN` del documento sigue siendo del proyecto. «Publicar programa», «Ver lista»,
 «Resumen de presupuesto» y «PDF de la semana» se desactivan sin tarjetas (en el botón y en el menú de la columna; la lista,
-sin subtareas, también). Con el texto del paso 2 cambiado,
+sin subtareas, también); el botón enseña el motivo debajo («No hay tarjetas en «Semana»») y es su descripción accesible. Con el texto del paso 2 cambiado,
 un enlace del pie («tus plantillas») pide confirmar como cerrar. Necesita que el servidor y el script compartan `UPLOAD_DIR`
 (por defecto `../uploads`, donde escribe los ficheros de los adjuntos). Borra su proyecto al terminar. Misma base y servidor:
 
@@ -623,7 +677,7 @@ sin cerrar el diálogo. Botones desactivados cuando no harían nada: «Limpiar»
 de *Ajustes → Almacenamiento*, «Guardar» el nombre y «Guardar avisos» de *Mi perfil* sin cambios, «Cambiar contraseña» sin
 rellenar, «Partir del texto por defecto» con ese texto ya puesto y «Todas»/«Ninguna» al generar una release. La nota cabe
 a 390 px. *Ajustes* e *Integraciones* son dos pestañas (ronda 57): el email, Google y Telegram/WhatsApp solo están en
-`/admin/integrations`, y un enlace antiguo `/admin/settings#acceso-google` lleva allí con su ancla. Misma base y servidor:
+`/admin/integrations` (la redirección de las anclas antiguas de Ajustes se retiró en la ronda 68). Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-textos-e2e.mjs   # PART=admin,profile,release

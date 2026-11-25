@@ -45,7 +45,7 @@ export function SetupForm({ emailAvailable, confirmed }: { emailAvailable: boole
         onCodes={setCodes}
         onBack={() => setEnrolling(false)}
       />
-      {!enrolling && <BackToLogin className="text-sm text-slate-500 hover:underline" />}
+      {!enrolling && <p className="text-center"><BackToLogin /></p>}
     </div>
   );
 }

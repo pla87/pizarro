@@ -1,5 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
+import { DEFAULT_SHARE_EXPIRY_DAYS, isShareExpiry } from "../share-out-board";
 import type { Prisma } from "@/generated/prisma/client";
 import { getT } from "@/i18n/server";
 import type { T } from "@/i18n/core";
@@ -581,6 +582,12 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         });
         for (const c of data.columns) {
           if (c.routineTargetRef) await tx.column.update({ where: { id: columnIds.get(c.ref)! }, data: { routineTargetColumnId: columnIds.get(c.routineTargetRef)! } });
+        }
+        // «Compartir fuera»: la columna vuelve marcada (rol NONE, sin «Asignación a persona»), sin enlace. El proyecto nuevo
+        // nace con la función apagada: nada se publica hasta que un administrador la active y alguien pulse «Generar web».
+        const shared = data.columns.filter((c) => c.shareOut && c.role === "NONE" && !c.assignee && c.assignDueDays == null);
+        if (shared.length) {
+          await tx.columnShare.createMany({ data: shared.map((c) => ({ projectId, columnId: columnIds.get(c.ref)!, expiryDays: isShareExpiry(c.shareOut!.expiryDays) ? c.shareOut!.expiryDays : DEFAULT_SHARE_EXPIRY_DAYS })) });
         }
         if (kindRows.length) await tx.taskKind.createMany({ data: kindRows });
         // Tipo por defecto de cada columna, por nombre (los propios importados antes que los generales); si no hay ninguno

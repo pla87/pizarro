@@ -18,8 +18,7 @@ export async function generateMetadata() {
 
 /**
  * Administración → Integraciones: los servicios externos con credenciales (1. email/SMTP, 2. acceso con Google y Google
- * Docs, 3. Telegram y WhatsApp). Antes iban en Ajustes; los enlaces antiguos con ancla (/admin/settings#avisos-email,
- * #acceso-google, #mensajeria) llegan aquí con MovedSectionRedirect.
+ * Docs, 3. Telegram y WhatsApp). Antes iban en Ajustes (la redirección de sus anclas antiguas se retiró en la v1.72).
  */
 export default async function IntegrationsPage() {
   await requireAdminPage();

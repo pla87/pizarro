@@ -8,9 +8,40 @@
 import type { T } from "@/i18n/shared";
 import { addDaysIso, formatDay, isoWeekday } from "./dates";
 import { FORM_LABEL_ONLY, withoutEmptyFormSections } from "./form-sections";
+import { POSITION_STEP } from "./positions";
 
 /** Plantilla cuyos proyectos ofrecen «Organizar por personas» (una columna «Asignación a persona» por cada una). */
 export const PEOPLE_TEMPLATE = "casa-familia";
+
+/**
+ * Dónde van las columnas de «Organizar por personas» (`count`), dadas las del proyecto en su orden: justo antes de la
+ * primera terminada (`isDone`, «Hecho») o, si no hay ninguna, al final; antes iban siempre detrás de «Hecho». Se renumeran
+ * todas de POSITION_STEP en POSITION_STEP (como al mover una columna): `positions`, las de las nuevas en orden; `moved`,
+ * las existentes que cambian de posición (con la de antes, para el deshacer).
+ */
+export function personColumnSlots(
+  columns: readonly { id: string; position: number; isDone: boolean }[], count: number,
+): { positions: number[]; moved: { id: string; position: number; before: number }[] } {
+  const at = columns.findIndex((c) => c.isDone);
+  const cut = at < 0 ? columns.length : at;
+  const positions = Array.from({ length: count }, (_, i) => (cut + i + 1) * POSITION_STEP);
+  const moved: { id: string; position: number; before: number }[] = [];
+  columns.forEach((c, i) => {
+    const position = (i < cut ? i + 1 : i + 1 + count) * POSITION_STEP;
+    if (position !== c.position) moved.push({ id: c.id, position, before: c.position });
+  });
+  return { positions, moved };
+}
+
+/** Como mucho, cuántos nombres dice el aviso de «Organizar por personas» (luego, «y N más»). */
+const NOTICE_NAMES = 4;
+
+/** Aviso tras «Organizar por personas»: «2 columnas creadas: Ana y Luis» (con muchas, «… Ana, Bea, Carlos, Dani y 2 más»). */
+export function personColumnsNotice(names: readonly string[], t: T, locale: string): string {
+  const shown = names.length > NOTICE_NAMES ? [...names.slice(0, NOTICE_NAMES), t("{n} más", { n: names.length - NOTICE_NAMES })] : names;
+  const list = new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
+  return names.length === 1 ? t("1 columna creada: {names}", { names: list }) : t("{n} columnas creadas: {names}", { n: names.length, names: list });
+}
 
 /** Plazo máximo de «Vence en N días». */
 export const MAX_ASSIGN_DUE_DAYS = 365;
@@ -50,7 +81,7 @@ export function assignedDueDate(current: string | null, days: number | null | un
 /**
  * Texto del aviso del tablero tras entrar tarjetas en una columna «Asignación a persona» (`null` si no se asignó ninguna). `moved`:
  * cuántas se movieron; si son más que las asignadas (algunas ya eran de esa persona y tenían fecha), el aviso dice las dos
- * cosas («5 tarjetas movidas · 2 asignadas a Ana»; lo enseña showAssignedNotice, assignNotice.ts): con solo las asignadas parecía que las demás no se habían movido.
+ * cosas («5 tareas movidas · 2 asignadas a Ana»; lo enseña showAssignedNotice, assignNotice.ts): con solo las asignadas parecía que las demás no se habían movido.
  */
 export function assignedNoticeText(assigned: readonly { assigneeId: string; dueDate: string | null }[], moved: number, ctx: { users: readonly { id: string; name: string }[]; today: string; locale: string; t: T }): string | null {
   const first = assigned[0];
@@ -59,11 +90,11 @@ export function assignedNoticeText(assigned: readonly { assigneeId: string; dueD
   const name = ctx.users.find((u) => u.id === first.assigneeId)?.name ?? "?";
   if (moved > assigned.length) {
     return assigned.length === 1
-      ? t("{n} tarjetas movidas · 1 asignada a {name}", { n: moved, name })
-      : t("{n} tarjetas movidas · {k} asignadas a {name}", { n: moved, k: assigned.length, name });
+      ? t("{n} tareas movidas · 1 asignada a {name}", { n: moved, name })
+      : t("{n} tareas movidas · {k} asignadas a {name}", { n: moved, k: assigned.length, name });
   }
   return assigned.length > 1
-    ? t("{n} tarjetas asignadas a {name}", { n: assigned.length, name })
+    ? t("{n} tareas asignadas a {name}", { n: assigned.length, name })
     : first.dueDate
       ? t("Asignada a {name} · vence el {date}", { name, date: formatDay(first.dueDate, ctx.today, ctx.locale) })
       : t("Asignada a {name}", { name });

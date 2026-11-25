@@ -6,6 +6,7 @@ import { actionContext } from "./action-context";
 import { columnsLockName } from "./advisory-locks";
 import { forgetAttachments } from "./attachment-cache";
 import { isUniqueColumnRole, liveColumnRole, MAX_LABELS_PER_PROJECT, type ColumnRoleValue } from "./constants";
+import { externalUndoWhere, revokeUnsharedLinks } from "./share-out-core";
 import { excerpt } from "./mentions";
 import { commentNoticesWhere } from "./notify";
 import { db } from "./db";
@@ -22,7 +23,8 @@ import { removeAttachmentFiles, removeReleaseAttachmentFiles } from "./uploads";
 // Rehacer: al deshacer una entrada se captura el estado actual de todo lo que sus operaciones van
 // a tocar (mirrorOps) y se guarda como entrada REDO; rehacerla hace lo mismo a la inversa y deja
 // otra entrada UNDO, así que se puede alternar. Cualquier acción nueva del usuario en el proyecto
-// vacía su pila de rehacer. Cada pila guarda 10 entradas por usuario y proyecto.
+// vacía su pila de rehacer. Cada pila guarda 10 entradas por usuario y proyecto (más, en la de deshacer, como mucho una
+// de lo hecho desde fuera con «Compartir fuera», que no cuenta: ver externalUndoWhere).
 
 const UNDO_LIMIT = 10;
 export const UNDO_MAX_AGE_DAYS = 7;
@@ -404,7 +406,8 @@ export async function saveUndo(
     select: { id: true },
   });
   const old = await db.undoEntry.findMany({
-    where: { userId, projectId, kind },
+    // Lo hecho desde fuera («Compartir fuera»: una entrada como mucho) no cuenta: no echa de la pila lo propio.
+    where: { userId, projectId, kind, ...(kind === "UNDO" ? { NOT: externalUndoWhere() } : {}) },
     orderBy: { createdAt: "desc" },
     skip: UNDO_LIMIT,
     // Solo el id: los adjuntos que se liberan los saca la propia base al borrar (discardEntries); las ops pueden pesar MB.
@@ -1037,6 +1040,9 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           else if (op.data.role === "BUDGET") await ensureCostField(projectId);
           else if (op.costOff) await dropCostField(projectId);
           if (count && op.data.position !== undefined) placedColumns.push(op.id);
+          // «Compartir fuera»: si la columna deja de serlo (otro rol, «Asignación a persona»), su enlace se revoca; si un
+          // rehacer o otro deshacer la vuelve a hacer «Compartir fuera», sale «Generar web» y el enlace es otro.
+          if (count && (op.data.role !== undefined || op.data.assigneeId !== undefined || op.data.assignDueDays !== undefined)) await revokeUnsharedLinks(db, projectId);
           break;
         }
         case "column.remove": {

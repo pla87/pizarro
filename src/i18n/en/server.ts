@@ -146,7 +146,6 @@ export const server: Record<string, string> = {
   "Hay demasiadas subidas en curso. Inténtalo de nuevo en unos segundos.": "Too many uploads in progress. Try again in a few seconds.",
   "Ese tipo está oculto en un proyecto con tareas de este tipo: elige otro o actívalo antes en ese proyecto.": "That type is hidden in a project with tasks of this type: choose another or enable it in that project first.",
   "No puedes desvincular tu propia cuenta de Google desde aquí.": "You can't unlink your own Google account from here.",
-  "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",
   "Ya se está preparando otro ZIP. Inténtalo de nuevo en unos segundos.": "Another ZIP is already being prepared. Try again in a few seconds.",
   "Datos no válidos": "Invalid data",
   "Los adjuntos de la tarea superarían el máximo del proyecto ({limit} MB por tarea; ya tiene {used} MB). Puedes cambiarlo en los ajustes del proyecto.": "The task's attachments would exceed the project maximum ({limit} MB per task; it already has {used} MB). You can change it in the project settings.",
@@ -334,4 +333,8 @@ export const server: Record<string, string> = {
   "por persona": "by person",
   "por tarjeta": "by card",
   "por tipo": "by type",
+  // Ronda 68: «Deshacer» de un aviso que ya no es lo último. El texto anterior queda en Logs (avisos de acciones fallidas,
+  // se traduce al leerlo): textos guardados por versiones anteriores.
+  "Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.": "Only the last change can be undone: use the ↶ arrow at the top.",
+  "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",
 };

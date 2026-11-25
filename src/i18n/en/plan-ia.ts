@@ -39,7 +39,7 @@ export const planIa: Record<string, string> = {
   "Plan de trabajo": "Work plan",
   "Contexto del proyecto": "Project context",
   "Depende de": "Depends on",
-  "la tarea {n} ({title})": "task {n} ({title})",
+  "la tarea {n}": "task {n}",
   "{title} (no está en este plan)": "{title} (not in this plan)",
   "Enlace": "Link",
   "Documentos": "Documents",
@@ -64,8 +64,8 @@ export const planIa: Record<string, string> = {
   // Límite de tareas de un plan
   "Un plan de trabajo admite como mucho 500 tareas: quita alguna de la selección.": "A work plan holds at most 500 tasks: remove some from the selection.",
   // Adjuntos del plan (ZIP «adjuntos/…», rutas en el texto)
-  "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.":
-    "{n} file(s) in the “attachments/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own and the images in the descriptions point to it. Images are in WebP.",
+  "{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción. Las imágenes van en WebP.":
+    "{n} file(s) in the “attachments/…” ZIP that goes with this plan (unzip it next to this file): each task cites the path of its own, including that of the images in its description. Images are in WebP.",
   "ZIP «adjuntos/…» con los adjuntos de las tareas del plan: el texto cita sus rutas": "“attachments/…” ZIP with the attachments of the plan's tasks: the text cites their paths",
   // Botones de columnas especiales sin tarjetas con lo que necesitan
   "Ninguna tarjeta tiene subtareas": "No card has subtasks",
@@ -83,4 +83,9 @@ export const planIa: Record<string, string> = {
     "The plan has {n} characters and Documentation holds at most {max}: copy it with “Copy all” or download it as .md, or generate one with fewer tasks.",
   // Plan para IA con ZIP: varios adjuntos de una tarea, con su carpeta una sola vez
   "en la carpeta {folder}": "in the folder {folder}",
+  // Plan para IA más corto: lo común a todas las tareas, una vez en el contexto; las imágenes del ZIP, por su ruta en texto
+  "Prioridad de todas las tareas": "Priority of all tasks",
+  "Etiquetas de todas las tareas": "Labels of all tasks",
+  "imagen {path}": "image {path}",
+  "imagen «{alt}» ({path})": "image “{alt}” ({path})",
 };

@@ -197,6 +197,7 @@ export function siteText(t: T, _priceEur: number) {
     codeTerminal: t("Terminal"),
     codeVariables: t("Variables"),
     codeOutput: t("Lo que verás"),
+    codePrompt: t("Texto para la IA"),
     genButton: t("Generar mis variables"),
     genAgain: t("Generar otras"),
     genDone: t("Listo: claves nuevas, creadas en tu navegador. Pulsa «Copiar» y pégalas en Railway."),

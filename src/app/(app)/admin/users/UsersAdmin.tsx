@@ -55,6 +55,7 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
   const confirm = useConfirm();
   // El máximo cuenta a todos los activos (también las invitaciones sin aceptar); el resumen los separa.
   const activeCount = users.filter((u) => u.active).length;
+  const atMax = maxUsers !== null && activeCount >= maxUsers;
   const pendingCount = users.filter((u) => u.active && u.invitePending).length;
   const joinedCount = activeCount - pendingCount;
   const summary = [
@@ -146,9 +147,13 @@ export function UsersAdmin({ users, meId, maxUsers, maxUsersSource = "default", 
             </InfoTip>
           </p>
         </div>
-        <button className="btn-primary ml-auto" onClick={() => setCreating(true)} disabled={maxUsers !== null && activeCount >= maxUsers} title={maxUsers !== null && activeCount >= maxUsers ? t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers }) : undefined}>
-          <UserPlus size={16} /> {t("Nuevo usuario")}
-        </button>
+        {/* Apagado, el motivo se ve al lado y es su descripción (con `title`, algunas herramientas nombraban el botón con él). */}
+        <div className="ml-auto flex items-center gap-2">
+          {atMax && <span id="new-user-why" className="text-xs text-slate-500">{t("Ya hay {max} usuarios activos, el máximo", { max: maxUsers })}</span>}
+          <button className="btn-primary" onClick={() => setCreating(true)} disabled={atMax} aria-describedby={atMax ? "new-user-why" : undefined}>
+            <UserPlus size={16} /> {t("Nuevo usuario")}
+          </button>
+        </div>
       </div>
       {noRecovery && (
         <p role="note" className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">

@@ -1,5 +1,5 @@
 # Imagen multi-stage de Pizarro:
-#   deps → build (Next standalone + script de arranque) → migrator (Prisma CLI aislado) → runner
+#   manifests (versión fija) → deps → build (Next standalone + scripts de dist/) → migrator (Prisma CLI aislado) → runner
 
 # --- Base común: OpenSSL es necesario para que Prisma elija el motor correcto ---
 # Imagen base fijada por digest, como las acciones de GitHub por SHA: etiqueta node:22-bookworm-slim (Node 22 sobre
@@ -14,9 +14,21 @@ RUN apt-get update \
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
+# --- 0. package.json y package-lock.json con la versión fija ----------------------
+# La versión de la app cambia en cada publicación y está en los dos ficheros: copiados tal cual, invalidaban la caché de
+# `npm ci` (aquí y en el migrador) aunque las dependencias fueran las mismas. Esta etapa se repite siempre (un segundo),
+# pero su resultado solo cambia si cambian las dependencias (los `scripts` de package.json también se quitan: `npm ci`
+# no usa ninguno): si no, Docker reutiliza las capas de instalación. La versión y los scripts reales los trae el
+# package.json que la etapa de build copia con el código.
+FROM base AS manifests
+WORKDIR /tmp/manifests
+COPY package.json package-lock.json ./
+COPY scripts/docker-manifests.mjs /tmp/
+RUN node /tmp/docker-manifests.mjs /tmp/manifests
+
 # --- 1. Dependencias completas (para compilar) ---------------------------------
 FROM base AS deps
-COPY package.json package-lock.json ./
+COPY --from=manifests /tmp/manifests/package.json /tmp/manifests/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 # --- 2. Build -----------------------------------------------------------------
@@ -40,7 +52,7 @@ RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm run build
 # --- 3. Prisma CLI aislado, solo para `migrate deploy` -----------------------------
 FROM base AS migrator
 WORKDIR /app/migrator
-COPY package.json package-lock.json /tmp/app/
+COPY --from=manifests /tmp/manifests/package.json /tmp/manifests/package-lock.json /tmp/app/
 COPY scripts/migrator-deps.mjs /tmp/app/scripts/
 # Mismas versiones que el proyecto: el package-lock.json del migrador sale del del proyecto (solo prisma y lo que
 # necesita) y `npm ci` lo instala tal cual, con sus hashes; la instalación descarga el motor de migraciones (no en cada

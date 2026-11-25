@@ -224,24 +224,93 @@ function appPathOf(url: string, origin: string | null | undefined): string | nul
 }
 
 /**
- * Enlaces e imágenes de una línea de descripción que llevan a Pizarro (appPathOf): un adjunto que va en el ZIP pasa a su
- * ruta dentro de él (la imagen se sigue viendo en un visor que abra el ZIP); los demás se quedan en su texto (la imagen,
- * en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros sitios no cambian. `cited` recoge los ids de
- * los adjuntos que han pasado a su ruta del ZIP.
+ * Texto alternativo que solo repite el nombre del fichero («pegada.png», el que pone el editor al pegar una imagen): acaba
+ * en una extensión de imagen o de fichero habitual. Cualquier punto no basta: «Figura 3.14» o «Ver www.ejemplo.com» son
+ * texto de verdad y se conservan.
  */
-function withoutAppLinks(line: string, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
+const FILE_NAME_ALT = /\.(?:png|jpe?g|gif|webp|heic|heif|avif|bmp|svg|tiff?|ico|pdf|txt|md|csv|json|xml|log|zip|docx?|xlsx?|pptx?|od[tsp]|rtf)$/i;
+
+/** Marca de un código en línea apartado (maskCodeSpans): dos caracteres de uso privado que el texto normal no lleva. */
+const CODE_MARK = /\uE000(\d+)\uE001/g;
+
+/**
+ * Aparta los códigos en línea de una línea (`` `…` ``, con tantas comillas invertidas de cierre como de apertura, como en
+ * CommonMark; `\`` fuera de código es una comilla suelta) y los cambia por una marca. Lo de dentro de un código es texto
+ * literal: un `![x](/api/attachments/…)` citado así no se reescribe (la ruta entre comillas invertidas cerraba el código).
+ */
+function maskCodeSpans(line: string): { masked: string; spans: string[] } {
+  const spans: string[] = [];
+  if (!line.includes("`") || line.includes("\uE000")) return { masked: line, spans };
+  let masked = "";
+  let i = 0;
+  while (i < line.length) {
+    const c = line[i]!;
+    if (c === "\\") {
+      masked += line.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (c !== "`") {
+      masked += c;
+      i++;
+      continue;
+    }
+    let open = i;
+    while (line[open] === "`") open++;
+    const run = open - i;
+    let close = -1;
+    for (let k = open; k < line.length; ) {
+      if (line[k] !== "`") {
+        k++;
+        continue;
+      }
+      let end = k;
+      while (line[end] === "`") end++;
+      if (end - k === run) {
+        close = k;
+        break;
+      }
+      k = end;
+    }
+    if (close < 0) {
+      masked += line.slice(i, open);
+      i = open;
+      continue;
+    }
+    masked += `\uE000${spans.length}\uE001`;
+    spans.push(line.slice(i, close + run));
+    i = close + run;
+  }
+  return { masked, spans };
+}
+
+/**
+ * Enlaces e imágenes de una línea de descripción que llevan a Pizarro (appPathOf): un adjunto que va en el ZIP pasa a su
+ * ruta dentro de él, escrita como texto («imagen `adjuntos/03-…/pegada.webp`», y un enlace, «plano (`adjuntos/…`)»): como
+ * imagen de Markdown, el editor con barra y la vista de Documentación solo enseñaban «[imagen: pegada.png]», sin la ruta.
+ * Los demás se quedan en su texto (la imagen, en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros
+ * sitios no cambian. `cited` recoge los ids de los adjuntos que han pasado a su ruta del ZIP.
+ */
+function withoutAppLinks(line: string, t: T, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
   if (!line.includes("](")) return line;
-  return line.replace(INLINE_LINK, (whole: string, bang: string, text: string, space: string, dest: string, rest: string) => {
+  const { masked, spans } = maskCodeSpans(line);
+  const replace = (from: string) => from.replace(INLINE_LINK, (whole: string, bang: string, text: string, _space: string, dest: string) => {
     const appPath = appPathOf(dest.startsWith("<") ? dest.slice(1, -1) : dest, origin);
     if (appPath === null) return whole;
     const id = ATTACHMENT_PATH.exec(appPath)?.[1] ?? "";
     const zipped = paths?.get(id);
-    if (zipped) {
-      cited?.add(id);
-      return `${bang}[${text}](${space}${dest.startsWith("<") ? `<${zipped}>` : zipped}${rest})`;
-    }
-    return text;
+    if (!zipped) return text;
+    cited?.add(id);
+    const path = `\`${zipped}\``;
+    const alt = text.trim();
+    // El enlace de fuera de una imagen enlazada al mismo adjunto: la ruta ya está en su texto, no se repite.
+    if (!bang) return !alt ? path : alt.includes(path) ? alt : `${alt} (${path})`;
+    return alt && !FILE_NAME_ALT.test(alt) ? t("imagen «{alt}» ({path})", { alt, path }) : t("imagen {path}", { path });
   });
+  // Dos pasadas: una imagen enlazada (`[![a](…)](…)`) solo deja ver el enlace de fuera cuando ya se ha sustituido la imagen.
+  const once = replace(masked);
+  const twice = once === masked ? once : replace(once);
+  return spans.length ? twice.replace(CODE_MARK, (_m, n: string) => spans[Number(n)]!) : twice;
 }
 
 /**
@@ -252,9 +321,10 @@ function withoutAppLinks(line: string, origin: string | null | undefined, paths:
  * una línea que abriría un bloque HTML sin fin (`<!-- nota`, `<pre`, `<script`…) empieza con «\<». Sin líneas en blanco
  * repetidas ni al principio o al final; los saltos de línea forzados (dos espacios al final) se conservan. Sin los
  * apartados del formulario del tipo que siguen vacíos (withoutEmptyFormSections). `cited`: recoge los ids de los adjuntos que
- * la descripción cita por su ruta en el ZIP (la lista «Adjuntos» de la tarea ya no los repite).
+ * la descripción cita por su ruta en el ZIP (la lista «Adjuntos» de la tarea ya no los repite). `t`: idioma del plan (el
+ * «imagen» de las imágenes del ZIP).
  */
-export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>, cited?: Set<string>): string {
+export function planDescription(description: string | null | undefined, origin?: string | null, paths?: ReadonlyMap<string, string>, cited?: Set<string>, t: T = esT): string {
   const text = decodeEntities(mentionsToPlain(description ?? ""));
   const out: string[] = [];
   /** Apertura del bloque de código en curso («```», «````», «~~~»…). */
@@ -289,7 +359,7 @@ export function planDescription(description: string | null | undefined, origin?:
       continue;
     }
     // Fuera de los bloques de código: sin enlaces a Pizarro (un adjunto del ZIP, por su ruta en él).
-    const line = withoutAppLinks(raw, origin, paths, cited);
+    const line = withoutAppLinks(raw, t, origin, paths, cited);
     const heading = ATX_HEADING.exec(line);
     if (heading) {
       out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
@@ -314,37 +384,48 @@ const LIST_OR_INDENT_START = /^(?:\s|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$))/;
  */
 const afterFacts = (description: string, t: T) => (LIST_OR_INDENT_START.test(description) ? `**${t("Descripción")}:**\n\n${description}` : description);
 
-/** `sharedKind`: todas las tareas son de ese tipo y ya lo dice el contexto: no se repite en cada una. */
-function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | null, paths?: ReadonlyMap<string, string>, sharedKind?: string | null): string {
+/**
+ * Lo que comparten todas las tareas del plan y ya dice el contexto (una vez, arriba): el tipo, la prioridad y las etiquetas
+ * que llevan todas. No se repite en cada tarea (en un plan de cientos, una o dos líneas menos por tarea).
+ */
+interface SharedFacts {
+  kind: string | null;
+  priority: string | null;
+  labels: ReadonlySet<string>;
+}
+
+function formatTask(task: AiPlanTask, index: number, t: T, shared: SharedFacts, origin?: string | null, paths?: ReadonlyMap<string, string>): string {
   const facts: string[] = [];
   const fact = (label: string, value: string) => facts.push(`- **${label}:** ${value}`);
-  if (task.kind && !sharedKind) fact(t("Tipo"), oneLine(task.kind));
-  if (task.priority) fact(t("Prioridad"), task.priority);
-  if (task.labels?.length) fact(t("Etiquetas"), task.labels.map(oneLine).join(", "));
+  if (task.kind && !shared.kind) fact(t("Tipo"), oneLine(task.kind));
+  if (task.priority && !shared.priority) fact(t("Prioridad"), task.priority);
+  const labels = (task.labels ?? []).map(oneLine).filter((l) => !shared.labels.has(l));
+  if (labels.length) fact(t("Etiquetas"), labels.join(", "));
   if (task.startDate) fact(t("Fecha de inicio"), task.startDate);
   if (task.dueDate) fact(t("Fecha límite"), task.dueDate);
-  if (task.blockedBy) {
-    const title = `«${oneLine(task.blockedBy.title)}»`;
-    fact(t("Depende de"), task.blockedBy.index ? t("la tarea {n} ({title})", { n: task.blockedBy.index, title }) : t("{title} (no está en este plan)", { title }));
-  }
+  // Una tarea del plan, por su número (su título ya está en su «### n.»); una de fuera, por su título.
+  if (task.blockedBy) fact(t("Depende de"), task.blockedBy.index ? t("la tarea {n}", { n: task.blockedBy.index }) : t("{title} (no está en este plan)", { title: `«${oneLine(task.blockedBy.title)}»` }));
   // El enlace externo de la tarea, salvo que lleve a Pizarro (a otra tarea, al tablero…).
   if (task.linkUrl && appPathOf(task.linkUrl, origin) === null) fact(t("Enlace"), `[${linkText(task.linkUrl)}](${linkTarget(task.linkUrl)})`);
   if (task.links?.length) fact(t("Documentos"), task.links.map((l) => `[${linkText(oneLine(l.title))}](${linkTarget(l.url)})`).join(", "));
   // Antes que la lista de adjuntos: los que la descripción ya cita por su ruta del ZIP no se repiten en ella.
   const cited = new Set<string>();
-  const description = planDescription(task.description, origin, paths, cited);
+  const description = planDescription(task.description, origin, paths, cited, t);
   const files = (task.attachments ?? []).filter((a) => !(a.id && a.path && cited.has(a.id)));
+  // Los adjuntos van al final de la tarea, en un párrafo (no en la lista de datos de arriba: tras la checklist, una viñeta
+  // más sería otra subtarea).
+  let attachments = "";
   if (files.some((a) => a.path)) {
     // Con ZIP, su ruta dentro de él. Todos los de una tarea van en su carpeta: con varios, la carpeta se dice una vez.
     const folderOf = (p: string) => p.slice(0, p.lastIndexOf("/") + 1);
     const folder = files[0]!.path ? folderOf(files[0]!.path) : "";
-    if (files.length === 1) fact(t("Adjuntos"), `\`${files[0]!.path}\``);
+    if (files.length === 1) attachments = `**${t("Adjuntos")}:** \`${files[0]!.path}\``;
     else if (folder && files.every((a) => a.path && folderOf(a.path) === folder)) {
-      facts.push(`- **${t("Adjuntos")}** (${t("en la carpeta {folder}", { folder: `\`${folder}\`` })}): ${files.map((a) => `\`${a.path!.slice(folder.length)}\``).join(", ")}`);
-    } else facts.push(`- **${t("Adjuntos")}:**`, ...files.map((a) => `  - ${a.path ? `\`${a.path}\`` : fileName(a.name)}`));
+      attachments = `**${t("Adjuntos")}** (${t("en la carpeta {folder}", { folder: `\`${folder}\`` })}): ${files.map((a) => `\`${a.path!.slice(folder.length)}\``).join(", ")}`;
+    } else attachments = [`**${t("Adjuntos")}:**`, "", ...files.map((a) => `- ${a.path ? `\`${a.path}\`` : fileName(a.name)}`)].join("\n");
   } else if (files.length) {
     // Sin ZIP, solo su nombre (sin enlace a Pizarro: la IA no puede abrirlo).
-    fact(t("Adjuntos"), files.map((a) => fileName(a.name)).join(", "));
+    attachments = `**${t("Adjuntos")}:** ${files.map((a) => fileName(a.name)).join(", ")}`;
   }
   const parts = [`### ${index}. ${oneLine(task.title)}`];
   if (facts.length) parts.push(facts.join("\n"));
@@ -354,7 +435,21 @@ function formatTask(task: AiPlanTask, index: number, t: T, origin?: string | nul
   if (task.subtasks?.length) {
     parts.push(`**${t("Checklist")}:**`, task.subtasks.map((s) => `- [${s.done ? "x" : " "}] ${oneLine(s.title)}`).join("\n"));
   }
+  if (attachments) parts.push(attachments);
   return parts.join("\n\n");
+}
+
+/** Tipo, prioridad y etiquetas comunes a todas las tareas (con dos o más; ver SharedFacts). */
+function sharedFacts(tasks: AiPlanTask[]): SharedFacts {
+  if (tasks.length < 2) return { kind: null, priority: null, labels: new Set() };
+  const same = (values: string[]) => (new Set(values).size === 1 ? values[0] || null : null);
+  const [first, ...rest] = tasks.map((x) => new Set((x.labels ?? []).map(oneLine)));
+  const labels = new Set([...first!].filter((l) => rest.every((r) => r.has(l))));
+  return {
+    kind: same(tasks.map((x) => (x.kind ? oneLine(x.kind) : ""))),
+    priority: same(tasks.map((x) => x.priority ?? "")),
+    labels,
+  };
 }
 
 /**
@@ -375,17 +470,18 @@ export function buildAiPlanMarkdown(input: AiPlanInput, t: T = esT): string {
   if (input.column) context.push(`- **${t("Columna")}:** ${oneLine(input.column)}`);
   context.push(`- **${t("Fecha")}:** ${formatDay(input.date, undefined, input.intlLocale ?? "es-ES")}`);
   context.push(`- **${t("Tareas")}:** ${input.tasks.length}`);
-  // Todas del mismo tipo: se dice una vez aquí y no en cada tarea (en un plan de cientos, una línea menos por tarea).
-  const kinds = new Set(input.tasks.map((x) => (x.kind ? oneLine(x.kind) : "")));
-  const sharedKind = input.tasks.length > 1 && kinds.size === 1 ? [...kinds][0] || null : null;
-  if (sharedKind) context.push(`- **${t("Tipo de todas las tareas")}:** ${sharedKind}`);
+  // Lo que comparten todas las tareas se dice una vez aquí y no en cada una (en un plan de cientos, líneas menos por tarea).
+  const shared = sharedFacts(input.tasks);
+  if (shared.kind) context.push(`- **${t("Tipo de todas las tareas")}:** ${shared.kind}`);
+  if (shared.priority) context.push(`- **${t("Prioridad de todas las tareas")}:** ${shared.priority}`);
+  if (shared.labels.size) context.push(`- **${t("Etiquetas de todas las tareas")}:** ${[...shared.labels].join(", ")}`);
   if (namesOnly) context.push(`- **${t("Adjuntos")}:** ${t("Este plan no lleva ZIP de adjuntos: cada tarea cita solo el nombre de los suyos (pídelos si los necesitas), aunque las instrucciones hablen de un ZIP.")}`);
-  if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos y las imágenes de las descripciones apuntan a ella. Las imágenes van en WebP.", { n: zipped.length })}`);
+  if (zipped.length) context.push(`- **${t("Adjuntos")}:** ${t("{n} archivo(s) en el ZIP «adjuntos/…» que va con este plan (descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción. Las imágenes van en WebP.", { n: zipped.length })}`);
   const description = planDescription(input.project.description, input.origin);
   if (description) context.push("", afterFacts(description, t));
   const pathById = new Map(zipped.filter((a) => a.id).map((a) => [a.id!, a.path!]));
   const tasks = input.tasks.length
-    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, input.origin, pathById, sharedKind))
+    ? input.tasks.map((task, i) => formatTask(task, i + 1, t, shared, input.origin, pathById))
     : [`_${t("Sin tareas seleccionadas.")}_`];
   return [
     `# ${t("Plan de trabajo")} – ${projectName}`,

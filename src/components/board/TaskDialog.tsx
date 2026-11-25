@@ -17,7 +17,7 @@ import { dueStatus } from "@/lib/dates";
 import { mentionsToPlain } from "@/lib/mentions";
 import { defaultRecurrenceDay, type RecurrenceRule } from "@/lib/recurrence-date";
 import { COLOR_NAME, hasEvergreenTasks, kindBadgeStyle, MAX_SUBTASKS, MAX_TITLE, swatchBorder } from "@/lib/constants";
-import type { BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
+import type { AttachmentInfo, BoardTask, KindOption, SubtaskInfo, TaskDetail, TaskLinkInfo, UserOption } from "@/lib/types";
 import { ColorPicker } from "../ui/ColorPicker";
 import { LabelToggles } from "./LabelToggles";
 import { cn } from "../ui/cn";
@@ -30,7 +30,7 @@ import type { MentionCommand } from "../ui/MentionTextarea";
 import { Lightbox } from "../ui/Lightbox";
 import { Modal } from "../ui/Modal";
 import { Popover } from "../ui/Popover";
-import { kindChangeNotice, switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
+import { kindChangeNotice, kindDescriptionChange, switchKindDescription, switchKindTitle } from "@/lib/kinds-special";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { copyText } from "../ui/clipboard";
 import { pasteAsOneLine } from "../ui/textarea-edit";
@@ -129,7 +129,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   const descDirtyCheck = useRef<(() => boolean) | null>(null);
   // Cambia el texto de la descripción abierta sin cerrarla ni darlo por guardado (lo da el editor; ver changeKind).
   // Devuelve cómo volver al texto y al aviso de antes si el cambio de tipo no se guarda (solo si nada ha cambiado después).
-  const descReplace = useRef<((markdown: string, templated: boolean) => () => void) | null>(null);
+  const descReplace = useRef<((markdown: string, templated: KindTemplateChange) => () => void) | null>(null);
+  // Espera a las imágenes que se suben en la descripción abierta (lo da el editor; ver saveAndClose).
+  const descUploadWait = useRef<(() => Promise<string | null> | null) | null>(null);
   // ¿Hay un comentario en edición con cambios? (lo comunica la lista de comentarios).
   const commentEditDirty = useRef<(() => boolean) | null>(null);
   // Cierre en curso: «confirming» mientras se pregunta, «discarding» tras «Descartar cambios». En ambos, salir del campo
@@ -428,16 +430,25 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
   };
 
-  /** Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). */
-  const reload = async () => {
+  /**
+   * Vuelve a leer la tarea (p. ej. si otra persona cambió su texto mientras se editaba, o tras deshacer). `discardTyped`:
+   * la persona ya ha aceptado descartar lo escrito en la descripción («Pegar tarea», «Deshacer todo»).
+   */
+  const reload = async (discardTyped = false) => {
     // Sin red la acción lanza: no se recarga (y no queda una promesa rechazada sin atender).
     const res = await getTaskDetail(task.id).catch(() => null);
     if (!res?.ok) return;
-    descBase.current = res.data.description;
+    // Con la descripción abierta y cambios sin guardar, lo escrito se queda en el editor (no se vuelve a montar): antes un
+    // conflicto al guardar otra cosa (p. ej. el título que pone un cambio de tipo, si otra persona lo había cambiado)
+    // recargaba el editor con lo guardado y lo escrito se perdía. Se sigue escribiendo sobre la descripción que se abrió
+    // (`descBase` no avanza): si otra persona también la ha cambiado, al guardarla el servidor avisa del conflicto.
+    const keepTyped = !discardTyped && editingDescription();
+    if (!keepTyped) descBase.current = res.data.description;
     knownBase.current = true;
     descReloads.current++;
     setDetail(res.data);
-    setDescVersion((n) => n + 1);
+    if (keepTyped) setDescRemote((n) => n + 1);
+    else setDescVersion((n) => n + 1);
     board.refresh();
   };
   const reloadRef = useRef(reload);
@@ -479,12 +490,22 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   /**
    * Botón Guardar / Alt+S: guarda TODO lo que se esté editando aunque aún no se haya confirmado (título,
    * descripción abierta, enlace, subtarea nueva o en renombrado) y cierra. Si algo falla, no cierra.
+   * Con una imagen aún subiéndose en la descripción, espera a que llegue (como «Guardar descripción», y el editor dice
+   * «…; se guardará al terminar»): antes guardaba el texto sin ella y luego avisaba de que no estaba en la descripción.
+   * Si mientras tanto se cancela o se cierra el editor, no se guarda nada. `typedDesc`: el texto ya con la imagen.
    */
-  const saveAndClose = async () => {
+  const saveAndClose = async (typedDesc?: string) => {
+    const waiting = typedDesc === undefined ? descUploadWait.current?.() : null;
+    if (waiting) {
+      const text = await waiting;
+      // Con lo último dibujado (título, enlace y campos pueden haber cambiado mientras se esperaba).
+      if (text !== null) void shortcutRef.current.saveAndClose(text);
+      return;
+    }
     const value = title.trim();
     const patch: { title?: string; description?: string; linkUrl?: string } = {};
     if (value && value !== task.title) patch.title = value;
-    const desc = descLive.current;
+    const desc = typedDesc ?? descLive.current;
     if (desc !== null && desc.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     if (desc !== null && desc !== (detail?.description ?? "")) patch.description = desc;
     const linkValue = normalizeLinkUrl(link);
@@ -592,8 +613,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       if (!res.ok) {
         closeGuard.current = "idle";
         toast(res.error, "error");
-        // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto.
-        await reload();
+        // Otra persona cambió el texto: se recarga con sus cambios y el diálogo sigue abierto (lo escrito ya se descartó).
+        await reload(true);
         return;
       }
       board.upsertTask(res.data.task);
@@ -602,22 +623,27 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       // Solo había cambios de otras personas («Descartar cambios» no los toca): nada que descartar ni que deshacer.
       if (!res.data.changed) return;
       board.refresh();
-      toast(t("Cambios descartados"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+      // «Deshacer» devuelve justo lo descartado (su entrada), no lo último que se haga después en la tarea.
+      const undoId = res.data.undo?.id;
+      toast(t("Cambios descartados"), "undo", undoId ? { label: t("Deshacer"), onClick: () => void undoLastChange(undoId) } : undefined);
     } finally {
       setCancelling(false);
     }
   };
 
   /** Guardado optimista de campos de la tarjeta. */
-  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, la
-  // descripción guardada pasa a la plantilla del tipo nuevo (el aviso lo dice).
-  type KindChange = false | { description: boolean };
-  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
+  // `kindChange`: el cambio de tipo, que además cambia las subtareas de la plantilla (changeTaskKind); con `description`, lo
+  // que le ha pasado a la descripción guardada: la plantilla del tipo nuevo aplicada o la del anterior quitada (el aviso lo dice).
+  type KindChange = false | { description: KindTemplateChange };
+  const save = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> =>
+    saveWithUndo(patch, optimistic, kindChange).then((r) => r !== false);
+  /** Como save, pero si se guarda da el id de su entrada de deshacer (para el «Deshacer» de su aviso); `false` si no. */
+  const saveWithUndo = (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<false | { undoId?: string }> => {
     const done = saveNow(patch, optimistic, kindChange);
-    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.catch(() => false);
+    if (patch.title !== undefined || patch.linkUrl !== undefined) textSaving.current = done.then((r) => r !== false, () => false);
     return done;
   };
-  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<boolean> => {
+  const saveNow = async (patch: Parameters<typeof updateTask>[1], optimistic: Partial<BoardTask>, kindChange: KindChange = false): Promise<false | { undoId?: string }> => {
     const before = board.getTask(task.id);
     const send = (since: ReturnType<typeof textSince> | undefined): Promise<Awaited<ReturnType<typeof changeTaskKind>>> =>
       kindChange && patch.kindId ? changeTaskKind(task.id, { kindId: patch.kindId, title: patch.title, description: patch.description }, since) : updateTask(task.id, patch, since);
@@ -662,19 +688,19 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       return false;
     }
     if (patch.title !== undefined || patch.linkUrl !== undefined) textSaveFailed.current = false;
-    const { kindSubtasks, kindUndo, titleClipped, ...saved } = res.data;
+    const { kindSubtasks, kindUndo, titleClipped, undo: savedUndo, ...saved } = res.data;
     board.upsertTask(saved);
     // El servidor recortó el título (p. ej. la plantilla de título del tipo nuevo lo alarga): se dice, como en el tablero.
     if (titleClipped) toast(t("Título recortado a {max} caracteres", { max: titleClipped }));
     if (editsText) setDetail((d) => (d ? { ...d, textVersion: saved.textVersion } : d));
     if (kindSubtasks) setDetail((d) => (d ? { ...d, subtasks: kindSubtasks.subtasks } : d));
     // Lo que ha cambiado además del tipo, contado por separado («Tipo cambiado: 3 subtareas añadidas, 2 quitadas y
-    // plantilla de la descripción aplicada»); solo el tipo, sin aviso (basta con «Guardado»).
+    // plantilla de la descripción aplicada», o «quitada»); solo el tipo, sin aviso (basta con «Guardado»).
     const text = kindChange ? kindChangeNotice(t, { added: kindSubtasks?.added ?? 0, removed: kindSubtasks?.removed ?? 0, description: kindChange.description }) : null;
     const undo = kindSubtasks?.undo ?? kindUndo;
     // «Deshacer» devuelve tipo, título, descripción y subtareas (una sola entrada, como el «Deshacer» de la barra).
     if (text) toast(text, "undo", undo?.id ? { label: t("Deshacer"), onClick: () => void undoLastChange(undo.id) } : undefined);
-    return true;
+    return { undoId: savedUndo.id };
   };
 
   const changeColumn = async (columnId: string) => {
@@ -705,16 +731,17 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     save({ recurrence, recurrenceDay }, { recurrence, recurrenceDay });
   };
 
-  const upload = async (list: File[]) => {
-    if (!list.length) return;
+  /** Sube archivos a la tarea; devuelve los adjuntos subidos (la descripción en edición inserta las imágenes). */
+  const upload = async (list: File[]): Promise<AttachmentInfo[]> => {
+    const uploaded: AttachmentInfo[] = [];
+    if (!list.length) return uploaded;
     // Sin tope de cantidad: solo el tamaño de cada archivo y lo que aún cabe en la tarea. Lo omitido se avisa de una vez.
     const used = (detail?.attachments ?? []).reduce((n, a) => n + a.size, 0);
     const { fileMaxMb, attachMaxMb } = board.project;
     const { accepted, skipped } = planUploads(list, { fileMaxBytes: fileMaxMb * 1024 * 1024, remainingBytes: attachMaxMb * 1024 * 1024 - used });
     if (skipped.length) toast(skippedMessage(t, locale, skipped, fileMaxMb), "error");
     if (skipped.some((s) => s.reason === "total")) setTotalRejected(true);
-    if (!accepted.length) return;
-    if (uploadAbort.current.signal.aborted) return;
+    if (!accepted.length || uploadAbort.current.signal.aborted) return uploaded;
     setUploading((n) => n + accepted.length);
     // Lo que aún reserva hueco de esta tanda (la clase la confirma el servidor al subir: `att.isImage`).
     const left = { images: accepted.filter(isImageFile).length, files: 0 };
@@ -733,6 +760,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
           left[kind]--;
           setPending((p) => ({ ...p, [kind]: p[kind] - 1 }));
         }
+        uploaded.push(att);
         setDetail((d) => (d ? { ...d, attachments: [...d.attachments, att] } : d));
         // Con el diálogo ya cerrado nadie recalcula desde la lista: los contadores de la tarjeta se ponen aquí.
         board.patchTask(task.id, monotonicTotals(board.getTask(task.id), att.totals));
@@ -745,6 +773,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (res.totalRejected) setTotalRejected(true);
     const msg = batchErrorMessage(t, res.errors, res.notSent);
     if (msg) toast(msg, "error");
+    return uploaded;
   };
 
   // Los contadores de la tarjeta (y el aviso «N / M MB en total») salen de la lista de adjuntos que se muestra, no de sumas
@@ -768,19 +797,26 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     if (!res.ok) return toast(res.error, "error");
     setDetail((d) => (d ? { ...d, attachments: d.attachments.filter((x) => x.id !== id) } : d));
     setTotalRejected(false);
-    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id) });
+    // `independent`: el servidor deshace un borrado de adjuntos aunque no sea lo último (undoEntry).
+    toast(t("Adjunto borrado"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange(res.data.undo.id), independent: true });
   };
 
-  /** Deshace lo último hecho en esta tarea, o la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle. */
+  /**
+   * Deshace la entrada indicada (el botón «Deshacer» de los avisos) y recarga el detalle; sin id (no debería faltar), lo
+   * último hecho en la tarea. Con id, esa entrada y no otra: si después se ha hecho otra cosa, el servidor lo dice («Solo
+   * se puede deshacer el último cambio…») en vez de deshacer lo que no era (antes, «Descripción borrada» y «Cambios
+   * descartados» deshacían lo último de la tarea: marcar una subtarea entretanto y pulsar «Deshacer» la desmarcaba).
+   */
   const undoLastChange = async (entryId?: string) => {
-    // Con id (aviso «Adjunto borrado») se deshace exactamente esa entrada, no la última de la tarea.
     const res = await board.track(entryId ? undoEntry(entryId) : undoLast(board.project.id, task.id));
     if (!res.ok) return toast(res.error, "error");
     toast(undoneText(t, res.data), "undo");
     await reloadRef.current();
   };
 
-  const dropping = useFileDrop(upload);
+  const dropping = useFileDrop((files) => void upload(files));
+  // El arrastre va sobre la descripción en edición con alguna imagen (ver el aviso de soltar).
+  const [dropInDesc, setDropInDesc] = useState(false);
 
   const remove = async () => {
     if (!(await confirm({ title: t("Borrar tarea"), message: t("¿Borrar esta tarea y sus adjuntos? Puedes deshacerlo justo después."), confirmLabel: t("Borrar"), danger: true }))) return;
@@ -996,14 +1032,15 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const res = await tracked(pasteTaskJson(task.id, text, one.task.title !== undefined || one.task.description !== undefined ? textSince() : undefined));
       if (!res.ok) {
         if (!isOfflineMessage(res.error, t)) toast(res.error, "error");
-        if (!isSessionExpiredMessage(res.error, t) && !isOfflineMessage(res.error, t)) await reload();
+        if (!isSessionExpiredMessage(res.error, t) && !isOfflineMessage(res.error, t)) await reload(true);
         return false;
       }
       textVersion.current = ownTextVersion.current = res.data.task.textVersion;
       board.upsertTask(res.data.task);
       res.data.spawned.forEach(board.upsertTask);
-      // Descripción, subtareas y documentos se vuelven a leer (y las etiquetas nuevas del proyecto, con el tablero).
-      await reload();
+      // Descripción, subtareas y documentos se vuelven a leer (y las etiquetas nuevas del proyecto, con el tablero). Lo
+      // escrito en la descripción ya se aceptó descartarlo (arriba).
+      await reload(true);
       showNotice(res.data.changed ? t("Tarea pegada") : t("Sin cambios"));
       const { skipped } = res.data;
       if (skipped.length) {
@@ -1089,14 +1126,16 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     const typed = descLive.current;
     if (detail && kind && typed !== null && typed !== detail.description && (descDirtyCheck.current?.() ?? true)) {
       // Siempre, aunque el texto no cambie: el editor avisa junto a sus botones de que falta guardar la descripción (y, si
-      // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado).
-      const nextDesc = switchKindDescription(prev, kind, typed);
-      const undoReplace = descReplace.current?.(nextDesc, nextDesc !== typed);
+      // la plantilla del tipo nuevo ha cambiado lo escrito, que se ha aplicado o que se ha quitado la del anterior). Si
+      // solo cambiarían espacios o saltos de línea, lo escrito se queda tal cual.
+      const switched = switchKindDescription(prev, kind, typed);
+      const typedChange = kindDescriptionChange(kind, typed, switched);
+      const undoReplace = descReplace.current?.(typedChange ? switched : typed, typedChange);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
       const prevTitle = title;
       const prevFailed = textSaveFailed.current;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
-      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: false });
+      const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: null });
       // Sin guardar, el título que puso el tipo vuelve al de antes (como abajo), y el editor, a lo escrito antes del cambio
       // y sin el aviso «Tipo cambiado…» (el selector ya enseña el tipo de antes) si no se ha tocado desde entonces; si se ha
       // escrito algo después, se queda como está.
@@ -1112,8 +1151,12 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
       return saved;
     }
-    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
-    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: false });
+    // Qué le pasa a la descripción guardada: la plantilla del nuevo se aplica, la del anterior se quita o nada (si solo
+    // cambiarían espacios o saltos de línea, se queda como está y el aviso no dice nada de ella).
+    const switched = detail && kind ? switchKindDescription(prev, kind, detail.description) : "";
+    const descChange = detail && kind ? kindDescriptionChange(kind, detail.description, switched) : null;
+    const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: descChange ? switched : detail.description } : null;
+    if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: null });
     // Si no se guarda (sin conexión, sesión caducada, otro error), el selector vuelve al tipo de antes (saveNow) y con él
     // el título y la descripción: los puso el tipo, no la persona. Antes se quedaban los de la plantilla nueva: la
     // descripción parecía guardada y el título, pendiente, se podía acabar guardando con el tipo anterior.
@@ -1127,7 +1170,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     return save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
-      { description: preset.description !== detail?.description },
+      { description: descChange },
     ).then((ok) => {
       if (ok) return ok;
       // Solo lo que sigue como lo dejó el cambio de tipo: lo que haya cambiado después (lo escrito, lo recargado tras un
@@ -1165,20 +1208,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   };
 
 
-  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Descartar cambios» y Guardar, quepan en una línea
+  // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Deshacer todo» y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px). Todos del mismo alto (h-8) y sin saltos de línea:
-  // si el pie no da para «Descartar cambios» (consulta de contenedor), se lee «Descartar» y el nombre accesible sigue entero.
+  // solo si de verdad no cabe «Deshacer todo» se lee «Deshacer» (ver DiscardAllButton) y el nombre accesible sigue entero.
   const actionButtons = (
     <div className="@container w-full min-w-0">
       <div className="flex flex-nowrap items-center gap-2 @max-[24rem]:gap-1 md:gap-1 [&>button]:h-8 [&>button]:py-0">
         <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
         <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
-        <button className="btn-secondary ml-auto min-w-0 px-2 whitespace-nowrap" onClick={discardEdits} disabled={cancelling} aria-label={t("Deshacer todo")} title={t("Deshace los cambios hechos desde que abriste la tarea y la cierra")}>
-          <span className="@max-[24rem]:hidden">{t("Deshacer todo")}</span>
-          <span className="@min-[24rem]:hidden">{t("Deshacer")}</span>
-        </button>
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={saveAndClose} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden" /> {t("Guardar")}</button>
+        <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
+        {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
       </div>
     </div>
   );
@@ -1251,9 +1292,21 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         </div>
       }
     >
-      <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : "md:grid-cols-[minmax(0,1fr)_18rem]", flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
+      <div ref={rootRef} className={cn("grid gap-6", crowdedAside ? CROWDED_ASIDE_COLS : ASIDE_COLS, flow ? "md:flex-none" : "md:min-h-0 md:flex-[1_1_auto] md:grid-rows-[minmax(0,1fr)]")}>
         {/* Margen negativo con relleno igual: deja sitio al anillo de foco (3 px + 2 de separación) que el scroll recortaría. */}
-        <div className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}>
+        <div
+          className={cn("min-w-0 space-y-6 md:-m-2 md:p-2", !flow && "md:overflow-y-auto md:overscroll-contain md:[--sticky-top:-0.5rem]")}
+          // ¿Se arrastra una imagen sobre la descripción en edición? Ahí, además de adjuntarse, se inserta en el texto
+          // (DescriptionField): el aviso de soltar lo dice.
+          onDragOverCapture={(e) => {
+            const over = dragOntoDescription(e);
+            if (over !== dropInDesc) setDropInDesc(over);
+          }}
+          onDragLeave={(e) => {
+            if (dropInDesc && !e.currentTarget.contains(e.relatedTarget as Node | null)) setDropInDesc(false);
+          }}
+          onDropCapture={() => dropInDesc && setDropInDesc(false)}
+        >
           <TaskViewers taskId={task.id} />
           <DescriptionEditor
             key={detail ? `loaded-${descVersion}` : "loading"}
@@ -1266,6 +1319,9 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             liveRef={descLive}
             dirtyRef={descDirtyCheck}
             replaceRef={descReplace}
+            uploadWaitRef={descUploadWait}
+            // Imágenes pegadas o soltadas con el editor abierto: adjuntos de la tarea e insertadas en el texto.
+            onFiles={async (files) => (await upload(files)).filter((a) => a.isImage).map((a) => ({ id: a.id, name: a.originalName }))}
             onDraftChange={(md) => {
               descDraft.current = md;
               if (md !== null && !draftUsed) setDraftUsed(true);
@@ -1281,7 +1337,10 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
             onClear={async () => {
               setDetail((d) => (d ? { ...d, description: "" } : d));
               // Pasa por el guardado normal: queda en el historial y se deshace como cualquier cambio.
-              if (await save({ description: "" }, { hasDescription: false })) toast(t("Descripción borrada"), "undo", { label: t("Deshacer"), onClick: () => void undoLastChange() });
+              // «Deshacer» devuelve esta descripción (su entrada), no lo último que se haya hecho después en la tarea.
+              const saved = await saveWithUndo({ description: "" }, { hasDescription: false });
+              const undoId = saved && saved.undoId;
+              if (saved) toast(t("Descripción borrada"), "undo", undoId ? { label: t("Deshacer"), onClick: () => void undoLastChange(undoId) } : undefined);
             }}
           />
           <Subtasks taskId={task.id} detail={detail} setDetail={setDetail} flushRef={flushSubtasks} draftRef={subtaskDraftPending} blurHeld={blurHeld} onUndo={(id) => void undoLastChange(id)} />
@@ -1293,11 +1352,11 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
               <div className="flex items-center gap-1">
                 <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus sm:hidden">
                   <Camera size={15} /> {t("Cámara")}
-                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { void upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
                 <label className="btn-secondary cursor-pointer py-1 text-xs has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus">
                   <ImagePlus size={15} /> {t("Añadir")}
-                  <input type="file" multiple className="sr-only" onChange={(e) => { upload(filesFrom(e.target.files)); e.target.value = ""; }} />
+                  <input type="file" multiple className="sr-only" onChange={(e) => { void upload(filesFrom(e.target.files)); e.target.value = ""; }} />
                 </label>
               </div>
             </div>
@@ -1566,7 +1625,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       {dropping && (
         <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-brand-500/15 p-4 backdrop-blur-[1px]">
           <div className="rounded-2xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-lg font-semibold text-brand-700 shadow-xl dark:bg-slate-900/90 dark:text-brand-300">
-            {t("Suelta para adjuntar")}
+            {dropInDesc ? t("Suelta para insertar en la descripción") : t("Suelta para adjuntar")}
           </div>
         </div>
       )}
@@ -1620,9 +1679,75 @@ export function ColorPopover({ value, onChange }: { value: string | null; onChan
   );
 }
 
+/**
+ * «Deshacer todo» del pie del detalle. Se lee «Deshacer» solo cuando «Deshacer todo» no cabe en lo que deja libre la fila
+ * (se mide: el texto entero, en una copia invisible, frente al ancho de la fila menos el de los demás botones). Antes lo
+ * decidía una consulta de contenedor con un ancho fijo (24 rem) y en la columna de campos del escritorio, que es más
+ * estrecha, se leía siempre «Deshacer», también en una ventana muy ancha. La medida no depende del texto que se muestra,
+ * así que no oscila.
+ */
+function DiscardAllButton({ onClick, disabled }: { onClick: () => void; disabled: boolean }) {
+  const t = useT();
+  const ref = useRef<HTMLButtonElement>(null);
+  const fullRef = useRef<HTMLSpanElement>(null);
+  const [short, setShort] = useState(false);
+  useLayoutEffect(() => {
+    const button = ref.current;
+    const full = fullRef.current;
+    const row = button?.parentElement;
+    if (!button || !full || !row) return;
+    const px = (v: string) => parseFloat(v) || 0;
+    const check = () => {
+      // Oculto (el pie del móvil en escritorio o la columna de campos en el móvil): no hay nada que medir.
+      if (!button.offsetParent) return;
+      const bs = getComputedStyle(button);
+      const rs = getComputedStyle(row);
+      const others = [...row.children].filter((el) => el !== button && (el as HTMLElement).offsetParent !== null);
+      const used = others.reduce((n, el) => n + el.getBoundingClientRect().width, 0) + px(rs.columnGap) * others.length;
+      const room = row.clientWidth - px(rs.paddingLeft) - px(rs.paddingRight) - used;
+      const need = full.getBoundingClientRect().width + px(bs.paddingLeft) + px(bs.paddingRight) + px(bs.borderLeftWidth) + px(bs.borderRightWidth);
+      setShort(need > room + 0.5);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(row);
+    ro.observe(full);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <button
+      ref={ref}
+      className="btn-secondary relative ml-auto min-w-0 overflow-hidden px-2 whitespace-nowrap"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={t("Deshacer todo")}
+      title={t("Deshace los cambios hechos desde que abriste la tarea y la cierra")}
+      data-discard-all
+    >
+      <span>{short ? t("Deshacer") : t("Deshacer todo")}</span>
+      <span ref={fullRef} aria-hidden className="pointer-events-none invisible absolute top-0 left-0 whitespace-nowrap">{t("Deshacer todo")}</span>
+    </button>
+  );
+}
+
+/**
+ * ¿Este arrastre va sobre el texto de la descripción en edición y lleva alguna imagen? Entonces, al soltar, se inserta en
+ * el texto además de adjuntarse (DescriptionField). Durante el arrastre se sabe el tipo de cada archivo, no su contenido.
+ */
+function dragOntoDescription(e: React.DragEvent): boolean {
+  const el = e.target instanceof Element ? e.target : null;
+  if (!el?.closest("[data-desc-editing] textarea, [data-desc-editing] [contenteditable=true]")) return false;
+  return Array.from(e.dataTransfer?.items ?? []).some((i) => i.kind === "file" && i.type.startsWith("image/"));
+}
+
+/** Lo que le ha hecho un cambio de tipo a la descripción: plantilla aplicada, la del anterior quitada o nada. */
+type KindTemplateChange = ReturnType<typeof kindDescriptionChange>;
+
 /** Ver `crowdedAside` en el detalle. */
 const CROWDED_ASIDE_ITEMS = 12;
 const CROWDED_ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] lg:grid-cols-[minmax(0,1fr)_21rem] xl:grid-cols-[minmax(0,1fr)_24rem]";
+/** Columna de campos normal: 18 rem y, en una ventana muy ancha, 21 rem (cabe «Deshacer todo» en el pie; ver DiscardAllButton). */
+const ASIDE_COLS = "md:grid-cols-[minmax(0,1fr)_18rem] xl:grid-cols-[minmax(0,1fr)_21rem]";
 
 /**
  * Campo lateral del detalle con su etiqueta. Con una función como contenido, la etiqueta es un <label> del control que
@@ -1704,7 +1829,7 @@ function focusFromElsewhere(e: React.FocusEvent<HTMLElement>): boolean {
   return e.relatedTarget !== null && e.currentTarget.matches(":focus-visible");
 }
 
-function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef }: {
+function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef, uploadWaitRef, onFiles }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
   remote?: number;
@@ -1723,7 +1848,14 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   /** ¿Hay cambios de la persona sin guardar? (para preguntar antes de cerrar el detalle). */
   dirtyRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Cambia el texto en edición desde fuera (cambio de tipo), sin cerrar el editor: sigue contando como cambio sin guardar. */
-  replaceRef?: React.MutableRefObject<((markdown: string, templated: boolean) => () => void) | null>;
+  replaceRef?: React.MutableRefObject<((markdown: string, templated: KindTemplateChange) => () => void) | null>;
+  /**
+   * Para el «Guardar» del pie (y Alt+S): con imágenes aún subiéndose en el editor, devuelve una promesa que se resuelve con
+   * el texto ya con ellas al acabar (o null si antes se cierra o se cancela el editor); sin subidas, null.
+   */
+  uploadWaitRef?: React.MutableRefObject<(() => Promise<string | null> | null) | null>;
+  /** Sube las imágenes pegadas o soltadas en el editor y devuelve las que se insertan en el texto (ver DescriptionField). */
+  onFiles?: (files: File[]) => Promise<{ id: string; name: string }[]>;
 }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -1749,6 +1881,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   };
   const onEditorChange = (v: string) => {
     if (!touched.current) baseline.current = v;
+    typed.current = v;
     setValue(v);
   };
   const dirtyLatest = useRef<() => boolean>(() => false);
@@ -1766,8 +1899,51 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     touched.current = true;
   };
   // Tras cambiar de tipo con la descripción abierta: aviso junto a «Guardar descripción» de que aún no se ha guardado
-  // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; ver switchKindDescription).
-  const [kindChanged, setKindChanged] = useState<false | "kind" | "template">(false);
+  // («template»: la plantilla del tipo nuevo ha cambiado lo escrito, que se conserva; «removed»: se ha quitado la del
+  // anterior y el nuevo no tiene; ver switchKindDescription).
+  const [kindChanged, setKindChanged] = useState<false | "kind" | "template" | "removed">(false);
+  // Imágenes pegadas o soltadas que aún se suben (ver DescriptionField): «Subiendo imagen…» junto a los botones, y
+  // «Guardar descripción» o Ctrl+Intro esperan a que lleguen para guardarlas en el texto (antes se guardaba sin ellas y,
+  // al llegar, el editor ya estaba cerrado: solo quedaban como adjunto).
+  const [uploads, setUploads] = useState(0);
+  // Las subidas en curso al instante (sin esperar al dibujo) y el guardado pedido mientras tanto: «desc» con «Guardar
+  // descripción» o Ctrl+Intro; una función con el «Guardar» del pie (ver `uploadWaitRef`), que recibe el texto o null.
+  // En ref: la subida avisa con el `uploadsChanged` del último dibujo y ha de ver lo pedido después.
+  const uploadsNow = useRef(0);
+  const afterUploads = useRef<null | "desc" | ((text: string | null) => void)>(null);
+  // Para el texto «…; se guardará al terminar».
+  const [saveAfterUploads, setSaveAfterUploads] = useState(false);
+  const setAfterUploads = (next: null | "desc" | ((text: string | null) => void)) => {
+    const before = afterUploads.current;
+    afterUploads.current = next;
+    if (typeof before === "function" && before !== next) before(null);
+    setSaveAfterUploads(next !== null);
+  };
+  // Al cerrar o cancelar el editor (o desmontarse) no queda nada pendiente: un editor nuevo no hereda subidas del
+  // anterior ni su guardado pedido (las subidas de un campo ya cerrado no avisan, ver DescriptionField).
+  const forgetUploads = () => {
+    uploadsNow.current = 0;
+    setUploads(0);
+    setAfterUploads(null);
+  };
+  useEffect(() => () => {
+    const pending = afterUploads.current;
+    afterUploads.current = null;
+    if (typeof pending === "function") pending(null);
+  }, []);
+  useEffect(() => {
+    if (!uploadWaitRef) return;
+    uploadWaitRef.current = () => (uploadsNow.current > 0 ? new Promise<string | null>((resolve) => setAfterUploads(resolve)) : null);
+    return () => {
+      uploadWaitRef.current = null;
+    };
+  }, [uploadWaitRef]);
+  // Lo escrito al instante: la imagen se inserta (onEditorChange) justo antes de avisar de que ha acabado la subida, sin
+  // que se haya vuelto a dibujar.
+  const typed = useRef(value);
+  useEffect(() => {
+    typed.current = value;
+  });
   // Lo último que se ha dibujado, para `replaceRef` (que se llama desde fuera, sin el estado del dibujo).
   const shown = useRef({ value, kindChanged, editing });
   useEffect(() => {
@@ -1781,8 +1957,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
       const turn = ++replaces.current;
       touched.current = true;
       setValue(markdown);
-      // Una vez aplicada, el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
-      setKindChanged((k) => (templated || k === "template" ? "template" : "kind"));
+      // Una vez aplicada (o quitada), el aviso lo sigue diciendo aunque luego se vuelva a cambiar de tipo sin tocar el texto.
+      setKindChanged((k) => (templated === "applied" ? "template" : templated === "removed" ? "removed" : k === "template" || k === "removed" ? k : "kind"));
       // El cambio de tipo no se ha guardado: vuelven el texto y el aviso de antes, salvo que después se haya escrito algo,
       // cambiado otra vez de tipo o cerrado el editor (guardada o descartada la descripción): entonces no se toca nada.
       return () => {
@@ -1798,11 +1974,24 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
   }, [replaceRef]);
   // Descripción nueva guardada desde fuera: se muestra, también en el editor abierto si no hay cambios propios (que no se
   // pisan: al guardarlos, el servidor avisa del conflicto). Sin remontar, para no cerrar el editor ni perder el foco.
+  // Si hay cambios propios, se avisa junto a los botones de que la guardada ha cambiado (lo escrito sigue ahí).
   const appliedRemote = useRef(remote);
+  const [remoteChanged, setRemoteChanged] = useState(false);
+  // La descripción guardada que se conoce mientras se edita (al cerrar el editor sigue a `initial`).
+  const knownInitial = useRef(initial);
+  useEffect(() => {
+    if (!editing) knownInitial.current = initial;
+  });
   useEffect(() => {
     if (remote === appliedRemote.current) return;
     appliedRemote.current = remote;
-    if (initial === null || (editing && value !== baseline.current)) return;
+    const changed = initial !== knownInitial.current;
+    knownInitial.current = initial;
+    if (initial === null) return;
+    if (editing && value !== baseline.current) {
+      if (changed) setRemoteChanged(true);
+      return;
+    }
     baseline.current = initial;
     setValue(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo cuando llega un cambio de fuera
@@ -1865,6 +2054,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     refocus.current = true;
     closedAt.current = section.current?.getBoundingClientRect().top ?? null;
     setKindChanged(false);
+    setRemoteChanged(false);
+    forgetUploads();
     setEditing(false);
   };
 
@@ -1872,12 +2063,28 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
     return <div className="h-24 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />;
   }
 
-  const finish = () => {
+  const saveText = (text: string) => {
     // Pasarse del límite no se guarda: se queda editando con el aviso del recuento.
-    if (value.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
+    if (text.length > MAX_DESCRIPTION) return toast(descriptionTooLong(t, locale, MAX_DESCRIPTION), "error");
     closeEditor();
     // Si falla y el editor sigue montado (no se recargó la tarea), se reabre con lo escrito para no perderlo.
-    if (value !== initial) void onSave(value).then((ok) => !ok && setEditing(true));
+    if (text !== initial) void onSave(text).then((ok) => !ok && setEditing(true));
+  };
+  const finish = () => {
+    // Con una imagen aún subiéndose, se guarda al llegar (ya en el texto); el editor sigue abierto y lo dice.
+    if (uploadsNow.current > 0) return setAfterUploads("desc");
+    saveText(value);
+  };
+  // Acaba una subida: si se había pedido guardar, se guarda ahora, con la imagen ya en el texto (`typed`: aún sin dibujar).
+  const uploadsChanged = (n: number) => {
+    uploadsNow.current = n;
+    setUploads(n);
+    const pending = afterUploads.current;
+    if (n > 0 || !pending) return;
+    afterUploads.current = null;
+    setSaveAfterUploads(false);
+    if (pending === "desc") saveText(typed.current);
+    else pending(typed.current);
   };
   const cancel = () => {
     setValue(initial);
@@ -1898,6 +2105,8 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
 
   const clear = () => {
     setKindChanged(false);
+    setRemoteChanged(false);
+    forgetUploads();
     setEditing(false);
     setValue("");
     if (initial.trim()) onClear();
@@ -1916,7 +2125,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
         )}
       </div>
       {editing ? (
-        <div className="space-y-2">
+        <div className="space-y-2" data-desc-editing="">
           {/* Lo que hace la persona en el editor (teclas, pegar, soltar, clics en la barra) marca el texto como tocado. */}
           <div onKeyDownCapture={touch} onPasteCapture={touch} onDropCapture={touch} onMouseDownCapture={touch} onTouchStartCapture={touch} onBeforeInputCapture={touch}>
           <DescriptionField
@@ -1935,15 +2144,33 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
             placeholder={t("Markdown · @persona · @docs / @sheets / @slides")}
             onCancel={() => void escapeCancel()}
             onSubmit={finish}
+            onFiles={onFiles}
+            onUploadsChange={uploadsChanged}
           />
           </div>
-          <div className="flex gap-2">
+          {/* Con `flex-wrap`: en el móvil (390 px), un aviso largo pasa a su propia línea en vez de quedar en una columna estrecha. */}
+          <div className="flex flex-wrap items-center gap-2">
             {/* «Guardar descripción»: el pie del detalle tiene otro «Guardar» (guarda todo y cierra). */}
             <button className="btn-primary py-1.5" onClick={finish}>{t("Guardar descripción")}</button>
             <button className="btn-ghost py-1.5" onClick={cancel}>{t("Cancelar")}</button>
-            {kindChanged ? (
-              <span className="ml-auto self-center text-xs text-amber-700 dark:text-amber-400" role="status">
-                {kindChanged === "template" ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción") : t("Tipo cambiado; falta guardar la descripción")}
+            {uploads > 0 ? (
+              <span className="ml-auto self-center text-xs text-slate-500 max-sm:basis-full dark:text-slate-400" role="status" data-desc-uploading>
+                {saveAfterUploads
+                  ? uploads === 1 ? t("Subiendo imagen…; se guardará al terminar") : t("Subiendo {n} imágenes…; se guardará al terminar", { n: uploads })
+                  : uploads === 1 ? t("Subiendo imagen…") : t("Subiendo {n} imágenes…", { n: uploads })}
+              </span>
+            ) : remoteChanged ? (
+              // Texto neutro: la guardada también cambia con un deshacer propio (↶ de la cabecera) mientras se escribe.
+              <span className="ml-auto self-center text-xs text-amber-700 max-sm:basis-full dark:text-amber-400" role="status" data-desc-remote>
+                {t("La descripción guardada ha cambiado mientras escribías; lo tuyo sigue aquí, sin guardar")}
+              </span>
+            ) : kindChanged ? (
+              <span className="ml-auto self-center text-xs text-amber-700 max-sm:basis-full dark:text-amber-400" role="status">
+                {kindChanged === "template"
+                  ? t("Tipo cambiado y plantilla aplicada; falta guardar la descripción")
+                  : kindChanged === "removed"
+                    ? t("Tipo cambiado y plantilla quitada; falta guardar la descripción")
+                    : t("Tipo cambiado; falta guardar la descripción")}
               </span>
             ) : (
               <span className="ml-auto self-center text-xs text-slate-400 max-sm:hidden">{t("Ctrl+Enter para guardar")}</span>

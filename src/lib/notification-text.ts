@@ -21,6 +21,7 @@ export function projectNoticePath(kind: NotificationKind, projectId: string): st
  * (PROJECT_TO_TEAM) o quien se ha dado de baja del informe semanal (REPORT_UNSUBSCRIBED).
  */
 export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string }): string {
+  if (externalNotice(vars.excerpt)?.what === "done") return t("{actor} ha marcado como hecha {task}", vars);
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
     case "REPORT_UNSUBSCRIBED": return t("{actor} se ha dado de baja del informe semanal de {task}", vars);
@@ -77,6 +78,8 @@ export function assignedBatchCount(excerpt: string): number | null {
 
 /** Texto bajo la cabecera del aviso, en el idioma de `t` (fechas con `locale`). */
 export function notificationBody(kind: NotificationKind, excerpt: string, t: T, locale: string): string {
+  const ext = externalNotice(excerpt);
+  if (ext) excerpt = ext.text;
   switch (kind) {
     // El extracto guarda el nombre de la cuenta borrada (ya va en la cabecera).
     case "PROJECT_TO_TEAM": return t("Ahora lo ven los administradores. Ábrelo para darle miembros, añadirlo a tus proyectos o borrarlo.");
@@ -90,4 +93,30 @@ export function notificationBody(kind: NotificationKind, excerpt: string, t: T, 
     }
     default: return excerpt;
   }
+}
+
+// --- Avisos de lo hecho desde «Compartir fuera» (sin cuenta) ---------------------------------------------------------
+// Quien lo hace no es una persona de la app (actorId null): el extracto lleva delante su nombre («Proveedor (fuera)») y
+// qué hizo, separados por un carácter de control que un extracto normal nunca trae. Los tipos de aviso son los de
+// siempre (COMMENT para comentar y marcar como hecha, DUE_CHANGED para la fecha): sin valores nuevos del enum.
+
+const EXT = "\u001E";
+type ExternalWhat = "comment" | "done" | "due";
+const EXT_WHAT: readonly ExternalWhat[] = ["comment", "done", "due"];
+
+/** Extracto de un aviso de algo hecho desde fuera: «␞autor␞qué␞texto». */
+export function externalExcerpt(author: string, what: ExternalWhat, text = ""): string {
+  return `${EXT}${author.replaceAll(EXT, " ").slice(0, 200)}${EXT}${what}${EXT}${text}`;
+}
+
+/** Autor, qué hizo y el texto de un aviso hecho desde fuera; null si es un aviso normal. */
+export function externalNotice(excerpt: string | undefined): { author: string; what: ExternalWhat; text: string } | null {
+  if (!excerpt?.startsWith(EXT)) return null;
+  const [, author = "", what = "", ...rest] = excerpt.split(EXT);
+  return EXT_WHAT.includes(what as ExternalWhat) ? { author, what: what as ExternalWhat, text: rest.join(EXT) } : null;
+}
+
+/** Nombre de quien provoca el aviso: la persona, el autor de fuera o, si no se sabe, `fallback` («Alguien»). */
+export function noticeActorName(actorName: string | null | undefined, excerpt: string, fallback: string): string {
+  return actorName ?? externalNotice(excerpt)?.author ?? fallback;
 }

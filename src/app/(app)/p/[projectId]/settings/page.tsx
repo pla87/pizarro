@@ -21,6 +21,7 @@ import { resolveProjectSettingsTab } from "./project-settings-tabs";
 import { ReportScheduleSection } from "./ReportScheduleSection";
 import { reportRecipientPeople, reportRecipientView, reportUnsubscribedView } from "@/lib/report-recipient";
 import { ApplyTemplate } from "./ApplyTemplate";
+import { ShareOutSettings } from "./ShareOutSettings";
 import { undoableTemplateChange } from "@/lib/template-apply";
 import { TEMPLATE_UNDO_HOURS } from "@/lib/template-apply-core";
 
@@ -46,6 +47,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
       googleShareMode: true,
       fileMaxMb: true,
       taskFields: true,
+      shareOutEnabled: true,
       _count: { select: { columns: { where: { role: "BUDGET" } } } },
       hiddenKinds: { select: { kindId: true } },
       members: {
@@ -116,6 +118,7 @@ export default async function ProjectSettingsPage({ params, searchParams }: { pa
         // Aplicar o deshacer una plantilla cambia etiquetas y campos, que el formulario guarda en su estado: se vuelve a montar.
         key={templateChange ? templateChange.createdAt.toISOString() : "sin-cambio"}
         storageSection={storageSection}
+        shareOutSection={tab === "tablero" && isAdmin ? <ShareOutSettings projectId={project.id} enabled={project.shareOutEnabled} /> : null}
         applyTemplate={tab === "tablero" && canManage ? (
           <ApplyTemplate
             projectId={project.id}

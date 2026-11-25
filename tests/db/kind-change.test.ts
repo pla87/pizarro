@@ -98,6 +98,24 @@ describe("cambiar de tipo: historial y deshacer", () => {
     assert.ok(!expectOk(await getTaskHistory(task.id)).some((e) => e.text.startsWith("Cambió las subtareas")));
   });
 
+  test("Logs y el deshacer nombran la tarea sin el prefijo que pone el tipo", async () => {
+    const me = await makeUser();
+    const f = await makeProject({ members: [me] });
+    await loginAs(me);
+    const moving = await db.taskKind.create({ data: { name: "Mudanza", color: "#3b82f6", position: 2, projectId: f.project.id, titleTemplate: "Mudanza: " } });
+    const papers = await db.taskKind.create({ data: { name: "Papeleo", color: "#3b82f6", position: 3, projectId: f.project.id, titleTemplate: "Gestionar" } });
+    const task = await makeTask(f, { title: "Varias dos" });
+    expectOk(await changeTaskKind(task.id, { kindId: moving.id, title: "Mudanza: Varias dos" }));
+    const log = await db.undoEntry.findFirstOrThrow({ where: { taskId: task.id }, orderBy: { createdAt: "desc" }, select: { label: true } });
+    assert.deepEqual(JSON.parse(log.label).p, { title: "Varias dos", kind: "Mudanza" });
+    assert.equal(expectOk(await undoLast(f.project.id, task.id)).done, "Deshecho el cambio de tipo de «Varias dos»");
+    // Del tipo intermedio a otro: tampoco con el prefijo del anterior ni con el del nuevo.
+    expectOk(await changeTaskKind(task.id, { kindId: moving.id, title: "Mudanza: Varias dos" }));
+    expectOk(await changeTaskKind(task.id, { kindId: papers.id, title: "Gestionar Varias dos" }));
+    assert.equal(expectOk(await undoLast(f.project.id, task.id)).done, "Deshecho el cambio de tipo de «Varias dos»");
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Mudanza: Varias dos");
+  });
+
   test("solo quitadas o solo añadidas: la línea lo dice así", async () => {
     const me = await makeUser();
     const f = await makeProject({ members: [me] });

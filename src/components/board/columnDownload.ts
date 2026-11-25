@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { useT } from "@/i18n/client";
 import type { useToast } from "../ui/Toast";
+import { downloadErrorText } from "./download-error";
 
 // Descargas de una columna que se generan en el servidor (los PDF de «Generar plan», de la semana y de la lista
 // consolidada): se piden con fetch y se guardan con un <a download>, sin salir del tablero ni abrir otra pestaña. Una a
@@ -27,10 +28,11 @@ function fileNameOf(res: Response, fallback: string): string {
 
 /**
  * Pide `url` y guarda lo que devuelve. `failed`: el aviso si el servidor responde con un error sin texto propio;
- * `offline`: el aviso sin conexión. Devuelve si se descargó.
+ * `offline`: el aviso sin conexión; `done`: el aviso al descargarlo (sin él, la descarga del navegador es la única señal,
+ * y con un PDF rápido el botón ocupado ni se llegaba a ver). Devuelve si se descargó.
  */
 export async function downloadFile(
-  key: string, url: string, texts: { fallbackName: string; failed: string; offline: string },
+  key: string, url: string, texts: { fallbackName: string; failed: string; offline: string; done?: string },
   t: ReturnType<typeof useT>, toast: ReturnType<typeof useToast>,
 ): Promise<boolean> {
   if (inFlight.has(key)) return false;
@@ -39,8 +41,7 @@ export async function downloadFile(
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
-      const text = (await res.text().catch(() => "")).trim();
-      toast(res.status === 429 ? t("Demasiadas peticiones, espera un momento.") : text && text.length < 300 ? text : texts.failed, "error");
+      toast(downloadErrorText(res.status, await res.text().catch(() => ""), texts.failed, t), "error");
       return false;
     }
     const blob = await res.blob();
@@ -52,6 +53,7 @@ export async function downloadFile(
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(href), 60_000);
+    if (texts.done) toast(texts.done);
     return true;
   } catch {
     toast(texts.offline, "error");

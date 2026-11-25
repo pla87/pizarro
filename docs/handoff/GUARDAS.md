@@ -26,6 +26,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 17. [Pruebas y código sin uso](#pruebas-y-código-sin-uso)
 18. [e2e](#e2e)
 19. [Entorno](#entorno)
+20. [Compartir fuera](#compartir-fuera)
 
 ## Tablero
 
@@ -110,8 +111,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
 - Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
-  Telegram y WhatsApp). Las anclas antiguas (`#avisos-email`, `#acceso-google`, `#mensajeria`) redirigen. Las guías de
-  `docs/guias/` y los textos de la app dicen «Administración → Integraciones».
+  Telegram y WhatsApp). Las anclas antiguas de *Ajustes* (`#avisos-email`, `#acceso-google`, `#mensajeria`) ya no
+  redirigen (se retiró `MovedSectionRedirect` en la ronda 68). Las guías de `docs/guias/` y los textos de la app dicen
+  «Administración → Integraciones».
 - Menús: `MenuSub` (`src/components/ui/Menu.tsx`) es el submenú accesible (se abre dentro del mismo panel; → o Intro,
   ← o Escape). Lo usa el rol de la columna.
 - Aviso de cambio simultáneo (`src/lib/edit-conflict*.ts`, `EditConflictNotice.tsx`): versión por valor de las claves de
@@ -120,6 +122,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   (Next vuelve a escribir la dirección vieja en el siguiente refresco).
 - (Ronda 62) Modales que se abren al cerrarse otro: `useBackToClose` espera a que no haya «atrás» silenciosos pendientes
   (`whenNoSilentPops`) antes de apilar su entrada; si no, Atrás salía de la página.
+- (Ronda 68) Detalle: `reload()` no vuelve a montar el editor de la descripción si tiene cambios propios (lo escrito no se
+  pierde en un conflicto); `reload(true)` solo cuando la persona ya aceptó descartar lo escrito («Pegar tarea», «Deshacer
+  todo»). Un campo que quiera tratar un pegado o un soltado de archivos usa `claimPaste`/`claimDrop` (`pasteFiles.ts`) y
+  solo si el evento va a su propia caja; las subidas que acaban con el editor cerrado no guardan ni cierran nada.
+- (Ronda 68) Avisos: uno nuevo con «Deshacer» anula el de los anteriores (`placeToast`, salvo `independent`); la pila no se
+  cierra ni se recorta con el ratón encima o con el foco del teclado dentro; los que se sustituyen en su sitio llevan `group`.
+  Los paneles de menú en portal nunca llevan `w-full`/`w-screen` (`tests/menus.test.ts`).
 
 ## Logs
 
@@ -373,6 +382,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 66) `Project.templateKey`: clave de serie o `custom`; al importar solo `knownTemplateKey()`; las búsquedas en
   mapas por clave con `Object.hasOwn` (una clave «constructor» tiraba el tablero). La huella de «modificada»
   (`comparable()`) cuenta los tipos por defecto solo si alguna columna tiene uno (las demás conservan su huella).
+- (Ronda 68) El aviso del cambio de tipo sale de `kindDescriptionChange` («aplicada», «quitada» o nada) y el deshacer nombra
+  la tarea con `titleWithoutKindPrefix`.
 
 ## Deshacer
 
@@ -380,7 +391,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   a la vez (`CREATE DATABASE … TEMPLATE …`), cada uno en su proceso, los más grandes primero; ficheros sueltos con
   `npm run test:db -- tests/db/x.test.ts`, en serie con `--jobs 1`, salida completa con `--verbose`; con Ctrl+C borra
   las bases y enseña lo que estaba en marcha. Una prueba de BD no puede depender de lo que dejaron otros ficheros (el
-  orden cambia): si empareja por nombre, `freeUserNames()`; si de verdad no puede ir a la vez, en `SERIAL`. Las que
+  orden cambia): si empareja por nombre, `freeUserNames()` (no hay lista de ficheros en serie: `SERIAL` se retiró, vacía). Las que
   miran `pg_locks` o `pg_stat_activity` filtran por `current_database()`.
 - `tests/db/undo-perf.test.ts` (dentro de `npm run test:db`): guarda de rendimiento del deshacer. Mide las
   consultas y los bytes leídos al deshacer y rehacer «Mover a…» de cientos de tarjetas; si falla, algo ha vuelto a
@@ -428,8 +439,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 ## Entorno
 
 - Entorno de la nube: `NODE_OPTIONS` trae `--max-old-space-size=8192`, que anula el tope de memoria del worker de PDF
-  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. Lanza `npm test` (y las pruebas de PDF) con
-  `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
+  (`resourceLimits`): `tests/report-render.test.ts` se cuelga o falla. `npm test` ya lo quita solo (`scripts/run-tests.mjs`,
+  ronda 68); las pruebas de PDF sueltas (`node --test tests/report-render.test.ts`), con `NODE_OPTIONS=--use-openssl-ca`. Los agentes no pueden lanzar `npx --yes knip@5` (lo bloquea el permiso): lo pasa la
   sesión principal.
 - `npm install` en este entorno reescribe el `package-lock.json` quitando los campos `libc`: para añadir una dependencia,
   edita a mano `package.json` y su entrada del lock (o usa `npm ci` para instalar, que no lo toca).
@@ -444,12 +455,12 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `git merge origin/<rama>` (sin cambios de contenido) y súbela normal.
 
 Trampas del entorno de la nube vistas en las rondas 58 y 59 (antes en §0 del núcleo). En el PC del propietario no hacen
-falta las de `PGPASSWORD`, `NODE_OPTIONS`, memoria, permisos y reinicios del contenedor (ver `docs/HANDOFF.md` §0b); las de
+falta las de `PGPASSWORD`, `NODE_OPTIONS`, memoria, permisos y reinicios del contenedor (ver `docs/handoff/LOCAL.md`); las de
 las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la CPU cargada valen también en local:
 
 - `createdb`/`dropdb` con `PGPASSWORD=postgres … -h localhost … </dev/null` (sin eso se quedan esperando la contraseña).
-- `NODE_OPTIONS` trae `--max-old-space-size=8192`: lanza `npm test` y las pruebas de PDF con
-  `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
+- `NODE_OPTIONS` trae `--max-old-space-size=8192`: `npm test` lo quita solo (`scripts/run-tests.mjs`); las pruebas de
+  PDF sueltas, con `NODE_OPTIONS=--use-openssl-ca` (si no, `tests/report-render.test.ts` se cuelga o falla).
 - Las bases de `tests/db/` sueltas deben llamarse `pizarro_test_<hex>` (lo exige `tests/db/helpers.ts`).
 - Tras borrar una página, `rm -rf .next/types` antes de `tsc` (los tipos viejos de la build la siguen citando).
 - Los agentes no pueden lanzar `npx --yes knip@5` ni instalar paquetes del sistema (p. ej. Caddy): lo hace la sesión
@@ -461,3 +472,27 @@ las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la C
   salida. Los agentes tampoco pueden descargar binarios (Caddy): el `Caddyfile` lo valida el job «Caddyfile» de CI.
 - `tests/report-render.test.ts` («sin memoria…») falla a veces con la CPU cargada por varios agentes; sola, y con
   `NODE_OPTIONS=--use-openssl-ca`, pasa.
+
+## Compartir fuera
+
+- (Ronda 68) Columna «Compartir fuera»: rol NONE + fila en `ColumnShare` (sin valor de enum nuevo: la v1.71 la ve como
+  columna normal). `/x/<token>` (página), `/x/<token>/t/<id>` (formularios) y `/x/<token>/a/<id>` (adjuntos) quedan fuera
+  del proxy y de las cabeceras generales de `next.config.ts` **solo esas tres** (`x/[^/]+$`, `x/[^/]+/t/[^/]+$`,
+  `x/[^/]+/a/[^/]+$`) y ponen las suyas (`shareResponseHeaders`, `SHARE_PAGE_CSP`/`SHARE_FILE_CSP`). Una ruta nueva bajo
+  `/x/` se añade a las dos listas y a `tests/hardening.test.ts`. El token nunca va a Logs (`path: "/x/…"`); `/x/` está en
+  `SECRET_PATH_PREFIXES` y `redactPath`. Las rutas de ficheros llevan `HEAD` propio (solo `stat`, sin contar ni registrar).
+- El token se guarda como huella (`tokenHash`, HMAC con TOKEN_SECRET) y cifrado (`tokenEnc`, ENCRYPTION_KEY, en
+  `ENCRYPTED_FIELDS`). Solo lo descifran `getShareLink` y `generateShareWeb` (`activeShareUrl`, que rehace la huella si no
+  es la de la clave actual); nunca va al tablero en vivo, al PDF ni a las exportaciones. Toda vía que termina un enlace
+  vacía `tokenEnc`. `rotate-keys` recifra `tokenEnc` y rehace las huellas (`rehashShareTokens`).
+- Un enlace vivo solo existe mientras la columna sea «Compartir fuera»: quitar el rol, borrar la columna, apagar la
+  función, deshacer/rehacer el cambio de rol o aplicar una plantilla lo terminan (`revokeUnsharedLinks`); el selector de
+  caducidad no revive uno terminado. Generar y apagar no se cruzan (`FOR SHARE` sobre el proyecto en la misma
+  transacción; apagar revoca en la misma transacción).
+- Lo de fuera pasa por `applyShareChange`: historial firmado «<columna> (fuera)», aviso al responsable (o a quien generó
+  la web, si sigue activo y ve el proyecto) con su propio cubo `notify:share:<shareId>` (10/h), y deshacer en su pila: como
+  mucho una entrada de fuera por persona y proyecto (`SHARE_UNDO_KEYS`/`externalUndoWhere`), que no cuenta para el límite
+  de 10. Lo que va después de guardar, en `sideEffect` (nunca un 500 con el cambio hecho). Un cuerpo ilegible da
+  `?m=invalid` sin registrar. El tope por IP usa `shareout-ip:` (mapa general: no puede desalojar los bloqueos de acceso);
+  los de cambios, descargas y avisos, el mapa de seguridad. `excerpt()` quita los caracteres de control (el separador
+  `\u001E` de los avisos de fuera no puede venir de un comentario). `shareOut.getLink` está en `UNPUBLISHED_ACTIONS`.

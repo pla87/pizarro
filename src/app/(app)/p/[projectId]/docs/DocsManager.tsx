@@ -152,6 +152,8 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     pendingFocus.current = { gone: d.id, next: neighbour?.id ?? null };
     toast(t("Documento enviado a la papelera"), "undo", {
       label: t("Deshacer"),
+      // Devuelve ese documento de la papelera, haya pasado lo que haya pasado después (no es «lo último»).
+      independent: true,
       onClick: () => {
         void restoreDocument(d.id).catch((e: unknown) => actionThrowResult(e, t)).then((r) => {
           if (!r.ok) return toast(r.error, "error");
@@ -407,6 +409,8 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
     if (!res.ok) return toast(res.error, "error");
     toast(t("Documento enviado a la papelera"), "undo", {
       label: t("Deshacer"),
+      // Devuelve ese documento de la papelera, haya pasado lo que haya pasado después (no es «lo último»).
+      independent: true,
       onClick: () => {
         void restoreDocument(doc.id).catch((e: unknown) => actionThrowResult(e, t)).then((r) => {
           if (!r.ok) return toast(r.error, "error");

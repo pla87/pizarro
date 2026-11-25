@@ -67,8 +67,8 @@ type Notify = typeof notifyTask;
  * Envía los avisos de fecha cuyo plazo ya ha vencido (`now` inyectable para los tests); devuelve cuántos avisos
  * ha creado. Las filas se reclaman con UPDATE ... FOR UPDATE SKIP LOCKED (su `sendAfter` pasa a `now` +
  * DUE_NOTICE_CLAIM_MS), así que dos procesos a la vez nunca envían lo mismo, y cada una se borra al terminar con ella.
- * Se avisa solo si la tarea sigue existiendo, no está archivada y la persona sigue asignada; si no (borrada, archivada,
- * desasignada o reasignada), se descarta sin avisar. Los permisos del destinatario se vuelven a comprobar en
+ * Se avisa solo si la tarea sigue existiendo, no está archivada ni terminada y la persona sigue asignada; si no (borrada,
+ * archivada, en una columna «hecha», desasignada o reasignada), se descarta sin avisar. Los permisos del destinatario se vuelven a comprobar en
  * notifyTask y en el envío externo. `notify` es inyectable para los tests.
  */
 export async function deliverDueNotices(now: Date = new Date(), notify: Notify = notifyTask): Promise<number> {
@@ -118,8 +118,10 @@ async function noticeProject(row: ClaimedNotice, now: Date): Promise<string | nu
     logEvent({ level: "warn", category: "notify", action: "notify.dueGaveUp", label: { k: "Aviso de cambio de fecha descartado: su envío lleva más de un día fallando desde el primer intento" }, details: { taskId: row.taskId, firstAttemptAt: row.claimedAt.toISOString() } });
     return null;
   }
-  const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true, dueDate: true } });
+  const task = await db.task.findUnique({ where: { id: row.taskId }, select: { projectId: true, archivedAt: true, assigneeId: true, dueDate: true, column: { select: { isDone: true } } } });
   if (!task || task.archivedAt || task.assigneeId !== row.recipientId) return null;
+  // Ya terminada (en una columna «hecha»): el aviso de su fecha límite sobra.
+  if (task.column.isDone) return null;
   // La fecha actual ya no es la que se iba a comunicar (Cancelar/deshacer/rehacer): el aviso sería falso.
   return (task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null) === row.toDue ? task.projectId : null;
 }

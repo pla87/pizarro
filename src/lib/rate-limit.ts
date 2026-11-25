@@ -17,7 +17,7 @@ const stores = (g.__pzRateStores ??= {
  * respuestas del bot de Telegram) y el de los intentos de enlazar Telegram con un código: en el mapa general, un aluvión de
  * peticiones baratas sin sesión podía vaciarlo y borrarlos.
  */
-const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:", "account-delete:", "backup-dl:", "feedback:", "feedback-try:", "whatsapp:", "messaging:", "mail:test:", "notify:", "project-invite:", "resend-invite:", "project-added-mail:", "report-schedule:", "telegram:link:", "telegram:reply:"] as const;
+const SECURITY_KEY_PREFIXES = ["login:", "reset:", "reset-submit:", "confirm:", "2fa:", "setup:", "glogin:", "password:", "email-change:", "force-password:", "account-delete:", "backup-dl:", "feedback:", "feedback-try:", "whatsapp:", "messaging:", "mail:test:", "notify:", "project-invite:", "resend-invite:", "project-added-mail:", "report-schedule:", "telegram:link:", "telegram:reply:", "share-out:"] as const;
 
 const storeFor = (key: string): Store => (SECURITY_KEY_PREFIXES.some((p) => key.startsWith(p)) ? stores.security : stores.general);
 

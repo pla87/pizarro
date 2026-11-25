@@ -583,15 +583,15 @@ ${rest.length ? `<nav class="guide-more" aria-labelledby="mas-guias"><h2 id="mas
 }
 
 /**
- * Bloque de código de la guía de instalación: una barra con su rótulo y, en los comandos y variables, el botón
- * «Copiar». «text» es lo que muestra la pantalla: se ve igual, pero sin botón.
+ * Bloque de código de la guía de instalación: una barra con su rótulo y, en los comandos, las variables y el texto para
+ * una IA («prompt»), el botón «Copiar». «text» es lo que muestra la pantalla: se ve igual, pero sin botón.
  */
 function codeBlock(s, file) {
   let n = 0;
   return (text, lang) => {
     const gen = lang === "railway-env";
-    const copyable = gen || ["bash", "sh", "shell", "env"].includes(lang);
-    const label = lang === "env" || gen ? s.codeVariables : copyable ? s.codeTerminal : s.codeOutput;
+    const copyable = gen || ["bash", "sh", "shell", "env", "prompt"].includes(lang);
+    const label = lang === "env" || gen ? s.codeVariables : lang === "prompt" ? s.codePrompt : copyable ? s.codeTerminal : s.codeOutput;
     const id = `codigo-${++n}`;
     const button = copyable ? `<button class="copy" type="button" data-copy="${id}" data-done="${esc(s.copied)}" hidden>${esc(s.copy)}</button>` : "";
     const block = `<div class="code${copyable ? "" : " code-out"}"><div class="code-bar"><span>${esc(label)}</span>${button}</div><pre tabindex="0"><code id="${id}">${esc(text)}</code></pre></div>`;

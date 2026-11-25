@@ -28,6 +28,7 @@ import type { Locale } from "@/i18n/shared";
 import { getT } from "@/i18n/server";
 import type { ColumnRole } from "@/generated/prisma/client";
 import { cutText } from "./graphemes";
+import { revokeUnsharedLinks } from "./share-out-core";
 import { assignOnEnter, type AssignOnEnterResult } from "./column-assign";
 import { dateToIso, isoToDate } from "./dates";
 
@@ -194,6 +195,9 @@ export async function applyTemplateToProject(opts: {
       }
       // Ninguna columna «Programa del curso» por encima del tope de sesiones (por el rol nuevo o por las tareas unidas).
       await assertProgramColumnsFit(tx, projectId, shape.columns);
+      // «Compartir fuera»: una columna reutilizada que pasa a tener otro rol deja de compartir (su enlace se revoca y no
+      // vuelve al deshacer el cambio de plantilla: el enlace solo se crea con «Generar web»).
+      await revokeUnsharedLinks(tx, projectId);
       const data = { userId: opts.userId, templateName: cutText(opts.templateName, 200), mode, snapshot: snap as unknown as Prisma.InputJsonValue, createdAt: new Date() };
       await tx.projectTemplateChange.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
       return { ...result, addedLabels: plan.addLabels.length };
@@ -591,6 +595,8 @@ export async function undoTemplateChange(projectId: string, now = new Date()): P
     // Las tareas fijas fuera de la columna de release o de las de plan para IA pasan a normales (la marca devuelta solo vale allí).
     await tx.task.updateMany({ where: { projectId, evergreen: true, column: { role: { notIn: [...EVERGREEN_COLUMN_ROLES] } } }, data: { evergreen: false, evergreenEvery: 1 } });
 
+    // «Compartir fuera»: lo mismo al deshacer (una columna que vuelve a otro rol deja de compartir).
+    await revokeUnsharedLinks(tx, projectId);
     await tx.projectTemplateChange.delete({ where: { id: row.id } });
     return { templateName: row.templateName, keptColumns, keptKinds };
   }, { timeout: 120_000, maxWait: 15_000 });

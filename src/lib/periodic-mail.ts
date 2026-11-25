@@ -8,6 +8,7 @@ import { db } from "./db";
 import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestInput, type DigestItem } from "./digest";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
+import { assignedBatchCount } from "./notification-text";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { unsubscribeLinks } from "./unsubscribe-links";
 import { getInstanceSettings } from "./instance";
@@ -46,13 +47,27 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   const live = { project: working, archivedAt: null };
   // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
   const mine = { project: visibleProjectsWhere(user as CurrentUser), archivedAt: null };
-  const [created, done, comments, assigned, due] = await Promise.all([
+  const [created, done, comments, assigned, assignedNew, due] = await Promise.all([
     // «Tareas nuevas»: las que crearon otras personas (las suyas ya las conoce, como sus comentarios).
     db.task.findMany({ where: { ...live, createdAt: { gte: since }, OR: [{ createdById: null }, { createdById: { not: user.id } }] }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     // «Terminadas»: también las que se archivaron después de terminarlas (archivar lo terminado es lo normal antes del envío).
     db.taskEvent.findMany({ where: { code: "done", createdAt: { gte: since }, task: { project: working } }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
     db.taskComment.findMany({ where: { deletedAt: null, createdAt: { gte: since }, OR: [{ authorId: null }, { authorId: { not: user.id } }], task: live }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
-    db.notification.findMany({ where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: mine }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: { task: { select: taskSelect } } }),
+    // «Asignadas a ti», de los avisos: solo si la tarea sigue siendo suya (si se la pasaron a otra persona, ya no).
+    db.notification.findMany({
+      where: { userId: user.id, type: "ASSIGNED", createdAt: { gte: since }, task: { ...mine, assigneeId: user.id } },
+      orderBy: { createdAt: "desc" },
+      take: MAX_ROWS,
+      select: { actorId: true, excerpt: true, createdAt: true, task: { select: { ...taskSelect, createdById: true, createdAt: true } } },
+    }),
+    // …y las que otra persona creó ya asignadas a ella: un lote («Varias tareas», importar) lleva un solo aviso, enlazado
+    // a la primera. Sin las copias de una tarea que se repite (siguen siendo suyas, no es una asignación nueva).
+    db.task.findMany({
+      where: { ...mine, assigneeId: user.id, createdAt: { gte: since }, recurrenceFromId: null, OR: [{ createdById: null }, { createdById: { not: user.id } }] },
+      orderBy: { createdAt: "desc" },
+      take: MAX_ROWS,
+      select: taskSelect,
+    }),
     db.task.findMany({
       where: { ...mine, assigneeId: user.id, column: { isDone: false }, dueDate: { lte: isoToDate(today) } },
       orderBy: [{ dueDate: "asc" }, { position: "asc" }],
@@ -63,7 +78,7 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   const out = emptyDigestInput();
   out.created = created.map((t) => item(t));
   out.done = done.map((e) => item(e.task));
-  out.assigned = assigned.flatMap((n) => (n.task ? [item(n.task)] : []));
+  out.assigned = assignedItems(assigned, assignedNew);
   const counts = new Map<string, DigestItem>();
   for (const c of comments) {
     const prev = counts.get(c.task.id);
@@ -72,6 +87,33 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   }
   out.comments = [...counts.values()];
   for (const task of due) (task.dueDate!.toISOString().slice(0, 10) === today ? out.dueToday : out.overdue).push(item(task));
+  return out;
+}
+
+/** Cuánto puede tardar el aviso de un lote recién creado en salir después de crear sus tareas (importar muchas, p. ej.). */
+const BATCH_NOTICE_LAG_MS = 5 * 60 * 1000;
+
+type AssignedNotice = { actorId: string | null; excerpt: string; createdAt: Date; task: (TaskRow & { createdById: string | null; createdAt: Date }) | null };
+
+/**
+ * «Asignadas a ti»: primero las de los avisos y después las creadas ya asignadas, sin repetir ninguna. Un aviso
+ * de un lote (`assignedBatchExcerpt`) enlaza solo a la primera tarea. Si el lote es de tareas recién creadas por quien
+ * avisa, las demás ya salen entre las creadas; si no (las que entraron en una columna con «Asignación a persona», que no
+ * guarda cuándo se asignó cada una), sale la primera con «y N más».
+ */
+function assignedItems(notices: AssignedNotice[], created: TaskRow[]): DigestItem[] {
+  const createdIds = new Set(created.map((t) => t.id));
+  const out: DigestItem[] = [];
+  const seen = new Set<string>();
+  for (const n of notices) {
+    if (!n.task || seen.has(n.task.id)) continue;
+    seen.add(n.task.id);
+    const count = assignedBatchCount(n.excerpt) ?? 1;
+    const createdWithNotice = createdIds.has(n.task.id) && n.task.createdById === n.actorId
+      && n.createdAt.getTime() - n.task.createdAt.getTime() <= BATCH_NOTICE_LAG_MS;
+    out.push(item(n.task, count > 1 && !createdWithNotice ? { more: count - 1 } : {}));
+  }
+  for (const t of created) if (!seen.has(t.id)) out.push(item(t));
   return out;
 }
 
