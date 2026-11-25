@@ -10,20 +10,27 @@ import { BackToLogin } from "./BackToLogin";
 import { guardFormAction } from "@/lib/guard-action";
 import { useActionTransition } from "@/components/useActionTransition";
 
-export function VerifyForm({ method, emailSent }: { method: "TOTP" | "EMAIL"; emailSent: boolean }) {
+/** emailStatus: «sent», el código ha salido; «capped», no ha salido por el tope de envíos de la persona. */
+export function VerifyForm({ method, emailStatus }: { method: "TOTP" | "EMAIL"; emailStatus: "sent" | "capped" | null }) {
   const t = useT();
   const locale = useLocale();
   // guardFormAction: tras un despliegue esta página puede ser de la versión anterior; entonces se recarga en vez de romper.
   const guarded = useMemo(() => guardFormAction(verifyLoginCode, t, reloadForNewVersion), [t]);
   const [state, action, pending] = useActionState<VerifyState, FormData>(guarded, {});
-  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(emailSent ? { ok: true, text: t("Te hemos enviado un código a tu email.") } : null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(
+    emailStatus === "sent" ? { ok: true, text: t("Te hemos enviado un código a tu email.") }
+      : emailStatus === "capped" ? { ok: false, text: t("Demasiados envíos. Espera unos minutos.") }
+        : null,
+  );
   const [resending, startResend] = useActionTransition((text) => setNote({ ok: false, text }));
 
   return (
     <div className="space-y-4">
       <form action={action} className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          {method === "EMAIL"
+          {method === "EMAIL" && emailStatus === "capped"
+            ? t("Escribe un código de recuperación o, pasados unos minutos, pulsa «Reenviar código» y escribe el de 6 dígitos del email.")
+            : method === "EMAIL"
             ? t("Escribe el código de 6 dígitos que te hemos enviado por email, o un código de recuperación.")
             : t("Escribe el código de 6 dígitos de tu app de autenticación, o un código de recuperación.")}
         </p>

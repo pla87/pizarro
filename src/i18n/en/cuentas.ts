@@ -364,4 +364,7 @@ export const cuentas: Record<string, string> = {
   "Este enlace no volverá a mostrarse; si lo pierdes, puedes reenviar la invitación desde su fila.": "This link won't be shown again; if you lose it, you can resend the invitation from their row.",
   // Forzar cambio de contraseña: el servidor también lo rechaza a una invitación pendiente
   "Esta persona aún no ha aceptado la invitación: reenvíasela en lugar de forzar el cambio.": "This person hasn't accepted the invitation yet: resend it instead of forcing a change.",
+  // Segundo paso por email: el código no ha salido por el tope de envíos de la persona (la pantalla lo dice)
+  "Escribe un código de recuperación o, pasados unos minutos, pulsa «Reenviar código» y escribe el de 6 dígitos del email.":
+    "Enter a recovery code or, in a few minutes, click “Resend code” and enter the 6-digit code from the email.",
 };

@@ -22,7 +22,7 @@ import { clientIp } from "@/lib/request";
 import { retargetReportSchedules } from "@/lib/report-recipient";
 import { safeNextPath } from "@/lib/redirect";
 import { createSession, destroySession, getCurrentUser, requirePendingUser } from "@/lib/session";
-import { isKnownDevice } from "@/lib/devices";
+import { isKnownDevice, knownDeviceCheck } from "@/lib/devices";
 import { secondStepFor, sendEmailCode, startChallenge } from "@/lib/two-factor";
 import * as v from "@/lib/validation";
 import { getT } from "@/i18n/server";
@@ -145,16 +145,23 @@ export async function logout(): Promise<void> {
   redirect("/login");
 }
 
-/** Emails de restablecimiento: como mucho estos al día a una dirección y estos por hora en total (cuota del SMTP). */
+/** Emails de restablecimiento: como mucho estos al día a una dirección (desde un dispositivo desconocido de la cuenta)… */
 const RESET_MAILS_PER_ADDRESS_DAY = 5;
-const RESET_MAILS_PER_HOUR = 30;
+/** …y, entre todas las direcciones, estos repetidos al día (los que no son el primero del día a esa dirección). */
+const RESET_REPEAT_MAILS_PER_DAY = 100;
+const DAY_MS = 24 * 60 * 60_000;
 
 /**
  * «¿Olvidaste tu contraseña?»: la respuesta es siempre la misma exista o no la cuenta (el texto lo pone la pantalla).
- * Además de los topes por IP y por dirección (cada 15 min), los del envío: RESET_MAILS_PER_ADDRESS_DAY al día a cada
- * dirección y RESET_MAILS_PER_HOUR por hora entre todas. Sin ellos, cualquiera, sin cuenta, mandaba un email cada 5 min
- * a cada usuario y agotaba la cuota diaria del SMTP (y con ella los códigos de la verificación en dos pasos). Pasado uno
- * de esos dos, no sale el email y la respuesta es la misma (el tope global deja una línea en Logs, una vez por hora).
+ * Además de los topes por IP y por dirección (cada 15 min), los del envío, que no pueden dejar a nadie sin su enlace:
+ * - El primer email del día a cada dirección sale siempre (solo cuentan las cuentas activas, así que esos están acotados
+ *   por el número de cuentas).
+ * - Pedido desde un dispositivo conocido de la cuenta (ya se ha entrado en ella desde ese navegador), también sale
+ *   siempre: un tercero sin esa cookie no puede gastarle los topes a nadie.
+ * - Los repetidos del día desde un dispositivo desconocido: como mucho RESET_MAILS_PER_ADDRESS_DAY a cada dirección y
+ *   RESET_REPEAT_MAILS_PER_DAY entre todas (la cuota diaria del SMTP, de la que también dependen los códigos de la
+ *   verificación en dos pasos). Pasado el global, una línea en Logs como mucho una vez al día.
+ * Pasado un tope, no sale el email y la respuesta es la misma.
  */
 export async function requestPasswordReset(email: string) {
   return runAction({ name: "auth.requestPasswordReset", args: [] }, async () => {
@@ -168,20 +175,27 @@ export async function requestPasswordReset(email: string) {
     }
     if (parsed.success) {
       const address = parsed.data;
+      // La cookie de dispositivos se lee ahora (tras la respuesta ya no hay cookies); la cuenta se mira en el envío.
+      const knownDevice = await knownDeviceCheck();
       // El envío va tras la respuesta: así tampoco se nota por el tiempo que tarde.
       sendMailInBackground("restablecer contraseña", async () => {
         const user = await db.user.findUnique({ where: { email: address }, select: { id: true, name: true, email: true, locale: true, active: true } });
         if (!user?.active) return;
         const day = `reset:email-day:${address}`;
-        if (rateLimitReached(day, RESET_MAILS_PER_ADDRESS_DAY)) return;
-        if (!rateLimit("reset:all", RESET_MAILS_PER_HOUR, 60 * 60_000)) {
-          releaseRateLimit("reset:all");
-          if (rateLimit("reset:all:logged", 1, 60 * 60_000)) {
-            logEvent({ level: "warn", category: "auth", action: "auth.resetMailCapped", label: { k: "Tope de emails para restablecer la contraseña: {n} en una hora. Los siguientes no se envían hasta que pase.", p: { n: RESET_MAILS_PER_HOUR } }, ip });
+        // El dispositivo solo se mira si ya ha salido alguno hoy (el primero sale de todas formas).
+        const known = rateLimitReached(day, 1) && (await knownDevice(user.id));
+        // Desde aquí, sin ningún await hasta anotar el envío: dos envíos a la vez no pueden ver el mismo contador.
+        if (!known && rateLimitReached(day, 1)) {
+          if (rateLimitReached(day, RESET_MAILS_PER_ADDRESS_DAY)) return;
+          if (!rateLimit("reset:repeat-day", RESET_REPEAT_MAILS_PER_DAY, DAY_MS)) {
+            releaseRateLimit("reset:repeat-day");
+            if (rateLimit("reset:repeat-day:logged", 1, DAY_MS)) {
+              logEvent({ level: "warn", category: "auth", action: "auth.resetMailCapped", label: { k: "Tope de emails repetidos para restablecer la contraseña: {n} en 24 horas. Hasta que pase, solo sale el primero del día a cada dirección y los pedidos desde un dispositivo conocido de la cuenta.", p: { n: RESET_REPEAT_MAILS_PER_DAY } }, ip });
+            }
+            return;
           }
-          return;
         }
-        rateLimit(day, RESET_MAILS_PER_ADDRESS_DAY, 24 * 60 * 60_000);
+        rateLimit(day, RESET_MAILS_PER_ADDRESS_DAY, DAY_MS);
         const token = await issueAuthToken(user.id, "PASSWORD_RESET");
         await sendPasswordResetMail(user, `${appUrl()}/reset/${token}`);
         logEvent({ category: "auth", action: "auth.resetRequested", label: { k: "Enlace de restablecimiento enviado a {name}", p: { name: user.name } }, userId: user.id, userName: user.name, ip });

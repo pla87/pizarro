@@ -97,8 +97,17 @@ export async function registerDevice(userId: string, opts: { trustDays?: number 
  * Da el margen extra de intentos de acceso (LOGIN_ACCOUNT_LIMIT_TRUSTED): un tercero sin la cookie no puede gastarlo.
  */
 export async function isKnownDevice(userId: string): Promise<boolean> {
+  return (await knownDeviceCheck())(userId);
+}
+
+/**
+ * Lo mismo que isKnownDevice, en dos tiempos: la cookie se lee ahora (durante la petición) y la cuenta se comprueba
+ * después, con la función que devuelve. Para un envío en segundo plano (sendMailInBackground), que corre cuando la
+ * respuesta ya ha salido y ya no hay cookies: así la respuesta tampoco tarda más según exista o no la cuenta.
+ */
+export async function knownDeviceCheck(): Promise<(userId: string) => Promise<boolean>> {
   const ids = sentDeviceIds(await cookies());
-  return ids.length > 0 && (await rowsForIds(userId, ids)).length > 0;
+  return async (userId) => ids.length > 0 && (await rowsForIds(userId, ids)).length > 0;
 }
 
 /** «Recordar este dispositivo»: ¿este navegador está marcado como de confianza para esta cuenta (no se pide el segundo paso)? */

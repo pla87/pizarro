@@ -20,8 +20,9 @@ import { issueAuthToken } from "../../src/lib/auth-token-issue";
 import { applyNewPassword } from "../../src/lib/account";
 import { LOGIN_ACCOUNT_LIMIT, LOGIN_ACCOUNT_LIMIT_TRUSTED, loginRateKeys, rateLimit, rateLimitReached, resetRateLimit } from "../../src/lib/rate-limit";
 import { finishSetup, verifyLoginCode } from "../../src/actions/two-factor";
-import { hashAuthToken, newToken } from "../../src/lib/auth-token-core";
-import { CHALLENGE_COOKIE, readChallenge, sendEmailCode, startChallenge } from "../../src/lib/two-factor";
+import { hashAuthToken, hashDeviceId, newToken } from "../../src/lib/auth-token-core";
+import { deviceCookieName } from "../../src/lib/session-config";
+import { CHALLENGE_COOKIE, emailCodeStatus, readChallenge, sendEmailCode, startChallenge } from "../../src/lib/two-factor";
 import { flushLogs } from "../../src/lib/log";
 import { changePassword } from "../../src/actions/profile";
 import { encryptSecret } from "../../src/lib/crypto";
@@ -704,74 +705,147 @@ async function countMails(fn: () => Promise<void>): Promise<number> {
   }
 }
 
+/** Un navegador que es dispositivo conocido de `userId` (su marca en la cookie y su fila KnownDevice, sin «Recordar»). */
+async function knownBrowser(userId: string): Promise<Map<string, string>> {
+  const deviceId = newToken();
+  await db.knownDevice.create({ data: { userId, deviceHash: hashDeviceId(deviceId) } });
+  return new Map([[deviceCookieName(), deviceId]]);
+}
+
+const emailOf = async (u: { id: string }) => (await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { email: true } })).email;
+
 describe("topes de los emails de «¿Olvidaste tu contraseña?»", () => {
   // La IP de las pruebas (sin cabeceras): sus topes de 15 min se vacían entre peticiones, como si pasara el tiempo.
   const freshWindow = (email: string) => {
     resetRateLimit(`reset:email:${email}`);
     for (const ip of ["unknown", "127.0.0.1", "::1"]) resetRateLimit(`reset:ip:${ip}`);
   };
+  const request = async (email: string) => {
+    freshWindow(email);
+    expectOk(await requestPasswordReset(email));
+    await afterDone();
+  };
+  const clearGlobal = () => {
+    resetRateLimit("reset:repeat-day");
+    resetRateLimit("reset:repeat-day:logged");
+  };
 
-  test("5 al día a una dirección: la 6.ª petición responde igual y no envía nada", async () => {
-    resetRateLimit("reset:all");
+  test("5 al día a una dirección desde un navegador desconocido: la 6.ª responde igual y no envía; desde un dispositivo conocido de la cuenta, sí", async () => {
+    clearGlobal();
     const user = await makeUser();
-    const email = (await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { email: true } })).email;
+    const email = await emailOf(user);
     resetRateLimit(`reset:email-day:${email}`);
-    const sent = await countMails(async () => {
-      for (let i = 0; i < 6; i++) {
-        freshWindow(email);
-        expectOk(await requestPasswordReset(email));
-        await afterDone();
-      }
-    });
-    assert.equal(sent, 5);
+    logout();
+    assert.equal(await countMails(async () => { for (let i = 0; i < 6; i++) await request(email); }), 5);
+    // El navegador de otra cuenta no es un dispositivo conocido de esta: sigue sin salir.
+    const other = await makeUser();
+    restoreSession(await knownBrowser(other.id));
+    assert.equal(await countMails(() => request(email)), 0);
+    // Desde el suyo sale, y más de uno (un tercero sin esa cookie no puede gastarle el tope).
+    restoreSession(await knownBrowser(user.id));
+    assert.equal(await countMails(async () => { await request(email); await request(email); }), 2);
+    // Los del dispositivo conocido no cuentan en el global de repetidos (solo los 4 repetidos de antes).
+    assert.equal(rateLimitReached("reset:repeat-day", 4), true);
+    assert.equal(rateLimitReached("reset:repeat-day", 5), false);
+    logout();
     // Una dirección sin cuenta no gasta el tope de nadie (ni el global): tampoco se envía nada.
-    resetRateLimit("reset:all");
-    assert.equal(await countMails(async () => expectOk(await requestPasswordReset("nadie-reset@example.com"))), 0);
-    assert.equal(rateLimitReached("reset:all", 1), false);
+    clearGlobal();
+    assert.equal(await countMails(() => request("nadie-reset@example.com")), 0);
+    assert.equal(rateLimitReached("reset:email-day:nadie-reset@example.com", 1), false);
+    assert.equal(rateLimitReached("reset:repeat-day", 1), false);
     resetRateLimit(`reset:email-day:${email}`);
   });
 
-  test("30 por hora en total: después, no sale ninguno, la respuesta es la misma y queda una línea en Logs (una por hora)", async () => {
-    resetRateLimit("reset:all");
-    resetRateLimit("reset:all:logged");
-    rateLimit("reset:all", 30, 60 * 60_000, 30); // ya se han enviado 30 esta hora
+  test("100 repetidos al día en total: el primero del día a cada dirección sale igual; los repetidos no (salvo desde un dispositivo conocido) y queda una línea en Logs, una al día", async () => {
+    clearGlobal();
+    rateLimit("reset:repeat-day", 100, 24 * 60 * 60_000, 100); // ya se han enviado 100 repetidos hoy
     const a = await makeUser();
     const b = await makeUser();
-    const emails = await Promise.all([a, b].map(async (u) => (await db.user.findUniqueOrThrow({ where: { id: u.id }, select: { email: true } })).email));
+    const emails = await Promise.all([a, b].map(emailOf));
+    for (const email of emails) resetRateLimit(`reset:email-day:${email}`);
+    logout();
     const since = new Date();
-    const sent = await countMails(async () => {
-      for (const email of emails) {
-        freshWindow(email);
-        expectOk(await requestPasswordReset(email));
-        await afterDone();
-      }
-    });
-    assert.equal(sent, 0);
+    // El primero del día a cada una: sale.
+    assert.equal(await countMails(async () => { for (const email of emails) await request(email); }), 2);
+    // El segundo, desde un navegador desconocido: no sale (la respuesta es la misma).
+    assert.equal(await countMails(async () => { for (const email of emails) await request(email); }), 0);
     await flushLogs();
     assert.equal(await db.appLog.count({ where: { action: "auth.resetMailCapped", createdAt: { gte: since } } }), 1);
-    // El tope por dirección no se ha gastado.
-    for (const email of emails) assert.equal(rateLimitReached(`reset:email-day:${email}`, 1), false, email);
-    resetRateLimit("reset:all");
-    resetRateLimit("reset:all:logged");
+    // El tope de cada dirección solo lleva el que salió; el global no ha pasado de 100.
+    for (const email of emails) {
+      assert.equal(rateLimitReached(`reset:email-day:${email}`, 1), true, email);
+      assert.equal(rateLimitReached(`reset:email-day:${email}`, 2), false, email);
+    }
+    assert.equal(rateLimitReached("reset:repeat-day", 101), false);
+    // Desde un dispositivo conocido de la cuenta sale aunque el global esté lleno.
+    restoreSession(await knownBrowser(a.id));
+    assert.equal(await countMails(() => request(emails[0]!)), 1);
+    logout();
+    clearGlobal();
+    for (const email of emails) resetRateLimit(`reset:email-day:${email}`);
   });
 });
 
 describe("códigos de la verificación en dos pasos por email: tope por persona", () => {
-  test("10 por hora entre todos sus desafíos: el 11.º (en un desafío nuevo) no se envía", async () => {
+  const challenge = (userId: string) => db.loginChallenge.create({ data: { userId, kind: "LOGIN", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + 600_000) }, select: { id: true, userId: true } });
+
+  test("10 por hora entre todos sus desafíos: el 11.º (en un desafío nuevo) no se envía, salvo desde un dispositivo conocido de la cuenta", async () => {
     const user = await makeUser();
     const me = await db.user.findUniqueOrThrow({ where: { id: user.id }, select: { name: true, email: true, locale: true } });
-    const challenge = () => db.loginChallenge.create({ data: { userId: user.id, kind: "LOGIN", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + 600_000) }, select: { id: true, userId: true } });
+    logout();
     let refused: unknown = null;
     const sent = await countMails(async () => {
-      for (let i = 0; i < 10; i++) await sendEmailCode(await challenge(), me);
-      await sendEmailCode(await challenge(), me).catch((err: unknown) => { refused = err; });
+      for (let i = 0; i < 10; i++) await sendEmailCode(await challenge(user.id), me);
+      await sendEmailCode(await challenge(user.id), me).catch((err: unknown) => { refused = err; });
     });
     assert.equal(sent, 10);
     assert.match(String((refused as Error | null)?.message), /Demasiados envíos/);
     // Otra persona no se ve afectada.
     const other = await makeUser();
     const them = await db.user.findUniqueOrThrow({ where: { id: other.id }, select: { name: true, email: true, locale: true } });
-    const theirs = await db.loginChallenge.create({ data: { userId: other.id, kind: "LOGIN", tokenHash: hashAuthToken(newToken()), expiresAt: new Date(Date.now() + 600_000) }, select: { id: true, userId: true } });
-    assert.equal(await countMails(() => sendEmailCode(theirs, them)), 1);
+    assert.equal(await countMails(async () => sendEmailCode(await challenge(other.id), them)), 1);
+    // El navegador de otra cuenta no salta el tope; el suyo, sí.
+    restoreSession(await knownBrowser(other.id));
+    assert.equal(await countMails(() => assert.rejects(async () => sendEmailCode(await challenge(user.id), me), /Demasiados envíos/)), 0);
+    restoreSession(await knownBrowser(user.id));
+    assert.equal(await countMails(async () => { await sendEmailCode(await challenge(user.id), me); await sendEmailCode(await challenge(user.id), me); }), 2);
+    logout();
+  });
+
+  test("al entrar con el tope lleno, la pantalla del segundo paso dice que no se ha enviado; desde un dispositivo conocido, sale y lo dice", async () => {
+    const PASSWORD = "clave-del-segundo-paso-1";
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(PASSWORD), twoFactorMethod: "EMAIL" } });
+    const email = await emailOf(user);
+    rateLimit(`2fa:send-user:${user.id}`, 10, 60 * 60_000, 10); // ya se le han enviado 10 esta hora
+    const enter = async (): Promise<string> => {
+      const form = new FormData();
+      form.set("email", email);
+      form.set("password", PASSWORD);
+      try {
+        await login({}, form);
+      } catch (err) {
+        const digest = (err as { digest?: string }).digest ?? "";
+        if (digest.startsWith("NEXT_REDIRECT")) return digest.split(";")[2] ?? "";
+        throw err;
+      }
+      throw new Error("login sin redirección");
+    };
+    // Desde un navegador desconocido (quien ya tiene la contraseña): no sale el código y la pantalla lo dice.
+    logout();
+    assert.equal(await countMails(async () => assert.equal(await enter(), "/login/verify")), 0);
+    const capped = await readChallenge();
+    assert.ok(capped);
+    assert.equal(await emailCodeStatus(capped), "capped");
+    // Desde su dispositivo conocido (sin «Recordar»: sigue pidiendo el segundo paso): sale.
+    restoreSession(await knownBrowser(user.id));
+    assert.equal(await countMails(async () => assert.equal(await enter(), "/login/verify")), 1);
+    const sent = await readChallenge();
+    assert.ok(sent);
+    assert.equal(await emailCodeStatus(sent), "sent");
+    // Sin tope, un desafío sin código no dice ni una cosa ni la otra.
+    resetRateLimit(`2fa:send-user:${user.id}`);
+    logout();
+    assert.equal(await emailCodeStatus({ userId: user.id, codeHash: null }), null);
   });
 });

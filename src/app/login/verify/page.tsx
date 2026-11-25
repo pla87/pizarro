@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { getCurrentUser } from "@/lib/session";
-import { readChallenge } from "@/lib/two-factor";
+import { emailCodeStatus, readChallenge } from "@/lib/two-factor";
 import { emailEnabled } from "@/lib/mail";
 import { getT } from "@/i18n/server";
 import { SetupForm } from "./SetupForm";
@@ -25,9 +25,12 @@ export default async function VerifyPage() {
       </AuthCard>
     );
   }
+  const method = ch.user.twoFactorMethod === "EMAIL" ? "EMAIL" : "TOTP";
+  // Con código por email: si salió, o si no salió porque la persona ha llegado a su tope de envíos (se dice en pantalla).
+  const emailStatus = method === "EMAIL" ? await emailCodeStatus(ch) : null;
   return (
     <AuthCard title={t("Verificación en dos pasos")}>
-      <VerifyForm method={ch.user.twoFactorMethod === "EMAIL" ? "EMAIL" : "TOTP"} emailSent={Boolean(ch.codeHash)} />
+      <VerifyForm method={method} emailStatus={emailStatus} />
     </AuthCard>
   );
 }

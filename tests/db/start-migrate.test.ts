@@ -150,7 +150,7 @@ test("migrate.mjs + Prisma: con todas las migraciones aplicadas y el mismo check
   // Segundo: al día, sin lanzar Prisma.
   const second = await start(dir, url);
   assert.equal(second.status, 0, second.stdout + second.stderr);
-  assert.match(second.stdout, /^\[start\] Base de datos al día: 2 migraciones aplicadas, sin lanzar Prisma \(comprobación: [\d,]+ s\)\.$/m);
+  assert.match(second.stdout, /^\[start\] Base de datos al día: 2 migraciones aplicadas, sin lanzar Prisma \(comprobación: [\d,]+ s(; espera a PostgreSQL: [\d,]+ s)?\)\.$/m);
   assert.doesNotMatch(second.stdout + second.stderr, /Loaded Prisma config|Aplicando migraciones/);
   // Migración nueva (versión siguiente): la aplica Prisma.
   const otra = "20270201000000_otra";
