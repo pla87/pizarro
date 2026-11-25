@@ -4,10 +4,15 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter, withSmtpDown } from "./helpers";
+import { afterDone, db, expectOk, loginAs, makeProject, makeTask, makeUser, waitForLockWaiter, withSmtpDown } from "./helpers";
 import { flushLogs } from "../../src/lib/log";
 import { updateEmailPrefs } from "../../src/actions/collab-prefs";
 import { gatherDigest, sendDueDigests } from "../../src/lib/periodic-mail";
+import { createTasks } from "../../src/actions/tasks";
+import { notifyAssigned } from "../../src/lib/column-assign";
+import { buildDigest, digestEmail, emptyDigestInput } from "../../src/lib/digest";
+import { makeT } from "../../src/i18n/core";
+import pg from "pg";
 import { resetShutdownForTests, runShutdown } from "../../src/lib/shutdown";
 import { digestDue } from "../../src/lib/schedule";
 
@@ -41,6 +46,101 @@ describe("resumen diario", () => {
     const now = new Date();
     const d = await gatherDigest({ id: user.id, role: "MEMBER" }, now, now.toISOString().slice(0, 10));
     assert.deepEqual(d.done.filter((x) => [f.project.id, foreign.project.id].includes(x.projectId)).map((x) => x.title).sort(), ["Terminada", "Terminada y archivada"]);
+  });
+});
+
+/** Cuenta las consultas SQL mientras corre `fn` (como en calendar-feed.test.ts). */
+async function countQueries<T>(fn: () => Promise<T>): Promise<{ result: T; sql: string[] }> {
+  const proto = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
+  const orig = proto.query;
+  const sql: string[] = [];
+  proto.query = function (this: unknown, ...args: unknown[]) {
+    const q = args[0];
+    sql.push(typeof q === "string" ? q : String((q as { text?: string } | undefined)?.text ?? ""));
+    return orig.apply(this, args);
+  };
+  try {
+    return { result: await fn(), sql };
+  } finally {
+    proto.query = orig;
+  }
+}
+
+describe("resumen diario: «Asignadas a ti»", () => {
+  const today = () => new Date().toISOString().slice(0, 10);
+  const assignedOf = async (user: { id: string }, projectId: string) =>
+    (await gatherDigest({ id: user.id, role: "MEMBER" }, new Date(), today())).assigned.filter((x) => x.projectId === projectId);
+
+  // Antes salía la tarea aunque al rato se la hubieran pasado a otra persona (solo se miraban los avisos).
+  test("solo las que siguen siendo de la persona", async () => {
+    const [user, other, third] = [await makeUser(), await makeUser(), await makeUser()];
+    const f = await makeProject({ members: [user, other, third] });
+    const kept = await makeTask(f, { title: "Sigue siendo mía", createdById: other.id });
+    const moved = await makeTask(f, { title: "Ya es de otra", createdById: other.id });
+    for (const t of [kept, moved]) {
+      await db.task.update({ where: { id: t.id }, data: { assigneeId: user.id } });
+      await db.notification.create({ data: { userId: user.id, actorId: other.id, taskId: t.id, type: "ASSIGNED", excerpt: t.title } });
+    }
+    await db.task.update({ where: { id: moved.id }, data: { assigneeId: third.id } });
+    assert.deepEqual((await assignedOf(user, f.project.id)).map((x) => x.title), ["Sigue siendo mía"]);
+  });
+
+  // Antes un lote de «Varias tareas» (un solo aviso, enlazado a la primera) salía como «Asignadas a ti: 1».
+  test("«Varias tareas» asignadas a la persona salen todas, sin «y N más»", async () => {
+    const [user, other] = [await makeUser(), await makeUser()];
+    const f = await makeProject({ members: [user, other] });
+    await loginAs(other);
+    const titles = Array.from({ length: 30 }, (_, i) => `Lote ${String(i).padStart(2, "0")}`);
+    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: user.id, tasks: titles.map((title) => ({ title, kindId: f.kindId })) }));
+    await afterDone();
+    assert.equal(await db.notification.count({ where: { userId: user.id, type: "ASSIGNED" } }), 1, "un solo aviso para el lote");
+    const items = await assignedOf(user, f.project.id);
+    assert.deepEqual(items.map((x) => x.title).sort(), titles);
+    assert.ok(items.every((x) => !x.more), "sin «y N más»: ya salen todas");
+    // Las que crea la propia persona para sí misma no salen (ya las conoce).
+    await loginAs(user);
+    expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: user.id, tasks: [{ title: "Para mí", kindId: f.kindId }] }));
+    assert.ok(!(await assignedOf(user, f.project.id)).some((x) => x.title === "Para mí"));
+  });
+
+  // El lote de la columna con «Asignación a persona» no tiene fecha de asignación por tarea: sale la primera y «y N más».
+  test("el lote de una columna con «Asignación a persona» dice «y N más»", async () => {
+    const [user, other] = [await makeUser(), await makeUser()];
+    const f = await makeProject({ members: [user, other] });
+    const old = new Date(Date.now() - 5 * 86_400_000);
+    const rows = [];
+    for (const title of ["Primera del lote", "Segunda", "Tercera"]) {
+      const t = await makeTask(f, { title, createdById: other.id });
+      rows.push(await db.task.update({ where: { id: t.id }, data: { assigneeId: user.id, createdAt: old } }));
+    }
+    await loginAs(other);
+    await notifyAssigned({ projectId: f.project.id, assigneeId: user.id }, rows.map((r) => r.id), other.id, rows);
+    await afterDone();
+    const items = await assignedOf(user, f.project.id);
+    assert.deepEqual(items.map((x) => [x.title, x.more]), [["Primera del lote", 2]]);
+    const digest = buildDigest({ ...emptyDigestInput(), assigned: items });
+    assert.equal(digest.sections[0]!.total, 3);
+    assert.equal(digest.taskCount, 3);
+    const es = digestEmail(digest, { name: "Luz", baseUrl: "https://app.example.com" }, makeT("es"));
+    assert.ok(es.text.includes("Asignadas a ti (3)"), es.text);
+    assert.ok(es.text.includes("«Primera del lote» y 2 más"), es.text);
+    assert.ok(es.html.includes("«Primera del lote» y 2 más"), es.html);
+    assert.ok(digestEmail(digest, { name: "Luz", baseUrl: "https://app.example.com" }, makeT("en")).text.includes("and 2 more"));
+  });
+
+  test("el número de consultas no crece con las tareas asignadas", async () => {
+    const counts: number[] = [];
+    for (const n of [2, 25]) {
+      const [user, other] = [await makeUser(), await makeUser()];
+      const f = await makeProject({ members: [user, other] });
+      await loginAs(other);
+      expectOk(await createTasks({ projectId: f.project.id, columnId: f.columns.todo, assigneeId: user.id, tasks: Array.from({ length: n }, (_, i) => ({ title: `T${i}`, kindId: f.kindId })) }));
+      await afterDone();
+      const { result, sql } = await countQueries(() => gatherDigest({ id: user.id, role: "MEMBER" }, new Date(), today()));
+      assert.equal(result.assigned.filter((x) => x.projectId === f.project.id).length, n);
+      counts.push(sql.filter((s) => /^\s*SELECT/i.test(s)).length);
+    }
+    assert.equal(counts[0], counts[1], String(counts));
   });
 });
 
