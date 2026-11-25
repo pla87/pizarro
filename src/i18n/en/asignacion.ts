@@ -72,4 +72,7 @@ export const asignacion: Record<string, string> = {
   "(se abre en otra pestaña)": "(opens in another tab)",
   "Asignada a {name} · vence el {date}": "Assigned to {name} · due {date}",
   "Asignada a {name}": "Assigned to {name}",
+  // Aviso al mover varias a una columna «Asignación a persona» cuando no todas cambian de responsable o de fecha
+  "{n} tarjetas movidas · 1 asignada a {name}": "{n} cards moved · 1 assigned to {name}",
+  "{n} tarjetas movidas · {k} asignadas a {name}": "{n} cards moved · {k} assigned to {name}",
 };

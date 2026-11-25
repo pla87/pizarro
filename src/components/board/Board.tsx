@@ -19,7 +19,7 @@ import { createPortal, flushSync } from "react-dom";
 import { archiveTasks, deleteTasks, duplicateTask, makeEvergreen, moveTask, moveTasks } from "@/actions/tasks";
 import { placeColumn } from "@/actions/columns";
 import { showAssignedNotice } from "./assignNotice";
-import { COLUMN_DRAG_PREFIX, columnDragCollision, createBoardCollisionDetection } from "@/lib/collision";
+import { COLUMN_DRAG_PREFIX, COLUMN_DROPPABLE_PREFIX, columnDragCollision, createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardPageData, BoardTask, LabelOption } from "@/lib/types";
 import { unpackBoardTask, type BoardTaskWire } from "@/lib/board-task-wire";
@@ -89,7 +89,6 @@ const BulkTaskDialog = lazyDialog(loadBulkTaskDialog, (m) => m.BulkTaskDialog);
 const ArchivedDialog = lazyDialog(loadArchivedDialog, (m) => m.ArchivedDialog);
 const ImportTasksDialog = lazyDialog(loadImportTasksDialog, (m) => m.ImportTasksDialog);
 
-const COLUMN_PREFIX = "col:";
 /** Contenedor virtual del arrastre de una tarea fija (evergreen): origen fuera de las listas ordenables. */
 const EVERGREEN_ORIGIN = "__evergreen__";
 /** Tiempo tras cambiar de lista durante el que la tarjeta arrastrada no vuelve a la lista de la que salió (ver onDragOver). */
@@ -254,7 +253,7 @@ function useStableItems(items: Items): Items {
 }
 
 function findContainer(items: Items, id: string): string | undefined {
-  if (id.startsWith(COLUMN_PREFIX)) return id.slice(COLUMN_PREFIX.length);
+  if (id.startsWith(COLUMN_DROPPABLE_PREFIX)) return id.slice(COLUMN_DROPPABLE_PREFIX.length);
   return Object.keys(items).find((col) => items[col]!.includes(id));
 }
 
@@ -686,10 +685,13 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     // Las tarjetas sueltas aplicadas después de pedir estos datos conservan la versión del parche; si no casan con ellos
     // (columna quitada o renumerada), null y se piden otra vez.
     const serverTasks = withPatchedTasks(data.tasks, patchedSince.current, new Set(data.columns.map((c) => c.id)));
-    if (pending.current > 0 || activeId || mutationAt.current > refreshAt.current || !serverTasks) {
+    // A medio arrastre (de una tarjeta o de la cabecera de una columna) se espera a soltar (cancelDrag llama a flushStale):
+    // antes, con una cabecera, las columnas saltaban bajo el puntero y, si la arrastrada desaparecía, soltar no hacía nada.
+    const dragging = !!activeId || !!columnDrag;
+    if (pending.current > 0 || dragging || mutationAt.current > refreshAt.current || !serverTasks) {
       // Datos que pueden ser anteriores a un cambio propio: se piden otra vez cuando no quede ninguno en vuelo.
       staleRefresh.current = true;
-      if (!activeId) flushStale();
+      if (!dragging) flushStale();
       return;
     }
     const openId = openTaskRef.current;
@@ -1089,9 +1091,12 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       return next;
     });
 
-  /** Tras entrar tarjetas en una columna «Asignación a persona»: «Asignada a X · vence el …» con «Deshacer» (assignNotice.ts). */
-  const assignedNotice = (assigned: readonly { id: string; assigneeId: string; dueDate: string | null }[], undoId: string | undefined) =>
-    showAssignedNotice(assigned, undoId, { users: data.users, today: data.today, locale, t, toast, track, refresh });
+  /**
+   * Tras entrar tarjetas en una columna «Asignación a persona»: «Asignada a X · vence el …» con «Deshacer» (assignNotice.ts).
+   * `moved`: cuántas se movieron, si eran varias (el aviso lo dice cuando no todas cambian de responsable o de fecha).
+   */
+  const assignedNotice = (assigned: readonly { id: string; assigneeId: string; dueDate: string | null }[], undoId: string | undefined, moved?: number) =>
+    showAssignedNotice(assigned, undoId, { users: data.users, today: data.today, locale, t, toast, track, refresh }, moved);
 
   /**
    * Mueve una selección en bloque (soltarla arrastrada, o Alt+flechas sobre una de ellas; ver groupDrag.ts): todas seguidas
@@ -1136,7 +1141,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     res.data.spawned.forEach(upsertTask);
     // Columna «Asignación a persona»: responsable y fecha que les ha puesto el servidor.
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
-    if (assignedNotice(res.data.assigned, res.data.undo.id)) return;
+    if (assignedNotice(res.data.assigned, res.data.undo.id, res.data.moved.length)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name ?? "";
     const n = res.data.moved.length;
     toast(t("{moved} a «{name}»", { moved: n === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n }), name }));
@@ -1264,7 +1269,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     setTasks((prev) => prev.map((t) => (server.has(t.id) ? { ...t, columnId, position: server.get(t.id)!, evergreen: false, evergreenEvery: 1, columnEnteredAt: new Date().toISOString() } : t)));
     res.data.spawned.forEach(upsertTask);
     for (const a of res.data.assigned) patchTask(a.id, { assigneeId: a.assigneeId, dueDate: a.dueDate });
-    if (assignedNotice(res.data.assigned, res.data.undo.id)) return;
+    if (assignedNotice(res.data.assigned, res.data.undo.id, res.data.moved.length)) return;
     const name = sortedColumns.find((c) => c.id === columnId)?.name;
     toast(t("{moved} a «{name}»", { moved: res.data.moved.length === 1 ? t("1 tarjeta movida") : t("{n} tarjetas movidas", { n: res.data.moved.length }), name: name ?? "" }));
   };
@@ -1475,7 +1480,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   /** Mueve la tarjeta arrastrada a otra columna en el estado temporal del arrastre. */
   const onDragOver = ({ active, over }: DragOverEvent) => {
     if (String(active.id).startsWith(COLUMN_DRAG_PREFIX)) {
-      const target = over && String(over.id).startsWith(COLUMN_PREFIX) ? String(over.id).slice(COLUMN_PREFIX.length) : null;
+      const target = over && String(over.id).startsWith(COLUMN_DROPPABLE_PREFIX) ? String(over.id).slice(COLUMN_DROPPABLE_PREFIX.length) : null;
       setColumnDrag((c) => (c && c.over !== target ? { ...c, over: target } : c));
       return;
     }
@@ -1602,7 +1607,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   const onDragEnd = async ({ active, over }: DragEndEvent) => {
     if (String(active.id).startsWith(COLUMN_DRAG_PREFIX)) {
-      const target = (over && String(over.id).startsWith(COLUMN_PREFIX) ? String(over.id).slice(COLUMN_PREFIX.length) : null) ?? columnDrag?.over ?? null;
+      const target = (over && String(over.id).startsWith(COLUMN_DROPPABLE_PREFIX) ? String(over.id).slice(COLUMN_DROPPABLE_PREFIX.length) : null) ?? columnDrag?.over ?? null;
       cancelDrag();
       if (over) void dropColumn(String(active.id).slice(COLUMN_DRAG_PREFIX.length), target);
       return;
@@ -1652,7 +1657,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     const col = findContainer(current, id);
     if (!col || col === EVERGREEN_ORIGIN) return;
     let list = current[col]!;
-    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_PREFIX)) {
+    if (findContainer(current, overId) === col && overId !== id && !overId.startsWith(COLUMN_DROPPABLE_PREFIX)) {
       list = moveOnto(list, id, overId);
     }
     const index = list.indexOf(id);
@@ -1824,7 +1829,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
               cardCount={cardCounts[column.id] ?? 0}
               index={i}
               total={stableColumns.length}
-              droppableId={COLUMN_PREFIX + column.id}
+              droppableId={COLUMN_DROPPABLE_PREFIX + column.id}
               mobileHidden={column.id !== activeMobileColumn}
               columnDragging={columnDrag?.id === column.id}
               columnDrop={columnDrag && columnDrag.over === column.id && columnDrag.id !== column.id

@@ -1085,8 +1085,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const nextDesc = switchKindDescription(prev, kind, typed);
       descReplace.current?.(nextDesc, nextDesc !== typed);
       const nextTitleKept = nextTitle.trim() ? nextTitle : title;
+      const prevTitle = title;
+      const prevFailed = textSaveFailed.current;
       if (nextTitleKept !== title) setTitle(nextTitleKept);
       const saved = save(nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, nextTitleKept === title ? { kindId } : { kindId, title: nextTitleKept }, { description: false });
+      // Sin guardar, el título que puso el tipo vuelve al de antes (como abajo); lo escrito en la descripción se queda.
+      if (nextTitleKept !== prevTitle) {
+        void saved.then((ok) => {
+          if (ok) return;
+          setTitle((cur) => (cur === nextTitleKept ? prevTitle : cur));
+          textSaveFailed.current = prevFailed;
+        });
+      }
       // El aviso dice qué se ha guardado: «Guardado» a secas hacía pensar que la descripción también.
       // Más rato que «Guardado»: el aviso de la cabecera queda lejos del selector de tipo y se pasaba por alto.
       void saved.then((ok) => ok && showNotice(t("Tipo guardado; la descripción, sin guardar"), 6000));
@@ -1094,14 +1104,32 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
     }
     const preset = detail && kind ? { title: nextTitle.trim() ? nextTitle : title, description: switchKindDescription(prev, kind, detail.description) } : null;
     if (!preset || (preset.title === title && preset.description === detail?.description)) return save({ kindId }, { kindId }, { description: false });
+    // Si no se guarda (sin conexión, sesión caducada, otro error), el selector vuelve al tipo de antes (saveNow) y con él
+    // el título y la descripción: los puso el tipo, no la persona. Antes se quedaban los de la plantilla nueva: la
+    // descripción parecía guardada y el título, pendiente, se podía acabar guardando con el tipo anterior.
+    const prevTitle = title;
+    const prevDesc = detail?.description ?? "";
+    const prevFailed = textSaveFailed.current;
     setTitle(preset.title);
     setDetail((d) => (d ? { ...d, description: preset.description } : d));
     setDescVersion((n) => n + 1);
-    save(
+    return save(
       { kindId, title: preset.title, description: preset.description },
       { kindId, title: preset.title, hasDescription: preset.description.trim().length > 0 },
       { description: preset.description !== detail?.description },
-    );
+    ).then((ok) => {
+      if (ok) return ok;
+      // Solo lo que sigue como lo dejó el cambio de tipo: lo que haya cambiado después (lo escrito, lo recargado tras un
+      // conflicto) se queda.
+      setTitle((cur) => (cur === preset.title ? prevTitle : cur));
+      const shown = textState.current.detail;
+      if (prevDesc !== preset.description && shown?.description === preset.description && !editingDescription()) {
+        setDetail((d) => (d ? { ...d, description: prevDesc } : d));
+        setDescVersion((n) => n + 1);
+      }
+      textSaveFailed.current = prevFailed;
+      return ok;
+    });
   };
 
   // `next`: título recién escrito (el dictado sin campo visible lo cambia sin pasar por un estado ya renderizado).
@@ -1655,6 +1683,15 @@ export function TypeSelector({ kinds, value, onChange }: { kinds: KindOption[]; 
   );
 }
 
+/**
+ * ¿El foco llega con el teclado desde otro elemento (Tab)? Al volver a la pestaña o a la ventana (Alt+Tab), el navegador
+ * vuelve a dar el foco al elemento que lo tenía, con `:focus-visible` si lo tenía, pero sin elemento de origen
+ * (`relatedTarget` nulo): tras guardar la descripción con Ctrl+Intro, eso abría el editor sin pedirlo.
+ */
+function focusFromElsewhere(e: React.FocusEvent<HTMLElement>): boolean {
+  return e.relatedTarget !== null && e.currentTarget.matches(":focus-visible");
+}
+
 function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onGoogle, onDraftChange, liveRef, dirtyRef, replaceRef }: {
   initial: string | null;
   /** Cambia cuando `initial` es una descripción nueva guardada desde fuera (otra persona u otra pestaña). */
@@ -1894,9 +1931,10 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
           role="group"
           aria-label={t("Descripción")}
           // Solo con el teclado (Tab): el clic con el ratón no debe abrir la edición, y un enlace del texto conserva su foco.
-          // Tampoco el foco que pone el editor al cerrarse (ver `placingFocus`).
+          // Tampoco el foco que pone el editor al cerrarse (ver `placingFocus`), ni el que el navegador le devuelve al volver
+          // a la pestaña o a la ventana (ver `focusFromElsewhere`).
           onFocus={(e) => {
-            if (!placingFocus.current && e.target === e.currentTarget && e.currentTarget.matches(":focus-visible")) setEditing(true);
+            if (!placingFocus.current && e.target === e.currentTarget && focusFromElsewhere(e)) setEditing(true);
           }}
           onKeyDown={(e) => {
             if (e.target === e.currentTarget && e.key === "Enter") setEditing(true);
@@ -1909,7 +1947,7 @@ function DescriptionEditor({ initial, remote, draft, onSave, onClear, users, onG
           className="w-full rounded-lg border border-dashed border-slate-300 p-4 text-left text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700"
           onClick={() => setEditing(true)}
           onFocus={(e) => {
-            if (e.currentTarget.matches(":focus-visible")) setEditing(true);
+            if (focusFromElsewhere(e)) setEditing(true);
           }}
         >
           {t("Añade una descripción…")}

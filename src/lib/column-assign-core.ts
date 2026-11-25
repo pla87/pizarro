@@ -5,7 +5,8 @@
 // ella pasa a la persona y, si la columna tiene plazo y la tarea no tiene fecha límite, vence hoy + N días. Elegir otro
 // rol (o «Sin rol») quita los dos campos. Una plantilla de proyecto conserva el plazo pero no la persona: esa columna
 // sigue siendo «Asignación a persona», sin persona hasta que se elija (y mientras, no asigna).
-import { addDaysIso, isoWeekday } from "./dates";
+import type { T } from "@/i18n/shared";
+import { addDaysIso, formatDay, isoWeekday } from "./dates";
 import { FORM_LABEL_ONLY, withoutEmptyFormSections } from "./form-sections";
 
 /** Plantilla cuyos proyectos ofrecen «Organizar por personas» (una columna «Asignación a persona» por cada una). */
@@ -44,6 +45,28 @@ export function parseAssignDays(raw: string): number | null | undefined {
 export function assignedDueDate(current: string | null, days: number | null | undefined, today: string): string | null {
   if (current) return current;
   return days ? addDaysIso(today, days) : null;
+}
+
+/**
+ * Texto del aviso del tablero tras entrar tarjetas en una columna «Asignación a persona» (`null` si no se asignó ninguna). `moved`:
+ * cuántas se movieron; si son más que las asignadas (algunas ya eran de esa persona y tenían fecha), el aviso dice las dos
+ * cosas («5 tarjetas movidas · 2 asignadas a Ana»; lo enseña showAssignedNotice, assignNotice.ts): con solo las asignadas parecía que las demás no se habían movido.
+ */
+export function assignedNoticeText(assigned: readonly { assigneeId: string; dueDate: string | null }[], moved: number, ctx: { users: readonly { id: string; name: string }[]; today: string; locale: string; t: T }): string | null {
+  const first = assigned[0];
+  if (!first) return null;
+  const { t } = ctx;
+  const name = ctx.users.find((u) => u.id === first.assigneeId)?.name ?? "?";
+  if (moved > assigned.length) {
+    return assigned.length === 1
+      ? t("{n} tarjetas movidas · 1 asignada a {name}", { n: moved, name })
+      : t("{n} tarjetas movidas · {k} asignadas a {name}", { n: moved, k: assigned.length, name });
+  }
+  return assigned.length > 1
+    ? t("{n} tarjetas asignadas a {name}", { n: assigned.length, name })
+    : first.dueDate
+      ? t("Asignada a {name} · vence el {date}", { name, date: formatDay(first.dueDate, ctx.today, ctx.locale) })
+      : t("Asignada a {name}", { name });
 }
 
 /** Grupo del plan: vencidas, hoy, esta semana, este mes, más adelante y sin fecha (en ese orden). */
