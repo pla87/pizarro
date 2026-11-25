@@ -2,7 +2,7 @@
 
 Anexo de `docs/HANDOFF.md` §5, que tiene el resumen. Aquí, el detalle: cerrar la versión, el workflow Release, el secreto
 `STABLE_PUSH_TOKEN`, mover `stable` sin publicar, publicar desde una sesión y las actualizaciones de Dependabot. Desde el
-PC del propietario, ver también `docs/HANDOFF.md` §0b («Ramas y publicación desde local»).
+PC del propietario, ver también `docs/handoff/LOCAL.md` («Ramas y publicación desde local»).
 
 ## Índice
 
@@ -82,7 +82,7 @@ PC del propietario, ver también `docs/HANDOFF.md` §0b («Ramas y publicación 
 ## Publicar desde la sesión y rama de trabajo tras la fusión
 
 Visto en las sesiones de la nube (antes en §0 del núcleo). Desde el PC del propietario no se fuerza nunca la subida: ver
-`docs/HANDOFF.md` §0b.
+`docs/handoff/LOCAL.md`.
 
 - La PR se fusiona aplastada (squash): después, la rama remota de trabajo conserva la historia vieja. Al empezar la
   ronda siguiente, `git checkout -B <rama> origin/main` y `git push --force-with-lease` (solo contiene lo ya fusionado);

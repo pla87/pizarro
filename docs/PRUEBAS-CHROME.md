@@ -1,6 +1,6 @@
 # Prompts para Claude in Chrome
 
-Desde la ronda 66 los ejecuta Claude Code en el PC del propietario con Claude in Chrome (ver docs/HANDOFF.md §0b); antes,
+Desde la ronda 66 los ejecuta Claude Code en el PC del propietario con Claude in Chrome (ver docs/handoff/LOCAL.md); antes,
 el propietario los pegaba en Claude in Chrome.
 
 Pruebas que se hacen con Claude in Chrome en el navegador del propietario (Cloudflare, Railway, la web). Cada prompt va en

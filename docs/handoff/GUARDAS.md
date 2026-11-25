@@ -444,7 +444,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `git merge origin/<rama>` (sin cambios de contenido) y súbela normal.
 
 Trampas del entorno de la nube vistas en las rondas 58 y 59 (antes en §0 del núcleo). En el PC del propietario no hacen
-falta las de `PGPASSWORD`, `NODE_OPTIONS`, memoria, permisos y reinicios del contenedor (ver `docs/HANDOFF.md` §0b); las de
+falta las de `PGPASSWORD`, `NODE_OPTIONS`, memoria, permisos y reinicios del contenedor (ver `docs/handoff/LOCAL.md`); las de
 las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la CPU cargada valen también en local:
 
 - `createdb`/`dropdb` con `PGPASSWORD=postgres … -h localhost … </dev/null` (sin eso se quedan esperando la contraseña).
