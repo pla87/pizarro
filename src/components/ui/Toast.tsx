@@ -227,13 +227,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         onPointerLeave={(e) => e.pointerType === "mouse" && pause("pointer", false)}
         // Con el foco del teclado dentro (Tab hasta «Deshacer»), igual que con el ratón encima (WCAG 2.2.1): no se va el
         // aviso ni desaparece el botón que tiene el foco. Sale de la pausa cuando el foco se va a otro sitio de la página.
+        // Solo el foco del teclado (`:focus-visible`): el clic con el ratón también enfoca el botón y, si no cerraba el aviso
+        // («Deshacer» anulado, «Abrir ajustes»), la pila se quedaba en pausa (nada caducaba) hasta el siguiente clic fuera.
+        // De dónde vino el foco se apunta al entrar, también si no se sabe (null: al salir irá al diálogo de arriba), y se
+        // olvida al salir: antes se quedaba con un elemento de una visita anterior y «Deshacer» con el ratón lo enfocaba.
         onFocus={(e) => {
           const from = e.relatedTarget as HTMLElement | null;
-          if (from && !e.currentTarget.contains(from)) focusBefore.current = from;
-          pause("focus", true);
+          if (!from || !e.currentTarget.contains(from)) focusBefore.current = from;
+          if ((e.target as Element).matches(":focus-visible")) pause("focus", true);
         }}
         onBlur={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) pause("focus", false);
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          focusBefore.current = null;
+          pause("focus", false);
         }}
         className="pointer-events-none fixed inset-x-0 top-[max(1rem,env(safe-area-inset-top))] z-[80] flex flex-col items-center gap-2 px-4 max-md:top-auto max-md:bottom-[calc(env(safe-area-inset-bottom)+max(9rem,1rem+var(--selection-bar-space,0px))+var(--connection-notice-space,0px))] max-md:[&>:not([data-pinned]):nth-last-child(n+3)]:hidden"
         aria-live="polite"
