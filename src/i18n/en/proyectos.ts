@@ -180,7 +180,6 @@ export const proyectos: Record<string, string> = {
   "Tampoco los administradores. Sus miembros lo siguen siendo y tú también pasas a serlo.": "Not even admins. Its members stay members, and you become one too.",
   "Los administradores ven todos los proyectos de equipo. Si añades a uno como miembro, el proyecto le sale en sus selectores y cuenta como miembro, igual que el resto.": "Admins see every team project. If you add one as a member, the project shows up in their pickers and counts as a member, like everyone else.",
   "Sin miembros.": "No members.",
-  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, generate a new link (the previous one will stop working).",
   "La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: generate a new invitation link to send them.",
   "¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? Its current members ({n}, including you) keep access and their cards. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
   // Administración → Proyectos: «miembros» en lugar de «asignados», como en Ajustes del proyecto
@@ -192,7 +191,6 @@ export const proyectos: Record<string, string> = {
   "¿Quitar a {name} de los miembros de «{project}»? Como es administrador, lo sigue viendo y conserva sus tarjetas.": "Remove {name} from the members of “{project}”? As an administrator, they still see it and keep their cards.",
   "No queda nadie por añadir": "Nobody left to add",
   // Ajustes del proyecto: invitación pendiente al añadir a alguien, con «Reenviar invitación» si hay email
-  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).": "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation is valid until {date}; if they don't have it, resend it by email or generate a new link (either way, the previous one will stop working).",
   "La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: resend it by email or generate a new invitation link to send them.",
   // Administración → Proyectos: administradores que lo ven sin ser miembros
   "1 admin sin ser miembro": "1 admin who isn't a member",
@@ -202,7 +200,14 @@ export const proyectos: Record<string, string> = {
   // Ajustes del proyecto: miembros de un proyecto de equipo e invitaciones pendientes
   "Sin miembros. Los administradores lo ven sin ser miembros.": "No members. Administrators see it without being members.",
   "Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).": "Email is set up: “Resend invitation” emails them a new link (the previous one stops working).",
-  "Sin email configurado: «Generar enlace de invitación nuevo» crea uno para que se lo pases tú (el anterior deja de valer).": "Email isn't set up: “Generate new invitation link” creates one for you to send them yourself (the previous one stops working).",
   "Reenviar invitación por email (el enlace anterior deja de valer)": "Resend the invitation by email (the previous link stops working)",
-  "Sin email configurado: genera un enlace de invitación nuevo para pasárselo; el anterior deja de valer": "Email isn't set up: generates a new invitation link to send them; the previous one stops working",
+  // Ajustes del proyecto: invitación pendiente con la fecha en que se emitió (vale 72 horas desde entonces) y sin email, en
+  // palabras de cualquiera
+  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación es del {sent} y vale 72 horas, hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).":
+    "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation was issued on {sent} and is valid for 72 hours, until {date}; if they don't have it, generate a new link (the previous one will stop working).",
+  "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación es del {sent} y vale 72 horas, hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).":
+    "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation was issued on {sent} and is valid for 72 hours, until {date}; if they don't have it, resend it by email or generate a new link (either way, the previous one will stop working).",
+  "Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). El que le pasaste antes dejará de funcionar.":
+    "Pizarro can't send emails from here. To let them in, press the link button next to their name and send them the new link yourself (by WhatsApp, for example). The one you sent before will stop working.",
+  "Enlace de invitación nuevo para que se lo mandes tú; el anterior deja de funcionar": "New invitation link for you to send them; the previous one stops working",
 };

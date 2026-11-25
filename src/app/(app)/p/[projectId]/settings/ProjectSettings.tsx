@@ -9,6 +9,7 @@ import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
 import { formatDay } from "@/lib/dates";
+import { formatDate } from "@/lib/format";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { localizeGeneralKind, localizeGeneralKinds } from "@/lib/kinds-localize";
 import { TaskFieldToggles } from "@/components/TaskFieldToggles";
@@ -494,10 +495,12 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (!res.ok) return toast(res.error, "error");
       toast(res.data.emailed ? t("Miembro añadido y avisado por email") : t("Miembro añadido"));
       setCandidate("");
-      // Con la invitación sin aceptar, el enlace al tablero no le sirve: lo que necesita es el de invitación.
+      // Con la invitación sin aceptar, el enlace al tablero no le sirve: lo que necesita es el de invitación. Quien se añade
+      // a sí mismo no necesita que le pasen nada (antes salía «Enlace al tablero para pasárselo a <yo>»).
+      if (candidate === currentUserId) return setShared(null);
       const invite = res.data.invite;
       setShared(invite
-        ? { kind: "pending", name, link: "", emailed: false, userId: invite.userId, expiresAt: invite.expiresAt }
+        ? { kind: "pending", name, link: "", emailed: false, userId: invite.userId, expiresAt: invite.expiresAt, issuedAt: invite.issuedAt }
         : { kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
     });
   };
@@ -570,7 +573,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   className="btn-icon shrink-0"
                   disabled={pending}
                   aria-label={t("Generar enlace de invitación nuevo para {name}", { name: m.name })}
-                  title={t("Sin email configurado: genera un enlace de invitación nuevo para pasárselo; el anterior deja de valer")}
+                  title={t("Enlace de invitación nuevo para que se lo mandes tú; el anterior deja de funcionar")}
                   onClick={() => void freshLink(m)}
                 >
                   <Link2 size={16} />
@@ -602,9 +605,10 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       {members.length === 0 && <p className="text-sm text-slate-500">{isPrivate ? t("Sin miembros.") : t("Sin miembros. Los administradores lo ven sin ser miembros.")}</p>}
       {canInvite && members.some((m) => m.invitePending && m.active) && (
         <p className="text-xs text-slate-500" data-testid="invite-pending-hint">
+          {/* Para quien no sabe de servidores: qué botón pulsar y qué pasa, sin «email configurado». */}
           {canResend
             ? t("Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).")
-            : t("Sin email configurado: «Generar enlace de invitación nuevo» crea uno para que se lo pases tú (el anterior deja de valer).")}
+            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). El que le pasaste antes dejará de funcionar.")}
         </p>
       )}
       <div className="flex gap-2">
@@ -653,7 +657,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
 }
 
 /** «pending»: se ha añadido a alguien con la invitación sin aceptar (solo administradores; sin enlace a la vista). */
-type SharedLink = { kind: "board" | "invite" | "pending"; name: string; link: string; emailed: boolean; userId?: string; expiresAt?: string | null };
+type SharedLink = { kind: "board" | "invite" | "pending"; name: string; link: string; emailed: boolean; userId?: string; expiresAt?: string | null; issuedAt?: string | null };
 
 /**
  * Sin APP_URL el servidor compone los enlaces con http://localhost:3000, que no sirve a nadie más: en ese caso se usa la
@@ -686,15 +690,17 @@ function SharedLinkNote({ shared, onClose, onFreshLink, onResend, busy = false }
   const toast = useToast();
   const locale = useIntlLocale();
   if (shared.kind === "pending") {
-    const until = shared.expiresAt ? new Date(shared.expiresAt).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" }) : null;
+    // En la zona horaria de la app, como el resto de fechas (antes, en la del navegador).
+    const until = shared.expiresAt ? formatDate(shared.expiresAt, "dateTime", locale) : null;
+    const sent = shared.issuedAt ? formatDate(shared.issuedAt, "dateTime", locale) : null;
     return (
       <div className="space-y-2 rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800" data-testid="member-link-note">
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1">
-            {until
+            {until && sent
               ? onResend
-                ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).", { name: shared.name, date: until })
-                : t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación vale hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, date: until })
+                ? t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación es del {sent} y vale 72 horas, hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).", { name: shared.name, sent, date: until })
+                : t("{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación es del {sent} y vale 72 horas, hasta el {date}; si no la tiene, genera un enlace nuevo (el anterior dejará de valer).", { name: shared.name, sent, date: until })
               : onResend
                 ? t("La invitación de {name} ha caducado: reenvíasela por email o genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })
                 : t("La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.", { name: shared.name })}

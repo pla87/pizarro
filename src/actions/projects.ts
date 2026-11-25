@@ -296,9 +296,11 @@ export async function addProjectMember(projectId: string, userId: string) {
     revalidatePath("/", "layout");
     // Quien aún no ha aceptado su invitación no puede abrir el tablero: a un administrador (el único que gestiona las
     // invitaciones) se le dice si su invitación sigue valiendo o ha caducado, para darle un enlace de invitación nuevo.
+    // Con cuándo se emitió: vale 72 horas desde entonces (al crear la cuenta, reenviarla o generar un enlace nuevo), no
+    // desde que se le añade al proyecto; sin la fecha de emisión, «vale hasta las 21:53» a las 17:53 parecía un error.
     if (user.role === "ADMIN" && invitePendingFrom(target)) {
-      const token = await db.authToken.findFirst({ where: { userId: target.id, purpose: "INVITE", expiresAt: { gt: new Date() } }, select: { expiresAt: true } });
-      return { link, emailed, invite: { userId: target.id, expiresAt: token?.expiresAt.toISOString() ?? null } };
+      const token = await db.authToken.findFirst({ where: { userId: target.id, purpose: "INVITE", expiresAt: { gt: new Date() } }, select: { expiresAt: true, createdAt: true } });
+      return { link, emailed, invite: { userId: target.id, expiresAt: token?.expiresAt.toISOString() ?? null, issuedAt: token?.createdAt.toISOString() ?? null } };
     }
     return { link, emailed, invite: null };
   });
