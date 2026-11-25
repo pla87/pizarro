@@ -117,7 +117,9 @@ if (only.includes("load")) {
   L.check("LOAD: al llegar el tablero, el indicador desaparece", w.gone !== null && (await loader.count()) === 0);
   await page.unroute(isProjectPage);
 
-  // Releases del mismo proyecto: su propio esqueleto (la barra lateral no cambia).
+  // Releases del mismo proyecto: su propio esqueleto (la barra lateral no cambia). Con «Usados recientemente», «R49 carga»
+  // es la segunda del selector y el puntero queda sobre «Releases» tras elegirlo: el enlace cambia de proyecto sin otro
+  // mouseenter y debe precargarse igualmente (HoverPrefetchLink); si no, salía el esqueleto del tablero.
   await slowClick(page, page.locator(`a[href="/p/${ID}/releases"]`).filter({ visible: true }).first(), 2000);
   L.check("LOAD: Releases con respuesta lenta también lo muestra", await loader.waitFor({ timeout: 3000 }).then(() => true, () => false));
   L.eq("LOAD: el de Releases", await loader.getAttribute("data-project-loading").catch(() => null), "releases");

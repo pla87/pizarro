@@ -103,6 +103,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Ahorro de datos: con `navigator.connection.saveData` (`saveDataOn()`, `src/lib/connection.ts`) no se precarga nada por
   adelantado (diálogos del tablero en reposo, `HoverPrefetchLink`, el detalle adelantado al hacer clic). Una precarga
   nueva debe mirarlo. Los `Link` de Next con su precarga normal no lo miran (Next solo lo hace en el router de `pages/`).
+- (Ronda 67) Precarga y esqueletos: una página de proyecto solo enseña SU `loading.tsx` si se precargó antes de pulsar;
+  si no, Next enseña el de más arriba (el del tablero, en `p/[projectId]/loading.tsx`). `HoverPrefetchLink` precarga
+  también cuando cambia su `href` con el ratón ya encima o con el foco (al cambiar de proyecto en el selector, el
+  puntero puede quedar sobre «Releases» de la barra lateral sin otro `mouseenter`). Prueba: `e2e/interfaz-carga-e2e.mjs`.
 - Emails en el HTML: con `EmailSafe` (y `rehypeEmailSafe` en Markdown), para que un proxy que reescribe emails no provoque
   errores de hidratación.
 - Administración (ronda 57): *Ajustes* (`/admin/settings`) e *Integraciones* (`/admin/integrations`: email, Google,
