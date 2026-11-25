@@ -244,6 +244,24 @@ código y dos de caza de bugs (usuario, administración/instalación/coste, prog
 herramienta). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.72.0, DMARC y
 WhatsApp real con el propietario delante).
 
+**Siguiente sesión: local, en el PC del propietario, con Claude in Chrome** (`docs/handoff/LOCAL.md`). En este orden:
+
+1. Arranque local (LOCAL.md, «Puesta en marcha»): rama de trabajo nueva desde `origin/main`, `npm ci`, PostgreSQL en
+   marcha, `npx prisma migrate deploy` (la v1.72 trae dos migraciones: `20261202100000_compartir_fuera` y
+   `20261203100000_compartir_fuera_token_cifrado`). Comprobar que `git log -1 origin/main` es «v1.72.0: …» y que
+   `origin/stable` y la etiqueta `v1.72.0` apuntan a ese commit.
+2. Claude in Chrome, con las reglas de LOCAL.md («Claude in Chrome») y los prompts de `docs/PRUEBAS-CHROME.md`:
+   - **Prompt 1, pruebas en real de la v1.72.0** en la instalación de PRUEBA (primero comprobar en Railway que ha
+     desplegado la v1.72.0 desde `stable`). Incluye «Compartir fuera»: lo de la ventana privada, el móvil, el Ctrl+V real
+     de una imagen en la descripción y la ventana muy ancha los hace el propietario; la sesión le guía.
+   - **Prompt 2, auditoría como usuario de la v1.72.0.**
+   - **Prompt 3, primeros informes DMARC** (solo mirar).
+   - **Prompt 4, WhatsApp en la instalación REAL**, solo con el propietario delante y si lo pide en esa sesión.
+   Los informes van a una carpeta temporal fuera del repositorio (sin datos personales en ficheros ni commits). Lo que
+   falle se arregla en la ronda 69; al cerrarla, «Estado» de PRUEBAS-CHROME y los prompts al día.
+3. Ronda 69: las respuestas del propietario a las preguntas de abajo (recomendadas para empezar: 2g, 3, 4 y 8) y lo que
+   salga de los informes de Chrome. Comprobaciones y e2e en local (§4); minutos de Actions solo para la PR y la Release.
+
 **Preguntas abiertas al propietario (tras la v1.72.0)**, con la numeración del informe final de la ronda 68 (entre
 paréntesis, la recomendación que se le dio):
 

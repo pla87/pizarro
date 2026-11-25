@@ -112,7 +112,10 @@ propio worktree (más lento, pero nunca toca el `node_modules` del repositorio p
 - Minutos de Actions solo al final (la PR y la Release): las comprobaciones de §4 del núcleo se pasan en local antes.
 
 **Claude in Chrome.** La propia sesión de Claude Code puede ejecutar los prompts de `docs/PRUEBAS-CHROME.md` en el
-Chrome del propietario (instalación de prueba de Railway, Cloudflare, GitHub). Reglas:
+Chrome del propietario (instalación de prueba de Railway, Cloudflare, GitHub). Requisitos: la extensión Claude in Chrome
+instalada y con sesión iniciada en Chrome, y Claude Code abierto con `claude --chrome` (o `/chrome` dentro de la sesión
+para conectarla). Si las herramientas `mcp__claude-in-chrome__*` no aparecen, pide al propietario que abra Chrome y
+compruebe la extensión antes de seguir. Reglas:
 
 - Siempre en una **pestaña nueva**; no tocar las pestañas que el propietario tenga abiertas.
 - En Railway, **comprobar el nombre del proyecto antes de tocar nada** (el de prueba y el real se llaman parecido).
