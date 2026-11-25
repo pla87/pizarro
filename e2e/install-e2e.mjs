@@ -170,7 +170,8 @@ await w.page.fill("#email", ADMIN_EMAIL);
 await w.page.fill("#password", ADMIN_PASSWORD);
 await w.page.click("button[type=submit]");
 await w.page.waitForURL(/\/login\/verify/, { timeout: 20000 });
-const backs = () => w.page.getByRole("button", { name: "Back", exact: true }).count();
+// (Ronda 68) Al elegir método, el botón para volver es «Back to sign in»; con el QR, «Back» (y el otro no sale).
+const backs = () => w.page.getByRole("button", { name: /^Back( to sign in)?$/ }).count();
 L.eq("2FA: al elegir método, un solo «Back»", await backs(), 1);
 await w.page.getByRole("button", { name: "Authenticator app" }).click();
 await w.page.locator('[data-testid="totp-secret"]').waitFor({ timeout: 15000 });

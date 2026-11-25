@@ -707,6 +707,10 @@ if (only.includes("otros")) {
   L.eq("CSV: descripción con la referencia de Jira", desc, "Con eñes\n\n_Referencia original: WEB-1_");
 
   // Una tarjeta de Trello en «Nueva tarea» (por el portapapeles).
+  // (Ronda 68) Los avisos no se van con el ratón encima (y el clic de Playwright pasa el ratón por encima del aviso que
+  // tapa el menú): se aparta el puntero y se espera a que se vayan.
+  await page.mouse.move(1, 1);
+  await L.waitFor(async () => (await page.locator("[data-toasts] > div").count()) === 0, { timeout: 15000 });
   await setClip(page, JSON.stringify({ id: "c9", idBoard: "b", idList: "l", name: "Tarjeta suelta", desc: "Desde Trello", list: { id: "l", name: COL.doing } }));
   await page.getByRole("button", { name: "Nueva tarea" }).first().click();
   const nt = page.getByRole("dialog", { name: "Nueva tarea" });

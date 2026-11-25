@@ -24,8 +24,8 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Generales**](SUITES.md#generales) | | **449** | |
 | QA (9 escenarios) | `e2e/qa/run-all.mjs` | 394 | ~5 min |
 | Instalación desde cero con `npm start` | `e2e/install-e2e.mjs` | 55 | ~1 min |
-| [**Tablero**](SUITES.md#tablero) | | **965** | |
-| Tablero | `e2e/tablero-e2e.mjs` | 374 | ~4 min |
+| [**Tablero**](SUITES.md#tablero) | | **971** | |
+| Tablero | `e2e/tablero-e2e.mjs` | 373 | ~4 min |
 | Cabecera y atajos (caza de bugs 48a; ronda 57: un selector de proyecto, botones agrupados, último tipo con su automatización) | `e2e/tablero-cabecera-e2e.mjs` | 132 | ~1,5 min |
 | Mover con el teclado varias veces seguidas (caza de bugs 51b) | `e2e/tablero-teclado-e2e.mjs` | 34 | ~20 s |
 | Arrastrar una selección (montón, teclado, dedo, tiempo real) | `e2e/tablero-seleccion-e2e.mjs` | 76 | ~1 min |
@@ -33,15 +33,15 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Canal en vivo con `ping` y presencia sin sondeos (dos personas), panel de filtros estable, «Ninguna tarjeta coincide» y release con filtro, lupa, columnas y pestañas en el móvil, botones flotantes y diálogos (ronda 65: copia del botón de informar y «Nueva tarea» entera con la pareja), CLS, Alt+P y rueda sobre el detalle (ronda 56) | `e2e/tablero-vivo-e2e.mjs` | 119 (123 con build oficial) | ~1,5 min |
 | «Compartir → Pizarro»: share_target del manifiesto, POST del navegador con texto, enlace y archivos → «Nueva tarea» en el último proyecto, formulario de otra web rechazado, sin sesión y otro proyecto elegido en el selector (ronda 57) | `e2e/tablero-compartir-e2e.mjs` | 19 | ~30 s |
 | Columna «Asignación a persona»: rol y persona con plazo, lo que entra (crear, detalle, «Mover a…», Alt+→, Ctrl+Z), cambiar plazo o persona, «Descargar plan (PDF)» (PDF descargado con su aviso, ocupado, 429 y contenido), tipo por defecto, «Sin rol», 390 px e inglés (ronda 64) | `e2e/tablero-asignacion-e2e.mjs` | 85 | ~1 min |
-| Columna «Compartir fuera»: activarla en Ajustes (administradores), rol, pie con «Generar web» y caducidad, diálogo con la dirección y mailto:, la misma dirección al actualizar y para otra persona, la página sin cuenta (cabeceras, sin scripts), marcar como hecha (tablero en vivo y Ctrl+Z), fecha, comentario, adjunto, enlace nuevo con confirmación, revocar y apagar (ronda 68; cifra provisional) | `e2e/tablero-fuera-e2e.mjs` | 50 | ~1 min |
-| [**Detalle de la tarea**](SUITES.md#detalle-de-la-tarea) | | **119** | |
+| Columna «Compartir fuera»: activarla en Ajustes (administradores), rol, pie con «Generar web» y caducidad, diálogo con la dirección y mailto:, la misma dirección al actualizar y para otra persona, la página sin cuenta (cabeceras, sin scripts), marcar como hecha (tablero en vivo y Ctrl+Z), fecha, comentario, adjunto, enlace nuevo con confirmación, revocar y apagar (ronda 68) | `e2e/tablero-fuera-e2e.mjs` | 49 | ~1 min |
+| [**Detalle de la tarea**](SUITES.md#detalle-de-la-tarea) | | **140** | |
 | Comentarios a la vez, editar el propio comentario y red lenta (caza de bugs 48c, ronda 57) | `e2e/detalle-comentarios-e2e.mjs` | 56 | ~1 min |
-| Editar en el detalle: cambio de tipo sin guardar, foco tras «Guardar descripción», volver a la pestaña, conflicto con la descripción a medias, aviso y deshacer del cambio de tipo, imagen pegada o soltada en la descripción, subida lenta con el editor cerrado o desde el «Guardar» del pie y «Deshacer todo» (rondas 67 y 68; cifra provisional) | `e2e/detalle-edicion-e2e.mjs` | 85 | ~1,5 min |
+| Editar en el detalle: cambio de tipo sin guardar, foco tras «Guardar descripción», volver a la pestaña, conflicto con la descripción a medias, aviso y deshacer del cambio de tipo, imagen pegada o soltada en la descripción, subida lenta con el editor cerrado o desde el «Guardar» del pie y «Deshacer todo» (rondas 67 y 68) | `e2e/detalle-edicion-e2e.mjs` | 84 | ~1,5 min |
 | [**Copias de tareas**](SUITES.md#copias-de-tareas) | | **120** | |
 | Copias con adjuntos y release con barra de formato | `e2e/copias-adjuntos-e2e.mjs` | 93 | ~2 min |
 | Copia con imagen en la descripción, sin red en calendario, borradores y releases (caza de bugs 49) | `e2e/copias-imagen-sin-red-e2e.mjs` | 27 | ~1 min |
-| [**Pegar, importar y exportar**](SUITES.md#pegar-importar-y-exportar) | | **352** | |
-| Pegar | `e2e/pegar-e2e.mjs` | 72 | ~1 min |
+| [**Pegar, importar y exportar**](SUITES.md#pegar-importar-y-exportar) | | **353** | |
+| Pegar | `e2e/pegar-e2e.mjs` | 73 | ~1 min |
 | Copiar y pegar una tarea como JSON desde el detalle: Ctrl+C sin selección y con texto seleccionado, Ctrl+V estricto fuera y dentro de un campo, deshacer, «Importar tarea» (portapapeles tolerante, fichero, a mano), JSON de una IA, móvil (copiar e importar juntos en «⋯») e inglés (rondas 53 y 54) | `e2e/importar-json-detalle-e2e.mjs` | 100 | ~1,5 min |
 | Importar y exportar tareas en JSON: botón de la cabecera, vista previa y columna de destino, fichero, arrastrar, Ctrl+V en el tablero, «Exportar (N)» y volver a importar, más de 2 MB (sin red, sesión caducada, 413), «Nueva tarea» (Ctrl+V de una tarea copiada con el foco en el título vacío, en un selector, un botón, la fecha, una zona vacía o una caja sin tocar; desde el «+» de una columna; etiquetas, color y enlace al crear, importar y copiar; cambiar de proyecto; editor visual y de Markdown), móvil a 390 px, inglés, oscuro y de otros Kanban: Trello y CSV de Jira (ronda 54) | `e2e/importar-exportar-e2e.mjs` | 155 | ~3 min |
 | Pegar la tarea con el foco en una casilla o en la fecha, Ctrl+C con solo una imagen seleccionada, título pegado en una línea, bloqueo entre tareas borradas tras deshacer-rehacer-deshacer y `?doc=…#apartado` mientras se lee el marco (caza de bugs 53) | `e2e/importar-pegar-foco-e2e.mjs` | 25 | ~1 min |
@@ -49,8 +49,8 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Tareas que se repiten (calendario, .ics —una descarga por columna a la vez— y «Nueva tarea») | `e2e/calendario-repetir-e2e.mjs` | 42 | ~1 min |
 | [**Releases**](SUITES.md#releases) | | **55** | |
 | Release de más de 500 tareas (o 200 con adjuntos), «+» flotante con el programa lleno y panel de fijas en el móvil (caza de bugs 51c) | `e2e/releases-grandes-e2e.mjs` | 55 | ~35 s |
-| [**Plan de trabajo para IA**](SUITES.md#plan-de-trabajo-para-ia) | | **257** | |
-| Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 146 | ~1 min |
+| [**Plan de trabajo para IA**](SUITES.md#plan-de-trabajo-para-ia) | | **268** | |
+| Plan de trabajo para IA y botones de las columnas especiales (ronda 51; submenú «Rol de la columna», ronda 57) | `e2e/plan-ia-e2e.mjs` | 145 | ~1 min |
 | Plan de trabajo: ZIP de adjuntos (también en inglés, «attachments/»), ritmo por columna, botones con la columna vacía (motivo a la vista, ronda 68) y salir por los enlaces del pie (ronda 52) | `e2e/plan-ia-zip-e2e.mjs` | 105 | ~1 min |
 | Plan de trabajo para IA: Markdown con descripciones raras, título a 390 px y más de 500 tareas (caza de bugs 51a) | `e2e/plan-ia-markdown-e2e.mjs` | 18 | ~30 s |
 | [**Plantillas y programa del curso**](SUITES.md#plantillas-y-programa-del-curso) | | **185** | |
@@ -64,19 +64,19 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |
 | Miembros de un proyecto: asignar administradores, «Invitar por email» y «Copiar enlace» (ronda 59) | `e2e/cuentas-invitar-e2e.mjs` | 38 | ~40 s |
-| [**Interfaz y textos**](SUITES.md#interfaz-y-textos) | | **330** | |
+| [**Interfaz y textos**](SUITES.md#interfaz-y-textos) | | **329** | |
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
 | Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 38 | ~1 min |
 | Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas» (línea de resumen con enlaces a cada grupo y `?filter=` antiguo, ronda 65), Historial de versiones con las 10 últimas, «Ver más», buscador y `#vX.Y.Z` (ronda 65), Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 91 | ~3 min |
-| [**Accesibilidad**](SUITES.md#accesibilidad) | | **108** | |
+| [**Accesibilidad**](SUITES.md#accesibilidad) | | **113** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 39 | ~40 s |
 | Descripción debajo de su punto en el histórico de releases, `<h2>` con el botón dentro y error al copiar, «Archivadas» del menú móvil, nombre accesible de los filtros del calendario y foco al cerrar «+N más», rol en «Aplicar plantilla», `otro.md#apartado` (caza de bugs 54) y borrar en un menú «⋯» (releases y Documentación) | `e2e/accesibilidad-releases-e2e.mjs` | 74 | ~30 s |
 | [**Red, sin conexión y formularios**](SUITES.md#red-sin-conexión-y-formularios) | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3493** | |
+| **Total** | | **3578** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en
