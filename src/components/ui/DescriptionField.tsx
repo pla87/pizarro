@@ -16,6 +16,7 @@ import type { EditAnchor } from "@/lib/edit-anchor";
 import { anchorFromTextarea, placeEditorAt, placeTextareaAt } from "./editAnchorDom";
 import { attachablePasteFiles, claimDrop, claimPaste, pasteClaimed, recoverEmptyImages } from "./pasteFiles";
 import { isUntypedImage } from "@/lib/document-kind";
+import { insertImageBlocks } from "@/lib/editor-extensions";
 import { useToast } from "./Toast";
 
 import type { EditorModeValue, UserOption } from "@/lib/types";
@@ -117,7 +118,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
   const pendingImages = useRef(0);
   /**
    * Inserta las imágenes subidas donde está el cursor ahora (la subida tarda: se puede haber seguido escribiendo). En el
-   * campo de texto, separadas por espacios de lo que haya alrededor; sin quitarle el foco a otro sitio si ya no lo tiene.
+   * editor con barra, cada una en su bloque (insertImageBlocks); en el campo de texto, separadas por espacios de lo que haya alrededor; sin quitarle el foco a otro sitio si ya no lo tiene.
    * Si el editor ya se ha cerrado (Cancelar, Escape), se avisa: la imagen es un adjunto de la tarea, pero no está en el
    * texto (antes no se decía nada y parecía que el pegado no había funcionado).
    */
@@ -125,10 +126,12 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     if (!images.length) return;
     const ed = editorOutRef.current;
     if (mode === "WYSIWYG" && ed && !ed.isDestroyed) {
-      ed.chain().insertContent(images.flatMap((img, i) => [
-        ...(i ? [{ type: "text", text: " " }] : []),
-        { type: "markdownImage", attrs: { raw: imageMarkdown(img), src: `/api/attachments/${img.id}`, alt: img.name } },
-      ])).run();
+      // Cada imagen, en su propio bloque (no en línea dentro del párrafo): el cursor queda en un párrafo nuevo debajo.
+      const nodes = images.map((img) => ed.schema.nodes.markdownImage!.create({ raw: imageMarkdown(img), src: `/api/attachments/${img.id}`, alt: img.name }));
+      ed.chain().command(({ tr }) => {
+        insertImageBlocks(tr, nodes);
+        return true;
+      }).run();
       return;
     }
     const el = inner.current;
