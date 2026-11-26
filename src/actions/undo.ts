@@ -6,6 +6,7 @@ import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
+import { externalUndoWhere } from "@/lib/share-out-core";
 import { requireUser } from "@/lib/session";
 import { removeTaskEvents, restoreTaskEvents } from "@/lib/task-events";
 import { decodeLabel, renderLabel, renderStoredLabel, undoneLabel } from "@/lib/undo-label";
@@ -239,7 +240,8 @@ export async function undoEntry(entryId: string) {
     // pisar cambios posteriores del mismo usuario. Si es la última, vale cualquiera (igual que undoLast).
     const onlyAttachments = (entry.ops as unknown as UndoOp[]).every((op) => op.t === "attachment.restore");
     if (!onlyAttachments) {
-      const latest = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: entry.projectId, kind: "UNDO" }, orderBy: { createdAt: "desc" }, select: { id: true } });
+      // Lo hecho desde fuera («Compartir fuera») no cuenta: no es un cambio de la persona ni lleva aviso con «Deshacer».
+      const latest = await db.undoEntry.findFirst({ where: { userId: user.id, projectId: entry.projectId, kind: "UNDO", NOT: externalUndoWhere() }, orderBy: { createdAt: "desc" }, select: { id: true } });
       // El botón ↶ de la cabecera («Deshacer la última acción»): los avisos con «Deshacer» de antes se apagan solos al
       // llegar otro (placeToast, toast-queue.ts), pero puede haberse hecho otro cambio sin aviso entretanto.
       if (latest?.id !== entry.id) throw new AppError("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.");

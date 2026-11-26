@@ -600,7 +600,10 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   run(
                     () => removeProjectMember(projectId, m.id),
                     isMe ? t("Has salido del proyecto") : t("Miembro quitado"),
-                    isMe ? () => router.push("/") : undefined,
+                    isMe
+                      ? () => router.push("/")
+                      // Su recuadro de invitación (caducada o pendiente) ya no tiene sentido: la persona ya no está.
+                      : () => setShared((s) => (s && (s.userId === m.id || s.name === m.name) ? null : s)),
                   );
                 }}
               >
@@ -617,7 +620,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           {/* Para quien no sabe de servidores: qué botón pulsar y qué pasa, sin «email configurado». */}
           {canResend
             ? t("Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).")
-            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.")}
+            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón con el icono de enlace, a la derecha de su nombre en la lista, y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.")}
         </p>
       )}
       <div className="flex gap-2">

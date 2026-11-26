@@ -384,15 +384,20 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const { detail: d, version } = textState.current;
       if (!alive || !res?.ok || !d || res.data.textVersion !== version) return;
       const fresh = res.data.description;
-      const reloadDesc = fresh !== d.description && !editingDescription();
+      const changedRemotely = fresh !== d.description;
+      const reloadDesc = changedRemotely && !editingDescription();
+      // Con cambios propios en la descripción abierta (también si el cambio es de la misma persona en otra pestaña) no se
+      // pisa lo escrito: se pone la guardada como «inicial» del editor, que avisa en ámbar de que ha cambiado. La base
+      // (`descBase`) y la versión del texto no avanzan: al guardar, el servidor sigue detectando el conflicto.
+      const warnTyped = changedRemotely && !reloadDesc;
       if (reloadDesc) {
         descBase.current = fresh;
         descReloads.current++;
       }
       const advance = !editingText();
-      if (!reloadDesc && !advance) return;
-      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
-      if (reloadDesc) setDescRemote((n) => n + 1);
+      if (!reloadDesc && !warnTyped && !advance) return;
+      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc || warnTyped ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
+      if (reloadDesc || warnTyped) setDescRemote((n) => n + 1);
     });
     return () => {
       alive = false;
@@ -1219,7 +1224,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
         {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar y cerrar")}</button>
       </div>
     </div>
   );
