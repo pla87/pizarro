@@ -51,7 +51,6 @@ let nextId = 1;
 /** El aviso de sesión caducada se queda más tiempo: es lo único que lleva a volver a entrar sin perder lo escrito. */
 const SESSION_TOAST_MS = 30000;
 
-
 export { isSessionExpiredMessage };
 
 /**
