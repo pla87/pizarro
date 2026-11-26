@@ -26,7 +26,7 @@ export function trimToasts<T extends { id: number }>(items: readonly T[], pinned
  * Cuánto dura un aviso: los errores y los que llevan botón, 6 s; los de deshacer con botón («Deshacer»), 10 s, para que
  * dé tiempo a leerlos y pulsarlo (con 6 s se iban antes de llegar con el ratón); los demás, 2,5 s.
  */
-export function toastMs(kind: "success" | "error" | "undo", hasAction: boolean): number {
+export function toastMs(kind: "success" | "error" | "undo" | "info", hasAction: boolean): number {
   if (kind === "undo" && hasAction) return 10000;
   return kind === "error" || hasAction ? 6000 : 2500;
 }
@@ -34,7 +34,7 @@ export function toastMs(kind: "success" | "error" | "undo", hasAction: boolean):
 /** Lo que la cola necesita saber de un aviso para «Deshacer» y para los que se actualizan solos. */
 interface QueueItem {
   id: number;
-  kind: "success" | "error" | "undo";
+  kind: "success" | "error" | "undo" | "info";
   /** Con botón «Deshacer» (u otro). `independent`: deshace algo suyo, no lo último hecho (no lo anula uno posterior). */
   action?: { independent?: boolean };
   /** El botón ya no sirve: llegó después otro aviso con «Deshacer» (ver supersedeUndo). */
