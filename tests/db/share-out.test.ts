@@ -125,8 +125,13 @@ describe("compartir fuera: activar y generar", () => {
     assert.ok((await (await page(token)).text()).includes("Revisar planos"));
     expectOk(await archiveTask(t2.id));
     assert.ok(!(await (await page(token)).text()).includes("Pedir material"));
-    // Con la columna vacía no se actualiza (el botón lo dice y el servidor lo rechaza).
-    expectFail(await generateShareWeb(f.columns.todo), /No hay tareas en esta columna/);
+    // Con el enlace activo, la columna vacía sí se actualiza: es la forma de despublicar lo que ya no está.
+    const emptied = await generate(f.columns.todo);
+    assert.equal(emptied.published, 0);
+    assert.equal(tokenOf(emptied.url), token);
+    assert.ok(!(await (await page(token)).text()).includes("Revisar planos"), "ya no sale la que se fue de la columna");
+    // Sin enlace activo (o pidiendo uno nuevo), una columna vacía no se genera.
+    expectFail(await generateShareWeb(f.columns.todo, { fresh: true }), /No hay tareas en esta columna/);
     await moveTask(t1.id, f.columns.todo, null, null);
     const again = await generate(f.columns.todo);
     assert.equal(tokenOf(again.url), token, "actualizar mantiene el mismo enlace y lo vuelve a enseñar");
