@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Globe, Link2, Mail } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Clock, Copy, ExternalLink, Globe, Link2, Mail } from "lucide-react";
 import { setColumnShareOut } from "@/actions/columns";
 import { generateShareWeb, getShareLink, revokeShareLink, setShareExpiry } from "@/actions/share-out";
-import { DEFAULT_SHARE_EXPIRY_DAYS, nextShareExpiry, shareExpiryLabel, shareMailto, shareStateText, type BoardShareInfo } from "@/lib/share-out-board";
+import { compareTaskOrder } from "@/lib/positions";
+import { DEFAULT_SHARE_EXPIRY_DAYS, nextShareExpiry, shareExpiryLabel, shareHasUnpublished, shareMailto, shareStateText, type BoardShareInfo } from "@/lib/share-out-board";
 import type { BoardColumn } from "@/lib/types";
 import { useIntlLocale, useT } from "@/i18n/client";
 import { cn } from "../ui/cn";
@@ -12,7 +13,7 @@ import { copyText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
-import { useBoard } from "./context";
+import { useBoard, useTasks } from "./context";
 
 // Columna «Compartir fuera» (lib/share-out*.ts): sus tareas se publican en una página sin cuenta (/x/<token>) para alguien
 // de fuera. Aquí, la marca de la cabecera, el pie con «Generar web» / «Actualizar web», el aviso de lo que se publica y el
@@ -30,7 +31,9 @@ export function ShareBadge({ info }: { info: BoardShareInfo | null | undefined }
   const day = useDay();
   if (!info) return null;
   const s = shareStateText(info);
-  const text = s.date ? t(s.key, { date: day(s.date) }) : t(s.key);
+  const text = info.state === "ended" && info.revoked && info.revokedBy && info.endsAt
+    ? t("Enlace revocado por {name} el {date}", { name: info.revokedBy, date: day(info.endsAt) })
+    : s.date ? t(s.key, { date: day(s.date) }) : t(s.key);
   return (
     <span
       data-share-badge={info.state}
@@ -67,6 +70,14 @@ export function useShareRole(column: BoardColumn): { pick: () => void; leave: ()
   };
 }
 
+/** «Enlace revocado por <nombre> el <fecha>» (si se sabe quién), para el pie y el diálogo. */
+function useRevokedLine(info: BoardShareInfo | null | undefined): string | null {
+  const t = useT();
+  const day = useDay();
+  if (!info || info.state !== "ended" || !info.revoked || !info.revokedBy || !info.endsAt) return null;
+  return t("Enlace revocado por {name} el {date}", { name: info.revokedBy, date: day(info.endsAt) });
+}
+
 /** Lo que enseña el diálogo: la dirección (o `lost` si no se puede recuperar) y, tras generar, cuántas se publicaron. */
 interface DialogState {
   url: string | null;
@@ -75,20 +86,32 @@ interface DialogState {
   left?: number;
 }
 
-/** Pie de la columna: «Generar web» / «Actualizar web», el aviso de lo que se publica y la caducidad. */
+/** Botón apagado a medias (`aria-disabled`): se ve apagado y se anuncia, pero sigue en el orden de Tab. */
+const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+
+/**
+ * Pie de la columna: «Generar web» / «Actualizar web» y el botón del enlace, el aviso de cambios sin publicar (o el motivo
+ * si la columna está vacía) y la caducidad.
+ */
 export function ShareFooter({ column }: { column: BoardColumn }) {
   const t = useT();
   const toast = useToast();
   const { track, setColumns } = useBoard();
+  const tasks = useTasks();
   const info = column.share ?? null;
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const days = info?.expiryDays ?? DEFAULT_SHARE_EXPIRY_DAYS;
   const active = info?.state === "active";
+  // Las tareas de ahora (en el orden de la columna, las fijas incluidas): lo que se publicaría.
+  const ids = useMemo(() => tasks.filter((x) => x.columnId === column.id).sort(compareTaskOrder).map((x) => x.id), [tasks, column.id]);
+  const empty = ids.length === 0;
+  const unpublished = info !== null && !empty && shareHasUnpublished(info, ids);
+  const revokedLine = useRevokedLine(info);
   const apply = (next: BoardShareInfo) => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, share: next } : c)));
 
   const generate = async (fresh = false) => {
-    if (busy) return;
+    if (busy || empty) return;
     setBusy(true);
     // `track` no lanza: si la acción lanza (sin red), devuelve el fallo.
     const res = await track(generateShareWeb(column.id, { fresh }));
@@ -120,46 +143,57 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   };
 
   const label = shareExpiryLabel(days);
+  const noTasks = t("No hay tareas en «{name}»", { name: column.name });
   return (
     <div className="space-y-1.5 border-t border-slate-200 px-2 pt-2 pb-2 dark:border-slate-700/70" data-share-footer>
       <div className="flex items-center gap-1.5">
-        <button type="button" className="btn-primary flex-1 py-1.5 aria-busy:cursor-progress" aria-busy={busy || undefined} onClick={() => void generate()} data-share-generate>
-          <Globe size={15} aria-hidden /> {active ? t("Actualizar web") : t("Generar web")}
+        <button
+          type="button"
+          className={cn("btn-primary min-w-0 flex-1 px-2 py-1.5 aria-busy:cursor-progress", OFF)}
+          aria-busy={busy || undefined}
+          aria-disabled={empty || undefined}
+          title={empty ? noTasks : undefined}
+          onClick={empty ? undefined : () => void generate()}
+          data-share-generate
+        >
+          <Globe size={15} aria-hidden /> <span className="truncate">{active ? t("Actualizar web") : t("Generar web")}</span>
         </button>
         {active && (
-          <button type="button" className="btn-icon h-8 w-8" onClick={() => void openLink()} aria-label={t("Enlace de la web")} title={t("Enlace de la web")} data-share-link>
-            <Link2 size={15} />
+          <button type="button" className="btn-primary shrink-0 px-2.5 py-1.5" onClick={() => void openLink()} aria-label={t("Enlace de la web")} title={t("Enlace de la web")} data-share-link>
+            <Link2 size={15} aria-hidden /> {t("Link")}
           </button>
         )}
       </div>
-      <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1 text-[11px] leading-snug text-slate-600 dark:text-slate-400">{t("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar.")}</p>
-        {/* Caducidad: rota 7 días / 1 mes / 3 meses sin uso, con el aspecto del interruptor de cadencia de las tareas fijas. */}
-        <button
-          type="button"
-          data-share-expiry={days}
-          onClick={() => void cycle()}
-          aria-label={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
-          title={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
-          className={cn(
-            "inline-flex h-4 shrink-0 items-center gap-1 rounded-full border border-progress px-1.5 text-[10px] leading-none text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-progress dark:text-slate-300",
-            days !== DEFAULT_SHARE_EXPIRY_DAYS ? "bg-progress/20 font-semibold" : "bg-transparent opacity-80 hover:opacity-100",
-          )}
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-progress" aria-hidden />
-          {t(label)}
-        </button>
-      </div>
+      {empty && <p className="text-center text-xs text-slate-500 dark:text-slate-400" data-share-empty>{noTasks}</p>}
+      {unpublished && <p className="text-xs leading-snug font-medium text-amber-700 dark:text-amber-400" role="status" data-share-unpublished>{t("Hay cambios sin publicar: pulsa «Actualizar web»")}</p>}
+      {!active && revokedLine && <p className="text-xs leading-snug text-slate-600 dark:text-slate-400" data-share-revoked>{revokedLine}</p>}
+      <p
+        className="text-[11px] leading-snug text-slate-600 dark:text-slate-400"
+        title={t("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar.")}
+      >
+        {t("Se publica todo el contenido de las tareas.")}
+      </p>
+      {/* Caducidad: un botón que rota 7 días / 1 mes / 3 meses sin uso. */}
+      <button
+        type="button"
+        data-share-expiry={days}
+        onClick={() => void cycle()}
+        aria-label={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
+        title={t("Caduca tras {label} sin uso: pulsa para cambiarlo", { label: t(label) })}
+        className="btn-secondary w-full justify-center px-2 py-1 text-xs"
+      >
+        <Clock size={13} aria-hidden /> {t("Caduca tras {label} sin uso", { label: t(label) })}
+      </button>
       {dialog && <ShareDialog column={column} state={dialog} onClose={() => setDialog(null)} onFresh={() => void generate(true)} onRevoked={(next) => { apply(next); setDialog(null); }} />}
     </div>
   );
 }
 
 /**
- * Diálogo tras «Generar web» / «Actualizar web» (o desde el botón del enlace): la dirección con clic para copiar, «Copiar»,
- * «Enviar por email» (mailto: con asunto y cuerpo; lo envía el correo de quien comparte) y hasta cuándo vale. Si no se
- * puede recuperar la dirección (`lost`: el enlace es de antes de guardarla, o cambió la clave de cifrado sin rotarla), lo
- * explica y ofrece crear un enlace nuevo, con confirmación. «Revocar enlace», con confirmación.
+ * Diálogo tras «Generar web» / «Actualizar web» (o desde el botón del enlace). De arriba abajo: lo publicado, la dirección
+ * destacada con «Copiar», «Abrir» (otra pestaña) y «Enviar por email»; la caducidad como línea secundaria y, apartado
+ * abajo, «Revocar enlace» (con confirmación). Si no se puede recuperar la dirección (`lost`: el enlace es de antes de
+ * guardarla, o cambió la clave de cifrado sin rotarla), lo explica y ofrece crear un enlace nuevo, con confirmación.
  */
 function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
   column: BoardColumn;
@@ -175,6 +209,7 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
   const { track } = useBoard();
   const info = column.share;
   const until = info?.state === "active" && info.endsAt ? day(info.endsAt) : null;
+  const revokedLine = useRevokedLine(info);
   const url = state.url;
 
   const copy = async () => {
@@ -211,37 +246,45 @@ function ShareDialog({ column, state, onClose, onFresh, onRevoked }: {
 
   return (
     <Modal open onClose={onClose} size="sm" title={t("Web de «{name}»", { name: column.name })} footer={<button type="button" className="btn-secondary" onClick={onClose}>{t("Cerrar")}</button>}>
-      <div className="space-y-3 text-sm">
+      <div className="space-y-4 text-sm">
         {state.published !== undefined && (
-          <p>{state.published === 1 ? t("Se ha publicado 1 tarea.") : t("Se han publicado {n} tareas.", { n: state.published })}{state.left ? ` ${t("{n} no caben y no salen en la web.", { n: state.left })}` : ""}</p>
+          <p className="font-medium text-emerald-700 dark:text-emerald-400" data-share-published>
+            {state.published === 1 ? t("Se ha publicado 1 tarea.") : t("Se han publicado {n} tareas.", { n: state.published })}
+            {state.left ? <span className="font-normal text-slate-600 dark:text-slate-400"> {t("{n} no caben y no salen en la web.", { n: state.left })}</span> : null}
+          </p>
         )}
         {url ? (
-          <>
-            <p className="text-slate-600 dark:text-slate-400">{t("Cualquiera con esta dirección puede ver estas tareas, marcarlas como hechas, cambiar su fecha, comentar y descargar sus adjuntos, sin cuenta.")}</p>
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("Dirección de la web")}</h3>
             <button
               type="button"
               data-pz-no-capture=""
               data-share-url
               onClick={() => void copy()}
               title={t("Pulsa para copiar")}
-              className="block w-full rounded-md border border-slate-300 bg-slate-50 px-2 py-1.5 text-left font-mono text-xs break-all hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="block w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-left font-mono text-xs break-all text-slate-900 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
             >
               {url}
             </button>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn-primary" onClick={() => void copy()}><Copy size={14} aria-hidden /> {t("Copiar")}</button>
+              <a className="btn-secondary" href={url} target="_blank" rel="noopener noreferrer" data-pz-no-capture="" data-share-open><ExternalLink size={14} aria-hidden /> {t("Abrir")}</a>
               {mailto && <a className="btn-secondary" href={mailto} data-pz-no-capture=""><Mail size={14} aria-hidden /> {t("Enviar por email")}</a>}
             </div>
-          </>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{t("Cualquiera con esta dirección puede ver estas tareas, marcarlas como hechas, cambiar su fecha, comentar y descargar sus adjuntos, sin cuenta.")}</p>
+          </section>
         ) : state.lost && info?.state === "active" ? (
-          <>
+          <section className="space-y-2">
             <p className="text-slate-600 dark:text-slate-400" data-share-lost>{t("El enlace sigue funcionando, pero Pizarro no puede volver a enseñar su dirección: se creó con una versión anterior o ha cambiado la clave de cifrado de la instalación. Quien ya la tiene puede seguir usándola. Si necesitas la dirección, crea un enlace nuevo (el actual dejará de funcionar).")}</p>
             <button type="button" className="btn-secondary" onClick={() => void fresh()} data-share-fresh>{t("Crear un enlace nuevo")}</button>
-          </>
+          </section>
         ) : null}
-        {until && <p>{t("Vale hasta el {date} si nadie la usa (abrirla o actualizarla cuenta como uso).", { date: until })}</p>}
+        {revokedLine && <p className="text-slate-600 dark:text-slate-400" data-share-revoked>{revokedLine}</p>}
+        {until && <p className="text-xs text-slate-500 dark:text-slate-400">{t("Vale hasta el {date} si nadie la usa (abrirla o actualizarla cuenta como uso).", { date: until })}</p>}
         {info?.state === "active" && (
-          <button type="button" className="text-sm font-medium text-red-700 hover:underline dark:text-red-400" onClick={() => void revoke()}>{t("Revocar enlace")}</button>
+          <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+            <button type="button" className="btn-secondary border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40" onClick={() => void revoke()} data-share-revoke>{t("Revocar enlace")}</button>
+          </div>
         )}
       </div>
     </Modal>

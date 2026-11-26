@@ -34,8 +34,6 @@ export const shareKeyOf = (token: string): string => createHash("sha256").update
 
 /** Tras caducar o revocarse, la misma dirección dice «ha caducado» estos días; después, «no encontrado». */
 export const SHARE_GRACE_DAYS = 30;
-/** Tareas que se publican como mucho (las primeras de la columna). */
-export const MAX_SHARE_TASKS = 200;
 /** Largo máximo de un comentario escrito desde fuera. */
 export const MAX_SHARE_COMMENT = 2000;
 /** Se apunta el uso (abrir la página) como mucho una vez cada tanto: no se escribe en la base en cada visita. */
