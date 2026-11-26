@@ -262,6 +262,10 @@ WhatsApp real con el propietario delante).
 3. Ronda 69: las respuestas del propietario a las preguntas de abajo (recomendadas para empezar: 2g, 3, 4 y 8) y lo que
    salga de los informes de Chrome. Comprobaciones y e2e en local (§4); minutos de Actions solo para la PR y la Release.
 
+**Hecho tras la ronda 68 (sesión local, 25–26 nov):** pasados los prompts 1, 2 y 3 de Claude in Chrome sobre la v1.72.0.
+Resultados, fallos, lo que confunde, lo que pidió el propietario, lo pendiente para él y la propuesta para la ronda 69:
+**`docs/handoff/CHROME-R69.md`** (léelo al empezar la ronda 69).
+
 **Preguntas abiertas al propietario (tras la v1.72.0)**, con la numeración del informe final de la ronda 68 (entre
 paréntesis, la recomendación que se le dio):
 
@@ -298,6 +302,7 @@ Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y me
 | `docs/handoff/GUARDAS.md` | Las guardas técnicas de §4 (y las de cada ronda) por tema: tablero, navegador, logs, migraciones, base de datos, PDF, subidas, importar, i18n, fechas, servidor, seguridad, emails, tareas de fondo, plantillas, deshacer, pruebas, e2e, entorno | Al repartir una ronda, la sección del tema de cada agente (cópiala a su brief); al revisar una entrega de ese tema |
 | `docs/handoff/HISTORIA.md` | Decisiones de cada ronda ya aplicadas, lo hecho de la paquetización, ideas pospuestas, límites conocidos y menores sin numerar | Cuando el propietario pregunte por algo ya decidido, antes de proponer algo que pudo descartarse, y al cerrar la ronda (para añadir sus decisiones) |
 | `docs/handoff/LOCAL.md` | Sesión en el PC del propietario: requisitos, puesta en marcha, trampas de Windows, recursos, publicar desde local y reglas de Claude in Chrome | Solo si la sesión corre en el PC del propietario |
+| `docs/handoff/CHROME-R69.md` | Informes de Claude in Chrome sobre la v1.72.0 (prompts 1–3) y propuesta para la ronda 69 | Al empezar la ronda 69 |
 | `docs/PRUEBAS-CHROME.md` | Prompts para Claude in Chrome pendientes y lo aprendido al usarlos | Si la ronda trae informes de Claude in Chrome y al cerrarla (para actualizar los prompts) |
 | `docs/handoff/PUBLICAR.md` | Cerrar y publicar una versión paso a paso, `STABLE_PUSH_TOKEN`, mover `stable`, publicar desde la sesión, Dependabot | Al cerrar una versión o si falla el workflow Release; al revisar un PR de Dependabot |
 | `e2e/SUITES.md` | Qué prueba cada suite e2e y cómo se lanza sola (las cifras, en `e2e/README.md`) | Al tocar o lanzar una suite concreta |
