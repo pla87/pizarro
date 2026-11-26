@@ -413,7 +413,7 @@ if (only.includes("lenta")) {
   await s.page.keyboard.press("Control+End");
   await pasteImage(s.page, "pie.png");
   await L.eqEventually("LENTA 3: dice «Subiendo imagen…»", () => uploading(d).count(), 1);
-  await d.getByRole("button", { name: "Guardar", exact: true }).click();
+  await d.getByRole("button", { name: "Guardar y cerrar", exact: true }).click();
   await L.eqEventually("LENTA 3: el pie también espera a la imagen", async () => (await uploading(d).innerText()).trim(), "Subiendo imagen…; se guardará al terminar");
   L.eq("LENTA 3: … con el detalle abierto", await U.dialog(s.page).count(), 1);
   release();

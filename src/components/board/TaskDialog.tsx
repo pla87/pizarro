@@ -1224,7 +1224,7 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
         {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar y cerrar")}</button>
       </div>
     </div>
   );

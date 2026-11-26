@@ -100,4 +100,7 @@ export const detalle: Record<string, string> = {
 
   // (Ronda 68, revisión) Aviso de soltar sobre la descripción en edición (la imagen además se inserta en el texto)
   "Suelta para insertar en la descripción": "Drop to insert into the description",
+  // Ronda 69: detalle
+  "Guardar y cerrar": "Save and close",
+  "Guarda los cambios pendientes y cierra la tarea": "Saves the pending changes and closes the task",
 };
