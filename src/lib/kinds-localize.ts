@@ -21,6 +21,19 @@ const OLD_DESCRIPTIONS: Record<string, string> = {
   kind_respuesta: "Respondo a las preguntas y lo que necesitas de mi:",
 };
 
+/**
+ * El texto con el viejo de serie (errata) al principio puesto al nuevo: una tarea creada antes de la ronda 69 empieza por «de mi»
+ * y el tipo ya dice «de mí»; así se reconoce como la plantilla del tipo (al cambiar de tipo se quita y al volver a elegirlo
+ * no se duplica). El resto del texto no cambia.
+ */
+export function withCurrentSeedText(text: string): string {
+  const start = text.trimStart();
+  for (const [id, old] of Object.entries(OLD_DESCRIPTIONS)) {
+    if (start.startsWith(old)) return SEEDS[id]!.es.descriptionTemplate + start.slice(old.length);
+  }
+  return text;
+}
+
 const SEEDS: Record<string, { es: SeedKind; en: SeedKind }> = {
   kind_funcionalidad: {
     es: { name: "Funcionalidad", titleTemplate: "", descriptionTemplate: "" },
