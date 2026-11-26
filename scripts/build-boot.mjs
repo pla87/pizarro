@@ -1,8 +1,8 @@
 // `npm run build:boot`: los scripts de línea de órdenes de dist/ (boot, restore, rotate-keys, doctor y reset-link), de
 // una vez y con lo común en trozos compartidos (dist/chunk-*.mjs). Antes cada uno se empaquetaba solo y llevaba su copia
 // de todo (Prisma, el cliente generado, las copias…): ~24 MB en dist/; ahora, unos 7. Los nombres de entrada no cambian:
-// `node dist/restore.mjs`, `node dist/reset-link.mjs`… (y `import("dist/boot.mjs")` en scripts/start-local.mjs) siguen
-// igual, en local, en la imagen Docker (copia dist/ entera) y en Railway. Los trozos van en dist/ mismo, junto a las
+// `node dist/restore.mjs`, `node dist/reset-link.mjs`… (y `node dist/boot.mjs`, que scripts/start-local.mjs lanza en un
+// proceso hijo) siguen igual, en local, en la imagen Docker (copia dist/ entera) y en Railway. Los trozos van en dist/ mismo, junto a las
 // entradas: lo que mira su propia ruta (import.meta.url: el cliente de Prisma, restore.ts) sigue viendo la misma carpeta.
 // dist/pdf-worker.mjs es aparte (scripts/postbuild.mjs): no se toca. Pruebas: tests/docker-build.test.ts.
 import { readdirSync, rmSync } from "node:fs";

@@ -1,7 +1,7 @@
 // Tareas de arranque (tras las migraciones): registra el arranque, sincroniza el changelog, ejecuta el seed idempotente,
 // anuncia el código del asistente /setup y prepara las plantillas de serie. El contenedor lo ejecuta como proceso aparte
-// (`node dist/boot.mjs`, en scripts/start.sh); `npm start` lo importa y llama a runBoot() antes de cargar el servidor
-// (scripts/start-local.mjs), así las dos formas de arrancar hacen lo mismo.
+// (`node dist/boot.mjs`, en scripts/start.sh); `npm start` también lo lanza como `node dist/boot.mjs` en un proceso hijo
+// que termina antes de cargar el servidor (scripts/start-local.mjs), así las dos formas de arrancar hacen lo mismo.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyAppUrlFallback } from "@/lib/app-url";
@@ -49,8 +49,9 @@ async function main() {
 
 /**
  * Ejecuta las tareas de arranque y cierra su conexión. Lanza si fallan (base inaccesible, migraciones sin aplicar).
- * src/lib/db.ts deja el cliente en globalThis (una sola copia por proceso); aquí se quita al terminar: si no,
- * el servidor cargado después en el mismo proceso (`npm start`) heredaría este cliente ya desconectado.
+ * src/lib/db.ts deja el cliente en globalThis (una sola copia por proceso); aquí se quita al terminar: si no, cualquier
+ * código cargado después en el mismo proceso heredaría este cliente ya desconectado (`npm start` ya no lo hace: lanza boot
+ * en un proceso hijo, pero se conserva por si se vuelve a importar).
  */
 export async function runBoot(): Promise<void> {
   try {

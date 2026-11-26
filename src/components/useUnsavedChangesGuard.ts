@@ -67,6 +67,8 @@ export function useUnsavedChangesGuard(active: boolean, dirty: () => boolean, as
         if (!a.isConnected) return;
         pass = a;
         a.click();
+        // El clic es síncrono: si ningún oyente lo consumió (no era una navegación de la app), el pase no se queda puesto.
+        pass = null;
       });
     };
     window.addEventListener("beforeunload", onBeforeUnload);
