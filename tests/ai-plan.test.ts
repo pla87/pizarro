@@ -298,7 +298,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(md.includes("imagen «c» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
     assert.ok(!md.includes("!["), md);
     // Una imagen que no es adjunto de ninguna tarea del plan se queda en su texto alternativo (sin enlace a Pizarro).
-    assert.ok(md.includes("Mira imagen «captura» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`) y otra y "), md);
+    assert.ok(md.includes("Mira\n\nimagen «captura» (`adjuntos/01-arreglar-ana-el-login-nandu/Plano_final.webp`)\n\ny otra y\n\nimagen «c» "), md);
     assert.ok(md.includes("(descomprímelo junto a este fichero)") && md.includes("Las imágenes van en WebP."), md);
     const plain = withPaths(false);
     assert.ok(!plain.includes("en el ZIP «adjuntos/…» que va con este plan") && plain.includes("Mira captura y otra y c"), plain);
@@ -319,7 +319,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     // Una captura pegada y dos ficheros más: la captura, solo en la descripción; los otros, con la carpeta una vez.
     const md = plan(["a1", "a2", "a3"], "Falla así: ![captura](/api/attachments/a1)");
     assert.ok(md.endsWith(`\n\n**Adjuntos** (en la carpeta \`${f}/\`): \`plano_final-2.webp\`, \`log.txt\`\n`), md);
-    assert.ok(md.includes(`Falla así: imagen «captura» (\`${f}/Plano_final.webp\`)`), md);
+    assert.ok(md.includes(`Falla así:\n\nimagen «captura» (\`${f}/Plano_final.webp\`)`), md);
     const list = md.slice(md.lastIndexOf("**Adjuntos**"));
     assert.ok(!list.includes("Plano_final.webp"), list);
     // Uno solo (el resto, citados): su ruta completa en la misma línea.
@@ -333,6 +333,14 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
       tasks: [{ id: "t1", title: "Fix", attachments: [{ id: "a1", name: "x", path: "attachments/01-fix/a.webp" }, { id: "a3", name: "y", path: "attachments/01-fix/log.txt" }] }],
     }, makeT("en"));
     assert.ok(en.includes("\n**Attachments** (in the folder `attachments/01-fix/`): `a.webp`, `log.txt`\n"), en);
+  });
+
+  test("planDescription: la imagen del ZIP va siempre en su propia línea, también si viene pegada al texto", () => {
+    const zip = new Map([["x1", "adjuntos/01-t/a.webp"]]);
+    const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
+    assert.equal(d("la tabla.![a](/api/attachments/x1)"), "la tabla.\n\nimagen «a» (`adjuntos/01-t/a.webp`)");
+    assert.equal(d("Antes ![a](/api/attachments/x1) después."), "Antes\n\nimagen «a» (`adjuntos/01-t/a.webp`)\n\ndespués.");
+    assert.equal(d("![a](/api/attachments/x1)![a](/api/attachments/x1)"), "imagen «a» (`adjuntos/01-t/a.webp`)\n\nimagen «a» (`adjuntos/01-t/a.webp`)");
   });
 
   test("planDescription: sin enlaces a Pizarro (relativos o con su origen); los adjuntos del ZIP, por su ruta; los demás enlaces, igual", () => {
@@ -356,10 +364,10 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
     assert.equal(d("`![x](/api/attachments/abc)`"), "`![x](/api/attachments/abc)`");
     // Cierre con tantas comillas como la apertura; el resto de la línea sí se sustituye.
-    assert.equal(d("Antes ``a ` ![x](/api/attachments/abc)`` y ![y](/api/attachments/abc)"), "Antes ``a ` ![x](/api/attachments/abc)`` y imagen «y» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("Antes ``a ` ![x](/api/attachments/abc)`` y ![y](/api/attachments/abc)"), "Antes ``a ` ![x](/api/attachments/abc)`` y\n\nimagen «y» (`adjuntos/01-x/pegada.webp`)");
     // Una comilla escapada o sin cerrar no abre un código.
-    assert.equal(d("\\`![x](/api/attachments/abc)"), "\\`imagen «x» (`adjuntos/01-x/pegada.webp`)");
-    assert.equal(d("`suelta ![x](/api/attachments/abc)"), "`suelta imagen «x» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("\\`![x](/api/attachments/abc)"), "\\`\n\nimagen «x» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("`suelta ![x](/api/attachments/abc)"), "`suelta\n\nimagen «x» (`adjuntos/01-x/pegada.webp`)");
   });
 
   test("planDescription: una imagen enlazada no deja el enlace a Pizarro de fuera", () => {
@@ -376,7 +384,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     const zip = new Map([["abc", "adjuntos/01-x/pegada.webp"]]);
     const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
     for (const name of ["pegada.png", "Foto.JPEG", "captura.webp", "informe.pdf", "notas.docx"]) assert.equal(d(`![${name}](/api/attachments/abc)`), "imagen `adjuntos/01-x/pegada.webp`", name);
-    assert.equal(d("Ver ![Figura 3.14](/api/attachments/abc)"), "Ver imagen «Figura 3.14» (`adjuntos/01-x/pegada.webp`)");
+    assert.equal(d("Ver ![Figura 3.14](/api/attachments/abc)"), "Ver\n\nimagen «Figura 3.14» (`adjuntos/01-x/pegada.webp`)");
     assert.equal(d("![Ver www.ejemplo.com](/api/attachments/abc)"), "imagen «Ver www.ejemplo.com» (`adjuntos/01-x/pegada.webp`)");
   });
 
