@@ -16,7 +16,7 @@ const CLASS = "btn-primary w-full py-1.5";
  * orden de Tab. Tocarlo no hace nada: el motivo ya está a la vista bajo él (OffReason). Antes salía además como aviso
  * rojo, que repetía lo que ya se leía debajo.
  */
-const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+export const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 /**
  * El motivo de un botón apagado, a la vista bajo él y como su descripción accesible (`aria-describedby`): solo con el

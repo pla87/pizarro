@@ -124,4 +124,5 @@ export const compartirFuera: Record<string, string> = {
   "Compartida desde Pizarro": "Shared from Pizarro",
   "Enlace no disponible": "Link not available",
   "Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.": "This task list is no longer available. Contact the person who gave you the link.",
+  "Link: enlace de la web": "Link: page link",
 };

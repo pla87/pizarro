@@ -67,10 +67,11 @@ export async function generateShareWeb(columnId: string, opts: { fresh?: boolean
     const where = { columnId: column.id, archivedAt: null };
     const [rows, total] = await Promise.all([db.task.findMany({ where, orderBy: TASK_ORDER, select: { id: true }, take: MAX_SHARE_TASKS }), db.task.count({ where })]);
     const taskIds = rows.map((t) => t.id);
-    // Una web sin tareas no se publica (el botón del tablero ya lo dice).
-    if (!taskIds.length) throw new AppError("No hay tareas en esta columna: añade alguna antes de generar la web.");
     const current = shareLinkState(share, now);
     const keep = current.state === "active" && !fresh;
+    // Una web nueva sin tareas no se publica (el botón del tablero ya lo dice); con el enlace activo, actualizarla vacía
+    // sí vale: es la forma de despublicar lo que ya no está.
+    if (!taskIds.length && !keep) throw new AppError("No hay tareas en esta columna: añade alguna antes de generar la web.");
     const token = keep ? null : newShareToken();
     const data = {
       taskIds, generatedAt: now, generatedById: user.id, lastUsedAt: now,

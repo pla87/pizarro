@@ -158,7 +158,7 @@ try {
     const other = await L.session({ email: L.USER2 });
     sessions.push(other);
     await openBoard(other.page);
-    await shareCol(other.page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(other.page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const theirs = U.dialog(other.page).locator("[data-share-url]");
     await theirs.waitFor();
     L.eq("GENERAR: otra persona del proyecto ve la misma dirección", (await theirs.innerText()).trim(), url);
@@ -228,7 +228,7 @@ try {
     // Como si la clave de cifrado hubiese cambiado sin rotarla (o el enlace fuese de una versión anterior).
     await L.q(`UPDATE "ColumnShare" SET "tokenEnc"=NULL WHERE "projectId"=$1`, [P]);
     await openBoard(page);
-    await shareCol(page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const d = U.dialog(page);
     await d.locator("[data-share-lost]").waitFor();
     L.eq("NUEVO: sin dirección en el diálogo", await d.locator("[data-share-url]").count(), 0);
@@ -250,7 +250,7 @@ try {
   if (only.includes("revocar") && url) {
     L.scenario("revocar: la dirección dice «ha caducado»");
     await openBoard(page);
-    await shareCol(page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const d = U.dialog(page);
     await d.getByRole("button", { name: "Revocar enlace" }).click();
     await page.getByRole("dialog").filter({ hasText: "¿Revocarlo?" }).getByRole("button", { name: "Revocar enlace" }).click();

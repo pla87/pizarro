@@ -293,6 +293,12 @@ test("cambios sin publicar: el conjunto de ids de la columna frente a lo publica
   assert.equal(shareHasUnpublished(info([], "none"), ["x"]), false);
   const many = Array.from({ length: MAX_SHARE_TASKS + 20 }, (_, i) => `t${i}`);
   assert.equal(shareHasUnpublished(info(many.slice(0, MAX_SHARE_TASKS)), many), false, "las que no caben no cuentan como cambio");
+  // Una publicada que ahora está en una columna terminada se sigue leyendo en vivo: no es una tarea quitada.
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a"], new Set(["b"])), false, "b pasó a «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["a", "b"])), false, "columna vacía: todas en «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["b"])), true, "columna vacía y a salió por otro lado: sí hay cambio");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a", "c"], new Set(["b"])), true, "una nueva sigue contando");
+  assert.equal(shareHasUnpublished(info(["a"]), ["a"], new Set(["a"])), false, "sigue en la columna: nada que ver con «Hecho»");
 });
 
 test("quién revocó: el nombre solo sale si el enlace terminó revocado; el tablero lleva los ids publicados solo si está activo", () => {
