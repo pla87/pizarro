@@ -384,15 +384,20 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const { detail: d, version } = textState.current;
       if (!alive || !res?.ok || !d || res.data.textVersion !== version) return;
       const fresh = res.data.description;
-      const reloadDesc = fresh !== d.description && !editingDescription();
+      const changedRemotely = fresh !== d.description;
+      const reloadDesc = changedRemotely && !editingDescription();
+      // Con cambios propios en la descripción abierta (también si el cambio es de la misma persona en otra pestaña) no se
+      // pisa lo escrito: se pone la guardada como «inicial» del editor, que avisa en ámbar de que ha cambiado. La base
+      // (`descBase`) y la versión del texto no avanzan: al guardar, el servidor sigue detectando el conflicto.
+      const warnTyped = changedRemotely && !reloadDesc;
       if (reloadDesc) {
         descBase.current = fresh;
         descReloads.current++;
       }
       const advance = !editingText();
-      if (!reloadDesc && !advance) return;
-      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
-      if (reloadDesc) setDescRemote((n) => n + 1);
+      if (!reloadDesc && !warnTyped && !advance) return;
+      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc || warnTyped ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
+      if (reloadDesc || warnTyped) setDescRemote((n) => n + 1);
     });
     return () => {
       alive = false;
