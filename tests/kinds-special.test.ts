@@ -404,3 +404,14 @@ test("la descripción a medio editar: al cambiar de tipo no se pierde nada de lo
     if (prev) for (const piece of kept) assert.ok(switchKindDescription(next, prev, out).includes(piece), `«${piece}» se ha perdido al volver`);
   }
 });
+
+// Ronda 69: una tarea de antes de la errata empieza por «de mi»; se reconoce como la plantilla del tipo «Respuesta».
+test("errata «de mi»: el texto viejo de serie se lee como la plantilla del tipo", () => {
+  const OLD = "Respondo a las preguntas y lo que necesitas de mi:";
+  const OTHER = { titleTemplate: "Aviso", descriptionTemplate: "Pasos:" };
+  // Al volver a elegir «Respuesta» no se duplica.
+  assert.equal(switchKindDescription(null, RESP, `${OLD}\n- punto`), `${RESPUESTA_LINE}\n- punto`);
+  // Al cambiar a otro tipo, la plantilla de «Respuesta» se quita (sin la respuesta, no queda nada suyo).
+  assert.equal(switchKindDescription(RESP, OTHER, `${OLD}\n`), "Pasos:\n");
+  assert.equal(switchKindDescription(RESP, OTHER, `${OLD}\n\nMi nota`), "Pasos:\n\nMi nota");
+});

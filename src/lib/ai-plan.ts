@@ -294,6 +294,8 @@ function maskCodeSpans(line: string): { masked: string; spans: string[] } {
 const IMAGE_OPEN = "\u0001";
 const IMAGE_CLOSE = "\u0002";
 const IMAGE_MARKS = /[\u0001\u0002]/g;
+/** Fila de tabla, cita o elemento de lista: la imagen se queda en su línea (partirla rompería la tabla, la cita o la lista). */
+const KEEPS_LINE = /^\s*(?:\||>|(?:[-*+]|\d+[.)])\s)/;
 const IMAGE_IN_LINK = /\[[^\]\u0002]*\u0001[^\]]*\]\(/;
 
 function withoutAppLinks(line: string, t: T, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
@@ -322,7 +324,9 @@ function withoutAppLinks(line: string, t: T, origin: string | null | undefined, 
   const twice = replaced.includes(IMAGE_OPEN)
     ? IMAGE_IN_LINK.test(replaced)
       ? replaced.replace(IMAGE_MARKS, "")
-      : replaced.replace(/[ \t]*\u0001/g, "\n\n").replace(/\u0002[ \t]*/g, "\n\n")
+      : KEEPS_LINE.test(replaced)
+        ? replaced.replace(/[ \t]*\u0001/g, " ").replace(/\u0002[ \t]*(?=\S)/g, " ").replace(/\u0002[ \t]*/g, "")
+        : replaced.replace(/[ \t]*\u0001/g, "\n\n").replace(/\u0002[ \t]*/g, "\n\n")
     : replaced;
   return spans.length ? twice.replace(CODE_MARK, (_m, n: string) => spans[Number(n)]!) : twice;
 }

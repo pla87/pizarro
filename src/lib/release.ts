@@ -232,10 +232,13 @@ export function attachmentFileMap(code: string, attachments: ReleaseAttachmentIn
 const MD_IMAGE = /!\[((?:\\.|[^\\[\]\n])*)\]\(\s*(<[^<>\n]*>|[^\s()<>]+)(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)/g;
 const APP_ATTACHMENT = /^(?:https?:\/\/[^/\s]+)?\/api\/attachments\/([^/?#\s]+)/;
 const CODE_FENCE = /^\s*(?:`{3,}|~{3,})/;
+/** Fila de tabla, cita o elemento de lista: partir la línea para sacar la imagen rompería la tabla, la cita o la lista. */
+const KEEPS_LINE = /^\s*(?:\||>|(?:[-*+]|\d+[.)])\s)/;
 
 /**
  * Texto de la release tal como se descarga (.md y .txt). Las imágenes de la descripción apuntan a `/api/attachments/…`, un
- * enlace de Pizarro que fuera de la app no abre. Cada una va en su propia línea (con la sangría de su línea) y:
+ * enlace de Pizarro que fuera de la app no abre. Cada una va en su propia línea (con la sangría de su línea; en una fila de
+ * tabla, una cita o un elemento de lista se queda en la misma línea, separada por un espacio del texto anterior) y:
  * si su adjunto va en el ZIP (`files`, id → nombre del fichero), como imagen con la ruta relativa del fichero, que queda
  * junto al texto al descomprimir; si no, como texto «[imagen: nombre]». Las imágenes de otros sitios no cambian, ni lo que
  * va dentro de un bloque de código. `t`: idioma de quien lo descarga.
@@ -247,6 +250,17 @@ export function releaseDownloadText(text: string, files: ReadonlyMap<string, str
     if (CODE_FENCE.test(line)) fenced = !fenced;
     if (fenced || !line.includes("](")) {
       out.push(line);
+      continue;
+    }
+    if (KEEPS_LINE.test(line)) {
+      out.push(line.replace(MD_IMAGE, (whole: string, alt: string, dest: string, at: number) => {
+        const appId = APP_ATTACHMENT.exec(dest.startsWith("<") ? dest.slice(1, -1) : dest)?.[1] ?? "";
+        if (!appId) return whole;
+        const file = files.get(appId);
+        const label = alt.replace(/\\(.)/g, "$1").trim();
+        const image = file ? `![${alt}](${file})` : label ? `[${t("imagen")}: ${label}]` : `[${t("imagen")}]`;
+        return at > 0 && !/\s/.test(line[at - 1]!) ? ` ${image}` : image;
+      }));
       continue;
     }
     const indent = /^\s*/.exec(line)![0];
@@ -287,7 +301,7 @@ export function releaseDownloadText(text: string, files: ReadonlyMap<string, str
   return out.join("\n");
 }
 
-/** Descripción sangrada 2 espacios:menciones en texto plano, sin espacios finales ni líneas en blanco repetidas. */
+/** Descripción sangrada 2 espacios: menciones en texto plano, sin espacios finales ni líneas en blanco repetidas. */
 function formatReleaseDescription(description: string | null | undefined): string[] {
   const lines: string[] = [];
   // Descripciones guardadas por versiones anteriores del editor pueden traer `-&gt;` en vez de `->`.

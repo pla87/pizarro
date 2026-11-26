@@ -373,4 +373,10 @@ test("descarga: las imágenes de la descripción, en su línea y con la ruta del
   // Sin ZIP: texto, nunca un enlace roto. En inglés, «image».
   assert.ok(releaseDownloadText("  ![pegada.png](/api/attachments/a1)", new Map()).startsWith("  [imagen: pegada.png]"));
   assert.equal(releaseDownloadText("![](/api/attachments/a1)", new Map(), (x) => (x === "imagen" ? "image" : x)), "[image]");
+  // En una fila de tabla, una cita o un elemento de lista la imagen se queda en su línea, separada del texto anterior.
+  const zip = new Map([["a1", "adjuntos/a.webp"]]);
+  assert.equal(releaseDownloadText("| x | tabla.![a](/api/attachments/a1) |", zip), "| x | tabla. ![a](adjuntos/a.webp) |");
+  assert.equal(releaseDownloadText("> cita ![a](/api/attachments/a1) fin", zip), "> cita ![a](adjuntos/a.webp) fin");
+  assert.equal(releaseDownloadText("- punto ![](/api/attachments/b9)", zip), "- punto [imagen]");
+  assert.equal(releaseDownloadText("  2) ![a](/api/attachments/a1)", zip), "  2) ![a](adjuntos/a.webp)");
 });

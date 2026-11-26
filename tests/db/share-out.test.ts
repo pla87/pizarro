@@ -125,8 +125,13 @@ describe("compartir fuera: activar y generar", () => {
     assert.ok((await (await page(token)).text()).includes("Revisar planos"));
     expectOk(await archiveTask(t2.id));
     assert.ok(!(await (await page(token)).text()).includes("Pedir material"));
-    // Con la columna vacía no se actualiza (el botón lo dice y el servidor lo rechaza).
-    expectFail(await generateShareWeb(f.columns.todo), /No hay tareas en esta columna/);
+    // Con el enlace activo, la columna vacía sí se actualiza: es la forma de despublicar lo que ya no está.
+    const emptied = await generate(f.columns.todo);
+    assert.equal(emptied.published, 0);
+    assert.equal(tokenOf(emptied.url), token);
+    assert.ok(!(await (await page(token)).text()).includes("Revisar planos"), "ya no sale la que se fue de la columna");
+    // Sin enlace activo (o pidiendo uno nuevo), una columna vacía no se genera.
+    expectFail(await generateShareWeb(f.columns.todo, { fresh: true }), /No hay tareas en esta columna/);
     await moveTask(t1.id, f.columns.todo, null, null);
     const again = await generate(f.columns.todo);
     assert.equal(tokenOf(again.url), token, "actualizar mantiene el mismo enlace y lo vuelve a enseñar");
@@ -175,6 +180,11 @@ describe("compartir fuera: activar y generar", () => {
     assert.ok(html.includes("Compartida por Marta desde Pizarro"), "el nombre de pila de quien generó la web");
     await db.user.update({ where: { id: me.id }, data: { name: "Lucía Nueva" } });
     assert.ok((await (await page(token)).text()).includes("Compartida por Lucía desde Pizarro"), "se lee de la cuenta de ahora");
+    // Con la cuenta desactivada ya no se dice su nombre (como al avisarle de los cambios).
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    const anon = await (await page(token)).text();
+    assert.ok(anon.includes("Compartida desde Pizarro") && !anon.includes("Lucía"), "sin cuenta activa, sin nombre");
+    await db.user.update({ where: { id: me.id }, data: { active: true } });
     // Tras un formulario, el aviso sale en la tarjeta de su tarea (el aviso lleva `t`).
     const res = await post(token, t1.id, { op: "done" });
     const loc = new URL(res.headers.get("location")!, "http://localhost");
@@ -372,7 +382,17 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal((await file(token, foreign.id)).status, 404);
     assert.equal((await file(token, "no$valido")).status, 404);
     // Ronda 69: la imagen adjunta sale con su miniatura (en línea) y el nombre como descarga.
-    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}?inline=1"><img src="/x/${token}/a/${img.id}?inline=1"`), "miniatura");
+    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}"><img src="/x/${token}/a/${img.id}?inline=thumb"`), "miniatura que enlaza a la descarga normal");
+    // La miniatura usa su variante (si existe; si no, la normal) y es lo único que se guarda en el navegador.
+    const noThumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await noThumb.text(), "img-data", "sin miniatura, la imagen normal");
+    await writeFile(attachmentPath(img.id, "thumb"), "thumb!");
+    const thumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await thumb.text(), "thumb!");
+    assert.match(thumb.headers.get("content-disposition")!, /^inline;/);
+    assert.equal(thumb.headers.get("cache-control"), "private, max-age=3600");
+    assert.equal((await file(token, img.id, "?inline=1")).headers.get("cache-control"), "no-store", "la imagen de la descripción no se guarda");
+    assert.equal(await (await file(token, img.id, "?inline=1")).text(), "img-data");
     // Solo las descargas de verdad quedan en Logs (el PDF dos veces; la miniatura no), firmadas «<columna> (fuera)».
     await flushLogs();
     const logs = await db.appLog.findMany({ where: { projectId: f.project.id, action: "shareOut.download" } });

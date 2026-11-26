@@ -343,6 +343,16 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.equal(d("![a](/api/attachments/x1)![a](/api/attachments/x1)"), "imagen «a» (`adjuntos/01-t/a.webp`)\n\nimagen «a» (`adjuntos/01-t/a.webp`)");
   });
 
+  test("planDescription: en una fila de tabla, una cita o una lista la imagen se queda en su línea", () => {
+    const zip = new Map([["x1", "adjuntos/01-t/a.webp"]]);
+    const d = (s: string) => planDescription(s, "https://pz.example.com", zip);
+    const img = "imagen «a» (`adjuntos/01-t/a.webp`)";
+    assert.equal(d("| col | otra |\n|---|---|\n| tabla.![a](/api/attachments/x1) | fin |"), "| col | otra |\n|---|---|\n| tabla. " + img + " | fin |");
+    assert.equal(d("> cita ![a](/api/attachments/x1) y más"), "> cita " + img + " y más");
+    assert.equal(d("- punto ![a](/api/attachments/x1)"), "- punto " + img);
+    assert.equal(d("1. ![a](/api/attachments/x1) luego"), "1. " + img + " luego");
+  });
+
   test("planDescription: sin enlaces a Pizarro (relativos o con su origen); los adjuntos del ZIP, por su ruta; los demás enlaces, igual", () => {
     const origin = "https://pz.example.com";
     const zip = new Map([["x1", "adjuntos/01-t/a.webp"]]);

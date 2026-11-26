@@ -170,7 +170,7 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // en el selector: antes solo se aplicaba al cambiar de tipo y el preseleccionado se quedaba sin ella. Un borrador
   // recuperado se queda como estaba (no se le añade nada).
   const [init] = useState(() => {
-    const columnKind = foreignInit || d ? undefined : columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? "");
+    const columnKind = foreignInit || (d && board.kindById.has(d.kindId)) ? undefined : columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? "");
     const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (columnKind ?? initialKindId(board.currentUserId, board.project.id, board.kinds));
     const title = d?.title ?? initialTitle ?? (initialPlan.accepted.length ? captureTitle(t, locale) : "");
     const description = d?.description ?? initialDescription ?? "";
@@ -252,11 +252,13 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
    * puso el tipo anterior (`prev`) se sustituye por lo del nuevo; lo escrito o cambiado se conserva y se añade lo del
    * nuevo sin duplicar. Antes se acumulaba (dos formularios en la descripción y las subtareas de los dos tipos).
    */
-  const applyKind = (id: string, kinds: ProjectFormData["kinds"], prev: ProjectFormData["kinds"][number] | undefined = form.kinds.find((k) => k.id === kindId)) => {
+  const applyKind = (id: string, kinds: ProjectFormData["kinds"], prev: ProjectFormData["kinds"][number] | undefined = form.kinds.find((k) => k.id === kindId), noPrefix = false) => {
     const pristine = !isDirty();
     setKindId(id);
-    const kind = kinds.find((k) => k.id === id);
-    if (!kind) return;
+    const found = kinds.find((k) => k.id === id);
+    if (!found) return;
+    // Un tipo que viene solo de «el último usado» (o del primero) no pone su prefijo en el título; el del anterior sí se quita.
+    const kind = noPrefix ? { ...found, titleTemplate: "" } : found;
     // Con actualizaciones funcionales: tras pedir las opciones de otro proyecto, lo escrito mientras tanto no se pierde.
     setTitle((cur) => switchKindTitle(prev, kind, cur, kinds));
     setDescription((cur) => switchKindDescription(prev, kind, cur));
@@ -277,11 +279,15 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
     const names = keep.labelNames;
     if (names) setLabelIds(f.labels.filter((l) => names.some((n) => foldName(n) === foldName(l.name))).map((l) => l.id).slice(0, MAX_TASK_LABELS));
     else setLabelIds((ids) => ids.filter((id) => f.labels.some((l) => l.id === id)));
-    // Si el tipo no existe en el proyecto nuevo, el que lo sustituye trae su automatización (salvo al recuperar un borrador).
+    const col = f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? "");
+    // Si el tipo no existe en el proyecto nuevo, el que lo sustituye trae su automatización (salvo al recuperar un borrador);
+    // el prefijo del título solo si es el tipo por defecto de la columna.
     if (f.kinds.some((k) => k.id === keep.kindId)) setKindId(keep.kindId);
     else if (keep.restoring) setKindId(initialKindId(board.currentUserId, f.project.id, f.kinds));
-    else applyKind(initialKindId(board.currentUserId, f.project.id, f.kinds), f.kinds, keep.prevKind);
-    const col = f.columns.some((c) => c.id === keep.columnId) ? keep.columnId : f.project.id === board.project.id ? (initialColumnId ?? f.columns[0]?.id ?? "") : (f.columns[0]?.id ?? "");
+    else {
+      const next = initialKindId(board.currentUserId, f.project.id, f.kinds);
+      applyKind(next, f.kinds, keep.prevKind, columnDefaultKind(f, col) !== next);
+    }
     setColumnId(col);
     setAssigneeId(columnPerson(f, col)?.id ?? (f.users.some((u) => u.id === keep.assigneeId) ? keep.assigneeId : ""));
     setDeliverableId(f.deliverables.some((x) => x.id === keep.deliverableId) ? keep.deliverableId : "");

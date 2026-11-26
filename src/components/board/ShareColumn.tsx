@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Clock, Copy, ExternalLink, Globe, Link2, Mail } from "lucide-react";
 import { setColumnShareOut } from "@/actions/columns";
 import { generateShareWeb, getShareLink, revokeShareLink, setShareExpiry } from "@/actions/share-out";
@@ -13,6 +13,7 @@ import { copyText } from "../ui/clipboard";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import { OFF } from "./ColumnActionButton";
 import { useBoard, useTasks } from "./context";
 
 // Columna «Compartir fuera» (lib/share-out*.ts): sus tareas se publican en una página sin cuenta (/x/<token>) para alguien
@@ -29,11 +30,10 @@ function useDay() {
 export function ShareBadge({ info }: { info: BoardShareInfo | null | undefined }) {
   const t = useT();
   const day = useDay();
+  const revoked = useRevokedLine(info);
   if (!info) return null;
   const s = shareStateText(info);
-  const text = info.state === "ended" && info.revoked && info.revokedBy && info.endsAt
-    ? t("Enlace revocado por {name} el {date}", { name: info.revokedBy, date: day(info.endsAt) })
-    : s.date ? t(s.key, { date: day(s.date) }) : t(s.key);
+  const text = revoked ?? (s.date ? t(s.key, { date: day(s.date) }) : t(s.key));
   return (
     <span
       data-share-badge={info.state}
@@ -86,9 +86,6 @@ interface DialogState {
   left?: number;
 }
 
-/** Botón apagado a medias (`aria-disabled`): se ve apagado y se anuncia, pero sigue en el orden de Tab. */
-const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
-
 /**
  * Pie de la columna: «Generar web» / «Actualizar web» y el botón del enlace, el aviso de cambios sin publicar (o el motivo
  * si la columna está vacía) y la caducidad.
@@ -96,7 +93,7 @@ const OFF = "aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 export function ShareFooter({ column }: { column: BoardColumn }) {
   const t = useT();
   const toast = useToast();
-  const { track, setColumns } = useBoard();
+  const { track, setColumns, columns } = useBoard();
   const tasks = useTasks();
   const info = column.share ?? null;
   const [busy, setBusy] = useState(false);
@@ -106,12 +103,20 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
   // Las tareas de ahora (en el orden de la columna, las fijas incluidas): lo que se publicaría.
   const ids = useMemo(() => tasks.filter((x) => x.columnId === column.id).sort(compareTaskOrder).map((x) => x.id), [tasks, column.id]);
   const empty = ids.length === 0;
-  const unpublished = info !== null && !empty && shareHasUnpublished(info, ids);
+  // Con el enlace activo, la columna vacía sí se puede actualizar (despublica); sin él no hay nada que publicar.
+  const off = empty && !active;
+  // Las publicadas que ahora están en una columna terminada no cuentan como quitadas: la web las sigue leyendo.
+  const doneIds = useMemo(() => {
+    const doneCols = new Set(columns.filter((c) => c.isDone).map((c) => c.id));
+    return new Set(tasks.filter((x) => doneCols.has(x.columnId)).map((x) => x.id));
+  }, [tasks, columns]);
+  const unpublished = info !== null && shareHasUnpublished(info, ids, doneIds);
+  const reasonId = useId();
   const revokedLine = useRevokedLine(info);
   const apply = (next: BoardShareInfo) => setColumns((cols) => cols.map((c) => (c.id === column.id ? { ...c, share: next } : c)));
 
   const generate = async (fresh = false) => {
-    if (busy || empty) return;
+    if (busy || off) return;
     setBusy(true);
     // `track` no lanza: si la acción lanza (sin red), devuelve el fallo.
     const res = await track(generateShareWeb(column.id, { fresh }));
@@ -151,20 +156,21 @@ export function ShareFooter({ column }: { column: BoardColumn }) {
           type="button"
           className={cn("btn-primary min-w-0 flex-1 px-2 py-1.5 aria-busy:cursor-progress", OFF)}
           aria-busy={busy || undefined}
-          aria-disabled={empty || undefined}
-          title={empty ? noTasks : undefined}
-          onClick={empty ? undefined : () => void generate()}
+          aria-disabled={off || undefined}
+          aria-describedby={off ? reasonId : undefined}
+          title={off ? noTasks : undefined}
+          onClick={off ? undefined : () => void generate()}
           data-share-generate
         >
           <Globe size={15} aria-hidden /> <span className="truncate">{active ? t("Actualizar web") : t("Generar web")}</span>
         </button>
         {active && (
-          <button type="button" className="btn-primary shrink-0 px-2.5 py-1.5" onClick={() => void openLink()} aria-label={t("Enlace de la web")} title={t("Enlace de la web")} data-share-link>
+          <button type="button" className="btn-primary shrink-0 px-2.5 py-1.5" onClick={() => void openLink()} aria-label={t("Link: enlace de la web")} title={t("Enlace de la web")} data-share-link>
             <Link2 size={15} aria-hidden /> {t("Link")}
           </button>
         )}
       </div>
-      {empty && <p className="text-center text-xs text-slate-500 dark:text-slate-400" data-share-empty>{noTasks}</p>}
+      {off && <p id={reasonId} className="text-center text-xs text-slate-500 dark:text-slate-400" data-share-empty>{noTasks}</p>}
       {unpublished && <p className="text-xs leading-snug font-medium text-amber-700 dark:text-amber-400" role="status" data-share-unpublished>{t("Hay cambios sin publicar: pulsa «Actualizar web»")}</p>}
       {!active && revokedLine && <p className="text-xs leading-snug text-slate-600 dark:text-slate-400" data-share-revoked>{revokedLine}</p>}
       <p

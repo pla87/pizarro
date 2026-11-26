@@ -24,13 +24,16 @@ export const MAX_SHARE_TASKS = 200;
 /**
  * ¿La columna tiene cambios sin publicar? Con el enlace activo, las tareas de ahora (`ids`, en el orden de la columna; solo
  * cuentan las primeras MAX_SHARE_TASKS) no son las que se publicaron. Basta el conjunto de ids: una tarea editada después
- * de publicar no se detecta (el tablero no lleva su fecha de cambio).
+ * de publicar no se detecta (el tablero no lleva su fecha de cambio). `done`: las tareas que ahora están en una columna
+ * terminada: la web las sigue leyendo en vivo (marcar hecha desde fuera la lleva a «Hecho»), así que haber salido de la
+ * columna por ahí no es un cambio sin publicar.
  */
-export function shareHasUnpublished(info: Pick<BoardShareInfo, "state" | "taskIds">, ids: readonly string[]): boolean {
+export function shareHasUnpublished(info: Pick<BoardShareInfo, "state" | "taskIds">, ids: readonly string[], done: ReadonlySet<string> = new Set()): boolean {
   if (info.state !== "active") return false;
   const now = ids.slice(0, MAX_SHARE_TASKS);
-  if (now.length !== info.taskIds.length) return true;
-  const was = new Set(info.taskIds);
+  const nowSet = new Set(now);
+  const was = new Set(info.taskIds.filter((id) => nowSet.has(id) || !done.has(id)));
+  if (now.length !== was.size) return true;
   return now.some((id) => !was.has(id));
 }
 

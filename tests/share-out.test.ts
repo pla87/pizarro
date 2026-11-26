@@ -293,6 +293,12 @@ test("cambios sin publicar: el conjunto de ids de la columna frente a lo publica
   assert.equal(shareHasUnpublished(info([], "none"), ["x"]), false);
   const many = Array.from({ length: MAX_SHARE_TASKS + 20 }, (_, i) => `t${i}`);
   assert.equal(shareHasUnpublished(info(many.slice(0, MAX_SHARE_TASKS)), many), false, "las que no caben no cuentan como cambio");
+  // Una publicada que ahora está en una columna terminada se sigue leyendo en vivo: no es una tarea quitada.
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a"], new Set(["b"])), false, "b pasó a «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["a", "b"])), false, "columna vacía: todas en «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["b"])), true, "columna vacía y a salió por otro lado: sí hay cambio");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a", "c"], new Set(["b"])), true, "una nueva sigue contando");
+  assert.equal(shareHasUnpublished(info(["a"]), ["a"], new Set(["a"])), false, "sigue en la columna: nada que ver con «Hecho»");
 });
 
 test("quién revocó: el nombre solo sale si el enlace terminó revocado; el tablero lleva los ids publicados solo si está activo", () => {
@@ -314,8 +320,9 @@ test("página: quién la comparte, imágenes como bloque, miniaturas de los adju
   assert.ok(/\.desc img\{[^}]*display:block/.test(html), "la imagen de la descripción es un bloque");
   assert.ok(!html.includes("Por qué:") && html.includes("Riesgo:"), "el apartado vacío de la plantilla no sale");
   const files = html.slice(html.indexOf('<ul class="files">'));
-  const inline = shareAttachmentPath(pageData().token, "a1", true);
-  assert.ok(files.includes(`<a href="${inline}"><img src="${inline}" alt="plano.webp" loading="lazy"></a>`), "miniatura en línea de la imagen adjunta");
+  const thumb = shareAttachmentPath(pageData().token, "a1", "thumb");
+  assert.ok(thumb.endsWith("?inline=thumb"));
+  assert.ok(files.includes(`<a href="${shareAttachmentPath(pageData().token, "a1")}"><img src="${thumb}" alt="plano.webp" loading="lazy"></a>`), "miniatura de la imagen adjunta, que enlaza a la descarga normal");
   assert.ok(files.includes(`href="${shareAttachmentPath(pageData().token, "a1")}">plano.webp</a>`), "el nombre sigue siendo la descarga");
   // El aviso, en la tarjeta de su tarea; sin tarea, arriba del todo.
   const here = sharePageHtml(pageData({ notice: "done", noticeTaskId: "t1" }), t);

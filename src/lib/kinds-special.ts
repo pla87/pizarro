@@ -1,6 +1,7 @@
 /** Automatización por tipo de tarea: al elegir el tipo se fija el título y/o se antepone un texto a la descripción. */
 import { esT, type T } from "@/i18n/shared";
 import { cutText } from "./graphemes";
+import { withCurrentSeedText } from "./kinds-localize";
 
 interface KindAutomation {
   titleTemplate: string;
@@ -16,9 +17,9 @@ function applyKindTemplate(
   current: { title: string; description: string },
 ): { title: string; description: string } | null {
   const titleTpl = kind.titleTemplate.trim();
-  const descTpl = kind.descriptionTemplate.trim();
+  const descTpl = withCurrentSeedText(kind.descriptionTemplate.trim());
   if (!titleTpl && !descTpl) return null;
-  let description = current.description;
+  let description = withCurrentSeedText(current.description);
   // Lo que ya había va tras una línea en blanco: así se distingue de una respuesta escrita en la última línea del
   // formulario, que va pegada a su etiqueta (ver switchKindDescription).
   if (descTpl && !description.trimStart().startsWith(descTpl)) {
@@ -248,10 +249,12 @@ function readForm(tpl: string, nextTpl: string, description: string): { sections
 }
 
 /** Descripción al pasar del tipo `prev` a `next`. */
-export function switchKindDescription(prev: KindAutomation | null | undefined, next: KindAutomation, description: string): string {
-  const tpl = prev?.descriptionTemplate.trim() ?? "";
-  const fresh = next.descriptionTemplate.trim();
-  if (prev && tpl === fresh) return description;
+export function switchKindDescription(prev: KindAutomation | null | undefined, next: KindAutomation, original: string): string {
+  const tpl = withCurrentSeedText(prev?.descriptionTemplate.trim() ?? "");
+  const fresh = withCurrentSeedText(next.descriptionTemplate.trim());
+  if (prev && tpl === fresh) return original;
+  // Con el texto viejo de serie («de mi», antes de la errata) al principio se lee como el nuevo.
+  const description = withCurrentSeedText(original);
   // Formulario del anterior con algo respondido: cada apartado vacío se quita y cada respuesta se conserva una sola vez, en
   // el apartado del nuevo con la misma etiqueta («Qué hay que hacer:» de «Casa» a «Reforma u obra») o, si el nuevo no lo
   // tiene, debajo de su formulario. Antes el formulario nuevo se ponía delante del viejo entero (etiquetas repetidas y
