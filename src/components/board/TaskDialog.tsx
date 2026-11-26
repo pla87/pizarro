@@ -1223,8 +1223,8 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
         <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
         <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
-        {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar y cerrar")}</button>
+        {/* Con poco ancho (pie del móvil, columna de campos) se lee «Guardar»; el nombre accesible sigue siendo «Guardar y cerrar». */}
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> <span className="@max-[24rem]:sr-only">{t("Guardar y cerrar")}</span><span aria-hidden className="hidden @max-[24rem]:inline">{t("Guardar")}</span></button>
       </div>
     </div>
   );

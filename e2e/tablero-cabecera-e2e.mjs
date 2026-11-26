@@ -329,8 +329,8 @@ if (only.includes("tipos")) {
     // 1. El «+» de una columna: el tipo marcado (el primero, «Compras») trae su plantilla sin pulsarlo.
     await openPlus();
     const first = await state();
-    // El prefijo va con un espacio detrás para escribir a continuación (se quita al guardar).
-    L.eq("TIPOS: «+» abre con «Compras» marcado, su título de plantilla y sin subtareas", [first.kind, first.title, first.subtasks], ["Compras", "Comprar ", []]);
+    // «Por hacer» no tiene tipo por defecto: el primero (o el último usado) viene marcado pero no pone su prefijo en el título.
+    L.eq("TIPOS: «+» abre con «Compras» marcado, el título vacío y sin subtareas", [first.kind, first.title, first.subtasks], ["Compras", "", []]);
     L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Para cuándo"), first.desc);
     L.check("TIPOS: lo que puso la plantilla no pide confirmar al cerrar", await closesWithoutAsking());
 

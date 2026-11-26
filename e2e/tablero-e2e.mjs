@@ -1390,7 +1390,7 @@ if (only.includes("r46")) {
     };
   });
   // (Ronda 68) «Deshacer» solo cuando de verdad no cabe «Deshacer todo» (se mide): a 390 px depende de la fuente.
-  for (const [width, label] of [[430, "Deshacer todo"], [390, null], [320, "Deshacer"]]) {
+  for (const [width, label] of [[430, "Deshacer todo"], [390, null], [320, null]]) {
     await mp.setViewportSize({ width, height: 844 });
     await sleep(300);
     const fit = await footFit();
