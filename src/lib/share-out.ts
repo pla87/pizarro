@@ -242,8 +242,9 @@ const firstDoneColumn = (projectId: string) => db.column.findFirst({ where: { pr
 export async function loadSharePage(share: ActiveShare, token: string, notice: ShareNotice | null, noticeTaskId: string | null = null): Promise<{ data: SharePageData; t: T }> {
   const [{ locale, t }, tasks, done, by] = await Promise.all([
     shareLocale(), liveSharedTasks(share), firstDoneColumn(share.projectId),
-    // Quien generó la web, por el nombre de su cuenta (sin cuenta, la página no dice quién).
-    share.generatedById ? db.user.findUnique({ where: { id: share.generatedById }, select: { name: true } }) : null,
+    // Quien generó la web, por el nombre de su cuenta: solo si sigue activa y con acceso al proyecto (la misma regla que para
+    // avisarle de los cambios); si no, la página no dice quién.
+    liveGeneratorUser(share),
   ]);
   return {
     t,
@@ -295,11 +296,12 @@ interface ShareChangeInput {
 class ShareTaskGone extends Error {}
 
 /** Quien generó la web, si su cuenta existe, está activa y ve el proyecto; si no, null. */
-async function liveGenerator(share: ActiveShare): Promise<string | null> {
+async function liveGeneratorUser(share: ActiveShare): Promise<{ id: string; name: string } | null> {
   if (!share.generatedById) return null;
-  const user = await db.user.findFirst({ where: { id: share.generatedById, active: true, ...projectUsersWhere({ isPrivate: share.projectPrivate }, share.projectId) }, select: { id: true } });
-  return user?.id ?? null;
+  return db.user.findFirst({ where: { id: share.generatedById, active: true, ...projectUsersWhere({ isPrivate: share.projectPrivate }, share.projectId) }, select: { id: true, name: true } });
 }
+
+const liveGenerator = async (share: ActiveShare): Promise<string | null> => (await liveGeneratorUser(share))?.id ?? null;
 
 /** Lo que sigue a un cambio ya guardado: si falla, se registra y el cambio se queda (quien está fuera nunca ve un 500). */
 async function sideEffect(what: string, fn: () => Promise<unknown>): Promise<void> {

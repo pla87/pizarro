@@ -180,6 +180,11 @@ describe("compartir fuera: activar y generar", () => {
     assert.ok(html.includes("Compartida por Marta desde Pizarro"), "el nombre de pila de quien generó la web");
     await db.user.update({ where: { id: me.id }, data: { name: "Lucía Nueva" } });
     assert.ok((await (await page(token)).text()).includes("Compartida por Lucía desde Pizarro"), "se lee de la cuenta de ahora");
+    // Con la cuenta desactivada ya no se dice su nombre (como al avisarle de los cambios).
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    const anon = await (await page(token)).text();
+    assert.ok(anon.includes("Compartida desde Pizarro") && !anon.includes("Lucía"), "sin cuenta activa, sin nombre");
+    await db.user.update({ where: { id: me.id }, data: { active: true } });
     // Tras un formulario, el aviso sale en la tarjeta de su tarea (el aviso lleva `t`).
     const res = await post(token, t1.id, { op: "done" });
     const loc = new URL(res.headers.get("location")!, "http://localhost");
