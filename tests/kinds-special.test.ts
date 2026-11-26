@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { describeKindAutomation, kindChangeNotice, kindDescriptionChange, parseSubtaskLines, switchKindDescription, switchKindSubtaskRows, switchKindSubtasks, switchKindText, switchKindTitle, titleWithoutKindPrefix } from "../src/lib/kinds-special";
 
-const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mi:";
+const RESPUESTA_LINE = "Respondo a las preguntas y lo que necesitas de mí:";
 
 const RESP = { titleTemplate: "Respuesta", descriptionTemplate: RESPUESTA_LINE };
 
@@ -40,7 +40,7 @@ test("describeKindAutomation resume y trunca", () => {
   assert.equal(describeKindAutomation({ titleTemplate: "Aviso", descriptionTemplate: "" }), "Al elegirlo, el título empieza por «Aviso».");
   assert.equal(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "Pasos:" }), "Al elegirlo, la descripción empieza por «Pasos:».");
   const line = describeKindAutomation(RESP)!;
-  assert.ok(line.includes("«Respuesta»") && line.includes("«Respondo a las preguntas y lo que necesitas de mi:»"));
+  assert.ok(line.includes("«Respuesta»") && line.includes("«Respondo a las preguntas y lo que necesitas de mí:»"));
   assert.ok(describeKindAutomation({ titleTemplate: "", descriptionTemplate: "a".repeat(100) })!.includes("…"));
 });
 
