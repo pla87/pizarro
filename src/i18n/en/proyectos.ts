@@ -207,10 +207,11 @@ export const proyectos: Record<string, string> = {
     "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation was issued on {sent} and is valid for 72 hours, until {date}; if they don't have it, generate a new link (the previous one will stop working).",
   "{name} aún no ha aceptado su invitación: el enlace al tablero no le sirve todavía. Su invitación es del {sent} y vale 72 horas, hasta el {date}; si no la tiene, reenvíasela por email o genera un enlace nuevo (en los dos casos, el anterior dejará de valer).":
     "{name} hasn't accepted their invitation yet, so the board link won't work for them. Their invitation was issued on {sent} and is valid for 72 hours, until {date}; if they don't have it, resend it by email or generate a new link (either way, the previous one will stop working).",
-  "Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.":
-    "Pizarro can't send emails from here. To let them in, press the link button next to their name and send them the new link yourself (by WhatsApp, for example). Generating it makes the previous one stop working.",
   "Enlace de invitación nuevo para que se lo mandes tú; el anterior deja de funcionar": "New invitation link for you to send them; the previous one stops working",
 
   // (Ronda 68, revisión) Miembros: quien se añade a sí mismo
   "Te has añadido al proyecto": "You've added yourself to the project",
+  // Ronda 69: miembros
+  "Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón con el icono de enlace, a la derecha de su nombre en la lista, y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.":
+    "Pizarro can't send emails from here. To let them in, press the link-icon button to the right of their name in the list and send them the new link yourself (by WhatsApp, for example). Generating it makes the previous one stop working.",
 };
