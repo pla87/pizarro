@@ -170,15 +170,18 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   // en el selector: antes solo se aplicaba al cambiar de tipo y el preseleccionado se quedaba sin ella. Un borrador
   // recuperado se queda como estaba (no se le añade nada).
   const [init] = useState(() => {
-    const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? "") ?? initialKindId(board.currentUserId, board.project.id, board.kinds));
+    const columnKind = foreignInit || d ? undefined : columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? "");
+    const kindId = !foreignInit && d && board.kindById.has(d.kindId) ? d.kindId : foreignInit ? "" : (columnKind ?? initialKindId(board.currentUserId, board.project.id, board.kinds));
     const title = d?.title ?? initialTitle ?? (initialPlan.accepted.length ? captureTitle(t, locale) : "");
     const description = d?.description ?? initialDescription ?? "";
     const subtasks = d?.subtasks ?? [];
     const kind = d ? undefined : board.kinds.find((k) => k.id === kindId);
     if (!kind) return { kindId, title, description, subtasks, templated: false };
     const next = switchKindText(null, kind, { title, description, subtasks });
-    // Lo compartido trae su título: el del tipo no lo sustituye.
-    if (initialTitle?.trim()) next.title = title;
+    // Lo compartido trae su título: el del tipo no lo sustituye. Tampoco el tipo que solo viene de «el último usado» (o del
+    // primero de la lista): su prefijo («Comprar », «Obra: ») se ponía en cualquier «Nueva tarea» sin que nadie lo pidiera.
+    // Solo lo pone el tipo por defecto de la columna o el que la persona elige a mano.
+    if (initialTitle?.trim() || !columnKind) next.title = title;
     const changed = next.title !== title || next.description !== description || next.subtasks.length !== subtasks.length;
     return { kindId, ...next, templated: changed && initialTitle === undefined };
   });

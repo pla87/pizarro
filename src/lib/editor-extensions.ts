@@ -5,6 +5,8 @@ import { Paragraph } from "@tiptap/extension-paragraph";
 import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import StarterKit from "@tiptap/starter-kit";
 import { isAttachmentSrc } from "./attachment-refs";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
+import type { Node as PMNode } from "@tiptap/pm/model";
 
 /** Idioma de la página (las vistas del editor se pintan fuera de React y no tienen `t`). */
 const pageIsEnglish = () => typeof document !== "undefined" && document.documentElement.lang.startsWith("en");
@@ -284,4 +286,47 @@ export function formatExtensions() {
     MarkdownTable,
     MarkdownImage,
   ];
+}
+
+/**
+ * Inserta imágenes (nodos `markdownImage`) como bloques propios, cada una en su párrafo: ya no quedan en línea dentro del
+ * texto del párrafo («…la tabla.![x](…)»), que al guardarse en Markdown unía imagen y texto. Con el cursor en medio de un
+ * párrafo se parte en dos y la imagen va entre ambos (el cursor, al principio del segundo trozo); al final de un párrafo con
+ * texto (o en un bloque de código), detrás, y el cursor queda en un párrafo vacío nuevo debajo; al principio, delante; en
+ * un párrafo vacío, ese párrafo se sustituye. Lo que haya seleccionado se reemplaza. Las descripciones ya guardadas con la
+ * imagen dentro del párrafo se siguen leyendo igual (el nodo sigue siendo de línea).
+ */
+export function insertImageBlocks(tr: Transaction, images: readonly PMNode[]): Transaction {
+  if (!images.length) return tr;
+  if (!tr.selection.empty) tr.deleteSelection();
+  const para = tr.doc.type.schema.nodes.paragraph!;
+  const blocks = images.map((img) => para.create(null, img));
+  const size = blocks.reduce((n, b) => n + b.nodeSize, 0);
+  const { $from } = tr.selection;
+  const parent = $from.parent;
+  let cursor: number;
+  if (!parent.isTextblock) {
+    const at = tr.selection.from;
+    tr.insert(at, [...blocks, para.create()]);
+    cursor = at + size + 1;
+  } else if (parent.type === para && parent.content.size === 0) {
+    const at = $from.before();
+    tr.replaceWith(at, $from.after(), [...blocks, para.create()]);
+    cursor = at + size + 1;
+  } else if ($from.parentOffset === 0 && !parent.type.spec.code) {
+    const at = $from.before();
+    tr.insert(at, blocks);
+    cursor = at + size + 1;
+  } else if ($from.parentOffset === parent.content.size || parent.type.spec.code) {
+    const at = $from.after();
+    tr.insert(at, [...blocks, para.create()]);
+    cursor = at + size + 1;
+  } else {
+    // En medio: se parte el párrafo; el segundo trozo empieza en pos + 2 (su apertura va en pos + 1).
+    const at = $from.pos + 1;
+    tr.split($from.pos);
+    tr.insert(at, blocks);
+    cursor = at + size + 1;
+  }
+  return tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(cursor, tr.doc.content.size)))).scrollIntoView();
 }

@@ -291,6 +291,11 @@ function maskCodeSpans(line: string): { masked: string; spans: string[] } {
  * Los demás se quedan en su texto (la imagen, en su texto alternativo), porque la IA no puede abrirlos. Los enlaces a otros
  * sitios no cambian. `cited` recoge los ids de los adjuntos que han pasado a su ruta del ZIP.
  */
+const IMAGE_OPEN = "\u0001";
+const IMAGE_CLOSE = "\u0002";
+const IMAGE_MARKS = /[\u0001\u0002]/g;
+const IMAGE_IN_LINK = /\[[^\]\u0002]*\u0001[^\]]*\]\(/;
+
 function withoutAppLinks(line: string, t: T, origin: string | null | undefined, paths: ReadonlyMap<string, string> | undefined, cited?: Set<string>): string {
   if (!line.includes("](")) return line;
   const { masked, spans } = maskCodeSpans(line);
@@ -302,14 +307,23 @@ function withoutAppLinks(line: string, t: T, origin: string | null | undefined, 
     if (!zipped) return text;
     cited?.add(id);
     const path = `\`${zipped}\``;
-    const alt = text.trim();
+    // El texto de un enlace que envuelve una imagen: sin las marcas de la imagen (no se parte la línea por un enlace).
+    const alt = text.replace(IMAGE_MARKS, "").trim();
     // El enlace de fuera de una imagen enlazada al mismo adjunto: la ruta ya está en su texto, no se repite.
     if (!bang) return !alt ? path : alt.includes(path) ? alt : `${alt} (${path})`;
-    return alt && !FILE_NAME_ALT.test(alt) ? t("imagen «{alt}» ({path})", { alt, path }) : t("imagen {path}", { path });
+    const image = alt && !FILE_NAME_ALT.test(alt) ? t("imagen «{alt}» ({path})", { alt, path }) : t("imagen {path}", { path });
+    return `${IMAGE_OPEN}${image}${IMAGE_CLOSE}`;
   });
   // Dos pasadas: una imagen enlazada (`[![a](…)](…)`) solo deja ver el enlace de fuera cuando ya se ha sustituido la imagen.
   const once = replace(masked);
-  const twice = once === masked ? once : replace(once);
+  const replaced = once === masked ? once : replace(once);
+  // La imagen, en su propia línea (un salto antes y otro después): un párrafo con la imagen dentro se leía «…la tabla.imagen `…`».
+  // Dentro del texto de un enlace no se parte (se rompería el enlace).
+  const twice = replaced.includes(IMAGE_OPEN)
+    ? IMAGE_IN_LINK.test(replaced)
+      ? replaced.replace(IMAGE_MARKS, "")
+      : replaced.replace(/[ \t]*\u0001/g, "\n\n").replace(/\u0002[ \t]*/g, "\n\n")
+    : replaced;
   return spans.length ? twice.replace(CODE_MARK, (_m, n: string) => spans[Number(n)]!) : twice;
 }
 
@@ -359,16 +373,24 @@ export function planDescription(description: string | null | undefined, origin?:
       continue;
     }
     // Fuera de los bloques de código: sin enlaces a Pizarro (un adjunto del ZIP, por su ruta en él).
-    const line = withoutAppLinks(raw, t, origin, paths, cited);
-    const heading = ATX_HEADING.exec(line);
-    if (heading) {
-      out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
-      paragraph = 0;
-      continue;
+    const withLinks = withoutAppLinks(raw, t, origin, paths, cited);
+    // Una imagen del ZIP parte la línea: cada trozo se trata como una línea suelta (los vacíos, como líneas en blanco).
+    for (const line of withLinks.split("\n")) {
+      if (line.trim() === "") {
+        paragraph = 0;
+        if (out.length > 0 && out.at(-1) !== "") out.push("");
+        continue;
+      }
+      const heading = ATX_HEADING.exec(line);
+      if (heading) {
+        out.push(`${"#".repeat(Math.min(6, heading[1]!.length + 3))}${heading[2]!.trimEnd()}`);
+        paragraph = 0;
+        continue;
+      }
+      paragraph = NOT_PARAGRAPH.test(line) ? 0 : paragraph + 1;
+      // Fuera de los bloques de código, «\<» al principio: se ve igual (un «<») y no abre un bloque HTML.
+      out.push(line.replace(HTML_BLOCK_START, "$1\\$2"));
     }
-    paragraph = NOT_PARAGRAPH.test(line) ? 0 : paragraph + 1;
-    // Fuera de los bloques de código, «\<» al principio: se ve igual (un «<») y no abre un bloque HTML.
-    out.push(line.replace(HTML_BLOCK_START, "$1\\$2"));
   }
   while (out.at(-1) === "") out.pop();
   if (fence) out.push(fence);
