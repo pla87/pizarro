@@ -52,9 +52,12 @@ export interface SharePageData {
   appOrigin: string | null;
 }
 
-/** Dirección de un adjunto de la tarea servido por la página (descarga; `inline` para las imágenes de la descripción). */
-export const shareAttachmentPath = (token: string, attachmentId: string, inline = false): string =>
-  `/x/${encodeURIComponent(token)}/a/${encodeURIComponent(attachmentId)}${inline ? "?inline=1" : ""}`;
+/**
+ * Dirección de un adjunto de la tarea servido por la página (descarga; `inline` para las imágenes de la descripción;
+ * `"thumb"`, la miniatura de un adjunto, que se ve en línea y no cuenta como descarga).
+ */
+export const shareAttachmentPath = (token: string, attachmentId: string, inline: boolean | "thumb" = false): string =>
+  `/x/${encodeURIComponent(token)}/a/${encodeURIComponent(attachmentId)}${inline === "thumb" ? "?inline=thumb" : inline ? "?inline=1" : ""}`;
 
 const ATTACHMENT_SRC = /^\/api\/attachments\/([A-Za-z0-9_-]{1,40})(?:\?[^#\s]*)?$/;
 
@@ -177,7 +180,7 @@ export function sharePageHtml(d: SharePageData, t: T): string {
       // Las imágenes, con su miniatura (servida en línea, que no cuenta como descarga) que abre la imagen; el nombre es la descarga.
       const file = (a: SharePageTask["attachments"][number]) => `<a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}">${escapeHtml(a.name)}</a> <span class="muted">(${escapeHtml(formatSize(a.size, d.locale))})</span>`;
       const item = (a: SharePageTask["attachments"][number]) => a.isImage
-        ? `<li class="img"><a href="${escapeHtml(shareAttachmentPath(d.token, a.id, true))}"><img src="${escapeHtml(shareAttachmentPath(d.token, a.id, true))}" alt="${escapeHtml(a.name)}" loading="lazy"></a>${file(a)}</li>`
+        ? `<li class="img"><a href="${escapeHtml(shareAttachmentPath(d.token, a.id))}"><img src="${escapeHtml(shareAttachmentPath(d.token, a.id, "thumb"))}" alt="${escapeHtml(a.name)}" loading="lazy"></a>${file(a)}</li>`
         : `<li>${file(a)}</li>`;
       parts.push(`<h3>${escapeHtml(t("Adjuntos"))}</h3><ul class="files">${task.attachments.map(item).join("")}</ul>`);
     }

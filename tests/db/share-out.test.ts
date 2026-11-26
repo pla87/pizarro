@@ -377,7 +377,17 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.equal((await file(token, foreign.id)).status, 404);
     assert.equal((await file(token, "no$valido")).status, 404);
     // Ronda 69: la imagen adjunta sale con su miniatura (en línea) y el nombre como descarga.
-    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}?inline=1"><img src="/x/${token}/a/${img.id}?inline=1"`), "miniatura");
+    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}"><img src="/x/${token}/a/${img.id}?inline=thumb"`), "miniatura que enlaza a la descarga normal");
+    // La miniatura usa su variante (si existe; si no, la normal) y es lo único que se guarda en el navegador.
+    const noThumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await noThumb.text(), "img-data", "sin miniatura, la imagen normal");
+    await writeFile(attachmentPath(img.id, "thumb"), "thumb!");
+    const thumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await thumb.text(), "thumb!");
+    assert.match(thumb.headers.get("content-disposition")!, /^inline;/);
+    assert.equal(thumb.headers.get("cache-control"), "private, max-age=3600");
+    assert.equal((await file(token, img.id, "?inline=1")).headers.get("cache-control"), "no-store", "la imagen de la descripción no se guarda");
+    assert.equal(await (await file(token, img.id, "?inline=1")).text(), "img-data");
     // Solo las descargas de verdad quedan en Logs (el PDF dos veces; la miniatura no), firmadas «<columna> (fuera)».
     await flushLogs();
     const logs = await db.appLog.findMany({ where: { projectId: f.project.id, action: "shareOut.download" } });

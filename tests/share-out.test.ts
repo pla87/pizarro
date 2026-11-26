@@ -320,8 +320,9 @@ test("página: quién la comparte, imágenes como bloque, miniaturas de los adju
   assert.ok(/\.desc img\{[^}]*display:block/.test(html), "la imagen de la descripción es un bloque");
   assert.ok(!html.includes("Por qué:") && html.includes("Riesgo:"), "el apartado vacío de la plantilla no sale");
   const files = html.slice(html.indexOf('<ul class="files">'));
-  const inline = shareAttachmentPath(pageData().token, "a1", true);
-  assert.ok(files.includes(`<a href="${inline}"><img src="${inline}" alt="plano.webp" loading="lazy"></a>`), "miniatura en línea de la imagen adjunta");
+  const thumb = shareAttachmentPath(pageData().token, "a1", "thumb");
+  assert.ok(thumb.endsWith("?inline=thumb"));
+  assert.ok(files.includes(`<a href="${shareAttachmentPath(pageData().token, "a1")}"><img src="${thumb}" alt="plano.webp" loading="lazy"></a>`), "miniatura de la imagen adjunta, que enlaza a la descarga normal");
   assert.ok(files.includes(`href="${shareAttachmentPath(pageData().token, "a1")}">plano.webp</a>`), "el nombre sigue siendo la descarga");
   // El aviso, en la tarjeta de su tarea; sin tarea, arriba del todo.
   const here = sharePageHtml(pageData({ notice: "done", noticeTaskId: "t1" }), t);
