@@ -6,15 +6,15 @@ import { clientIp } from "@/lib/request";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { isRowId } from "@/lib/row-id";
 import { SHARE_FILE_CSP, shareResponseHeaders } from "@/lib/share-out-core";
-import { resolveShareToken, shareAttachment, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
+import { resolveShareToken, shareAttachment, shareAuthorName, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
 import { attachmentPath, safeDownloadMime } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Adjuntos de la página de «Compartir fuera»: solo de una tarea publicada y viva de ESE enlace (si no, 404, igual que
-// un adjunto que no existe). Se descargan siempre (`attachment`); las imágenes de la descripción, con `?inline=1`, se
-// pueden ver en línea (con nosniff y una CSP con sandbox). Topes por IP y por enlace; las descargas quedan en Logs sin
+// un adjunto que no existe). Se descargan siempre (`attachment`); las imágenes (las de la descripción y las miniaturas de los
+// adjuntos), con `?inline=1`, se pueden ver en línea (con nosniff y una CSP con sandbox). Topes por IP y por enlace; las descargas quedan en Logs sin
 // el token. HEAD propio (ver abajo).
 
 const fail = (status: number, text: string) => new Response(text, { status, headers: { ...shareResponseHeaders(), "Content-Type": "text/plain; charset=utf-8" } });
@@ -53,7 +53,7 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
     return fail(404, "Not found");
   }
   if (!inline && !head) {
-    logEvent({ category: "api", action: "shareOut.download", label: { k: "Descarga de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } }, projectId: share.projectId, path: "/x/…", ip, details: { attachmentId: meta.id, taskId: meta.taskId, shareId: share.id, size } });
+    logEvent({ category: "api", action: "shareOut.download", label: { k: "Descarga de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } }, userName: await shareAuthorName(share), projectId: share.projectId, path: "/x/…", ip, details: { attachmentId: meta.id, taskId: meta.taskId, shareId: share.id, size } });
   }
   const name = meta.isImage ? meta.originalName.replace(/\.[^.]+$/, "") + ".webp" : meta.originalName;
   const filename = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);

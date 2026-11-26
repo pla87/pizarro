@@ -114,11 +114,11 @@ try {
     L.check("ROL: queda la fila (rol NONE)", !!(await shareRow())?.columnId);
     const footer = shareCol(page).locator("[data-share-footer]");
     L.eq("ROL: botón «Generar web»", (await footer.locator("[data-share-generate]").innerText()).trim(), "Generar web");
-    L.check("ROL: el aviso de lo que se publica", (await footer.innerText()).includes("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar."));
+    L.check("ROL: el aviso corto de lo que se publica", (await footer.innerText()).includes("Se publica todo el contenido de las tareas."));
     const expiry = footer.locator("[data-share-expiry]");
-    L.eq("ROL: caducidad por defecto «1 mes»", (await expiry.innerText()).trim(), "1 mes");
+    L.eq("ROL: caducidad por defecto «1 mes»", (await expiry.innerText()).trim(), "Caduca tras 1 mes sin uso");
     await expiry.click();
-    await L.eqEventually("ROL: rota a «3 meses» (90 días)", async () => [(await expiry.innerText()).trim(), (await shareRow()).expiryDays], ["3 meses", 90]);
+    await L.eqEventually("ROL: rota a «3 meses» (90 días)", async () => [(await expiry.innerText()).trim(), (await shareRow()).expiryDays], ["Caduca tras 3 meses sin uso", 90]);
     await expiry.click();
     await L.eqEventually("ROL: y a «7 días»", async () => (await shareRow()).expiryDays, 7);
     await expiry.click();
@@ -256,10 +256,10 @@ try {
     await page.getByRole("dialog").filter({ hasText: "¿Revocarlo?" }).getByRole("button", { name: "Revocar enlace" }).click();
     await L.checkEventually("REVOCAR: revocado en la base", async () => [!!(await shareRow()).revokedAt, ""]);
     const r = await fetch(url);
-    L.eq("REVOCAR: 410 con el aviso", [r.status, (await r.text()).includes("Esta lista de tareas ha caducado. Contacta con la persona que te ha dado el enlace.")], [410, true]);
+    L.eq("REVOCAR: 410 con el aviso de «ya no está disponible»", [r.status, (await r.text()).includes("Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.")], [410, true]);
     await L.eqEventually("REVOCAR: la cabecera ya no dice activo", async () => shareCol(page).locator("[data-share-badge]").getAttribute("data-share-badge"), "ended");
     // Revocado, no caducado.
-    L.eq("REVOCAR: la marca dice «Enlace revocado»", await shareCol(page).locator("[data-share-badge]").getAttribute("title"), "Compartir fuera: Enlace revocado");
+    L.check("REVOCAR: la marca dice «Enlace revocado por <nombre> el <fecha>»", (await shareCol(page).locator("[data-share-badge]").getAttribute("title"))?.startsWith("Compartir fuera: Enlace revocado por "));
   }
 
   if (only.includes("apagar")) {
