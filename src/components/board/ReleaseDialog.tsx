@@ -4,7 +4,7 @@ import { appTimeZone } from "@/lib/format";
 import { ArrowLeft, Check, ClipboardCopy, Download, FileArchive, FileText, Loader2, Rocket } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { countReleasesOn, deployRelease, getReleaseTaskDetails } from "@/actions/releases";
-import { buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, releaseFileName, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
+import { attachmentFileMap, buildReleaseMarkdown, computeReleaseCodes, defaultReleaseTitle, evergreenDue, isoDate, RELEASE_MAX_ATTACHMENT_TASKS, RELEASE_MAX_TASKS, releaseFileName, releaseDownloadText, releasesUntilDue, releaseZipName, swapTemplateBlock } from "@/lib/release";
 import type { BoardTask, TemplateOption } from "@/lib/types";
 import { useIntlLocale, useLocale, useT } from "@/i18n/client";
 import { copyText, downloadText } from "../ui/clipboard";
@@ -68,6 +68,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const [zipping, setZipping] = useState(false);
   /** Tareas con adjuntos de la release generada, con su código (para el ZIP). */
   const [zipItems, setZipItems] = useState<{ taskId: string; code: string; count: number }[]>([]);
+  /** Nombre en el ZIP de cada adjunto (por su id): las imágenes de la descripción se descargan enlazadas a su fichero. */
+  const [zipFiles, setZipFiles] = useState<ReadonlyMap<string, string>>(new Map());
   /** Número que tendrá la release (prefijo R32 de los códigos) y con cuál se generó el texto. */
   const [releaseNumber, setReleaseNumber] = useState<number | null>(null);
   /** Cuándo le toca a una tarea fija respecto a la release que se genera: «ahora», «en la siguiente», «dentro de 2»… */
@@ -146,6 +148,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     setZipItems(
       releaseTasks.filter((t) => t.attachments.length).map((t) => ({ taskId: t.id, code: codes.get(t.id)!, count: t.attachments.length })),
     );
+    setZipFiles(new Map(releaseTasks.flatMap((x) => [...attachmentFileMap(codes.get(x.id)!, x.attachments)])));
     const md = buildReleaseMarkdown({
       header: templateText(allTemplates("header"), headerId),
       footer: templateText(allTemplates("footer"), footerId),
@@ -205,6 +208,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
 
   const attachmentTotal = zipItems.reduce((n, i) => n + i.count, 0);
   const tooManyAttachments = zipItems.length > RELEASE_MAX_ATTACHMENT_TASKS;
+  /** El texto de .md y .txt: sin enlaces de Pizarro (que fuera no abren); sin ZIP posible, las imágenes salen como texto. */
+  const downloadable = () => releaseDownloadText(currentText(), tooManyAttachments ? new Map() : zipFiles, t);
 
   const downloadAttachments = async () => {
     await downloadAttachmentsZip({
@@ -279,10 +284,10 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
             <button className="btn-secondary" onClick={copy}>
               {copied ? <Check size={15} /> : <ClipboardCopy size={15} />} {t("Copiar todo")}
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(currentText(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
+            <button className="btn-secondary" onClick={() => downloadText(downloadable(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "md"), "text/markdown")}>
               <Download size={15} /> .md
             </button>
-            <button className="btn-secondary" onClick={() => downloadText(currentText(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
+            <button className="btn-secondary" onClick={() => downloadText(downloadable(), releaseFileName({ day: isoDate(now, appTimeZone()), number: generatedNumber, project: board.project.name }, "txt"), "text/plain")}>
               <FileText size={15} /> .txt
             </button>
             {attachmentTotal > 0 && (

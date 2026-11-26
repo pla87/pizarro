@@ -6,6 +6,8 @@ import {
   computeReleaseCodes,
   defaultReleaseTitle,
   evergreenDue,
+  attachmentFileMap,
+  releaseDownloadText,
   releasesUntilDue,
   nextEvergreenEvery,
   formatReleaseLine,
@@ -338,4 +340,37 @@ test("splitReleaseCode: el código del principio del título, para explicarlo en
   assert.equal(splitReleaseCode("R5F1: R3F2: Respuesta")?.code, "R5F1");
   // Sin «: » detrás, o sin el formato R + número + letras + número, no es un código.
   for (const title of ["R3F1 sin dos puntos", "Revisar F1: algo", "R3: algo", "r3f1: algo", "F1: algo", ""]) assert.equal(splitReleaseCode(title), null, title);
+});
+
+test("descarga: las imágenes de la descripción, en su línea y con la ruta del ZIP (o en texto sin ZIP)", () => {
+  const attachments = [{ id: "a1", originalName: "pegada.png" }, { id: "a2", originalName: "log.txt", isImage: false }];
+  const files = attachmentFileMap("R3F1", attachments);
+  assert.equal(files.get("a1"), "R3F1_pegada.webp");
+  const md = [
+    "- **R3F1** · Tarea",
+    "",
+    "  Mira la tabla.![pegada.png](/api/attachments/a1) y sigue",
+    "  ![otra](https://pz.example.com/api/attachments/zz?x=1)",
+    "  ![web](https://example.com/a.png)",
+    "  ```",
+    "  ![c](/api/attachments/a1)",
+    "  ```",
+  ].join("\n");
+  assert.equal(releaseDownloadText(md, files), [
+    "- **R3F1** · Tarea",
+    "",
+    "  Mira la tabla.",
+    "",
+    "  ![pegada.png](R3F1_pegada.webp)",
+    "",
+    "  y sigue",
+    "  [imagen: otra]",
+    "  ![web](https://example.com/a.png)",
+    "  ```",
+    "  ![c](/api/attachments/a1)",
+    "  ```",
+  ].join("\n"));
+  // Sin ZIP: texto, nunca un enlace roto. En inglés, «image».
+  assert.ok(releaseDownloadText("  ![pegada.png](/api/attachments/a1)", new Map()).startsWith("  [imagen: pegada.png]"));
+  assert.equal(releaseDownloadText("![](/api/attachments/a1)", new Map(), (x) => (x === "imagen" ? "image" : x)), "[image]");
 });
