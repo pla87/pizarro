@@ -307,7 +307,8 @@ function withoutAppLinks(line: string, t: T, origin: string | null | undefined, 
     if (!zipped) return text;
     cited?.add(id);
     const path = `\`${zipped}\``;
-    const alt = text.trim();
+    // El texto de un enlace que envuelve una imagen: sin las marcas de la imagen (no se parte la línea por un enlace).
+    const alt = text.replace(IMAGE_MARKS, "").trim();
     // El enlace de fuera de una imagen enlazada al mismo adjunto: la ruta ya está en su texto, no se repite.
     if (!bang) return !alt ? path : alt.includes(path) ? alt : `${alt} (${path})`;
     const image = alt && !FILE_NAME_ALT.test(alt) ? t("imagen «{alt}» ({path})", { alt, path }) : t("imagen {path}", { path });

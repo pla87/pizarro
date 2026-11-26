@@ -215,18 +215,18 @@ test("insertImageBlocks: la imagen pegada va en su propio párrafo (partiendo el
     tr.doc.check();
     return { md: normalizeEditorMarkdown(full.serialize(tr.doc.toJSON())).trim(), tr };
   };
-  // «Hola mundo»: el párrafo empieza en 1.
-  assert.equal(run("Hola mundo", 6).md, "Hola\n\n![a](/api/attachments/x1)\n\nmundo");
-  assert.equal(run("Hola mundo", 1).md, "![a](/api/attachments/x1)\n\nHola mundo");
-  const end = run("Hola mundo", 11);
-  assert.equal(end.md, "Hola mundo\n\n![a](/api/attachments/x1)");
+  // «Holamundo»: el párrafo empieza en 1.
+  assert.equal(run("Holamundo", 5).md, "Hola\n\n![a](/api/attachments/x1)\n\nmundo");
+  assert.equal(run("Holamundo", 1).md, "![a](/api/attachments/x1)\n\nHolamundo");
+  const end = run("Holamundo", 10);
+  assert.equal(end.md, "Holamundo\n\n![a](/api/attachments/x1)");
   // Al final, el cursor queda en un párrafo vacío nuevo, detrás de la imagen.
   const last = end.tr.doc.lastChild!;
   assert.equal(last.type.name, "paragraph");
   assert.equal(last.content.size, 0);
   assert.equal(end.tr.selection.$from.parent, last);
   // En medio, el cursor queda al principio del trozo de detrás.
-  assert.equal(run("Hola mundo", 6).tr.selection.$from.parent.textContent, "mundo");
+  assert.equal(run("Holamundo", 5).tr.selection.$from.parent.textContent, "mundo");
   // Una descripción ya guardada con la imagen dentro del párrafo se sigue leyendo igual.
   assert.equal(saved("Mira la tabla.![a](/api/attachments/x1)"), "Mira la tabla.![a](/api/attachments/x1)");
 });

@@ -435,7 +435,7 @@ describe("adjuntos del plan: rutas dentro del ZIP «adjuntos/…»", () => {
     assert.ok(md.includes("- **Attachments:** 1 file(s) in the “attachments/…” ZIP that goes with this plan"), md);
     assert.ok(!md.slice(md.indexOf("### 1.")).includes("**Attachments"), md);
     assert.ok(!md.includes("Pizarro"), md);
-    assert.ok(md.includes("See image “shot” (`attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
+    assert.ok(md.includes("See\n\nimage “shot” (`attachments/01-arreglar-ana-el-login-nandu/Plano_final.webp`)"), md);
     assert.ok(!md.includes("adjuntos/"), md);
   });
 
