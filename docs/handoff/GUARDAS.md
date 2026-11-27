@@ -110,6 +110,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   el layout lo lanza en paralelo solo con un id válido; `useServerReleaseNav` apunta en el cliente lo que trae el layout
   tras un `router.refresh()`. «Generar release» y «Generar plan de trabajo» no se activan hasta tener el número de release
   y las plantillas (`data-release-number`, `data-plan-setup`).
+- (Ronda 73) El `ping` del canal en vivo lleva `{ at, boot, seq }` (como el saludo): con la posición al día, la recarga de
+  respaldo y la de volver a la ventana pasan a una de seguridad cada hora (`LIVE_CHECKED_REFRESH_MS`); si el ping muestra un
+  aviso perdido, se recarga en el acto (`missedByPing`). Un cambio que no pase por `publishChange` no lo ve el número: solo
+  lo recoge esa recarga de cada hora. Un ping antiguo (solo la hora) deja los plazos de antes.
 
 ## Navegador e interfaz
 
