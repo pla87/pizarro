@@ -7,6 +7,13 @@ export function documentUploadName(file: File, t: T): string {
   return file.name && file.name !== "image.png" ? file.name : `${t("captura")}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.png`;
 }
 
+/** Lo que devuelve el servidor del documento subido (lo que usa el editor de notas para enlazar una imagen pegada). */
+interface UploadedDocument {
+  id: string;
+  name: string;
+  kind: string;
+}
+
 /** Respuesta de error del servidor, con lo que necesita withRetry para decidir si reintentar (429/503 y Retry-After). */
 class DocumentUploadError extends Error {
   constructor(message: string, public readonly status: number, public readonly retryAfterSec: number | null) {
@@ -19,7 +26,7 @@ class DocumentUploadError extends Error {
  * Con `fileMaxMb` se rechaza antes de enviarlo si ya se sabe que no cabe. Como los adjuntos, reintenta con calma si el
  * servidor está ocupado o se ha llegado al tope de subidas por minuto (429/503, esperando lo que diga Retry-After).
  */
-export async function uploadDocument(projectId: string, file: File, t: T, fileMaxMb?: number): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function uploadDocument(projectId: string, file: File, t: T, fileMaxMb?: number): Promise<{ ok: true; document: UploadedDocument | null } | { ok: false; error: string }> {
   // Las fotos grandes se reducen antes, como los adjuntos: el servidor guarda la imagen a 1280 px de ancho como mucho y
   // no admite más de 30 megapíxeles (una de 48 MP quedaba como descarga, sin vista previa). El tope se mira con lo que se envía.
   const blob = await shrinkImage(file, { checkPixels: true });
@@ -28,17 +35,17 @@ export async function uploadDocument(projectId: string, file: File, t: T, fileMa
   }
   try {
     // Por la misma puerta que los adjuntos: con otra persona activa, una subida a la vez en total desde esta pestaña.
-    await withRetry(() => uploadGate.run(async () => {
+    const document = await withRetry(() => uploadGate.run(async () => {
       const body = new FormData();
       body.append("file", blob, documentUploadName(file, t));
       const res = await fetch(`/api/projects/${projectId}/documents`, { method: "POST", body });
       uploadCap.note(res.headers);
-      if (res.ok) return;
+      if (res.ok) return ((await res.json().catch(() => null)) as UploadedDocument | null);
       const json = (await res.json().catch(() => ({}))) as { error?: string };
       const retryAfter = Number(res.headers.get("Retry-After"));
       throw new DocumentUploadError(json.error ?? t("No se pudo subir el archivo."), res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
     }));
-    return { ok: true };
+    return { ok: true, document };
   } catch (err) {
     return { ok: false, error: err instanceof DocumentUploadError ? err.message : t("No se pudo subir el archivo.") };
   }

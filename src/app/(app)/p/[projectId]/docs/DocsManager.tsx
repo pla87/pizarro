@@ -1,11 +1,12 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, Code2, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, MoreHorizontal, Pencil, RotateCcw, Search, Trash2, Upload, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "@/actions/documents";
+import { AlertCircle, ArrowLeft, Code2, Download, Eye, File as FileIcon, FileCode, FileImage, FileText, FileType, Loader2, MoreHorizontal, Pencil, Pin, PinOff, RotateCcw, Search, StickyNote, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createNote, deleteDocument, deleteDocumentForever, renameDocument, restoreDocument, searchNotes, setDocumentPinned } from "@/actions/documents";
 import { filesFrom, formatBytes, useFileDrop } from "@/components/board/upload";
 import { uploadDocument, documentUploadName } from "@/components/docs/uploadDocuments";
 import { useDocTaskDialogs } from "@/components/docs/useDocTaskDialogs";
+import { lazyDialog } from "@/components/lazyDialog";
 import { HtmlPreview } from "@/components/docs/HtmlPreview";
 import { ZoomImage } from "@/components/docs/ZoomImage";
 import { LazyMarkdown } from "@/components/ui/LazyMarkdown";
@@ -15,9 +16,9 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { MessageWithLinks, useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
+import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, isPreviewable, NOTE_SEARCH_MIN_CHARS, type DocumentKindName } from "@/lib/document-kind";
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
-import type { EditorModeValue } from "@/lib/types";
+import type { EditorModeValue, UserOption } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { headingIdForHash } from "@/lib/heading-ids";
 import { normalizeSearch } from "@/lib/search-accents";
@@ -33,6 +34,8 @@ interface Props {
   maxCount: number;
   currentUserId: string;
   editorMode: EditorModeValue;
+  /** Personas del proyecto, para las menciones de las notas. */
+  users: UserOption[];
   /** Documento que se abre al entrar (enlace `?doc=`). */
   initialOpenId?: string | null;
   /** El enlace `?doc=` apunta a un documento de la papelera o que no existe en este proyecto. */
@@ -55,9 +58,19 @@ const ICONS: Record<DocumentKindName, { icon: typeof FileIcon; className: string
   OTHER: { icon: FileIcon, className: "text-slate-400 bg-slate-100 dark:bg-slate-800 dark:text-slate-400" },
 };
 
+/** Icono de las notas escritas en la app (son Markdown, pero se distinguen de un .md subido). */
+const NOTE_ICON = { icon: StickyNote, className: "text-amber-600 bg-amber-50 dark:bg-amber-500/15 dark:text-amber-300" };
+const iconOf = (d: { kind: DocumentKindName; note: boolean }) => (d.note ? NOTE_ICON : ICONS[d.kind]);
+
+// El editor de notas (con el de las descripciones dentro) no va en el código inicial de la Documentación.
+const NoteEditor = lazyDialog(() => import("@/components/docs/NoteEditor"), (m) => m.NoteEditor);
+
+/** Espera tras dejar de escribir en el buscador antes de buscar también en el texto de las notas. */
+const NOTE_SEARCH_DELAY_MS = 400;
+
 let nextKey = 1;
 
-export function DocsManager({ projectId, projectName, documents, trashed, fileMaxMb, maxCount, currentUserId, editorMode, initialOpenId = null, linkNotice = null }: Props) {
+export function DocsManager({ projectId, projectName, documents: listed, trashed, fileMaxMb, maxCount, currentUserId, editorMode, users, initialOpenId = null, linkNotice = null }: Props) {
   const t = useT();
   const locale = useIntlLocale();
   const safeRefresh = useSafeRefresh();
@@ -69,6 +82,23 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   const [showTrash, setShowTrash] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  // Nota recién creada: se abre (en modo edición) antes de que llegue la lista nueva con ella.
+  const [created, setCreated] = useState<DocumentRow | null>(null);
+  const [creating, setCreating] = useState(false);
+  // La recién creada se abre en modo edición solo esa vez.
+  const [freshId, setFreshId] = useState<string | null>(null);
+  // Solo mientras la lista del servidor no la traiga: después manda la lista (si la nota ya no está en ella, p. ej. porque
+  // se mandó a la papelera, tampoco sale aquí).
+  const listedCreated = !!created && listed.some((d) => d.id === created.id);
+  // Ya la trae: se olvida (durante el dibujo, como recomienda React para un estado que se deriva de las props). Si no, al
+  // borrarla para siempre otra persona volvería a salir.
+  if (listedCreated) setCreated(null);
+  const documents = useMemo(
+    () => (created && !listedCreated && !trashed.some((d) => d.id === created.id) ? [created, ...listed] : listed),
+    [created, listedCreated, listed, trashed],
+  );
+  // Notas cuyo texto contiene lo buscado (lo pide al servidor; el nombre se filtra aquí).
+  const [noteHits, setNoteHits] = useState<{ q: string; ids: Set<string> } | null>(null);
   // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
   const queue = useRef<Promise<void>>(Promise.resolve());
   const searchInput = useRef<HTMLInputElement>(null);
@@ -88,8 +118,37 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     (next ?? searchInput.current)?.focus();
   }, [documents]);
 
-  const kindLabel = (k: DocumentKindName) =>
-    k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : k === "HTML" ? "HTML" : t("Otro");
+  const kindLabel = (d: { kind: DocumentKindName; note: boolean }) => {
+    const k = d.kind;
+    if (d.note) return t("Nota");
+    return k === "TEXT" ? t("Texto") : k === "MARKDOWN" ? "Markdown" : k === "PDF" ? "PDF" : k === "IMAGE" ? t("Imagen") : k === "HTML" ? "HTML" : t("Otro");
+  };
+
+  async function newNote() {
+    if (creating) return;
+    setCreating(true);
+    let res: Awaited<ReturnType<typeof createNote>>;
+    try {
+      res = await createNote(projectId).catch((e: unknown) => actionThrowResult(e, t));
+    } finally {
+      setCreating(false);
+    }
+    if (!res.ok) return toast(res.error, "error");
+    setShowTrash(false);
+    setCreated(res.data);
+    setFreshId(res.data.id);
+    setOpenId(res.data.id);
+    safeRefresh();
+  }
+
+  async function togglePin(d: DocumentRow) {
+    setBusyId(d.id);
+    const res = await setDocumentPinned(d.id, !d.pinnedAt).catch((e: unknown) => actionThrowResult(e, t));
+    setBusyId(null);
+    if (!res.ok) return toast(res.error, "error");
+    toast(d.pinnedAt ? t("Quitado de «Notas generales»") : t("Fijado en «Notas generales»"));
+    safeRefresh();
+  }
 
   function uploadFiles(files: File[]) {
     if (!files.length) return;
@@ -131,7 +190,23 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   });
 
   const needle = normalizeSearch(query.trim());
-  const shown = needle ? documents.filter((d) => normalizeSearch(d.name).includes(needle)) : documents;
+  const hasNotes = documents.some((d) => d.note);
+  // También en el texto de las notas: lo busca el servidor, con una pequeña espera mientras se escribe.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < NOTE_SEARCH_MIN_CHARS || !hasNotes) return;
+    const timer = setTimeout(() => {
+      void searchNotes(projectId, q).catch(() => null).then((res) => {
+        if (res?.ok) setNoteHits({ q, ids: new Set(res.data) });
+      });
+    }, NOTE_SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [query, projectId, hasNotes]);
+  const textHits = noteHits && noteHits.q === query.trim() ? noteHits.ids : null;
+  const shown = needle ? documents.filter((d) => normalizeSearch(d.name).includes(needle) || (d.note && !!textHits?.has(d.id))) : documents;
+  // Fijados arriba («Notas generales»), en el orden en que se fijaron; el resto, como siempre.
+  const pinned = shown.filter((d) => d.pinnedAt).sort((a, b) => a.pinnedAt!.localeCompare(b.pinnedAt!));
+  const unpinned = shown.filter((d) => !d.pinnedAt);
   const open = documents.find((d) => d.id === openId) ?? null;
   const openTrashed = trashed.find((d) => d.id === openId) ?? null;
   const full = documents.length >= maxCount;
@@ -192,6 +267,61 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
     safeRefresh();
   }
 
+  /** Fila de un documento (en «Notas generales» o en la lista). */
+  function row(d: DocumentRow) {
+    const { icon: Icon, className } = iconOf(d);
+    return (
+      <li key={d.id} className="flex items-center hover:bg-slate-50 focus-within:bg-slate-50 dark:hover:bg-slate-800/60 dark:focus-within:bg-slate-800/60">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/60"
+          data-doc-open={d.id}
+          onClick={() => setOpenId(d.id)}
+        >
+          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d)}>
+            <Icon size={18} aria-hidden />
+            <span className="sr-only">{kindLabel(d)}</span>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
+            <span className="block truncate text-xs text-slate-500">
+              {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "date", locale)}
+            </span>
+          </span>
+        </button>
+        {/* Acciones secundarias en «⋯» (la papelera, siempre a la vista, se pulsaba sin querer); abrir sigue siendo la fila. */}
+        <Menu
+          align="end"
+          className="mx-2 shrink-0"
+          label={t("Más acciones de «{name}»", { name: d.name })}
+          panelClassName="w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          trigger={({ props }) => (
+            <button type="button" className="btn-icon" aria-label={t("Más acciones de «{name}»", { name: d.name })} title={t("Más acciones")} data-testid="doc-menu-btn" {...props}>
+              <MoreHorizontal size={18} aria-hidden />
+            </button>
+          )}
+        >
+          <a
+            role="menuitem"
+            tabIndex={-1}
+            href={`/api/documents/${d.id}?download=1`}
+            download
+            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
+          >
+            <Download size={15} aria-hidden /> {t("Descargar")}
+          </a>
+          <MenuItem icon={d.pinnedAt ? PinOff : Pin} disabled={busyId === d.id} data-testid="doc-pin-btn" onClick={() => void togglePin(d)}>
+            {d.pinnedAt ? t("Quitar de «Notas generales»") : t("Fijar en «Notas generales»")}
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem icon={Trash2} danger disabled={busyId === d.id} data-testid="doc-trash-btn" onClick={() => void trashFromList(d)}>
+            {t("Enviar a la papelera")}
+          </MenuItem>
+        </Menu>
+      </li>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl p-4 md:p-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -202,6 +332,9 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
               {showTrash ? <ArrowLeft size={16} /> : <Trash2 size={16} />} {showTrash ? t("Volver a la documentación") : t("Papelera ({n})", { n: trashed.length })}
             </button>
           )}
+          <button type="button" className="btn-secondary" onClick={() => void newNote()} disabled={full || creating} data-testid="docs-new-note">
+            {creating ? <Loader2 size={16} className="animate-spin" /> : <StickyNote size={16} />} {t("Nueva nota")}
+          </button>
           <button type="button" className="btn-primary" onClick={() => fileInput.current?.click()} disabled={full}>
             <Upload size={16} /> {t("Subir archivos")}
           </button>
@@ -263,12 +396,12 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
           ) : (
             <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-trash-list">
               {trashed.map((d) => {
-                const { icon: Icon, className } = ICONS[d.kind];
+                const { icon: Icon, className } = iconOf(d);
                 return (
                   <li key={d.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5" data-testid="docs-trash-item">
-                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d.kind)}>
+                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d)}>
                       <Icon size={18} aria-hidden />
-                      <span className="sr-only">{kindLabel(d.kind)}</span>
+                      <span className="sr-only">{kindLabel(d)}</span>
                     </span>
                     <span className="min-w-0 flex-1 basis-48">
                       <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
@@ -302,9 +435,14 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
           <p className="max-w-md">
             {t("Guías, notas, PDF e imágenes de referencia, para todo el equipo del proyecto. Arrastra archivos aquí, pégalos o usa «Subir archivos».")}
           </p>
-          <button type="button" className="btn-secondary mt-2" onClick={() => fileInput.current?.click()}>
-            <Upload size={16} /> {t("Subir archivos")}
-          </button>
+          <span className="mt-2 flex flex-wrap justify-center gap-2">
+            <button type="button" className="btn-secondary" onClick={() => void newNote()} disabled={creating}>
+              <StickyNote size={16} /> {t("Nueva nota")}
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => fileInput.current?.click()}>
+              <Upload size={16} /> {t("Subir archivos")}
+            </button>
+          </span>
         </div>
       ) : (
         <>
@@ -314,7 +452,7 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
               ref={searchInput}
               type="search"
               className="input pl-9"
-              placeholder={t("Buscar por nombre…")}
+              placeholder={hasNotes ? t("Buscar por nombre o en las notas…") : t("Buscar por nombre…")}
               aria-label={t("Buscar documentos")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -323,63 +461,36 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
           {shown.length === 0 ? (
             <p className="card p-6 text-center text-sm text-slate-500">{t("Ningún documento coincide con «{query}».", { query })}</p>
           ) : (
-            <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-list">
-              {shown.map((d) => {
-                const { icon: Icon, className } = ICONS[d.kind];
-                return (
-                  <li key={d.id} className="flex items-center hover:bg-slate-50 focus-within:bg-slate-50 dark:hover:bg-slate-800/60 dark:focus-within:bg-slate-800/60">
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-3 text-left focus-visible:bg-slate-50 dark:focus-visible:bg-slate-800/60"
-                      data-doc-open={d.id}
-                      onClick={() => setOpenId(d.id)}
-                    >
-                      <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", className)} title={kindLabel(d.kind)}>
-                        <Icon size={18} aria-hidden />
-                        <span className="sr-only">{kindLabel(d.kind)}</span>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span dir="auto" className="block truncate text-sm font-medium">{d.name}</span>
-                        <span className="block truncate text-xs text-slate-500">
-                          {formatBytes(d.size, locale)} · {d.createdByName ?? t("Usuario eliminado")} · {formatDate(d.createdAt, "date", locale)}
-                        </span>
-                      </span>
-                    </button>
-                    {/* Acciones secundarias en «⋯» (la papelera, siempre a la vista, se pulsaba sin querer); abrir sigue siendo la fila. */}
-                    <Menu
-                      align="end"
-                      className="mx-2 shrink-0"
-                      label={t("Más acciones de «{name}»", { name: d.name })}
-                      panelClassName="w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg dark:border-slate-700 dark:bg-slate-900"
-                      trigger={({ props }) => (
-                        <button type="button" className="btn-icon" aria-label={t("Más acciones de «{name}»", { name: d.name })} title={t("Más acciones")} data-testid="doc-menu-btn" {...props}>
-                          <MoreHorizontal size={18} aria-hidden />
-                        </button>
-                      )}
-                    >
-                      <a
-                        role="menuitem"
-                        tabIndex={-1}
-                        href={`/api/documents/${d.id}?download=1`}
-                        download
-                        className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none dark:hover:bg-slate-800 dark:focus-visible:bg-slate-800"
-                      >
-                        <Download size={15} aria-hidden /> {t("Descargar")}
-                      </a>
-                      <MenuSeparator />
-                      <MenuItem icon={Trash2} danger disabled={busyId === d.id} data-testid="doc-trash-btn" onClick={() => void trashFromList(d)}>
-                        {t("Enviar a la papelera")}
-                      </MenuItem>
-                    </Menu>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              {pinned.length > 0 && (
+                <section aria-labelledby="docs-pinned-title" className="mb-4">
+                  <h2 id="docs-pinned-title" className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                    <Pin size={14} aria-hidden /> {t("Notas generales")}
+                  </h2>
+                  <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-pinned-list">
+                    {pinned.map((d) => row(d))}
+                  </ul>
+                </section>
+              )}
+              {unpinned.length > 0 && (
+                <>
+                  {pinned.length > 0 && <h2 className="mb-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">{t("Todos los documentos")}</h2>}
+                  <ul className="card divide-y divide-slate-200 overflow-hidden dark:divide-slate-800" data-testid="docs-list">
+                    {unpinned.map((d) => row(d))}
+                  </ul>
+                </>
+              )}
+            </>
           )}
         </>
       )}
 
-      {open && !showTrash && <DocViewer key={open.id} doc={open} docs={documents} fromLink={open.id === initialOpenId} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} onClose={() => setOpenId(null)} />}
+      {open && !showTrash && (
+        <DocViewer
+          key={open.id} doc={open} docs={documents} fromLink={open.id === initialOpenId} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode}
+          users={users} fileMaxMb={fileMaxMb} isNew={open.id === freshId} onPin={() => void togglePin(open)} pinBusy={busyId === open.id} onClose={() => { setOpenId(null); setFreshId(null); }}
+        />
+      )}
       {openTrashed && showTrash && (
         <TrashViewer key={openTrashed.id} doc={openTrashed} busy={busyId === openTrashed.id} onClose={() => setOpenId(null)} onRestore={() => void restore(openTrashed)} />
       )}
@@ -387,8 +498,14 @@ export function DocsManager({ projectId, projectName, documents, trashed, fileMa
   );
 }
 
-/** Visor en un modal: imagen, PDF del visor del navegador, texto plano, Markdown o HTML (aislado); el resto solo se descarga. */
-function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, onClose }: { doc: DocumentRow; docs: DocumentRow[]; fromLink: boolean; projectId: string; currentUserId: string; editorMode: EditorModeValue; onClose: () => void }) {
+/**
+ * Visor en un modal: imagen, PDF del visor del navegador, texto plano, Markdown o HTML (aislado); el resto solo se descarga.
+ * Una nota se ve y se edita aquí mismo (NoteEditor); `isNew`: recién creada, se abre ya en modo edición.
+ */
+function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, users, fileMaxMb, isNew, onPin, pinBusy, onClose }: {
+  doc: DocumentRow; docs: DocumentRow[]; fromLink: boolean; projectId: string; currentUserId: string; editorMode: EditorModeValue;
+  users: UserOption[]; fileMaxMb: number; isNew: boolean; onPin: () => void; pinBusy: boolean; onClose: () => void;
+}) {
   const t = useT();
   const locale = useIntlLocale();
   const safeRefresh = useSafeRefresh();
@@ -397,6 +514,10 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(doc.name);
   const [busy, setBusy] = useState(false);
+  // El tamaño de una nota cambia al escribir (el de la lista llega con el refresco al cerrar).
+  const [size, setSize] = useState(doc.size);
+  // Cerrado el visor, el guardado de lo último escrito puede llegar después: entonces refresca la lista (tamaño).
+  const closed = useRef(false);
   const src = `/api/documents/${doc.id}`;
   const big = doc.kind === "PDF" || doc.kind === "IMAGE";
   const second = useDocTaskDialogs({ projectId, currentUserId, editorMode, doc: { id: doc.id, name, kind: doc.kind }, viewerWidth: MODAL_SIZE_REM[big ? "2xl" : "xl"] });
@@ -439,7 +560,11 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
     <>
     <Modal
       open
-      onClose={onClose}
+      onClose={() => {
+        closed.current = true;
+        if (doc.note) safeRefresh();
+        onClose();
+      }}
       size={big ? "2xl" : "xl"}
       panelClassName={big ? "h-[92dvh] sm:h-[calc(100dvh-2rem)] sm:max-h-none" : undefined}
       side={second.open ? "left" : "center"}
@@ -466,9 +591,17 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-slate-500">
-            {formatBytes(doc.size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "date", locale)}
+            {formatBytes(size, locale)} · {doc.createdByName ?? t("Usuario eliminado")} · {formatDate(doc.createdAt, "date", locale)}
           </span>
-          <span className="flex gap-2">
+          <span className="flex flex-wrap gap-2">
+            <button
+              // Sin aria-pressed: la etiqueta ya dice lo que hará (con las dos cosas el lector anunciaba el estado dos veces).
+              type="button" className="btn-secondary" onClick={onPin} disabled={pinBusy} data-testid="doc-viewer-pin"
+              title={doc.pinnedAt ? t("Quitar de «Notas generales»") : t("Fijar en «Notas generales»")}
+              aria-label={doc.pinnedAt ? t("Quitar de «Notas generales»") : t("Fijar en «Notas generales»")}
+            >
+              {doc.pinnedAt ? <PinOff size={16} aria-hidden /> : <Pin size={16} aria-hidden />} <span className="hidden sm:inline">{doc.pinnedAt ? t("Desfijar") : t("Fijar")}</span>
+            </button>
             {/* Se puede deshacer (va a la papelera): como en el «⋯» de la lista, no «Borrar» en rojo. */}
             <button type="button" className="btn-secondary" onClick={() => void remove()} disabled={busy}>
               <Trash2 size={16} /> {t("Enviar a la papelera")}
@@ -480,7 +613,14 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
         </div>
       }
     >
-      <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />
+      {doc.note ? (
+        <NoteEditor
+          docId={doc.id} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} users={users} fileMaxMb={fileMaxMb} startEditing={isNew}
+          onSaved={(n) => (closed.current ? safeRefresh() : setSize(n))} onUploaded={safeRefresh} onTrashed={safeRefresh}
+        />
+      ) : (
+        <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />
+      )}
     </Modal>
     {second.dialogs}
     </>

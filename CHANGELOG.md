@@ -2,6 +2,24 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.76.0 — 2026-11-27 18:01
+
+Notas generales en Documentación, «¿Descartar el texto?» al importar, pasar a privado dice quién conserva el acceso y plan por persona más ligero
+
+### Nuevas funcionalidades
+
+- Documentación: notas generales escritas en la app («Nueva nota») con el editor de las descripciones (formato, imágenes y menciones), guardado automático, aviso si cambian a la vez en otra pestaña o por otra persona, búsqueda en su texto y la opción de fijarlas arriba en «Notas generales» (también cualquier otro documento). Van a la papelera, se descargan como .md, entran en las copias y en la exportación del proyecto (también «Sin adjuntos»).
+
+### Mejoras
+
+- Importar tareas: al cerrar con un texto del que no se lee ninguna tarea, pregunta «¿Descartar el texto?» en vez de «Hay tareas sin importar».
+- Pasar a privado un proyecto de equipo: la confirmación nombra a quienes mantienen el acceso (sus miembros, entre ellos quien lo creó, y tú).
+
+### Cambios técnicos / DB
+
+- PDF del plan por persona: las subtareas pendientes se leen con tope en la base (las 15 que salen y su número), no todas.
+- Una imagen de Documentación pintada en una descripción ya no cuenta como descarga en Logs, y sus referencias se mantienen al exportar e importar.
+
 ## v1.75.1 — 2026-11-27 15:44
 
 Revisión y caza de bugs: tope diario de WhatsApp, tablero en vivo con menos recargas, sesiones cerradas al restaurar una copia y arreglos de deshacer, avisos y arranque

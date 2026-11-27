@@ -13,6 +13,7 @@ import { ADMIN_EXPORT, db, loginAs, logout, makeKind, makeProject, makeTask, mak
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
 import { freeProjectName, importProjectFile, safeFileName, threadComments, type ImportUser } from "../../src/lib/project-export/import";
 import { clampTitle } from "../../src/lib/title-clamp";
+import { NOTE_MAX_CHARS } from "../../src/lib/document-kind";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { LIMITS, projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
@@ -436,6 +437,111 @@ describe("exportar e importar: papelera, cuota propia y enlaces de Drive", () =>
     const at = "2026-01-02T03:04:05.000Z";
     const data = minimal([], { documentsTrash: [{ ref: "x1", name: "a.txt", mimeType: "text/plain", size: 1, kind: "TEXT", createdBy: null, createdAt: at, updatedAt: at, file: "b".repeat(64), deletedAt: at, deletedBy: null }] });
     await assert.rejects(importProjectFile(await craft(data), asImporter(admin), { isPrivate: true }), /no existe/);
+  });
+});
+
+describe("exportar e importar: notas de Documentación", () => {
+  test("una nota va como .md marcado y vuelve como nota, con sus menciones, sus imágenes de Documentación y fijada", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const member = await makeUser({ name: "Carla Notas" });
+    const f = await makeProject({ members: [admin, member] });
+    const img = await webp();
+    const image = await db.projectDocument.create({ data: { projectId: f.project.id, name: "captura.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdById: admin.id } });
+    await saveDocumentFile(image.id, img);
+    const text = `# Acta\n\nHabla @[Carla Notas](user:${member.id}).\n\n![captura](/api/documents/${image.id})`;
+    await db.projectDocument.create({
+      data: { projectId: f.project.id, name: "Acta", mimeType: "text/markdown", size: Buffer.byteLength(text), kind: "MARKDOWN", createdById: admin.id, noteContent: text, noteVersion: 7, pinnedAt: new Date("2026-03-04T05:06:07Z") },
+    });
+    await db.projectDocument.create({
+      data: { projectId: f.project.id, name: "Borrador", mimeType: "text/markdown", size: 3, kind: "MARKDOWN", createdById: admin.id, noteContent: "old", deletedAt: new Date(), deletedById: admin.id },
+    });
+
+    const built = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
+    const data = projectJsonOf(built);
+    projectDataSchema.parse(data);
+    const exported = data.documents.find((d) => d.name === "Acta")!;
+    const imageRef = data.documents.find((d) => d.name === "captura.webp")!.ref;
+    assert.equal(exported.note, true);
+    assert.equal(exported.pinnedAt, "2026-03-04T05:06:07.000Z");
+    assert.equal(data.documentsTrash?.find((d) => d.name === "Borrador")?.note, true);
+    // En el archivo, el texto lleva refs (ni el id de la persona ni el del documento).
+    const fileEntry = built.entries.find((e) => e.name === `files/${exported.file}`)!;
+    const body = Buffer.isBuffer(fileEntry.body) ? fileEntry.body : Buffer.concat(await Array.fromAsync(fileEntry.body(), (c) => Buffer.from(c)));
+    const exportedText = body.toString("utf8");
+    assert.ok(!exportedText.includes(member.id) && !exportedText.includes(image.id), exportedText);
+    assert.match(exportedText, new RegExp(`/api/documents/${imageRef}\\)`));
+
+    const s = await importProjectFile(await writeExport(built), asImporter(admin), { isPrivate: false });
+    const docs = await db.projectDocument.findMany({ where: { projectId: s.projectId } });
+    const imported = docs.find((d) => d.name === "Acta")!;
+    const importedImage = docs.find((d) => d.name === "captura.webp")!;
+    assert.equal(imported.noteContent, `# Acta\n\nHabla @[Carla Notas](user:${member.id}).\n\n![captura](/api/documents/${importedImage.id})`);
+    assert.equal(imported.size, Buffer.byteLength(imported.noteContent!));
+    assert.equal(imported.pinnedAt?.toISOString(), "2026-03-04T05:06:07.000Z");
+    assert.equal(imported.noteVersion, 0);
+    // Sin fichero en el disco para las notas; la imagen sí.
+    await assert.rejects(stat(documentPath(imported.id)));
+    assert.ok((await stat(documentPath(importedImage.id))).size > 0);
+    const back = docs.find((d) => d.name === "Borrador")!;
+    assert.deepEqual([back.noteContent, !!back.deletedAt], ["old", true]);
+
+    // Una versión anterior sin la marca `note` la importa como un .md subido (es lo que hace la v1.75 con el archivo nuevo).
+    const at = "2026-01-02T03:04:05.000Z";
+    const md = Buffer.from("# Hola");
+    const old = minimal([], { documents: [{ ref: "x1", name: "leeme", mimeType: "text/markdown", size: md.length, kind: "MARKDOWN", createdBy: null, createdAt: at, updatedAt: at, file: sha(md) }] });
+    const s2 = await importProjectFile(await craft(old, [md]), asImporter(admin), { isPrivate: true });
+    const plain = await db.projectDocument.findFirstOrThrow({ where: { projectId: s2.projectId } });
+    assert.equal(plain.noteContent, null);
+    assert.equal((await readFile(documentPath(plain.id))).toString(), "# Hola");
+  });
+
+  test("«Sin adjuntos» lleva las notas (no los ficheros); las imágenes de Documentación de una descripción apuntan a la importada", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    const img = await webp();
+    const image = await db.projectDocument.create({ data: { projectId: f.project.id, name: "plano.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdById: admin.id } });
+    await saveDocumentFile(image.id, img);
+    await db.projectDocument.create({ data: { projectId: f.project.id, name: "Ideas", mimeType: "text/markdown", size: 5, kind: "MARKDOWN", createdById: admin.id, noteContent: "ideas" } });
+    const task = await makeTask(f);
+    await db.task.update({ where: { id: task.id }, data: { description: `Ver ![plano](/api/documents/${image.id})` } });
+
+    // Sin adjuntos: solo la nota (con su fichero en el ZIP), y la estimación la cuenta.
+    const light = await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT);
+    const lightData = projectJsonOf(light);
+    assert.deepEqual(lightData.documents.map((d) => [d.name, d.note]), [["Ideas", true]]);
+    assert.equal((await estimateProjectExport(f.project.id, { attachments: false, scope: "board" })).documents, 1);
+    const s1 = await importProjectFile(await writeExport(light), asImporter(admin), { isPrivate: true });
+    assert.deepEqual((await db.projectDocument.findMany({ where: { projectId: s1.projectId } })).map((d) => [d.name, d.noteContent]), [["Ideas", "ideas"]]);
+
+    // Con adjuntos: la descripción sale con la ref del documento y vuelve con el id del importado.
+    const full = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
+    const fullData = projectJsonOf(full);
+    const ref = fullData.documents.find((d) => d.name === "plano.webp")!.ref;
+    assert.equal(fullData.tasks[0]!.description, `Ver ![plano](/api/documents/${ref})`);
+    const s2 = await importProjectFile(await writeExport(full), asImporter(admin), { isPrivate: true });
+    const newImage = await db.projectDocument.findFirstOrThrow({ where: { projectId: s2.projectId, name: "plano.webp" } });
+    const newTask = await db.task.findFirstOrThrow({ where: { projectId: s2.projectId } });
+    assert.equal(newTask.description, `Ver ![plano](/api/documents/${newImage.id})`);
+  });
+
+  test("una nota que con los ids importados pasaría del máximo de caracteres entra como un .md subido", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = "2026-01-02T03:04:05.000Z";
+    const img = await webp();
+    // Cerca del tope y con muchas refs cortas (`x1`) que al importar pasan a ser ids largos.
+    const refs = "![i](/api/documents/x1)".repeat(200);
+    const md = Buffer.from(refs + "a".repeat(NOTE_MAX_CHARS - refs.length));
+    const data = minimal([], {
+      documents: [
+        { ref: "x1", name: "i.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdBy: null, createdAt: at, updatedAt: at, file: sha(img) },
+        { ref: "x2", name: "Larga", mimeType: "text/markdown", size: md.length, kind: "MARKDOWN", createdBy: null, createdAt: at, updatedAt: at, file: sha(md), note: true },
+      ],
+    });
+    const s = await importProjectFile(await craft(data, [img, md]), asImporter(admin), { isPrivate: true });
+    const long = await db.projectDocument.findFirstOrThrow({ where: { projectId: s.projectId, name: "Larga" } });
+    assert.equal(long.noteContent, null);
+    assert.equal(long.kind, "MARKDOWN");
+    assert.equal((await readFile(documentPath(long.id))).length, md.length);
   });
 });
 

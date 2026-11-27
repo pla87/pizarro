@@ -33,7 +33,7 @@ export const proyectos: Record<string, string> = {
   "Con adjuntos": "With attachments",
   "Incluye los adjuntos de las tarjetas y de las releases y los archivos de Documentación. El archivo pesa más.": "Includes card and release attachments and the Documentation files. The file is larger.",
   "Sin adjuntos": "Without attachments",
-  "Solo los datos: rápido y ligero.": "Data only: fast and light.",
+  "Solo los datos y las notas de Documentación: rápido y ligero.": "Data and Documentation notes only: fast and light.",
   "Alcance": "Scope",
   "Solo el tablero": "Board only",
   "Las tarjetas no archivadas, con sus subtareas y comentarios, más columnas, tipos, etiquetas y ajustes.": "Non-archived cards with their subtasks and comments, plus columns, types, labels and settings.",
@@ -181,7 +181,7 @@ export const proyectos: Record<string, string> = {
   "Los administradores ven todos los proyectos de equipo. Si añades a uno como miembro, el proyecto le sale en sus selectores y cuenta como miembro, igual que el resto.": "Admins see every team project. If you add one as a member, the project shows up in their pickers and counts as a member, like everyone else.",
   "Sin miembros.": "No members.",
   "La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: generate a new invitation link to send them.",
-  "¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? Its current members ({n}, including you) keep access and their cards. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
+  "¿Hacer el proyecto privado? Mantienen el acceso, con sus tarjetas: {names} (sus miembros, entre ellos quien lo creó, y tú). Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? These people keep access and their cards: {names} (its members, including whoever created it, and you). Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
   // Administración → Proyectos: «miembros» en lugar de «asignados», como en Ajustes del proyecto
   "Proyectos de equipo y sus miembros. Los privados no salen aquí.": "Team projects and their members. Private ones are not listed here.",
   "Quien no es administrador solo ve los proyectos de los que es miembro. Los administradores ven todos: se les puede añadir como miembros igual que a cualquiera y, si no lo son, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
@@ -264,4 +264,6 @@ export const proyectos: Record<string, string> = {
   "Modificó el entregable «{name}»": "Edited the deliverable “{name}”",
   "Movió el entregable «{name}» al {day}": "Moved the deliverable “{name}” to {day}",
   "Borró el entregable «{name}»": "Deleted the deliverable “{name}”",
+  // v1.76: quién mantiene el acceso al pasar un proyecto a privado
+  "tú": "you",
 };

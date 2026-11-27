@@ -77,13 +77,17 @@ interface Props {
 interface InlineImage {
   id: string;
   name: string;
+  /** Dirección de la imagen; sin ella, la del adjunto (`/api/attachments/<id>`). Las notas de Documentación: `/api/documents/<id>`. */
+  src?: string;
 }
+
+const imageSrc = (img: InlineImage) => img.src ?? `/api/attachments/${img.id}`;
 
 const isImage = (f: File) => f.type.startsWith("image/") || isUntypedImage(f.name, f.type);
 
 /** Markdown de una imagen subida (el texto alternativo, con los corchetes escapados como los guarda el editor con barra). */
 function imageMarkdown(img: InlineImage): string {
-  return `![${img.name.replace(/[[\]\\]/g, "\\$&")}](/api/attachments/${img.id})`;
+  return `![${img.name.replace(/[[\]\\]/g, "\\$&")}](${imageSrc(img)})`;
 }
 
 /**
@@ -132,7 +136,7 @@ export function DescriptionField({ id, mode, value, onValueChange, users, placeh
     const toBlocks = insertImageBlocks;
     if (mode === "WYSIWYG" && ed && !ed.isDestroyed && toBlocks) {
       // Cada imagen, en su propio bloque (no en línea dentro del párrafo): el cursor queda en un párrafo nuevo debajo.
-      const nodes = images.map((img) => ed.schema.nodes.markdownImage!.create({ raw: imageMarkdown(img), src: `/api/attachments/${img.id}`, alt: img.name }));
+      const nodes = images.map((img) => ed.schema.nodes.markdownImage!.create({ raw: imageMarkdown(img), src: imageSrc(img), alt: img.name }));
       ed.chain().command(({ tr }) => {
         toBlocks(tr, nodes);
         return true;

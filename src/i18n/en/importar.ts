@@ -100,4 +100,7 @@ export const importar: Record<string, string> = {
   // Ronda 71: importar tareas
   "Descartar la importación": "Discard the import",
   "Hay tareas sin importar. ¿Descartarlas?": "Some tasks are not imported yet. Discard them?",
+  // v1.76: cerrar «Importar tareas» con un texto del que no se lee ninguna tarea
+  "¿Descartar el texto?": "Discard the text?",
+  "No se ha leído ninguna tarea de este texto. Si cierras, se pierde.": "No tasks could be read from this text. If you close, it will be lost.",
 };

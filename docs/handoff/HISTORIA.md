@@ -14,6 +14,14 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Ronda 73, segunda parte (ya aplicada, v1.76.0):** respuestas a las preguntas de la v1.75.0: 1 = A (notas en
+Documentación, hechas como se propuso; las menciones no avisan y la lista no se refresca en vivo), 3, 4 y 5 = SÍ (hechas),
+6 y 7 = NO. Una revisión independiente de las notas encontró 11 puntos; arreglados los evidentes (nota recién creada que
+no se iba, guardado que reintentaba en bucle con la papelera o la cuota, conflicto falso tras perder la respuesta, notas
+también en «Sin adjuntos», imágenes de Documentación en descripciones, espera de guardado según el tamaño, borrador local
+con retardo, accesibilidad del aviso, tope al importar). Sin hacer (opcionales): avisar de lo escrito tras mandar la nota a
+la papelera desde otra cuenta, y adjuntar a una tarea lo último sin guardar de una nota.
+
 **Decisiones de la ronda 73 (ya aplicadas, v1.75.1):** el propietario cerró la v1.75.0 desde la nube (Release lanzada por
 la sesión) y pidió las 3 vueltas de revisión y caza de bugs. SÍ a: prueba del pie a 430 px sin exigir el texto (depende de
 la fuente), «(1 tarea)» en Logs, y a las decisiones 1-8 de la revisión (cerrar sesiones al restaurar; tope diario de

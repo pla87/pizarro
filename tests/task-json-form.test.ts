@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseTasksText, strictJsonFormat, stringifyTaskJson } from "../src/lib/task-json";
-import { fillNewTaskForm, importPreview, newTaskFormJson, type FormProject } from "../src/lib/task-json-form";
+import { fillNewTaskForm, importDiscardQuestion, importPreview, newTaskFormJson, type FormProject } from "../src/lib/task-json-form";
 import { EMPTY_FIELDS_FORM } from "../src/lib/fields-form";
 import { esT } from "../src/i18n/shared";
 
@@ -160,4 +160,19 @@ test("tipos de serie entre idiomas: el nombre en el otro idioma vale en el formu
   // Un tipo general que un administrador renombró ya no responde a los nombres de serie.
   const renamed: FormProject = { ...project, kinds: [{ id: "kind_correccion", name: "Bugs" }] };
   assert.deepEqual(kindOf(renamed, "Bug fix"), [undefined, ["tipo «Bug fix» (no existe)"]]);
+});
+
+test("cerrar «Importar tareas»: con tareas leídas, que quedan sin importar; sin ninguna, que se descarta el texto", () => {
+  const readable = (text: string) => parseTasksText(text).tasks.filter((x) => x.task.title).length;
+  const some = importDiscardQuestion(readable('{"title":"Una"}'), esT);
+  assert.equal(some.title, "Descartar la importación");
+  assert.equal(some.message, "Hay tareas sin importar. ¿Descartarlas?");
+  for (const text of ["hola", "{no es json", '{"description":"sin título"}']) {
+    const q = importDiscardQuestion(readable(text), esT);
+    assert.equal(q.title, "¿Descartar el texto?", text);
+    assert.equal(q.message, "No se ha leído ninguna tarea de este texto. Si cierras, se pierde.");
+    assert.equal(q.confirmLabel, "Descartar");
+    assert.equal(q.cancelLabel, "Seguir editando");
+    assert.ok(q.danger);
+  }
 });

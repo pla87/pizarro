@@ -78,7 +78,7 @@ Estado tras la ronda 70 (v1.73.1):
 - Lo creado en la instalación de prueba por esas sesiones (no se ha borrado nada; preguntar antes): proyecto «Casa R69»
   y, en «Proyecto de prueba», la columna «Proveedor», Persona Prueba como miembro y la etiqueta «informes».
 
-## 1. Pruebas en real de la v1.73.0 a la v1.75.1 (instalación de prueba)
+## 1. Pruebas en real de la v1.73.0 a la v1.76.0 (instalación de prueba)
 
 Los puntos con ventana privada, Ctrl+V de una imagen de verdad, una ventana muy ancha o el móvil los hace el
 propietario: el prompt le pide que los haga y apunta lo que le diga.
@@ -129,6 +129,11 @@ Quiero que compruebes en real las novedades de Pizarro v1.73.0, v1.73.1, v1.74.0
 39. Tope de WhatsApp (v1.75.1): en Administración → Integraciones → 3, junto a WhatsApp está «Tope de avisos al día» (vacío = 200) y el estado dice «Hoy: N de M avisos». Pon 0: da error; pon 5 y guarda: se conserva.
 40. Selección grande (v1.75.1): no hace falta llegar a 500; comprueba solo que mover, archivar y borrar varias tarjetas seleccionadas siguen funcionando y se deshacen con Ctrl+Z.
 41. Mac (v1.75.1, solo si usas Mac): en la barra de formato de una descripción, el globo de Negrita dice «(⌘B)»; en la ayuda de atajos («?»), «Espacio» sale en español.
+42. Notas (v1.76.0): en Documentación, «Nueva nota»: escribe un título (lápiz) y unas líneas con negrita y una lista; espera a «Guardado», cierra y vuelve a abrirla: está todo. Pega una captura dentro: se ve en la nota y sale también en la lista como imagen.
+43. Notas generales (v1.76.0): en el menú ⋯ de la nota, «Fijar en «Notas generales»»: sube a una sección propia arriba; desde el visor, «Quitar de «Notas generales»» la devuelve.
+44. Dos pestañas (v1.76.0): abre la misma nota en dos pestañas, escribe en una, espera a «Guardado» y escribe en la otra: sale «Esta nota ha cambiado en otra pestaña o por otra persona…»; prueba «Ver la otra versión» y «Quedarme con la mía».
+45. Buscar y papelera (v1.76.0): el buscador de Documentación encuentra la nota por una palabra de su texto (sin tildes también); mándala a la papelera y restáurala.
+46. Importar y privado (v1.76.0): en el tablero, Importar → pega «hola» y cierra: pregunta «¿Descartar el texto?». En Ajustes de un proyecto de equipo de prueba, pásalo a privado: la confirmación nombra a quienes conservan el acceso (no lo confirmes si no es de prueba).
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```

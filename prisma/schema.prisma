@@ -527,6 +527,12 @@ model ProjectDocument {
   /// Papelera: si no es null, el documento está borrado y se purga (fila y fichero) pasados DOCUMENT_TRASH_DAYS días.
   deletedAt   DateTime?
   deletedById String?
+  /// Nota escrita en la app: su texto (Markdown) va aquí en vez de en un fichero. Null = documento subido (con fichero).
+  noteContent String?
+  /// Versión del texto de la nota: sube con cada guardado (aviso si otra persona la cambió a la vez).
+  noteVersion Int      @default(0)
+  /// Fijado arriba en la lista de Documentación («Notas generales»). Null = sin fijar.
+  pinnedAt    DateTime?
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy   User?    @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   deletedBy   User?    @relation("DocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
