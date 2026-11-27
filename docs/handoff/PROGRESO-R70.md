@@ -42,3 +42,24 @@ Opcionales (para el propietario, en la lista de decisiones del cierre):
 
 Candidatos a retirar: ninguno nuevo en esta vuelta (`@tiptap/suggestion` no se importa pero es dependencia obligatoria de
 `@tiptap/extension-mention`).
+
+Hecho en la vuelta 1: todos los evidentes de arriba (fusionados en `ronda-70`).
+
+## Vuelta 2 (revisores: administración/instalación/tareas de fondo; importar/exportar, releases, PDF, documentación y qué retirar)
+
+Hecho (evidentes):
+- Exportar/importar proyecto: las imágenes del histórico de releases quedaban rotas (no se reescribían sus referencias).
+- Importar: un tipo propio con el nombre de un tipo general de la instalación se duplicaba; ahora entra como «Nombre (2)»
+  con aviso, y las columnas y tareas que lo usaban siguen con él.
+- Tareas diarias (limpiezas, papelera, avisos): si fallaban no se reintentaban hasta 23 h después; ahora en la pasada siguiente.
+- `docs/INSTALL.md` §6.1 y §6.3: las órdenes de restaurar fallaban con el rol de aplicación `pizarro_app` que crea
+  `install.sh`; ahora usan el rol que corresponde y `restore.mjs --force`.
+- Manual §4.5: la comprobación de espacio antes de cada copia, como la hace el código.
+
+Opcional:
+- La prueba de restauración mensual duplica el tamaño de la base en el disco de PostgreSQL sin mirar si cabe: hacer la
+  prueba en modo «verificar» si no hay sitio (en Compose y npm start se puede medir; en Railway, con un tope por variable).
+
+Qué retirar: knip limpio, 0 traducciones sin uso, ningún fichero huérfano. Siguen sin uso (pendientes de tu «sí»):
+`parseProfileTab`, `listProjectDocuments`/`listTrashedDocuments`, `htmlTableToMarkdown`, el `export` de `runBoot` y la
+limpieza de `globalThis.prisma` en `scripts/boot.ts`, y la columna `ColumnShare.generatedByName` (v1.74).
