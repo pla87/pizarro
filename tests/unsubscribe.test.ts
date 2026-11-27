@@ -51,3 +51,13 @@ test("baja: cabeceras List-Unsubscribe solo con https, y cada aviso apaga la cas
   assert.deepEqual(kinds, ["mention", "mention", "mention", "assigned", "due", "due", "comment", "comment"]);
   assert.equal(core.EMAIL_PREF_FIELD.due, "notifyDueEmail");
 });
+
+test("baja de las menciones en notas: su propio tipo de enlace («n»), que no vale para otro", () => {
+  const token = core.unsubscribeToken("note", "user1", "ana@example.com");
+  assert.ok(token.startsWith("nuser1."));
+  const parsed = core.parseUnsubscribeToken(token);
+  assert.deepEqual(parsed && { kind: parsed.kind, id: parsed.id }, { kind: "note", id: "user1" });
+  assert.ok(core.unsubscribeSignatureOk(parsed!, "ana@example.com"));
+  // Con la letra de las menciones, la firma ya no vale.
+  assert.ok(!core.unsubscribeSignatureOk({ ...parsed!, kind: "mention" }, "ana@example.com"));
+});

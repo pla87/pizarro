@@ -616,7 +616,16 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
       {doc.note ? (
         <NoteEditor
           docId={doc.id} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} users={users} fileMaxMb={fileMaxMb} startEditing={isNew}
-          onSaved={(n) => (closed.current ? safeRefresh() : setSize(n))} onUploaded={safeRefresh} onTrashed={safeRefresh}
+          onSaved={(n, newName) => {
+            if (closed.current) return safeRefresh();
+            setSize(n);
+            // Título automático (la primera línea): el del visor al momento y la lista con un refresco, sin recargar.
+            if (newName) {
+              setName(newName);
+              safeRefresh();
+            }
+          }}
+          onUploaded={safeRefresh} onTrashed={safeRefresh}
         />
       ) : (
         <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />

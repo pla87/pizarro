@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { runAction } from "@/lib/action";
 import { describeAction } from "@/lib/action-context";
 import { requireUser } from "@/lib/session";
+import { NOTE_MENTION_EMAIL_MODES } from "@/lib/note-mention-pref";
 
 const schema = z.object({
   notifyEmail: z.boolean(),
@@ -13,11 +14,13 @@ const schema = z.object({
   notifyCommentEmail: z.boolean(),
   dailyDigest: z.boolean(),
   digestHour: z.number().int().min(0).max(23),
+  /** Menciones en notas: solo si la persona la ha elegido (sin elegir, sigue a las demás opciones; noteMentionEmailMode). */
+  noteMentionEmail: z.enum(NOTE_MENTION_EMAIL_MODES).optional(),
 }).strict();
 
 /**
  * «Avisos por email» de Mi perfil → Avisos: todas las casillas de email (menciones, asignaciones, cambios de fecha,
- * comentarios) y el resumen diario con su hora, a la vez y en una sola escritura (los avisos en la app son siempre;
+ * comentarios), las menciones en notas y el resumen diario con su hora, a la vez y en una sola escritura (los avisos en la app son siempre;
  * Telegram y WhatsApp se guardan aparte, actions/messaging.ts).
  */
 export async function updateEmailPrefs(input: z.input<typeof schema>) {

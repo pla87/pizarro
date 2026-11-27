@@ -68,6 +68,10 @@ model User {
   notifyAssignedEmail Boolean @default(false)
   notifyDueEmail      Boolean @default(true)
   notifyCommentEmail  Boolean @default(false)
+  /// Email de las menciones en notas de Documentación (v1.77): "NOW" (al momento), "DIGEST" (en el resumen diario) u
+  /// "OFF". Texto y no enum, para no añadir valores de enum que escribir en la misma versión. Null = sin elegir: sigue a
+  /// las demás opciones (noteMentionEmailMode, lib/note-mention-pref.ts).
+  noteMentionEmail String?
   /// Resumen diario por email: activado, hora local de la app (0-23) y cuándo se envió el último.
   dailyDigest    Boolean   @default(false)
   digestHour     Int       @default(8)
@@ -533,9 +537,13 @@ model ProjectDocument {
   noteVersion Int      @default(0)
   /// Fijado arriba en la lista de Documentación («Notas generales»). Null = sin fijar.
   pinnedAt    DateTime?
+  /// Nota que aún toma su nombre de la primera línea al guardarse (v1.77): true al crearla con «Nueva nota», false en
+  /// cuanto alguien la renombra a mano (ver saveNoteRow).
+  noteAutoName Boolean  @default(false)
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy   User?    @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   deletedBy   User?    @relation("DocumentDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  notifications Notification[]
 
   @@index([projectId, createdAt])
   @@index([createdById])
@@ -867,6 +875,10 @@ model Notification {
   /// Avisos de un proyecto, sin tarea (PROJECT_TO_TEAM). Null en los de una tarea.
   projectId      String?
   project        Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Mención en una nota de Documentación (v1.77): tipo MENTION sin tarea ni proyecto (la v1.76 no los ve: su campana
+  /// solo pinta los de una tarea o un proyecto visibles). Borrar la nota (purga o definitivo) borra el aviso.
+  documentId     String?
+  document       ProjectDocument? @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
@@ -875,6 +887,7 @@ model Notification {
   @@index([actorId])
   @@index([commentId])
   @@index([projectId])
+  @@index([documentId])
 }
 
 /// Cambio de fecha límite pendiente de avisar (uno por tarea y destinatario). Se actualiza con cada cambio

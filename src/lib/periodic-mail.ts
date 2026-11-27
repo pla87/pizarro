@@ -9,6 +9,7 @@ import { buildDigest, digestEmail, digestPeriod, emptyDigestInput, type DigestIn
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { assignedBatchCount } from "./notification-text";
+import { noteMentionEmailMode } from "./note-mention-pref";
 import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFooter } from "./mail";
 import { unsubscribeLinks } from "./unsubscribe-links";
 import { getInstanceSettings } from "./instance";
@@ -38,7 +39,7 @@ const item = (t: TaskRow, extra: Partial<DigestItem> = {}): DigestItem => ({ tas
  * de equipo que eligió en su perfil y sus privados; ver workingProjectsWhere), y lo que le toca a ella en
  * cualquier proyecto que pueda ver.
  */
-export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" }, now: Date, today: string, lastSentAt: Date | null = null): Promise<DigestInput> {
+export async function gatherDigest(user: DigestPrefsUser, now: Date, today: string, lastSentAt: Date | null = null): Promise<DigestInput> {
   // Desde el envío anterior (así no se pierde ni se repite nada aunque salga a otra hora), como mucho 48 h atrás;
   // sin envío anterior, las últimas 24 h.
   const floor = now.getTime() - 2 * DAY_MS;
@@ -47,7 +48,10 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
   const live = { project: working, archivedAt: null };
   // Lo asignado a la persona sale aunque un admin no haya elegido ese proyecto (sigue pudiendo verlo).
   const mine = { project: visibleProjectsWhere(user as CurrentUser), archivedAt: null };
-  const [created, done, comments, assigned, assignedNew, due] = await Promise.all([
+  // Menciones en notas de Documentación, de quien las quiere en el resumen (Mi perfil → Avisos; de serie, quien tiene el
+  // resumen activado): de notas fuera de la papelera de proyectos que sigue pudiendo ver.
+  const wantsNotes = noteMentionEmailMode({ noteMentionEmail: user.noteMentionEmail ?? null, notifyEmail: user.notifyEmail ?? true, dailyDigest: true }) === "DIGEST";
+  const [created, done, comments, assigned, assignedNew, due, noteMentions] = await Promise.all([
     // «Tareas nuevas»: las que crearon otras personas (las suyas ya las conoce, como sus comentarios).
     db.task.findMany({ where: { ...live, createdAt: { gte: since }, OR: [{ createdById: null }, { createdById: { not: user.id } }] }, orderBy: { createdAt: "desc" }, take: MAX_ROWS, select: taskSelect }),
     // «Terminadas»: también las que se archivaron después de terminarlas (archivar lo terminado es lo normal antes del envío).
@@ -74,6 +78,14 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
       take: MAX_ROWS,
       select: { ...taskSelect, dueDate: true },
     }),
+    wantsNotes
+      ? db.notification.findMany({
+          where: { userId: user.id, type: "MENTION", createdAt: { gte: since }, document: { deletedAt: null, project: visibleProjectsWhere(user as CurrentUser) } },
+          orderBy: { createdAt: "desc" },
+          take: MAX_ROWS,
+          select: { document: { select: { id: true, name: true, project: { select: { id: true, name: true } } } } },
+        })
+      : Promise.resolve([]),
   ]);
   const out = emptyDigestInput();
   out.created = created.map((t) => item(t));
@@ -86,9 +98,24 @@ export async function gatherDigest(user: { id: string; role: "ADMIN" | "MEMBER" 
     else counts.set(c.task.id, item(c.task, { count: 1 }));
   }
   out.comments = [...counts.values()];
+  const notes = new Map<string, DigestItem>();
+  for (const n of noteMentions) {
+    const d = n.document;
+    if (!d) continue;
+    const prev = notes.get(d.id);
+    if (prev) prev.count = (prev.count ?? 1) + 1;
+    else notes.set(d.id, { taskId: "", docId: d.id, title: d.name, projectId: d.project.id, projectName: d.project.name, count: 1 });
+  }
+  out.notes = [...notes.values()];
   for (const task of due) (task.dueDate!.toISOString().slice(0, 10) === today ? out.dueToday : out.overdue).push(item(task));
   return out;
 }
+
+/**
+ * Quien recibe el resumen, con sus opciones de email para las menciones en notas (sin ellas, las de una cuenta nueva:
+ * menciones por email activadas y sin elegir la opción de las notas, que con el resumen activado van en él).
+ */
+type DigestPrefsUser = { id: string; role: "ADMIN" | "MEMBER"; noteMentionEmail?: string | null; notifyEmail?: boolean };
 
 /** Cuánto puede tardar el aviso de un lote recién creado en salir después de crear sus tareas (importar muchas, p. ej.). */
 const BATCH_NOTICE_LAG_MS = 5 * 60 * 1000;
@@ -185,7 +212,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   const tz = appTimeZone();
   const users = await db.user.findMany({
     where: { active: true, dailyDigest: true },
-    select: { id: true, name: true, email: true, locale: true, role: true, digestHour: true, lastDigestAt: true },
+    select: { id: true, name: true, email: true, locale: true, role: true, digestHour: true, lastDigestAt: true, noteMentionEmail: true, notifyEmail: true },
   });
   let sent = 0;
   for (const u of users) {
@@ -202,7 +229,7 @@ export async function sendDueDigests(now: Date = new Date()): Promise<number> {
   return sent;
 }
 
-type DigestUser = { id: string; name: string; email: string; locale: string | null; role: "ADMIN" | "MEMBER"; lastDigestAt: Date | null };
+type DigestUser = DigestPrefsUser & { name: string; email: string; locale: string | null; lastDigestAt: Date | null };
 
 /**
  * Reserva, reúne y envía el resumen de una persona (o devuelve la reserva si falla). true si se ha enviado; si el envío

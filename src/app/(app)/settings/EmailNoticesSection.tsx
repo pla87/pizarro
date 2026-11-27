@@ -8,6 +8,7 @@ import { updateEmailPrefs } from "@/actions/collab-prefs";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/i18n/client";
 import { useActionTransition } from "@/components/useActionTransition";
+import { isNoteMentionEmailMode, noteMentionEmailMode, type NoteMentionEmailMode } from "@/lib/note-mention-pref";
 
 type EmailPrefs = {
   notifyEmail: boolean;
@@ -16,6 +17,8 @@ type EmailPrefs = {
   notifyCommentEmail: boolean;
   dailyDigest: boolean;
   digestHour: number;
+  /** Menciones en notas de Documentación; null = sin elegir (sigue a las demás casillas, noteMentionEmailMode). */
+  noteMentionEmail: NoteMentionEmailMode | null;
 };
 
 interface Props {
@@ -66,8 +69,10 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
         onSubmit={(e) => {
           e.preventDefault();
           const sent = form;
+          // La opción de las notas solo se guarda si se ha elegido: sin elegir, sigue a las demás casillas también después.
+          const { noteMentionEmail, ...rest } = sent;
           start(async () => {
-            const res = await updateEmailPrefs(sent);
+            const res = await updateEmailPrefs(noteMentionEmail ? { ...rest, noteMentionEmail } : rest);
             toast(res.ok ? t("Preferencias guardadas") : res.error, res.ok ? "success" : "error");
             if (res.ok) setSaved(sent);
           });
@@ -98,6 +103,27 @@ export function EmailNoticesSection({ prefs, emailAvailable, adminNotices, timeZ
           <input type="checkbox" className="mt-0.5" checked={form.notifyCommentEmail} onChange={(e) => set("notifyCommentEmail", e.target.checked)} />
           <span>{t("Email con los comentarios y respuestas en tareas que sigo")}</span>
         </label>
+        <div className="text-sm">
+          <span className="flex flex-wrap items-center gap-2">
+            <label htmlFor="note-mention-email">{t("Email cuando me mencionan en una nota de Documentación")}</label>
+            <select
+              id="note-mention-email" className="input w-auto py-1" data-testid="note-mention-email"
+              value={noteMentionEmailMode(form)}
+              onChange={(e) => isNoteMentionEmailMode(e.target.value) && set("noteMentionEmail", e.target.value)}
+            >
+              <option value="NOW">{t("Al momento")}</option>
+              <option value="DIGEST">{t("En el resumen diario")}</option>
+              <option value="OFF">{t("No")}</option>
+            </select>
+          </span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            {noteMentionEmailMode(form) === "DIGEST" && !form.dailyDigest
+              ? t("Activa el resumen diario (aquí debajo) para recibirlas: sin él no te llega ningún email de estas menciones.")
+              : form.noteMentionEmail === null
+                ? t("Mientras no lo elijas, sigue a tus otras casillas: en el resumen diario si lo tienes activado y, si no, como «Email cuando me mencionan». En la campana salen siempre; por Telegram y WhatsApp, no.")
+                : t("En la campana salen siempre; por Telegram y WhatsApp, no.")}
+          </span>
+        </div>
         <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5" checked={form.dailyDigest} onChange={(e) => set("dailyDigest", e.target.checked)} />
