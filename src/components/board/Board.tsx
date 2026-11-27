@@ -2,7 +2,7 @@
 
 import { useMidnightRefresh } from "@/components/useMidnightRefresh";
 import { prefetchTaskDetail } from "./taskDetailPrefetch";
-import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
+import { advanceCursor, announceOnArrival, announceRemoteChange, DEFAULT_LIVE_REFRESH_JITTER_MS, foreignRefreshDelay, missedWhileClosed, removalOf, settleIncoming, uncoveredChanges, type IncomingChange, type LiveCursor, type Removal } from "./remoteChange";
 import { actionThrowMessage } from "@/lib/stale-action";
 import { lazyDialog } from "../lazyDialog";
 import { isNetworkError, refreshWhenOnline, reportOffline, reportReachable, reportServerHeard, safeRefresh, saveDataOn } from "@/lib/connection";
@@ -553,9 +553,10 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   const jitterMs = data.liveRefreshJitterMs ?? DEFAULT_LIVE_REFRESH_JITTER_MS;
   const drainIncoming = useCallback(() => {
     if (pending.current > 0 || !incoming.current.length) return;
-    const delay = foreignRefreshDelay(incoming.current, ownChanges.current, jitterMs);
-    const patchDelay = foreignRefreshDelay(incoming.current, ownChanges.current, Math.min(jitterMs, PATCH_JITTER_MAX_MS));
-    const { announce, refresh: stale, changes } = settleIncoming(incoming.current, ownChanges.current);
+    const open = uncoveredChanges(incoming.current, refreshAt.current);
+    const delay = foreignRefreshDelay(open, ownChanges.current, jitterMs);
+    const patchDelay = foreignRefreshDelay(open, ownChanges.current, Math.min(jitterMs, PATCH_JITTER_MAX_MS));
+    const { announce, refresh: stale, changes } = settleIncoming(incoming.current, ownChanges.current, refreshAt.current);
     incoming.current = [];
     for (const change of announce) announceRemoteChange(change);
     if (!stale) return;
@@ -868,7 +869,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       // al decidir (drainIncoming), cuando ya se sabe si es de una acción de esta pestaña.
       const announced = announceOnArrival(change, data.currentUserId);
       if (announced) announceRemoteChange(change);
-      incoming.current.push({ cid, change, announced });
+      incoming.current.push({ cid, change, announced, at: performance.now() });
       if (timer) clearTimeout(timer);
       // Con acciones en vuelo se decide al terminar la última (trackRaw), cuando ya se conocen sus ids.
       timer = setTimeout(() => {

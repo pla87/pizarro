@@ -337,4 +337,7 @@ export const server: Record<string, string> = {
   // se traduce al leerlo): textos guardados por versiones anteriores.
   "Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.": "Only the last change can be undone: use the ↶ arrow at the top.",
   "Esa acción ya no se puede deshacer desde aquí: usa Deshacer.": "That action can no longer be undone from here: use Undo.",
+  // Ronda 70: etiquetas desde el detalle (cambio en lugar de lista entera).
+  "Etiquetas: o la lista entera o los cambios, no las dos cosas.": "Labels: send either the whole list or the changes, not both.",
+  "Una tarea no puede tener tantas etiquetas.": "A task can't have that many labels.",
 };
