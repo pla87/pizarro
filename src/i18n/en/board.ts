@@ -387,4 +387,6 @@ export const board: Record<string, string> = {
   // Ronda 72: «Generar release» espera al número de la release
   "No se ha podido saber el número de la release.": "Could not get the release number.",
   "Vuelve a generar el texto: falta el número de la release.": "Generate the text again: the release number is missing.",
+  // Acciones en bloque con demasiadas tarjetas
+  "Como mucho 500 tarjetas a la vez: selecciona menos.": "At most 500 cards at a time: select fewer.",
 };

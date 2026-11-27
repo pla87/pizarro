@@ -22,6 +22,7 @@ import { showAssignedNotice } from "./assignNotice";
 import { COLUMN_DRAG_PREFIX, COLUMN_DROPPABLE_PREFIX, columnDragCollision, createBoardCollisionDetection } from "@/lib/collision";
 import { compareTaskOrder, insertBefore, moveOnto, neighboursOf, positionBetween, spreadPositions } from "@/lib/positions";
 import type { BoardColumn, BoardData, BoardPageData, BoardTask, LabelOption } from "@/lib/types";
+import { MAX_SELECTION_ACTION } from "@/lib/constants";
 import { unpackBoardTask, type BoardTaskWire } from "@/lib/board-task-wire";
 import { TASK_PRIORITIES } from "@/lib/task-fields";
 import { FilterMenu } from "./FilterMenu";
@@ -555,6 +556,9 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // comentarios abiertos ya muestran el suyo); cualquier otro, sí. Los de otras personas se reenvían al llegar
   // (announceOnArrival) y aquí solo esperan para refrescar el tablero.
   const incoming = useRef<IncomingChange[]>([]);
+  // Proyecto cuyos avisos quedaron en `incoming` sin decidir al cerrarse el canal (pestaña oculta en los 200 ms de espera):
+  // el saludo al reabrir los decide si sigue siendo el mismo proyecto; si no, se descartan.
+  const undrainedFor = useRef<string | null>(null);
   const ownChanges = useRef(new Set<string>());
   const jitterMs = data.liveRefreshJitterMs ?? DEFAULT_LIVE_REFRESH_JITTER_MS;
   const drainIncoming = useCallback(() => {
@@ -850,8 +854,12 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       }
       const missed = missedWhileClosed(liveCursor, raw);
       live.paused = false;
+      const undrained = undrainedFor.current;
+      undrainedFor.current = null;
       if (missed) refresh();
       else live.gap = false;
+      if (undrained !== null && undrained !== data.project.id) incoming.current = [];
+      else if (undrained !== null && !missed) drainIncoming();
     });
     source.addEventListener("change", (e) => {
       heard();
@@ -884,7 +892,10 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
       }, 200);
     });
     return () => {
-      if (timer) clearTimeout(timer);
+      if (timer) {
+        clearTimeout(timer);
+        undrainedFor.current = data.project.id;
+      }
       if (retry) clearTimeout(retry);
       source.close();
       live.open = false;
@@ -1119,6 +1130,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
     // Las vecinas que van al servidor son tareas de verdad: una copia provisional (dropCopy) junto al hueco se salta.
     const { placement, group } = realPlacement(askedPlacement, asked);
     if (!group.length || sameOrder(withoutPendingCopies(itemsNow()[columnId] ?? NO_IDS), placement.list)) return;
+    if (tooManySelected(group.length)) return;
     if (!(await confirmLeaveReview(group, columnId))) {
       if (focusId) focusCard(focusId);
       return;
@@ -1260,10 +1272,16 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   );
 
   // --- Movimiento masivo ------------------------------------------------------
+  // Más de las que admite una acción en bloque: se avisa antes de tocar nada (si no, desaparecían y volvían con un error).
+  const tooManySelected = (n: number) => {
+    if (n <= MAX_SELECTION_ACTION) return false;
+    toast(t("Como mucho 500 tarjetas a la vez: selecciona menos."), "error");
+    return true;
+  };
   const moveSelected = async (columnId: string) => {
     const selected = stores.selection.get();
     const ids = [...selected];
-    if (!ids.length) return;
+    if (!ids.length || tooManySelected(ids.length)) return;
     if (!(await confirmLeaveReview(ids, columnId))) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     // Optimista: al final de la columna destino, conservando el orden actual.
@@ -1291,7 +1309,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   const archiveSelected = async () => {
     const ids = [...stores.selection.get()];
-    if (!ids.length) return;
+    if (!ids.length || tooManySelected(ids.length)) return;
     const before = new Map(tasks.filter((t) => ids.includes(t.id)).map((t) => [t.id, t]));
     const gone = new Set(ids);
     setTasks((prev) => prev.filter((t) => !gone.has(t.id)));
@@ -1319,7 +1337,7 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
 
   const deleteSelected = async () => {
     const ids = [...stores.selection.get()];
-    if (!ids.length) return;
+    if (!ids.length || tooManySelected(ids.length)) return;
     const ok = await confirm({
       title: ids.length === 1 ? t("Borrar tarea") : t("Borrar tareas"),
       message: ids.length === 1 ? t("¿Borrar la tarea seleccionada y sus adjuntos? Puedes deshacerlo justo después.") : t("¿Borrar las {n} tareas seleccionadas y sus adjuntos? Puedes deshacerlo justo después.", { n: ids.length }),

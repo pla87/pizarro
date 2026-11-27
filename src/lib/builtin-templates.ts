@@ -327,6 +327,9 @@ export function comparable(t: TemplateData): string {
     // Y con el tipo por defecto de las columnas: las de serie sin ninguno (las sembradas antes) conservan su huella, así que
     // las sin modificar reciben los nuevos al arrancar (upgradeBuiltinTemplates) y poner uno a mano cuenta como modificarla.
     ...(t.columns.some((c) => c.defaultKind) ? { defaults: t.columns.map((c) => c.defaultKind ?? null) } : {}),
+    // Igual con el límite WIP y el plazo de «Asignación a persona» (las de serie no traen ninguno): cambiarlos cuenta como
+    // modificarla (antes se perdían al actualizarla o al crearla con la interfaz en inglés).
+    ...(t.columns.some((c) => c.wipLimit != null || c.assignDueDays != null) ? { limits: t.columns.map((c) => [c.wipLimit ?? null, c.assignDueDays ?? null]) } : {}),
   });
 }
 

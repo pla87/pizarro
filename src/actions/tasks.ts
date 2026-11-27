@@ -8,7 +8,7 @@ import { runAction } from "@/lib/action";
 import { assertAssignable, assertNotArchived, assertNotArchivedRow, assertProjectAccess, assertTaskAccess, loadTaskWithAccess, visibleProjectsWhere } from "@/lib/access";
 import { appTimeZone, attachmentTotals, listKinds, loadBoardTask, loadBoardTasksByIds, projectClients, projectUsers } from "@/lib/board";
 import { MAX_BULK_TASKS } from "@/lib/bulk";
-import { EVERGREEN_COLUMN_ROLES, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
+import { EVERGREEN_COLUMN_ROLES, MAX_SELECTION_ACTION, MAX_SUBTASKS, MAX_TASK_LABELS, MAX_TITLE, MAX_TITLE_UNITS } from "@/lib/constants";
 import { clampTitle, graphemeCount } from "@/lib/title-clamp";
 import { cutText } from "@/lib/graphemes";
 import { describeAction, needOwnRefresh, noteProject, noteTask, noteTasks, recordTaskEvent, skipTaskEvents, trackUndoEntry } from "@/lib/action-context";
@@ -942,10 +942,13 @@ async function applyTaskMove(user: CurrentUser, taskId: string, columnId: string
  * destino, en el orden del tablero (columna y posición), también las que ya estaban en ella; las mismas reglas que
  * moveTask si las vecinas ya no están (al final). Un solo paso de deshacer en los dos casos.
  */
+/** Mismo texto que el aviso del navegador (Board.tsx). */
+const TOO_MANY_SELECTED = "Como mucho 500 tarjetas a la vez: selecciona menos.";
+
 export async function moveTasks(taskIds: string[], columnId: string, at?: { prevId: string | null; nextId: string | null } | null) {
   return runAction({ name: "tasks.moveTasks", args: [taskIds, columnId, at] }, async () => {
     const user = await requireUser();
-    const ids = z.array(v.id).min(1).max(500).parse(taskIds);
+    const ids = z.array(v.id).min(1).max(MAX_SELECTION_ACTION, TOO_MANY_SELECTED).parse(taskIds);
     const place = at == null ? null : z.object({ prevId: v.id.nullable(), nextId: v.id.nullable() }).parse(at);
     const column = await db.column.findFirst({
       where: { id: v.id.parse(columnId), project: visibleProjectsWhere(user) },
@@ -1065,7 +1068,7 @@ export async function archiveTask(taskId: string) {
 export async function archiveTasks(taskIds: string[]) {
   return runAction({ name: "tasks.archiveTasks", args: [taskIds] }, async () => {
     const user = await requireUser();
-    const requested = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    const requested = [...new Set(z.array(v.id).min(1).max(MAX_SELECTION_ACTION, TOO_MANY_SELECTED).parse(taskIds))];
     // Las que ya no existen o no se ven (borradas desde otra pestaña, p. ej.) se ignoran en vez de fallar toda la acción.
     const tasks = await db.task.findMany({ where: { id: { in: requested }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
     if (!tasks.length) return { archived: 0, spawned: await spawnRecurrences([], user.id) };
@@ -1184,7 +1187,7 @@ export async function deleteTask(taskId: string) {
 export async function deleteTasks(taskIds: string[]) {
   return runAction({ name: "tasks.deleteTasks", args: [taskIds] }, async () => {
     const user = await requireUser();
-    const requested = [...new Set(z.array(v.id).min(1).max(500).parse(taskIds))];
+    const requested = [...new Set(z.array(v.id).min(1).max(MAX_SELECTION_ACTION, TOO_MANY_SELECTED).parse(taskIds))];
     // Las que ya no existen o no se ven se ignoran en vez de fallar toda la acción.
     const tasks = await db.task.findMany({ where: { id: { in: requested }, project: visibleProjectsWhere(user) }, select: { id: true, projectId: true } });
     if (!tasks.length) return { deleted: 0 };
