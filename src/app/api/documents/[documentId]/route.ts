@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { findDocumentForUser } from "@/lib/documents";
+import { findDocumentWithNoteForUser } from "@/lib/documents";
 import { documentDownloadName } from "@/lib/document-kind";
 import { ifNoneMatchHas } from "@/lib/etag";
 import { logEvent } from "@/lib/log";
@@ -38,8 +38,13 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
   const { documentId } = await ctx.params;
   if (!/^[a-z0-9]{1,40}$/i.test(documentId)) return new Response(t("No encontrado"), { status: 404 });
 
-  const doc = await findDocumentForUser(user, documentId);
+  const doc = await findDocumentWithNoteForUser(user, documentId);
   if (!doc) return new Response(t("No encontrado"), { status: 404 });
+  // Pedido por un <img> (una imagen de Documentación en una nota, una descripción o un comentario): solo se sirven las
+  // imágenes, y nunca cuenta como descarga. Un `![x](/api/documents/<id de un .zip>)` registraba una «descarga» a nombre
+  // de cada persona que abría la tarea. Sec-Fetch-Dest lo pone el navegador y una página no lo puede falsear.
+  const asImage = req.headers.get("sec-fetch-dest") === "image";
+  if (asImage && doc.kind !== "IMAGE") return new Response(t("No encontrado"), { status: 404 });
 
   // Una nota (escrita en la app) no tiene fichero: se sirve su texto, como un .md, con la versión en el ETag.
   const noteBody = doc.noteContent !== null ? Buffer.from(doc.noteContent, "utf8") : null;
@@ -60,7 +65,7 @@ async function serve(req: Request, ctx: { params: Promise<{ documentId: string }
   }
   const url = new URL(req.url);
   // Solo se vuelve a descargar lo explícito o lo que no tiene vista previa; ver un documento no deja rastro en el log.
-  const download = doc.kind === "OTHER" || url.searchParams.has("download");
+  const download = !asImage && (doc.kind === "OTHER" || url.searchParams.has("download"));
   if (download && !head) {
     logEvent({
       category: "api", action: "documents.download", label: { k: "Descarga de «{name}»", p: { name: doc.name } },

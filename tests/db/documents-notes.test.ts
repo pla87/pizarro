@@ -11,6 +11,7 @@ import { createNote, deleteDocument, deleteDocumentForever, getNote, renameDocum
 import { DOCUMENTS_MAX_PER_PROJECT, NOTE_MAX_CHARS } from "../../src/lib/document-kind";
 import { listProjectDocumentsOf, listTrashedDocumentsOf, purgeTrashedDocuments } from "../../src/lib/documents";
 import { storageUsage } from "../../src/lib/storage-usage";
+import { saveDocumentFile } from "../../src/lib/uploads";
 import { flushLogs } from "../../src/lib/log";
 import { GET as fileRoute, HEAD as fileHead } from "../../src/app/api/documents/[documentId]/route";
 
@@ -83,6 +84,19 @@ describe("notas: crear y guardar", () => {
     await asUser(b, async () => assert.deepEqual(expectOk(await saveNote(note.id, "Texto de B", 1)), { status: "saved", version: 2, size: 10 }));
     // A, que seguía en la versión 1, ahora es quien recibe el aviso.
     await asUser(a, async () => assert.equal(expectOk(await saveNote(note.id, "Texto de A, segunda", 1)).status, "conflict"));
+  });
+
+  test("un guardado que se hizo pero cuya respuesta se perdió: el reintento con la versión vieja es un éxito, no un conflicto", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    await loginAs(m);
+    const note = expectOk(await createNote(f.project.id));
+    expectOk(await saveNote(note.id, "uno", 0));
+    // El navegador no recibió la respuesta y reintenta lo mismo sobre la versión 0.
+    assert.deepEqual(expectOk(await saveNote(note.id, "uno", 0)), { status: "saved", version: 1, size: 3 });
+    assert.equal((await doc(note.id)).noteVersion, 1);
+    // Con otro texto, sí es un conflicto.
+    assert.equal(expectOk(await saveNote(note.id, "dos", 0)).status, "conflict");
   });
 
   test("guardados simultáneos sobre la misma versión: solo uno entra", async () => {
@@ -170,6 +184,27 @@ describe("notas: descarga, papelera y búsqueda", () => {
     assert.equal((await fetchDoc(note.id, "", { "if-none-match": etag })).status, 200);
   });
 
+  test("pedido por un <img>: solo se sirve una imagen y nunca cuenta como descarga", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    await loginAs(m);
+    const zip = await db.projectDocument.create({ data: { projectId: f.project.id, name: "datos.zip", mimeType: "application/zip", size: 3, kind: "OTHER", createdById: m.id } });
+    const png = await db.projectDocument.create({ data: { projectId: f.project.id, name: "foto.webp", mimeType: "image/webp", size: 3, kind: "IMAGE", createdById: m.id } });
+    await saveDocumentFile(zip.id, Buffer.from("zip"));
+    await saveDocumentFile(png.id, Buffer.from("img"));
+    const img = { "sec-fetch-dest": "image" };
+    assert.equal((await fetchDoc(zip.id, "", img)).status, 404);
+    const ok = await fetchDoc(png.id, "?download=1", img);
+    assert.equal(ok.status, 200);
+    assert.match(ok.headers.get("content-disposition")!, /^inline;/);
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "documents.download", projectId: f.project.id } }), 0);
+    // Sin la cabecera, el .zip sigue siendo una descarga registrada.
+    assert.equal((await fetchDoc(zip.id)).status, 200);
+    await flushLogs();
+    assert.equal(await db.appLog.count({ where: { action: "documents.download", projectId: f.project.id } }), 1);
+  });
+
   test("papelera: no se guarda mientras está ahí; se ve, se restaura y se borra para siempre como las demás", async () => {
     const m = await makeUser();
     const f = await makeProject({ members: [m] });
@@ -177,7 +212,10 @@ describe("notas: descarga, papelera y búsqueda", () => {
     const note = expectOk(await createNote(f.project.id));
     expectOk(await saveNote(note.id, "texto", 0));
     expectOk(await deleteDocument(note.id));
-    expectFail(await saveNote(note.id, "texto nuevo", 1), /en la papelera/);
+    const inTrash = await saveNote(note.id, "texto nuevo", 1);
+    expectFail(inTrash, /en la papelera/);
+    // Con su código: el editor deja de guardar solo (no reintenta en cada pausa).
+    assert.equal(!inTrash.ok && "code" in inTrash ? inTrash.code : null, "note_trashed");
     assert.deepEqual(expectOk(await getNote(note.id)), { content: "texto", version: 1, trashed: true });
     assert.equal((await listTrashedDocumentsOf(f.project.id)).find((d) => d.id === note.id)?.note, true);
     assert.equal((await fetchDoc(note.id)).status, 200); // vista previa desde la papelera
@@ -220,6 +258,9 @@ describe("notas: descarga, papelera y búsqueda", () => {
     assert.deepEqual(expectOk(await searchNotes(f.project.id, "reunion cliente")), []);
     assert.deepEqual(expectOk(await searchNotes(f.project.id, "cliente")), [a.id]);
     assert.deepEqual(expectOk(await searchNotes(f.project.id, "  ")), []);
+    // Con una sola letra no se busca en el texto (casi todo coincidiría).
+    assert.deepEqual(expectOk(await searchNotes(f.project.id, "c")), []);
+    assert.deepEqual(expectOk(await searchNotes(f.project.id, "cl")), [a.id]);
     // «%» y «_» son letras, no comodines.
     assert.deepEqual(expectOk(await searchNotes(f.project.id, "%")), []);
   });

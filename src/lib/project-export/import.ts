@@ -221,7 +221,10 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     : [...new Set([...userMap.values()].filter((m): m is { id: string; role: "ADMIN" | "MEMBER" } => !!m && m.role !== "ADMIN" && m.id !== user.id).map((m) => m.id))];
   // Ref de cada adjunto en el archivo → id del importado (se llena al importar los ficheros, antes de escribir los textos).
   const attachmentIds = new Map<string, string>();
-  const text = (s: string) => remapAttachmentRefs(mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; }), attachmentIds);
+  // Igual con los documentos de Documentación (`/api/documents/<ref>` en notas, descripciones y comentarios).
+  const documentIds = new Map<string, string>();
+  const text = (s: string) =>
+    remapDocumentRefs(remapAttachmentRefs(mapMentions(s, (name, ref) => { const id = uid(ref); return id ? mentionToken(name, id) : `@${name}`; }), attachmentIds), documentIds);
 
   const projectId = newId();
   const fileMaxMb = clamp(data.project.fileMaxMb, FILE_MAX_MIN_MB, FILE_MAX_MAX_MB);
@@ -364,7 +367,6 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     // Las notas, al final: su texto puede citar imágenes de la Documentación (`/api/documents/<ref>`), que así ya tienen id.
     const docs: (ProjectExportData["documents"][number] & { deletedAt?: string; deletedBy?: string | null })[] = [...data.documents, ...trash]
       .sort((a, b) => Number(!!a.note) - Number(!!b.note));
-    const documentIds = new Map<string, string>();
     for (const d of docs) {
       fileStart();
       if (tooBig(d.name, d.file)) continue;
@@ -378,9 +380,9 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
         ...(d.deletedAt ? { deletedAt: date(d.deletedAt), deletedById: uid(d.deletedBy ?? null) } : { pinnedAt: d.pinnedAt ? date(d.pinnedAt) : null }),
       };
       // Una nota vuelve a ser nota (texto en la fila, sin fichero) si es texto UTF-8 dentro del máximo; si no, entra como un .md subido.
-      const noteText = d.note && looksLikeText(buf) ? buf.toString("utf8") : null;
-      if (noteText !== null && noteText.length <= NOTE_MAX_CHARS) {
-        const content = remapDocumentRefs(text(noteText), documentIds);
+      // El tope se mira ya con las refs cambiadas por los ids (más largos): si no, entraba una nota que luego no se podía guardar.
+      const content = d.note && looksLikeText(buf) ? text(buf.toString("utf8")) : null;
+      if (content !== null && content.length <= NOTE_MAX_CHARS) {
         const size = noteBytes(content);
         documentIds.set(d.ref, id);
         writtenBytes += size;

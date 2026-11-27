@@ -3,7 +3,7 @@
 // la página la nota sigue con su texto (Markdown pintado) y lo escrito justo antes de cerrar el visor también llega;
 // (fijar) «Fijar en «Notas generales»» del menú ⋯ la sube a la sección «Notas generales» y el botón del visor la quita;
 // (buscar) el buscador encuentra la nota por una palabra de su texto sin tildes ni mayúsculas, y no por otra; (conflicto)
-// dos pestañas editando a la vez: la segunda recibe «Otra persona ha cambiado esta nota…» y «Quedarme con la mía» guarda
+// dos pestañas editando a la vez: la segunda recibe «Esta nota ha cambiado en otra pestaña o por otra persona…», con el foco, y «Quedarme con la mía» guarda
 // la suya sin perder nada; (visual) con el editor con barra (modo visual) también se guarda; (papelera) enviarla a la
 // papelera desde el menú ⋯ la quita de la lista, en la papelera se ve su texto y se restaura. Misma base y servidor que
 // tablero-e2e.mjs:
@@ -108,7 +108,7 @@ if (only.includes("fijar") && noteId) {
   L.check("FIJAR: queda en la base", !!(await noteById(noteId))?.pinnedAt);
   await openById(page, noteId);
   const pinBtn = U.dialog(page).getByTestId("doc-viewer-pin");
-  L.eq("FIJAR: el botón del visor dice que está fijada", await pinBtn.getAttribute("aria-pressed"), "true");
+  L.eq("FIJAR: el botón del visor dice que la quita (sin aria-pressed)", [await pinBtn.getAttribute("aria-label"), await pinBtn.getAttribute("aria-pressed")], ["Quitar de «Notas generales»", null]);
   await pinBtn.click();
   await L.checkEventually("FIJAR: desde el visor se quita", async () => !(await noteById(noteId))?.pinnedAt);
   await closeViewer(page);
@@ -153,9 +153,10 @@ if (only.includes("conflicto") && noteId) {
   await b.pressSequentially(" Cambio de B.", { delay: 5 });
   const notice = U.dialog(p2).getByTestId("note-conflict");
   await notice.waitFor({ timeout: 10000 });
-  L.check("CONFLICTO: aviso «Otra persona ha cambiado esta nota…»", (await notice.textContent())?.includes("Otra persona ha cambiado esta nota"));
+  L.check("CONFLICTO: aviso «Esta nota ha cambiado en otra pestaña o por otra persona…»", (await notice.textContent())?.includes("Esta nota ha cambiado en otra pestaña o por otra persona"));
+  L.check("CONFLICTO: el aviso se lleva el foco", await notice.evaluate((el) => el === document.activeElement));
   L.eq("CONFLICTO: no se ha pisado el texto de A", (await noteById(noteId)).noteContent, afterA);
-  await notice.getByText("Ver su versión").click();
+  await notice.getByText("Ver la otra versión").click();
   L.check("CONFLICTO: se ve la versión de A", (await notice.locator("pre").textContent())?.includes("Cambio de A."));
   await notice.getByRole("button", { name: "Quedarme con la mía" }).click();
   await L.checkEventually("CONFLICTO: «Quedarme con la mía» guarda lo de B", async () => (await noteById(noteId)).noteContent?.endsWith("Cambio de B."), { timeout: 10000 });

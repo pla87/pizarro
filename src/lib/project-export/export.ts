@@ -219,12 +219,14 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
       })
     : [];
 
-  // Documentación y su papelera. Sin ficheros no tiene sentido: solo con adjuntos.
+  // Documentación y su papelera. Los ficheros, solo con adjuntos; las notas (texto en la base, pocos KB) siempre: son texto
+  // escrito en la app, como las descripciones.
   const documentRows = [];
-  if (options.attachments) {
-    const live = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  {
+    const which: Prisma.ProjectDocumentWhereInput = options.attachments ? { projectId } : { projectId, noteContent: { not: null } };
+    const live = await db.projectDocument.findMany({ where: { ...which, deletedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     // De la papelera, los borrados más recientes (los antiguos se purgan solos), en orden de creación como los demás.
-    const trashed = (await db.projectDocument.findMany({ where: { projectId, deletedAt: { not: null } }, orderBy: [{ deletedAt: "desc" }, { id: "asc" }], take: TRASH_EXPORT_MAX }))
+    const trashed = (await db.projectDocument.findMany({ where: { ...which, deletedAt: { not: null } }, orderBy: [{ deletedAt: "desc" }, { id: "asc" }], take: TRASH_EXPORT_MAX }))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
     documentRows.push(...live, ...trashed);
   }
@@ -422,7 +424,11 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
   // Personas citadas (las que ya no existen se omiten: sus refs quedan sin resolver y al importar salen como texto).
   const userById = new Map(userRows.map((u) => [u.id, u]));
   // Menciones: la de una persona que existe lleva su ref; la de una que ya no, queda como texto.
-  const fixMentions = (text: string) => remapAttachmentRefs(mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`)), attachmentRefs);
+  // Documentos exportados: id → ref (`x1`, `x2`…). Las imágenes de Documentación (`/api/documents/<id>`) de los textos
+  // (notas, descripciones, comentarios) se escriben con la ref y al importar apuntan al documento importado.
+  const documentRefs = new Map(documentRows.map((d, i) => [d.id, `x${i + 1}`]));
+  const fixMentions = (text: string) =>
+    remapDocumentRefs(remapAttachmentRefs(mapMentions(text, (name, id) => (userById.has(id) ? `@[${name}](user:${users.ref(id)})` : `@${name}`)), attachmentRefs), documentRefs);
   for (const t of tasks) {
     t.title = fixMentions(t.title);
     t.description = fixMentions(t.description);
@@ -431,17 +437,16 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
   // Las imágenes del histórico de releases también apuntan a adjuntos de tareas.
   for (const r of releases) r.content = remapAttachmentRefs(r.content, attachmentRefs);
 
-  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
+  // Documentación y su papelera (con quién y cuándo borró cada documento): los ficheros solo con adjuntos, las notas siempre.
   // Una nota (texto en la base, sin fichero) viaja como un fichero .md más, marcada con `note`: una versión anterior que
   // no conoce la marca la importa como un Markdown subido. Su texto lleva las menciones y las imágenes con refs, como las
   // descripciones; las imágenes de la propia Documentación (`/api/documents/<id>`) con la ref del documento (`x3`).
   const documents: ProjectExportData["documents"] = [];
   const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
-  const documentRefs = new Map(documentRows.map((d, i) => [d.id, `x${i + 1}`]));
   for (const d of documentRows) {
     let info: FileInfo | null;
     if (d.noteContent !== null) {
-      const body = Buffer.from(remapDocumentRefs(fixMentions(d.noteContent), documentRefs), "utf8");
+      const body = Buffer.from(fixMentions(d.noteContent), "utf8");
       info = await addFile(files, bufferStream(body), async () => true, onFile);
     } else {
       const file = documentPath(d.id);
@@ -621,18 +626,18 @@ export async function estimateProjectExport(projectId: string, options: ExportOp
     db.task.count({ where: taskWhere }),
     all ? db.task.count({ where: { projectId, archivedAt: { not: null } } }) : 0,
     all ? db.release.count({ where: { projectId } }) : 0,
-    db.projectDocument.count({ where: { projectId } }),
+    db.projectDocument.count({ where: options.attachments ? { projectId } : { projectId, noteContent: { not: null } } }),
     options.attachments ? db.taskAttachment.aggregate({ _sum: { size: true }, _count: true, where: { task: taskWhere } }) : null,
     options.attachments && all ? db.releaseAttachment.aggregate({ _sum: { size: true }, _count: true, where: { release: { projectId } } }) : null,
     // Con la papelera, que también va en el archivo.
-    options.attachments ? db.projectDocument.aggregate({ _sum: { size: true }, _count: true, where: { projectId } }) : null,
+    db.projectDocument.aggregate({ _sum: { size: true }, _count: true, where: options.attachments ? { projectId } : { projectId, noteContent: { not: null } } }),
   ]);
   const parts = [ta, ra, da];
   const attachments = parts.reduce((n, p) => n + (p?._count ?? 0), 0);
   // Los adjuntos también ocupan una entrada en project.json (nombre, tipo, huella…) y otra en el ZIP.
   const attachmentRows = (ta?._count ?? 0) * ROW_BYTES.attachment + (ra?._count ?? 0) * ROW_BYTES.releaseAttachment + (da?._count ?? 0) * ROW_BYTES.document;
   return {
-    tasks, archivedTasks, releases, documents: options.attachments ? documents : 0,
+    tasks, archivedTasks, releases, documents,
     attachments,
     bytes: parts.reduce((n, p) => n + (p?._sum.size ?? 0), 0),
     dataBytes: (await estimateDataBytes(projectId, options)) + attachmentRows,

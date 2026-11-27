@@ -11,6 +11,8 @@ export const DOCUMENT_TRASH_DAYS = 7;
 export const DOCUMENT_PREVIEW_MAX_BYTES = 1024 * 1024;
 /** Máximo de caracteres del texto de una nota escrita en la app (Documentación → «Nueva nota»). */
 export const NOTE_MAX_CHARS = 200_000;
+/** Letras a partir de las que el buscador de Documentación mira también el texto de las notas (con una, casi todo coincide). */
+export const NOTE_SEARCH_MIN_CHARS = 2;
 /** Bytes que ocupa el texto de una nota (lo que cuenta en la cuota, como el tamaño de un fichero). */
 export const noteBytes = (text: string): number => new TextEncoder().encode(text).length;
 

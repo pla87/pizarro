@@ -16,7 +16,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { MessageWithLinks, useToast } from "@/components/ui/Toast";
 import { cn } from "@/components/ui/cn";
 import { useIntlLocale, useT } from "@/i18n/client";
-import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, isPreviewable, type DocumentKindName } from "@/lib/document-kind";
+import { DOCUMENT_PREVIEW_MAX_BYTES, DOCUMENT_TRASH_DAYS, decodeDocumentText, isPreviewable, NOTE_SEARCH_MIN_CHARS, type DocumentKindName } from "@/lib/document-kind";
 import type { DocumentRow, TrashedDocumentRow } from "@/lib/documents";
 import type { EditorModeValue, UserOption } from "@/lib/types";
 import { formatDate } from "@/lib/format";
@@ -66,7 +66,7 @@ const iconOf = (d: { kind: DocumentKindName; note: boolean }) => (d.note ? NOTE_
 const NoteEditor = lazyDialog(() => import("@/components/docs/NoteEditor"), (m) => m.NoteEditor);
 
 /** Espera tras dejar de escribir en el buscador antes de buscar también en el texto de las notas. */
-const NOTE_SEARCH_DELAY_MS = 250;
+const NOTE_SEARCH_DELAY_MS = 400;
 
 let nextKey = 1;
 
@@ -87,7 +87,16 @@ export function DocsManager({ projectId, projectName, documents: listed, trashed
   const [creating, setCreating] = useState(false);
   // La recién creada se abre en modo edición solo esa vez.
   const [freshId, setFreshId] = useState<string | null>(null);
-  const documents = useMemo(() => (created && !listed.some((d) => d.id === created.id) ? [created, ...listed] : listed), [created, listed]);
+  // Solo mientras la lista del servidor no la traiga: después manda la lista (si la nota ya no está en ella, p. ej. porque
+  // se mandó a la papelera, tampoco sale aquí).
+  const listedCreated = !!created && listed.some((d) => d.id === created.id);
+  // Ya la trae: se olvida (durante el dibujo, como recomienda React para un estado que se deriva de las props). Si no, al
+  // borrarla para siempre otra persona volvería a salir.
+  if (listedCreated) setCreated(null);
+  const documents = useMemo(
+    () => (created && !listedCreated && !trashed.some((d) => d.id === created.id) ? [created, ...listed] : listed),
+    [created, listedCreated, listed, trashed],
+  );
   // Notas cuyo texto contiene lo buscado (lo pide al servidor; el nombre se filtra aquí).
   const [noteHits, setNoteHits] = useState<{ q: string; ids: Set<string> } | null>(null);
   // Cola de subida en serie: cada archivo es una petición y el servidor aplica sus límites a cada una.
@@ -185,7 +194,7 @@ export function DocsManager({ projectId, projectName, documents: listed, trashed
   // También en el texto de las notas: lo busca el servidor, con una pequeña espera mientras se escribe.
   useEffect(() => {
     const q = query.trim();
-    if (!q || !hasNotes) return;
+    if (q.length < NOTE_SEARCH_MIN_CHARS || !hasNotes) return;
     const timer = setTimeout(() => {
       void searchNotes(projectId, q).catch(() => null).then((res) => {
         if (res?.ok) setNoteHits({ q, ids: new Set(res.data) });
@@ -586,7 +595,8 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
           </span>
           <span className="flex flex-wrap gap-2">
             <button
-              type="button" className="btn-secondary" onClick={onPin} disabled={pinBusy} aria-pressed={!!doc.pinnedAt} data-testid="doc-viewer-pin"
+              // Sin aria-pressed: la etiqueta ya dice lo que hará (con las dos cosas el lector anunciaba el estado dos veces).
+              type="button" className="btn-secondary" onClick={onPin} disabled={pinBusy} data-testid="doc-viewer-pin"
               title={doc.pinnedAt ? t("Quitar de «Notas generales»") : t("Fijar en «Notas generales»")}
               aria-label={doc.pinnedAt ? t("Quitar de «Notas generales»") : t("Fijar en «Notas generales»")}
             >
@@ -606,7 +616,7 @@ function DocViewer({ doc, docs, fromLink, projectId, currentUserId, editorMode, 
       {doc.note ? (
         <NoteEditor
           docId={doc.id} projectId={projectId} currentUserId={currentUserId} editorMode={editorMode} users={users} fileMaxMb={fileMaxMb} startEditing={isNew}
-          onSaved={(n) => (closed.current ? safeRefresh() : setSize(n))} onUploaded={safeRefresh}
+          onSaved={(n) => (closed.current ? safeRefresh() : setSize(n))} onUploaded={safeRefresh} onTrashed={safeRefresh}
         />
       ) : (
         <DocPreview doc={doc} name={name} src={src} projectId={projectId} docs={docs} fromLink={fromLink} />

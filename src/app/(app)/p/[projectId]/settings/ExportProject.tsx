@@ -129,7 +129,7 @@ export function ExportProject({ projectId }: { projectId: string }) {
           <fieldset className="space-y-2">
             <legend className="label">{t("Adjuntos")}</legend>
             {choice("export-attachments", "with", attachments, setAttachments, t("Con adjuntos"), t("Incluye los adjuntos de las tarjetas y de las releases y los archivos de Documentación. El archivo pesa más."))}
-            {choice("export-attachments", "without", attachments, setAttachments, t("Sin adjuntos"), t("Solo los datos: rápido y ligero."))}
+            {choice("export-attachments", "without", attachments, setAttachments, t("Sin adjuntos"), t("Solo los datos y las notas de Documentación: rápido y ligero."))}
           </fieldset>
           <fieldset className="space-y-2">
             <legend className="label">{t("Alcance")}</legend>

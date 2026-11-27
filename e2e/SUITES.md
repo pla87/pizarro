@@ -563,7 +563,7 @@ texto; lo escrito se guarda solo al dejar de escribir (el indicador dice «Guard
 fichero) y el lápiz del visor le cambia el título. Tras recargar se ve pintada, y lo escrito justo antes de cerrar el visor
 también llega. «Fijar en «Notas generales»» (menú ⋯) la sube a esa sección y el botón del visor la quita. El buscador la
 encuentra por una palabra de su texto sin tildes ni mayúsculas («CANCION» → «Canción») y no por otra. Dos pestañas
-editando a la vez: la segunda recibe «Otra persona ha cambiado esta nota…», ve la versión de la otra y «Quedarme con la
+editando a la vez: la segunda recibe «Esta nota ha cambiado en otra pestaña o por otra persona…» (con el foco), ve la versión de la otra y «Quedarme con la
 mía» guarda la suya sin pisar nada antes. Con el editor con barra (modo visual) también se guarda. Enviarla a la papelera
 desde ⋯ la quita de la lista; en la papelera se ve su texto y se restaura. Misma base y servidor:
 

@@ -13,6 +13,7 @@ import { ADMIN_EXPORT, db, loginAs, logout, makeKind, makeProject, makeTask, mak
 import { buildProjectExport, estimateProjectExport, exportFileName, projectSlug, type ProjectExport } from "../../src/lib/project-export/export";
 import { freeProjectName, importProjectFile, safeFileName, threadComments, type ImportUser } from "../../src/lib/project-export/import";
 import { clampTitle } from "../../src/lib/title-clamp";
+import { NOTE_MAX_CHARS } from "../../src/lib/document-kind";
 import { parseImportJournal, recoverImportJournals } from "../../src/lib/project-export/import-journal";
 import { cleanOrphanFiles } from "../../src/lib/orphan-files";
 import { LIMITS, projectDataSchema, type ExportManifest, type ExportOptions, type ProjectExportData } from "../../src/lib/project-export/types";
@@ -492,6 +493,55 @@ describe("exportar e importar: notas de Documentación", () => {
     const plain = await db.projectDocument.findFirstOrThrow({ where: { projectId: s2.projectId } });
     assert.equal(plain.noteContent, null);
     assert.equal((await readFile(documentPath(plain.id))).toString(), "# Hola");
+  });
+
+  test("«Sin adjuntos» lleva las notas (no los ficheros); las imágenes de Documentación de una descripción apuntan a la importada", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const f = await makeProject({ members: [admin] });
+    const img = await webp();
+    const image = await db.projectDocument.create({ data: { projectId: f.project.id, name: "plano.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdById: admin.id } });
+    await saveDocumentFile(image.id, img);
+    await db.projectDocument.create({ data: { projectId: f.project.id, name: "Ideas", mimeType: "text/markdown", size: 5, kind: "MARKDOWN", createdById: admin.id, noteContent: "ideas" } });
+    const task = await makeTask(f);
+    await db.task.update({ where: { id: task.id }, data: { description: `Ver ![plano](/api/documents/${image.id})` } });
+
+    // Sin adjuntos: solo la nota (con su fichero en el ZIP), y la estimación la cuenta.
+    const light = await buildProjectExport(f.project.id, { attachments: false, scope: "board" }, ADMIN_EXPORT);
+    const lightData = projectJsonOf(light);
+    assert.deepEqual(lightData.documents.map((d) => [d.name, d.note]), [["Ideas", true]]);
+    assert.equal((await estimateProjectExport(f.project.id, { attachments: false, scope: "board" })).documents, 1);
+    const s1 = await importProjectFile(await writeExport(light), asImporter(admin), { isPrivate: true });
+    assert.deepEqual((await db.projectDocument.findMany({ where: { projectId: s1.projectId } })).map((d) => [d.name, d.noteContent]), [["Ideas", "ideas"]]);
+
+    // Con adjuntos: la descripción sale con la ref del documento y vuelve con el id del importado.
+    const full = await buildProjectExport(f.project.id, { attachments: true, scope: "board" }, ADMIN_EXPORT);
+    const fullData = projectJsonOf(full);
+    const ref = fullData.documents.find((d) => d.name === "plano.webp")!.ref;
+    assert.equal(fullData.tasks[0]!.description, `Ver ![plano](/api/documents/${ref})`);
+    const s2 = await importProjectFile(await writeExport(full), asImporter(admin), { isPrivate: true });
+    const newImage = await db.projectDocument.findFirstOrThrow({ where: { projectId: s2.projectId, name: "plano.webp" } });
+    const newTask = await db.task.findFirstOrThrow({ where: { projectId: s2.projectId } });
+    assert.equal(newTask.description, `Ver ![plano](/api/documents/${newImage.id})`);
+  });
+
+  test("una nota que con los ids importados pasaría del máximo de caracteres entra como un .md subido", async () => {
+    const admin = await makeUser({ role: "ADMIN" });
+    const at = "2026-01-02T03:04:05.000Z";
+    const img = await webp();
+    // Cerca del tope y con muchas refs cortas (`x1`) que al importar pasan a ser ids largos.
+    const refs = "![i](/api/documents/x1)".repeat(200);
+    const md = Buffer.from(refs + "a".repeat(NOTE_MAX_CHARS - refs.length));
+    const data = minimal([], {
+      documents: [
+        { ref: "x1", name: "i.webp", mimeType: "image/webp", size: img.length, kind: "IMAGE", createdBy: null, createdAt: at, updatedAt: at, file: sha(img) },
+        { ref: "x2", name: "Larga", mimeType: "text/markdown", size: md.length, kind: "MARKDOWN", createdBy: null, createdAt: at, updatedAt: at, file: sha(md), note: true },
+      ],
+    });
+    const s = await importProjectFile(await craft(data, [img, md]), asImporter(admin), { isPrivate: true });
+    const long = await db.projectDocument.findFirstOrThrow({ where: { projectId: s.projectId, name: "Larga" } });
+    assert.equal(long.noteContent, null);
+    assert.equal(long.kind, "MARKDOWN");
+    assert.equal((await readFile(documentPath(long.id))).length, md.length);
   });
 });
 

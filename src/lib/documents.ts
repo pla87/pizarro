@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { visibleProjectsWhere } from "./access";
 import { db } from "./db";
-import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT, NOTE_MAX_CHARS, noteBytes, sanitizeDocumentName, type DocumentKindName } from "./document-kind";
+import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT, NOTE_MAX_CHARS, NOTE_SEARCH_MIN_CHARS, noteBytes, sanitizeDocumentName, type DocumentKindName } from "./document-kind";
 import { uploadWriteError } from "./disk-space";
 import { effectiveFileMaxMb } from "./upload-size";
 import { AppError, notFound } from "./errors";
@@ -100,6 +100,17 @@ export async function listTrashedDocumentsOf(projectId: string, now: Date = new 
  * Incluye los de la papelera (`deletedAt` no nulo): se pueden previsualizar desde ella.
  */
 export async function findDocumentForUser(user: CurrentUser, documentId: string) {
+  return db.projectDocument.findFirst({
+    where: { id: documentId, project: visibleProjectsWhere(user) },
+    select: { id: true, name: true, mimeType: true, size: true, kind: true, projectId: true, deletedAt: true, noteVersion: true, pinnedAt: true },
+  });
+}
+
+/**
+ * Como findDocumentForUser, con el texto de la nota (`noteContent`; null si es un documento subido). Aparte para que
+ * renombrar, fijar o mandar a la papelera no lean hasta 200.000 caracteres: solo la ruta del documento y las notas.
+ */
+export async function findDocumentWithNoteForUser(user: CurrentUser, documentId: string) {
   return db.projectDocument.findFirst({
     where: { id: documentId, project: visibleProjectsWhere(user) },
     select: { id: true, name: true, mimeType: true, size: true, kind: true, projectId: true, deletedAt: true, noteContent: true, noteVersion: true, pinnedAt: true },
@@ -302,7 +313,7 @@ export async function createNoteRow(user: CurrentUser, projectId: string, name: 
 
 /** Texto y versión de una nota a la que el usuario tiene acceso (también en la papelera, para verla). */
 export async function getNoteForUser(user: CurrentUser, documentId: string) {
-  const doc = await findDocumentForUser(user, documentId);
+  const doc = await findDocumentWithNoteForUser(user, documentId);
   if (!doc || doc.noteContent === null) throw notFound();
   return { id: doc.id, projectId: doc.projectId, name: doc.name, content: doc.noteContent, version: doc.noteVersion, trashed: !!doc.deletedAt };
 }
@@ -319,14 +330,16 @@ type SaveNoteResult =
  */
 export async function saveNoteRow(user: CurrentUser, documentId: string, content: string, baseVersion: number): Promise<SaveNoteResult> {
   assertNoteLength(content);
-  const doc = await findDocumentForUser(user, documentId);
+  const doc = await findDocumentWithNoteForUser(user, documentId);
   if (!doc || doc.noteContent === null) throw notFound();
   if (doc.deletedAt) throw new AppError(NOTE_TRASHED, 409, "note_trashed");
   noteProject(doc.projectId);
   const conflict = (cur: { noteVersion: number; noteContent: string | null }): SaveNoteResult => ({ status: "conflict", version: cur.noteVersion, content: cur.noteContent ?? "" });
-  if (doc.noteVersion !== baseVersion) return conflict(doc);
-  // Sin cambios (p. ej. un segundo guardado al cerrar): nada que escribir.
+  // Ya tiene ese texto: nada que escribir, sea cual sea la versión que se conocía (un segundo guardado al cerrar, o el
+  // reintento de un guardado que sí se hizo pero cuya respuesta se perdió). Antes que la versión: si no, ese reintento
+  // salía como un cambio de otra persona con dos textos iguales.
   if (doc.noteContent === content) return { status: "saved", version: doc.noteVersion, size: doc.size };
+  if (doc.noteVersion !== baseVersion) return conflict(doc);
   const size = noteBytes(content);
   const res = await db.$transaction(async (tx) => {
     if (size > doc.size) {
@@ -346,6 +359,8 @@ export async function saveNoteRow(user: CurrentUser, documentId: string, content
   const cur = await db.projectDocument.findUnique({ where: { id: doc.id }, select: { noteVersion: true, noteContent: true, deletedAt: true } });
   if (!cur || cur.noteContent === null) throw notFound();
   if (cur.deletedAt) throw new AppError(NOTE_TRASHED, 409, "note_trashed");
+  // Otro guardado con el mismo texto entró a la vez: es el mismo resultado, no un cambio ajeno.
+  if (cur.noteContent === content) return { status: "saved", version: cur.noteVersion, size };
   return conflict(cur);
 }
 
@@ -365,7 +380,8 @@ export async function setDocumentPinnedRow(user: CurrentUser, documentId: string
  */
 export async function searchNoteIds(projectId: string, q: string): Promise<string[]> {
   const needle = q.trim();
-  if (!needle) return [];
+  // Con una sola letra casi todo coincide y se pliega el texto de todas las notas: no se busca en el texto.
+  if (needle.length < NOTE_SEARCH_MIN_CHARS) return [];
   const rows = await db.$queryRaw<{ id: string }[]>(Prisma.sql`
     SELECT "id" FROM "ProjectDocument" WHERE "projectId" = ${projectId} AND "deletedAt" IS NULL AND "noteContent" IS NOT NULL
       AND search_fold("noteContent") LIKE ${foldedContains(needle)}
