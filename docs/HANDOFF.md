@@ -236,16 +236,25 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 72:** v1.75.0 fusionada en `main`; la v1.74.0 ya está publicada (`stable`). **La Release de la
-v1.75.0 está pendiente** (*Actions → Release* sobre `main`; el propietario autorizó lanzarla desde la sesión en la ronda
-72 para la v1.74.0, no como norma). Hecho: aviso al revocar un enlace de «Compartir fuera», `DROP COLUMN generatedByName`
-(`20261206100000`), imágenes de la web de fuera que se abren, «Varias tareas» encima del fondo, historial desde el número
-de versión, «Casa y familia» sin «Persona 1/2» y 3 vueltas de revisión y caza de bugs (ver `HISTORIA.md`, ronda 72).
-Guardas nuevas: `GUARDAS.md` («(Ronda 72)»). Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md`.
+**Estado de la ronda 72 (sin cerrar):** la v1.74.0 está publicada (`stable` y la etiqueta `v1.74.0`). La v1.75.0 está
+hecha en la rama `ronda-72`, en la **PR #98 abierta, sin fusionar**: aviso al revocar un enlace de «Compartir fuera»,
+`DROP COLUMN generatedByName` (`20261206100000`), imágenes de la web de fuera que se abren, «Varias tareas» encima del
+fondo, historial desde el número de versión, «Casa y familia» sin «Persona 1/2» y 3 vueltas de revisión y caza de bugs
+(ver `HISTORIA.md`, ronda 72; guardas «(Ronda 72)» en `GUARDAS.md`). Ya están hechos la versión y el changelog (1.75.0), el
+manual, `HISTORIA`, `GUARDAS` y los pasos 34-38 de `docs/PRUEBAS-CHROME.md`. Pasaron en local (Windows): tsc, lint, i18n,
+knip, unitarias y con base (solo los fallos conocidos del entorno de Windows). **Falta:** la build de producción y las e2e
+completas (en el PC del propietario las paró la falta de memoria), una pasada de lo visual en navegador (copia de «Varias
+tareas» con una tarea abierta, enlace de la versión del pie, web de fuera), el PDF del manual (`node
+scripts/build-manual-pdf.mjs`, no se sube), las comprobaciones de la PR, fusionar aplastando y, con el permiso del
+propietario, la Release de la v1.75.0.
 
-**Siguiente sesión:** lo que el propietario decida (preguntas de abajo; en especial la 1, notas generales). Rondas
-propias ya aprobadas: una URL por tarea y el migrador sin Prisma. Arranque local como en `docs/handoff/LOCAL.md`, desde
-`origin/main`, con `npx prisma migrate deploy`.
+**Siguiente sesión (en la nube):** terminar la ronda 72 como dice el párrafo anterior. Partir de la rama `ronda-72`
+(`git fetch origin && git checkout ronda-72`, NO de `main`), arrancar como en §0 (base local, `npx prisma migrate deploy`),
+compilar (§4) y pasar `scripts/e2e-all.sh`. Fallos de e2e que no sean de esta ronda: compararlos con `main` antes de
+tocarlos. Las suites que dependen de «Releases» en el menú o de «Historial de versiones» en el menú ya están ajustadas
+(`interfaz-auditoria`, `interfaz-carga`, `interfaz-esqueletos`, `cuentas-borrar-restos`). Después, lo que el propietario
+decida de las preguntas de abajo (en especial la 1, notas generales). Rondas propias ya aprobadas: una URL por tarea y el
+migrador sin Prisma.
 
 **Preguntas abiertas al propietario (tras la v1.75.0)**, con la recomendación entre paréntesis:
 
