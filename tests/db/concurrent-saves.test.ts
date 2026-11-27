@@ -7,6 +7,7 @@ import { describe, test } from "node:test";
 import { db, expectFail, expectOk, loginAs, makeKind, makeProject, makeTask, makeUser, waitForLockWaiter } from "./helpers";
 import { createSession } from "../../src/lib/session";
 import { updateTask } from "../../src/actions/tasks";
+import { undoLast } from "../../src/actions/undo";
 import { deployRelease } from "../../src/actions/releases";
 import { setGeneralKindEnabled } from "../../src/actions/project-kinds";
 import { textHash } from "../../src/lib/text-version";
@@ -237,6 +238,32 @@ describe("updateTask: etiquetas cambiadas a la vez", () => {
     expectOk(await pending!);
     const labels = await db.taskLabel.findMany({ where: { taskId: task.id }, select: { labelId: true } });
     assert.deepEqual(labels.map((l) => l.labelId).sort(), [x!.id, z!.id].sort());
+  });
+
+  test("marcar una etiqueta con el cambio (no la lista): la que otra persona acaba de poner se conserva y deshacer vuelve a lo de antes", async () => {
+    const a = await makeUser({ name: "Ana" });
+    const b = await makeUser({ name: "Bea" });
+    const f = await makeProject({ members: [a, b] });
+    const task = await makeTask(f);
+    const [x, z] = await Promise.all(["X", "Z"].map((name) => db.label.create({ data: { projectId: f.project.id, name, color: "#ff0000" } })));
+    await loginAs(b);
+    let pending: ReturnType<typeof updateTask> | null = null;
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Task" WHERE "id" = ${task.id} FOR NO KEY UPDATE`;
+      await tx.taskLabel.createMany({ data: [{ taskId: task.id, labelId: x!.id }] });
+      pending = updateTask(task.id, { addLabelIds: [z!.id] });
+      await waitForLockWaiter();
+    }, { timeout: 10_000 });
+    const res = expectOk(await pending!);
+    assert.deepEqual([...res.labelIds].sort(), [x!.id, z!.id].sort());
+    const rows = async () => (await db.taskLabel.findMany({ where: { taskId: task.id }, select: { labelId: true } })).map((l) => l.labelId).sort();
+    assert.deepEqual(await rows(), [x!.id, z!.id].sort());
+    // Quitar una: solo esa.
+    expectOk(await updateTask(task.id, { removeLabelIds: [x!.id] }));
+    assert.deepEqual(await rows(), [z!.id]);
+    // Deshacer devuelve la lista de justo antes de quitar.
+    expectOk(await undoLast(f.project.id));
+    assert.deepEqual(await rows(), [x!.id, z!.id].sort());
   });
 });
 

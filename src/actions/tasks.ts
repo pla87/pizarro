@@ -500,6 +500,9 @@ const updateSchema = z.object({
   linkUrl: v.linkUrl.optional(),
   assigneeId: v.id.nullable().optional(),
   labelIds: z.array(v.id).max(MAX_TASK_LABELS).optional(),
+  /** Cambio de etiquetas en lugar de la lista entera (el detalle): se aplica sobre las de ahora, con la fila bloqueada, y dos personas a la vez no se pisan. */
+  addLabelIds: z.array(v.id).max(MAX_TASK_LABELS).optional(),
+  removeLabelIds: z.array(v.id).max(MAX_TASK_LABELS).optional(),
   dueDate: v.dayIso.optional(),
   deliverableId: v.id.nullable().optional(),
   evergreen: z.boolean().optional(),
@@ -709,6 +712,9 @@ async function applyTaskUpdate(
   {
     since = sinceSchema.parse(since);
     const data = updateSchema.parse(patch);
+    if (data.labelIds !== undefined && (data.addLabelIds || data.removeLabelIds)) throw new AppError("Etiquetas: o la lista entera o los cambios, no las dos cosas.");
+    // Cambio de etiquetas (no la lista entera): lo que queda se calcula dentro de la transacción.
+    const labelDelta = data.addLabelIds || data.removeLabelIds ? { add: [...new Set(data.addLabelIds ?? [])], remove: [...new Set(data.removeLabelIds ?? [])] } : null;
     const optionalIn = taskFieldSchema.parse(patch);
     // Una sola lectura de la tarea (con el permiso) para todo lo que sigue: archivada, conflicto de edición,
     // fija, repetición, valores para deshacer y valores anteriores para el historial y los avisos.
@@ -731,6 +737,7 @@ async function applyTaskUpdate(
     const checks = await Promise.allSettled([
       data.assigneeId ? assertAssignable(projectId, data.assigneeId) : null,
       data.labelIds ? assertLabelsInProject(data.labelIds, projectId) : null,
+      labelDelta?.add.length ? assertLabelsInProject(labelDelta.add, projectId) : null,
       assertDeliverableInProject(data.deliverableId, projectId),
       assertKindsInProject([data.kindId], projectId),
       data.blockedById ? assertCanBlock(id, data.blockedById, projectId) : null,
@@ -749,7 +756,7 @@ async function applyTaskUpdate(
         assertStartBeforeDue(enabled, optionalIn.startDate !== undefined ? optionalIn.startDate : dateToIso(task.startDate), data.dueDate !== undefined ? data.dueDate : dateToIso(task.dueDate));
       }
     }
-    const { labelIds, dueDate, recurrence, recurrenceDay, ...rest } = data;
+    const { labelIds, addLabelIds: _add, removeLabelIds: _remove, dueDate, recurrence, recurrenceDay, ...rest } = data;
     // La cadencia solo existe en una tarea fija: al dejar de serlo (o si no lo es) vuelve a 1.
     const stillFixed = data.evergreen ?? task.evergreen;
     if (!stillFixed && (data.evergreenEvery !== undefined || task.evergreenEvery !== 1)) rest.evergreenEvery = 1;
@@ -769,7 +776,9 @@ async function applyTaskUpdate(
     };
     const changed = Object.keys(fields).filter((k) => k !== "labelIds") as TaskField[];
     // `changed` solo incluye la descripción si se edita, y entonces se ha leído.
-    addUndo(taskSetOp(task as typeof loaded, changed, labels));
+    // Con un cambio de etiquetas, las de antes se leen dentro de la transacción (con la fila bloqueada): el deshacer
+    // devuelve la lista que había justo antes de este cambio, no la que se leyó antes de esperar a otra persona.
+    if (!labelDelta) addUndo(taskSetOp(task as typeof loaded, changed, labels));
     const prev = task;
     const newMentions = await db.$transaction(async (tx) => {
       // Bloqueo: la comprobación de antes vale para el mensaje rápido, pero la definitiva va aquí, con el candado del
@@ -791,7 +800,7 @@ async function applyTaskUpdate(
           const old = new Set(extractMentionIds(before?.description ?? ""));
           added = extractMentionIds(data.description).filter((id) => !old.has(id));
         }
-      } else if (labelIds) {
+      } else if (labelIds || labelDelta) {
         // Las etiquetas se borran y se vuelven a crear con la fila bloqueada (la consulta de arriba ya la bloquea): dos
         // cambios a la vez creaban las mismas filas y el segundo fallaba con «Los datos han cambiado mientras tanto».
         await lockTaskRow(tx, taskId);
@@ -806,11 +815,23 @@ async function applyTaskUpdate(
         await tx.taskLabel.deleteMany({ where: { taskId } });
         await tx.taskLabel.createMany({ data: [...new Set(labelIds)].map((labelId) => ({ taskId, labelId })) });
       }
+      if (labelDelta) {
+        const now = (await tx.taskLabel.findMany({ where: { taskId }, select: { labelId: true } })).map((l) => l.labelId);
+        addUndo(taskSetOp(task as typeof loaded, changed, now.map((labelId) => ({ labelId }))));
+        const have = new Set(now);
+        const toAdd = labelDelta.add.filter((l) => !have.has(l) && !labelDelta.remove.includes(l));
+        const toRemove = labelDelta.remove.filter((l) => have.has(l));
+        if (have.size + toAdd.length - toRemove.length > MAX_TASK_LABELS) throw new AppError("Una tarea no puede tener tantas etiquetas.");
+        if (toRemove.length) await tx.taskLabel.deleteMany({ where: { taskId, labelId: { in: toRemove } } });
+        if (toAdd.length) await tx.taskLabel.createMany({ data: toAdd.map((labelId) => ({ taskId, labelId })), skipDuplicates: true });
+      }
       if (alsoInTx) await alsoInTx(tx, { kindId: kindBefore });
       return added;
     });
-    describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges({ ...data, ...optional }) }, { taskId });
-    await recordUpdateEvents(taskId, prev, data, dueDate, optional);
+    // Para el texto de la acción y el historial, un cambio de etiquetas cuenta como «etiquetas».
+    const shown = labelDelta ? { ...data, addLabelIds: undefined, removeLabelIds: undefined, labelIds: [] } : data;
+    describeAction("Modificó «{title}»: {changes}", { title: mentionsToPlain(data.title ?? prev.title), changes: describeChanges({ ...shown, ...optional }) }, { taskId });
+    await recordUpdateEvents(taskId, prev, shown, dueDate, optional);
     if (newMentions.length) {
       await notifyMentions({ actorId: user.id, taskId, projectId, recipientIds: newMentions, text: data.description ?? "" });
     }
