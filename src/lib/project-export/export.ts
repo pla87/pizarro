@@ -439,6 +439,8 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
     t.description = fixMentions(t.description);
     for (const c of t.comments) c.body = fixMentions(c.body);
   }
+  // Las imágenes del histórico de releases también apuntan a adjuntos de tareas.
+  for (const r of releases) r.content = remapAttachmentRefs(r.content, attachmentRefs);
   const userList = users.entries().flatMap(([id, ref]) => {
     const u = userById.get(id);
     // Los emails ajenos solo si exporta un administrador (los demás no los ven en la aplicación). La clave se mantiene
