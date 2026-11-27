@@ -1,6 +1,41 @@
 {
   "versions": [
     {
+      "version": "1.78.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T23:09:26+01:00",
+      "summary": "Avisos en el dispositivo: notificaciones push del navegador y del móvil, gratis y sin configurar nada",
+      "changes": {
+        "nuevas": [
+          "Avisos en el dispositivo: notificaciones push del navegador y del móvil, gratis y sin configurar nada. Se activan en Mi perfil → Avisos → «Avisos en este dispositivo» (con la lista de dispositivos, «Quitar» y «Probar»), con sus propios tipos de aviso (por defecto menciones —también en notas—, asignaciones y fechas o «Esperando») y como mucho 30 por hora. Llevan solo quién y qué tarea o nota y el proyecto. En iPhone y iPad, con Pizarro instalado en la pantalla de inicio (iOS 16.4 o posterior)."
+        ],
+        "mejoras": [
+          "Los avisos de un dispositivo van con su sesión: se cortan al cerrar sesión, al cerrarla desde otro dispositivo, al cambiar la contraseña o al caducar."
+        ],
+        "correcciones": [],
+        "tecnicos": [
+          "Web Push sin dependencias nuevas (VAPID y cifrado aes128gcm con node:crypto); claves de la instalación cifradas con ENCRYPTION_KEY y cubiertas por rotate-keys; solo se envía a los servicios push de Google, Mozilla, Apple y Microsoft, sin redirecciones y con 5 s como mucho.",
+          "Pruebas del informe semanal que fallaban según la hora del día (pasadas las 22:00)."
+        ]
+      },
+      "en": {
+        "summary": "Device notifications: browser and mobile push notifications, free and with nothing to configure",
+        "changes": {
+          "nuevas": [
+            "Device notifications: browser and mobile push notifications, free and with nothing to configure. Turn them on in My profile → Notifications → “Notifications on this device” (with the list of devices, “Remove” and “Test”), with their own notification types (by default mentions —also in notes—, assignments and dates or “Waiting”) and at most 30 per hour. They only say who and which task or note, and the project. On iPhone and iPad, with Pizarro installed on the home screen (iOS 16.4 or later)."
+          ],
+          "mejoras": [
+            "A device’s notifications go with its session: they stop when you sign out, when the session is closed from another device, when the password changes or when it expires."
+          ],
+          "correcciones": [],
+          "tecnicos": [
+            "Web Push with no new dependencies (VAPID and aes128gcm encryption with node:crypto); installation keys encrypted with ENCRYPTION_KEY and covered by rotate-keys; sent only to the Google, Mozilla, Apple and Microsoft push services, without redirects and with a 5 s limit.",
+            "Weekly report tests that failed depending on the time of day (after 22:00)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.77.0",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T21:16:53+01:00",

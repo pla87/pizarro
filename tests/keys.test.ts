@@ -171,7 +171,7 @@ function fakeDb(data: Record<string, Record<string, string | null>[]>) {
       },
     };
   };
-  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount"), appState: delegate("appState"), columnShare: delegate("columnShare") };
+  return { user: delegate("user"), loginChallenge: delegate("loginChallenge"), googleAccount: delegate("googleAccount"), appState: delegate("appState"), columnShare: delegate("columnShare"), pushSubscription: delegate("pushSubscription") };
 }
 
 describe("comando de rotación (rotate-keys)", () => {
@@ -179,7 +179,7 @@ describe("comando de rotación (rotate-keys)", () => {
   const env = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2, ENCRYPTION_KEY_PREVIOUS: ENC };
 
   test("cubre todos los campos cifrados del esquema", () => {
-    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value", "appState.value", "appState.value", "appState.value", "appState.value", "columnShare.tokenEnc"]);
+    assert.deepEqual(ENCRYPTED_FIELDS.map((f) => `${f.model}.${f.field}`), ["user.totpSecretEnc", "loginChallenge.pendingSecretEnc", "googleAccount.refreshTokenEnc", "googleAccount.accessTokenEnc", "appState.value", "appState.value", "appState.value", "appState.value", "appState.value", "columnShare.tokenEnc", "appState.value", "pushSubscription.endpointEnc", "pushSubscription.keysEnc"]);
   });
 
   test("re-cifra lo antiguo con la clave actual, deja lo que ya está al día y cuenta lo ilegible", async () => {
@@ -199,7 +199,10 @@ describe("comando de rotación (rotate-keys)", () => {
         { key: "telegram.tokenEnc", value: keyring.encryptSecret("tg-token", prevEnv) }, { key: "whatsapp.tokenEnc", value: keyring.encryptSecret("wa-token", prevEnv) }, { key: "telegram.botUsername", value: "pizarro_bot" }],
       // «Compartir fuera»: el token de la web de una columna (una fila sin enlace no cuenta).
       columnShare: [{ id: "s1", tokenEnc: keyring.encryptSecret("share-token", prevEnv) }, { id: "s2", tokenEnc: null }],
+      // Avisos push: la clave VAPID (en AppState) y el endpoint y las claves de un dispositivo.
+      pushSubscription: [{ id: "p1", endpointEnc: keyring.encryptSecret("https://fcm.googleapis.com/fcm/send/x", prevEnv), keysEnc: keyring.encryptSecret("{}", prevEnv) }],
     };
+    data.appState.push({ key: "push.vapidEnc", value: keyring.encryptSecret("{\"kty\":\"EC\"}", prevEnv) });
     const u3Before = data.user[2]!.totpSecretEnc;
     const db = fakeDb(data);
 
@@ -209,7 +212,7 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.ok(data.user[1]!.totpSecretEnc!.startsWith("v1."));
 
     const counts = await rotateEncryptedSecrets(db, { env });
-    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
+    assert.deepEqual(counts.map((c) => [c.total, c.current, c.rotated, c.unreadable]), [[4, 1, 2, 1], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [0, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0], [1, 0, 1, 0]]);
     // Todo lo legible queda con la clave nueva y se abre SIN la anterior.
     const onlyNew = { SESSION_SECRET: SESSION, ENCRYPTION_KEY: ENC2 };
     assert.equal(keyring.decryptSecret(data.user[0]!.totpSecretEnc!, onlyNew), "T1");
@@ -224,13 +227,15 @@ describe("comando de rotación (rotate-keys)", () => {
     assert.equal(keyring.decryptSecret(data.appState[4]!.value!, onlyNew), "wa-token");
     assert.equal(data.appState[5]!.value, "pizarro_bot");
     assert.equal(keyring.decryptSecret(data.columnShare[0]!.tokenEnc!, onlyNew), "share-token");
+    assert.equal(keyring.decryptSecret(data.pushSubscription[0]!.endpointEnc!, onlyNew), "https://fcm.googleapis.com/fcm/send/x");
+    assert.equal(keyring.decryptSecret(data.appState[6]!.value!, onlyNew), "{\"kty\":\"EC\"}");
     // Repetirlo no cambia nada.
     const again = await rotateEncryptedSecrets(db, { env: onlyNew });
-    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    assert.deepEqual(again.map((c) => c.rotated), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   });
 
   test("si la app cambia el valor mientras tanto, no se pisa", async () => {
-    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [], appState: [], columnShare: [] };
+    const data = { user: [{ id: "u1", totpSecretEnc: keyring.encryptSecret("T1", prevEnv) }], loginChallenge: [], googleAccount: [], appState: [], columnShare: [], pushSubscription: [] };
     const db = fakeDb(data);
     const realUpdate = db.user.updateMany;
     db.user.updateMany = async (args) => {

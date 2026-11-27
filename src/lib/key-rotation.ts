@@ -3,6 +3,7 @@ import { MAIL_PASS_KEY } from "./mail-settings-core";
 import { GOOGLE_SECRET_KEY } from "./google-config-core";
 import { TELEGRAM_SECRET_KEY, TELEGRAM_TOKEN_KEY, WHATSAPP_TOKEN_KEY } from "./messaging-core";
 import { hashShareToken, isShareTokenShape } from "./share-out-core";
+import { PUSH_VAPID_KEY } from "./web-push-core";
 
 // Re-cifrado de todos los secretos guardados con la clave actual (node dist/rotate-keys.mjs), y las huellas de
 // «Compartir fuera» rehechas con la clave actual de TOKEN_SECRET. Sin «server-only»: lo usa el script de línea de
@@ -10,7 +11,7 @@ import { hashShareToken, isShareTokenShape } from "./share-out-core";
 
 /** Los campos cifrados de la base de datos: tabla, columna y nombre legible (`idField`: clave de la fila, «id» salvo en AppState; `where`: filtro fijo). */
 interface EncryptedField {
-  model: "user" | "loginChallenge" | "googleAccount" | "appState" | "columnShare";
+  model: "user" | "loginChallenge" | "googleAccount" | "appState" | "columnShare" | "pushSubscription";
   field: string;
   nullable: boolean;
   label: string;
@@ -29,6 +30,9 @@ export const ENCRYPTED_FIELDS: readonly EncryptedField[] = [
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: TELEGRAM_SECRET_KEY }, label: "Telegram: secreto del webhook" },
   { model: "appState", field: "value", nullable: false, idField: "key", where: { key: WHATSAPP_TOKEN_KEY }, label: "WhatsApp: token guardado en Ajustes" },
   { model: "columnShare", field: "tokenEnc", nullable: true, label: "Compartir fuera: direcciones de las webs de las columnas" },
+  { model: "appState", field: "value", nullable: false, idField: "key", where: { key: PUSH_VAPID_KEY }, label: "Avisos push: clave VAPID de la instalación" },
+  { model: "pushSubscription", field: "endpointEnc", nullable: false, label: "Avisos push: direcciones de los dispositivos" },
+  { model: "pushSubscription", field: "keysEnc", nullable: false, label: "Avisos push: claves de los dispositivos" },
 ];
 
 type Row = Record<string, string | null>;

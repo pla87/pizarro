@@ -72,6 +72,12 @@ model User {
   /// "OFF". Texto y no enum, para no añadir valores de enum que escribir en la misma versión. Null = sin elegir: sigue a
   /// las demás opciones (noteMentionEmailMode, lib/note-mention-pref.ts).
   noteMentionEmail String?
+  /// Avisos push del navegador (v1.78): qué tipos salen a los dispositivos de PushSubscription (los mismos grupos que
+  /// Telegram y WhatsApp, channelWants). Por defecto, menciones, asignaciones y fechas.
+  pushNotifyMention  Boolean @default(true)
+  pushNotifyAssigned Boolean @default(true)
+  pushNotifyDue      Boolean @default(true)
+  pushNotifyComment  Boolean @default(false)
   /// Resumen diario por email: activado, hora local de la app (0-23) y cuándo se envió el último.
   dailyDigest    Boolean   @default(false)
   digestHour     Int       @default(8)
@@ -122,6 +128,7 @@ model User {
   undoEntries       UndoEntry[]
   followedTasks     TaskFollower[]
   channels          UserChannel[]
+  pushSubscriptions PushSubscription[]
   telegramLinks     TelegramLinkCode[]
   templateChanges   ProjectTemplateChange[]
 }
@@ -138,6 +145,8 @@ model Session {
   userAgent String?
   ip        String?
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Avisos push activados desde esta sesión: cerrarla (o que caduque y se borre) los corta.
+  pushSubscriptions PushSubscription[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -867,6 +876,8 @@ model Notification {
   emailSentAt    DateTime?
   whatsappSentAt DateTime?
   telegramSentAt DateTime?
+  /// Cuándo salió como aviso push a algún dispositivo (v1.78).
+  pushSentAt     DateTime?
   deliveryError  String?
   createdAt      DateTime         @default(now())
   user           User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
@@ -1141,6 +1152,36 @@ model UserChannel {
 
   @@unique([userId, channel])
   @@index([channel, address])
+}
+
+/// Avisos push del navegador (v1.78): un dispositivo (navegador) suscrito en Mi perfil → Avisos. El endpoint y las claves
+/// permiten enviar avisos a ese navegador: van cifrados con ENCRYPTION_KEY (rotate-keys los cubre) y nunca salen en Logs,
+/// exportaciones ni el tablero. `endpointHash` (SHA-256 del endpoint) evita duplicados y que dos cuentas compartan uno.
+/// Tabla propia y no un valor nuevo de MessagingChannel: la v1.77 no conoce ese valor y fallaría al leer UserChannel.
+model PushSubscription {
+  id           String    @id @default(cuid())
+  userId       String
+  endpointHash String    @unique
+  endpointEnc  String
+  /// JSON {p256dh, auth} cifrado.
+  keysEnc      String
+  /// Host del servicio push (de la lista cerrada de lib/web-push-core.ts): para mostrar «Google», «Apple»…
+  host         String
+  /// User-Agent del navegador al suscribirse (recortado), para «Chrome en Android».
+  userAgent    String    @default("")
+  /// Sesión desde la que se activó: al cerrarla por cualquier vía (salir, «Cerrar las demás», cambio de contraseña,
+  /// limpieza de las caducadas) la clave ajena borra la suscripción; si caducó y aún no se ha borrado, no se le envía.
+  sessionId    String
+  /// Clave pública VAPID con la que se suscribió: si la instalación cambia de clave, no se le envía (y se borra).
+  vapidPublicKey String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastSentAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
 }
 
 /// Código de un solo uso de «Conectar Telegram» (t.me/<bot>?start=<código>). Solo se guarda su HMAC; caduca en minutos.

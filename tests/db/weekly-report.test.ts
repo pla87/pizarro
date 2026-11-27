@@ -48,6 +48,16 @@ async function mails(): Promise<Mail[]> {
 }
 
 /** Informe de `f` programado para hoy a las 0:00 (ya toca), configurado por `creator` hacia `recipient`. */
+/**
+ * «Ahora» para las pruebas que simulan pasadas a +1 h o +2 h: deben caer el mismo día local que el informe programado
+ * (hoy), o pasadas las 22:00 la siguiente ya no le toca y la prueba fallaba según la hora. Si es tarde, se adelanta a las
+ * 20:xx de hoy.
+ */
+function sameDayNow(): Date {
+  const hour = localParts(new Date(), appTimeZone()).hour;
+  return new Date(Date.now() - Math.max(0, hour - 20) * 3_600_000);
+}
+
 async function schedule(f: { project: { id: string } }, creator: { id: string }, recipient: string) {
   const weekday = localParts(new Date(), appTimeZone()).weekday;
   await db.reportSchedule.upsert({
@@ -186,10 +196,7 @@ describe("email del informe semanal", () => {
     const creatorEmail = (await db.user.findUniqueOrThrow({ where: { id: creator.id }, select: { email: true } })).email;
     await schedule(f, creator, email);
     const calls: string[] = [];
-    // Las pasadas de abajo van a +1 h y +2 h: deben caer el mismo día local que el informe programado (hoy), o pasadas las
-    // 22:00 la última ya no le toca y la prueba fallaba según la hora. Si es tarde, «ahora» se adelanta a las 20:xx de hoy.
-    const hourNow = localParts(new Date(), appTimeZone()).hour;
-    const now = new Date(Date.now() - Math.max(0, hourNow - 20) * 3_600_000);
+    const now = sameDayNow();
     const again = async (at: Date) => {
       await flushLogs();
       await db.reportSchedule.update({ where: { projectId: f.project.id }, data: { lastSentAt: null } });
@@ -260,7 +267,7 @@ describe("email del informe semanal", () => {
       const f = await makeProject({ members: [creator] });
       await schedule(f, creator, `rechazo-${Date.now()}@example.com`);
       const calls: string[] = [];
-      const now = new Date();
+      const now = sameDayNow();
       await withSmtpRejecting(async () => {
         for (const h of [0, 1]) assert.equal(await sendDueReports(new Date(now.getTime() + h * 3_600_000), { generate: fakePdf(calls) }), 0);
       }, at);

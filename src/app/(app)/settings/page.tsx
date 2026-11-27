@@ -8,6 +8,8 @@ import { appTimeZone } from "@/lib/board";
 import { emailEnabled } from "@/lib/notify";
 import { getMyChannels } from "@/lib/messaging";
 import { MessagingSection } from "./MessagingSection";
+import { PushSection } from "./PushSection";
+import { pushView } from "@/lib/web-push";
 import { EmailNoticesSection } from "./EmailNoticesSection";
 import { currentSessionId, requireUserPage } from "@/lib/session";
 import { recoveryCodesLeft } from "@/lib/two-factor";
@@ -83,7 +85,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // Solo lo de la pestaña que se pinta (las pestañas se cambian en el servidor), y todo a la vez.
   const account = tab === "cuenta";
   const noTemplates = { headers: [], footers: [] };
-  const [codesLeft, sessions, currentId, pickProjects, templates, planTemplates, channels, block, privateProjects] = await Promise.all([
+  const [codesLeft, sessions, currentId, pickProjects, templates, planTemplates, channels, push, block, privateProjects] = await Promise.all([
     account && row.twoFactorMethod ? recoveryCodesLeft(user.id) : 0,
     account
       ? db.session.findMany({
@@ -104,6 +106,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     tab === "plantillas" ? userTemplates(user.id) : noTemplates,
     tab === "plantillas" ? userPlanTemplates(user.id) : noTemplates,
     tab === "avisos" ? getMyChannels(user.id) : null,
+    tab === "avisos" ? pushView(user.id, t) : null,
     account ? deletionBlock(user.id) : null,
     account ? soloPrivateProjects(user.id) : null,
   ]);
@@ -139,6 +142,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 adminNotices={user.role === "ADMIN"}
                 timeZone={appTimeZone()}
               />
+              {push && <PushSection initial={push} />}
               {channels && <MessagingSection initial={channels} />}
             </>
           ) : null

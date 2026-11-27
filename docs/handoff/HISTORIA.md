@@ -14,6 +14,12 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Ronda 74, v1.78.0 (ya aplicada):** avisos push como canal opcional, aprobado por el propietario. Decisiones: tabla
+propia (no un valor de enum en `MessagingChannel`), preferencias por persona con los grupos de Telegram (comentarios
+apagados por defecto), 30/h y 10 dispositivos por persona, menciones en notas también por push (gratis), suscripción atada a
+la sesión (cerrarla corta los avisos), cambio de cuenta en el mismo navegador solo con las mismas claves, clave VAPID
+rehecha = se quitan todas las suscripciones. Sin hacer (opcional): `pushsubscriptionchange` en el service worker.
+
 **Decisiones de la ronda 74 (ya aplicadas, v1.77.0):** 1: SÍ a avisar de las menciones en notas: en la app siempre y
 por email según elija cada persona (al momento, en el resumen diario o no); no salen por Telegram ni WhatsApp (coste y
 guardado automático). 2: SÍ al título automático desde la primera línea. 3: NO al refresco en vivo de la lista de

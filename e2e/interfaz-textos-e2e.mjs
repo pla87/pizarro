@@ -136,6 +136,13 @@ if (only.includes("profile")) {
   L.eq("AVISOS: tras guardar, vuelve a estar desactivado", await saveMention.isEnabled(), false);
   await L.q(`UPDATE "User" SET "notifyEmail"=$2, "notifyCommentEmail"=$3 WHERE email=$1`, [L.ADMIN, prefsBefore.n, prefsBefore.c]);
   L.check("AVISOS: la descripción es de una línea", !(await bodyText(page)).includes("Cuando alguien te menciona con @"));
+  // Avisos en este dispositivo (push, v1.78): la sección aparece y, sin permiso concedido, deja activarlo con el
+  // interruptor o explica por qué no se puede (permiso bloqueado, navegador sin push, iPhone sin instalar…).
+  const push = page.getByTestId("push-section");
+  await push.waitFor({ timeout: 10000 });
+  L.eq("AVISOS: sección «Avisos en este dispositivo»", await push.getByRole("heading", { name: "Avisos en este dispositivo" }).count(), 1);
+  await push.locator('[role="switch"], [data-testid="push-note"]').first().waitFor({ timeout: 10000 });
+  L.check("AVISOS: push con su interruptor o con la explicación", (await push.locator('[role="switch"], [data-testid="push-note"]').count()) >= 1);
   L.assertNoErrors("PROFILE", [s]);
   await s.ctx.close();
 }

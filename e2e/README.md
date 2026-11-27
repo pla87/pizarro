@@ -69,7 +69,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | Carga de proyecto y «Adjuntos y límites» (ronda 49) | `e2e/interfaz-carga-e2e.mjs` | 38 | ~1 min |
 | Esqueletos de carga, icono de la app, HTML sin `<link>` y copias con segundos (ronda 51) | `e2e/interfaz-esqueletos-e2e.mjs` | 53 | ~1,5 min |
 | Archivar/borrar al instante desde el detalle, cambio de columna seguido, flechas en grupos de opciones (y el color pendiente al recargar, con sendBeacon), iconos de la raíz (con ETag y 304) y nombre corto (ronda 52) | `e2e/interfaz-detalle-iconos-e2e.mjs` | 109 | ~1,5 min |
-| Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 38 | ~1 min |
+| Textos breves, notas «i» y botones sin efecto (ronda 49) | `e2e/interfaz-textos-e2e.mjs` | 40 | ~1 min |
 | Auditoría de escritorio y móvil: sin errores de hidratación (otra zona horaria e idioma, y tras un proxy que reescribe los emails), pestañas con alias y aviso, destinatario del informe por nombre, vencidas del calendario y de «Mis tareas» (línea de resumen con enlaces a cada grupo y `?filter=` antiguo, ronda 65), Historial de versiones con las 10 últimas, «Ver más», buscador y `#vX.Y.Z` (ronda 65), Usuarios a 393 px, indicador de las pestañas, pie del menú, theme-color del tema elegido y accesibilidad (aria-pressed, aria-expanded, fondo inert con un modal, axe) (ronda 56) | `e2e/interfaz-auditoria-e2e.mjs` | 91 | ~3 min |
 | [**Accesibilidad**](SUITES.md#accesibilidad) | | **113** | |
 | Reintentar el ZIP del plan, aviso de `?doc=` a un documento que ya no está, botones de columna con aria-disabled y opciones de correo accesibles (caza de bugs 52, segunda tanda) | `e2e/accesibilidad-columnas-e2e.mjs` | 39 | ~40 s |
@@ -77,7 +77,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Red, sin conexión y formularios**](SUITES.md#red-sin-conexión-y-formularios) | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3624** | |
+| **Total** | | **3626** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en

@@ -81,7 +81,7 @@ Estado tras la ronda 70 (v1.73.1):
 - Lo creado en la instalación de prueba por esas sesiones (no se ha borrado nada; preguntar antes): proyecto «Casa R69»
   y, en «Proyecto de prueba», la columna «Proveedor», Persona Prueba como miembro y la etiqueta «informes».
 
-## 1. Pruebas en real de la v1.73.0 a la v1.77.0 (instalación de prueba)
+## 1. Pruebas en real de la v1.73.0 a la v1.78.0 (instalación de prueba)
 
 Los puntos con ventana privada, Ctrl+V de una imagen de verdad, una ventana muy ancha o el móvil los hace el
 propietario: el prompt le pide que los haga y apunta lo que le diga.
@@ -139,6 +139,7 @@ Quiero que compruebes en real las novedades de Pizarro v1.73.0, v1.73.1, v1.74.0
 46. Importar y privado (v1.76.0): en el tablero, Importar → pega «hola» y cierra: pregunta «¿Descartar el texto?». En Ajustes de un proyecto de equipo de prueba, pásalo a privado: la confirmación nombra a quienes conservan el acceso (no lo confirmes si no es de prueba).
 47. Menciones en notas (v1.77.0): en una nota escribe @ y elige a Persona Prueba; pídeme que mire su campana: «… te ha mencionado en la nota «…»» y al pulsarlo se abre la nota. En Mi perfil → Avisos, «Email cuando me mencionan en una nota de Documentación» tiene Al momento / En el resumen diario / No.
 48. Título automático (v1.77.0): «Nueva nota» y escribe una primera línea: el nombre de la nota pasa a ser esa línea en el visor y en la lista; renómbrala con el lápiz y cambia la primera línea: el nombre ya no cambia.
+49. Avisos en el dispositivo (v1.78.0): en Mi perfil → Avisos está «Avisos en este dispositivo» con su interruptor (o, si el navegador no lo admite o el permiso está bloqueado, la explicación). No aceptes permisos ni actives nada: solo describe lo que ves.
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```

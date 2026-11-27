@@ -377,9 +377,11 @@ export async function forcePasswordChange(userId: string, opts?: { copyLink?: bo
       db.authToken.deleteMany({ where: { userId: user.id, purpose: { in: ["INVITE", "PASSWORD_RESET", "PASSWORD_CHANGE", "EMAIL_CHANGE"] } } }),
       // También los accesos a medio completar (contraseña ya comprobada, falta el segundo paso o configurarlo).
       db.loginChallenge.deleteMany({ where: { userId: user.id, kind: { in: ["LOGIN", "SETUP"] } } }),
-      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar) y WhatsApp.
+      // Lo que sigue funcionando sin sesión: el calendario suscrito, Telegram (con su enlace de conexión a medio usar),
+      // WhatsApp y los avisos push de sus dispositivos.
       db.calendarFeed.deleteMany({ where: { userId: user.id } }),
       db.userChannel.deleteMany({ where: { userId: user.id } }),
+      db.pushSubscription.deleteMany({ where: { userId: user.id } }),
       db.telegramLinkCode.deleteMany({ where: { userId: user.id } }),
     ]);
     // revokeUser también vacía la caché de los calendarios suscritos: el enlace deja de dar sus tareas al momento.

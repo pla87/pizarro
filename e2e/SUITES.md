@@ -697,7 +697,8 @@ sin cerrar el diálogo. Botones desactivados cuando no harían nada: «Limpiar»
 de *Ajustes → Almacenamiento*, «Guardar» el nombre y «Guardar avisos» de *Mi perfil* sin cambios, «Cambiar contraseña» sin
 rellenar, «Partir del texto por defecto» con ese texto ya puesto y «Todas»/«Ninguna» al generar una release. La nota cabe
 a 390 px. *Ajustes* e *Integraciones* son dos pestañas (ronda 57): el email, Google y Telegram/WhatsApp solo están en
-`/admin/integrations` (la redirección de las anclas antiguas de Ajustes se retiró en la ronda 68). Misma base y servidor:
+`/admin/integrations` (la redirección de las anclas antiguas de Ajustes se retiró en la ronda 68). *Mi perfil → Avisos*
+muestra «Avisos en este dispositivo» (push, v1.78) con su interruptor o, sin permiso, con la explicación. Misma base y servidor:
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node interfaz-textos-e2e.mjs   # PART=admin,profile,release
