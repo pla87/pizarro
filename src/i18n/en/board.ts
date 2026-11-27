@@ -384,4 +384,6 @@ export const board: Record<string, string> = {
   // Ronda 70: descartar varias tareas
   "Descartar las tareas": "Discard the tasks",
   "Hay tareas sin crear. ¿Descartarlas?": "Some tasks are not created yet. Discard them?",
+  // Ronda 72: copia de «Varias tareas» encima del fondo
+  "Abrir «Varias tareas» al lado": "Open “Several tasks” alongside",
 };

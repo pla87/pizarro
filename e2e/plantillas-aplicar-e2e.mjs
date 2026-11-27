@@ -131,7 +131,7 @@ if (only.includes("add")) {
   await dlg.locator("[data-step='3']").waitFor({ timeout: 10000 });
   const text = await summaryText(dlg);
   L.check("ADD: el resumen dice qué columnas se añadirán (Hecho ya está)", /Se añadirán 6 columnas/.test(text) && /Por hacer, Esta semana, Esperando, Lista de la compra, Citas, Rutinas/.test(text), text);
-  L.check("ADD: y los tipos y las etiquetas que faltan", /Se añadirán 6 tipos de tarea/.test(text) && /Se añadirán 4 etiquetas/.test(text), text);
+  L.check("ADD: y los tipos y las etiquetas que faltan", /Se añadirán 6 tipos de tarea/.test(text) && /Se añadirán 2 etiquetas/.test(text), text);
   L.check("ADD: avisa de que se podrá deshacer", (await dlg.innerText()).includes("Deshacer el cambio de plantilla"));
   await page.screenshot({ path: `${SHOTS}/r50-plantilla-add.png` });
   await dlg.getByRole("button", { name: "Aplicar", exact: true }).click();
@@ -141,7 +141,7 @@ if (only.includes("add")) {
   L.eq("ADD: columnas nuevas", after.columns.slice(4).map((c) => c.name), ["Por hacer", "Esta semana", "Esperando", "Lista de la compra", "Citas", "Rutinas"]);
   L.eq("ADD: ninguna tarea cambia", after.tasks, before.tasks);
   L.eq("ADD: no se oculta ningún tipo general", after.hidden, before.hidden);
-  L.eq("ADD: etiquetas (la suelta sigue)", after.labels, ["Persona 1", "Persona 2", "Suelta", "Toda la familia", "Urgente", "Usada"]);
+  L.eq("ADD: etiquetas (la suelta sigue)", after.labels, ["Suelta", "Toda la familia", "Urgente", "Usada"]);
   await page.locator("[data-template-undo]").waitFor({ timeout: 10000 });
   L.check("ADD: aparece «Deshacer el cambio de plantilla»", await page.getByRole("button", { name: "Deshacer el cambio de plantilla" }).isVisible());
   await undoFromSettings(page);

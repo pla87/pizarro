@@ -154,6 +154,8 @@ cabecera): la copia flotante de «Nueva tarea» dice lo mismo que el botón («N
 entera (opaca y sin nada encima); con la confirmación de descartar encima no se ve. El botón de informar del pie del menú
 tiene su copia encima del fondo, en el mismo sitio, y abre el informe sin cerrar la tarea (solo con una build oficial,
 como en `interfaz-auditoria-e2e.mjs`; si no, una nota); a 390 y 900 px no hay copia.
+Desde la ronda 72, «Varias tareas» también tiene su copia (en su sitio, con el mismo texto): abre «Varias tareas» al lado
+y, con la pareja abierta, lleva `aria-disabled` y el `title` «Ya hay dos tareas abiertas» y no abre nada.
 
 ```sh
 cd e2e && BASE=http://localhost:3231 DATABASE_URL=$DBURL node tablero-vivo-e2e.mjs   # PART=ping,presencia,filtros,vacio,lupa,movil,capas,cls,altp,rueda,axe,parche
@@ -701,7 +703,8 @@ con hoy arriba. **mis**: «1 tarea»/«2 tareas en todos tus proyectos.», una t
 con un enlace a cada grupo con tareas, `?filter=overdue` redirige a `/my-tasks` y, a 390 px, el enlace baja hasta su grupo sin
 desbordar. **hist**: Historial de versiones con las 10 últimas (anota el peso del HTML y del payload RSC), «Ver más» trae
 el resto y lleva el foco a la primera nueva, el buscador encuentra la más antigua, `#vX.Y.Z` de una antigua baja hasta
-ella y, a 390 px, sin desbordar. **movil**: en Usuarios a
+ella y, a 390 px, sin desbordar; desde la ronda 72 no hay entrada «Historial de versiones» en el menú lateral y se llega
+pulsando la versión del pie («Historial de versiones (vX.Y.Z)»), también desde el menú del móvil (en **movil**). **movil**: en Usuarios a
 393 px el nombre y el email tienen sitio, las acciones están en «⋯» (y abren su diálogo) y en el escritorio siguen los
 iconos; en las pestañas de Administración, el indicador de que hay más a la derecha (y a la izquierda al final); el pie
 del menú lateral se ve entero. **tema**: con el sistema claro y Pizarro oscuro, theme-color oscuro, y cambia al momento
