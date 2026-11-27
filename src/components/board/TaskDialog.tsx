@@ -1216,15 +1216,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Deshacer todo» y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px). Todos del mismo alto (h-8) y sin saltos de línea:
   // solo si de verdad no cabe «Deshacer todo» se lee «Deshacer» (ver DiscardAllButton) y el nombre accesible sigue entero.
+  // Los tres iconos, con poco relleno en la columna de campos: así caben «Deshacer todo» y «Guardar y cerrar» (≈16 px de margen
+  // a 21rem); en pantallas táctiles, el área de pulsación la da `touch-target`.
   const actionButtons = (
     <div className="@container w-full min-w-0">
       <div className="flex flex-nowrap items-center gap-2 @max-[24rem]:gap-1 md:gap-1 [&>button]:h-8 [&>button]:py-0">
-        <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-        <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-        <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+        <button className="btn-secondary touch-target px-2 @max-[24rem]:px-1 md:px-1" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+        <button className="btn-secondary touch-target px-2 @max-[24rem]:px-1 md:px-1" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+        <button className="btn-ghost touch-target px-2 @max-[24rem]:px-1 md:px-1 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
-        {/* Con poco ancho (pie del móvil, columna de campos) se lee «Guardar»; el nombre accesible sigue siendo «Guardar y cerrar». */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> <span className="@max-[24rem]:sr-only">{t("Guardar y cerrar")}</span><span aria-hidden className="hidden @max-[24rem]:inline">{t("Guardar")}</span></button>
+        {/* La columna de campos del escritorio (≈21rem) cabe justa con «Deshacer» corto; por debajo de 20,5rem (móvil estrecho) se lee
+            «Guardar» y el nombre accesible sigue siendo «Guardar y cerrar». */}
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[24rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> <span className="@max-[20.5rem]:sr-only">{t("Guardar y cerrar")}</span><span aria-hidden className="hidden @max-[20.5rem]:inline">{t("Guardar")}</span></button>
       </div>
     </div>
   );
