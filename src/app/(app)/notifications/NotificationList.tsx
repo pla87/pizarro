@@ -159,6 +159,8 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
     else if (item.project) router.push(projectNoticePath(item.type, item.project.id));
+    // La tarea del aviso se borró: no hay a dónde ir, y sin decirlo parece que el botón no hace nada.
+    else toast(t("Esa tarea ya no existe."), "info");
   };
 
   return (

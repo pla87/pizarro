@@ -8,6 +8,7 @@ import { outsideListProject } from "@/lib/project-visit";
 import { getPublicContactEmail } from "@/lib/google-config";
 import { licenseNudgeFor } from "@/lib/license-registry";
 import { buyHref } from "@/lib/product";
+import { db } from "@/lib/db";
 import { getUpdateNotice } from "@/lib/update-check";
 import { getFeedbackStatus } from "@/lib/feedback";
 import { requireUserPage } from "@/lib/session";
@@ -40,10 +41,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const lastProjectId = projects.find((p) => p.id === last)?.id ?? null;
   // Un administrador que abre (cargando la página) un proyecto de equipo que no está en su lista: el selector y la
   // navegación lo muestran desde el primer dibujo. Al llegar con la navegación de la app lo pide AppShell.
-  const pathProject = isAdmin ? /^\/p\/([^/?#]+)/.exec((await headers()).get("x-pz-path") ?? "")?.[1] : undefined;
+  const anyPathProject = /^\/p\/([^/?#]+)/.exec((await headers()).get("x-pz-path") ?? "")?.[1];
+  const pathProject = isAdmin ? anyPathProject : undefined;
   const outside = pathProject && !projects.some((p) => p.id === pathProject) ? await outsideListProject(user, pathProject).catch(() => null) : null;
+  // «Releases» del menú solo en proyectos que las usan; el tablero lo corrige después con sus columnas en vivo (releaseNav.ts).
+  const releaseNav = anyPathProject && projects.some((p) => p.id === anyPathProject)
+    ? await Promise.all([
+        db.column.findFirst({ where: { projectId: anyPathProject, role: "NEXT_RELEASE" }, select: { id: true } }),
+        db.release.findFirst({ where: { projectId: anyPathProject }, select: { id: true } }),
+      ]).then(([c, r]) => ({ id: anyPathProject, show: Boolean(c || r) }), () => null)
+    : null;
   return (
-    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} licenseNudge={licenseNudge} feedback={feedback}>
+    <AppShell user={user} projects={projects.map((p) => ({ id: p.id, name: p.name, isPrivate: p.isPrivate }))} version={pkg.version} unread={unread} lastProjectId={lastProjectId} outsideProject={outside} releaseNav={releaseNav} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} licenseNudge={licenseNudge} feedback={feedback}>
       {children}
     </AppShell>
   );

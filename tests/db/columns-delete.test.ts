@@ -67,7 +67,8 @@ describe("deshacer no deja columnas en la misma posición", () => {
     const a = await makeUser();
     const b = await makeUser();
     const f = await makeProject({ members: [a, b] });
-    await db.column.update({ where: { id: f.columns.done }, data: { position: 4096 } });
+    // Sin columna terminada, la nueva va al final (con una, iría antes: columns-create.test.ts).
+    await db.column.update({ where: { id: f.columns.done }, data: { position: 4096, isDone: false } });
     await loginAs(a);
     expectOk(await moveColumn(f.columns.todo, 1));
     await loginAs(b);

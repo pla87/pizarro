@@ -39,25 +39,36 @@ async function findColumn(columnId: string) {
   return column;
 }
 
+/**
+ * Añade una columna justo antes de la primera terminada («Hecho») o, si no hay ninguna, al final (personColumnSlots, como
+ * «Organizar por personas»). Devuelve la nueva y las posiciones nuevas de las que se corren (`moved`); el deshacer la quita
+ * y devuelve esas a su posición.
+ */
 export async function createColumn(projectId: string, name: string) {
-  return runAction({ name: "columns.createColumn", args: [projectId, name] }, async (): Promise<BoardColumn> => {
+  return runAction({ name: "columns.createColumn", args: [projectId, name] }, async (): Promise<BoardColumn & { moved: { id: string; position: number }[] }> => {
     const user = await requireUser();
     await assertProjectAccess(user, v.id.parse(projectId));
     const colName = v.name.parse(name);
     // Bloqueo por proyecto: dos altas a la vez no pueden pasar del tope ni calcular la misma posición.
     const column = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${columnsLockName(projectId)}))`;
-      const count = await tx.column.count({ where: { projectId } });
-      if (count >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
-      const last = await tx.column.findFirst({ where: { projectId }, orderBy: { position: "desc" }, select: { position: true } });
-      return tx.column.create({
-        data: { projectId, name: colName, position: (last?.position ?? 0) + POSITION_STEP },
-        select: columnSelect,
-      });
+      const existing = await tx.column.findMany({ where: { projectId }, orderBy: COLUMN_ORDER, select: { id: true, position: true, isDone: true } });
+      if (existing.length >= 30) throw new AppError("Máximo 30 columnas por proyecto.");
+      // Sin ninguna terminada, al final y sin tocar las demás; con una, como «Organizar por personas» (corre las de detrás).
+      const last = existing[existing.length - 1];
+      const slots = existing.some((c) => c.isDone)
+        ? personColumnSlots(existing, 1)
+        : { positions: [(last?.position ?? 0) + POSITION_STEP], moved: [] as { id: string; position: number; before: number }[] };
+      for (const m of slots.moved) await tx.column.update({ where: { id: m.id }, data: { position: m.position }, select: { id: true } });
+      const created = await tx.column.create({ data: { projectId, name: colName, position: slots.positions[0]! }, select: columnSelect });
+      return { created, moved: slots.moved };
     });
     describeAction("Creó la columna «{name}»", { name: colName });
-    addUndo({ t: "column.remove", id: column.id });
-    return column;
+    addUndo(
+      { t: "column.remove", id: column.created.id },
+      ...column.moved.map((m) => ({ t: "column.set" as const, id: m.id, data: { position: m.before } })),
+    );
+    return { ...column.created, moved: column.moved.map(({ id, position }) => ({ id, position })) };
   });
 }
 
