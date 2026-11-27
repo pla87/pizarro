@@ -14,6 +14,8 @@ import { logEvent } from "./log";
 import { newFileId, removeDocumentFiles, saveDocumentFile } from "./uploads";
 import { foldedContains } from "./search-accents";
 import { quotaError } from "./quota-message";
+import { isDefaultNoteName, noteAutoTitle } from "./note-title";
+import { notifyNoteMentions } from "./notify";
 import { intlLocale } from "@/i18n/core";
 import { getLocale, getT } from "@/i18n/server";
 
@@ -113,7 +115,7 @@ export async function findDocumentForUser(user: CurrentUser, documentId: string)
 export async function findDocumentWithNoteForUser(user: CurrentUser, documentId: string) {
   return db.projectDocument.findFirst({
     where: { id: documentId, project: visibleProjectsWhere(user) },
-    select: { id: true, name: true, mimeType: true, size: true, kind: true, projectId: true, deletedAt: true, noteContent: true, noteVersion: true, pinnedAt: true },
+    select: { id: true, name: true, mimeType: true, size: true, kind: true, projectId: true, deletedAt: true, noteContent: true, noteVersion: true, pinnedAt: true, noteAutoName: true },
   });
 }
 
@@ -148,6 +150,8 @@ export async function createDocumentWithinLimit(data: {
   id?: string; projectId: string; name: string; mimeType: string; size: number; kind: DocumentKindName; createdById: string;
   /** Solo las notas: su texto (sin fichero). */
   noteContent?: string;
+  /** Solo las notas nuevas («Nueva nota»): el nombre sale de la primera línea hasta que alguien la renombre. */
+  noteAutoName?: boolean;
 }, nameFor?: DocumentNameFor): Promise<DocumentCreateResult> {
   return db.$transaction(async (tx) => {
     // `nameFor` suele escribir en la fila del proyecto (la versión: UPDATE "Project"): se bloquea ANTES del candado común
@@ -275,7 +279,8 @@ export async function renameDocumentRow(user: CurrentUser, documentId: string, n
   if (!doc || doc.deletedAt) throw notFound();
   noteProject(doc.projectId);
   if (!name) throw new AppError("El nombre no puede estar vacío.");
-  await db.projectDocument.update({ where: { id: doc.id }, data: { name } });
+  // Una nota renombrada a mano ya no toma el nombre de su primera línea (saveNoteRow).
+  await db.projectDocument.update({ where: { id: doc.id }, data: { name, noteAutoName: false } });
   return { ...doc, name };
 }
 
@@ -306,6 +311,7 @@ export async function createNoteRow(user: CurrentUser, projectId: string, name: 
   noteProject(projectId);
   const created = await createDocumentWithinLimit({
     projectId, name: sanitizeDocumentName(name, "nota"), mimeType: "text/markdown", size: noteBytes(content), kind: "MARKDOWN", createdById: user.id, noteContent: content,
+    noteAutoName: true,
   });
   if (!created.ok) throw await noteLimitError(created, projectId, user);
   return created.document;
@@ -319,14 +325,30 @@ export async function getNoteForUser(user: CurrentUser, documentId: string) {
 }
 
 type SaveNoteResult =
-  | { status: "saved"; version: number; size: number }
+  /** `name`: solo si el guardado le ha cambiado el nombre (título automático, ver autoNoteName). */
+  | { status: "saved"; version: number; size: number; name?: string }
   /** Otra persona la guardó después de la versión que se conocía: su texto y su versión (no se ha guardado nada). */
   | { status: "conflict"; version: number; content: string };
 
 /**
+ * Nombre que debe tomar una nota al guardar `content`, o null si se queda como está. Solo las creadas con «Nueva nota»
+ * que nadie ha renombrado (`noteAutoName`) y cuyo nombre sigue siendo el por defecto o el que salió de su texto anterior
+ * (así, una renombrada desde una versión que no conoce la columna, como la v1.76 si se vuelve atrás, tampoco cambia sola).
+ * Si el texto se queda sin ninguna línea con texto, vuelve al nombre por defecto en el idioma de quien escribe.
+ */
+async function autoNoteName(doc: { name: string; noteAutoName: boolean; noteContent: string | null }, content: string): Promise<string | null> {
+  if (!doc.noteAutoName) return null;
+  if (!isDefaultNoteName(doc.name) && doc.name !== noteAutoTitle(doc.noteContent ?? "")) return null;
+  const next = noteAutoTitle(content) || (isDefaultNoteName(doc.name) ? doc.name : (await getT())("Nota sin título"));
+  return next === doc.name ? null : next;
+}
+
+/**
  * Guarda el texto de una nota si sigue en la versión `baseVersion` que conocía quien escribe; si no, no toca nada y
  * devuelve la versión de la otra persona (para elegir). Si el texto crece, comprueba la cuota con el candado común de las
- * subidas (solo lo que crece: los bytes de antes ya cuentan). Una nota en la papelera no se guarda.
+ * subidas (solo lo que crece: los bytes de antes ya cuentan). Una nota en la papelera no se guarda. Mientras nadie la
+ * haya renombrado, toma el nombre de su primera línea (autoNoteName). Las menciones nuevas respecto al texto anterior
+ * avisan a esas personas (notifyNoteMentions).
  */
 export async function saveNoteRow(user: CurrentUser, documentId: string, content: string, baseVersion: number): Promise<SaveNoteResult> {
   assertNoteLength(content);
@@ -341,21 +363,31 @@ export async function saveNoteRow(user: CurrentUser, documentId: string, content
   if (doc.noteContent === content) return { status: "saved", version: doc.noteVersion, size: doc.size };
   if (doc.noteVersion !== baseVersion) return conflict(doc);
   const size = noteBytes(content);
+  const name = await autoNoteName(doc, content);
   const res = await db.$transaction(async (tx) => {
     if (size > doc.size) {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('pz:attachment-quota'))::text`;
       const quota = await quotaExceededFor(doc.projectId, size - doc.size, tx);
-      if (quota) return { saved: false as const, quota };
+      if (quota) return { saved: false as const, renamed: false, quota };
     }
     // La versión y que siga viva se comprueban en el propio UPDATE: dos guardados a la vez no se pisan.
     const { count } = await tx.projectDocument.updateMany({
       where: { id: doc.id, noteVersion: baseVersion, deletedAt: null, noteContent: { not: null } },
       data: { noteContent: content, size, noteVersion: { increment: 1 } },
     });
-    return { saved: count > 0, quota: null };
+    // El nombre, solo si nadie la ha renombrado entretanto (renombrar quita noteAutoName).
+    const renamed = count > 0 && name !== null
+      ? (await tx.projectDocument.updateMany({ where: { id: doc.id, noteAutoName: true, name: doc.name }, data: { name } })).count > 0
+      : false;
+    return { saved: count > 0, renamed, quota: null };
   });
   if (res.quota) throw await noteLimitError({ reason: "quota", quota: res.quota }, doc.projectId, user);
-  if (res.saved) return { status: "saved", version: baseVersion + 1, size };
+  if (res.saved) {
+    // Un fallo al avisar no deshace el guardado (el texto ya está en la base).
+    await notifyNoteMentions({ actorId: user.id, documentId: doc.id, projectId: doc.projectId, before: doc.noteContent, after: content })
+      .catch((err) => console.error("[notes] avisos de mención", err));
+    return { status: "saved", version: baseVersion + 1, size, ...(res.renamed && name !== null ? { name } : {}) };
+  }
   const cur = await db.projectDocument.findUnique({ where: { id: doc.id }, select: { noteVersion: true, noteContent: true, deletedAt: true } });
   if (!cur || cur.noteContent === null) throw notFound();
   if (cur.deletedAt) throw new AppError(NOTE_TRASHED, 409, "note_trashed");

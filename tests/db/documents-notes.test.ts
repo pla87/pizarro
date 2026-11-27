@@ -50,7 +50,8 @@ describe("notas: crear y guardar", () => {
 
     const text = "# Acta\n\nAcordado: **sí** — ñandú";
     const saved = expectOk(await saveNote(created.id, text, 0));
-    assert.deepEqual(saved, { status: "saved", version: 1, size: Buffer.byteLength(text) });
+    // El primer guardado le pone de nombre su primera línea (título automático, v1.77).
+    assert.deepEqual(saved, { status: "saved", version: 1, size: Buffer.byteLength(text), name: "Acta" });
     assert.deepEqual(expectOk(await getNote(created.id)), { content: text, version: 1, trashed: false });
     // El mismo texto otra vez (el guardado al cerrar) no cambia nada.
     assert.deepEqual(expectOk(await saveNote(created.id, text, 1)), { status: "saved", version: 1, size: Buffer.byteLength(text) });
@@ -81,7 +82,7 @@ describe("notas: crear y guardar", () => {
     assert.deepEqual(conflict, { status: "conflict", version: 1, content: "Texto de A" });
     assert.equal((await doc(note.id)).noteContent, "Texto de A");
     // «Quedarme con la mía»: B guarda sobre la versión que acaba de ver.
-    await asUser(b, async () => assert.deepEqual(expectOk(await saveNote(note.id, "Texto de B", 1)), { status: "saved", version: 2, size: 10 }));
+    await asUser(b, async () => assert.deepEqual(expectOk(await saveNote(note.id, "Texto de B", 1)), { status: "saved", version: 2, size: 10, name: "Texto de B" }));
     // A, que seguía en la versión 1, ahora es quien recibe el aviso.
     await asUser(a, async () => assert.equal(expectOk(await saveNote(note.id, "Texto de A, segunda", 1)).status, "conflict"));
   });
@@ -175,7 +176,8 @@ describe("notas: descarga, papelera y búsqueda", () => {
     const etag = res.headers.get("etag")!;
     assert.equal((await fetchDoc(note.id, "", { "if-none-match": etag })).status, 304);
     const dl = await fetchDoc(note.id, "?download=1");
-    assert.match(dl.headers.get("content-disposition")!, /^attachment; filename\*=UTF-8''Nota%20sin%20t%C3%ADtulo\.md$/);
+    // Con el nombre que tomó de su primera línea.
+    assert.match(dl.headers.get("content-disposition")!, /^attachment; filename\*=UTF-8''Hola%20%C3%B1\.md$/);
     assert.equal(dl.headers.get("content-length"), String(Buffer.byteLength("Hola ñ")));
     const head = await fileHead(new Request(`http://localhost/api/documents/${note.id}`, { method: "HEAD" }), { params: Promise.resolve({ documentId: note.id }) });
     assert.equal(head.status, 200);
@@ -286,5 +288,62 @@ describe("notas: descarga, papelera y búsqueda", () => {
     await flushLogs();
     const logs = await db.appLog.findMany({ where: { action: "documents.setDocumentPinned", projectId: f.project.id } });
     assert.ok(logs.length >= 3);
+  });
+});
+
+/** Nombre que devuelve un guardado (solo si se lo cambió); «conflicto» si no se guardó. */
+const nameOf = (res: Awaited<ReturnType<typeof saveNote>>) => {
+  const out = expectOk(res);
+  return out.status === "saved" ? out.name : "conflicto";
+};
+
+describe("notas: título automático (v1.77)", () => {
+  test("«Nota sin título» toma su primera línea al guardarse y la sigue mientras nadie la renombre", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    await loginAs(m);
+    const note = expectOk(await createNote(f.project.id));
+    assert.equal((await doc(note.id)).noteAutoName, true);
+    assert.equal(nameOf(await saveNote(note.id, "Ac", 0)), "Ac");
+    assert.equal(nameOf(await saveNote(note.id, "## Acta **semanal**\n\nTexto", 1)), "Acta semanal");
+    // Si el guardado no cambia la primera línea, no devuelve nombre.
+    assert.equal(nameOf(await saveNote(note.id, "## Acta **semanal**\n\nTexto y más", 2)), undefined);
+    // Sin texto vuelve al nombre por defecto (y lo sigue tomando después).
+    assert.equal(nameOf(await saveNote(note.id, "  \n\n", 3)), "Nota sin título");
+    assert.equal(nameOf(await saveNote(note.id, "Otra cosa", 4)), "Otra cosa");
+    assert.equal((await listProjectDocumentsOf(f.project.id)).find((d) => d.id === note.id)?.name, "Otra cosa");
+    // Renombrada a mano: ya no cambia sola.
+    expectOk(await renameDocument(note.id, "Mi nombre"));
+    assert.equal((await doc(note.id)).noteAutoName, false);
+    assert.equal(nameOf(await saveNote(note.id, "Primera línea distinta", 5)), undefined);
+    assert.equal((await doc(note.id)).name, "Mi nombre");
+  });
+
+  test("renombrada desde una versión que no conoce la columna (la v1.76) o que no es «Nueva nota»: no cambia sola", async () => {
+    const m = await makeUser();
+    const f = await makeProject({ members: [m] });
+    await loginAs(m);
+    const note = expectOk(await createNote(f.project.id));
+    expectOk(await saveNote(note.id, "Primera", 0));
+    // La v1.76 renombra sin tocar noteAutoName: el nombre ya no es ni el por defecto ni el de su texto.
+    await db.projectDocument.update({ where: { id: note.id }, data: { name: "Puesto en la v1.76" } });
+    assert.equal(nameOf(await saveNote(note.id, "Segunda", 1)), undefined);
+    assert.equal((await doc(note.id)).name, "Puesto en la v1.76");
+    // Una nota que no se creó con «Nueva nota» (importada, de la v1.76) se queda con su nombre.
+    const other = expectOk(await createNote(f.project.id));
+    await db.projectDocument.update({ where: { id: other.id }, data: { noteAutoName: false } });
+    assert.equal(nameOf(await saveNote(other.id, "Texto", 0)), undefined);
+    assert.equal((await doc(other.id)).name, "Nota sin título");
+  });
+
+  test("en inglés: «Untitled note» también toma su primera línea, y sin texto vuelve a «Untitled note»", async () => {
+    const m = await makeUser();
+    await db.user.update({ where: { id: m.id }, data: { locale: "EN" } });
+    const f = await makeProject({ members: [m] });
+    await loginAs(m);
+    const note = expectOk(await createNote(f.project.id));
+    assert.equal(note.name, "Untitled note");
+    assert.equal(nameOf(await saveNote(note.id, "Weekly sync", 0)), "Weekly sync");
+    assert.equal(nameOf(await saveNote(note.id, "", 1)), "Untitled note");
   });
 });

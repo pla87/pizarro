@@ -29,6 +29,8 @@ interface Item {
   task: { id: string; title: string; projectId: string; projectName: string } | null;
   /** Aviso de un proyecto (PROJECT_TO_TEAM, REPORT_UNSUBSCRIBED): lleva al proyecto o a sus ajustes (projectNoticePath). */
   project?: { id: string; name: string } | null;
+  /** Mención en una nota de Documentación (v1.77): lleva a la nota. */
+  doc?: { id: string; name: string; projectId: string; projectName: string } | null;
 }
 
 const ICONS: Record<NotificationKind, typeof AtSign> = {
@@ -159,6 +161,8 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
   const open = (item: Item) => {
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
+    // Si la nota está en la papelera, Documentación lo dice al abrirla.
+    else if (item.doc) router.push(`/p/${item.doc.projectId}/docs?doc=${item.doc.id}`);
     else if (item.project) router.push(projectNoticePath(item.type, item.project.id));
     // Su tarea (o su proyecto, en los avisos de proyecto) se borró: no hay a dónde ir, y sin decirlo parece que el botón no
     // hace nada.
@@ -228,8 +232,11 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
                         // Aviso de proyecto: la cuenta borrada (o quien se dio de baja del informe) va en el extracto y el
                         // proyecto en lugar de la tarea.
                         ? notificationHeadline(n.type, t, { actor: projectNoticeActor(n.type, n.excerpt) || t("Usuario eliminado"), task: t("«{title}»", { title: n.project.name }), excerpt: n.excerpt })
-                        : notificationHeadline(n.type, t, { actor: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
+                        : n.doc
+                          ? notificationHeadline(n.type, t, { actor: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")), task: t("«{title}»", { title: n.doc.name }), excerpt: n.excerpt, note: true })
+                          : notificationHeadline(n.type, t, { actor: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")), task: n.task ? t("«{title}»", { title: n.task.title }) : t("una tarea borrada"), excerpt: n.excerpt })}
                       {n.task && <span className="text-slate-500"> · {n.task.projectName}</span>}
+                      {n.doc && <span className="text-slate-500"> · {n.doc.projectName}</span>}
                     </p>
                     {/* Lo escrito por una persona (comentario, respuesta, mención), como cita: no se confunde con el texto del aviso. */}
                     {body && <p dir="auto" className={cn("mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400", quotesWriting(n.type) && "border-s-2 border-slate-300 ps-2 dark:border-slate-600")}>{body}</p>}

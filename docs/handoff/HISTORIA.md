@@ -14,6 +14,13 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 74 (ya aplicadas, v1.77.0):** 1: SÍ a avisar de las menciones en notas: en la app siempre y
+por email según elija cada persona (al momento, en el resumen diario o no); no salen por Telegram ni WhatsApp (coste y
+guardado automático). 2: SÍ al título automático desde la primera línea. 3: NO al refresco en vivo de la lista de
+Documentación por ahora. 4 y 5: SÍ (renombrar `bh48a.test.ts` a `name-spaces.test.ts` y retirar `CHROME-R69.md`, con sus
+pendientes en PRUEBAS-CHROME). 6: la regla de knip la añade el propietario a mano (la sesión no puede editar sus permisos).
+SÍ a las notificaciones push como canal opcional en una ronda propia.
+
 **Ronda 73, segunda parte (ya aplicada, v1.76.0):** respuestas a las preguntas de la v1.75.0: 1 = A (notas en
 Documentación, hechas como se propuso; las menciones no avisan y la lista no se refresca en vivo), 3, 4 y 5 = SÍ (hechas),
 6 y 7 = NO. Una revisión independiente de las notas encontró 11 puntos; arreglados los evidentes (nota recién creada que
@@ -29,7 +36,7 @@ WhatsApp configurable, 200 por defecto; ping con posición y recarga de segurida
 no crea otra siguiente; 2 PDF a la vez por persona; apagado del contenedor que deja terminar la migración; `npm start` se
 para si faltan migraciones; búsqueda de releases de 1-2 letras solo en el título). NO a: «Persona: yo» del calendario con
 todos los proyectos visibles de un admin (9) y ayuda de atajos en una sola columna (10). Sin contestar: renombrar
-`bh48a.test.ts` y borrar `CHROME-R69.md`. Lo evidente de las vueltas (deshacer con series y roles únicos, cabeceras
+`bh48a.test.ts` y borrar `CHROME-R69.md` (los dos, SÍ en la ronda 74). Lo evidente de las vueltas (deshacer con series y roles únicos, cabeceras
 internas, tokens en Logs, rol de la base también para funciones, ejemplo que no reaparece, plantillas de serie con plazo o
 WIP, >500 tarjetas en bloque con aviso claro, avisos en vivo al ocultar la pestaña…) está en el changelog de la v1.75.1.
 Con opción y sin aplicar (NO del propietario o de poco valor): compartir con tope de cuota (`api/share`), ICS con SEQUENCE
@@ -73,7 +80,7 @@ proyecto de Railway).
 
 **Decisiones de la ronda 70 (ya aplicadas, v1.73.1):** encargo del propietario: mejoras operativas (experiencia de uso sin complicar la web, eficiencia, velocidad, seguridad, abaratar servidor sin bajar la calidad) y caza de bugs como cliente, editor, programador y atacante, hasta 10 vueltas o hasta que no saliera nada; lo evidente se arregla, lo opcional se pregunta y lo que se retira se pregunta antes de borrar. Criterio de parada: una vuelta sin hallazgos verificados de gravedad media o alta (se paró en la 5.ª, una pasada en Claude in Chrome en local sin hallazgos nuevos, para no gastar IA de más). Seguridad: nada explotable de gravedad alta. Hecho: «Varias tareas» pregunta al cerrar con texto; la web de fuera no publica el comentario repetido en 30 s (con el reloj de la app); caducidad de «Compartir fuera» sin clics repetidos; «Nueva tarea» respeta el prefijo escrito a mano; «Columna:» en Mis tareas; radios de visibilidad con grupo; imagen pegada sin espacios en el borde; Dockerfile sin copiar `static`/`public` dos veces; exportar/importar con las imágenes de las releases y tipos repetidos como «Nombre (2)»; tareas diarias que fallan se reintentan y Administración dice cuándo fallaron; restauración documentada con el rol de la app; Ctrl+Z con una sola recarga y avisos de deshacer con lo hecho desde fuera (cambios y comentarios); «Mover a…» sin las archivadas; etiquetas del detalle por cambio; «Aplicar plantilla» sin interbloqueo; móvil sin zoom de iOS (16 px) y web de fuera sin desbordes; baja de emails en el idioma de la persona; textos en inglés. **Descartado:** usar la caché de acceso en el canal en vivo (una vía que no la vaciase dejaría ver cambios hasta 5 min; se queda la consulta directa al abrir el canal). **Límite conocido:** la ventana de 30 s del comentario repetido usa el reloj de la app porque Prisma pone `createdAt` en la app; dos personas distintas que escriban lo mismo en 30 s cuentan como una. Opcionales y retiradas pendientes del «sí» del propietario: `docs/HANDOFF.md` §6.
 
-**Decisiones de la ronda 69 (ya aplicadas):** el propietario dijo «adelante» a la propuesta de `docs/handoff/CHROME-R69.md`
+**Decisiones de la ronda 69 (ya aplicadas):** el propietario dijo «adelante» a la propuesta de `docs/handoff/CHROME-R69.md` (retirado en la ronda 74; está en el historial de git)
 (diálogo y pie de «Compartir fuera» más claros, imagen pegada como bloque propio, columna vacía sin generar web, aviso de
 cambios sin publicar, «Compartida por <nombre>» en la web, sin apartados vacíos, los fallos de los informes y las preguntas
 2g, 3, 4 y 8 de la ronda 68). Cualquier miembro del proyecto puede revocar el enlace (no solo administradores ni quien lo

@@ -186,7 +186,10 @@ describe("email del informe semanal", () => {
     const creatorEmail = (await db.user.findUniqueOrThrow({ where: { id: creator.id }, select: { email: true } })).email;
     await schedule(f, creator, email);
     const calls: string[] = [];
-    const now = new Date();
+    // Las pasadas de abajo van a +1 h y +2 h: deben caer el mismo día local que el informe programado (hoy), o pasadas las
+    // 22:00 la última ya no le toca y la prueba fallaba según la hora. Si es tarde, «ahora» se adelanta a las 20:xx de hoy.
+    const hourNow = localParts(new Date(), appTimeZone()).hour;
+    const now = new Date(Date.now() - Math.max(0, hourNow - 20) * 3_600_000);
     const again = async (at: Date) => {
       await flushLogs();
       await db.reportSchedule.update({ where: { projectId: f.project.id }, data: { lastSentAt: null } });

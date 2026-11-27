@@ -2,6 +2,19 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.77.0 — 2026-11-27 21:16
+
+Menciones en notas de Documentación con aviso (campana y email a elegir) y título automático de las notas
+
+### Nuevas funcionalidades
+
+- Mencionar a alguien con @ en una nota de Documentación le avisa en la campana (al pulsarlo se abre la nota). Por email lo decide cada persona en Mi perfil → Avisos: al momento, en el resumen diario o no.
+- Las notas nuevas toman como título su primera línea mientras nadie las renombre.
+
+### Cambios técnicos / DB
+
+- Retirados el anexo docs/handoff/CHROME-R69.md (sus pendientes pasan a PRUEBAS-CHROME) y el nombre de prueba bh48a (ahora tests/db/name-spaces.test.ts).
+
 ## v1.76.0 — 2026-11-27 18:01
 
 Notas generales en Documentación, «¿Descartar el texto?» al importar, pasar a privado dice quién conserva el acceso y plan por persona más ligero

@@ -205,6 +205,8 @@ export interface NoticeMessage {
   locale?: string;
   /** Frase ya escrita en lugar de la del tipo de aviso (mensajes de prueba). */
   headline?: string;
+  /** Mención en una nota de Documentación (v1.77): `taskTitle` es el nombre de la nota y el enlace la abre. */
+  note?: boolean;
 }
 
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -212,7 +214,7 @@ const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 /** Frase del aviso con la tarea entre comillas del idioma (como en el email), en una línea («Ana te ha asignado «Pantalla»»). */
 function noticeHeadline(m: NoticeMessage, t: T): string {
   if (m.headline) return oneLine(m.headline);
-  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }), excerpt: m.excerpt }));
+  return oneLine(notificationHeadline(m.type ?? "MENTION", t, { actor: m.actorName, task: t("«{title}»", { title: ellipsize(oneLine(m.taskTitle), 120) }), excerpt: m.excerpt, note: m.note }));
 }
 
 /**
@@ -249,8 +251,8 @@ export function noticeBody(m: NoticeMessage, t: T): string {
 }
 
 /** Texto del enlace del aviso: a la tarea o, en un aviso de proyecto, al proyecto. */
-export const noticeLinkLabel = (m: Pick<NoticeMessage, "type">, t: T): string =>
-  m.type === "REPORT_UNSUBSCRIBED" ? t("Abrir los informes del proyecto") : m.type && isProjectNotice(m.type) ? t("Abrir el proyecto") : t("Abrir la tarea");
+export const noticeLinkLabel = (m: Pick<NoticeMessage, "type" | "note">, t: T): string =>
+  m.note ? t("Abrir la nota") : m.type === "REPORT_UNSUBSCRIBED" ? t("Abrir los informes del proyecto") : m.type && isProjectNotice(m.type) ? t("Abrir el proyecto") : t("Abrir la tarea");
 
 /** Mensaje de Telegram (HTML de Telegram, todo el contenido escapado): cabecera, proyecto, extracto y enlace. */
 export function telegramNoticeText(m: NoticeMessage, t: T): TelegramHtml {

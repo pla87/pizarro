@@ -26,6 +26,7 @@ function what(target: UnsubscribeTarget, t: T): string {
     case "assigned": return t("los emails de las tareas que te asignan");
     case "due": return t("los emails de cambios de fecha límite y recordatorios de «Esperando»");
     case "comment": return t("los emails de comentarios y respuestas en tareas que sigues");
+    case "note": return t("los emails de menciones en notas de Documentación");
     case "digest": return t("el resumen diario por email");
     default: return t("el informe semanal del proyecto «{project}»", { project: target.projectName ?? "" });
   }

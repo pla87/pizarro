@@ -10,7 +10,8 @@ import { appUrl, emailEnabled, escapeHtml, noReplyNote, sendMail, unsubscribeFoo
 import { ellipsize } from "./graphemes";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
-import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
+import { excerpt as makeExcerpt, extractMentionIds, mentionsToPlain } from "./mentions";
+import { noteMentionEmailMode } from "./note-mention-pref";
 import { noticeActorName, notificationHeadline, projectNoticeActor, projectNoticePath, quotesWriting, shareRevokedExcerpt, shareRevokedParts, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
@@ -48,7 +49,7 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es"), opts: { unsu
   // Las comillas del título van en la plantilla traducida: «…» en español, “…” en inglés. Recortado como en Telegram y
   // WhatsApp: un título de cientos de caracteres no cabe en el asunto (muchos programas lo cortan o lo parten).
   const task = t("«{title}»", { title: ellipsize(m.taskTitle.replace(/\s+/g, " ").trim(), 120) });
-  const subject = notificationHeadline(type, t, { actor: m.actorName, task, excerpt: m.excerpt });
+  const subject = notificationHeadline(type, t, { actor: m.actorName, task, excerpt: m.excerpt, note: m.note });
   const open = noticeLinkLabel(m, t);
   const optOut = t("Puedes desactivar estos avisos en «Mi perfil» de Pizarro.");
   const noReply = noReplyNote(t);
@@ -58,7 +59,7 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es"), opts: { unsu
   const text = `${subject} (${m.projectName})${bodyText}\n\n${open}: ${m.url}\n\n${optOut}\n${unsub.text}${noReply}\n`;
   // Todo lo que viene de una persona va escapado en el HTML, también la columna de SHARE_REVOKED (sale del extracto).
   const column = type === "SHARE_REVOKED" ? escapeHtml(shareRevokedParts(m.excerpt).column) : undefined;
-  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt, column });
+  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt, column, note: m.note });
   const quote = `<blockquote style="margin:${quoted ? "4px" : "12px"} 0 12px;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
@@ -122,14 +123,15 @@ export async function deliver(notificationIds: string[]): Promise<void> {
       id: true,
       type: true,
       excerpt: true,
-      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } } },
+      user: { select: { id: true, name: true, email: true, locale: true, active: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true, noteMentionEmail: true, channels: { select: CHANNEL_SELECT } } },
       actor: { select: { name: true } },
       task: { select: { id: true, title: true, project: { select: { id: true, name: true, isPrivate: true } } } },
       project: { select: { id: true, name: true, isPrivate: true } },
+      document: { select: { id: true, name: true, deletedAt: true, project: { select: { id: true, name: true, isPrivate: true } } } },
     },
   });
-  /** Proyecto del aviso: el de su tarea o, en un aviso de proyecto, el suyo. */
-  const projectOf = (n: (typeof rows)[number]) => n.task?.project ?? n.project;
+  /** Proyecto del aviso: el de su tarea, el de su nota o, en un aviso de proyecto, el suyo. */
+  const projectOf = (n: (typeof rows)[number]) => n.task?.project ?? n.document?.project ?? n.project;
   // El envío sale después de crear el aviso: se vuelve a comprobar que cada persona sigue pudiendo ver el
   // proyecto (p. ej. la han sacado de un proyecto privado entre medias). Si no, no sale nada por fuera.
   const allowed = new Set<string>();
@@ -155,6 +157,11 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     }
     const locale = toLocale(n.user.locale);
     const t = makeT(locale);
+    // Mención en una nota: solo por email y solo con «Al momento» (Telegram y WhatsApp no; el resumen la recoge aparte).
+    if (n.document) {
+      await deliverNoteMention({ ...n, document: n.document }, project, locale, t);
+      continue;
+    }
     const msg: MentionMessage = n.task
       ? {
           type: n.type,
@@ -230,6 +237,100 @@ export async function deliver(notificationIds: string[]): Promise<void> {
     }
     if (Object.keys(update).length) await db.notification.update({ where: { id: n.id }, data: update });
   }
+}
+
+/**
+ * Email de una mención en una nota (deliver), si la persona lo quiere al momento (noteMentionEmailMode) y la nota sigue
+ * fuera de la papelera. Lleva su propio enlace de baja («note»: pone la opción en «No»). Sin Telegram ni WhatsApp: el
+ * texto de una nota se guarda solo cada pocos segundos y WhatsApp cuesta dinero; en la campana sale siempre.
+ */
+async function deliverNoteMention(
+  n: { id: string; excerpt: string; actor: { name: string } | null; document: { id: string; name: string; deletedAt: Date | null }; user: { id: string; name: string; email: string; notifyEmail: boolean; dailyDigest: boolean; noteMentionEmail: string | null } },
+  project: { id: string; name: string },
+  locale: Locale,
+  t: T,
+): Promise<void> {
+  if (!emailEnabled() || n.document.deletedAt || noteMentionEmailMode(n.user) !== "NOW") return;
+  const msg: MentionMessage = {
+    type: "MENTION",
+    note: true,
+    locale: intlLocale(locale),
+    actorName: noticeActorName(n.actor?.name, n.excerpt, t("Alguien")),
+    taskTitle: n.document.name,
+    projectName: project.name,
+    excerpt: n.excerpt,
+    url: `${appUrl()}/p/${project.id}/docs?doc=${n.document.id}`,
+  };
+  const base = { category: "notify", userId: n.user.id, userName: n.user.name, projectId: project.id };
+  const details = { notificationId: n.id, documentId: n.document.id, to: maskEmail(n.user.email) };
+  const t0 = performance.now();
+  try {
+    const unsub = unsubscribeLinks("note", n.user.id, n.user.email);
+    await sendMail({ to: n.user.email, ...mentionEmail(msg, t, { unsubscribeUrl: unsub.page }), headers: unsub.headers });
+    await db.notification.update({ where: { id: n.id }, data: { emailSentAt: new Date() } });
+    logEvent({ ...base, action: "notify.email", label: { k: "Email de mención en una nota enviado a {name}", p: { name: n.user.name } }, durationMs: performance.now() - t0, details });
+  } catch (err) {
+    const error = `email: ${(err as Error).message}`.slice(0, 500);
+    console.error("[notify]", n.id, maskEmailsIn(error));
+    await db.notification.update({ where: { id: n.id }, data: { deliveryError: error } }).catch(() => {});
+    logEvent({ ...base, level: "error", action: "notify.emailFailed", label: { k: "Fallo al enviar email a {name}: {error}", p: { name: n.user.name, error: logText(maskEmailsIn((err as Error).message)) } }, durationMs: performance.now() - t0, details });
+  }
+}
+
+/**
+ * Avisos de las menciones NUEVAS de una nota de Documentación al guardarla (saveNoteRow): quien aparece en `after` y no
+ * en `before`, sin quien escribe, activo y con acceso al proyecto. En la campana siempre (enlaza a la nota); por email
+ * según su opción de Mi perfil (al momento, en el resumen diario o no). Para no avisar de más con el guardado automático
+ * (cada pocos segundos), a la misma persona por la misma nota no se le crea otro aviso en 10 minutos (quitar y volver a
+ * poner una mención mientras se escribe no avisa dos veces). El extracto es el párrafo de la mención. Devuelve a quién avisa.
+ */
+export async function notifyNoteMentions(opts: { actorId: string; documentId: string; projectId: string; before: string; after: string }): Promise<string[]> {
+  const old = new Set(extractMentionIds(opts.before));
+  const ids = extractMentionIds(opts.after).filter((id) => !old.has(id) && id !== opts.actorId);
+  if (!ids.length) return [];
+  const project = await db.project.findUnique({ where: { id: opts.projectId }, select: { isPrivate: true } });
+  if (!project) return [];
+  const people = await db.user.findMany({ where: mentionRecipientsWhere(project, ids, opts.projectId), select: { id: true, notifyEmail: true, dailyDigest: true, noteMentionEmail: true } });
+  if (!people.length) return [];
+  const recent = await db.notification.findMany({
+    where: { documentId: opts.documentId, type: "MENTION", userId: { in: people.map((p) => p.id) }, createdAt: { gte: new Date(Date.now() - DEDUPE_MINUTES * 60_000) } },
+    select: { userId: true },
+  });
+  const skip = new Set(recent.map((r) => r.userId));
+  const fresh = people.filter((p) => !skip.has(p.id));
+  if (!fresh.length) return [];
+  const created = await db.notification.createManyAndReturn({
+    data: fresh.map((p) => ({ userId: p.id, actorId: opts.actorId, documentId: opts.documentId, type: "MENTION" as const, excerpt: mentionContext(opts.after, p.id) })),
+    select: { id: true, userId: true },
+  });
+  // Email al momento, con el tope por hora de quien escribe (como los demás avisos que provoca una persona).
+  const now = new Set(fresh.filter((p) => noteMentionEmailMode(p) === "NOW").map((p) => p.id));
+  const toDeliver = emailEnabled()
+    ? created.filter((c) => now.has(c.userId) && rateLimit(`notify:${opts.actorId}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000)).map((c) => c.id)
+    : [];
+  logEvent({
+    category: "notify", action: "notify.note_mention", label: { k: "{n} aviso(s) de mención en una nota creados ({external} por email al momento)", p: { n: created.length, external: toDeliver.length } },
+    userId: opts.actorId, projectId: opts.projectId,
+    details: { documentId: opts.documentId, recipients: created.map((c) => c.userId), skippedRecent: [...skip] },
+  });
+  if (toDeliver.length) {
+    const send = () => deliver(toDeliver).catch((err) => console.error("[notify] envío", err));
+    try {
+      after(() => trackInFlight(send));
+    } catch {
+      // Fuera de una petición (pruebas, tareas de fondo) no hay `after`: se envía aquí mismo.
+      await send();
+    }
+  }
+  return created.map((c) => c.userId);
+}
+
+/** Extracto de una mención en una nota: el párrafo (o línea) donde está la primera mención de esa persona. */
+function mentionContext(text: string, userId: string): string {
+  for (const block of text.split(/\n\s*\n/)) {
+    if (extractMentionIds(block).includes(userId)) return makeExcerpt(block);
+  }
+  return makeExcerpt(text);
 }
 
 /**

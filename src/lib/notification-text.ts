@@ -42,8 +42,9 @@ export const projectNoticeActor = (kind: NotificationKind, excerpt: string): str
  * `task` es el nombre del proyecto entre comillas y `actor`, lo que guarda el extracto: la cuenta borrada
  * (PROJECT_TO_TEAM) o quien se ha dado de baja del informe semanal (REPORT_UNSUBSCRIBED).
  * En SHARE_REVOKED la columna sale del extracto; quien escribe HTML (el email) la pasa ya escapada en `column`.
+ * `note`: mención en una nota de Documentación (v1.77); `task` es entonces el nombre de la nota entre comillas.
  */
-export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor: string; task: string; excerpt?: string; column?: string }): string {
+export function notificationHeadline(kind: NotificationKind, t: T, { note, ...vars }: { actor: string; task: string; excerpt?: string; column?: string; note?: boolean }): string {
   if (externalNotice(vars.excerpt)?.what === "done") return t("{actor} ha marcado como hecha {task}", vars);
   switch (kind) {
     case "PROJECT_TO_TEAM": return t("El proyecto {task} de {actor} ha pasado a ser de equipo al borrarse su cuenta", vars);
@@ -58,7 +59,7 @@ export function notificationHeadline(kind: NotificationKind, t: T, vars: { actor
     case "COMMENT": return t("{actor} ha comentado en {task}", vars);
     case "WAITING": return t("{task} sigue esperando respuesta", vars);
     case "REPLY": return t("{actor} ha respondido a tu comentario en {task}", vars);
-    default: return t("{actor} te ha mencionado en {task}", vars);
+    default: return note ? t("{actor} te ha mencionado en la nota {task}", vars) : t("{actor} te ha mencionado en {task}", vars);
   }
 }
 

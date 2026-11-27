@@ -403,6 +403,7 @@
       "src/lib/document-kind.ts",
       "src/lib/attachment-refs.ts",
       "src/lib/search-accents.ts",
+      "src/lib/note-title.ts",
       "src/app/(app)/p/[projectId]/docs/**",
       "src/app/api/documents/**"
     ],
