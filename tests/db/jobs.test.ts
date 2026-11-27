@@ -98,6 +98,21 @@ describe("JobRun", () => {
     assert.equal(count, 2);
   });
 
+  test("everyMs: si la tarea falla, no cuenta como arrancada y se reintenta en la pasada siguiente", async () => {
+    let fail = true;
+    const job = { name: "test-daily-fail", run: async () => { if (fail) throw new Error("sin disco"); }, everyMs: 23 * 3_600_000 };
+    const t0 = new Date("2026-10-26T08:00:00Z");
+    assert.equal(await runJob(job, t0), "error");
+    assert.equal((await db.jobRun.findUniqueOrThrow({ where: { name: job.name } })).lastStartedAt, null);
+    fail = false;
+    assert.equal(await runJob(job, new Date(t0.getTime() + 3_600_000)), "ok");
+    assert.equal(await runJob(job, new Date(t0.getTime() + 2 * 3_600_000)), "skipped");
+    // Un fallo posterior conserva el arranque de la última vez que fue bien.
+    fail = true;
+    assert.equal(await runJob(job, new Date(t0.getTime() + 24 * 3_600_000)), "error");
+    assert.equal((await db.jobRun.findUniqueOrThrow({ where: { name: job.name } })).lastStartedAt?.getTime(), t0.getTime() + 3_600_000);
+  });
+
   test("una tarea que no hace nada a propósito anota el motivo: correcta, sin error y con `skipped`", async () => {
     assert.equal(await runJob({ name: "test-skip", run: async () => ({ skipped: "alreadyToday" }) }), "ok");
     let run = (await listJobRuns()).find((r) => r.name === "test-skip");
