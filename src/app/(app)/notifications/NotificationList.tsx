@@ -46,6 +46,8 @@ const ICONS: Record<NotificationKind, typeof AtSign> = {
  * Avisos leídos desde esta lista en esta pestaña. Como leer uno ya no refresca la página, al volver atrás desde el
  * tablero Next puede pintar la lista que tenía guardada, de antes de leerlo: con esto sale como leído.
  */
+/** Avisos de un proyecto (no de una tarea): sin proyecto, lo que ya no existe es el proyecto. */
+const PROJECT_NOTICES = new Set<NotificationKind>(["PROJECT_TO_TEAM", "REPORT_UNSUBSCRIBED"]);
 const readHere = new Set<string>();
 
 /**
@@ -159,8 +161,9 @@ export function NotificationList({ items: initial, moreHref, unreadTotal, unread
     if (!item.read) markRead(item);
     if (item.task) router.push(`/p/${item.task.projectId}?task=${item.task.id}`);
     else if (item.project) router.push(projectNoticePath(item.type, item.project.id));
-    // La tarea del aviso se borró: no hay a dónde ir, y sin decirlo parece que el botón no hace nada.
-    else toast(t("Esa tarea ya no existe."), "info");
+    // Su tarea (o su proyecto, en los avisos de proyecto) se borró: no hay a dónde ir, y sin decirlo parece que el botón no
+    // hace nada.
+    else toast(PROJECT_NOTICES.has(item.type) ? t("El proyecto ya no existe.") : t("Esa tarea ya no existe."), "info");
   };
 
   return (
