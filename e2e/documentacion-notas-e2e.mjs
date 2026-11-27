@@ -19,7 +19,16 @@ await L.prepareUsers();
 await L.cleanBoard();
 const p = await L.project();
 const [admin] = await L.q(`SELECT id FROM "User" WHERE email=$1`, [L.ADMIN]);
-const [second] = await L.q(`SELECT id, name FROM "User" WHERE email=$1`, [L.USER2]);
+// La segunda persona, con un id como los de la app (letras y números: las menciones no reconocen «qa_user_2»), miembro del
+// proyecto. Misma contraseña que el administrador (copia de su fila, como prepareUsers).
+const MENTIONED = "notas-mencion@example.com";
+if (!(await L.q(`SELECT 1 FROM "User" WHERE email=$1`, [MENTIONED])).length) {
+  const [a] = await L.q(`SELECT * FROM "User" WHERE email=$1`, [L.ADMIN]);
+  const cols = Object.keys(a).filter((c) => !["id", "email", "name", "role", "googleSub"].includes(c));
+  await L.q(`INSERT INTO "User" (id,email,name,role,${cols.map((c) => `"${c}"`).join(",")}) VALUES ('cnotasmencion0000000001',$1,'Mencionada Notas','MEMBER',${cols.map((_, i) => `$${i + 2}`).join(",")})`, [MENTIONED, ...cols.map((c) => a[c])]);
+}
+const [second] = await L.q(`SELECT id, name FROM "User" WHERE email=$1`, [MENTIONED]);
+await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2) ON CONFLICT DO NOTHING`, [p.id, second.id]);
 await L.q(`DELETE FROM "ProjectDocument" WHERE "projectId"=$1`, [p.id]);
 await L.q(`UPDATE "User" SET locale='ES', "editorMode"='MARKDOWN' WHERE id=$1`, [admin.id]);
 
@@ -92,7 +101,7 @@ if (only.includes("mencion") && noteId) {
   const box = editorBox(page);
   await box.waitFor();
   await box.press("Control+End");
-  await box.pressSequentially("\n\nPara @Segu", { delay: 5 });
+  await box.pressSequentially("\n\nPara @Menciona", { delay: 5 });
   await page.keyboard.press("Enter");
   await box.pressSequentially("revisa los acuerdos.", { delay: 5 });
   await L.waitFor(async () => (await status(page).textContent())?.trim() === "Guardado", { timeout: 10000 });
@@ -103,7 +112,7 @@ if (only.includes("mencion") && noteId) {
   await L.waitFor(async () => (await noteById(noteId))?.noteContent?.endsWith("Gracias."), { timeout: 10000 });
   L.eq("MENCION: seguir escribiendo no repite el aviso", (await L.q(`SELECT count(*)::int n FROM "Notification" WHERE "userId"=$1 AND "documentId"=$2`, [second.id, noteId]))[0].n, 1);
   await closeViewer(page);
-  const s2 = await L.session({ email: L.USER2 });
+  const s2 = await L.session({ email: MENTIONED });
   await L.goto(s2.page, `${L.BASE}/notifications`);
   const notice = s2.page.locator("[data-notice-open]").filter({ hasText: "te ha mencionado en la nota «Acta semanal (revisada)»" });
   await notice.first().waitFor({ timeout: 10000 });
