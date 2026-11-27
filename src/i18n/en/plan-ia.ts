@@ -32,7 +32,7 @@ export const planIa: Record<string, string> = {
   "Incluir cada dos planes": "Include in every second plan",
   "Incluir cada tres planes": "Include in every third plan",
   "Solo pueden ser fijas las tareas de la columna de la release o de un plan de trabajo para IA.": "Only tasks in the release column or in an AI work plan can be fixed.",
-  "Marcó «{title}» como fija en el plan": "Fixed “{title}” in the plan",
+  "Marcó «{title}» como fija en el plan": "Pinned “{title}” in the plan",
   "Guardó en la Documentación el plan de trabajo «{name}» de «{column}»": "Saved the work plan “{name}” from “{column}” to Documentation",
 
   // Texto del plan

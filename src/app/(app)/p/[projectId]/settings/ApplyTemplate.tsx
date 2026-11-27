@@ -53,7 +53,7 @@ export function ApplyTemplate({ projectId, lastChange }: { projectId: string; la
       const res = await undoTemplateChange(projectId);
       if (!res.ok) return toast(res.error, "error");
       const kept = res.data.keptColumns + res.data.keptKinds;
-      toast(kept ? t("Cambio de plantilla deshecho. Se conservan {n} columnas o tipos nuevos porque ya tienen tareas.", { n: kept }) : t("Cambio de plantilla deshecho"));
+      toast(kept === 1 ? t("Cambio de plantilla deshecho. Se conserva 1 columna o tipo nuevo porque ya tiene tareas.") : kept ? t("Cambio de plantilla deshecho. Se conservan {n} columnas o tipos nuevos porque ya tienen tareas.", { n: kept }) : t("Cambio de plantilla deshecho"));
       router.refresh();
     });
   };

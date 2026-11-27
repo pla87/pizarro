@@ -22,6 +22,8 @@ export interface UnsubscribeTarget {
   /** Dirección de destino (no se muestra: solo va enmascarada al registro). */
   email: string;
   userName: string | null;
+  /** Idioma de la persona (avisos y resumen); null en el informe, que va a una dirección sin cuenta. */
+  locale: string | null;
 }
 
 /** Comprueba el token (forma y firma contra el email actual) y dice qué apaga, o null si no vale. */
@@ -31,12 +33,12 @@ export async function resolveUnsubscribe(token: string): Promise<UnsubscribeTarg
   if (parsed.kind === "report") {
     const s = await db.reportSchedule.findUnique({ where: { projectId: parsed.id }, select: { recipient: true, enabled: true, project: { select: { name: true } } } });
     if (!s || !unsubscribeSignatureOk(parsed, s.recipient)) return null;
-    return { kind: "report", id: parsed.id, projectName: s.project.name, receiving: s.enabled, email: s.recipient, userName: null };
+    return { kind: "report", id: parsed.id, projectName: s.project.name, receiving: s.enabled, email: s.recipient, userName: null, locale: null };
   }
   const field = EMAIL_PREF_FIELD[parsed.kind];
-  const u = await db.user.findUnique({ where: { id: parsed.id }, select: { name: true, email: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true } });
+  const u = await db.user.findUnique({ where: { id: parsed.id }, select: { name: true, locale: true, email: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, dailyDigest: true } });
   if (!u || !unsubscribeSignatureOk(parsed, u.email)) return null;
-  return { kind: parsed.kind, id: parsed.id, projectName: null, receiving: u[field], email: u.email, userName: u.name };
+  return { kind: parsed.kind, id: parsed.id, projectName: null, receiving: u[field], email: u.email, userName: u.name, locale: u.locale };
 }
 
 /**
