@@ -165,8 +165,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         accountEnd={
           tab === "cuenta" ? (
             <DeleteAccountSection
-              block={block!}
-              privateProjects={privateProjects!}
+              block={block}
+              privateProjects={privateProjects ?? []}
               twoFactor={row.twoFactorMethod}
               emailAvailable={emailEnabled()}
               passwordLogin={passwordLoginAllowed(user.role, googlePolicyEnv())}

@@ -104,7 +104,8 @@ export async function createInitialAdmin(
  * Seed idempotente:
  * - Si no hay usuarios, crea el administrador inicial con SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD
  *   (sin esas variables lo crea el asistente web /setup).
- * - Si no hay proyectos, crea un proyecto de ejemplo con las columnas por defecto.
+ * - Una sola vez (marca `exampleProjectSeeded` en AppState): si no hay proyectos, crea un proyecto de ejemplo con las
+ *   columnas por defecto; con proyectos, solo pone la marca.
  * Todo en `locale` o, si no se indica, en el idioma de la instalación (español si aún no se ha elegido).
  */
 export async function seed(db: PrismaClient, log: (msg: string) => void = console.log, locale?: SeedLocale): Promise<void> {

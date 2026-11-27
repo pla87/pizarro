@@ -69,8 +69,10 @@ export function TransferJobs({ kind, projectId, skipId = null, title }: { kind: 
     let cancelled = false;
     fetch(`/api/transfer-jobs?${query}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((b: { jobs: TransferJobView[] }) => !cancelled && setJobs(b.jobs))
-      .then(() => { failures.current = 0; })
+      .then((b: { jobs: TransferJobView[] }) => {
+        failures.current = 0;
+        if (!cancelled) setJobs(b.jobs);
+      })
       // Un fallo con alguna en curso: una lista nueva (la misma) vuelve a programar el sondeo, que si no se paraba; cada
       // vez más despacio y, tras 10 fallos seguidos, se deja (vuelve con una nueva en cola o al reabrir el panel).
       .catch(() => {

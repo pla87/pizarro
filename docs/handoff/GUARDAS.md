@@ -481,6 +481,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `relink` no cuenta como conflicto ni entra en la huella (la siguiente aparición se toca a menudo); el del bloqueo sí.
   Un `relink` sobre una tarea que ya no existe no cuenta como parte perdida. `column.restore` comprueba el tope de 30
   columnas y el rol único bajo el candado de columnas (`columnsLockName`): si otra columna tiene ya el rol, vuelve «Sin rol».
+  Sacar ese `relink` de la huella no cambió el prefijo `v2:b:` a sabiendas: una entrada de la v1.75.0 con él daría el
+  aviso genérico una vez (se confirma) y caduca a los 7 días; un prefijo nuevo la habría descartado.
 - (Ronda 70) Conflictos de deshacer (`undo-conflicts.ts`): lo de fuera es `userId`/`authorId: null` (web de «Compartir
   fuera», siempre otra persona; el nombre sale de `userName`/`authorName`), así que el filtro es `OR: [{ campo: null }, {
   campo: { not: userId } }]`, nunca `not: null`. Prueba: `tests/db/undo-conflicts.test.ts`.
