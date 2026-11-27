@@ -825,4 +825,6 @@ export const admin: Record<string, string> = {
   // Copias: el detalle técnico de restaurar, en la nota «Para quien instala» de la carpeta (no en la de «Descargar»)
   "Para restaurar una copia: pasos de «Restaurar» de la guía de instalación (variable BACKUP_KEY y node dist/restore.mjs).":
     "To restore a backup: “Restore” steps in the installation guide (BACKUP_KEY variable and node dist/restore.mjs).",
+  // Ronda 71: prueba de restauración sin disco para la base temporal
+  "Sin espacio para restaurar entera: se ha comprobado el archivo.": "Not enough space to restore it in full: the file was checked instead.",
 };
