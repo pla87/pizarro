@@ -19,7 +19,8 @@ import { appTimeZone } from "../../src/lib/format";
 import { buildProjectExport } from "../../src/lib/project-export/export";
 import { importProjectFile } from "../../src/lib/project-export/import";
 import { streamZip } from "../../src/lib/zip-stream";
-import { generateAssignPlanPdf } from "../../src/lib/report-build";
+import { generateAssignPlanPdf, pendingSubtaskHeads } from "../../src/lib/report-build";
+import { PLAN_SUBTASKS_SHOWN } from "../../src/lib/column-assign-core";
 import { flushLogs } from "../../src/lib/log";
 import { stopPdfWorker } from "../../src/lib/report-render";
 
@@ -222,6 +223,26 @@ describe("asignación a persona: configurar la columna", () => {
     assert.match(pdf.filename, /^plan-usuario-[0-9a-f]+-\d{4}-\d{2}-\d{2}\.pdf$/);
     assert.equal(await generateAssignPlanPdf(f.project.id, f.columns.doing, { locale: "es" }), null);
     void ana;
+  });
+
+  test("PDF del plan: de las subtareas se leen solo las primeras pendientes (con tope en SQL) y cuántas son", async () => {
+    const { f } = await setup();
+    const many = await makeTask(f, { columnId: f.columns.doing, title: "Muchas subtareas" });
+    const none = await makeTask(f, { columnId: f.columns.doing, title: "Sin pendientes" });
+    // 300 subtareas en orden inverso de creación, una de cada tres marcada; dos con la misma posición (desempata el id).
+    await db.subtask.createMany({ data: Array.from({ length: 300 }, (_, i) => ({ taskId: many.id, title: `S${String(299 - i).padStart(3, "0")}`, position: 299 - i, done: (299 - i) % 3 === 0 })) });
+    await db.subtask.createMany({ data: [{ taskId: many.id, title: "S001b", position: 1, done: false }, { taskId: none.id, title: "Hecha", position: 1, done: true }] });
+    expectOk(await moveTasks([many.id, none.id], f.columns.todo, null));
+    // Lo mismo que leía la consulta anterior (Prisma, con todas en memoria).
+    const expected = await db.subtask.findMany({ where: { taskId: many.id, done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true } });
+    const heads = await pendingSubtaskHeads([many.id, none.id], PLAN_SUBTASKS_SHOWN);
+    assert.deepEqual(heads.get(many.id), { titles: expected.slice(0, PLAN_SUBTASKS_SHOWN).map((s) => s.title), count: 201 });
+    assert.equal(expected.length, 201);
+    assert.ok(heads.get(many.id)!.titles.slice(0, 3).every((x) => /^S00[12]/.test(x)));
+    assert.equal(heads.has(none.id), false);
+    assert.equal((await pendingSubtaskHeads([], PLAN_SUBTASKS_SHOWN)).size, 0);
+    const pdf = await generateAssignPlanPdf(f.project.id, f.columns.todo, { locale: "es" });
+    assert.equal(pdf?.taskCount, 2);
   });
 });
 

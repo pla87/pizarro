@@ -12,7 +12,7 @@ import { appTimeZone } from "@/lib/format";
 import { actionThrowResult } from "@/lib/stale-action";
 import { isOfflineMessage } from "@/lib/connection";
 import { parseTasksText, TASK_READ_FAILURE, TASKS_JSON_MAX, TASKS_TEXT_MAX_CHARS } from "@/lib/task-json";
-import { importPreview } from "@/lib/task-json-form";
+import { importDiscardQuestion, importPreview } from "@/lib/task-json-form";
 import { useConfirm } from "../ui/ConfirmDialog";
 import { Modal } from "../ui/Modal";
 import { cn } from "../ui/cn";
@@ -104,14 +104,17 @@ export function ImportTasksDialog({ initialText = "", onClose }: Props) {
     if (res.data.tasks[0]) board.revealTask(res.data.tasks[0].id);
   };
 
-  // Con texto o fichero sin importar, cerrar (Escape, clic fuera, X o «Cancelar») pide confirmación; importando, no se cierra.
+  // Con texto o fichero sin importar, cerrar (Escape, clic fuera, X o «Cancelar») pide confirmación («Hay tareas sin
+  // importar» o, si no se ha leído ninguna, «¿Descartar el texto?»); importando, no se cierra.
   const confirming = useRef(false);
   const requestClose = async (): Promise<boolean> => {
     if (busy) return false;
     if (text.trim()) {
       if (confirming.current) return false;
       confirming.current = true;
-      const ok = await confirm({ title: t("Descartar la importación"), message: t("Hay tareas sin importar. ¿Descartarlas?"), confirmLabel: t("Descartar"), danger: true }).catch(() => false);
+      // Si la vista previa va por detrás de lo escrito (useDeferredValue), se lee el texto de ahora para no preguntar mal.
+      const readable = shown === text ? ready.length : parseTasksText(text, { t, timeZone: appTimeZone(), locale }).tasks.filter((x) => x.task.title).length;
+      const ok = await confirm(importDiscardQuestion(readable, t)).catch(() => false);
       confirming.current = false;
       if (!ok) return false;
     }

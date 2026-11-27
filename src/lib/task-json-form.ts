@@ -210,3 +210,13 @@ export function importPreview(task: TaskJsonInput, p: Pick<FormProject, "columns
   if (task.type !== undefined && !findKind(p.kinds, task.type)) notices.push(t("tipo «{name}» (no existe)", { name: quote(task.type) }));
   return { columnId: columnId ?? p.columns[0]?.id ?? null, notices };
 }
+
+/**
+ * La pregunta al cerrar «Importar tareas» con texto en el cuadro. Si se ha leído alguna tarea (`readable`: las que se
+ * importarían), que quedan sin importar; si no (un texto que no es de tareas, ninguna con título, demasiado largo), solo
+ * que se descarta el texto.
+ */
+export function importDiscardQuestion(readable: number, t: T): { title: string; message: string; confirmLabel: string; cancelLabel?: string; danger: true } {
+  if (readable > 0) return { title: t("Descartar la importación"), message: t("Hay tareas sin importar. ¿Descartarlas?"), confirmLabel: t("Descartar"), danger: true };
+  return { title: t("¿Descartar el texto?"), message: t("No se ha leído ninguna tarea de este texto. Si cierras, se pierde."), confirmLabel: t("Descartar"), cancelLabel: t("Seguir editando"), danger: true };
+}

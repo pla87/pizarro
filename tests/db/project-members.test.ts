@@ -8,7 +8,9 @@ import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { flushLogs } from "../../src/lib/log";
 import { afterDone, db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser, NOT_FOUND } from "./helpers";
-import { addProjectMember, removeProjectMember, setProjectVisibility } from "../../src/actions/projects";
+import { addProjectMember, createProject, removeProjectMember, setProjectVisibility } from "../../src/actions/projects";
+import { privateKeepNames } from "../../src/lib/project-private";
+import { esT } from "../../src/i18n/shared";
 import { findUsableToken, purgeExpiredTokens } from "../../src/lib/auth-token";
 import { workingProjectsWhere } from "../../src/lib/access";
 import { outsideListProject } from "../../src/lib/project-visit";
@@ -103,6 +105,28 @@ describe("administradores asignados a un proyecto de equipo", () => {
     // Y de vuelta a privado, el admin asignado conserva el acceso como miembro.
     expectOk(await setProjectVisibility(p.project.id, "PRIVATE"));
     assert.ok(await isMember(p.project.id, admin.id));
+  });
+
+  test("pasar a privado uno de equipo: la confirmación nombra a quienes conservan el acceso (quien lo creó, entre ellos)", async () => {
+    const creator = await makeUser({ role: "ADMIN", name: `Creadora ${Date.now()}` });
+    const ana = await makeUser({ name: `Ana ${Date.now()}` });
+    const other = await makeUser({ role: "ADMIN", name: `Otro admin ${Date.now()}` });
+    await loginAs(creator);
+    const { id } = expectOk(await createProject(`Equipo ${Date.now()}`));
+    expectOk(await addProjectMember(id, ana.id));
+    // Quien lo pasa a privado es otro administrador, que no es miembro: el diálogo sale con los miembros de los Ajustes.
+    const members = (await db.projectMember.findMany({ where: { projectId: id }, select: { userId: true, user: { select: { name: true } } }, orderBy: { user: { name: "asc" } } }))
+      .map((m) => ({ id: m.userId, name: m.user.name }));
+    assert.equal(privateKeepNames(members, other.id, esT, "es"), `tú, ${ana.name} y ${creator.name}`);
+    assert.equal(privateKeepNames(members, creator.id, esT, "es"), `tú y ${ana.name}`);
+    await loginAs(other);
+    expectOk(await setProjectVisibility(id, "PRIVATE"));
+    // Y son justo los que quedan como miembros.
+    const kept = (await db.projectMember.findMany({ where: { projectId: id }, select: { userId: true } })).map((m) => m.userId).sort();
+    assert.deepEqual(kept, [creator.id, ana.id, other.id].sort());
+    // Con muchos, los primeros y «N más».
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `u${i}`, name: `P${String(i).padStart(2, "0")}` }));
+    assert.equal(privateKeepNames(many, "u0", esT, "es"), "tú, P01, P02, P03, P04, P05, P06 y 5 más");
   });
 
   test("pasar a administrador conserva sus asignaciones y las marca como elegidas", async () => {

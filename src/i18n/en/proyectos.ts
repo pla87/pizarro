@@ -181,7 +181,7 @@ export const proyectos: Record<string, string> = {
   "Los administradores ven todos los proyectos de equipo. Si añades a uno como miembro, el proyecto le sale en sus selectores y cuenta como miembro, igual que el resto.": "Admins see every team project. If you add one as a member, the project shows up in their pickers and counts as a member, like everyone else.",
   "Sin miembros.": "No members.",
   "La invitación de {name} ha caducado: genera un enlace de invitación nuevo para pasárselo.": "{name}'s invitation has expired: generate a new invitation link to send them.",
-  "¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? Its current members ({n}, including you) keep access and their cards. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
+  "¿Hacer el proyecto privado? Mantienen el acceso, con sus tarjetas: {names}. Son sus miembros actuales (entre ellos quien lo creó, que es miembro desde que lo creó salvo que se le haya quitado) y tú. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.": "Make the project private? These people keep access and their cards: {names}. They are its current members (including whoever created it, who has been a member since creating it unless they were removed) and you. Admins who aren't members (who only saw it because it was in “Projects I work on”) will lose access and their cards will be unassigned. You can remove members afterwards.",
   // Administración → Proyectos: «miembros» en lugar de «asignados», como en Ajustes del proyecto
   "Proyectos de equipo y sus miembros. Los privados no salen aquí.": "Team projects and their members. Private ones are not listed here.",
   "Quien no es administrador solo ve los proyectos de los que es miembro. Los administradores ven todos: se les puede añadir como miembros igual que a cualquiera y, si no lo son, eligen en cuáles trabajan pulsando su nombre (o en su perfil).":
@@ -264,4 +264,6 @@ export const proyectos: Record<string, string> = {
   "Modificó el entregable «{name}»": "Edited the deliverable “{name}”",
   "Movió el entregable «{name}» al {day}": "Moved the deliverable “{name}” to {day}",
   "Borró el entregable «{name}»": "Deleted the deliverable “{name}”",
+  // v1.76: quién mantiene el acceso al pasar un proyecto a privado
+  "tú": "you",
 };

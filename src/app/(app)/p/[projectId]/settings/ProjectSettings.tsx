@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { sameName } from "@/lib/name-spaces";
+import { privateKeepNames } from "@/lib/project-private";
 import {
   createDeliverable, createLabel, deleteDeliverable, deleteLabel, addProjectMember, deleteProject, removeProjectMember, setProjectVisibility, setAttachmentLimits, setGoogleShareMode, setTaskFields, updateDeliverable, updateLabel, updateProject,
 } from "@/actions/projects";
@@ -119,8 +120,8 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
   const [confirmName, setConfirmName] = useState("");
   // Los miembros de un proyecto privado lo gestionan aunque no sean administradores.
   const isPrivateProject = project.visibility === "PRIVATE";
-  // Al pasar a privado siguen con acceso los asignados y quien lo cambia.
-  const keepCount = project.members.length + (project.members.some((m) => m.id === currentUserId) ? 0 : 1);
+  // Al pasar a privado siguen con acceso los asignados (quien lo creó, entre ellos) y quien lo cambia: lo dice la confirmación.
+  const intlLocale = useIntlLocale();
   const canManage = isAdmin || isPrivateProject;
 
   const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, success: string, after?: () => void) =>
@@ -204,7 +205,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               className="btn-primary mt-4"
               disabled={pending}
               onClick={async () => {
-                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Seguirán teniendo acceso sus miembros actuales ({n}, contándote a ti), que conservan sus tarjetas. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { n: keepCount }), confirmLabel: t("Hacer privado"), danger: true }))) return;
+                if (visibility === "PRIVATE" && !(await confirm({ title: t("Hacer el proyecto privado"), message: t("¿Hacer el proyecto privado? Mantienen el acceso, con sus tarjetas: {names}. Son sus miembros actuales (entre ellos quien lo creó, que es miembro desde que lo creó salvo que se le haya quitado) y tú. Los administradores que no sean miembros (los que lo veían solo por tenerlo en «Proyectos en los que trabajo») dejarán de verlo y se desasignarán sus tarjetas. Después podrás quitar miembros.", { names: privateKeepNames(project.members, currentUserId, t, intlLocale) }), confirmLabel: t("Hacer privado"), danger: true }))) return;
                 run(() => setProjectVisibility(project.id, visibility), t("Visibilidad actualizada"));
               }}
             >

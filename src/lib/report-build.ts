@@ -381,6 +381,33 @@ export function generateWeekPlanPdf(
 }
 
 /**
+ * De las subtareas sin marcar de unas tareas, las `take` primeras en su orden (posición e id, como en la tarjeta) y cuántas
+ * son en total. En SQL y no con un `take` anidado: Prisma 7 no le pone LIMIT por tarea (leía todas las subtareas sin marcar
+ * de todas las tareas y recortaba en memoria). Las tareas sin ninguna pendiente no vienen.
+ */
+export async function pendingSubtaskHeads(taskIds: string[], take: number): Promise<Map<string, { titles: string[]; count: number }>> {
+  const out = new Map<string, { titles: string[]; count: number }>();
+  if (!taskIds.length) return out;
+  const rows = await db.$queryRaw<{ taskId: string; title: string; count: number }[]>`
+    SELECT s."taskId", s."title", s."count"::int AS "count"
+    FROM (
+      SELECT "taskId", "title", "position", "id",
+             ROW_NUMBER() OVER (PARTITION BY "taskId" ORDER BY "position", "id") AS "rn",
+             COUNT(*) OVER (PARTITION BY "taskId") AS "count"
+      FROM "Subtask"
+      WHERE "taskId" = ANY(${taskIds}::text[]) AND NOT "done"
+    ) s
+    WHERE s."rn" <= ${take}
+    ORDER BY s."taskId", s."rn"`;
+  for (const r of rows) {
+    const entry = out.get(r.taskId) ?? { titles: [], count: r.count };
+    entry.titles.push(r.title);
+    out.set(r.taskId, entry);
+  }
+  return out;
+}
+
+/**
  * PDF «Plan de <persona>» de una columna «Asignación a persona»: las tareas no archivadas de la columna que son de su
  * persona, agrupadas por vencimiento (vencidas, hoy, esta semana, este mes, más adelante y sin fecha) y, dentro de cada
  * grupo, por fecha límite. La semana empieza en lunes en español y en domingo en inglés (como la cuadrícula del
@@ -407,14 +434,13 @@ export function generateAssignPlanPdf(
         select: {
           id: true, title: true, dueDate: true, priority: true, kind: { select: { id: true, name: true } },
           labels: { select: { label: { select: { name: true } } } },
-          subtasks: { where: { done: false }, orderBy: [{ position: "asc" }, { id: "asc" }], take: PLAN_SUBTASKS_SHOWN, select: { title: true } },
-          _count: { select: { subtasks: { where: { done: false } } } },
         },
       }),
       db.task.count({ where: { projectId, columnId, archivedAt: null, OR: [{ assigneeId: null }, { assigneeId: { not: column.assigneeId! } }] } }),
     ]);
     // De la descripción solo hace falta el comienzo (el resumen no pasa de unas líneas): se lee solo eso de la base.
-    const heads = (await descriptionHeads(tasks.map((x) => x.id), [], PLAN_DESCRIPTION_READ)).tasks;
+    const ids = tasks.map((x) => x.id);
+    const [heads, pending] = await Promise.all([descriptionHeads(ids, [], PLAN_DESCRIPTION_READ).then((r) => r.tasks), pendingSubtaskHeads(ids, PLAN_SUBTASKS_SHOWN)]);
     const today = todayIso(appTimeZone());
     const labelCollator = new Intl.Collator(intlLocale(opts.locale), { sensitivity: "base", numeric: true });
     const rows: AssignPlanTask[] = tasks.map((x) => ({
@@ -424,8 +450,8 @@ export function generateAssignPlanPdf(
       dueDate: dateToIso(x.dueDate),
       summary: descriptionSummary(mentionsToPlain(heads.get(x.id) ?? "", false)),
       labels: x.labels.map((l) => l.label.name).sort(labelCollator.compare),
-      pendingSubtasks: x.subtasks.map((st) => mentionsToPlain(st.title, false)),
-      pendingCount: x._count.subtasks,
+      pendingSubtasks: (pending.get(x.id)?.titles ?? []).map((title) => mentionsToPlain(title, false)),
+      pendingCount: pending.get(x.id)?.count ?? 0,
     }));
     const groups = buildAssignPlan(rows, today, calendarWeekStart(opts.locale));
     const pdf = await renderPdf({ kind: "assignPlan", locale: opts.locale, input: { project: column.project.name, column: column.name, person: column.assignee.name, today, groups, others } }, opts.signal, opts.owner);
