@@ -749,8 +749,6 @@ model ColumnShare {
   generatedAt     DateTime?
   /// Quién generó o actualizó la web por última vez (sin clave ajena; al borrar la cuenta se vacían los dos).
   generatedById   String?
-  /// Ya no se escribe ni se lee (el nombre se lee de la cuenta por generatedById); se quitará en una versión posterior.
-  generatedByName String?
   /// Último uso (abrir la página o generar/actualizar): de aquí cuenta la caducidad.
   lastUsedAt      DateTime?
   /// El enlace actual se revocó (a mano, al quitar la función, al borrar la columna o al apagarla en el proyecto).

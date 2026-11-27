@@ -16,7 +16,3 @@ export type ProfileTab = (typeof PROFILE_TABS)[number]["id"];
 export function resolveProfileTab(value: unknown): TabResolution<ProfileTab> {
   return resolveTabParam<ProfileTab>(value, PROFILE_TABS);
 }
-
-export function parseProfileTab(value: unknown): ProfileTab {
-  return resolveProfileTab(value).tab;
-}

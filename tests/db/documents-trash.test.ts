@@ -8,7 +8,7 @@ import { describe, test } from "node:test";
 import { asUser, db, expectFail, expectOk, loginAs, makeProject, makeUser, NOT_FOUND } from "./helpers";
 import { deleteDocument, deleteDocumentForever, renameDocument, restoreDocument } from "../../src/actions/documents";
 import { DOCUMENT_TRASH_DAYS, DOCUMENTS_MAX_PER_PROJECT } from "../../src/lib/document-kind";
-import { createDocumentWithinLimit, listProjectDocuments, listTrashedDocuments, purgeTrashedDocuments, trashDaysLeft } from "../../src/lib/documents";
+import { createDocumentWithinLimit, listProjectDocumentsOf, listTrashedDocumentsOf, purgeTrashedDocuments, trashDaysLeft } from "../../src/lib/documents";
 import { runJob } from "../../src/lib/jobs";
 import { MAINTENANCE_JOBS } from "../../src/lib/maintenance";
 import { storageUsage } from "../../src/lib/storage-usage";
@@ -22,9 +22,6 @@ const DAY = 24 * 60 * 60 * 1000;
 const row = (projectId: string, createdById: string, size = 10, name = "nota.txt") =>
   ({ projectId, name, mimeType: "text/plain", size, kind: "TEXT" as const, createdById });
 
-async function userOf(id: string) {
-  return { ...(await db.user.findUniqueOrThrow({ where: { id } })), theme: "SYSTEM", accent: "BLUE", locale: "ES" } as never;
-}
 const exists = (id: string) => stat(documentPath(id)).then(() => true, () => false);
 
 async function withQuota<T>(mb: number, fn: () => Promise<T>): Promise<T> {
@@ -48,9 +45,8 @@ describe("papelera de documentos", () => {
       expectOk(await deleteDocument(doc.id));
       expectFail(await deleteDocument(doc.id), NOT_FOUND);
     });
-    const u = await userOf(m.id);
-    assert.equal((await listProjectDocuments(u, f.project.id)).length, 0);
-    const trash = await listTrashedDocuments(u, f.project.id);
+    assert.equal((await listProjectDocumentsOf(f.project.id)).length, 0);
+    const trash = await listTrashedDocumentsOf(f.project.id);
     assert.equal(trash.length, 1);
     assert.equal(trash[0]!.deletedByName, "Persona Uno");
     assert.equal(trash[0]!.daysLeft, DOCUMENT_TRASH_DAYS);
@@ -79,7 +75,6 @@ describe("papelera de documentos", () => {
     const f = await makeProject({ members: [m] });
     const doc = await db.projectDocument.create({ data: { ...row(f.project.id, m.id), deletedAt: new Date(), deletedById: m.id } });
     await saveDocumentFile(doc.id, Buffer.from("x"));
-    await assert.rejects(listTrashedDocuments(await userOf(outsider.id), f.project.id), NOT_FOUND);
     await asUser(outsider, async () => {
       expectFail(await restoreDocument(doc.id), NOT_FOUND);
       expectFail(await deleteDocumentForever(doc.id), NOT_FOUND);
@@ -102,7 +97,7 @@ describe("papelera de documentos", () => {
     const after = await db.projectDocument.findUniqueOrThrow({ where: { id: doc.id } });
     assert.equal(after.deletedAt, null);
     assert.equal(after.deletedById, null);
-    assert.equal((await listProjectDocuments(await userOf(m.id), f.project.id)).length, 1);
+    assert.equal((await listProjectDocumentsOf(f.project.id)).length, 1);
   });
 
   test("el máximo de documentos cuenta solo los vivos y restaurar lo vuelve a comprobar", async () => {

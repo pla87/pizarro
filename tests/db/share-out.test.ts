@@ -167,7 +167,7 @@ describe("compartir fuera: activar y generar", () => {
     expectFail(await setShareExpiry(f.columns.todo, 12), /Caducidad no válida/);
   });
 
-  test("ronda 69: sin tareas no se genera, la página dice quién la comparte y ya no se escribe generatedByName", async () => {
+  test("ronda 69: sin tareas no se genera, la página dice quién la comparte", async () => {
     const { me, f, t1, t2 } = await setup();
     await db.task.updateMany({ where: { id: { in: [t1.id, t2.id] } }, data: { archivedAt: new Date() } });
     expectFail(await generateShareWeb(f.columns.todo), /No hay tareas en esta columna/);
@@ -175,7 +175,6 @@ describe("compartir fuera: activar y generar", () => {
     const token = tokenOf((await generate(f.columns.todo)).url);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.equal(row.generatedById, me.id);
-    assert.equal(row.generatedByName, null, "el nombre se lee de la cuenta, no se guarda");
     const html = await (await page(token)).text();
     assert.ok(html.includes("Compartida por Marta desde Pizarro"), "el nombre de pila de quien generó la web");
     await db.user.update({ where: { id: me.id }, data: { name: "Lucía Nueva" } });
@@ -555,7 +554,6 @@ describe("compartir fuera: arreglos de la revisión", () => {
     assert.ok(res);
     const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
     assert.equal(row.generatedById, null);
-    assert.equal(row.generatedByName, null, "como en el historial, no queda su nombre");
     assert.equal(noticeOf(await post(token, fixed.id, { op: "done" })), "done");
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: fixed.id } })).columnId, f.columns.done);
     const spawned = await db.task.findFirst({ where: { recurrenceFromId: fixed.id } });
