@@ -408,15 +408,26 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     const importedAt = Date.now() - 1_000_000;
     const kindIndex = new Map(data.kinds.map((k, i) => [k.ref, i]));
     for (const k of [...data.kinds].sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "project" ? -1 : 1))) {
-      const lower = k.name.toLowerCase();
+      let name = k.name;
+      let lower = name.toLowerCase();
       const existing = k.scope === "general" ? generalByName.get(lower) : undefined;
       if (existing) { kindIds.set(k.ref, existing); continue; }
       const dupe = ownKindByName.get(lower);
       if (dupe) { kindIds.set(k.ref, dupe); continue; }
+      // Un tipo del proyecto no puede repetir el nombre de un tipo general de esta instalación: se le busca un nombre libre.
+      if (generalByName.has(lower)) {
+        for (let n = 2; ; n++) {
+          const tail = ` (${n})`;
+          name = `${cutText(k.name, 80 - tail.length).trimEnd()}${tail}`;
+          lower = name.toLowerCase();
+          if (!generalByName.has(lower) && !ownKindByName.has(lower)) break;
+        }
+        warnings.push(t("El tipo «{from}» ya existe como tipo general aquí y se ha importado como «{to}».", { from: k.name, to: name }));
+      }
       const id = newId();
       kindIds.set(k.ref, id);
       ownKindByName.set(lower, id);
-      kindRows.push({ id, projectId, name: k.name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate,
+      kindRows.push({ id, projectId, name, color: k.color, position: k.position, titleTemplate: k.titleTemplate, descriptionTemplate: k.descriptionTemplate, subtaskTemplate: k.subtaskTemplate,
         // Sin fecha en el archivo, orden creciente según el del archivo (desempata tipos con la misma posición).
         createdAt: k.createdAt ? date(k.createdAt) : new Date(importedAt + kindIndex.get(k.ref)!),
       });
@@ -538,7 +549,7 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
     }
 
     const releaseRows: Prisma.ReleaseCreateManyInput[] = data.releases.map((r) => ({
-      id: releaseIds.get(r.ref)!, projectId, number: r.number, title: r.title, content: r.content, createdById: uid(r.createdBy), deployedAt: date(r.deployedAt),
+      id: releaseIds.get(r.ref)!, projectId, number: r.number, title: r.title, content: remapAttachmentRefs(r.content, attachmentIds), createdById: uid(r.createdBy), deployedAt: date(r.deployedAt),
     }));
     const releaseTaskRows: Prisma.ReleaseTaskCreateManyInput[] = data.releases.flatMap((r) =>
       r.tasks.map((x) => ({ releaseId: releaseIds.get(r.ref)!, taskId: x.taskRef ? taskIds.get(x.taskRef)! : null, title: x.title, kindName: x.kindName })),
