@@ -124,9 +124,8 @@ export const BUILTIN_TEMPLATES: BuiltinTemplate[] = [
       ],
       hiddenGeneralKinds: [],
       hideAllGeneralKinds: true,
+      // Sin «Persona 1/2» (ronda 72): para repartir por personas está «Organizar por personas» (una columna por persona).
       labels: [
-        { name: "Persona 1", color: "#0ea5e9" },
-        { name: "Persona 2", color: "#ec4899" },
         { name: "Toda la familia", color: "#a855f7" },
         { name: "Urgente", color: "#ef4444" },
       ],

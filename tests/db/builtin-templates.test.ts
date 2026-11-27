@@ -185,7 +185,7 @@ describe("plantillas de proyecto de serie", () => {
     const kinds = await db.taskKind.findMany({ where: { projectId: created.id }, orderBy: { position: "asc" } });
     assert.equal(kinds[0]!.name, "Shopping");
     assert.match(kinds[1]!.descriptionTemplate, /What needs doing/);
-    assert.ok((await db.label.findMany({ where: { projectId: created.id } })).some((l) => l.name === "Person 1"));
+    assert.ok((await db.label.findMany({ where: { projectId: created.id } })).some((l) => l.name === "Whole family"));
 
     // Modificada por el administrador: se ofrece y se aplica tal como está guardada.
     await db.projectTemplate.update({ where: { builtinKey: "eventos-viajes" }, data: { name: "Mis viajes" } });
@@ -391,6 +391,48 @@ describe("plantillas de proyecto de serie", () => {
     const pc = await db.column.findMany({ where: { projectId: created.id }, select: { name: true, defaultKind: { select: { name: true } } } });
     const byName = Object.fromEntries(pc.map((c) => [c.name, c.defaultKind?.name ?? null]));
     assert.deepEqual([byName["Por confirmar"], byName["Reservado"], byName["Lista del día y maleta"], byName["Ideas"]], ["Proveedor", "Proveedor", "Maleta y material", null]);
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+  });
+  test("«Casa y familia» sin «Persona 1/2»: la sembrada sin tocar pasa sola; la modificada se respeta; los proyectos conservan sus etiquetas", async () => {
+    await db.projectTemplate.deleteMany();
+    await db.builtinTemplateSeeded.deleteMany();
+    await seedBuiltinTemplates(db);
+    const key = "casa-familia";
+    const canon = canonicalTemplate(key)!;
+    assert.deepEqual(canon.labels.map((l) => l.name), ["Toda la familia", "Urgente"]);
+    assert.deepEqual(canonicalTemplateEn(key)!.labels.map((l) => l.name), ["Whole family", "Urgent"]);
+    // La definición de la v1.74.0 (la huella es la de entonces: si no coincide, una instalación real no se pondría al día).
+    const old: TemplateData = { ...canon, labels: [{ name: "Persona 1", color: "#0ea5e9" }, { name: "Persona 2", color: "#ec4899" }, ...canon.labels] };
+    assert.equal(templateFingerprint(old), "23aae0fbac6d457ab01c00b8bd841ea0b52dbec450291af62bc0441b6e90432f");
+    await db.projectTemplate.update({ where: { builtinKey: key }, data: { labels: old.labels } });
+    await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+
+    // Un proyecto creado con la definición vieja.
+    const admin = await makeUser({ role: "ADMIN" });
+    await loginAs(admin);
+    resetRateLimit(`project-create:${admin.id}`);
+    const tpl = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } });
+    const home = expectOk(await createProject(`Casa ${Date.now()}`, { templateId: tpl.id }));
+    const labelsOf = async (projectId: string) => (await db.label.findMany({ where: { projectId }, orderBy: { name: "asc" } })).map((l) => l.name);
+    assert.deepEqual(await labelsOf(home.id), ["Persona 1", "Persona 2", "Toda la familia", "Urgente"]);
+
+    assert.deepEqual(await upgradeBuiltinTemplates(db), [key]);
+    const now = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } });
+    assert.deepEqual((now.labels as { name: string }[]).map((l) => l.name), ["Toda la familia", "Urgente"]);
+    assert.equal((await db.builtinTemplateSeeded.findUniqueOrThrow({ where: { key } })).appliedHash, templateFingerprint(canon));
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    assert.deepEqual(await labelsOf(home.id), ["Persona 1", "Persona 2", "Toda la familia", "Urgente"], "el proyecto ya creado no cambia");
+    const fresh = expectOk(await createProject(`Casa nueva ${Date.now()}`, { templateId: now.id }));
+    assert.deepEqual(await labelsOf(fresh.id), ["Toda la familia", "Urgente"]);
+
+    // Modificada por el administrador (otra etiqueta además de las viejas): no se toca.
+    const edited = [...old.labels, { name: "Abuela", color: "#14b8a6" }];
+    await db.projectTemplate.update({ where: { builtinKey: key }, data: { labels: edited } });
+    await db.builtinTemplateSeeded.update({ where: { key }, data: { appliedHash: templateFingerprint(old) } });
+    assert.deepEqual(await upgradeBuiltinTemplates(db), []);
+    const kept = await db.projectTemplate.findUniqueOrThrow({ where: { builtinKey: key } });
+    assert.deepEqual((kept.labels as { name: string }[]).map((l) => l.name), ["Persona 1", "Persona 2", "Toda la familia", "Urgente", "Abuela"]);
     await db.projectTemplate.deleteMany();
     await db.builtinTemplateSeeded.deleteMany();
   });
