@@ -945,4 +945,4 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 ### 22.3 Tablero en vivo con menos recargas (tu instalación)
 
-- Deja un tablero abierto en dos navegadores. Cambia una tarjeta en uno: el otro la ve en uno o dos segundos, como siempre. Sin tocar nada durante 20 minutos, en *Logs* las visitas al tablero de esa pestaña ya no salen cada 15 minutos.
+- Deja un tablero abierto en dos navegadores. Cambia una tarjeta en uno: el otro la ve en uno o dos segundos, como siempre. Deja los dos quietos un buen rato (más de 15 minutos) y vuelve a cambiar algo: se sigue viendo al momento en el otro.

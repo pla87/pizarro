@@ -236,24 +236,22 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado tras la ronda 72:** la v1.75.0 está publicada (`stable` y la etiqueta `v1.75.0`): aviso al revocar un enlace de
-«Compartir fuera», `DROP COLUMN generatedByName` (`20261206100000`), imágenes de la web de fuera que se abren, «Varias
-tareas» encima del fondo, historial desde el número de versión, «Casa y familia» sin «Persona 1/2» y 3 vueltas de revisión
-y caza de bugs (ver `HISTORIA.md`, ronda 72; guardas «(Ronda 72)» en `GUARDAS.md`). Se cerró en la nube: build de
-producción, `scripts/e2e-all.sh` completo y pasada visual en navegador.
+**Estado tras la ronda 73 (primera parte):** la v1.75.1 está publicada (`stable` y la etiqueta `v1.75.1`): 3 vueltas de
+revisión y caza de bugs (R70M1/R70M2) con lo evidente arreglado y las decisiones 1-8 del propietario aplicadas (tope
+diario de WhatsApp, ping del canal en vivo con la posición y recarga de seguridad cada hora, sesiones cerradas al restaurar,
+repetidas que no renacen al archivar, 2 PDF a la vez por persona, apagado del contenedor sin cortar migraciones, aviso de
+migraciones pendientes en `npm start`, búsqueda corta de releases solo en el título). Ver `HISTORIA.md`, ronda 73, y las
+guardas «(Ronda 73)» de `GUARDAS.md`.
 
-**Ronda 73 en curso (rama `claude/nice-feynman-45a4d9`, sin PR):** hechas las 3 vueltas de revisión y caza de bugs
-(R70M1/R70M2) con lo evidente arreglado y probado (unitarias, con base, e2e afectadas y las del tablero en verde), más
-«(1 tarea)» en Logs de «Compartir fuera» y la prueba del pie del detalle a 430 px que ya no depende de la fuente. Lo
-opcional está en la lista de decisiones del informe al propietario. Falta: sus respuestas, el manual/changelog y publicar
-(v1.75.1 o junto a las notas en la v1.76.0).
+**Siguiente (ronda 73, segunda parte, v1.76.0):** R69F1, notas generales con la opción **A** («Nueva nota» dentro de
+Documentación); «¿Descartar el texto?» al importar un texto ilegible (respuesta 3 de la v1.75.0); decir en el diálogo de
+pasar a privado que quien lo creó conserva el acceso (4); subtareas con tope en el PDF del plan por persona (5). Después,
+rondas propias ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que una IA agéntica
+instale en Railway (crea un proyecto de pago), solo con el propietario delante.
 
-**Siguiente ronda (73):** el propietario ya contestó las preguntas de la v1.75.0 (`HISTORIA.md`, «Respuestas del
-propietario a las preguntas de la v1.75.0»). Por hacer: R69F1, notas generales con la opción **A** («Nueva nota» dentro de
-Documentación); «¿Descartar el texto?» al importar un texto ilegible (3); decir en el diálogo de pasar a privado que quien
-lo creó conserva el acceso (4); subtareas con tope en el PDF del plan por persona (5). NO a la 6 y la 7. Aparte, rondas
-propias ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real de la guía de Railway para la IA (crea un
-proyecto de pago), solo con el propietario delante.
+**Preguntas abiertas al propietario:** sin contestar de la ronda 73: renombrar `tests/db/bh48a.test.ts` a
+`name-spaces.test.ts` (SÍ) y borrar `docs/handoff/CHROME-R69.md` pasando antes sus 4 pendientes aquí (SÍ). Dijo NO a:
+«Persona: yo» del calendario con todos los proyectos visibles de un admin, y ayuda de atajos en una columna.
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
