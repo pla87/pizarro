@@ -341,7 +341,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   su memoria (~170 MB) se libera al acabar. Sin `dist/boot.mjs`, o si el hijo falla (código distinto de 0), no arranca.
   Con SIGTERM (o el apagado de `parent-watch`) mientras corre, mata al hijo y sale con 143.
   `boot.ts` se ejecuta solo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
-  de Prisma y lo quita de `globalThis` (limpieza que ya no hace falta con el hijo aparte; pendiente de retirar en la v1.74). `start.sh` y `start-local.mjs` fijan
+  de Prisma (la limpieza de `globalThis` se retiró en la ronda 71). `start.sh` y `start-local.mjs` fijan
   `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
   (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
   `e2e/install-e2e.mjs`.

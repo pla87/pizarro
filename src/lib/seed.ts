@@ -67,6 +67,9 @@ const TEXT = {
   },
 } as const satisfies Record<SeedLocale, unknown>;
 
+/** Marca en AppState: el proyecto de ejemplo ya se creó (o la instalación ya tenía proyectos). */
+const EXAMPLE_SEEDED_KEY = "exampleProjectSeeded";
+
 /** Idioma de la instalación guardado por el asistente /setup (español si no hay ninguno). */
 async function installationLocale(db: Pick<PrismaClient, "appState">): Promise<SeedLocale> {
   const row = await db.appState.findUnique({ where: { key: INSTANCE_LOCALE_KEY }, select: { value: true } });
@@ -122,7 +125,17 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
     log(`[seed] Administrador inicial creado (${email}).`);
   }
 
-  if ((await db.project.count()) === 0) {
+  // El proyecto de ejemplo, una sola vez en la vida de la instalación: si después se borran todos los proyectos, un
+  // reinicio no lo vuelve a crear (antes reaparecía en cada arranque). Una instalación que ya tenía proyectos al llegar
+  // esta marca la recibe sin ejemplo.
+  if (await db.appState.findUnique({ where: { key: EXAMPLE_SEEDED_KEY }, select: { key: true } })) return;
+  const markSeeded = () => db.appState.upsert({ where: { key: EXAMPLE_SEEDED_KEY }, create: { key: EXAMPLE_SEEDED_KEY, value: "1" }, update: {} });
+  if ((await db.project.count()) > 0) {
+    await markSeeded();
+    return;
+  }
+  // Sin proyectos y sin marca: instalación nueva (la marca se pone al terminar; si algo falla, se reintenta al arrancar).
+  {
     const project = await db.project.create({
       data: {
         name: text.project,
@@ -182,6 +195,7 @@ export async function seed(db: PrismaClient, log: (msg: string) => void = consol
         },
       });
     }
+    await markSeeded();
     log("[seed] Proyecto de ejemplo creado.");
   }
 }

@@ -29,5 +29,12 @@ SELECT format('ALTER TABLE %I.%I OWNER TO %I', n.nspname, c.relname, :'appuser')
 SELECT format('ALTER TYPE %I.%I OWNER TO %I', n.nspname, t.typname, :'appuser')
   FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
   WHERE n.nspname = 'public' AND t.typtype = 'e' \gexec
+-- También las funciones propias (las de las migraciones: task_column_entered, task_routine_origin, search_fold): una
+-- migración que hace CREATE OR REPLACE FUNCTION sobre una del superusuario falla («must be owner of function») y la app no
+-- arranca. Las de extensiones (pg_trgm) no se tocan.
+SELECT format('ALTER FUNCTION %I.%I(%s) OWNER TO %I', n.nspname, p.proname, pg_get_function_identity_arguments(p.oid), :'appuser')
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public' AND p.prokind = 'f'
+    AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e') \gexec
 SQL
 echo "[initdb] Rol de aplicación «$APP_DB_USER» listo (sin superusuario, con CREATEDB)."
