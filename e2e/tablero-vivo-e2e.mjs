@@ -382,12 +382,31 @@ if (only.includes("capas")) {
     await fb.waitFor({ state: "detached" });
     L.eq("CAPAS escritorio: al cerrar el informe sigue la tarea", await d.page.locator("[role=dialog]").count(), 1);
   }
+  // Ronda 72: «Varias tareas» también tiene su copia encima del fondo, en su sitio y con el mismo texto; abre «Varias tareas» al lado.
+  const bulkCopy = floating("Abrir «Varias tareas» al lado");
+  await L.eqEventually("CAPAS escritorio: copia de «Varias tareas» encima del fondo, opaca y sin nada encima", () => bulkCopy.count().then((n) => (n === 1 ? onTop(bulkCopy) : n)), [1, true, true]);
+  const bulkOrig = d.page.locator("button[aria-label='Varias tareas']:not([data-pz-layer])").first();
+  L.eq("CAPAS escritorio: la copia de «Varias tareas» dice lo mismo que el botón de la cabecera", [(await bulkCopy.innerText()).trim(), (await bulkOrig.innerText()).trim()], ["Varias tareas", "Varias tareas"]);
+  const [bo, bc] = [await bulkOrig.boundingBox(), await bulkCopy.boundingBox()];
+  L.eq("CAPAS escritorio: y en el mismo sitio", [Math.round(bc.x), Math.round(bc.y)], [Math.round(bo.x), Math.round(bo.y)]);
+  await bulkCopy.click();
+  const bulkDlg = d.page.getByRole("dialog").filter({ hasText: "Crear varias tareas" });
+  await bulkDlg.waitFor({ timeout: 10000 });
+  L.eq("CAPAS escritorio: la copia de «Varias tareas» la abre al lado, con la tarea aún abierta", await d.page.locator("[role=dialog]").count(), 2);
+  await bulkDlg.getByRole("button", { name: "Cancelar" }).click();
+  await bulkDlg.waitFor({ state: "detached" });
+  L.eq("CAPAS escritorio: al cancelarla sigue la tarea", await d.page.locator("[role=dialog]").count(), 1);
   await floating("Abrir otra tarea nueva al lado").click();
   await L.eqEventually("CAPAS escritorio: la copia de «Nueva tarea» abre la segunda al lado", () => d.page.locator("[role=dialog]").count(), 2);
   L.check("CAPAS escritorio: con la tarea aún abierta", await d.page.locator("[role=dialog]", { hasText: "Nueva tarea" }).count() === 1);
   await sleep(400);
   L.eq("CAPAS escritorio: con la pareja abierta, la copia de «Nueva tarea» sigue diciendo «Nueva tarea»", (await floating("Abrir otra tarea nueva al lado").innerText()).trim(), "Nueva tarea");
   L.eq("CAPAS escritorio: y se ve entera (opaca y sin nada encima)", await onTop(floating("Abrir otra tarea nueva al lado")), [1, true, true]);
+  L.eq("CAPAS escritorio: con la pareja abierta, la copia de «Varias tareas» no abre una tercera y dice por qué", [await bulkCopy.getAttribute("aria-disabled"), await bulkCopy.getAttribute("title")], ["true", "Ya hay dos tareas abiertas"]);
+  // force: Playwright no pulsa lo que lleva aria-disabled; aquí se comprueba justo que no hace nada.
+  await bulkCopy.click({ force: true });
+  await sleep(300);
+  L.eq("CAPAS escritorio: pulsarla no abre nada", await d.page.locator("[role=dialog]").count(), 2);
   // Una confirmación centrada encima (ronda 64) sí las oculta; al volver, otra vez enteras.
   const second = d.page.locator("[role=dialog]", { hasText: "Nueva tarea" });
   await second.locator("input").first().fill("Borrador r65");

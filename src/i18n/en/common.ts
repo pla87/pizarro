@@ -172,4 +172,6 @@ export const common: Record<string, string> = {
 
   // Copia flotante de «Nueva tarea» con dos tareas abiertas lado a lado (no abre una tercera)
   "Ya hay dos tareas abiertas": "Two tasks are already open",
+  // Ronda 72: el historial de versiones se abre desde la versión del pie del menú
+  "Historial de versiones (v{version})": "Version history (v{version})",
 };

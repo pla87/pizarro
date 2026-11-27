@@ -495,6 +495,16 @@ if (only.includes("hist")) {
   const mMore = m.page.getByRole("button", { name: "Ver más" });
   await mMore.waitFor({ timeout: 15000 });
   L.check("MÓVIL hist: sin desbordar a lo ancho", await m.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+  // Ronda 72 (escritorio): el historial ya no está en el menú lateral; se llega desde la versión del pie, que lo marca al estar en él.
+  const aside = s.page.locator("aside").first();
+  L.eq("HIST: sin entrada «Historial de versiones» en el menú lateral", await aside.getByRole("link", { name: "Historial de versiones", exact: true }).count(), 0);
+  const footVersion = aside.getByRole("link", { name: /^Historial de versiones \(v\d+\.\d+\.\d+\)$/ });
+  L.eq("HIST: la versión del pie lleva al historial y lo marca como página actual", [await footVersion.getAttribute("href"), await footVersion.getAttribute("aria-current")], ["/changelog", "page"]);
+  await L.goto(s.page, `${L.BASE}/my-tasks`);
+  await footVersion.click();
+  await s.page.waitForURL(/\/changelog$/, { timeout: 15000 });
+  await s.page.getByRole("heading", { name: "Historial de versiones" }).waitFor({ timeout: 15000 });
+  L.check("HIST: pulsar la versión del pie abre el historial", true);
   L.assertNoErrors("HIST", [s, m]);
   await m.ctx.close();
   await s.ctx.close();
@@ -546,9 +556,17 @@ if (only.includes("movil")) {
   await drawer.waitFor();
   const vh = await m.page.evaluate(() => window.innerHeight);
   const logout = await drawer.getByRole("button", { name: "Cerrar sesión" }).boundingBox();
-  const version = await drawer.getByRole("link", { name: /^v\d/ }).boundingBox();
+  // Ronda 72: la versión del pie es el enlace al historial (ya no hay entrada «Historial de versiones» en el menú).
+  const versionLink = drawer.getByRole("link", { name: /^Historial de versiones \(v\d+\.\d+\.\d+\)$/ });
+  const version = await versionLink.boundingBox();
   L.check("MÓVIL menú: el pie (nombre, versión y salir) se ve entero, con margen", logout.y + logout.height <= vh - 8 && version.y + version.height <= vh - 8, JSON.stringify({ vh, logout, version }));
   await m.page.screenshot({ path: `${SHOTS}/r56-menu-pie.png` });
+  L.eq("MÓVIL menú: sin entrada «Historial de versiones» en el menú", await drawer.getByRole("link", { name: "Historial de versiones", exact: true }).count(), 0);
+  L.check("MÓVIL menú: la versión se ve («vX.Y.Z») y su title nombra el historial", /^v\d+\.\d+\.\d+$/.test((await versionLink.innerText()).trim()) && /^Historial de versiones \(v/.test((await versionLink.getAttribute("title")) ?? ""));
+  await versionLink.tap();
+  await m.page.waitForURL(/\/changelog$/, { timeout: 15000 });
+  await m.page.getByRole("heading", { name: "Historial de versiones" }).waitFor({ timeout: 15000 });
+  L.check("MÓVIL menú: pulsar la versión abre el historial", true);
   L.assertNoErrors("MÓVIL", [m]);
   await m.ctx.close();
   await asMember();
