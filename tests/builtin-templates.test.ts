@@ -49,6 +49,11 @@ test("isBuiltinModified: igual, editada, sin clave y clave desconocida", () => {
   assert.equal(isBuiltinModified({ ...canon, columns: [...canon.columns].reverse() }, "trabajo-clientes"), true);
   assert.equal(isBuiltinModified({ ...canon, labels: canon.labels.slice(1) }, "trabajo-clientes"), true);
   assert.equal(isBuiltinModified({ ...canon, kinds: canon.kinds.map((k, i) => (i === 0 ? { ...k, subtaskTemplate: [] } : k)) }, "trabajo-clientes"), true);
+  // El plazo de «Asignación a persona» y el límite WIP también cuentan (la columna sigue con rol NONE).
+  assert.equal(isBuiltinModified({ ...canon, columns: canon.columns.map((c, i) => (i === 0 ? { ...c, assignDueDays: 3 } : c)) }, "trabajo-clientes"), true);
+  assert.equal(isBuiltinModified({ ...canon, columns: canon.columns.map((c, i) => (i === 0 ? { ...c, wipLimit: 4 } : c)) }, "trabajo-clientes"), true);
+  // Y todas las de serie conservan su huella (ninguna trae esos campos).
+  for (const b of BUILTIN_TEMPLATES) assert.equal(isBuiltinModified(canonicalTemplate(b.key)!, b.key), false, b.key);
   assert.equal(isBuiltinModified({ ...canon, name: "otro" }, null), false);
   assert.equal(isBuiltinModified({ ...canon, name: "otro" }, "desconocida"), false);
 });

@@ -78,8 +78,9 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
               {g.items.map((it) => (
                 <li key={it.keys + it.label} className="grid grid-cols-[1fr_7rem_5rem] items-center gap-x-3 py-1.5 text-sm">
                   <span>{t(it.label)}</span>
-                  <Keys>{it.keys}</Keys>
-                  <Keys>{shortcutLabel(it.keys, true)}</Keys>
+                  {/* «Espacio» es la única tecla con nombre: se traduce («Space»). */}
+                  <Keys>{it.keys === "Espacio" ? t("Espacio") : it.keys}</Keys>
+                  <Keys>{it.keys === "Espacio" ? t("Espacio") : shortcutLabel(it.keys, true)}</Keys>
                 </li>
               ))}
             </ul>

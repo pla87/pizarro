@@ -208,6 +208,7 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
   const initial = {
     phoneNumberId: view.phoneNumberId, templateName: view.templateName, templateLang: view.templateLang, templateLangEn: view.templateLangEn,
     codeTemplateName: view.codeTemplateName, codeTemplateLang: view.codeTemplateLang, codeTemplateLangEn: view.codeTemplateLangEn,
+    dailyLimit: view.dailyLimit,
   };
   const [form, setForm] = useState(initial);
   const [saved, setSaved] = useState(initial);
@@ -267,10 +268,14 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
           {t("Activo: {connected} y {pending}.", {
             connected: view.connected === 1 ? t("1 persona conectada") : t("{n} personas conectadas", { n: view.connected }),
             pending: view.pending === 1 ? t("1 pendiente de confirmar su número") : t("{n} pendientes de confirmar su número", { n: view.pending }),
-          })}
+          })}{" "}
+          <span data-testid="whatsapp-today">{t("Hoy: {n} de {max} avisos.", { n: view.sentToday, max: view.effectiveDailyLimit })}</span>
         </Status>
       ) : (
         <Status active={false}>{view.complete ? t("Desactivado: la configuración está completa, pero no se envían avisos.") : t("Inactivo: faltan el token, el identificador del número o la plantilla.")}</Status>
+      )}
+      {view.active && view.sentToday >= view.effectiveDailyLimit && (
+        <ErrorBox>{t("Se ha llegado al tope de {max} avisos por WhatsApp de hoy: hasta mañana, los avisos solo quedan en la app y en los demás canales. Puedes subir el tope abajo.", { max: view.effectiveDailyLimit })}</ErrorBox>
       )}
       {view.authError && (
         <ErrorBox>{t("Meta ha rechazado el token y los avisos no salen: {error}. Pon un token permanente (paso 2 de «Qué necesitas de Meta») y guarda.", { error: view.authError.message })}</ErrorBox>
@@ -360,6 +365,13 @@ function WhatsappAdmin({ view }: { view: MessagingAdminView["whatsapp"] }) {
             <span className="font-medium">{t("Idioma en inglés de la verificación")}</span>
             <input className="input mt-1 w-full" value={form.codeTemplateLangEn} onChange={(e) => set("codeTemplateLangEn", e.target.value)} maxLength={10} placeholder={t("opcional, p. ej. en")} />
           </label>
+        </div>
+        <div className="block text-sm">
+          <div className="flex items-center gap-1">
+            <label htmlFor="wa-daily-limit" className="font-medium">{t("Tope de avisos al día")}</label>
+            <InfoTip topic={t("Tope de avisos al día")}>{t("Avisos por WhatsApp como mucho cada día (desde medianoche, en la zona horaria de la instalación) entre todas las personas. Al llegar, el resto del día los avisos solo quedan en la app y en los demás canales, y queda una línea en Logs. Vacío = {n}.", { n: view.defaultDailyLimit })}</InfoTip>
+          </div>
+          <input id="wa-daily-limit" className="input mt-1 w-full sm:w-40" inputMode="numeric" value={form.dailyLimit} onChange={(e) => set("dailyLimit", e.target.value)} maxLength={6} placeholder={String(view.defaultDailyLimit)} />
         </div>
       </div>
       <p className="flex flex-wrap items-center gap-1 text-xs text-slate-500">

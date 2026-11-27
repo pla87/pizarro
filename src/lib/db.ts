@@ -60,5 +60,5 @@ function createClient() {
 
 // En globalThis también en producción: webpack empaqueta este módulo una vez por capa (páginas, acciones e
 // instrumentación) y cada copia abría su propio pool (tres pools de DATABASE_POOL_SIZE conexiones en un proceso).
-// boot.ts lo desconecta y lo quita de aquí al terminar, para que el servidor no herede uno cerrado.
+// boot.ts (proceso hijo aparte) solo lo desconecta al terminar.
 export const db = (globalForPrisma.prisma ??= createClient());

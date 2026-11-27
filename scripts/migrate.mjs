@@ -364,6 +364,20 @@ export function migrationsUpToDate(local, rows) {
   return { ok: true, count: local.length };
 }
 
+/**
+ * Para `npm start` (scripts/start-local.mjs), que no migra solo: por qué la base no está al día con las migraciones de
+ * `dir` (texto para el aviso), o null si lo está o no se puede saber (sin carpeta, otro esquema, base inaccesible: entonces
+ * avisa el arranque).
+ */
+export async function pendingMigrationsReason(dir, url) {
+  const local = localMigrations(dir);
+  if (!local?.length || !defaultSchema(url)) return null;
+  const rows = await migrationRows(url);
+  if (!rows) return null;
+  const state = migrationsUpToDate(local, rows);
+  return state.ok ? null : state.reason ?? "faltan migraciones";
+}
+
 /** ¿Lee pg la misma tabla que Prisma? Prisma usa el esquema de `?schema=` (public si no hay); pg, siempre el de search_path. */
 function defaultSchema(url) {
   try {

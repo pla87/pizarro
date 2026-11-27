@@ -65,24 +65,32 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const base: Prisma.TaskWhereInput = { project: projectWhere, archivedAt: null, dueDate: range };
 
   // Personas con tareas en el rango (para el filtro): solo las que ya se ven en este calendario.
-  const assigneeGroups = await db.task.groupBy({ by: ["assigneeId"], where: base });
-  // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
-  // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
-  const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
-  const requestedIds = requestedPeople.filter((x) => x !== PERSON_UNASSIGNED && x !== user.id);
-  const scope = projectIds.length ? picked : projects;
-  const people = await db.user.findMany({
-    where: {
-      active: true,
-      OR: [
-        { id: { in: [...peopleIds, user.id] } },
-        ...(requestedIds.length && scope.length ? [{ id: { in: requestedIds }, OR: scope.map((p) => projectUsersWhere(p, p.id)) }] : []),
-      ],
-    },
-    select: { id: true, name: true },
-    orderBy: { name: "asc" },
-  });
-  const personIds = requestedPeople.filter((x) => x === PERSON_UNASSIGNED || people.some((p) => p.id === x));
+  // Sin filtro de persona (lo normal), las consultas de abajo no dependen de esta lista: va en paralelo con ellas.
+  const peoplePromise = (async () => {
+    const assigneeGroups = await db.task.groupBy({ by: ["assigneeId"], where: base });
+    // Un id arbitrario en la URL no revela ningún nombre ni filtra nada: solo valen el propio usuario, quienes tienen tareas
+    // visibles en el rango y quienes pueden usar alguno de los proyectos a la vista (projectUsersWhere).
+    const peopleIds = assigneeGroups.map((g) => g.assigneeId).filter((x): x is string => !!x);
+    const requestedIds = requestedPeople.filter((x) => x !== PERSON_UNASSIGNED && x !== user.id);
+    const scope = projectIds.length ? picked : projects;
+    const people = await db.user.findMany({
+      where: {
+        active: true,
+        OR: [
+          { id: { in: [...peopleIds, user.id] } },
+          ...(requestedIds.length && scope.length ? [{ id: { in: requestedIds }, OR: scope.map((p) => projectUsersWhere(p, p.id)) }] : []),
+        ],
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return people;
+  })();
+  // Si falla mientras nadie la espera, no es un rechazo sin atender (el await de abajo sigue viendo el error).
+  peoplePromise.catch(() => undefined);
+  // Sin persona pedida no hace falta esperarla aquí (se espera al final, para el filtro).
+  const knownPeople = requestedPeople.length ? await peoplePromise : [];
+  const personIds = requestedPeople.filter((x) => x === PERSON_UNASSIGNED || knownPeople.some((p) => p.id === x));
   const assigneeIds = personIds.filter((x) => x !== PERSON_UNASSIGNED);
   const personWhere: Prisma.TaskWhereInput = personIds.length
     ? { OR: [...(assigneeIds.length ? [{ assigneeId: { in: assigneeIds } }] : []), ...(personIds.includes(PERSON_UNASSIGNED) ? [{ assigneeId: null }] : [])] }
@@ -215,7 +223,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
       repeats={repeats}
       deliverables={deliverables}
       projects={options}
-      people={people}
+      people={await peoplePromise}
       meId={user.id}
       filters={{ project: projectIds, person: personIds, hideDone }}
       feed={{ active: !!feedRow, scope: feedRow?.scope ?? null }}

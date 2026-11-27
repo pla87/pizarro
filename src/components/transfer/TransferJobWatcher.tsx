@@ -26,16 +26,26 @@ export function TransferJobWatcher() {
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Fallos seguidos (sin red, un 503 durante un despliegue): se reintenta, cada vez más despacio y no para siempre.
+    let failures = 0;
     const check = async () => {
       clearTimeout(timer);
       let jobs: TransferJobView[] = [];
+      let failed = false;
       try {
         const res = await fetch("/api/transfer-jobs?pending=1", { cache: "no-store" });
         if (res.ok) jobs = ((await res.json()) as { jobs: TransferJobView[] }).jobs;
+        else failed = res.status >= 500;
       } catch {
-        // sin red: se vuelve a intentar enseguida
+        failed = true;
       }
       if (stopped) return;
+      if (failed) {
+        // Sin esto, tras un fallo nadie avisaba de que la exportación estaba lista hasta recargar.
+        if (++failures <= 10) timer = setTimeout(check, POLL_MS * Math.min(2 ** failures, 16));
+        return;
+      }
+      failures = 0;
       const { t, toast, router } = latest.current;
       for (const job of jobs) {
         if (!isFinal(job.status) || job.notified || shownJobs.has(job.id) || watchingJobs.has(job.id) || job.status === "EXPIRED") continue;

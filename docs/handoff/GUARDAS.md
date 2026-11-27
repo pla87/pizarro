@@ -110,6 +110,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   el layout lo lanza en paralelo solo con un id válido; `useServerReleaseNav` apunta en el cliente lo que trae el layout
   tras un `router.refresh()`. «Generar release» y «Generar plan de trabajo» no se activan hasta tener el número de release
   y las plantillas (`data-release-number`, `data-plan-setup`).
+- (Ronda 73) El `ping` del canal en vivo lleva `{ at, boot, seq }` (como el saludo): con la posición al día, la recarga de
+  respaldo y la de volver a la ventana pasan a una de seguridad cada hora (`LIVE_CHECKED_REFRESH_MS`); si el ping muestra un
+  aviso perdido, se recarga en el acto (`missedByPing`). Un cambio que no pase por `publishChange` no lo ve el número: solo
+  lo recoge esa recarga de cada hora. Un ping antiguo (solo la hora) deja los plazos de antes.
 
 ## Navegador e interfaz
 
@@ -341,7 +345,7 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   su memoria (~170 MB) se libera al acabar. Sin `dist/boot.mjs`, o si el hijo falla (código distinto de 0), no arranca.
   Con SIGTERM (o el apagado de `parent-watch`) mientras corre, mata al hijo y sale con 143.
   `boot.ts` se ejecuta solo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
-  de Prisma y lo quita de `globalThis` (limpieza que ya no hace falta con el hijo aparte; pendiente de retirar en la v1.74). `start.sh` y `start-local.mjs` fijan
+  de Prisma (la limpieza de `globalThis` se retiró en la ronda 71). `start.sh` y `start-local.mjs` fijan
   `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
   (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
   `e2e/install-e2e.mjs`.
@@ -417,6 +421,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
     de autenticación `codigo_pizarro` (Meta lo exige para códigos de un solo uso; ajustes `whatsapp.codeTemplate*` en
     `AppState`, con traducción inglesa opcional). *Probar* envía las dos plantillas. Si Meta rechaza la de verificación,
     Ajustes lo marca en rojo y nadie puede conectar un número nuevo hasta crearla (guía de WhatsApp, paso 6).
+  - (Ronda 73) Tope DIARIO de avisos por WhatsApp para toda la instalación (`src/lib/whatsapp-quota.ts`): 200 por
+    defecto, `whatsapp.dailyLimit` en `AppState` (Integraciones, junto al resto de WhatsApp). Día natural en la zona de
+    la instalación (la clave `whatsapp:day:<día>` va en el mapa de seguridad); al arrancar se rellena con los
+    `whatsappSentAt` de hoy, para que un reinicio no regale otro cupo. Al llegar: no sale por WhatsApp (los demás canales
+    sí), una línea `notify.whatsappDailyLimit` al día en Logs e Integraciones lo marca («Hoy: N de M»). Solo cuentan los
+    avisos de `deliver`; los códigos y las pruebas tienen sus propios topes. Un envío nuevo de avisos por WhatsApp pasa
+    por `reserveWhatsappNotice`.
   - Pruebas: `tests/messaging.test.ts`, `tests/db/messaging.test.ts` y `tests/db/messaging-migration.test.ts`.
 
 ## Tareas de fondo y copias
@@ -475,7 +486,14 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `applyEntry` en `src/actions/undo.ts`). Sin migración: esas entradas caducan solas a los 7 días. Si algún día cambia
   el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
-  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
+  dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`). (Ronda 73) También guarda la siguiente
+  aparición de una repetida (`recurrenceFromId`, SetNull): vuelve a colgar de la tarea que vuelve solo si sigue sin origen
+  y esa tarea no tiene ya otra siguiente (es único); sin eso, archivarla o volver a terminarla duplicaba la serie. Ese
+  `relink` no cuenta como conflicto ni entra en la huella (la siguiente aparición se toca a menudo); el del bloqueo sí.
+  Un `relink` sobre una tarea que ya no existe no cuenta como parte perdida. `column.restore` comprueba el tope de 30
+  columnas y el rol único bajo el candado de columnas (`columnsLockName`): si otra columna tiene ya el rol, vuelve «Sin rol».
+  Sacar ese `relink` de la huella no cambió el prefijo `v2:b:` a sabiendas: una entrada de la v1.75.0 con él daría el
+  aviso genérico una vez (se confirma) y caduca a los 7 días; un prefijo nuevo la habría descartado.
 - (Ronda 70) Conflictos de deshacer (`undo-conflicts.ts`): lo de fuera es `userId`/`authorId: null` (web de «Compartir
   fuera», siempre otra persona; el nombre sale de `userName`/`authorName`), así que el filtro es `OR: [{ campo: null }, {
   campo: { not: userId } }]`, nunca `not: null`. Prueba: `tests/db/undo-conflicts.test.ts`.

@@ -13,7 +13,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   const auth = await authorizeColumnRoute(ctx.params, "plan");
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
-  const report = await generateAssignPlanPdf(projectId, columnId, { locale, signal: req.signal }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
+  const report = await generateAssignPlanPdf(projectId, columnId, { locale, signal: req.signal, owner: user.id }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({

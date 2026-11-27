@@ -21,6 +21,8 @@
 			fields {
 				request>uri delete
 				request>headers>Referer delete
+				# El secreto del webhook de Telegram: con él se podrían falsificar avisos al bot.
+				request>headers>X-Telegram-Bot-Api-Secret-Token delete
 				resp_headers>Location delete
 			}
 		}

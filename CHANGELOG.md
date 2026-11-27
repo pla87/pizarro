@@ -2,6 +2,42 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.75.1 — 2026-11-27 15:44
+
+Revisión y caza de bugs: tope diario de WhatsApp, tablero en vivo con menos recargas, sesiones cerradas al restaurar una copia y arreglos de deshacer, avisos y arranque
+
+### Nuevas funcionalidades
+
+- WhatsApp: tope diario de avisos para toda la instalación (200 por defecto, configurable en Administración → Integraciones, que muestra «Hoy: N de M»). Al llegar, los avisos siguen en la app y en los demás canales.
+
+### Mejoras
+
+- Tablero en vivo: con la conexión al día ya no se recarga entero cada 15 minutos ni al volver a la ventana (una recarga de seguridad cada hora); si se pierde un aviso, se pone al día en el acto.
+- Restaurar una copia cierra todas las sesiones: una sesión cerrada o una contraseña cambiada después de la copia no revive.
+- Con más de 500 tarjetas seleccionadas, mover, archivar o borrar avisa antes («Como mucho 500 tarjetas a la vez») en vez de fallar con «Datos no válidos».
+- «Mi perfil» y el calendario cargan antes (menos consultas seguidas).
+- Como mucho 2 PDF a la vez por persona: una sola cuenta ya no llena la cola de todos.
+- Buscar releases con 1 o 2 letras mira solo el título (es más rápido).
+- Logs: los entregables (crear, cambiar, mover, borrar) dicen qué se hizo; «Compartir fuera» dice «(1 tarea)».
+- En Mac, los atajos de la barra de formato salen con ⌘ y ⇧; «Espacio» traducido en la ayuda de atajos.
+
+### Correcciones
+
+- Borrar una tarea repetida y deshacerlo ya no duplica su siguiente aparición; archivar una repetida ya terminada no la vuelve a crear si se borró.
+- Deshacer el borrado de una columna «En producción» o «Siguiente salto» cuando otra ya tiene ese rol: vuelve «Sin rol» en vez de fallar (y nunca pasa de 30 columnas).
+- Los avisos de «Exportación lista» y «Proyecto importado» llegan aunque falle la red un momento.
+- Un aviso del tablero en vivo ya no se pierde si se oculta la pestaña justo al llegar.
+- Una plantilla de serie con un plazo de «Asignación a persona» o un límite WIP cambiados cuenta como modificada (no se pierde al actualizarla).
+- El proyecto de ejemplo ya no reaparece al reiniciar si se borraron todos los proyectos.
+- En el visor de imágenes, Tab ya no se escapa a lo de debajo.
+
+### Cambios técnicos / DB
+
+- Docker: al pasar a la base con el rol de la aplicación, también las funciones (una migración ya no falla con «must be owner of function»); el apagado durante las migraciones deja terminar el paso en curso.
+- `npm start` se para con un aviso si faltan migraciones por aplicar.
+- Seguridad: los tokens de las URL no llegan a los detalles de Logs; las cabeceras internas que mande el navegador se borran en todas las rutas; Caddy no registra el secreto del webhook de Telegram.
+- Copias externas: sin nada que subir no se abre conexión a la base; la limpieza diaria de ficheros sin usar no revisa uno a uno los que sí se usan.
+
 ## v1.75.0 — 2026-11-27 12:08
 
 Aviso al revocar un enlace de «Compartir fuera», historial desde el número de versión, «Varias tareas» siempre a mano, «Casa y familia» sin Persona 1/2, releases y plan que esperan sus datos, revisión y caza de bugs

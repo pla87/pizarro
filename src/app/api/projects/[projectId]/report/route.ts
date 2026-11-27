@@ -1,6 +1,6 @@
 import { visibleProjectsWhere } from "@/lib/access";
 import { db } from "@/lib/db";
-import { generateProjectReportPdf, isPdfQueueError, PDF_BUSY_MESSAGE } from "@/lib/report-build";
+import { generateProjectReportPdf, isPdfQueueError } from "@/lib/report-build";
 import { logError, logEvent } from "@/lib/log";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/request";
@@ -30,10 +30,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ projectId: str
 
   let report;
   try {
-    report = await generateProjectReportPdf(projectId, { generatedBy: user.name, locale: toLocale(user.locale), signal: _req.signal });
+    report = await generateProjectReportPdf(projectId, { generatedBy: user.name, locale: toLocale(user.locale), signal: _req.signal, owner: user.id });
   } catch (err) {
     // Cola llena o petición cancelada: no es un fallo de generación, no se registra como tal.
-    if (isPdfQueueError(err) && err.code === "pdf_busy") return new Response(t(PDF_BUSY_MESSAGE), { status: err.status });
+    if (isPdfQueueError(err) && err.code === "pdf_busy") return new Response(t(err.message), { status: err.status });
     if (isPdfQueueError(err) && err.code === "pdf_aborted") return new Response(t(err.message), { status: err.status });
     logEvent({
       level: "error", category: "api", action: "report.pdfFailed", label: { k: "Fallo al generar el informe PDF de «{project}»: {error}", p: { project: project.name, error: logError(err) } },

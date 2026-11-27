@@ -530,6 +530,8 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
   if (lock.busy || lock.external) return [];
   lock.external = true;
   try {
+    // Sin nada que subir no se abre la conexión del bloqueo (23 de cada 24 pasadas).
+    if (!opts.force && (await nothingToUpload(destinations))) return [];
     const res = await withAdvisoryLock(LOCK_BACKUP, () => syncExternalLocked(key, destinations, opts));
     if (!res.ran) console.info("[backup] destino externo: otro proceso está copiando; se omite esta pasada");
     return res.ran ? res.value : [];
@@ -541,22 +543,27 @@ export async function syncExternal(opts: { force?: boolean; config?: ExternalCon
   }
 }
 
+/**
+ * ¿Todos los destinos tienen ya subida la última copia local (o no hay ninguna)? Solo lee el almacén local y el estado:
+ * syncExternal lo mira antes de abrir la conexión del bloqueo (lo normal en cada pasada horaria) y otra vez dentro.
+ */
+async function nothingToUpload(destinations: BackupDestination[]): Promise<boolean> {
+  const stem = (await listStems(localDestination(), { sizes: false })).find((s) => s.hasManifest)?.stem;
+  if (!stem) return true;
+  const status = await readStatus();
+  return destinations.every((d) => {
+    const prev = status.external?.[d.id];
+    return prev?.lastOkFile === stem && prev.last?.ok === true;
+  });
+}
+
 async function syncExternalLocked(key: Buffer, destinations: BackupDestination[], opts: { force?: boolean }): Promise<ExternalRun[]> {
   const at = () => new Date().toISOString();
   const runs: ExternalRun[] = [];
   try {
     // Sin `force`, si todos los destinos ya tienen subida la última copia local (lo normal en cada pasada), no hay nada
     // que hacer: se sale sin descifrar el manifiesto ni listar el almacén local (mismo criterio que el bucle de abajo).
-    if (!opts.force) {
-      const stem = (await listStems(localDestination(), { sizes: false })).find((s) => s.hasManifest)?.stem;
-      if (!stem) return [];
-      const status = await readStatus();
-      const done = (d: BackupDestination) => {
-        const prev = status.external?.[d.id];
-        return prev?.lastOkFile === stem && prev.last?.ok === true;
-      };
-      if (destinations.every(done)) return [];
-    }
+    if (!opts.force && (await nothingToUpload(destinations))) return [];
     const latest = await latestLocalManifest(key);
     if (!latest) return [];
     const { manifest, bytes } = latest;

@@ -932,3 +932,17 @@ Los avisos salen abajo; abre una tarea archivada para leerla; en el detalle, *De
 
 **Si falla:** *Logs*, busca `shareOut` (nivel Error). La página no debe mostrar nunca un error del servidor: si una dirección recién generada da «No encontrado», comprueba que abres la misma instalación que la generó (su `APP_URL` o la dirección de Railway).
 
+
+## 22. Novedades de la v1.75.1
+
+### 22.1 Tope diario de WhatsApp (solo si lo usas)
+
+- *Administración → Integraciones → 3*: el estado de WhatsApp dice «Hoy: N de M avisos». No hace falta llegar al tope (cuesta dinero): comprueba solo que la cifra sube al recibir un aviso por WhatsApp y que, si cambias el tope y guardas, se conserva.
+
+### 22.2 Restaurar una copia cierra las sesiones (instalación de prueba, nunca la real)
+
+- Tras restaurar una copia con `node dist/restore.mjs` (ver `docs/INSTALL.md` §6.3), todos los navegadores piden volver a iniciar sesión. El final de la salida lo dice («Sesiones cerradas…»).
+
+### 22.3 Tablero en vivo con menos recargas (tu instalación)
+
+- Deja un tablero abierto en dos navegadores. Cambia una tarjeta en uno: el otro la ve en uno o dos segundos, como siempre. Deja los dos quietos un buen rato (más de 15 minutos) y vuelve a cambiar algo: se sigue viendo al momento en el otro.

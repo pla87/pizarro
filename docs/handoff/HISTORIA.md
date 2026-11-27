@@ -14,6 +14,19 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 73 (ya aplicadas, v1.75.1):** el propietario cerró la v1.75.0 desde la nube (Release lanzada por
+la sesión) y pidió las 3 vueltas de revisión y caza de bugs. SÍ a: prueba del pie a 430 px sin exigir el texto (depende de
+la fuente), «(1 tarea)» en Logs, y a las decisiones 1-8 de la revisión (cerrar sesiones al restaurar; tope diario de
+WhatsApp configurable, 200 por defecto; ping con posición y recarga de seguridad de 1 h; archivar una repetida ya terminada
+no crea otra siguiente; 2 PDF a la vez por persona; apagado del contenedor que deja terminar la migración; `npm start` se
+para si faltan migraciones; búsqueda de releases de 1-2 letras solo en el título). NO a: «Persona: yo» del calendario con
+todos los proyectos visibles de un admin (9) y ayuda de atajos en una sola columna (10). Sin contestar: renombrar
+`bh48a.test.ts` y borrar `CHROME-R69.md`. Lo evidente de las vueltas (deshacer con series y roles únicos, cabeceras
+internas, tokens en Logs, rol de la base también para funciones, ejemplo que no reaparece, plantillas de serie con plazo o
+WIP, >500 tarjetas en bloque con aviso claro, avisos en vivo al ocultar la pestaña…) está en el changelog de la v1.75.1.
+Con opción y sin aplicar (NO del propietario o de poco valor): compartir con tope de cuota (`api/share`), ICS con SEQUENCE
+en series que avanzan, «Cancelar» del detalle sin línea de movimiento en el historial.
+
 **Respuestas del propietario a las preguntas de la v1.75.0 (para la ronda 73, sin aplicar):** 1: R69F1 notas
 generales con la opción A («Nueva nota» dentro de Documentación, mismo editor que las descripciones, autoguardado, fijar
 arriba, buscar, papelera, exportar y copias). 2: probar en real la guía de Railway para la IA, con el propietario delante

@@ -223,4 +223,14 @@ export const mensajeria: Record<string, string> = {
   // Integraciones → WhatsApp: token caducado o revocado (Meta responde 401/403 o el código 190)
   "Meta ha rechazado el token y los avisos no salen: {error}. Pon un token permanente (paso 2 de «Qué necesitas de Meta») y guarda.":
     "Meta rejected the token and notifications are not going out: {error}. Set a permanent token (step 2 of “What you need from Meta”) and save.",
+  // Tope diario de WhatsApp para toda la instalación (Integraciones, Logs)
+  "El tope diario de WhatsApp debe ser un número entero entre 1 y 100000.": "The WhatsApp daily limit must be a whole number between 1 and 100000.",
+  "Tope diario de {max} mensajes de WhatsApp alcanzado: hasta mañana, los avisos solo quedan en la app y en los demás canales":
+    "Daily limit of {max} WhatsApp messages reached: until tomorrow, notifications only stay in the app and the other channels",
+  "Hoy: {n} de {max} avisos.": "Today: {n} of {max} notifications.",
+  "Se ha llegado al tope de {max} avisos por WhatsApp de hoy: hasta mañana, los avisos solo quedan en la app y en los demás canales. Puedes subir el tope abajo.":
+    "Today's limit of {max} WhatsApp notifications has been reached: until tomorrow, notifications only stay in the app and the other channels. You can raise the limit below.",
+  "Tope de avisos al día": "Daily notification limit",
+  "Avisos por WhatsApp como mucho cada día (desde medianoche, en la zona horaria de la instalación) entre todas las personas. Al llegar, el resto del día los avisos solo quedan en la app y en los demás canales, y queda una línea en Logs. Vacío = {n}.":
+    "Maximum WhatsApp notifications per day (from midnight, in the installation's time zone) across everyone. Once reached, for the rest of the day notifications only stay in the app and the other channels, and a line is written to Logs. Empty = {n}.",
 };

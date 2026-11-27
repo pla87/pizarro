@@ -14,7 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ projectId: stri
   if (auth instanceof Response) return auth;
   const { user, t, locale, projectId, columnId, project } = auth;
   const groupBy = new URL(req.url).searchParams.get("by") === "person" ? "person" : "day";
-  const report = await generateWeekPlanPdf(projectId, columnId, { generatedBy: user.name, locale, groupBy, signal: req.signal }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
+  const report = await generateWeekPlanPdf(projectId, columnId, { generatedBy: user.name, locale, groupBy, signal: req.signal, owner: user.id }).catch((err) => { if (isPdfQueueError(err)) return err; throw err; });
   if (report instanceof AppError) return new Response(t(report.message), { status: report.status });
   if (!report) return new Response(t("No encontrado"), { status: 404 });
   logEvent({

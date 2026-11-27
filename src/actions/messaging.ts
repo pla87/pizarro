@@ -149,13 +149,15 @@ export async function saveWhatsappSettings(form: WhatsappForm) {
     // WHATSAPP_* del servidor sigue activa. Antes, sin el valor guardado, contaba como activa en cuanto estaba completa.
     const before = await loadMessagingConfig({ fresh: true });
     const enabled = before.whatsappSettings.enabled === null ? before.whatsapp.active : undefined;
-    const change = await persistWhatsapp(checked.value, { token, clearToken: Boolean(form.clearToken), enabled });
+    // Sin el campo (una llamada anterior a este ajuste), se conserva el tope diario guardado.
+    const value = form.dailyLimit === undefined ? { ...checked.value, dailyLimit: before.whatsappSettings.dailyLimit === null ? "" : String(before.whatsappSettings.dailyLimit) } : checked.value;
+    const change = await persistWhatsapp(value, { token, clearToken: Boolean(form.clearToken), enabled });
     // Otro token: el rechazo del anterior ya no vale (si el nuevo tampoco sirve, lo dirá el próximo envío).
     if (token || form.clearToken) clearWhatsappAuthError();
     const cfg = (await loadMessagingConfig({ fresh: true })).whatsapp;
     describeAction("Cambió la configuración de WhatsApp", {
       template: cfg.templateName, lang: cfg.templateLang, langEn: checked.value.templateLangEn || null, codeTemplate: cfg.codeTemplateName, codeLang: cfg.codeTemplateLang,
-      codeLangEn: cfg.codeTemplateLangEn || null,
+      codeLangEn: cfg.codeTemplateLangEn || null, dailyLimit: cfg.dailyLimit,
       complete: cfg.complete, active: cfg.active, authChange: change,
     });
     revalidatePath("/admin/integrations");

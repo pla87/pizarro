@@ -263,6 +263,10 @@ export async function restoreDatabaseFromDump(opts: { databaseUrl: string; dumpF
     await restoreDatabase(sql, opts.dumpFile, opts.key, log, { verified: manifest });
     const after = await applyMigrations(sql, opts.migrationsDir, { log });
     if (after) log(`Aplicadas ${after} migraciones posteriores a la copia.`);
+    // Las sesiones, los dispositivos de confianza y los segundos pasos a medias de la copia no vuelven a valer: una sesión
+    // cerrada o una contraseña cambiada después de la copia no reviven. Todo el mundo vuelve a entrar.
+    await sql.exec(`DELETE FROM "Session"; DELETE FROM "KnownDevice"; DELETE FROM "LoginChallenge";`);
+    log("Sesiones cerradas: todo el mundo vuelve a iniciar sesión. Lo que se revocó después de la fecha de la copia (enlaces de «Compartir fuera», calendarios suscritos, contraseñas) vuelve a como estaba en la copia: revísalo.");
     return { db: manifest, before, after };
   } finally {
     await sql.end().catch(() => {});

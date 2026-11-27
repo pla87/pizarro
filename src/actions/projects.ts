@@ -473,6 +473,7 @@ export async function createDeliverable(projectId: string, input: z.input<typeof
         select: { id: true, name: true, description: true, dueDate: true },
       });
     });
+    describeAction("Creó el entregable «{name}»", { name: d.name });
     return { ...d, dueDate: dateToIso(d.dueDate) };
   });
 }
@@ -481,7 +482,7 @@ async function findDeliverable(deliverableId: string) {
   const user = await requireUser();
   const d = await db.deliverable.findFirst({
     where: { id: v.id.parse(deliverableId), project: visibleProjectsWhere(user) },
-    select: { id: true, projectId: true, dueDate: true },
+    select: { id: true, projectId: true, name: true, dueDate: true },
   });
   if (!d) throw notFound();
   noteProject(d.projectId);
@@ -496,6 +497,7 @@ export async function updateDeliverable(deliverableId: string, input: z.input<ty
       where: { id: d.id },
       data: { name: data.name, description: data.description, dueDate: data.dueDate ? isoToDate(data.dueDate) : null },
     });
+    describeAction("Modificó el entregable «{name}»", { name: data.name });
   });
 }
 
@@ -506,6 +508,7 @@ export async function moveDeliverable(deliverableId: string, dueDate: string) {
     const day = v.dayIso.parse(dueDate);
     if (!day) throw new AppError("Fecha no válida.");
     await db.deliverable.update({ where: { id: d.id }, data: { dueDate: isoToDate(day) } });
+    describeAction("Movió el entregable «{name}» al {day}", { name: d.name, day });
     return { from: dateToIso(d.dueDate) };
   });
 }
@@ -515,5 +518,6 @@ export async function deleteDeliverable(deliverableId: string) {
   return runAction({ name: "projects.deleteDeliverable", args: [deliverableId] }, async () => {
     const d = await findDeliverable(deliverableId);
     await db.deliverable.delete({ where: { id: d.id } });
+    describeAction("Borró el entregable «{name}»", { name: d.name });
   });
 }

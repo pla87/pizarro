@@ -18,6 +18,10 @@ const { resetShutdownForTests, runShutdown } = await import("../../src/lib/shutd
 const { collectTechInfo } = await import("../../src/lib/tech-info");
 const { flushLogs } = await import("../../src/lib/log");
 const { telegramWaitState } = await import("../../src/lib/telegram-wait");
+const { resetRateLimit } = await import("../../src/lib/rate-limit");
+const { todayIso } = await import("../../src/lib/dates");
+const { appTimeZone } = await import("../../src/lib/format");
+const { startOfDayInZone } = await import("../../src/lib/log-range");
 
 const TOKEN = "123456789:AAHfiqksKZ8WmR2zSjiQ7_v4TMAKdiHm9T0";
 const WA_TOKEN = "EAAGwhatsappTokenDePrueba1234567890";
@@ -753,6 +757,70 @@ describe("WhatsApp: plantilla de verificación (autenticación)", () => {
     expectFail(await testWhatsapp({ to: "+34611000022" }), /No se pudo enviar el WhatsApp de prueba\..*no existe en Meta o aún no está aprobada \(error 132001\)/);
     expectOk(await saveWhatsappSettings({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en" }));
     assert.equal((await getMessagingAdminView()).whatsapp.codeTemplateError, null);
+  });
+});
+
+describe("WhatsApp: tope diario de toda la instalación", () => {
+  /** Como tras un reinicio: sin contador en memoria (se rellena con los avisos que ya constan como enviados hoy). */
+  const forgetDay = () => {
+    const key = `whatsapp:day:${todayIso(appTimeZone())}`;
+    resetRateLimit(key);
+    resetRateLimit(`${key}:warned`);
+    delete (globalThis as Record<string, unknown>).__pzWhatsappDaySeed;
+  };
+  const sentTodayInDb = () => db.notification.count({ where: { whatsappSentAt: { gte: startOfDayInZone(todayIso(appTimeZone()), appTimeZone()) } } });
+  const form = (dailyLimit?: string) => ({ phoneNumberId: "1234567890", templateName: "aviso_pizarro", templateLang: "es", templateLangEn: "en", ...(dailyLimit === undefined ? {} : { dailyLimit }) });
+
+  test("al llegar al tope no sale más por WhatsApp (Telegram sigue), una línea en Logs, «Hoy: N de M» y sobrevive a un reinicio", async () => {
+    await cleanConfig();
+    await telegramOn();
+    await whatsappOn();
+    forgetDay();
+    // Lo que otras pruebas de este fichero ya enviaron hoy cuenta: el tope se pone 3 por encima.
+    const before = await sentTodayInDb();
+    const limit = before + 3;
+    assert.equal((await getMessagingAdminView()).whatsapp.effectiveDailyLimit, 200, "por defecto, 200 al día");
+    expectOk(await saveWhatsappSettings(form(String(limit))));
+    const user = await makeUser();
+    await db.user.update({ where: { id: user.id }, data: { notifyEmail: false } });
+    const f = await makeProject({ members: [user] });
+    await db.userChannel.create({ data: { userId: user.id, channel: "TELEGRAM", address: "9990001" } });
+    await db.userChannel.create({ data: { userId: user.id, channel: "WHATSAPP", address: "+34611000031", consentAt: new Date(), verifiedAt: new Date() } });
+    // Un aviso por tarea (dos por la misma tarea no se repiten en 10 minutos).
+    const mention = async () => deliver([await notice("MENTION", { userId: user.id, taskId: (await makeTask(f)).id })]);
+    calls = [];
+    for (let i = 0; i < 5; i++) await mention();
+    assert.equal(graphCalls().length, 3, "solo hasta el tope");
+    assert.equal(sends("9990001").length, 5, "Telegram no se ve afectado");
+    await flushLogs();
+    const logs = await db.appLog.findMany({ where: { action: "notify.whatsappDailyLimit" } });
+    assert.equal(logs.length, 1, "una sola línea al día, no una por mensaje");
+    assert.equal(logs[0]!.level, "warn");
+    let view = (await getMessagingAdminView()).whatsapp;
+    assert.deepEqual([view.sentToday, view.effectiveDailyLimit, view.dailyLimit], [limit, limit, String(limit)]);
+
+    // Reinicio (o despliegue): el contador vuelve a partir de los avisos que ya salieron hoy, no de cero.
+    forgetDay();
+    view = (await getMessagingAdminView()).whatsapp;
+    assert.equal(view.sentToday, limit);
+    calls = [];
+    await mention();
+    assert.equal(graphCalls().length, 0);
+
+    // Guardar sin el campo (llamada anterior a este ajuste) conserva el tope; con un valor no válido, error.
+    expectOk(await saveWhatsappSettings(form()));
+    assert.equal((await getMessagingAdminView()).whatsapp.effectiveDailyLimit, limit);
+    expectFail(await saveWhatsappSettings(form("0")), /tope diario de WhatsApp/);
+    // Subirlo deja salir más hoy mismo; vaciarlo vuelve a los 200 de siempre.
+    expectOk(await saveWhatsappSettings(form(String(limit + 1))));
+    calls = [];
+    await mention();
+    await mention();
+    assert.equal(graphCalls().length, 1);
+    expectOk(await saveWhatsappSettings(form("")));
+    view = (await getMessagingAdminView()).whatsapp;
+    assert.deepEqual([view.dailyLimit, view.effectiveDailyLimit], ["", 200]);
+    forgetDay();
   });
 });
 

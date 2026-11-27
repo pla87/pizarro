@@ -53,7 +53,7 @@ function useIsMac(): boolean {
 /** Texto de un atajo según la plataforma: `shortcutLabel("Alt+N", mac)` da «⌥N» en Mac y «Alt+N» en el resto. */
 export function shortcutLabel(keys: string, mac: boolean): string {
   if (!mac) return keys;
-  return keys.replace(/Ctrl\+/g, "⌘").replace(/Alt\+/g, "⌥").replace(/Shift\+/g, "⇧");
+  return keys.replace(/Ctrl\+/g, "⌘").replace(/Alt\+/g, "⌥").replace(/(Shift|Mayús)\+/g, "⇧");
 }
 
 /** Texto de atajo para tooltips: `const sc = useShortcut(); title={`${t("Nueva tarea")} (${sc("Alt+N")})`}`. */

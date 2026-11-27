@@ -93,8 +93,14 @@ export async function generateShareWeb(columnId: string, opts: { fresh?: boolean
     });
     if (!count) throw new AppError("Los datos han cambiado mientras tanto. Recarga e inténtalo de nuevo.");
     const row = await db.columnShare.findUniqueOrThrow({ where: { id: share.id } });
-    if (token) describeAction(share.tokenHash ? "Creó un enlace nuevo para la web de «{col}» ({n} tareas)" : "Generó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
-    else describeAction("Actualizó la web de «{col}» ({n} tareas)", { col: column.name, n: taskIds.length }, { shareId: share.id });
+    // Con una sola tarea, «(1 tarea)» y no «(1 tareas)».
+    const one = taskIds.length === 1;
+    const key = token
+      ? share.tokenHash
+        ? one ? "Creó un enlace nuevo para la web de «{col}» (1 tarea)" : "Creó un enlace nuevo para la web de «{col}» ({n} tareas)"
+        : one ? "Generó la web de «{col}» (1 tarea)" : "Generó la web de «{col}» ({n} tareas)"
+      : one ? "Actualizó la web de «{col}» (1 tarea)" : "Actualizó la web de «{col}» ({n} tareas)";
+    describeAction(key, { col: column.name, n: taskIds.length }, { shareId: share.id });
     const link = token ? { url: shareUrl(appUrl(), token), lost: false } : await activeShareUrl(row);
     return { ...link, info: await shareInfoOf(row, now), published: taskIds.length, left: Math.max(0, total - taskIds.length) };
   });

@@ -5,6 +5,7 @@ import { db } from "./helpers";
 import { verifyPassword } from "../../src/lib/password";
 import { SETUP_CODE_KEY, announceSetup, checkSetupCode, completeSetup, isSetupPending, resetSetupCache, type SetupInput } from "../../src/lib/setup";
 import { parseStoredCode } from "../../src/lib/setup-core";
+import { seed } from "../../src/lib/seed";
 
 const ENV = { APP_URL: "https://pizarro.example.com" } as Record<string, string | undefined>;
 
@@ -22,7 +23,7 @@ const input = (code: string, over: Partial<SetupInput> = {}): SetupInput => ({
 const cleanup = async () => {
   await db.user.deleteMany();
   await db.project.deleteMany();
-  await db.appState.deleteMany({ where: { OR: [{ key: SETUP_CODE_KEY }, { key: { startsWith: "instance." } }] } });
+  await db.appState.deleteMany({ where: { OR: [{ key: SETUP_CODE_KEY }, { key: { startsWith: "instance." } }, { key: "exampleProjectSeeded" }] } });
   resetSetupCache();
 };
 
@@ -113,6 +114,10 @@ describe("asistente de primer arranque", () => {
     assert.equal(project.deliverables[0]?.name, "Closed beta");
     assert.ok(project.tasks.some((t) => t.title === "Data export screen" && t.subtasks.map((s) => s.title).join() === "Design,Implementation,Testing"));
     assert.deepEqual(admin.releaseTemplates.map((r) => r.name).sort(), ["AI context", "Release checklist"]);
+    // Si después se borran todos los proyectos, un reinicio (el seed del arranque) no vuelve a crear el de ejemplo.
+    await db.project.deleteMany();
+    await seed(db, () => {});
+    assert.equal(await db.project.count(), 0, "el ejemplo no reaparece");
   });
 
   test("una segunda ejecución se bloquea (también con el código válido o SETUP_TOKEN)", async () => {

@@ -67,20 +67,24 @@ test("el servidor sustituye la cabecera interna que mande el cliente por la dire
   installPeerIpHeader(); // idempotente
   assert.equal((globalThis as Record<symbol, unknown>)[PEER_IP_MARK], true);
   const seen: (string | undefined)[] = [];
+  const internal: unknown[] = [];
   const server = http.createServer((req, res) => {
     seen.push(req.headers[PEER_IP_HEADER] as string | undefined);
+    internal.push(req.headers["x-pz-path"], req.headers["x-pz-auth-link"], req.headers["x-nonce"]);
     res.end("ok");
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   try {
     const { port } = server.address() as { port: number };
-    await fetch(`http://127.0.0.1:${port}/`, { headers: { [PEER_IP_HEADER]: "6.6.6.6", "x-real-ip": "6.6.6.6", "x-forwarded-for": "6.6.6.6" } }).then((r) => r.text());
+    await fetch(`http://127.0.0.1:${port}/`, { headers: { [PEER_IP_HEADER]: "6.6.6.6", "x-real-ip": "6.6.6.6", "x-forwarded-for": "6.6.6.6", "x-pz-path": "/inventada", "x-pz-auth-link": "/reset/x", "x-nonce": "n" } }).then((r) => r.text());
     await fetch(`http://127.0.0.1:${port}/`).then((r) => r.text());
   } finally {
     server.close();
   }
   assert.equal(seen.length, 2);
   for (const ip of seen) assert.match(ip ?? "", /^(::ffff:)?127\.0\.0\.1$/);
+  // Tampoco llegan las cabeceras internas del proxy que mande el cliente.
+  assert.deepEqual(internal.filter((v) => v !== undefined), []);
 });
 
 test("ningún otro módulo lee X-Real-IP ni X-Forwarded-For: todo pasa por clientIp (lib/request.ts)", () => {

@@ -80,4 +80,29 @@ describe("deshacer no deja columnas en la misma posición", () => {
     noTies(rows);
     assert.deepEqual(rows.map((r) => r.name), ["Por hacer", "En curso", "Hecho", "Revisión"]);
   });
+
+  test("deshacer el borrado de una columna «En producción» cuando otra ya tiene ese rol: vuelve «Sin rol»", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    await db.column.update({ where: { id: f.columns.done }, data: { role: "IN_PRODUCTION" } });
+    expectOk(await deleteColumn(f.columns.done));
+    // Otra persona da el rol a otra columna entretanto.
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "IN_PRODUCTION" } });
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    const back = await db.column.findUniqueOrThrow({ where: { id: f.columns.done }, select: { role: true } });
+    assert.equal(back.role, "NONE");
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing }, select: { role: true } })).role, "IN_PRODUCTION");
+  });
+
+  test("deshacer el borrado de una columna con el proyecto ya en 30 columnas: no vuelve (una parte que no se aplicó)", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    expectOk(await deleteColumn(f.columns.done));
+    const have = await columns(f.project.id);
+    await db.column.createMany({ data: Array.from({ length: 30 - have }, (_, i) => ({ projectId: f.project.id, name: `Relleno ${i}`, position: 10000 + i })) });
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 1);
+    assert.equal(await columns(f.project.id), 30);
+  });
 });

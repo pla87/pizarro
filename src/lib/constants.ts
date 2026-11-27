@@ -172,6 +172,11 @@ export const MAX_LABELS_PER_PROJECT = 50;
 export const MAX_RELEASE_TEMPLATES_PER_KIND = 20;
 export const MAX_DELIVERABLES_PER_PROJECT = 100;
 export const MAX_ACTIVE_TASKS_PER_PROJECT = 1000;
+/**
+ * Tarjetas de una acción en bloque (mover, archivar o borrar la selección): el deshacer guarda una copia de cada una, así
+ * que no llega al tope del proyecto. El navegador avisa antes de lanzarla (Board.tsx) y el servidor lo comprueba.
+ */
+export const MAX_SELECTION_ACTION = 500;
 /** Tareas nuevas por minuto y persona (las creaciones múltiples cuentan una por tarea; debe ser ≥ MAX_BULK_TASKS). */
 export const TASK_CREATE_PER_MINUTE = 300;
 export const LABEL_CREATE_PER_MINUTE = 30;

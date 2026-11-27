@@ -27,6 +27,9 @@ describe("búsqueda de releases", () => {
     assert.deepEqual(await find("list__ya"), []);
     assert.deepEqual(await find("5%"), []);
     assert.equal((await searchReleaseIds(f.project.id, "desplegable", 1)).length, 1);
+    // Con menos de 3 letras solo el título (sin trigramas el índice no sirve): «50» está en el texto de r2, «ot» en su título.
+    assert.deepEqual(await find("50"), []);
+    assert.deepEqual(await find("ot"), [r2.id]);
   });
 
   test("con miles de releases (2.000 en el proyecto) el plan usa los índices trigram (no recorre el texto de todas)", async () => {

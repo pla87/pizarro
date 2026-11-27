@@ -23,6 +23,7 @@ export const server: Record<string, string> = {
   "El envío de emails está configurado en el servidor (variables SMTP_*) y no se puede cambiar aquí.": "Email sending is set on the server (SMTP_* variables) and cannot be changed here.",
   "El PDF tardó demasiado; inténtalo de nuevo":"The PDF took too long; please try again.",
   "Hay muchos PDF generándose; inténtalo en un momento.": "Many PDFs are being generated; try again in a moment.",
+  "Ya tienes PDF generándose: espera a que terminen.": "You already have PDFs being generated: wait for them to finish.",
   "Este proyecto ya tiene el máximo de 1000 tareas activas. Archiva o borra alguna.": "This project already has the maximum of 1000 active tasks. Archive or delete some.",
   "Este proyecto tiene {active} de 1000 tareas activas: no caben {adding} más. Archiva o borra alguna.": "This project has {active} of 1000 active tasks: {adding} more do not fit. Archive or delete some.",
   "Este proyecto ya tiene el máximo de 50 etiquetas. Borra alguna.": "This project already has the maximum of 50 labels. Delete some.",

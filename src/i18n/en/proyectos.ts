@@ -259,4 +259,9 @@ export const proyectos: Record<string, string> = {
   "«{name}» es mayor de lo declarado.": "“{name}” is larger than declared.",
   "«{name}» está dañado (CRC-32).": "“{name}” is damaged (CRC-32).",
   "«{name}» está incompleto.": "“{name}” is incomplete.",
+  // Logs de los entregables
+  "Creó el entregable «{name}»": "Created the deliverable “{name}”",
+  "Modificó el entregable «{name}»": "Edited the deliverable “{name}”",
+  "Movió el entregable «{name}» al {day}": "Moved the deliverable “{name}” to {day}",
+  "Borró el entregable «{name}»": "Deleted the deliverable “{name}”",
 };
