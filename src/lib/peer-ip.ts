@@ -7,7 +7,11 @@
 
 import http from "node:http";
 import https from "node:https";
+import { AUTH_LINK_HEADER } from "./auth-link-path";
 import { PEER_IP_HEADER, PEER_IP_MARK } from "./client-ip";
+
+/** Las que escribe solo el proxy (ruta para Logs, enlace de email para el idioma, nonce de la CSP). */
+const INTERNAL_HEADERS = ["x-pz-path", AUTH_LINK_HEADER, "x-nonce"] as const;
 
 type Emit = (this: unknown, event: string | symbol, ...args: unknown[]) => boolean;
 
@@ -23,6 +27,9 @@ export function installPeerIpHeader(): void {
           const addr = req.socket?.remoteAddress;
           if (addr) req.headers[PEER_IP_HEADER] = addr;
           else delete req.headers[PEER_IP_HEADER];
+          // Cabeceras internas que pone src/proxy.ts: la que mande el cliente no vale nunca, tampoco en las rutas que
+          // quedan fuera del matcher del proxy (subidas, importar, /x/…), donde nadie las borraba.
+          for (const h of INTERNAL_HEADERS) delete req.headers[h];
         }
       }
       return original.call(this, event, ...args);

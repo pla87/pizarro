@@ -36,6 +36,15 @@ beforeEach(async () => {
 });
 
 describe("logs con NUL o medio emoji", () => {
+  test("la pila de un error del navegador no guarda el token de /reset/ ni de /confirm/", async () => {
+    const token = "tok_" + "a".repeat(40);
+    assert.equal((await report({ source: "window", message: "fallo-pila", stack: `Error: x\n    at http://localhost:3000/reset/${token}:1:2` })).status, 204);
+    await flushLogs();
+    const [row] = await db.appLog.findMany({ where: { category: "client", details: { path: ["error"], string_contains: "fallo-pila" } } });
+    assert.ok(row);
+    assert.ok(!JSON.stringify(row.details).includes(token), JSON.stringify(row.details));
+  });
+
   test("un error del navegador sin sesión con \\u0000 y otro con \\ud83d se guardan (limpios) junto a los demás", async () => {
     assert.equal((await report({ source: "window", message: "fallo-nul a\u0000b", path: "/login" })).status, 204);
     assert.equal((await report({ source: "window", message: "fallo-emoji x\ud83d", stack: "pila \ud83d\u0000 rota" })).status, 204);

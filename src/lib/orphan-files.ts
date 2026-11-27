@@ -73,6 +73,12 @@ export async function cleanOrphanFiles(
       if (!parsed) continue;
       const file = path.join(folder, entry.name);
       if (!isInside(root, file)) continue;
+      // Los que la base conoce (casi todos) se cuentan sin `lstat`: el tipo ya viene de readdir (un enlace simbólico no es
+      // isFile()). Solo los candidatos necesitan el tamaño y la fecha.
+      if ("id" in parsed && (ids.has(parsed.id) || (alsoRetained && retained.has(parsed.id)))) {
+        report.scanned++;
+        continue;
+      }
       let st;
       try {
         st = await lstat(file);
@@ -82,7 +88,6 @@ export async function cleanOrphanFiles(
       if (!st.isFile() || st.isSymbolicLink()) continue;
       report.scanned++;
       if (now - st.mtimeMs < minAge) continue;
-      if ("id" in parsed && (ids.has(parsed.id) || (alsoRetained && retained.has(parsed.id)))) continue;
       candidates.push({ file, size: st.size, tmp: !("id" in parsed) });
     }
   };

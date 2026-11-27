@@ -90,7 +90,8 @@ interface TaskSnapshot {
 
 export type UndoOp =
   /**
-   * `relink`: devuelve el bloqueo (`data.blockedById`) que perdió la tarea al borrarse la que la bloqueaba (SetNull),
+   * `relink`: devuelve el bloqueo (`data.blockedById`) o el origen de una repetida (`data.recurrenceFromId`) que perdió la
+   * tarea al borrarse la otra (SetNull),
    * solo si sigue sin bloqueo: si entretanto alguien le puso otro, no se pisa (ver dependentLinkOps).
    */
   | { t: "task.set"; id: string; data: TaskData; labelIds?: string[]; relink?: true }
@@ -223,8 +224,20 @@ export async function snapshotTasks(ids: string[]): Promise<UndoOp[]> {
  */
 export async function dependentLinkOps(ids: string[]): Promise<Extract<UndoOp, { t: "task.set" }>[]> {
   if (!ids.length) return [];
-  const rows = await db.task.findMany({ where: { blockedById: { in: ids }, id: { notIn: ids } }, select: { id: true, blockedById: true }, orderBy: { id: "asc" } });
-  return rows.map((r) => ({ t: "task.set" as const, id: r.id, data: { blockedById: r.blockedById }, relink: true as const }));
+  // También la siguiente aparición de una repetida (recurrenceFromId, SetNull): sin el enlace, archivar o volver a
+  // terminar la tarea que vuelve crearía otra siguiente y la serie quedaría duplicada.
+  const rows = await db.task.findMany({
+    where: { id: { notIn: ids }, OR: [{ blockedById: { in: ids } }, { recurrenceFromId: { in: ids } }] },
+    select: { id: true, blockedById: true, recurrenceFromId: true },
+    orderBy: { id: "asc" },
+  });
+  const set = new Set(ids);
+  const ops: Extract<UndoOp, { t: "task.set" }>[] = [];
+  for (const r of rows) {
+    if (r.blockedById && set.has(r.blockedById)) ops.push({ t: "task.set", id: r.id, data: { blockedById: r.blockedById }, relink: true });
+    if (r.recurrenceFromId && set.has(r.recurrenceFromId)) ops.push({ t: "task.set", id: r.id, data: { recurrenceFromId: r.recurrenceFromId }, relink: true });
+  }
+  return ops;
 }
 
 export type UndoKind = "UNDO" | "REDO";
@@ -616,8 +629,9 @@ export async function mirrorOps(projectId: string, ops: UndoOp[]): Promise<UndoO
     // borrado les quita el bloqueo, así que su contraria se lo devuelve tras recrearla (antes en la lista, después al aplicar).
     const links = new Map<string, UndoOp[]>();
     for (const op of await dependentLinkOps(removedIds)) {
-      if (!once(`relink:${op.id}`)) continue;
-      const blocker = op.data.blockedById!;
+      const field = op.data.recurrenceFromId ? "recurrence" : "blocked";
+      if (!once(`relink:${op.id}:${field}`)) continue;
+      const blocker = (op.data.blockedById ?? op.data.recurrenceFromId)!;
       links.set(blocker, [...(links.get(blocker) ?? []), op]);
     }
     for (const x of removes) {
@@ -845,6 +859,14 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
           const exists = await db.task.count({ where: { id: op.id, projectId } });
           if (!exists) { miss++; break; }
           if (op.relink) {
+            // La siguiente aparición vuelve a colgar de la tarea que vuelve: solo si sigue sin origen y ninguna otra es ya
+            // la siguiente de esa tarea (recurrenceFromId es único).
+            const fromId = op.data.recurrenceFromId;
+            if (fromId) {
+              const free = (await db.task.count({ where: { id: fromId, projectId } })) && !(await db.task.count({ where: { recurrenceFromId: fromId } }));
+              if (free) await db.task.updateMany({ where: { id: op.id, projectId, recurrenceFromId: null }, data: { recurrenceFromId: fromId } }).catch(() => undefined);
+              break;
+            }
             // Solo si sigue sin bloqueo (no pisa uno puesto después) y la que bloqueaba está en el proyecto sin cerrar un ciclo.
             const blockerId = op.data.blockedById;
             if (blockerId) {
@@ -1065,9 +1087,15 @@ export async function applyUndo(projectId: string, ops: UndoOp[], opts: { keepFi
         }
         case "column.restore": {
           if (await db.column.count({ where: { id: op.row.id } })) { miss++; break; }
+          // Como al crear columnas: como mucho 30 por proyecto.
+          if ((await db.column.count({ where: { projectId } })) >= 30) { miss++; break; }
           // El destino de rutinas puede haberse borrado entre tanto: entonces la columna vuelve sin él.
           const routineTargetColumnId = op.row.routineTargetColumnId && (await db.column.count({ where: { id: op.row.routineTargetColumnId, projectId } })) ? op.row.routineTargetColumnId : null;
-          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role: liveColumnRole(op.row.role as ColumnRoleValue), assigneeId: known(op.row.assigneeId), defaultKindId: await existingKind(op.row.defaultKindId) } });
+          // Un rol único (siguiente salto, en producción) que entretanto se dio a otra columna se queda en esa: la que
+          // vuelve lo hace «Sin rol» (si no, el índice único hacía fallar la restauración y la columna no volvía).
+          let role = liveColumnRole(op.row.role as ColumnRoleValue);
+          if (isUniqueColumnRole(role) && (await db.column.count({ where: { projectId, role } }))) role = "NONE";
+          await db.column.create({ data: { ...op.row, routineTargetColumnId, projectId, role, assigneeId: known(op.row.assigneeId), defaultKindId: await existingKind(op.row.defaultKindId) } });
           if (op.row.role === "BUDGET") await ensureCostField(projectId);
           columnIds.add(op.row.id);
           placedColumns.push(op.row.id);

@@ -80,4 +80,18 @@ describe("deshacer no deja columnas en la misma posición", () => {
     noTies(rows);
     assert.deepEqual(rows.map((r) => r.name), ["Por hacer", "En curso", "Hecho", "Revisión"]);
   });
+
+  test("deshacer el borrado de una columna «En producción» cuando otra ya tiene ese rol: vuelve «Sin rol»", async () => {
+    const user = await makeUser();
+    await loginAs(user);
+    const f = await makeProject({ members: [user] });
+    await db.column.update({ where: { id: f.columns.done }, data: { role: "IN_PRODUCTION" } });
+    expectOk(await deleteColumn(f.columns.done));
+    // Otra persona da el rol a otra columna entretanto.
+    await db.column.update({ where: { id: f.columns.doing }, data: { role: "IN_PRODUCTION" } });
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    const back = await db.column.findUniqueOrThrow({ where: { id: f.columns.done }, select: { role: true } });
+    assert.equal(back.role, "NONE");
+    assert.equal((await db.column.findUniqueOrThrow({ where: { id: f.columns.doing }, select: { role: true } })).role, "IN_PRODUCTION");
+  });
 });

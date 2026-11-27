@@ -118,6 +118,25 @@ describe("deshacer acciones propias", () => {
     assert.equal(await db.task.count({ where: { recurrenceFromId: task.id } }), 0);
   });
 
+  test("borrar una repetida que ya tiene siguiente: deshacer (y rehacer y deshacer) le devuelve la serie, sin duplicarla", async () => {
+    const { f } = await setup();
+    const task = await makeTask(f, { recurrence: "WEEKLY", dueDate: new Date("2026-01-10T00:00:00Z") });
+    const [next] = expectOk(await moveTask(task.id, f.columns.done, null, null)).spawned;
+    assert.ok(next);
+    const nextId = next.id;
+    const fromOf = async () => (await db.task.findUniqueOrThrow({ where: { id: nextId }, select: { recurrenceFromId: true } })).recurrenceFromId;
+    expectOk(await deleteTask(task.id));
+    assert.equal(await fromOf(), null);
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    assert.equal(await fromOf(), task.id);
+    expectApplied(await redoChecked(f.project.id));
+    assert.equal(expectOk(await undoLast(f.project.id)).skipped, 0);
+    assert.equal(await fromOf(), task.id);
+    // Archivarla ya no crea otra siguiente aparición.
+    assert.equal(expectOk(await archiveTask(task.id)).spawned.length, 0);
+    assert.equal(await db.task.count({ where: { projectId: f.project.id, recurrence: "WEEKLY" } }), 2);
+  });
+
   test("borrar una tarea: deshacer la restaura con subtareas, comentarios y etiquetas", async () => {
     const { user, f } = await setup();
     const label = await db.label.create({ data: { projectId: f.project.id, name: "L2", color: "red" } });

@@ -58,7 +58,12 @@ const SECRET_KEY = /pass(word)?|token|secret|authorization|cookie|phone/i;
  */
 function sanitize(value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value ?? null;
-  if (typeof value === "string") return value.length > 500 ? `${clipText(value, 500)}… (${value.length} caracteres)` : cleanText(value);
+  if (typeof value === "string") {
+    // Tampoco en los detalles (p. ej. la pila de un error del navegador con la URL de /reset/<token>) va un token de la URL.
+    // Se enmascara sobre un trozo acotado (un texto enorme no pasa entero por la expresión regular).
+    const text = maskSecretPaths(value.length > 2000 ? value.slice(0, 2000) : value);
+    return value.length > 500 ? `${clipText(text, 500)}… (${value.length} caracteres)` : cleanText(text);
+  }
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Date) return value.toISOString();
