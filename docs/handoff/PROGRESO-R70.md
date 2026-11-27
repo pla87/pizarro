@@ -22,7 +22,8 @@ Evidentes (en curso):
 - Ajustes → Visibilidad: radios sin grupo (teclado y lector de pantalla).
 - Imagen pegada en medio de un párrafo: espacios sobrantes en los bordes (se veían en la release .md).
 - Imagen Docker: `static` y `public` copiados dos veces (~1,2 MB por imagen).
-- Canal en vivo: una consulta de acceso por reconexión que puede ir a la caché de acceso.
+- (Descartado tras probarlo) Canal en vivo con la caché de acceso: una vía que no vaciase la caché dejaría ver cambios del
+  proyecto hasta 5 min; se queda la comprobación directa (una consulta barata al abrir el canal).
 
 Opcionales (para el propietario, en la lista de decisiones del cierre):
 - Tope de bytes por enlace y hora en las descargas de «Compartir fuera» (hoy 300 descargas/h de hasta 20–100 MB: 6–30 GB/h
