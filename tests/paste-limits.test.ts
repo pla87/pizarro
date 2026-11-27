@@ -4,8 +4,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { htmlHasText } from "../src/lib/clipboard-files";
-import { htmlTableToMarkdown, MAX_TABLE_CELLS, MAX_TABLE_HTML, replaceHtmlTables, tablesOnlyMarkdown } from "../src/lib/paste-table";
+import { MAX_TABLE_CELLS, MAX_TABLE_HTML, replaceHtmlTables, tablesOnlyMarkdown } from "../src/lib/paste-table";
 import { subtaskBatch } from "../src/lib/subtask-lines";
+
+/** Markdown de una tabla HTML suelta, o null si no se convierte. */
+const htmlTableToMarkdown = (html: string): string | null => {
+  const out = replaceHtmlTables(html, (md) => md);
+  return out === html ? null : out;
+};
 
 /** Milisegundos que tarda `fn`. Los límites de abajo son holgados (antes del arreglo eran segundos o más). */
 function ms(fn: () => unknown): number {

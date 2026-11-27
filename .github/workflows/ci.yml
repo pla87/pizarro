@@ -109,6 +109,16 @@ jobs:
       - name: Cliente de Prisma
         run: npx prisma generate
 
+      # Bases desechables: el PostgreSQL del servicio y sus bases pizarro_test_* se tiran al acabar el job, así que se
+      # apagan el fsync y las escrituras completas de página (más rápido; si el servidor se cae, no se pierde nada).
+      - name: PostgreSQL sin esperas de disco (base desechable)
+        run: >-
+          node -e "const { Client } = require('pg'); (async () => { const c = new Client({ connectionString: process.env.DATABASE_URL }); await c.connect();
+          for (const s of ['fsync = off', 'synchronous_commit = off', 'full_page_writes = off']) await c.query('ALTER SYSTEM SET ' + s);
+          await c.query('SELECT pg_reload_conf()'); await c.end(); })().catch((e) => { console.error(e); process.exit(1); })"
+
       - name: Pruebas con base de datos (orden al azar)
+        env:
+          TEST_DB_JOBS: 4
         run: npm run test:db -- --shuffle
 

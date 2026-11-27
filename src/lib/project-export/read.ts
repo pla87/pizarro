@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { MAX_ACTIVE_TASKS_PER_PROJECT, MAX_DELIVERABLES_PER_PROJECT, MAX_LABELS_PER_PROJECT, isUniqueColumnRole } from "../constants";
 import { DOCUMENTS_MAX_PER_PROJECT } from "../document-kind";
 import { AppError } from "../errors";
-import { ArchiveError } from "./errors";
+import { ArchiveError, zipDetail } from "./errors";
 import { ZipFile, ZipReadError, type ZipEntryInfo } from "../zip-read";
 import { LIMITS, manifestSchema, projectDataSchema, EXPORT_FORMAT, type ExportManifest, type ProjectExportData } from "./types";
 import { assertSupportedVersion, upgrade } from "./upgrade";
@@ -43,7 +43,8 @@ function parseJson(buf: Buffer, what: string): unknown {
 /** Primer fallo del esquema como «ruta: mensaje», para poder localizar el problema. */
 function schemaError(what: string, issues: { path: PropertyKey[]; message: string }[]): ArchiveError {
   const first = issues[0];
-  return new ArchiveError("El archivo no es válido.", `${what} no es válido: ${first ? `${first.path.map(String).join(".") || "raíz"}: ${first.message}` : "forma incorrecta"}`);
+  const path = first?.path.map(String).join(".") ?? "";
+  return new ArchiveError("El archivo no es válido.", !first ? { k: "{what} no es válido: forma incorrecta", p: { what } } : path ? { k: "{what} no es válido: {path}: {message}", p: { what, path, message: first.message } } : { k: "{what} no es válido: raíz: {message}", p: { what, message: first.message } });
 }
 
 /**
@@ -56,14 +57,14 @@ export async function openProjectArchive(file: string, onProgress?: (done: numbe
   try {
     zip = await ZipFile.open(file);
   } catch (err) {
-    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", err.message);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", zipDetail(err.message));
     throw new AppError("No se pudo leer el archivo.");
   }
   try {
     return await validateArchive(zip, onProgress);
   } catch (err) {
     await zip.close();
-    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", err.message);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", zipDetail(err.message));
     throw err;
   }
 }
@@ -97,7 +98,7 @@ export async function peekProjectArchive(file: string): Promise<ExportManifest> 
   try {
     zip = await ZipFile.open(file);
   } catch (err) {
-    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", err.message);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo no es un ZIP válido.", zipDetail(err.message));
     throw new AppError("No se pudo leer el archivo.");
   }
   try {
@@ -106,7 +107,7 @@ export async function peekProjectArchive(file: string): Promise<ExportManifest> 
     }
     return await readManifest(zip);
   } catch (err) {
-    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", err.message);
+    if (err instanceof ZipReadError) throw new ArchiveError("El archivo está dañado.", zipDetail(err.message));
     throw err;
   } finally {
     await zip.close();
@@ -155,7 +156,7 @@ async function validateArchive(zip: ZipFile, onProgress?: (done: number, total: 
 const dup = (what: string, values: string[]) => {
   const seen = new Set<string>();
   for (const v of values) {
-    if (seen.has(v)) throw new ArchiveError("El archivo tiene datos repetidos.", `project.json repite ${what}: ${v.slice(0, 60)}`);
+    if (seen.has(v)) throw new ArchiveError("El archivo tiene datos repetidos.", { k: `project.json repite ${what}: {value}`, p: { value: v.slice(0, 60) } });
     seen.add(v);
   }
   return seen;
@@ -181,7 +182,7 @@ function validateRefs(data: ProjectExportData, fileShas: Set<string>): void {
   if (data.documents.length > DOCUMENTS_MAX_PER_PROJECT) throw new AppError("El proyecto tiene más documentos de los permitidos.");
   if (data.tasks.filter((t) => !t.archivedAt).length > MAX_ACTIVE_TASKS_PER_PROJECT) throw new AppError("El proyecto tiene más tareas activas de las permitidas.");
   const need = (set: Set<string>, value: string | null, what: string) => {
-    if (value !== null && !set.has(value)) throw new ArchiveError("El archivo hace referencia a algo que no existe.", `project.json hace referencia a ${what} que no existe`);
+    if (value !== null && !set.has(value)) throw new ArchiveError("El archivo hace referencia a algo que no existe.", { k: `project.json hace referencia a ${what} que no existe` });
   };
   for (const c of data.columns) need(columns, c.routineTargetRef, "una columna");
   for (const t of data.tasks) {

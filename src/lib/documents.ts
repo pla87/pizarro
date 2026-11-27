@@ -35,13 +35,7 @@ const toDocumentRow = (r: Row): DocumentRow => ({
   id: r.id, name: r.name, mimeType: r.mimeType, size: r.size, kind: r.kind, createdAt: r.createdAt.toISOString(), createdByName: r.createdBy?.name ?? null,
 });
 
-/** Documentación del proyecto sin la papelera, la más reciente primero. Sin acceso al proyecto: «no encontrado». */
-export async function listProjectDocuments(user: CurrentUser, projectId: string): Promise<DocumentRow[]> {
-  if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) throw notFound();
-  return listProjectDocumentsOf(projectId);
-}
-
-/** Sin comprobar el acceso: solo para quien ya lo ha comprobado (p. ej. la página, que lee el proyecto antes). */
+/** Documentación del proyecto sin la papelera, la más reciente primero. Sin comprobar el acceso: solo para quien ya lo ha comprobado (p. ej. la página, que lee el proyecto antes). */
 export async function listProjectDocumentsOf(projectId: string): Promise<DocumentRow[]> {
   const rows = await db.projectDocument.findMany({ where: { projectId, deletedAt: null }, orderBy: { createdAt: "desc" }, take: DOCUMENTS_MAX_PER_PROJECT + 50, select: SELECT });
   return rows.map(toDocumentRow);
@@ -61,13 +55,7 @@ const trashPurgeAt = (deletedAt: Date): Date => new Date(deletedAt.getTime() + D
 export const trashDaysLeft = (deletedAt: Date, now: Date = new Date()): number =>
   Math.max(0, Math.ceil((trashPurgeAt(deletedAt).getTime() - now.getTime()) / DAY_MS));
 
-/** Papelera del proyecto: lo borrado más reciente primero. Sin acceso al proyecto: «no encontrado». */
-export async function listTrashedDocuments(user: CurrentUser, projectId: string, now: Date = new Date()): Promise<TrashedDocumentRow[]> {
-  if (!(await db.project.count({ where: { id: projectId, ...visibleProjectsWhere(user) } }))) throw notFound();
-  return listTrashedDocumentsOf(projectId, now);
-}
-
-/** Sin comprobar el acceso (ver listProjectDocumentsOf). */
+/** Papelera del proyecto: lo borrado más reciente primero. Sin comprobar el acceso (ver listProjectDocumentsOf). */
 export async function listTrashedDocumentsOf(projectId: string, now: Date = new Date()): Promise<TrashedDocumentRow[]> {
   const rows = await db.projectDocument.findMany({
     where: { projectId, deletedAt: { not: null } },

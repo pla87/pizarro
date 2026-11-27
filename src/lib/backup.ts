@@ -56,8 +56,8 @@ export interface BackupRun {
 export interface RestoreTestRun extends BackupRun {
   /** "database": restaurada de verdad en una base temporal; "verify": solo descifrada y comprobada. */
   mode?: "database" | "verify";
-  /** Por qué solo se verificó: el usuario no puede crear bases de datos, o no está la carpeta de migraciones. */
-  limit?: "createdb" | "migrations";
+  /** Por qué solo se verificó: el usuario no puede crear bases de datos, no está la carpeta de migraciones, o no hay disco para la base temporal. */
+  limit?: "createdb" | "migrations" | "disk";
   /** Objetos del almacén comprobados (presentes) y descifrados de muestra. */
   objectsChecked?: number;
   objectsSampled?: number;
@@ -638,6 +638,23 @@ async function canCreateDatabase(): Promise<boolean> {
   }
 }
 
+/**
+ * ¿Hay disco para restaurar entera la base en una temporal? Necesita su tamaño ×1,2 libre. Se mide en el volumen de las
+ * copias (backupsDir()): con el PostgreSQL en la misma máquina o volumen es el mismo disco. Con la base en otro servidor
+ * (p. ej. Railway, donde el disco de PostgreSQL no es el de Pizarro) no es una medida exacta; en ese caso, si no cabe,
+ * la prueba pasa al modo «verify» (que no escribe nada en la base) en vez de arriesgar llenar el disco de la base.
+ */
+async function roomForTemporaryDatabase(): Promise<boolean> {
+  try {
+    const rows = await db.$queryRawUnsafe<{ bytes: bigint | number }[]>("SELECT pg_database_size(current_database()) AS bytes");
+    const size = Number(rows[0]?.bytes ?? 0);
+    await assertDiskRoom(backupsDir(), Math.ceil(size * 1.2));
+    return true;
+  } catch (err) {
+    return !(err instanceof AppError && err.code === "disk_full");
+  }
+}
+
 async function dropDatabase(name: string): Promise<void> {
   try {
     await db.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
@@ -696,7 +713,9 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
       let mode: RestoreTestRun["mode"];
       let limit: RestoreTestRun["limit"];
       let referencesChecked: number | undefined;
-      if (migrationsDir && (await canCreateDatabase())) {
+      const canRestore = migrationsDir && (await canCreateDatabase());
+      const diskRoom = canRestore ? await roomForTemporaryDatabase() : true;
+      if (canRestore && diskRoom) {
         dbManifest = await restoreIntoTemporaryDatabase(latest.file, key, migrationsDir);
         mode = "database";
       } else {
@@ -708,7 +727,7 @@ export async function runRestoreTest(): Promise<RestoreTestRun> {
         dbManifest = verified.manifest;
         referencesChecked = verified.referencesChecked;
         mode = "verify";
-        limit = migrationsDir ? "createdb" : "migrations";
+        limit = !migrationsDir ? "migrations" : canRestore ? "disk" : "createdb";
       }
       if (manifest && (manifest.db.dataSha256 !== dbManifest.sha256 || manifest.db.rows !== dbManifest.totalRows)) throw new Error("El manifiesto no coincide con el volcado.");
       // Ficheros: en cada destino con almacén, todos los objetos de su última copia y unos pocos descifrados.

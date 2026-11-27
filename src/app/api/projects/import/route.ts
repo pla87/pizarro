@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { randomBytes } from "node:crypto";
 import { AppError } from "@/lib/errors";
 import { assertDiskRoom } from "@/lib/disk-space";
-import { ArchiveError } from "@/lib/project-export/errors";
+import { ArchiveError, zipDetail } from "@/lib/project-export/errors";
 import { logError, logEvent } from "@/lib/log";
 import { assertCsvHeader } from "@/lib/foreign-import/csv";
 import { decodeText, foreignMaxBytes, sniffFormat } from "@/lib/foreign-import/parse";
@@ -149,7 +149,7 @@ async function handlePost(req: Request): Promise<Response> {
   } catch (rawErr) {
     const err = rawErr instanceof UploadTooSlowError ? new AppError(UPLOAD_TOO_SLOW_MESSAGE, 408) : rawErr;
     const status = err instanceof AppError ? err.status : 500;
-    const known = err instanceof AppError ? err : err instanceof ZipReadError ? new ArchiveError("El archivo está dañado.", err.message) : null;
+    const known = err instanceof AppError ? err : err instanceof ZipReadError ? new ArchiveError("El archivo está dañado.", zipDetail(err.message)) : null;
     logEvent({
       level: known ? "warn" : "error", category: "api", action: "projects.importFailed",
       label: { k: "Fallo al importar un proyecto: {error}", p: { error: logError(err) } },
@@ -157,7 +157,7 @@ async function handlePost(req: Request): Promise<Response> {
     });
     if (known) {
       const headers = known.code === "upload_busy" ? { "Retry-After": "5" } : undefined;
-      const message = known instanceof ArchiveError ? `${t(known.base)}${known.detail ? ` (${known.detail})` : ""}` : t(known.message);
+      const message = known instanceof ArchiveError ? known.text(t) : t(known.message);
       return Response.json({ error: message, ...(known.code ? { code: known.code } : {}) }, { status: known.status, headers });
     }
     console.error("[project import]", err);

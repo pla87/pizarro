@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseProfileTab } from "../src/app/(app)/settings/profile-tabs";
+import { resolveProfileTab } from "../src/app/(app)/settings/profile-tabs";
 
 test("pestañas de «Mi perfil»: valor válido, y «Cuenta» si falta o es desconocido", () => {
-  assert.equal(parseProfileTab("preferencias"), "preferencias");
-  assert.equal(parseProfileTab("plantillas"), "plantillas");
-  assert.equal(parseProfileTab("avisos"), "avisos");
-  assert.equal(parseProfileTab("cuenta"), "cuenta");
-  assert.equal(parseProfileTab(undefined), "cuenta");
-  assert.equal(parseProfileTab("otra"), "cuenta");
-  assert.equal(parseProfileTab(["avisos"]), "cuenta");
+  const tab = (v: unknown) => resolveProfileTab(v).tab;
+  assert.equal(tab("preferencias"), "preferencias");
+  assert.equal(tab("plantillas"), "plantillas");
+  assert.equal(tab("avisos"), "avisos");
+  assert.equal(tab("cuenta"), "cuenta");
+  assert.equal(tab(undefined), "cuenta");
+  assert.equal(tab("otra"), "cuenta");
+  assert.equal(tab(["avisos"]), "cuenta");
 });
 
 test("pestañas: alias sin mayúsculas ni tildes, y aviso con una desconocida (ronda 56)", async () => {
-  const { resolveProfileTab } = await import("../src/app/(app)/settings/profile-tabs");
   const { resolveProjectSettingsTab } = await import("../src/app/(app)/p/[projectId]/settings/project-settings-tabs");
   assert.deepEqual(resolveProfileTab(undefined), { tab: "cuenta", kind: "default" });
   assert.deepEqual(resolveProfileTab("avisos"), { tab: "avisos", kind: "exact" });

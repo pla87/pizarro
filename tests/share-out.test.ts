@@ -260,7 +260,7 @@ test("página: botones con el título de su tarea para lectores de pantalla, con
 test("marca de la cabecera: revocado o caducado", () => {
   const now = new Date("2026-06-15T12:00:00Z");
   const used = new Date("2026-06-10T12:00:00Z");
-  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: used, generatedByName: null, lastUsedAt: null, revokedAt: null, taskIds: [] };
+  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: used, lastUsedAt: null, revokedAt: null, taskIds: [] };
   // «Revocar enlace» con el enlace activo.
   const revoked = boardShareOf({ ...base, revokedAt: new Date("2026-06-12T08:00:00Z") }, now);
   assert.deepEqual([revoked.state, revoked.revoked], ["ended", true]);
