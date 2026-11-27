@@ -212,21 +212,21 @@ iniciase sesión como administrador pasaría por la verificación en dos pasos),
 
 - `activar`: apagada, el submenú «Rol de la columna» no la ofrece; *Ajustes del proyecto → Tablero → Permitir columnas
   «Compartir fuera»* la enciende.
-- `rol`: «Rol de la columna › Compartir fuera» deja la fila en la base y el pie con «Generar web», el aviso de lo que se publica
-  y la caducidad, que rota «1 mes → 3 meses → 7 días → 1 mes» (y se guarda); la marca de la cabecera dice «sin generar».
+- `rol`: «Rol de la columna › Compartir fuera» deja la fila en la base y el pie con «Generar web», el aviso corto de lo que se publica
+  y la caducidad («Caduca tras 1 mes sin uso»), que rota «1 mes → 3 meses → 7 días → 1 mes» (y se guarda); la marca de la cabecera dice «sin generar».
 - `generar`: el diálogo enseña la dirección `/x/<token>` (con `data-pz-no-capture`), «Enviar por email» es un `mailto:`
   con la dirección, dice hasta cuándo vale; en la base, la huella y el token cifrado (`v2.…`, nunca en claro). La marca
   pasa a activo y el botón a «Actualizar web», que vuelve a enseñar la misma dirección; la segunda persona del proyecto
-  también la ve con «Enlace de la web». Ningún registro lleva el token.
+  también la ve con el botón «Link» (nombre accesible «Link: enlace de la web»). Ningún registro lleva el token.
 - `fuera`: en otro contexto sin sesión, la página responde con `X-Robots-Tag`, `Referrer-Policy: no-referrer` y
   `Cache-Control: no-store`, sin `<script>`; enseña solo las tareas publicadas. «Marcar como hecha» la lleva a «Hecho»
   y el tablero abierto la ve sin recargar; Ctrl+Z en la app la devuelve. Cambiar la fecha y comentar (firmado
   «Proveedor F68 (fuera)», también en el historial); los registros de lo de fuera llevan «/x/…» y ninguno el token; el
   adjunto se descarga con su nombre y uno ajeno da 404.
-- `nuevo`: sin el token cifrado (como tras cambiar la clave sin rotarla), «Enlace de la web» explica que no puede
+- `nuevo`: sin el token cifrado (como tras cambiar la clave sin rotarla), el botón «Link» explica que no puede
   enseñar la dirección; «Crear un enlace nuevo» pide confirmación y da otra dirección; la anterior responde 410.
-- `revocar`: «Enlace de la web» → «Revocar enlace» (con confirmación): la dirección responde 410 con «Esta lista de
-  tareas ha caducado…» y la marca deja de decir activo.
+- `revocar`: el botón «Link» → «Revocar enlace» (con confirmación): la dirección responde 410 con «Esta lista de
+  tareas ya no está disponible…» y la marca dice «Enlace revocado por <nombre>…».
 - `apagar`: apagarla en Ajustes (confirmando si hay enlaces) quita el pie y la opción del submenú.
 
 Misma base y servidor:
