@@ -64,3 +64,31 @@ Opcional:
 Qué retirar: knip limpio, 0 traducciones sin uso, ningún fichero huérfano. Siguen sin uso (pendientes de tu «sí»):
 `parseProfileTab`, `listProjectDocuments`/`listTrashedDocuments`, `htmlTableToMarkdown`, el `export` de `runBoot` y la
 limpieza de `globalThis.prisma` en `scripts/boot.ts`, y la columna `ColumnShare.generatedByName` (v1.74).
+
+## Vuelta 3 (revisores: concurrencia, tablero en vivo y deshacer; móvil, inglés, accesibilidad y textos)
+
+Hecho (evidentes):
+- Ctrl+Z / rehacer recargaba el tablero entero dos veces en la propia pestaña: ahora una.
+- Deshacer no avisaba (y pisaba) lo cambiado desde la web de «Compartir fuera».
+- «Mover a…» de varias tareas movía también una que otra persona acababa de archivar.
+- Etiquetas desde el detalle: si dos personas las cambiaban casi a la vez, se perdía la de una; ahora se manda el cambio.
+- «Aplicar plantilla» (sustituir) podía interbloquearse con un «Mover a…» a la vez.
+- Móvil: iPhone ya no amplía la página al tocar un campo (16 px en móvil táctil); la web de fuera tampoco, y sus tablas,
+  bloques de código y nombres largos ya no se salen de la pantalla.
+- La página «Dejar de recibir estos emails» sale en el idioma de la persona.
+- Textos: plural de «Se conserva 1 columna…», «Pinned» en el plan, comillas inglesas en inglés.
+
+Opcional:
+- Borrar tareas: leer la instantánea para deshacer dentro de la transacción del borrado (alarga el candado).
+- Errores de importar en inglés con el detalle técnico en español; un error del proxy en español; página sin conexión
+  para la app instalada.
+
+## Vuelta 4 (revisión del diff de la propia ronda)
+
+En curso: título del detalle que encogía al editar en móvil (por la regla de 16 px), la fecha que enseña Administración
+cuando una tarea diaria falla, comentarios de fuera en el aviso de deshacer, tipos renombrados al importar que se fundían,
+prefijo en «Nueva tarea» con título compartido o borrador, textos en plural de «Varias tareas», «Mover a…» que deja en su
+sitio lo que no se movió, la hora de la base en la deduplicación de comentarios de fuera y un comentario obsoleto.
+
+Opcional: 16 px también en tabletas y móviles en horizontal (hoy solo hasta 639 px); deduplicar comentarios de fuera solo
+si además es el mismo visitante (hoy dos personas distintas que escriben lo mismo en 30 s cuentan como uno).
