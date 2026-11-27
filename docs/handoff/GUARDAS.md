@@ -129,6 +129,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 68) Avisos: uno nuevo con «Deshacer» anula el de los anteriores (`placeToast`, salvo `independent`); la pila no se
   cierra ni se recorta con el ratón encima o con el foco del teclado dentro; los que se sustituyen en su sitio llevan `group`.
   Los paneles de menú en portal nunca llevan `w-full`/`w-screen` (`tests/menus.test.ts`).
+- (Ronda 69) Avisos: existe el tipo `info` en `Toast.tsx` (neutro, 6 s, sin `role="alert"`); `show` convierte en `info` el
+  error «Solo se puede deshacer el último cambio…». Los avisos de mover no llevan «Deshacer» por diseño.
+- (Ronda 69) Imágenes en el editor: pegar o soltar una imagen pasa por `insertImageBlocks` (`src/lib/editor-extensions.ts`),
+  que la deja en su propio párrafo y parte el texto si el cursor estaba en medio; el nodo `markdownImage` sigue siendo
+  inline (lo guardado antes se ve igual) y el modo Markdown no cambia.
 
 ## Logs
 
@@ -230,6 +235,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   se crean al pulsar «Crear tarea», por las rutas de siempre. Sin sesión no se guarda ningún archivo (solo los textos, en
   la dirección de vuelta del acceso).
 
+- (Ronda 69) Imágenes en el plan para IA y la Release: siempre en su propia línea, salvo en filas de tabla, citas y listas,
+  donde se quedan en línea con un espacio (`src/lib/ai-plan.ts`, `src/lib/release.ts`). En las descargas .md y .txt de la
+  Release apuntan al fichero del ZIP (`R3F1_nombre.webp`), o «[imagen: nombre]» sin ZIP; «Copiar todo» y el histórico
+  conservan los enlaces internos.
+
 ## Importar y exportar
 
 - Importar y exportar tareas en JSON: formato y lectura en `src/lib/task-json.ts` (`pizarro.task` / `pizarro.tasks`,
@@ -283,11 +293,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   detecta que ha desaparecido el proceso padre (también si npm muere de golpe) y lanza el apagado ordenado en ~1 s
   (solo si lo arrancó npm). Pruebas: `tests/start-signals.test.ts` (arranca `npm start` de verdad con un servidor de
   prueba, lo para con SIGTERM al pid de npm y comprueba que no queda huérfano).
-  Antes de cargar `server.js`, `start-local.mjs` importa `dist/boot.mjs` y espera a `runBoot()`: las mismas tareas de
-  arranque que el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y
-  plantillas de serie), en el mismo proceso y sin abrir otro servidor. Sin `dist/boot.mjs` o si fallan, no arranca.
-  `boot.ts` solo se ejecuta por sí mismo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
-  de Prisma y lo quita de `globalThis` para que el servidor no herede uno cerrado. `start.sh` y `start-local.mjs` fijan
+  (Ronda 69) Antes de cargar `server.js`, `start-local.mjs` lanza `node dist/boot.mjs` en un proceso hijo aparte
+  (`process.execPath`, sin shell, mismo entorno) y espera a que termine con código 0: las mismas tareas de arranque que
+  el contenedor (`system.boot`, historial de versiones, seed, código de `/setup` en la terminal y plantillas de serie), y
+  su memoria (~170 MB) se libera al acabar. Sin `dist/boot.mjs`, o si el hijo falla (código distinto de 0), no arranca.
+  Con SIGTERM (o el apagado de `parent-watch`) mientras corre, mata al hijo y sale con 143.
+  `boot.ts` se ejecuta solo cuando se lanza directamente (`node dist/boot.mjs`); al terminar desconecta su cliente
+  de Prisma y lo quita de `globalThis` (limpieza que ya no hace falta con el hijo aparte; pendiente de retirar en la v1.74). `start.sh` y `start-local.mjs` fijan
   `PIZARRO_LAUNCHER` (`docker` / `npm`) para que el paso 1 de `/setup` diga dónde mirar el código
   (`setupCodeSource`, `src/lib/setup-core.ts`; Railway se detecta por sus variables). Recorrido completo desde cero:
   `e2e/install-e2e.mjs`.
@@ -384,6 +396,11 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   (`comparable()`) cuenta los tipos por defecto solo si alguna columna tiene uno (las demás conservan su huella).
 - (Ronda 68) El aviso del cambio de tipo sale de `kindDescriptionChange` («aplicada», «quitada» o nada) y el deshacer nombra
   la tarea con `titleWithoutKindPrefix`.
+
+- (Ronda 69) Textos de serie corregidos: `OLD_DESCRIPTIONS` + `withCurrentSeedText` (`src/lib/kinds-localize.ts`) reconocen
+  el texto viejo como la plantilla actual (errata «de mi» → «de mí» en «Respuesta»); la migración
+  `20261204110000_respuesta_errata` solo corrige las filas que nadie tocó. «Nueva tarea» solo pone el prefijo del tipo si es
+  el de la columna o se elige a mano, no si viene de «el último usado» (`NewTaskDialog.tsx`).
 
 ## Deshacer
 
@@ -496,3 +513,12 @@ las bases `pizarro_test_<hex>`, `rm -rf .next/types` y la prueba de PDF con la C
   `?m=invalid` sin registrar. El tope por IP usa `shareout-ip:` (mapa general: no puede desalojar los bloqueos de acceso);
   los de cambios, descargas y avisos, el mapa de seguridad. `excerpt()` quita los caracteres de control (el separador
   `\u001E` de los avisos de fuera no puede venir de un comentario). `shareOut.getLink` está en `UNPUBLISHED_ACTIONS`.
+- (Ronda 69) `MAX_SHARE_TASKS` vive en `src/lib/share-out-board.ts` (lo usa el navegador). `BoardShareInfo` lleva `taskIds`
+  (solo con enlace activo, nunca el token) y `revokedBy`. `ColumnShare.revokedById` sin clave ajena: el nombre se lee de la
+  cuenta y se vacía al generar un enlace nuevo y al borrar la cuenta (`user-delete.ts`); cualquier miembro puede revocar.
+  `ColumnShare.generatedByName` ya no se escribe ni se lee (se quita la columna en la v1.74). «Cambios sin publicar»
+  compara `taskIds` con las tareas de la columna (las terminadas no cuentan como quitadas). Sin enlace activo y sin tareas,
+  generar se rechaza también en el servidor.
+- (Ronda 69) Miniaturas de adjuntos en la web de fuera: `?inline=thumb` (variante thumb, `Cache-Control: private,
+  max-age=3600` solo para esa); `?inline=1` (imágenes de la descripción) sigue `no-store` y sin registrar; la descarga (sin
+  `inline`) cuenta en el tope del enlace y en Logs. Las descargas y aperturas llevan «<columna> (fuera)» en Logs.
