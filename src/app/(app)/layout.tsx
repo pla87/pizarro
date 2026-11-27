@@ -9,6 +9,7 @@ import { getPublicContactEmail } from "@/lib/google-config";
 import { licenseNudgeFor } from "@/lib/license-registry";
 import { buyHref } from "@/lib/product";
 import { releaseUse } from "@/lib/release-nav";
+import { isRowId } from "@/lib/row-id";
 import { getUpdateNotice } from "@/lib/update-check";
 import { getFeedbackStatus } from "@/lib/feedback";
 import { requireUserPage } from "@/lib/session";
@@ -21,7 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const anyPathProject = /^\/p\/([^/?#]+)/.exec((await headers()).get("x-pz-path") ?? "")?.[1];
   // «Releases» del menú solo en proyectos que las usan: se pide ya, en paralelo con lo demás (y la página del tablero
   // reutiliza la misma respuesta, `cache`); solo se usa si el proyecto está en la lista de la persona.
-  const releaseUsePromise = anyPathProject ? releaseUse(anyPathProject).catch(() => null) : null;
+  // Solo con un id con forma de id (una ruta inventada no lanza consultas).
+  const releaseUsePromise = anyPathProject && isRowId(anyPathProject) ? releaseUse(anyPathProject).catch(() => null) : null;
   // En paralelo: estas consultas van en cada página.
   const [projects, unread, backupAlert, updateAvailable, diskLow, licenseNudge, feedback] = await Promise.all([
     listVisibleProjects(user),
