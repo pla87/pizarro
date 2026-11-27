@@ -236,71 +236,37 @@ Resumen (el detalle, `STABLE_PUSH_TOKEN`, mover `stable` y Dependabot: `docs/han
 - Telegram y WhatsApp: implementados; la única decisión pendiente del propietario es de coste (si activa WhatsApp en
   su instalación). Detalle: `docs/handoff/GUARDAS.md`, «Emails y mensajería».
 
-**Estado al cerrar la ronda 70:** v1.73.1 (de arreglos) fusionada en `main`. **Las Releases de la v1.73.0 y de la v1.73.1
-están pendientes de lanzar por el propietario** (*Actions → Release* sobre `main`): no se lanzaron porque no estaba delante.
-Con publicar la v1.73.1 basta, lleva todo lo de la v1.73.0; hasta entonces `stable` y la etiqueta `v1.72.0` siguen en la
-versión anterior y la instalación de prueba de Railway no tiene ninguna de las dos. Hecho (5 vueltas; se paró por el
-criterio «una vuelta sin hallazgos medios o altos»: la 5.ª, una pasada en Claude in Chrome en local, no dio ninguno):
-confirmación al cerrar «Varias tareas», comentario repetido desde fuera, Ctrl+Z con una sola recarga y avisos de deshacer
-con lo hecho desde fuera, concurrencia (etiquetas, «Mover a…», «Aplicar plantilla»), móvil sin zoom de iOS, baja de emails
-en el idioma de la persona, exportar/importar con imágenes de releases y tipos «(2)», tareas diarias que se reintentan y
-Administración con la fecha del fallo, imagen Docker sin copias redundantes. Decisiones, límites y lo descartado (caché de
-acceso en el canal en vivo): `HISTORIA.md`; guardas nuevas: `GUARDAS.md` («(Ronda 70)»). Sin migraciones nuevas. Pendientes
-de Claude in Chrome: `docs/PRUEBAS-CHROME.md` (pruebas en real y auditoría de la v1.73.0 y la v1.73.1, DMARC y WhatsApp real
-con el propietario delante).
+**Estado al cerrar la ronda 71:** v1.74.0 fusionada en `main`. **La Release está pendiente de lanzar por el propietario**
+(*Actions → Release* sobre `main`; con la v1.74.0 basta, lleva también la v1.73.0 y la v1.73.1). Hasta entonces `stable` y la
+etiqueta `v1.72.0` siguen en la versión anterior. La ronda aplicó las respuestas a las preguntas 1-27 de la v1.73.1 (ver
+`HISTORIA.md`, ronda 71): quien crea o importa un proyecto es miembro, Releases solo donde se usan, columna nueva antes de
+«Hecho», «Organizar por personas» en la bienvenida, avisos de lo borrado, `/setup` y «Importar tareas» que no pierden nada,
+web de fuera con tope de bytes, fecha mínima y miniatura que abre la imagen, release .md sin imágenes repetidas, prueba de
+restauración sin disco, textos en inglés, CI más rápida y código retirado. Migración nueva:
+`20261205100000_aviso_enlace_revocado` (solo añade el valor `SHARE_REVOKED`). Guardas nuevas: `GUARDAS.md` («(Ronda 71)»).
+Pendientes de Claude in Chrome: `docs/PRUEBAS-CHROME.md`.
 
-**Siguiente sesión:** lo que el propietario decida (por ejemplo, contestar las preguntas de abajo). Si va a seguir con la
-paquetización o con la v1.74 (quitar `ColumnShare.generatedByName`, pregunta 11), arranque local como en
+**Siguiente sesión:** lo que el propietario decida. La v1.75 tiene dos pasos ya decididos (pregunta 5): escribir el aviso
+`SHARE_REVOKED` al revocar y el `DROP COLUMN` de `ColumnShare.generatedByName`. Arranque local como en
 `docs/handoff/LOCAL.md`, desde `origin/main`, con `npx prisma migrate deploy`.
 
-**Preguntas abiertas al propietario (tras la v1.73.1)**, con la recomendación entre paréntesis. Se renumeran: las 1-12
-siguen de la ronda 69 y las 13-27 son los opcionales de la ronda 70:
+**Preguntas abiertas al propietario (tras la v1.74.0)**, con la recomendación entre paréntesis. Se renumeran:
 
-1. Creador de un proyecto de equipo: no es miembro (modelo de la v1.17, `adminPicks`). A) explicar en Ajustes quién lo ve
-   sin ser miembro (SÍ) o B) hacerle miembro al crear.
-2. «Compartir fuera», opcionales: a) mostrar solo las tareas que siguen en la columna o están terminadas (NO: se actualiza
-   con el botón); b) tope de MB en las descargas (NO por ahora; ver también la 13); c) 30 días de «caducado» también para el
-   penúltimo enlace (NO); d) no publicar los comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios
-   por enlace (NO por ahora); f) Ctrl+Z al elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos
-   versiones).
-3. «Organizar por personas» también en la tarjeta de bienvenida de «Casa y familia» (SÍ).
-4. Ocultar «Release con selección» y Releases en proyectos sin columna «Siguiente salto» ni releases (SÍ).
-5. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
-6. Cerrada: NO. Caché de la imagen en la Release (`cache-from/to: gha`): se quitó en la v1.68 por lenta y el repositorio
-   público no paga minutos de Actions.
-7. Retirar (pendiente de su «sí»; se pregunta antes de borrar): a) `parseProfileTab` (SÍ); b)
-   `listProjectDocuments`/`listTrashedDocuments`, que solo usan las pruebas (SÍ, pasando sus pruebas a las variantes `…Of`);
-   c) `htmlTableToMarkdown` (SÍ); d) `export` de `runBoot` y la limpieza de `globalThis.prisma` de `scripts/boot.ts` (SÍ);
-   e) `/x/` en robots, redundante con `/` (NO: explícito). knip está limpio y no hay traducciones sin uso ni ficheros huérfanos.
-8. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
-9. Pendiente aprobado: una URL por tarea (`?tarea=ID`, abre el tablero con la tarea abierta), en una ronda propia; y el
-   migrador propio sin Prisma (hoy ~18 % de la imagen, 23,8 MB comprimidos), en otra.
-10. Aviso en la campana a quien generó la web cuando otra persona revoca el enlace: necesita un valor nuevo de enum (la
-    v1.74 lo añade y la v1.75 lo escribe, para no romper la versión anterior) (SÍ).
-11. En la v1.74, quitar la columna `ColumnShare.generatedByName` (ya decidido, 2h) y la limpieza de `globalThis.prisma` de
-    `scripts/boot.ts` (líneas 52-63), que ya no hace falta con el arranque en un proceso aparte (SÍ).
-12. «Cambios sin publicar» también al editar una tarea ya publicada: requiere llevar la fecha de cambio al tablero (NO por
-    ahora: la web ya lee el contenido en vivo).
-13. Tope de bytes por enlace y hora en las descargas de «Compartir fuera» (hoy 300 descargas/h de hasta 20-100 MB: 6-30 GB/h
-    de salida si se filtra un enlace) (SÍ si el coste de salida importa; si no, NO por ahora).
-14. Caché corta (5-10 s) de la página pública de «Compartir fuera» o tope de visitas por enlace (NO por ahora).
-15. CI con la base en `fsync=off` y 4 procesos: ≈1 min menos por PR y Release; el repositorio es público y no cuesta
-    dinero (SÍ).
-16. Prueba mensual de restauración sin espacio: hacerla en modo «verificar» si no cabe el doble de la base (SÍ).
-17. «Añadir columna» delante de la primera columna terminada en vez de al final (SÍ).
-18. Mejoras de la web de fuera: fecha mínima en «Cambiar fecha» y aviso propio, no decir «Fecha cambiada» si no cambió,
-    «copia tu texto» en el aviso de error de un comentario, y ver miniaturas e imágenes sin descargar (`?inline=1`) (SÍ).
-19. Avisos de una tarea borrada: decir «Esa tarea ya no existe» al pulsarlos (SÍ).
-20. Error de `/setup`: conservarlo al pulsar «Atrás» (SÍ).
-21. «Importar tareas» pregunta antes de cerrar con texto pegado (SÍ).
-22. Release .md: la imagen de la descripción aparece también en «Adjuntos:» (SÍ).
-23. 16 px también en tabletas y móviles en horizontal (hoy solo hasta 639 px) (NO por ahora: el zoom afecta sobre todo al
-    iPhone en vertical).
-24. Borrar tareas: leer la instantánea para deshacer dentro de la transacción del borrado (NO: alarga el candado).
-25. Errores de importar en inglés con el detalle técnico en español y un error del proxy en español (SÍ, ronda de textos).
-26. Página sin conexión para la app instalada (NO por ahora).
-27. Deduplicar comentarios de fuera solo si además es el mismo visitante (hoy dos personas que escriben lo mismo en 30 s
-    cuentan como una) (NO: es raro y no tiene identificador fiable).
+1. «Compartir fuera», opcionales (el propietario pidió las opciones y no ha elegido; no se hace ninguna): a) mostrar solo
+   las tareas que siguen en la columna o están terminadas (NO: se actualiza con el botón); b) tope de MB en las descargas
+   (ya hay 2 GB por enlace y hora: NO); c) 30 días de «caducado» también para el penúltimo enlace (NO); d) no publicar los
+   comentarios internos (NO: el aviso del pie lo dice); e) tope diario de cambios por enlace (NO por ahora); f) Ctrl+Z al
+   elegir o quitar la función (NO: necesita una operación nueva de deshacer en dos versiones).
+2. Quitar las etiquetas de ejemplo «Persona 1/2» de «Casa y familia» (SÍ, ronda propia: cambia la huella de la plantilla).
+3. Probar en real el texto para la IA de la guía de Railway (cuesta un proyecto de Railway más).
+4. Pendiente aprobado, en rondas propias: una URL por tarea (`?tarea=ID`) y el migrador propio sin Prisma (~18 % de la imagen).
+5. v1.75: escribir el aviso `SHARE_REVOKED` a quien generó la web cuando otra persona revoca el enlace, y borrar la columna
+   `generatedByName` (SÍ, ya decidido; no puede ir antes porque la v1.73 aún la usa).
+6. Web de fuera: que pulsar una imagen de la descripción también la abra (hoy la descarga), contando igual que la miniatura (SÍ).
+7. Web de fuera: «Copia tu texto antes de volver a intentarlo» también cuando el enlace se revoca o caduca mientras se
+   escribe (hoy esa página no pinta avisos; NO por ahora: es raro).
+8. Tarjeta de bienvenida en la vista de lista: el enlace «Organizar por personas» solo sale en la vista de tablero (NO: en
+   la lista no hay columnas que crear a la vista).
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.
