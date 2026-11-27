@@ -9,7 +9,7 @@ import { assertDiskRoom, isNoSpaceError, NO_SPACE_MESSAGE, releaseDisk, reserveD
 import { AppError } from "./errors";
 import { logError, logEvent } from "./log";
 import { buildProjectExport, estimateProjectExport } from "./project-export/export";
-import { ArchiveError, INTERRUPTED_MESSAGE } from "./project-export/errors";
+import { ArchiveError, INTERRUPTED_MESSAGE, zipDetail } from "./project-export/errors";
 import { importForeignFile } from "./foreign-import/create";
 import type { ImportFormat } from "./foreign-import/parse";
 import { importProjectFile, type ImportSummary } from "./project-export/import";
@@ -244,8 +244,8 @@ async function translatorFor(userId: string): Promise<T> {
 
 /** Mensaje de error del trabajo, ya en el idioma de la persona. Los fallos inesperados se anotan en el registro y se resumen. */
 function failureMessage(err: unknown, t: T, fallback: string): string {
-  if (err instanceof ArchiveError) return `${t(err.base)}${err.detail ? ` (${err.detail})` : ""}`;
-  if (err instanceof ZipReadError) return `${t("El archivo está dañado.")} (${err.message})`;
+  if (err instanceof ArchiveError) return err.text(t);
+  if (err instanceof ZipReadError) return new ArchiveError("El archivo está dañado.", zipDetail(err.message)).text(t);
   if (err instanceof AppError) return t(err.message);
   return t(fallback);
 }

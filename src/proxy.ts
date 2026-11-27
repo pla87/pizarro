@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_LINK_HEADER } from "@/lib/auth-link-path";
 import { canonicalRedirect } from "@/lib/canonical-url";
+import { localeFromAcceptLanguage } from "@/lib/landing-locale";
 import { PASSWORD_CHANGE_COOKIE, sessionCookieName, sessionCookieOptions } from "@/lib/session-config";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -74,7 +75,7 @@ export function proxy(req: NextRequest) {
   }
 
   if (!token) {
-    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: localeFromAcceptLanguage(req.headers.get("accept-language")) === "en" ? "Not authorized" : "No autorizado" }, { status: 401 });
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
@@ -84,7 +85,11 @@ export function proxy(req: NextRequest) {
   // Con el cambio de contraseña pendiente solo se puede ver esa pantalla (y usar sus acciones); el servidor lo
   // vuelve a comprobar en cada página, acción y ruta API.
   if (req.cookies.get(PASSWORD_CHANGE_COOKIE)?.value && pathname !== "/change-password") {
-    if (pathname.startsWith("/api/") || req.method !== "GET") return NextResponse.json({ error: "Debes elegir una contraseña nueva" }, { status: 403 });
+    if (pathname.startsWith("/api/") || req.method !== "GET") {
+      // Sin consultar la base (el proxy no la usa): el idioma del navegador; sin él, español.
+      const en = localeFromAcceptLanguage(req.headers.get("accept-language")) === "en";
+      return NextResponse.json({ error: en ? "You must choose a new password" : "Debes elegir una contraseña nueva" }, { status: 403 });
+    }
     const url = req.nextUrl.clone();
     url.pathname = "/change-password";
     url.search = "";

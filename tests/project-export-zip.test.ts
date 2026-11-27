@@ -215,3 +215,19 @@ test("resumen de importación: el email no se repite", () => {
   assert.equal(personLine({ name: "Ana", email: "ana@example.com" }), "Ana · ana@example.com");
   assert.equal(personLine({ name: "Ana", email: "" }), "Ana");
 });
+
+test("ronda 71: el detalle técnico del error de importar sale en el idioma de quien importa", async () => {
+  const { ArchiveError, zipDetail } = await import("../src/lib/project-export/errors");
+  const { makeT } = await import("../src/i18n/core");
+  const en = makeT("en");
+  const es = makeT("es");
+  const dup = new ArchiveError("El archivo tiene datos repetidos.", { k: "project.json repite una columna: {value}", p: { value: "c1" } });
+  assert.equal(dup.message, "El archivo tiene datos repetidos. (project.json repite una columna: c1)");
+  assert.equal(dup.text(es), dup.message);
+  assert.equal(dup.text(en), "The file has duplicated data. (project.json has a duplicate column: c1)");
+  assert.equal(new ArchiveError("El archivo está dañado.", zipDetail("«a.png» está incompleto.")).text(en), "The file is damaged. (“a.png” is incomplete.)");
+  assert.equal(new ArchiveError("El archivo no es un ZIP válido.", zipDetail("Entrada repetida: x/y")).text(en), "The file is not a valid ZIP. (Repeated entry: x/y)");
+  assert.equal(new ArchiveError("El archivo no es un ZIP válido.", zipDetail("ZIP64 no admitido.")).text(en), "The file is not a valid ZIP. (ZIP64 is not supported.)");
+  // Un detalle de texto (un nombre) se muestra tal cual.
+  assert.equal(new ArchiveError("El archivo contiene una entrada inesperada.", "raro.bin").text(en), "The file contains an unexpected entry. (raro.bin)");
+});
