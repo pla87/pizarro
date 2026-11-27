@@ -254,7 +254,8 @@ if (only.includes("kind")) {
     await page.keyboard.press("Alt+N");
     await U.dialog(page).waitFor();
     // Con un espacio detrás, para seguir escribiendo (se quita al guardar).
-    L.eq("KIND: el tipo preseleccionado aplica su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "Plantilla del tipo ");
+    // Ronda 69: el tipo que viene solo de «el último usado» no prefija el título (sí la descripción y las subtareas).
+    L.eq("KIND: el tipo preseleccionado (último usado) no pone su título de plantilla", await U.dialog(page).locator("input[required]").first().inputValue(), "");
     // La descripción puede ser un textarea o el editor con formato (según el perfil): se lee lo que haya en el diálogo.
     const dialogText = () => U.dialog(page).evaluate((el) => [...el.querySelectorAll("textarea")].map((x) => x.value).join("\n") + "\n" + el.innerText);
     L.check("KIND: y su descripción de plantilla", (await dialogText()).includes("Pasos para reproducir:"));
@@ -329,8 +330,8 @@ if (only.includes("tipos")) {
     // 1. El «+» de una columna: el tipo marcado (el primero, «Compras») trae su plantilla sin pulsarlo.
     await openPlus();
     const first = await state();
-    // El prefijo va con un espacio detrás para escribir a continuación (se quita al guardar).
-    L.eq("TIPOS: «+» abre con «Compras» marcado, su título de plantilla y sin subtareas", [first.kind, first.title, first.subtasks], ["Compras", "Comprar ", []]);
+    // «Por hacer» no tiene tipo por defecto: el primero (o el último usado) viene marcado pero no pone su prefijo en el título.
+    L.eq("TIPOS: «+» abre con «Compras» marcado, el título vacío y sin subtareas", [first.kind, first.title, first.subtasks], ["Compras", "", []]);
     L.check("TIPOS: y su descripción de plantilla", first.desc.includes("Para cuándo"), first.desc);
     L.check("TIPOS: lo que puso la plantilla no pide confirmar al cerrar", await closesWithoutAsking());
 

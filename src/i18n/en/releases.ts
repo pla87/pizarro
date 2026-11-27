@@ -47,4 +47,6 @@ export const releases: Record<string, string> = {
   // Release: tareas que cambian de tipo mientras se preparaba (el código del título saldría del tipo nuevo)
   "Una de las tareas ha cambiado de tipo mientras tanto: vuelve a generar la release.": "One of the tasks has changed type in the meantime: generate the release again.",
   "{n} de las tareas han cambiado de tipo mientras tanto: vuelve a generar la release.": "{n} of the tasks have changed type in the meantime: generate the release again.",
+  // Ronda 69: imágenes de la descripción en el .md y .txt descargados
+  "imagen": "image",
 };

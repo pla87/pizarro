@@ -290,7 +290,7 @@ if (only.includes("imagen")) {
   await L.eqEventually("IMAGEN: y se inserta en el editor", () => d.locator(`[contenteditable=true] img[src="/api/attachments/${first.id}"]`).count(), 1);
   await L.eqEventually("IMAGEN: sale también en «Capturas y adjuntos»", () => d.locator(`img[src="/api/attachments/${first.id}?thumb=1"]`).count(), 1);
   await saveDesc(d).click();
-  await L.eqEventually("IMAGEN: guardada donde estaba el cursor", async () => (await row(id)).description, `Antes ![${first.name}](/api/attachments/${first.id})después`);
+  await L.eqEventually("IMAGEN: guardada donde estaba el cursor", async () => (await row(id)).description, `Antes \n\n![${first.name}](/api/attachments/${first.id})\n\ndespués`); // ronda 69: la imagen va en su propio párrafo
   L.eq("IMAGEN: la descripción guardada la muestra", await d.getByRole("group", { name: "Descripción" }).locator(`img[src^="/api/attachments/${first.id}"]`).count(), 1);
   // Soltar un fichero de imagen sobre el editor abierto: adjunto e imagen en el texto; el aviso «Suelta para adjuntar» se va.
   await openDesc(d);
@@ -413,7 +413,7 @@ if (only.includes("lenta")) {
   await s.page.keyboard.press("Control+End");
   await pasteImage(s.page, "pie.png");
   await L.eqEventually("LENTA 3: dice «Subiendo imagen…»", () => uploading(d).count(), 1);
-  await d.getByRole("button", { name: "Guardar", exact: true }).click();
+  await d.getByRole("button", { name: "Guardar y cerrar", exact: true }).click();
   await L.eqEventually("LENTA 3: el pie también espera a la imagen", async () => (await uploading(d).innerText()).trim(), "Subiendo imagen…; se guardará al terminar");
   L.eq("LENTA 3: … con el detalle abierto", await U.dialog(s.page).count(), 1);
   release();

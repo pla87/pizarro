@@ -5,7 +5,7 @@ import { projectUsersWhere } from "./access";
 import { appTimeZone } from "./board";
 import { assertColumnRoom } from "./column-capacity";
 import { assignOnEnter, assignUndoOps, finishAssignOnEnter } from "./column-assign";
-import { isShareColumn, shareLinkState } from "./share-out-board";
+import { boardShareOf, isShareColumn, shareLinkState, wasRevoked, type BoardShareInfo } from "./share-out-board";
 import { dateToIso, isoToDate } from "./dates";
 import { decryptSecret } from "./crypto";
 import { db } from "./db";
@@ -72,6 +72,19 @@ export async function countActiveShares(projectId: string, now: Date = new Date(
   return rows.filter((r) => r.column && isShareColumn({ ...r.column, share: true }) && shareLinkState(r, now).state === "active").length;
 }
 
+/** Nombres (de la cuenta) de quienes revocaron enlaces, por id: una cuenta borrada ya no sale. */
+export async function revokerNames(rows: readonly { revokedById?: string | null }[]): Promise<Map<string, string>> {
+  const ids = [...new Set(rows.map((r) => r.revokedById).filter((id): id is string => Boolean(id)))];
+  if (!ids.length) return new Map();
+  return new Map((await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+}
+
+/** El estado del enlace para el tablero y el diálogo, con el nombre de quien lo revocó leído de su cuenta. */
+export async function shareInfoOf(row: Parameters<typeof boardShareOf>[0] & { revokedById?: string | null }, now: Date = new Date()): Promise<BoardShareInfo> {
+  const names = await revokerNames([row]);
+  return boardShareOf(row, now, row.revokedById ? (names.get(row.revokedById) ?? null) : null);
+}
+
 /**
  * La dirección del enlace activo de una fila, descifrando su token (solo para el diálogo de la columna, a quien puede
  * editar el proyecto). `lost`: el enlace funciona, pero no se puede volver a enseñar (se creó antes de guardar el token
@@ -136,7 +149,7 @@ interface ActiveShare {
   key: string;
 }
 
-type ResolvedShare = { kind: "active"; share: ActiveShare } | { kind: "expired" } | null;
+type ResolvedShare = { kind: "active"; share: ActiveShare } | { kind: "expired"; revoked: boolean } | null;
 
 /**
  * Qué hay detrás de un token: un enlace activo, uno que terminó hace menos de 30 días (`expired`) o nada (null: forma mala,
@@ -159,11 +172,11 @@ export async function resolveShareToken(token: string, now: Date = new Date()): 
   if (!current) {
     // El enlace anterior de la columna (se sustituyó por otro): solo el aviso de «ha caducado».
     const ended = row.oldEndedAt ?? now;
-    return row.oldTokenHash && candidates.some((c) => sameHash(c, row.oldTokenHash!)) && inShareGrace(ended, now) ? { kind: "expired" } : null;
+    return row.oldTokenHash && candidates.some((c) => sameHash(c, row.oldTokenHash!)) && inShareGrace(ended, now) ? { kind: "expired", revoked: false } : null;
   }
   const { state, endsAt } = shareLinkState(row, now);
   const usable = state === "active" && row.project.shareOutEnabled && row.column && isShareColumn({ ...row.column, share: true });
-  if (!usable) return inShareGrace(state === "active" ? now : (endsAt ?? now), now) ? { kind: "expired" } : null;
+  if (!usable) return inShareGrace(state === "active" ? now : (endsAt ?? now), now) ? { kind: "expired", revoked: wasRevoked(row) } : null;
   // Coincidió con la clave anterior (rotación de TOKEN_SECRET): se guarda ya con la actual.
   if (!sameHash(candidates[0]!, row.tokenHash!)) {
     await db.columnShare.updateMany({ where: { id: row.id, tokenHash: row.tokenHash }, data: { tokenHash: candidates[0]! } }).catch(() => {});
@@ -175,6 +188,12 @@ export async function resolveShareToken(token: string, now: Date = new Date()): 
       taskIds: row.taskIds, expiresAt: endsAt!, lastUsedAt: row.lastUsedAt, generatedById: row.generatedById, key: shareKeyOf(token),
     },
   };
+}
+
+/** Quién firma lo que pasa desde la web en Logs: «<columna> (fuera)», como el historial y los avisos. */
+export async function shareAuthorName(share: Pick<ActiveShare, "columnName">): Promise<string> {
+  const { t } = await shareLocale();
+  return renderLabel(shareAuthorLabel(share.columnName), t);
 }
 
 /** Abrir la página cuenta como uso (de ahí la caducidad); se escribe como mucho una vez por hora. */
@@ -220,8 +239,13 @@ async function liveSharedTasks(share: ActiveShare) {
 const firstDoneColumn = (projectId: string) => db.column.findFirst({ where: { projectId, isDone: true }, orderBy: COLUMN_ORDER, select: { id: true, name: true } });
 
 /** Datos de la página (sin el token: lo pone la ruta). */
-export async function loadSharePage(share: ActiveShare, token: string, notice: ShareNotice | null): Promise<{ data: SharePageData; t: T }> {
-  const [{ locale, t }, tasks, done] = await Promise.all([shareLocale(), liveSharedTasks(share), firstDoneColumn(share.projectId)]);
+export async function loadSharePage(share: ActiveShare, token: string, notice: ShareNotice | null, noticeTaskId: string | null = null): Promise<{ data: SharePageData; t: T }> {
+  const [{ locale, t }, tasks, done, by] = await Promise.all([
+    shareLocale(), liveSharedTasks(share), firstDoneColumn(share.projectId),
+    // Quien generó la web, por el nombre de su cuenta: solo si sigue activa y con acceso al proyecto (la misma regla que para
+    // avisarle de los cambios); si no, la página no dice quién.
+    liveGeneratorUser(share),
+  ]);
   return {
     t,
     data: {
@@ -230,6 +254,8 @@ export async function loadSharePage(share: ActiveShare, token: string, notice: S
       canMarkDone: done !== null,
       expiresAt: share.expiresAt.toISOString(),
       notice,
+      noticeTaskId: noticeTaskId && tasks.some((x) => x.id === noticeTaskId) ? noticeTaskId : null,
+      sharedBy: by ? firstName(by.name) : null,
       locale: intlLocale(locale),
       lang: locale,
       timeZone: appTimeZone(),
@@ -270,11 +296,12 @@ interface ShareChangeInput {
 class ShareTaskGone extends Error {}
 
 /** Quien generó la web, si su cuenta existe, está activa y ve el proyecto; si no, null. */
-async function liveGenerator(share: ActiveShare): Promise<string | null> {
+async function liveGeneratorUser(share: ActiveShare): Promise<{ id: string; name: string } | null> {
   if (!share.generatedById) return null;
-  const user = await db.user.findFirst({ where: { id: share.generatedById, active: true, ...projectUsersWhere({ isPrivate: share.projectPrivate }, share.projectId) }, select: { id: true } });
-  return user?.id ?? null;
+  return db.user.findFirst({ where: { id: share.generatedById, active: true, ...projectUsersWhere({ isPrivate: share.projectPrivate }, share.projectId) }, select: { id: true, name: true } });
 }
+
+const liveGenerator = async (share: ActiveShare): Promise<string | null> => (await liveGeneratorUser(share))?.id ?? null;
 
 /** Lo que sigue a un cambio ya guardado: si falla, se registra y el cambio se queda (quien está fuera nunca ve un 500). */
 async function sideEffect(what: string, fn: () => Promise<unknown>): Promise<void> {

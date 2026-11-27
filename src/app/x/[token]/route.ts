@@ -1,7 +1,7 @@
 import { logEvent } from "@/lib/log";
 import { clientIp } from "@/lib/request";
 import { isShareNotice, SHARE_PAGE_CSP, SHARE_USE_WRITE_MS, shareResponseHeaders } from "@/lib/share-out-core";
-import { loadSharePage, noteShareUse, resolveShareToken, shareIpAllowed, shareLocale } from "@/lib/share-out";
+import { loadSharePage, noteShareUse, resolveShareToken, shareAuthorName, shareIpAllowed, shareLocale } from "@/lib/share-out";
 import { shareMessageHtml, sharePageHtml } from "@/lib/share-out-page";
 
 export const runtime = "nodejs";
@@ -37,16 +37,17 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   const { token } = await ctx.params;
   const resolved = await resolveShareToken(token);
   if (!resolved) return reply(() => shareMessageHtml("notFound", locale, t), 404);
-  if (resolved.kind === "expired") return reply(() => shareMessageHtml("expired", locale, t), 410);
+  if (resolved.kind === "expired") return reply(() => shareMessageHtml(resolved.revoked ? "revoked" : "expired", locale, t), 410);
   if (head) return html(null, 200);
   const { share } = resolved;
   const first = !share.lastUsedAt || Date.now() - share.lastUsedAt.getTime() >= SHARE_USE_WRITE_MS;
   await noteShareUse(share);
   // Las visitas, como mucho una por enlace y hora en el registro (la misma vez que se apunta el uso).
   if (first) {
-    logEvent({ category: "api", action: "shareOut.open", label: { k: "Abrieron la web de «Compartir fuera» de la columna «{col}»", p: { col: share.columnName } }, projectId: share.projectId, path: "/x/…", ip, details: { shareId: share.id } });
+    logEvent({ category: "api", action: "shareOut.open", label: { k: "Abrieron la web de «Compartir fuera» de la columna «{col}»", p: { col: share.columnName } }, userName: await shareAuthorName(share), projectId: share.projectId, path: "/x/…", ip, details: { shareId: share.id } });
   }
-  const m = new URL(req.url).searchParams.get("m");
-  const { data, t: pageT } = await loadSharePage(share, token, isShareNotice(m) ? m : null);
+  const params = new URL(req.url).searchParams;
+  const m = params.get("m");
+  const { data, t: pageT } = await loadSharePage(share, token, isShareNotice(m) ? m : null, params.get("t"));
   return html(sharePageHtml(data, pageT), 200);
 }

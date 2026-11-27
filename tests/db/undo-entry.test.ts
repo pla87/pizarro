@@ -5,6 +5,8 @@ import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, ma
 import { deleteAttachment, updateTask } from "../../src/actions/tasks";
 import { undoEntry, undoLast } from "../../src/actions/undo";
 import { unlinkGoogle } from "../../src/actions/users";
+import { externalUndoWhere, SHARE_UNDO_KEYS } from "../../src/lib/share-out-core";
+import { encodeLabel } from "../../src/lib/undo-label";
 
 async function attach(taskId: string, userId: string, name: string) {
   return db.taskAttachment.create({ data: { taskId, originalName: name, mimeType: "text/plain", isImage: false, size: 10, createdById: userId } });
@@ -74,6 +76,28 @@ describe("updateTask devuelve su entrada de deshacer («Descripción borrada»)"
     const again = expectOk(await updateTask(task.id, { description: "otro" }));
     expectOk(await undoEntry(again.undo.id!));
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).description, "");
+  });
+});
+
+describe("undoEntry con lo hecho desde fuera («Compartir fuera») al final de la pila", () => {
+  test("la entrada de fuera no cuenta como «último cambio»: el «Deshacer» del aviso propio sigue valiendo", async () => {
+    const user = await makeUser();
+    const f = await makeProject();
+    await loginAs(user);
+    const task = await makeTask(f, { title: "Original" });
+    expectOk(await updateTask(task.id, { description: "texto" }));
+    const cleared = expectOk(await updateTask(task.id, { description: "" }));
+    // Lo último de la pila vino de la web de fuera: su etiqueta empieza por una de SHARE_UNDO_KEYS.
+    await db.undoEntry.create({
+      data: { userId: user.id, projectId: f.project.id, taskId: task.id, label: encodeLabel({ k: SHARE_UNDO_KEYS.done, p: { who: "Proveedor (fuera)", title: "Original" } }), ops: [] },
+    });
+    assert.equal(await db.undoEntry.count({ where: { userId: user.id, kind: "UNDO", ...externalUndoWhere() } }), 1);
+    expectOk(await undoEntry(cleared.undo.id!));
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).description, "texto");
+    // Si lo último es un cambio propio, sigue rechazándose uno anterior.
+    const again = expectOk(await updateTask(task.id, { description: "" }));
+    expectOk(await updateTask(task.id, { title: "Cambiado" }));
+    expectFail(await undoEntry(again.undo.id!), /Solo se puede deshacer el último cambio/);
   });
 });
 

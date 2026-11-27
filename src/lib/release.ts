@@ -34,6 +34,8 @@ interface ReleaseKind {
 }
 
 interface ReleaseAttachmentInput {
+  /** Id del adjunto: con él, las imágenes de la descripción se enlazan a su fichero del ZIP (releaseDownloadText). */
+  id?: string;
   originalName: string;
   /** false = archivo no imagen: conserva su extensión original. Por defecto true (se guarda como .webp). */
   isImage?: boolean;
@@ -216,6 +218,87 @@ export function formatReleaseLine(task: Pick<ReleaseTaskInput, "title" | "linkUr
   const title = mentionsToPlain(task.title).replace(/\s+/g, " ").trim();
   const link = task.linkUrl ? ` ([${escapeLinkText(t("enlace"))}](<${task.linkUrl.replace(/[<>]/g, "")}>))` : "";
   return `- ${code ? `**${code}** · ` : ""}${escapeLinkText(title)}${link}`;
+}
+
+/** Nombre en el ZIP de cada adjunto de la tarea (por su id), el mismo que el de attachmentFileNames. Sin id, no sale. */
+export function attachmentFileMap(code: string, attachments: ReleaseAttachmentInput[]): Map<string, string> {
+  const names = attachmentFileNames(code, attachments);
+  const map = new Map<string, string>();
+  for (const [i, a] of attachments.entries()) if (a.id) map.set(a.id, names[i]!);
+  return map;
+}
+
+/** Imagen de Markdown con su texto y su dirección (`![texto](dirección)`, la dirección sin espacios ni paréntesis). */
+const MD_IMAGE = /!\[((?:\\.|[^\\[\]\n])*)\]\(\s*(<[^<>\n]*>|[^\s()<>]+)(?:\s+(?:"[^"\n]*"|'[^'\n]*'))?\s*\)/g;
+const APP_ATTACHMENT = /^(?:https?:\/\/[^/\s]+)?\/api\/attachments\/([^/?#\s]+)/;
+const CODE_FENCE = /^\s*(?:`{3,}|~{3,})/;
+/** Fila de tabla, cita o elemento de lista: partir la línea para sacar la imagen rompería la tabla, la cita o la lista. */
+const KEEPS_LINE = /^\s*(?:\||>|(?:[-*+]|\d+[.)])\s)/;
+
+/**
+ * Texto de la release tal como se descarga (.md y .txt). Las imágenes de la descripción apuntan a `/api/attachments/…`, un
+ * enlace de Pizarro que fuera de la app no abre. Cada una va en su propia línea (con la sangría de su línea; en una fila de
+ * tabla, una cita o un elemento de lista se queda en la misma línea, separada por un espacio del texto anterior) y:
+ * si su adjunto va en el ZIP (`files`, id → nombre del fichero), como imagen con la ruta relativa del fichero, que queda
+ * junto al texto al descomprimir; si no, como texto «[imagen: nombre]». Las imágenes de otros sitios no cambian, ni lo que
+ * va dentro de un bloque de código. `t`: idioma de quien lo descarga.
+ */
+export function releaseDownloadText(text: string, files: ReadonlyMap<string, string>, t: T = esT): string {
+  let fenced = false;
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    if (CODE_FENCE.test(line)) fenced = !fenced;
+    if (fenced || !line.includes("](")) {
+      out.push(line);
+      continue;
+    }
+    if (KEEPS_LINE.test(line)) {
+      out.push(line.replace(MD_IMAGE, (whole: string, alt: string, dest: string, at: number) => {
+        const appId = APP_ATTACHMENT.exec(dest.startsWith("<") ? dest.slice(1, -1) : dest)?.[1] ?? "";
+        if (!appId) return whole;
+        const file = files.get(appId);
+        const label = alt.replace(/\\(.)/g, "$1").trim();
+        const image = file ? `![${alt}](${file})` : label ? `[${t("imagen")}: ${label}]` : `[${t("imagen")}]`;
+        return at > 0 && !/\s/.test(line[at - 1]!) ? ` ${image}` : image;
+      }));
+      continue;
+    }
+    const indent = /^\s*/.exec(line)![0];
+    const pieces: string[] = [];
+    let rest = line;
+    let changed = false;
+    // El texto de antes y de después de cada imagen, cada uno en su línea.
+    for (;;) {
+      MD_IMAGE.lastIndex = 0;
+      let found: RegExpExecArray | null = null;
+      let appId = "";
+      while ((found = MD_IMAGE.exec(rest))) {
+        const dest = found[2]!;
+        appId = APP_ATTACHMENT.exec(dest.startsWith("<") ? dest.slice(1, -1) : dest)?.[1] ?? "";
+        if (appId) break;
+      }
+      if (!found || !appId) break;
+      changed = true;
+      const alt = found[1]!;
+      const file = files.get(appId);
+      const label = alt.replace(/\\(.)/g, "$1").trim();
+      const image = file ? `![${alt}](${file})` : label ? `[${t("imagen")}: ${label}]` : `[${t("imagen")}]`;
+      const before = rest.slice(0, found.index).trimEnd();
+      if (before.trim()) pieces.push(before, "");
+      pieces.push(`${indent}${image.trimStart()}`, "");
+      rest = rest.slice(found.index + found[0].length).trimStart();
+      if (!rest) break;
+      rest = `${indent}${rest}`;
+    }
+    if (!changed) {
+      out.push(line);
+      continue;
+    }
+    if (rest.trim()) pieces.push(rest);
+    else if (pieces.at(-1) === "") pieces.pop();
+    out.push(...pieces);
+  }
+  return out.join("\n");
 }
 
 /** Descripción sangrada 2 espacios: menciones en texto plano, sin espacios finales ni líneas en blanco repetidas. */

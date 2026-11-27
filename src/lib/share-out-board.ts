@@ -12,6 +12,29 @@ export interface BoardShareInfo {
   expiryDays: number;
   /** Tareas publicadas en la última generación. */
   published: number;
+  /** Sus ids (sin el token): el pie avisa de «cambios sin publicar» al compararlos con las tareas de la columna. */
+  taskIds: string[];
+  /** Quién revocó el enlace a mano (nombre leído de su cuenta); null si caducó, lo terminó el sistema o ya no existe. */
+  revokedBy: string | null;
+}
+
+/** Tareas que se publican como mucho (las primeras de la columna). */
+export const MAX_SHARE_TASKS = 200;
+
+/**
+ * ¿La columna tiene cambios sin publicar? Con el enlace activo, las tareas de ahora (`ids`, en el orden de la columna; solo
+ * cuentan las primeras MAX_SHARE_TASKS) no son las que se publicaron. Basta el conjunto de ids: una tarea editada después
+ * de publicar no se detecta (el tablero no lleva su fecha de cambio). `done`: las tareas que ahora están en una columna
+ * terminada: la web las sigue leyendo en vivo (marcar hecha desde fuera la lleva a «Hecho»), así que haber salido de la
+ * columna por ahí no es un cambio sin publicar.
+ */
+export function shareHasUnpublished(info: Pick<BoardShareInfo, "state" | "taskIds">, ids: readonly string[], done: ReadonlySet<string> = new Set()): boolean {
+  if (info.state !== "active") return false;
+  const now = ids.slice(0, MAX_SHARE_TASKS);
+  const nowSet = new Set(now);
+  const was = new Set(info.taskIds.filter((id) => nowSet.has(id) || !done.has(id)));
+  if (now.length !== was.size) return true;
+  return now.some((id) => !was.has(id));
 }
 
 /**
@@ -71,14 +94,14 @@ export function shareLinkState(row: ShareLinkRow, now: Date = new Date()): { sta
 }
 
 /** Campos de ColumnShare que necesita el tablero (con `columns: { select: { share: … } } }`). */
-export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, taskIds: true } as const;
+export const SHARE_BOARD_SELECT = { columnId: true, tokenHash: true, expiryDays: true, generatedAt: true, lastUsedAt: true, revokedAt: true, revokedById: true, taskIds: true } as const;
 
 /**
  * ¿Terminó al revocarlo (y no por caducar)? Con `revokedAt` y sin haber caducado antes. El selector de caducidad deja
  * terminado donde estaba un enlace ya caducado poniendo `revokedAt` en el momento exacto en que caducó (último uso más sus
  * días, ver setShareExpiry): ese sigue siendo «caducado».
  */
-function wasRevoked(row: ShareLinkRow): boolean {
+export function wasRevoked(row: ShareLinkRow): boolean {
   if (!row.revokedAt) return false;
   const at = row.revokedAt.getTime();
   const used = (row.lastUsedAt ?? row.generatedAt)?.getTime();
@@ -86,14 +109,17 @@ function wasRevoked(row: ShareLinkRow): boolean {
   return !SHARE_EXPIRY_DAYS.some((d) => used + d * DAY === at) && used + row.expiryDays * DAY > at;
 }
 
-export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date()): BoardShareInfo {
+export function boardShareOf(row: { columnId: string | null; tokenHash: string | null; expiryDays: number; generatedAt: Date | null; lastUsedAt: Date | null; revokedAt: Date | null; taskIds: string[] }, now: Date = new Date(), revokedBy: string | null = null): BoardShareInfo {
   const { state, endsAt } = shareLinkState(row, now);
+  const revoked = state === "ended" && wasRevoked(row);
   return {
     state,
     endsAt: endsAt?.toISOString() ?? null,
-    revoked: state === "ended" && wasRevoked(row),
+    revoked,
     expiryDays: row.expiryDays,
     published: row.taskIds.length,
+    taskIds: state === "active" ? row.taskIds : [],
+    revokedBy: revoked ? revokedBy : null,
   };
 }
 

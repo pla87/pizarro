@@ -145,7 +145,7 @@ export async function inviteToProject(projectId: string, email: string) {
       how: emailed ? { k: " (por email)" } : mailFailed ? { k: " (falló el email; queda el enlace para pasarlo a mano)" } : { k: " (con enlace, sin email)" },
     });
     revalidatePath("/", "layout");
-    return { name: created.name, link, emailed, mailFailed };
+    return { userId: created.id, name: created.name, link, emailed, mailFailed };
   });
 }
 

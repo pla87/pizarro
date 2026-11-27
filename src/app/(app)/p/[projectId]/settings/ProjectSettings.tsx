@@ -510,7 +510,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       const invite = res.data.invite;
       setShared(invite
         ? { kind: "pending", name, link: "", emailed: false, userId: invite.userId, expiresAt: invite.expiresAt, issuedAt: invite.issuedAt }
-        : { kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed });
+        : { kind: "board", name, link: shareableLink(res.data.link), emailed: res.data.emailed, userId: candidate });
     });
   };
   const invite = () =>
@@ -520,7 +520,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       if (res.data.mailFailed) toast(t("Invitación creada, pero no se pudo enviar el email: pásale el enlace."), "error");
       else toast(res.data.emailed ? t("Invitación enviada") : t("Invitación creada"));
       setInviteEmail("");
-      setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed });
+      setShared({ kind: "invite", name: res.data.name, link: shareableLink(res.data.link), emailed: res.data.emailed, userId: res.data.userId });
     });
   const resend = (m: { id: string; name: string }) =>
     start(async () => {
@@ -529,7 +529,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       // Si el email no sale, el enlace nuevo (el anterior ya no vale) queda a la vista para pasárselo a mano.
       if (res.data.mailFailed) toast(t("No se pudo enviar el email: pásale el enlace."), "error");
       else toast(t("Invitación enviada"));
-      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: !res.data.mailFailed });
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: !res.data.mailFailed, userId: m.id });
     });
   const freshLink = async (m: { id: string; name: string }) => {
     // El enlace que ya se le pasó deja de valer: no se hace sin confirmarlo (antes, «Copiar…» parecía inofensivo).
@@ -542,7 +542,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
       const res = await generateInviteLink(m.id, projectId);
       if (!res.ok) return toast(res.error, "error");
       toast(t("Enlace de invitación nuevo: el anterior ya no vale"));
-      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false });
+      setShared({ kind: "invite", name: m.name, link: shareableLink(res.data.link), emailed: false, userId: m.id });
     });
   };
   const activeCount = members.filter((m) => m.active).length;
@@ -600,7 +600,10 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
                   run(
                     () => removeProjectMember(projectId, m.id),
                     isMe ? t("Has salido del proyecto") : t("Miembro quitado"),
-                    isMe ? () => router.push("/") : undefined,
+                    isMe
+                      ? () => router.push("/")
+                      // Su recuadro de invitación (caducada o pendiente) ya no tiene sentido: la persona ya no está.
+                      : () => setShared((s) => (s && s.userId === m.id ? null : s)),
                   );
                 }}
               >
@@ -617,7 +620,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           {/* Para quien no sabe de servidores: qué botón pulsar y qué pasa, sin «email configurado». */}
           {canResend
             ? t("Con email configurado: «Reenviar invitación» le manda un enlace nuevo por email (el anterior deja de valer).")
-            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón del enlace junto a su nombre y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.")}
+            : t("Pizarro no puede enviar emails desde aquí. Para que entre, pulsa el botón con el icono de enlace, a la derecha de su nombre en la lista, y mándale tú el enlace nuevo (por WhatsApp, por ejemplo). Al generarlo, el anterior deja de funcionar.")}
         </p>
       )}
       <div className="flex gap-2">

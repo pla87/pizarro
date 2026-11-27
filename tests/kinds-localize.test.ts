@@ -4,7 +4,7 @@ import { localizeGeneralKind, localizeGeneralKinds } from "../src/lib/kinds-loca
 
 const feature = { id: "kind_funcionalidad", name: "Funcionalidad", color: "#22c55e", titleTemplate: "", descriptionTemplate: "" };
 const bug = { id: "kind_correccion", name: "Corrección", color: "#f97316", titleTemplate: "", descriptionTemplate: "" };
-const reply = { id: "kind_respuesta", name: "Respuesta", color: "#a855f7", titleTemplate: "Respuesta", descriptionTemplate: "Respondo a las preguntas y lo que necesitas de mi:" };
+const reply = { id: "kind_respuesta", name: "Respuesta", color: "#a855f7", titleTemplate: "Respuesta", descriptionTemplate: "Respondo a las preguntas y lo que necesitas de mí:" };
 
 test("en español deja los tipos como están", () => {
   const list = [feature, bug];
@@ -31,4 +31,9 @@ test("respeta el nombre o la plantilla que haya cambiado un administrador", () =
 test("no toca tipos que no son de serie", () => {
   const own = { id: "k1", name: "Funcionalidad" };
   assert.equal(localizeGeneralKind(own, "en"), own);
+});
+
+test("reconoce también el texto de serie anterior a la errata («de mi») y lo traduce", () => {
+  const old = { ...reply, descriptionTemplate: "Respondo a las preguntas y lo que necesitas de mi:" };
+  assert.equal(localizeGeneralKind(old, "en").descriptionTemplate, "I answer the questions and what you need from me:");
 });

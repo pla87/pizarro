@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { hashFeedToken } from "../src/lib/calendar-feed-core";
 import { splitRoleChoices, currentRoleChoice, ROLE_CHOICES } from "../src/lib/column-role-choices";
 import { externalExcerpt, externalNotice, noticeActorName, notificationBody, notificationHeadline } from "../src/lib/notification-text";
-import { boardShareOf, DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, nextShareExpiry, shareExpiryLabel, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
+import { boardShareOf, DEFAULT_SHARE_EXPIRY_DAYS, isShareColumn, isShareExpiry, MAX_SHARE_TASKS, nextShareExpiry, shareExpiryLabel, shareHasUnpublished, shareLinkState, shareMailto, shareStateText } from "../src/lib/share-out-board";
 import {
   hashShareToken, inShareGrace, isShareNotice, isShareTokenShape, MAX_SHARE_PAGE_COMMENTS, newShareToken, parseShareDate,
   SHARE_LIMITS, SHARE_PAGE_CSP, SHARE_TOKEN_LENGTH, shareFormAllowed, shareIpKey, shareKeyOf, shareNotifyBucket, shareResponseHeaders, shareUrl,
@@ -279,4 +279,62 @@ test("marca de la cabecera: revocado o caducado", () => {
   }
   assert.equal(boardShareOf(base, now).revoked, false);
   assert.equal(shareStateText({ state: "ended", endsAt: null }).key, "Enlace caducado");
+});
+
+// --- Ronda 69 --------------------------------------------------------------------------------------------------------
+
+test("cambios sin publicar: el conjunto de ids de la columna frente a lo publicado, solo con el enlace activo y con el tope", () => {
+  const info = (taskIds: string[], state: "none" | "active" | "ended" = "active") => ({ state, taskIds });
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["b", "a"]), false, "mismo conjunto, otro orden: nada que publicar");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a", "b", "c"]), true, "una tarea nueva");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a"]), true, "una tarea que ya no está");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a", "c"]), true, "una por otra");
+  assert.equal(shareHasUnpublished(info(["a"], "ended"), ["x"]), false, "sin enlace activo no hay nada que actualizar");
+  assert.equal(shareHasUnpublished(info([], "none"), ["x"]), false);
+  const many = Array.from({ length: MAX_SHARE_TASKS + 20 }, (_, i) => `t${i}`);
+  assert.equal(shareHasUnpublished(info(many.slice(0, MAX_SHARE_TASKS)), many), false, "las que no caben no cuentan como cambio");
+  // Una publicada que ahora está en una columna terminada se sigue leyendo en vivo: no es una tarea quitada.
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a"], new Set(["b"])), false, "b pasó a «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["a", "b"])), false, "columna vacía: todas en «Hecho»");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), [], new Set(["b"])), true, "columna vacía y a salió por otro lado: sí hay cambio");
+  assert.equal(shareHasUnpublished(info(["a", "b"]), ["a", "c"], new Set(["b"])), true, "una nueva sigue contando");
+  assert.equal(shareHasUnpublished(info(["a"]), ["a"], new Set(["a"])), false, "sigue en la columna: nada que ver con «Hecho»");
+});
+
+test("quién revocó: el nombre solo sale si el enlace terminó revocado; el tablero lleva los ids publicados solo si está activo", () => {
+  const now = new Date("2026-06-15T12:00:00Z");
+  const base = { columnId: "c1", tokenHash: "h", expiryDays: 30, generatedAt: new Date("2026-06-10T12:00:00Z"), lastUsedAt: null, revokedAt: null, taskIds: ["a", "b"] };
+  const active = boardShareOf(base, now, "Marta");
+  assert.deepEqual([active.revokedBy, active.taskIds], [null, ["a", "b"]]);
+  const revoked = boardShareOf({ ...base, revokedAt: new Date("2026-06-12T08:00:00Z") }, now, "Marta");
+  assert.deepEqual([revoked.revoked, revoked.revokedBy, revoked.taskIds], [true, "Marta", []]);
+  assert.equal(boardShareOf({ ...base, revokedAt: new Date("2026-06-12T08:00:00Z") }, now).revokedBy, null, "cuenta borrada: sin nombre");
+  assert.equal(boardShareOf({ ...base, generatedAt: new Date(now.getTime() - 40 * DAY) }, now, "Marta").revokedBy, null, "caducado: nadie lo revocó");
+});
+
+test("página: quién la comparte, imágenes como bloque, miniaturas de los adjuntos, sin apartados vacíos y el aviso en la tarjeta", () => {
+  const task = { ...pageData().tasks[0]!, description: "**Por qué:**\n\n**Riesgo:** sin cambios\n\nTexto ![p](/api/attachments/a1) fin" };
+  const html = sharePageHtml(pageData({ sharedBy: "Marta", tasks: [task] }), t);
+  assert.ok(html.includes("Compartida por Marta desde Pizarro"), html);
+  assert.ok(sharePageHtml(pageData({ sharedBy: null }), t).includes("Compartida desde Pizarro"));
+  assert.ok(/\.desc img\{[^}]*display:block/.test(html), "la imagen de la descripción es un bloque");
+  assert.ok(!html.includes("Por qué:") && html.includes("Riesgo:"), "el apartado vacío de la plantilla no sale");
+  const files = html.slice(html.indexOf('<ul class="files">'));
+  const thumb = shareAttachmentPath(pageData().token, "a1", "thumb");
+  assert.ok(thumb.endsWith("?inline=thumb"));
+  assert.ok(files.includes(`<a href="${shareAttachmentPath(pageData().token, "a1")}"><img src="${thumb}" alt="plano.webp" loading="lazy"></a>`), "miniatura de la imagen adjunta, que enlaza a la descarga normal");
+  assert.ok(files.includes(`href="${shareAttachmentPath(pageData().token, "a1")}">plano.webp</a>`), "el nombre sigue siendo la descarga");
+  // El aviso, en la tarjeta de su tarea; sin tarea, arriba del todo.
+  const here = sharePageHtml(pageData({ notice: "done", noticeTaskId: "t1" }), t);
+  const card = here.slice(here.indexOf('<section class="card" id="t-t1">'));
+  assert.ok(card.startsWith('<section class="card" id="t-t1"><p class="notice"') && card.includes("Tarea marcada como hecha."));
+  assert.equal(here.split("Tarea marcada como hecha.").length - 1, 1, "una sola vez");
+  const top = sharePageHtml(pageData({ notice: "done" }), t);
+  assert.ok(top.indexOf("Tarea marcada como hecha.") < top.indexOf('<section class="card"'));
+});
+
+test("enlace revocado: la página no dice «ha caducado»", () => {
+  const html = shareMessageHtml("revoked", "es", t);
+  assert.ok(html.includes("Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.") && !html.includes("caducado"));
+  assert.ok(shareMessageHtml("revoked", "en", makeT("en")).includes("no longer available"));
 });

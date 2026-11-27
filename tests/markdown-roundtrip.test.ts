@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getSchema, type JSONContent } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";
-import { escapeBlockStarts, formatExtensions, tableRows } from "../src/lib/editor-extensions";
+import { EditorState, TextSelection } from "@tiptap/pm/state";
+import { escapeBlockStarts, formatExtensions, insertImageBlocks, tableRows } from "../src/lib/editor-extensions";
 import { MentionChip } from "../src/lib/editor-mention";
 import { normalizeEditorMarkdown } from "../src/lib/markdown-entities";
 import { markdownToHtml } from "../src/lib/markdown-html";
@@ -202,4 +203,30 @@ test("una imagen pegada como HTML solo conserva su Markdown original si es exact
   };
   assert.equal(md({ "data-md-image": "@[Ana](user:u1)", "data-alt": "captura", "data-src": "/api/attachments/abc" }), "![captura](/api/attachments/abc)");
   assert.equal(md({ "data-alt": "a] [b\\", "data-src": "x) @[Ana](user:u1" }), "![a\\] \\[b\\\\](x%29%20@[Ana]%28user:u1)");
+});
+
+test("insertImageBlocks: la imagen pegada va en su propio párrafo (partiendo el texto) y el cursor queda debajo", () => {
+  const img = () => schema.nodes.markdownImage!.create({ raw: "![a](/api/attachments/x1)", src: "/api/attachments/x1", alt: "a" });
+  // Cursor en la posición `at` (dentro del texto) del primer párrafo de `md`.
+  const run = (md: string, at: number) => {
+    const doc = toDoc(md);
+    const state = EditorState.create({ doc, selection: TextSelection.create(doc, at) });
+    const tr = insertImageBlocks(state.tr, [img()]);
+    tr.doc.check();
+    return { md: normalizeEditorMarkdown(full.serialize(tr.doc.toJSON())).trim(), tr };
+  };
+  // «Holamundo»: el párrafo empieza en 1.
+  assert.equal(run("Holamundo", 5).md, "Hola\n\n![a](/api/attachments/x1)\n\nmundo");
+  assert.equal(run("Holamundo", 1).md, "![a](/api/attachments/x1)\n\nHolamundo");
+  const end = run("Holamundo", 10);
+  assert.equal(end.md, "Holamundo\n\n![a](/api/attachments/x1)");
+  // Al final, el cursor queda en un párrafo vacío nuevo, detrás de la imagen.
+  const last = end.tr.doc.lastChild!;
+  assert.equal(last.type.name, "paragraph");
+  assert.equal(last.content.size, 0);
+  assert.equal(end.tr.selection.$from.parent, last);
+  // En medio, el cursor queda al principio del trozo de detrás.
+  assert.equal(run("Holamundo", 5).tr.selection.$from.parent.textContent, "mundo");
+  // Una descripción ya guardada con la imagen dentro del párrafo se sigue leyendo igual.
+  assert.equal(saved("Mira la tabla.![a](/api/attachments/x1)"), "Mira la tabla.![a](/api/attachments/x1)");
 });

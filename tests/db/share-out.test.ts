@@ -125,11 +125,19 @@ describe("compartir fuera: activar y generar", () => {
     assert.ok((await (await page(token)).text()).includes("Revisar planos"));
     expectOk(await archiveTask(t2.id));
     assert.ok(!(await (await page(token)).text()).includes("Pedir material"));
+    // Con el enlace activo, la columna vacía sí se actualiza: es la forma de despublicar lo que ya no está.
+    const emptied = await generate(f.columns.todo);
+    assert.equal(emptied.published, 0);
+    assert.equal(tokenOf(emptied.url), token);
+    assert.ok(!(await (await page(token)).text()).includes("Revisar planos"), "ya no sale la que se fue de la columna");
+    // Sin enlace activo (o pidiendo uno nuevo), una columna vacía no se genera.
+    expectFail(await generateShareWeb(f.columns.todo, { fresh: true }), /No hay tareas en esta columna/);
+    await moveTask(t1.id, f.columns.todo, null, null);
     const again = await generate(f.columns.todo);
     assert.equal(tokenOf(again.url), token, "actualizar mantiene el mismo enlace y lo vuelve a enseñar");
-    assert.equal(again.published, 0);
+    assert.equal(again.published, 1);
     assert.equal((await page(token)).status, 200);
-    assert.ok(!(await (await page(token)).text()).includes("Revisar planos"));
+    assert.ok((await (await page(token)).text()).includes("Revisar planos"));
   });
 
   test("caduca a los N días sin uso; 30 días dice «ha caducado» y después «no encontrado»", async () => {
@@ -159,6 +167,58 @@ describe("compartir fuera: activar y generar", () => {
     expectFail(await setShareExpiry(f.columns.todo, 12), /Caducidad no válida/);
   });
 
+  test("ronda 69: sin tareas no se genera, la página dice quién la comparte y ya no se escribe generatedByName", async () => {
+    const { me, f, t1, t2 } = await setup();
+    await db.task.updateMany({ where: { id: { in: [t1.id, t2.id] } }, data: { archivedAt: new Date() } });
+    expectFail(await generateShareWeb(f.columns.todo), /No hay tareas en esta columna/);
+    await db.task.updateMany({ where: { id: { in: [t1.id, t2.id] } }, data: { archivedAt: null } });
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.equal(row.generatedById, me.id);
+    assert.equal(row.generatedByName, null, "el nombre se lee de la cuenta, no se guarda");
+    const html = await (await page(token)).text();
+    assert.ok(html.includes("Compartida por Marta desde Pizarro"), "el nombre de pila de quien generó la web");
+    await db.user.update({ where: { id: me.id }, data: { name: "Lucía Nueva" } });
+    assert.ok((await (await page(token)).text()).includes("Compartida por Lucía desde Pizarro"), "se lee de la cuenta de ahora");
+    // Con la cuenta desactivada ya no se dice su nombre (como al avisarle de los cambios).
+    await db.user.update({ where: { id: me.id }, data: { active: false } });
+    const anon = await (await page(token)).text();
+    assert.ok(anon.includes("Compartida desde Pizarro") && !anon.includes("Lucía"), "sin cuenta activa, sin nombre");
+    await db.user.update({ where: { id: me.id }, data: { active: true } });
+    // Tras un formulario, el aviso sale en la tarjeta de su tarea (el aviso lleva `t`).
+    const res = await post(token, t1.id, { op: "done" });
+    const loc = new URL(res.headers.get("location")!, "http://localhost");
+    assert.equal(loc.searchParams.get("t"), t1.id);
+    assert.equal(loc.hash, `#t-${t1.id}`);
+    const after = await (await page(token, loc.search)).text();
+    assert.ok(after.includes("Tarea marcada como hecha.") || after.includes("Esa tarea ya no"), after.slice(0, 300));
+  });
+
+  test("ronda 69: quien revoca queda apuntado, su nombre sale en el tablero y la página dice «ya no está disponible»", async () => {
+    const { ana, f, me } = await setup();
+    const token = tokenOf((await generate(f.columns.todo)).url);
+    await loginAs(ana);
+    const info = expectOk(await revokeShareLink(f.columns.todo));
+    assert.deepEqual([info.state, info.revoked, info.revokedBy], ["ended", true, "Ana López"]);
+    const row = await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } });
+    assert.equal(row.revokedById, ana.id);
+    const res = await page(token);
+    assert.equal(res.status, 410);
+    const html = await res.text();
+    assert.ok(html.includes("ya no está disponible") && !html.includes("ha caducado"), html);
+    // Quien generó el enlace lo ve en el tablero (getShareLink conserva el dato) y uno nuevo lo borra.
+    await loginAs(me);
+    assert.equal(expectOk(await getShareLink(f.columns.todo)).info.revokedBy, "Ana López");
+    expectOk(await generateShareWeb(f.columns.todo));
+    assert.equal((await db.columnShare.findUniqueOrThrow({ where: { columnId: f.columns.todo } })).revokedById, null);
+    // Uno caducado por tiempo sigue diciendo «ha caducado».
+    const next = tokenOf((await generate(f.columns.todo, true)).url);
+    await db.columnShare.updateMany({ where: { columnId: f.columns.todo }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });
+    const old = await page(next);
+    assert.equal(old.status, 410);
+    assert.ok((await old.text()).includes("ha caducado"));
+  });
+
   test("revocar: el enlace deja de funcionar al momento; uno nuevo deja el viejo en «ha caducado»", async () => {
     const { f } = await setup();
     const token = tokenOf((await generate(f.columns.todo)).url);
@@ -178,6 +238,7 @@ describe("compartir fuera: activar y generar", () => {
     const token = tokenOf((await generate(f.columns.todo)).url);
     // Otro enlace que ya caducó por tiempo (sin revocar): se cierra igual, pero no cuenta como «ha dejado de funcionar».
     expectOk(await setColumnShareOut(f.columns.doing));
+    await makeTask(f, { title: "En curso", columnId: f.columns.doing });
     await generate(f.columns.doing);
     await db.columnShare.updateMany({ where: { columnId: f.columns.doing }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });
     await loginAs(admin);
@@ -206,7 +267,9 @@ describe("compartir fuera: activar y generar", () => {
     // Borrar una columna «Compartir fuera» (vacía).
     await loginAs(me);
     expectOk(await setColumnShareOut(f.columns.doing));
+    const waiting = await makeTask(f, { title: "En curso", columnId: f.columns.doing });
     const t3 = tokenOf((await generate(f.columns.doing)).url);
+    await moveTask(waiting.id, f.columns.todo, null, null);
     expectOk(await deleteColumn(f.columns.doing));
     assert.equal((await page(t3)).status, 410);
     // Pasados los 30 días, el mantenimiento borra las filas sin columna.
@@ -318,6 +381,23 @@ describe("compartir fuera: lo que se hace desde fuera", () => {
     assert.match((await file(token, own.id, "?inline=1")).headers.get("content-disposition")!, /^attachment;/, "lo que no es imagen, siempre descarga");
     assert.equal((await file(token, foreign.id)).status, 404);
     assert.equal((await file(token, "no$valido")).status, 404);
+    // Ronda 69: la imagen adjunta sale con su miniatura (en línea) y el nombre como descarga.
+    assert.ok(html.includes(`<li class="img"><a href="/x/${token}/a/${img.id}"><img src="/x/${token}/a/${img.id}?inline=thumb"`), "miniatura que enlaza a la descarga normal");
+    // La miniatura usa su variante (si existe; si no, la normal) y es lo único que se guarda en el navegador.
+    const noThumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await noThumb.text(), "img-data", "sin miniatura, la imagen normal");
+    await writeFile(attachmentPath(img.id, "thumb"), "thumb!");
+    const thumb = await file(token, img.id, "?inline=thumb");
+    assert.equal(await thumb.text(), "thumb!");
+    assert.match(thumb.headers.get("content-disposition")!, /^inline;/);
+    assert.equal(thumb.headers.get("cache-control"), "private, max-age=3600");
+    assert.equal((await file(token, img.id, "?inline=1")).headers.get("cache-control"), "no-store", "la imagen de la descripción no se guarda");
+    assert.equal(await (await file(token, img.id, "?inline=1")).text(), "img-data");
+    // Solo las descargas de verdad quedan en Logs (el PDF dos veces; la miniatura no), firmadas «<columna> (fuera)».
+    await flushLogs();
+    const logs = await db.appLog.findMany({ where: { projectId: f.project.id, action: "shareOut.download" } });
+    const col = await db.column.findUniqueOrThrow({ where: { id: f.columns.todo } });
+    assert.deepEqual(logs.map((l) => l.userName), [`${col.name} (fuera)`, `${col.name} (fuera)`]);
     expectOk(await archiveTask(t1.id));
     assert.equal((await file(token, own.id)).status, 404);
   });
@@ -494,6 +574,7 @@ describe("compartir fuera: arreglos de la revisión", () => {
     assert.equal(await countActiveShares(f.project.id), 0);
     await generate(f.columns.todo);
     expectOk(await setColumnShareOut(f.columns.doing));
+    await makeTask(f, { title: "En curso", columnId: f.columns.doing });
     await generate(f.columns.doing);
     assert.equal(await countActiveShares(f.project.id), 2);
     await db.columnShare.updateMany({ where: { columnId: f.columns.doing }, data: { lastUsedAt: new Date(Date.now() - 40 * DAY) } });

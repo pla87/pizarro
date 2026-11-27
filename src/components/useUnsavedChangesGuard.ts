@@ -16,6 +16,19 @@ function inAppNavigation(e: MouseEvent): HTMLAnchorElement | null {
   return a;
 }
 
+/** Espera (unos fotogramas como mucho) a que el elemento deje de estar dentro de algo `inert`. */
+async function untilInteractive(el: Element): Promise<void> {
+  for (let i = 0; i < 60 && el.isConnected && el.closest("[inert]"); i++) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 50);
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+}
+
 /**
  * Mientras `dirty()` sea cierto, avisa antes de perder lo escrito: al recargar o cerrar la pestaña (el aviso del
  * navegador, `beforeunload`) y al seguir un enlace de la app (pestañas de Ajustes y Mi perfil, barra lateral…), con
@@ -46,10 +59,16 @@ export function useUnsavedChangesGuard(active: boolean, dirty: () => boolean, as
       // Antes que el `Link` de Next (escucha en la raíz de React, por debajo de document en la fase de captura).
       e.preventDefault();
       e.stopPropagation();
-      void latest.current.ask().then((ok) => {
-        if (!ok || !a.isConnected) return;
+      void latest.current.ask().then(async (ok) => {
+        if (!ok) return;
+        // El diálogo de confirmación deja el resto de la página `inert` hasta que React lo desmonta, y un clic sobre un
+        // elemento inerte se pierde sin hacer nada: se espera a que vuelva a estar activo antes de repetirlo.
+        await untilInteractive(a);
+        if (!a.isConnected) return;
         pass = a;
         a.click();
+        // El clic es síncrono: si ningún oyente lo consumió (no era una navegación de la app), el pase no se queda puesto.
+        pass = null;
       });
     };
     window.addEventListener("beforeunload", onBeforeUnload);

@@ -110,7 +110,7 @@ if (only.includes("zip")) {
   L.check("ZIP: …y cita el documento de la tarea 1 y el de la 3 (con su número en el plan)", text.includes(`\n**Adjuntos:** \`${f1}/notas.txt\`\n\n### 2.`) && text.includes("\n**Adjuntos:** `adjuntos/03-con-un-registro/registro.txt`\n"), text.slice(text.indexOf("### 1.")));
   L.check("ZIP: sin enlace a Pizarro", !text.includes(L.BASE), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   // Con su ruta escrita: como imagen de Markdown, el editor con barra solo enseñaba «[imagen: captura]».
-  L.check("ZIP: la imagen pegada en la descripción cita la misma ruta del ZIP", text.includes(`Falla así: imagen «captura» (\`${f1}/Plano_final.webp\`)`), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
+  L.check("ZIP: la imagen pegada en la descripción cita la misma ruta del ZIP", text.includes(`Falla así:\n\nimagen «captura» (\`${f1}/Plano_final.webp\`)`), text.slice(text.indexOf("### 1."), text.indexOf("### 2.")));
   L.check("ZIP: una imagen que no es adjunto del plan se queda en su texto alternativo (sin enlace a Pizarro)", text.includes("y esto ajena") && !text.includes("/api/attachments/zzzzzz"));
   L.check("ZIP: el contexto explica el ZIP «adjuntos/…» (3 archivos)", text.includes("- **Adjuntos:** 3 archivo(s) en el ZIP «adjuntos/…» que va con este plan"));
   L.check("ZIP: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(descomprímelo junto a este fichero): cada tarea cita la ruta de los suyos, también la de las imágenes de su descripción.") && text.includes("Las imágenes van en WebP.") && !text.includes("que acompaña a este plan"));
@@ -188,7 +188,7 @@ if (only.includes("en")) {
     const f1 = "attachments/01-fix-the-login";
     L.check("EN: la imagen de la descripción no se repite en la lista de adjuntos (sin enlace a Pizarro)", text.split("Final_plan.webp").length === 2 && !text.includes(L.BASE) && !text.includes("in Pizarro"), text.slice(text.indexOf("### 1.")));
     L.check("EN: una tarea sin letras en el título va en «02-task»", text.includes("\n**Attachments:** `attachments/02-task/notes.txt`\n"), text.slice(text.indexOf("### 2.")));
-    L.check("EN: la imagen de la descripción cita la misma ruta", text.includes(`Fails like this: image “shot” (\`${f1}/Final_plan.webp\`)`), text.slice(text.indexOf("### 1.")));
+    L.check("EN: la imagen de la descripción cita la misma ruta", text.includes(`Fails like this:\n\nimage “shot” (\`${f1}/Final_plan.webp\`)`), text.slice(text.indexOf("### 1.")));
     L.check("EN: el contexto explica el ZIP «attachments/…»", text.includes("- **Attachments:** 2 file(s) in the “attachments/…” ZIP that goes with this plan"));
     L.check("EN: el contexto dice cómo usarlo (la cabecera de serie ya no habla del ZIP)", text.includes("(unzip it next to this file)") && text.includes("Images are in WebP.") && !text.includes("`attachments/03-task-title/drawing.webp`"));
     L.check("EN: en el plan en inglés no queda ninguna ruta «adjuntos/»", !text.includes("adjuntos"), text);

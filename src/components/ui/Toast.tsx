@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, AlertCircle, Undo2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, Info, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/client";
@@ -8,7 +8,7 @@ import { cn } from "./cn";
 import { MAX_TOASTS, placeToast, toastMs, trimToasts } from "./toast-queue";
 import { isSessionExpiredMessage, SESSION_EXPIRED } from "./session-expired";
 
-type ToastKind = "success" | "error" | "undo";
+type ToastKind = "success" | "error" | "undo" | "info";
 interface ToastItem {
   id: number;
   kind: ToastKind;
@@ -170,6 +170,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     // trajera, que sin sesión tampoco serviría), que abre la pantalla de acceso con vuelta a esta página. No se redirige
     // sin avisar: se perdería lo que se está escribiendo sin guardar.
     const t = tRef.current;
+    // «Solo se puede deshacer el último cambio…» no es un fallo, es una indicación: también cuando llega del servidor
+    // como error (AppError), se pinta neutro.
+    if (kind === "error" && message === t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba.")) kind = "info";
     // Con el ratón encima, lo nuevo se añade sin echar a nadie (se recorta al salir).
     const max = hoveredRef.current ? Infinity : MAX_TOASTS;
     if (kind === "error" && isSessionExpiredMessage(message, t)) {
@@ -255,7 +258,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               item.kind === "error" ? "bg-red-600" : "bg-slate-900 dark:bg-slate-700",
             )}
           >
-            {item.kind === "error" ? <AlertCircle size={16} className="shrink-0" /> : item.kind === "undo" ? <Undo2 size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
+            {item.kind === "error" ? <AlertCircle size={16} className="shrink-0" /> : item.kind === "info" ? <Info size={16} className="shrink-0" /> : item.kind === "undo" ? <Undo2 size={16} className="shrink-0" /> : <CheckCircle2 size={16} className="shrink-0" />}
             <span><MessageWithLinks message={item.message} /></span>
             {/* «Deshacer» anulado por uno posterior: en pausa (ratón encima o foco dentro) sigue en su sitio, apagado y
                 explicando por qué; al salir, desaparece. Es el mismo botón (no otro en su lugar): si tenía el foco, lo
@@ -270,7 +273,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                   item.stale ? "cursor-not-allowed opacity-50" : "hover:bg-white/10",
                 )}
                 onClick={() => {
-                  if (item.stale) return show(t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba."), "error");
+                  if (item.stale) return show(t("Solo se puede deshacer el último cambio: usa la flecha ↶ de arriba."), "info");
                   returnFocus();
                   setItems((prev) => prev.filter((x) => x.id !== item.id));
                   if (sessionToast.current?.id === item.id) {

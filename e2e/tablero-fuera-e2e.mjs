@@ -114,11 +114,11 @@ try {
     L.check("ROL: queda la fila (rol NONE)", !!(await shareRow())?.columnId);
     const footer = shareCol(page).locator("[data-share-footer]");
     L.eq("ROL: botón «Generar web»", (await footer.locator("[data-share-generate]").innerText()).trim(), "Generar web");
-    L.check("ROL: el aviso de lo que se publica", (await footer.innerText()).includes("Se publican la descripción, las subtareas, los comentarios y los adjuntos de estas tareas; los adjuntos se podrán descargar."));
+    L.check("ROL: el aviso corto de lo que se publica", (await footer.innerText()).includes("Se publica todo el contenido de las tareas."));
     const expiry = footer.locator("[data-share-expiry]");
-    L.eq("ROL: caducidad por defecto «1 mes»", (await expiry.innerText()).trim(), "1 mes");
+    L.eq("ROL: caducidad por defecto «1 mes»", (await expiry.innerText()).trim(), "Caduca tras 1 mes sin uso");
     await expiry.click();
-    await L.eqEventually("ROL: rota a «3 meses» (90 días)", async () => [(await expiry.innerText()).trim(), (await shareRow()).expiryDays], ["3 meses", 90]);
+    await L.eqEventually("ROL: rota a «3 meses» (90 días)", async () => [(await expiry.innerText()).trim(), (await shareRow()).expiryDays], ["Caduca tras 3 meses sin uso", 90]);
     await expiry.click();
     await L.eqEventually("ROL: y a «7 días»", async () => (await shareRow()).expiryDays, 7);
     await expiry.click();
@@ -158,7 +158,7 @@ try {
     const other = await L.session({ email: L.USER2 });
     sessions.push(other);
     await openBoard(other.page);
-    await shareCol(other.page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(other.page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const theirs = U.dialog(other.page).locator("[data-share-url]");
     await theirs.waitFor();
     L.eq("GENERAR: otra persona del proyecto ve la misma dirección", (await theirs.innerText()).trim(), url);
@@ -228,7 +228,7 @@ try {
     // Como si la clave de cifrado hubiese cambiado sin rotarla (o el enlace fuese de una versión anterior).
     await L.q(`UPDATE "ColumnShare" SET "tokenEnc"=NULL WHERE "projectId"=$1`, [P]);
     await openBoard(page);
-    await shareCol(page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const d = U.dialog(page);
     await d.locator("[data-share-lost]").waitFor();
     L.eq("NUEVO: sin dirección en el diálogo", await d.locator("[data-share-url]").count(), 0);
@@ -250,16 +250,16 @@ try {
   if (only.includes("revocar") && url) {
     L.scenario("revocar: la dirección dice «ha caducado»");
     await openBoard(page);
-    await shareCol(page).getByRole("button", { name: "Enlace de la web" }).click();
+    await shareCol(page).getByRole("button", { name: "Link: enlace de la web" }).click();
     const d = U.dialog(page);
     await d.getByRole("button", { name: "Revocar enlace" }).click();
     await page.getByRole("dialog").filter({ hasText: "¿Revocarlo?" }).getByRole("button", { name: "Revocar enlace" }).click();
     await L.checkEventually("REVOCAR: revocado en la base", async () => [!!(await shareRow()).revokedAt, ""]);
     const r = await fetch(url);
-    L.eq("REVOCAR: 410 con el aviso", [r.status, (await r.text()).includes("Esta lista de tareas ha caducado. Contacta con la persona que te ha dado el enlace.")], [410, true]);
+    L.eq("REVOCAR: 410 con el aviso de «ya no está disponible»", [r.status, (await r.text()).includes("Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.")], [410, true]);
     await L.eqEventually("REVOCAR: la cabecera ya no dice activo", async () => shareCol(page).locator("[data-share-badge]").getAttribute("data-share-badge"), "ended");
     // Revocado, no caducado.
-    L.eq("REVOCAR: la marca dice «Enlace revocado»", await shareCol(page).locator("[data-share-badge]").getAttribute("title"), "Compartir fuera: Enlace revocado");
+    L.check("REVOCAR: la marca dice «Enlace revocado por <nombre> el <fecha>»", (await shareCol(page).locator("[data-share-badge]").getAttribute("title"))?.startsWith("Compartir fuera: Enlace revocado por "));
   }
 
   if (only.includes("apagar")) {

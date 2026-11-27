@@ -40,16 +40,14 @@ test("el script start funciona con cualquier shell (sin `exec`, que cmd.exe no e
   assert.doesNotMatch(startScript, /[;&|$'`]/);
 });
 
-/** dist/boot.mjs de prueba: anota cuándo corren las tareas de arranque (o falla, con `fail`). */
+/** dist/boot.mjs de prueba: se ejecuta solo (como `node dist/boot.mjs`), anota cuándo corren las tareas de arranque (o falla, con `fail`). */
 async function fakeBoot(dir: string, log: string, fail = false): Promise<void> {
   await mkdir(path.join(dir, "dist"), { recursive: true });
   await writeFile(
     path.join(dir, "dist", "boot.mjs"),
     [
       `import fs from "node:fs";`,
-      `export async function runBoot() {`,
-      fail ? `  throw new Error("base inaccesible");` : `  fs.appendFileSync(${JSON.stringify(log)}, "boot " + process.pid + " " + process.env.NODE_ENV + " " + process.env.PIZARRO_LAUNCHER + " " + Date.now() + "\\n");`,
-      `}`,
+      fail ? `console.error("[boot] Error: base inaccesible");\nprocess.exitCode = 1;` : `fs.appendFileSync(${JSON.stringify(log)}, "boot " + process.pid + " " + process.env.NODE_ENV + " " + process.env.PIZARRO_LAUNCHER + " " + Date.now() + "\\n");`,
     ].join("\n"),
   );
 }
@@ -69,7 +67,7 @@ test("start-local.mjs: sin dist/boot.mjs, o si fallan las tareas de arranque, no
     await fakeBoot(dir, log, true);
     r = run();
     assert.equal(r.status, 1);
-    assert.match(r.stderr, /Fallaron las tareas de arranque[\s\S]*base inaccesible/);
+    assert.match(r.stderr, /base inaccesible[\s\S]*Fallaron las tareas de arranque[\s\S]*código 1/);
     assert.equal(await readFile(log, "utf8").catch(() => ""), "", "el servidor no llegó a cargarse");
     await fakeBoot(dir, log);
     r = run();
@@ -111,7 +109,8 @@ test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de form
       if (m) server = Number(m[1]);
     }
     assert.ok(server > 0, "el servidor de prueba no arrancó");
-    assert.match(await readFile(log, "utf8"), new RegExp(`^boot ${server} production npm \\d+\\nlisto ${server} `), "las tareas de arranque van antes del servidor, en el mismo proceso");
+    assert.match(await readFile(log, "utf8"), new RegExp(`^boot \\d+ production npm \\d+\\nlisto ${server} `), "las tareas de arranque van antes del servidor");
+    assert.notEqual(/^boot (\d+) /.exec(await readFile(log, "utf8"))![1], String(server), "y en un proceso aparte (su memoria no se queda en el servidor)");
     const npmExited = new Promise<void>((r) => npm.on("exit", () => r()));
     const killedAt = Date.now();
     npm.kill("SIGTERM");

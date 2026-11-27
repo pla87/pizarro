@@ -111,4 +111,18 @@ export const compartirFuera: Record<string, string> = {
   "La web compartida dejará de funcionar y no vuelve al deshacer.": "The shared page will stop working and won't come back if you undo.",
   // Ronda 68, segunda vuelta (servidor): el informe distingue revocado de caducado.
   "enlace revocado": "link revoked",
+  // Ronda 69: «Compartir fuera» (diálogo y pie más claros, sin tareas no se genera, cambios sin publicar, web pública).
+  "No hay tareas en «{name}»": "There are no tasks in “{name}”",
+  "Link": "Link",
+  "Dirección de la web": "Page address",
+  "Caduca tras {label} sin uso": "Expires after {label} without use",
+  "Se publica todo el contenido de las tareas.": "All the content of the tasks is published.",
+  "Hay cambios sin publicar: pulsa «Actualizar web»": "There are unpublished changes: click “Update page”",
+  "No hay tareas en esta columna: añade alguna antes de generar la web.": "There are no tasks in this column: add some before generating the page.",
+  "Enlace revocado por {name} el {date}": "Link revoked by {name} on {date}",
+  "Compartida por {name} desde Pizarro": "Shared by {name} from Pizarro",
+  "Compartida desde Pizarro": "Shared from Pizarro",
+  "Enlace no disponible": "Link not available",
+  "Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.": "This task list is no longer available. Contact the person who gave you the link.",
+  "Link: enlace de la web": "Link: page link",
 };

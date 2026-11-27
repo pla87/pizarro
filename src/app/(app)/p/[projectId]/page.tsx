@@ -10,6 +10,7 @@ import { dateToIso, todayIso } from "@/lib/dates";
 import { googleEnabled } from "@/lib/google";
 import { liveRefreshJitterMs } from "@/lib/live-refresh";
 import { liveCursor } from "@/lib/realtime";
+import { revokerNames } from "@/lib/share-out";
 import { boardShareOf, SHARE_BOARD_SELECT } from "@/lib/share-out-board";
 import { db } from "@/lib/db";
 import { noteProjectVisit } from "@/lib/project-visit";
@@ -63,7 +64,11 @@ export default async function BoardPage({ params, searchParams }: Params) {
         // «Compartir fuera»: el estado de su enlace (nunca el token), solo si el proyecto la tiene activada.
         ...(project.shareOutEnabled ? { share: { select: SHARE_BOARD_SELECT } } : {}),
       },
-    }).then((rows) => rows.map(({ share, ...c }: (typeof rows)[number] & { share?: Parameters<typeof boardShareOf>[0] | null }) => (share ? { ...c, share: boardShareOf(share) } : c))),
+    }).then(async (rows) => {
+      // «Revocado por <nombre>»: el nombre se lee de la cuenta (una consulta para todas las columnas).
+      const names = await revokerNames(rows.map((r) => (r as { share?: { revokedById?: string | null } | null }).share ?? {}));
+      return rows.map(({ share, ...c }: (typeof rows)[number] & { share?: (Parameters<typeof boardShareOf>[0] & { revokedById?: string | null }) | null }) => (share ? { ...c, share: boardShareOf(share, new Date(), share.revokedById ? (names.get(share.revokedById) ?? null) : null) } : c));
+    }),
     loadBoardTasks(projectId),
     projectUsers(projectId, project),
     db.label.findMany({ where: { projectId }, orderBy: { name: "asc" }, select: { id: true, name: true, color: true } }),

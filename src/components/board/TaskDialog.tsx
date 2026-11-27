@@ -384,15 +384,20 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
       const { detail: d, version } = textState.current;
       if (!alive || !res?.ok || !d || res.data.textVersion !== version) return;
       const fresh = res.data.description;
-      const reloadDesc = fresh !== d.description && !editingDescription();
+      const changedRemotely = fresh !== d.description;
+      const reloadDesc = changedRemotely && !editingDescription();
+      // Con cambios propios en la descripción abierta (también si el cambio es de la misma persona en otra pestaña) no se
+      // pisa lo escrito: se pone la guardada como «inicial» del editor, que avisa en ámbar de que ha cambiado. La base
+      // (`descBase`) y la versión del texto no avanzan: al guardar, el servidor sigue detectando el conflicto.
+      const warnTyped = changedRemotely && !reloadDesc;
       if (reloadDesc) {
         descBase.current = fresh;
         descReloads.current++;
       }
       const advance = !editingText();
-      if (!reloadDesc && !advance) return;
-      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
-      if (reloadDesc) setDescRemote((n) => n + 1);
+      if (!reloadDesc && !warnTyped && !advance) return;
+      setDetail((cur) => (cur ? { ...cur, ...(reloadDesc || warnTyped ? { description: fresh } : {}), ...(advance ? { textVersion: res.data.textVersion } : {}) } : cur));
+      if (reloadDesc || warnTyped) setDescRemote((n) => n + 1);
     });
     return () => {
       alive = false;
@@ -1211,15 +1216,18 @@ export function TaskDialog({ task, onClose: close, side, onAddSecond, onAddSecon
   // Archivar, Duplicar y Borrar solo con icono (con tooltip y atajo) para que, con «Deshacer todo» y Guardar, quepan en una línea
   // tanto en la columna lateral (~300 px) como en el pie móvil (360 px). Todos del mismo alto (h-8) y sin saltos de línea:
   // solo si de verdad no cabe «Deshacer todo» se lee «Deshacer» (ver DiscardAllButton) y el nombre accesible sigue entero.
+  // Los tres iconos, con poco relleno en la columna de campos: así caben «Deshacer todo» y «Guardar y cerrar» (≈16 px de margen
+  // a 21rem); en pantallas táctiles, el área de pulsación la da `touch-target`.
   const actionButtons = (
     <div className="@container w-full min-w-0">
       <div className="flex flex-nowrap items-center gap-2 @max-[24rem]:gap-1 md:gap-1 [&>button]:h-8 [&>button]:py-0">
-        <button className="btn-secondary touch-target px-2" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
-        <button className="btn-secondary touch-target px-2" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
-        <button className="btn-ghost touch-target px-2 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
+        <button className="btn-secondary touch-target px-2 @max-[24rem]:px-1 md:px-1" onClick={archive} aria-label={t("Archivar")} title={`${t("Archivar")} (${sc("Alt+A")})`}><Archive size={15} /></button>
+        <button className="btn-secondary touch-target px-2 @max-[24rem]:px-1 md:px-1" onClick={() => void board.duplicateTask(task.id)} aria-label={t("Duplicar")} title={`${t("Duplicar")} (${sc("Alt+Shift+D")})`}><Copy size={15} /></button>
+        <button className="btn-ghost touch-target px-2 @max-[24rem]:px-1 md:px-1 text-red-600" onClick={remove} aria-label={t("Borrar")} title={t("Borrar")}><Trash2 size={15} /></button>
         <DiscardAllButton onClick={discardEdits} disabled={cancelling} />
-        {/* En escritorio, sin el icono: así cabe «Deshacer todo» en la columna de campos. */}
-        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[18.5rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guardar")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> {t("Guardar")}</button>
+        {/* La columna de campos del escritorio (≈21rem) cabe justa con «Deshacer» corto; por debajo de 20,5rem (móvil estrecho) se lee
+            «Guardar» y el nombre accesible sigue siendo «Guardar y cerrar». */}
+        <button className="btn-primary shrink-0 px-3 whitespace-nowrap @max-[24rem]:px-2" onClick={() => void saveAndClose()} title={`${t("Guarda los cambios pendientes y cierra la tarea")} (${sc("Alt+S")})`}><Check size={15} className="@max-[18.5rem]:hidden md:hidden" /> <span className="@max-[20.5rem]:sr-only">{t("Guardar y cerrar")}</span><span aria-hidden className="hidden @max-[20.5rem]:inline">{t("Guardar")}</span></button>
       </div>
     </div>
   );
