@@ -18,10 +18,15 @@ const stage = (name: string) => {
 test("package.json y package-lock.json con otra versión dan los mismos bytes; las dependencias, intactas", () => {
   const pkg = readFileSync("package.json", "utf8");
   const lock = readFileSync("package-lock.json", "utf8");
-  const bump = (text: string) => text.replaceAll(`"version": "${JSON.parse(pkg).version}"`, '"version": "99.0.0"');
-  assert.notEqual(bump(pkg), pkg);
-  assert.equal(fix(bump(pkg), "package"), fix(pkg, "package"));
-  assert.equal(fix(bump(lock), "lock"), fix(lock, "lock"));
+  // Solo la versión del proyecto (la de package.json y, en el lock, la de arriba y la de `packages[""]`): un paquete puede
+  // tener el mismo número (lucide-react 1.74.0 con Pizarro v1.74.0) y no es una versión de Pizarro.
+  const bump = (text: string, times: number) => {
+    let n = 0;
+    return text.replaceAll(`"version": "${JSON.parse(pkg).version}"`, (m) => (n++ < times ? '"version": "99.0.0"' : m));
+  };
+  assert.notEqual(bump(pkg, 1), pkg);
+  assert.equal(fix(bump(pkg, 1), "package"), fix(pkg, "package"));
+  assert.equal(fix(bump(lock, 2), "lock"), fix(lock, "lock"));
   const fixedLock = JSON.parse(fix(lock, "lock"));
   assert.equal(fixedLock.version, FIXED_VERSION);
   assert.equal(fixedLock.packages[""].version, FIXED_VERSION);
