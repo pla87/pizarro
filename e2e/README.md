@@ -60,7 +60,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Documentación y formatos del material**](SUITES.md#documentación-y-formatos-del-material) | | **197** | |
 | Formatos del material: cerrar la release, párrafos vacíos, Google Slides y HTML aislado (ronda 50) | `e2e/documentacion-formatos-e2e.mjs` | 107 | ~1 min |
 | Enlaces dentro de los HTML de Documentación: entre documentos (ida, vuelta, #apartado, inexistente, otro proyecto), al propio documento y con nombres arreglados, e índice (#apartado, también en SVG, sin `ping`); HTML/texto/Markdown en Latin-1, Windows-1252 y UTF-16, UTF-8 con un `<meta>` de 8 bits mal puesto y binarios con BOM de UTF-16 (ronda 52, cazas de bugs 50b y 52) | `e2e/documentacion-enlaces-e2e.mjs` | 90 | ~1,5 min |
-| Notas de Documentación (v1.76): «Nueva nota», guardado automático (también al cerrar), título, «Notas generales», buscar en el texto, cambio simultáneo en dos pestañas, editor con barra y papelera | `e2e/documentacion-notas-e2e.mjs` | (por medir) | |
+| Notas de Documentación (v1.76): «Nueva nota», guardado automático (también al cerrar), título, «Notas generales», buscar en el texto, cambio simultáneo en dos pestañas, editor con barra y papelera | `e2e/documentacion-notas-e2e.mjs` | 36 | ~1 min |
 | [**Cuentas**](SUITES.md#cuentas) | | **199** | |
 | Borrar mi cuenta (escritorio, móvil, Google y Administración) | `e2e/cuentas-borrar-e2e.mjs` | 61 | ~1 min |
 | Lo que queda al borrar una cuenta: Google pide la contraseña, aviso a los administradores y proyecto fuera de la lista (ronda 51), y baja con Google en un servidor sin email (caza de bugs 50b) | `e2e/cuentas-borrar-restos-e2e.mjs` | 100 | ~1 min |
@@ -77,7 +77,7 @@ esta tabla (cada grupo de la tabla enlaza a su sección). Las cifras solo se apu
 | [**Red, sin conexión y formularios**](SUITES.md#red-sin-conexión-y-formularios) | | **157** | |
 | Formularios sin red, IP del cliente y páginas legales (ronda 49) | `e2e/red-formularios-e2e.mjs` | 26 | ~1 min |
 | Sin conexión y pestañas (caza de bugs 48b) y borrador al archivar o borrar sin red (caza de bugs 52) | `e2e/red-sin-conexion-e2e.mjs` | 131 | ~3 min |
-| **Total** | | **3578** | |
+| **Total** | | **3614** | |
 
 Las cifras son las de la última pasada completa; si añades comprobaciones, actualízalas aquí (es el único sitio donde
 se apuntan). Todas, menos la QA y la de instalación, usan la base que deja preparada la QA y un servidor ya arrancado; se pueden lanzar en

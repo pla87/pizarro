@@ -82,12 +82,12 @@ if (only.includes("recargar") && noteId) {
   await U.dialog(page).getByTestId("note-edit").click();
   const box = editorBox(page);
   await box.waitFor();
-  await box.press("End");
+  await box.press("Control+End");
   await box.pressSequentially("\n\nÚltima línea antes de cerrar.", { delay: 5 });
   // Se cierra enseguida, sin esperar al guardado automático.
   await closeViewer(page);
   await L.checkEventually("RECARGAR: lo escrito justo antes de cerrar llega a la base", async () => (await noteById(noteId))?.noteContent?.endsWith("Última línea antes de cerrar."), { timeout: 10000 });
-  await L.reload(page);
+  await gotoDocs(page);
   await openById(page, noteId);
   await L.checkEventually("RECARGAR: tras recargar, la nota tiene todo", async () => (await U.dialog(page).locator("[data-testid=doc-markdown]").textContent())?.includes("Última línea antes de cerrar."));
   await closeViewer(page);
@@ -143,13 +143,13 @@ if (only.includes("conflicto") && noteId) {
   }
   // La primera escribe y guarda.
   const a = editorBox(page);
-  await a.press("End");
+  await a.press("Control+End");
   await a.pressSequentially(" Cambio de A.", { delay: 5 });
   await L.waitFor(async () => (await status(page).textContent())?.trim() === "Guardado", { timeout: 10000 });
   const afterA = (await noteById(noteId)).noteContent;
   // La segunda, que abrió antes de ese guardado, escribe: aviso en vez de pisar.
   const b = editorBox(p2);
-  await b.press("End");
+  await b.press("Control+End");
   await b.pressSequentially(" Cambio de B.", { delay: 5 });
   const notice = U.dialog(p2).getByTestId("note-conflict");
   await notice.waitFor({ timeout: 10000 });
