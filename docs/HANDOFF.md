@@ -243,10 +243,20 @@ v1.76.0 (R69F1, **notas generales en Documentación**, opción A: texto en `Proj
 nombra a quienes conservan el acceso; plan por persona con subtareas con tope en SQL). Ver `HISTORIA.md`, ronda 73, y las
 guardas «(Ronda 73)» de `GUARDAS.md`.
 
-**Siguiente:** rondas propias ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que
-una IA agéntica instale en Railway (crea un proyecto de pago), solo con el propietario delante. Ideas de las notas que
-quedaron fuera: avisar a quien se menciona en una nota, refresco en vivo de la lista de Documentación, título automático
-desde la primera línea.
+**Ronda 74 (v1.77.0):** menciones en notas con aviso en la campana y email a elegir por cada persona (al momento, en el
+resumen diario o no; `User.noteMentionEmail`, `Notification.documentId`), título automático de las notas
+(`noteAutoName`), y retirados `CHROME-R69.md` y `bh48a.test.ts`. Ver `HISTORIA.md`, ronda 74.
+
+**Siguiente (aprobado por el propietario):** **notificaciones push** como canal opcional en una ronda propia (servicio en
+`public/sw.js`, claves VAPID propias de la instalación, tabla de suscripciones por dispositivo, interruptor «Avisos en este
+dispositivo» en *Mi perfil → Avisos* respetando las preferencias por tipo; en iPhone/iPad solo con la app instalada, iOS
+16.4+). Después, rondas ya aprobadas: una URL por tarea y el migrador sin Prisma. La prueba real del prompt para que una IA
+agéntica instale en Railway, con el propietario delante. Ideas pospuestas: refresco en vivo de la lista de Documentación
+(el propietario dijo que no por ahora).
+
+**Permisos del entorno de la nube:** el clasificador del modo automático bloquea `npx --yes knip@5` y que la sesión edite
+sus propios permisos. El propietario añadirá a mano `.claude/settings.json` con
+`{"permissions":{"allow":["Bash(npx --yes knip@5:*)"]}}` en `main` (aceptado en la ronda 74).
 
 Decisiones ya aplicadas de cada ronda, ideas pospuestas, límites conocidos y menores sin numerar:
 `docs/handoff/HISTORIA.md`.

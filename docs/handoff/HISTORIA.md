@@ -14,6 +14,13 @@ arriba de «Decisiones por ronda».
 
 ## Decisiones por ronda
 
+**Decisiones de la ronda 74 (ya aplicadas, v1.77.0):** 1: SÍ a avisar de las menciones en notas: en la app siempre y
+por email según elija cada persona (al momento, en el resumen diario o no); no salen por Telegram ni WhatsApp (coste y
+guardado automático). 2: SÍ al título automático desde la primera línea. 3: NO al refresco en vivo de la lista de
+Documentación por ahora. 4 y 5: SÍ (renombrar `bh48a.test.ts` a `name-spaces.test.ts` y retirar `CHROME-R69.md`, con sus
+pendientes en PRUEBAS-CHROME). 6: la regla de knip la añade el propietario a mano (la sesión no puede editar sus permisos).
+SÍ a las notificaciones push como canal opcional en una ronda propia.
+
 **Ronda 73, segunda parte (ya aplicada, v1.76.0):** respuestas a las preguntas de la v1.75.0: 1 = A (notas en
 Documentación, hechas como se propuso; las menciones no avisan y la lista no se refresca en vivo), 3, 4 y 5 = SÍ (hechas),
 6 y 7 = NO. Una revisión independiente de las notas encontró 11 puntos; arreglados los evidentes (nota recién creada que

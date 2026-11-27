@@ -1,6 +1,37 @@
 {
   "versions": [
     {
+      "version": "1.77.0",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T21:16:53+01:00",
+      "summary": "Menciones en notas de Documentación con aviso (campana y email a elegir) y título automático de las notas",
+      "changes": {
+        "nuevas": [
+          "Mencionar a alguien con @ en una nota de Documentación le avisa en la campana (al pulsarlo se abre la nota). Por email lo decide cada persona en Mi perfil → Avisos: al momento, en el resumen diario o no.",
+          "Las notas nuevas toman como título su primera línea mientras nadie las renombre."
+        ],
+        "mejoras": [],
+        "correcciones": [],
+        "tecnicos": [
+          "Retirados el anexo docs/handoff/CHROME-R69.md (sus pendientes pasan a PRUEBAS-CHROME) y el nombre de prueba bh48a (ahora tests/db/name-spaces.test.ts)."
+        ]
+      },
+      "en": {
+        "summary": "Mentions in Documentation notes with notifications (bell, and email as you choose) and automatic note titles",
+        "changes": {
+          "nuevas": [
+            "Mentioning someone with @ in a Documentation note notifies them in the bell (clicking it opens the note). By email, each person chooses in My profile → Notifications: right away, in the daily summary or not at all.",
+            "New notes take their first line as the title until someone renames them."
+          ],
+          "mejoras": [],
+          "correcciones": [],
+          "tecnicos": [
+            "Removed the docs/handoff/CHROME-R69.md annex (its pending items moved to PRUEBAS-CHROME) and the bh48a test name (now tests/db/name-spaces.test.ts)."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.76.0",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T18:01:06+01:00",
