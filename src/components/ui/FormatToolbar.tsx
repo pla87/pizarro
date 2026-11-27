@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { useT } from "@/i18n/client";
+import { useShortcut } from "@/components/board/shortcuts";
 import { cn } from "./cn";
 
 /**
@@ -77,6 +78,9 @@ const SEP = 9;
  */
 export function FormatToolbar({ items, onLeave, className, trailing }: { items: FormatItems; onLeave: () => void; className?: string; trailing?: ReactNode }) {
   const t = useT();
+  // El atajo entre paréntesis («Negrita (Ctrl+B)»), como en Mac («⌘B») donde toca.
+  const sc = useShortcut();
+  const titleOf = (title: string) => t(title).replace(/\(([^()]*)\)$/, (_m, keys: string) => `(${sc(keys)})`);
   const ref = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -237,7 +241,7 @@ export function FormatToolbar({ items, onLeave, className, trailing }: { items: 
       <button
         key={b.title}
         type="button"
-        title={t(b.title)}
+        title={titleOf(b.title)}
         aria-label={baseTitle(t(b.title))}
         aria-pressed={b.pressed === undefined ? undefined : b.pressed}
         tabIndex={-1}

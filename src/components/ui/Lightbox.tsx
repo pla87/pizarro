@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/i18n/client";
+import { trapTab } from "./focusTrap";
 import { useBackToClose } from "./useBackToClose";
 
 interface LightboxImage {
@@ -32,6 +33,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
 
   // Foco dentro al abrir y de vuelta al elemento anterior al cerrar.
   const closeRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const hasImage = !!images[index];
   useEffect(() => {
     if (!hasImage) return;
@@ -44,6 +46,11 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
     // En captura sobre window, antes del listener del Modal (document), que respeta defaultPrevented.
     const onKey = (e: KeyboardEvent) => {
       const s = stateRef.current;
+      // Tab no sale del visor (el modal de debajo deja la trampa al diálogo que tiene el foco: este).
+      if (e.key === "Tab") {
+        trapTab(e, rootRef.current);
+        return;
+      }
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -68,6 +75,7 @@ export function Lightbox({ images, index, onIndexChange, onClose }: Props) {
 
   return createPortal(
     <div
+      ref={rootRef}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 sm:p-8"
       role="dialog"
       aria-modal="true"

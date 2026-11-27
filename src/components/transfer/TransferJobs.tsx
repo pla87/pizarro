@@ -69,7 +69,8 @@ export function TransferJobs({ kind, projectId, skipId = null, title }: { kind: 
     fetch(`/api/transfer-jobs?${query}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((b: { jobs: TransferJobView[] }) => !cancelled && setJobs(b.jobs))
-      .catch(() => !cancelled && setJobs((prev) => prev ?? []));
+      // Un fallo con alguna en curso: una lista nueva (la misma) vuelve a programar el sondeo de 3 s, que si no se paraba.
+      .catch(() => !cancelled && setJobs((prev) => (prev ? [...prev] : [])));
     return () => { cancelled = true; };
   }, [query, tick]);
   useEffect(() => {
