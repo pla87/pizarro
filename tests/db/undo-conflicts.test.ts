@@ -75,6 +75,16 @@ describe("deshacer con cambios ajenos posteriores", () => {
     assert.equal(await db.task.count({ where: { id: created.id } }), 0);
   });
 
+  test("un comentario de «Compartir fuera» (sin usuario) en una tarea que se borraría también avisa, con su nombre", async () => {
+    const { me, f } = await team();
+    await loginAs(me);
+    const created = expectOk(await createTask({ projectId: f.project.id, columnId: f.columns.todo, title: "Nueva fuera", kindId: f.kindId }));
+    await db.taskComment.create({ data: { taskId: created.id, authorId: null, authorName: "Cliente (fuera)", body: "hola" } });
+    const res = expectOk(await undoChecked(f.project.id));
+    assert.ok(res.conflict, "debe pedir confirmación");
+    assert.match(res.conflict.message, /^Cliente \(fuera\) cambió esta tarea después\. También se borrará lo que añadieron: 1 comentario/);
+  });
+
   test("varias personas en varias tareas (archivado masivo): «Otras personas (…) cambiaron N de estas tareas»", async () => {
     const { me, ana, luis, f } = await team();
     const tasks = await Promise.all([1, 2, 3, 4].map((i) => makeTask(f, { title: `A${i}`, position: i * 1000 })));

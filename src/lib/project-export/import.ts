@@ -415,17 +415,17 @@ async function runImport({ zip, data: fileData, files, manifest }: ProjectArchiv
       const existing = k.scope === "general" ? generalByName.get(lower) : undefined;
       if (existing) { kindIds.set(k.ref, existing); continue; }
       const fileLower = lower;
-      const dupe = ownKindByName.get(lower);
+      const dupe = ownKindByFileName.get(lower);
       if (dupe) { kindIds.set(k.ref, dupe); continue; }
       // Un tipo del proyecto no puede repetir el nombre de un tipo general de esta instalación: se le busca un nombre libre.
-      if (generalByName.has(lower)) {
+      if (generalByName.has(lower) || ownKindByName.has(lower)) {
         for (let n = 2; ; n++) {
           const tail = ` (${n})`;
           name = `${cutText(k.name, 80 - tail.length).trimEnd()}${tail}`;
           lower = name.toLowerCase();
           if (!generalByName.has(lower) && !ownKindByName.has(lower)) break;
         }
-        warnings.push(t("El tipo «{from}» ya existe como tipo general aquí y se ha importado como «{to}».", { from: k.name, to: name }));
+        if (generalByName.has(fileLower)) warnings.push(t("El tipo «{from}» ya existe como tipo general aquí y se ha importado como «{to}».", { from: k.name, to: name }));
       }
       const id = newId();
       kindIds.set(k.ref, id);

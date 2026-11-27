@@ -181,7 +181,7 @@ export function BulkTaskDialog({ initialColumnId, onClose, side, pickProject = f
     if (text.trim()) {
       if (confirming.current) return false;
       confirming.current = true;
-      const ok = await confirm({ title: t("Descartar la nueva tarea"), message: t("Hay cambios sin guardar. ¿Descartar la nueva tarea?"), confirmLabel: t("Descartar"), danger: true }).catch(() => false);
+      const ok = await confirm({ title: t("Descartar las tareas"), message: t("Hay tareas sin crear. ¿Descartarlas?"), confirmLabel: t("Descartar"), danger: true }).catch(() => false);
       confirming.current = false;
       if (!ok) return false;
     }

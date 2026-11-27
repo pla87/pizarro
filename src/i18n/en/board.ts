@@ -381,4 +381,7 @@ export const board: Record<string, string> = {
   "Deshecho: «{title}» vuelve a «{from}»": "Undone: “{title}” is back in “{from}”",
   "Rehecho: «{title}» otra vez en «{to}»": "Redone: “{title}” is in “{to}” again",
   "Has pedido muchos PDF seguidos: espera un minuto y vuelve a intentarlo.": "You have requested many PDFs in a row: wait a minute and try again.",
+  // Ronda 70: descartar varias tareas
+  "Descartar las tareas": "Discard the tasks",
+  "Hay tareas sin crear. ¿Descartarlas?": "Some tasks are not created yet. Discard them?",
 };
