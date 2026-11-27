@@ -57,7 +57,7 @@ test("start-local.mjs: sin dist/boot.mjs, o si fallan las tareas de arranque, no
   try {
     await mkdir(path.join(dir, "scripts"));
     await mkdir(path.join(dir, ".next", "standalone"), { recursive: true });
-    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
+    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs", "migrate.mjs"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
     const log = path.join(dir, "server.log");
     await writeFile(path.join(dir, ".next", "standalone", "server.js"), `require("fs").appendFileSync(${JSON.stringify(log)}, "listo\\n");`);
     const run = () => spawnSync(process.execPath, [path.join(dir, "scripts", "start-local.mjs")], { cwd: dir, encoding: "utf8", env: { ...process.env, npm_lifecycle_event: "" } });
@@ -87,7 +87,7 @@ test("`npm start` parado con SIGTERM al pid de npm: el servidor se apaga de form
   try {
     await mkdir(path.join(dir, "scripts"));
     await mkdir(path.join(dir, ".next", "standalone"), { recursive: true });
-    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs", "server.env"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
+    for (const f of ["start-local.mjs", "parent-watch.mjs", "local-paths.mjs", "migrate.mjs", "server.env"]) await copyFile(path.join(root, "scripts", f), path.join(dir, "scripts", f));
     await writeFile(path.join(dir, "package.json"), JSON.stringify({ name: "pz-start-test", private: true, scripts: { start: startScript } }));
     const log = path.join(dir, "server.log");
     await fakeBoot(dir, log);
