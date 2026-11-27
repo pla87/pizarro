@@ -242,6 +242,12 @@ tareas» encima del fondo, historial desde el número de versión, «Casa y fami
 y caza de bugs (ver `HISTORIA.md`, ronda 72; guardas «(Ronda 72)» en `GUARDAS.md`). Se cerró en la nube: build de
 producción, `scripts/e2e-all.sh` completo y pasada visual en navegador.
 
+**Ronda 73 en curso (rama `claude/nice-feynman-45a4d9`, sin PR):** hechas las 3 vueltas de revisión y caza de bugs
+(R70M1/R70M2) con lo evidente arreglado y probado (unitarias, con base, e2e afectadas y las del tablero en verde), más
+«(1 tarea)» en Logs de «Compartir fuera» y la prueba del pie del detalle a 430 px que ya no depende de la fuente. Lo
+opcional está en la lista de decisiones del informe al propietario. Falta: sus respuestas, el manual/changelog y publicar
+(v1.75.1 o junto a las notas en la v1.76.0).
+
 **Siguiente ronda (73):** el propietario ya contestó las preguntas de la v1.75.0 (`HISTORIA.md`, «Respuestas del
 propietario a las preguntas de la v1.75.0»). Por hacer: R69F1, notas generales con la opción **A** («Nueva nota» dentro de
 Documentación); «¿Descartar el texto?» al importar un texto ilegible (3); decir en el diálogo de pasar a privado que quien
