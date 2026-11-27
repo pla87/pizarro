@@ -2,7 +2,8 @@
 // con emparejamiento, nada se borra si tiene tareas, todo o nada (transacción), deshacer, permisos y aviso en vivo.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { db, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
+import pg from "pg";
+import { db, waitForLockWaiter, expectFail, expectOk, FORBIDDEN, loginAs, makeProject, makeTask, makeUser } from "./helpers";
 import { getArchivedTasks, restoreTask } from "../../src/actions/tasks";
 import { applyTemplateChange, listApplicableTemplates, previewTemplateChange, undoTemplateChange } from "../../src/actions/template-apply";
 import { subscribeProject } from "../../src/lib/realtime";
@@ -281,6 +282,36 @@ test("una archivada de una columna que se une a otra vuelve a esa al recuperarla
   expectOk(await undoTemplateChange(f.project.id));
   const d = await db.task.findUniqueOrThrow({ where: { id: tasks.d.id }, select: { columnId: true, archivedFromColumnId: true } });
   assert.deepEqual(d, { columnId: f.columns.doing, archivedFromColumnId: f.columns.doing });
+});
+
+test("cambiar de plantilla bloquea al principio todas las columnas que se unen (sin filas de tareas tomadas mientras espera)", async () => {
+  const admin = await makeUser({ role: "ADMIN" });
+  const { f, tasks } = await setup();
+  await db.projectMember.create({ data: { projectId: f.project.id, userId: admin.id } });
+  // Dos uniones: «En curso» → «Por hacer» y «Extra 2» → «Extra 1».
+  const e1 = await db.column.create({ data: { projectId: f.project.id, name: "Extra 1", position: 4000 } });
+  const e2 = await db.column.create({ data: { projectId: f.project.id, name: "Extra 2", position: 5000 } });
+  await makeTask(f, { title: "X1", columnId: e1.id, position: 1000 });
+  await makeTask(f, { title: "X2", columnId: e2.id, position: 1000 });
+  await loginAs(admin);
+  const ref = { source: "template", id: (await makeTemplate()).id } as const;
+  const holder = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await holder.connect();
+  try {
+    // Otra persona (p. ej. «Mover a…») tiene la columna que se absorbe en segundo lugar.
+    await holder.query("BEGIN");
+    await holder.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [`task-position:${e2.id}`]);
+    const applying = applyTemplateChange(f.project.id, ref, "REPLACE", { columns: { [f.columns.todo]: "t:0", [f.columns.doing]: "t:0", [e1.id]: "t:1", [e2.id]: "t:1", [f.columns.done]: "t:3" } });
+    await waitForLockWaiter();
+    // Espera sin haber tomado ninguna fila de tarea: otra acción puede bloquear las de «En curso» sin esperarla.
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "Task" WHERE "id" = ${tasks.c.id} FOR UPDATE NOWAIT`;
+    });
+    await holder.query("COMMIT");
+    expectOk(await applying);
+  } finally {
+    await holder.end();
+  }
 });
 
 test("añadir lo que falte vuelve a mostrar los tipos generales ocultos que usa la plantilla; deshacer los vuelve a ocultar", async () => {
