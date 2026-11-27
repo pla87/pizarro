@@ -30,6 +30,8 @@ async function createProject() {
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId","updatedAt",position) VALUES ($1,'R51 carga',true,$2,NOW(),-1)`, [ID, me.id]);
   await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [ID, me.id]);
   await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ('r51ui_c1',$1,'Backlog',1),('r51ui_c2',$1,'En curso',2),('r51ui_c3',$1,'Revisión',3),('r51ui_c4',$1,'Hecho',4)`, [ID]);
+  // «Revisión» con el rol «Siguiente salto»: sin él (ni releases) el menú no enseña «Releases» (v1.74), y se navega por ahí.
+  await L.q(`UPDATE "Column" SET role='NEXT_RELEASE' WHERE id='r51ui_c3'`);
 }
 
 /** Respuestas lentas (solo la navegación, no la precarga) para las páginas del proyecto de la prueba. */

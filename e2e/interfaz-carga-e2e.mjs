@@ -22,6 +22,8 @@ async function createProject() {
   await L.q(`INSERT INTO "Project"(id,name,"isPrivate","privateOwnerId","updatedAt",position) VALUES ($1,'R49 carga',true,$2,NOW(),999)`, [ID, admin.id]);
   await L.q(`INSERT INTO "ProjectMember"("projectId","userId") VALUES ($1,$2)`, [ID, admin.id]);
   await L.q(`INSERT INTO "Column"(id,"projectId",name,position) VALUES ('r49ui_c1',$1,'Backlog',1),('r49ui_c2',$1,'Hecho',2)`, [ID]);
+  // Con «Siguiente salto»: sin ella (ni releases) el menú no enseña «Releases» (v1.74), y LOAD navega por ese enlace.
+  await L.q(`INSERT INTO "Column"(id,"projectId",name,position,role) VALUES ('r49ui_c3',$1,'Siguiente salto',3,'NEXT_RELEASE')`, [ID]);
 }
 
 /** Respuestas lentas (solo la navegación, no la precarga) para las páginas del proyecto de la prueba. */
