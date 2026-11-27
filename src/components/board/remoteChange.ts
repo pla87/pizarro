@@ -102,25 +102,52 @@ export interface LiveCursor {
  * cuenta como perdido si ya había posición.
  */
 export function missedWhileClosed(cursor: { current: LiveCursor | null }, raw: string): boolean {
-  let hello: LiveCursor | null = null;
-  try {
-    const p = JSON.parse(raw) as { boot?: unknown; seq?: unknown };
-    if (typeof p.boot === "string" && typeof p.seq === "number") hello = { boot: p.boot, seq: p.seq };
-  } catch {
-    // Ilegible: abajo.
+  const hello = parseCursor(raw);
+  if (!hello) return cursor.current !== null;
+  return advancePast(cursor, hello);
+}
+
+/**
+ * `ping` periódico del servidor (cada 25 s), que lleva también su posición del proyecto (`{ at, boot, seq }`): ¿se perdió
+ * algún aviso con el canal abierto? `true`: sí (otro `boot` o un número mayor que el último visto); avanza `cursor` como
+ * el saludo, así un mismo hueco recarga una sola vez. `false`: la pestaña está al día. `null`: no se sabe (ping de un
+ * servidor anterior, que solo manda la hora; ilegible; o sin posición previa, que se toma de este): entonces mandan los
+ * plazos de siempre (lib/focus-refresh.ts).
+ */
+export function missedByPing(cursor: { current: LiveCursor | null }, raw: string): boolean | null {
+  const ping = parseCursor(raw);
+  if (!ping) return null;
+  if (!cursor.current) {
+    cursor.current = ping;
+    return null;
   }
+  return advancePast(cursor, ping);
+}
+
+/** `{ boot, seq }` de un mensaje del canal (saludo o ping); null si no los trae o no se puede leer. */
+function parseCursor(raw: string): LiveCursor | null {
+  try {
+    const p = JSON.parse(raw) as { boot?: unknown; seq?: unknown } | null;
+    if (p && typeof p === "object" && typeof p.boot === "string" && typeof p.seq === "number") return { boot: p.boot, seq: p.seq };
+  } catch {
+    // Ilegible.
+  }
+  return null;
+}
+
+/** Avanza `cursor` (con posición) hasta la del servidor; ¿había avisos sin ver? (otro `boot`: no se puede saber, sí). */
+function advancePast(cursor: { current: LiveCursor | null }, server: LiveCursor): boolean {
   const prev = cursor.current;
-  if (!hello) return prev !== null;
   if (!prev) {
-    cursor.current = hello;
+    cursor.current = server;
     return false;
   }
-  if (prev.boot !== hello.boot) {
-    cursor.current = hello;
+  if (prev.boot !== server.boot) {
+    cursor.current = server;
     return true;
   }
-  cursor.current = { boot: prev.boot, seq: Math.max(prev.seq, hello.seq) };
-  return hello.seq > prev.seq;
+  cursor.current = { boot: prev.boot, seq: Math.max(prev.seq, server.seq) };
+  return server.seq > prev.seq;
 }
 
 /** Datos (de la página) más recientes que la posición: la posición avanza hasta ellos. */

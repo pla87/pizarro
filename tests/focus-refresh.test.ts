@@ -37,3 +37,28 @@ test("canal abierto pero mudo (sin ping en el tiempo de «sano»): se da por ca�
   assert.equal(channelStalled({ open: true, sinceMessageMs: LIVE_HEALTHY_MS }), true);
   assert.equal(channelStalled({ open: false, sinceMessageMs: LIVE_HEALTHY_MS * 10 }), false, "cerrado ya lo trata el error del canal");
 });
+
+test("canal sano y al día según su ping: solo la recarga de seguridad, cada hora", async () => {
+  const { BACKUP_REFRESH_LIVE_MS, BACKUP_REFRESH_MS, LIVE_CHECKED_REFRESH_MS, backupRefreshDue, cursorChecked } = await import("../src/lib/focus-refresh");
+  assert.equal(LIVE_CHECKED_REFRESH_MS, 60 * 60_000);
+  // Recarga periódica: sin la de 15 minutos, pero sí la de cada hora.
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS, healthy: true, upToDate: true }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: LIVE_CHECKED_REFRESH_MS - 1, healthy: true, upToDate: true }), false);
+  assert.equal(backupRefreshDue({ sinceSyncMs: LIVE_CHECKED_REFRESH_MS, healthy: true, upToDate: true }), true);
+  // «Al día» no vale sin canal sano (el ping que lo confirmó es de antes de un corte o de un canal ya mudo).
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_MS, healthy: false, upToDate: true }), true);
+  // Sin dato (servidor anterior, cuyo ping no trae posición): los 15 minutos de siempre.
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS, healthy: true }), true);
+  assert.equal(backupRefreshDue({ sinceSyncMs: BACKUP_REFRESH_LIVE_MS, healthy: true, upToDate: false }), true);
+  // Al volver a la ventana: tampoco a los 5 minutos; sí pasada la hora.
+  assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_LIVE_MS, channelOpen: true, channelGap: false, upToDate: true }), false);
+  assert.equal(shouldRefreshOnFocus({ sinceSyncMs: LIVE_CHECKED_REFRESH_MS, channelOpen: true, channelGap: false, upToDate: true }), true);
+  assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_LIVE_MS, channelOpen: true, channelGap: false, upToDate: false }), true);
+  // Un corte manda sobre «al día»; sin canal abierto, el minuto de siempre.
+  assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_GAP_MS, channelOpen: true, channelGap: true, upToDate: true }), true);
+  assert.equal(shouldRefreshOnFocus({ sinceSyncMs: FOCUS_REFRESH_MIN_MS, channelOpen: false, channelGap: false, upToDate: true }), true);
+  // «Al día» caduca como «sano»: si dejan de llegar pings con posición, al minuto vuelven los plazos normales.
+  assert.equal(cursorChecked({ sinceCheckMs: 25_000 }), true);
+  assert.equal(cursorChecked({ sinceCheckMs: LIVE_HEALTHY_MS }), false);
+  assert.equal(cursorChecked({ sinceCheckMs: Infinity }), false);
+});
