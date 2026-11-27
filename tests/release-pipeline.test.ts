@@ -522,6 +522,12 @@ test("workflow de release: «Pruebas con base de datos» igual que en ci.yml ant
   assert.equal(fromServices(db), fromServices(ciDb));
   assert.match(db, /^ {8}image: postgres:16$/m);
   assert.match(db, /^ {8}run: npm run test:db -- --shuffle$/m);
+  // Base desechable: sin esperas de disco, y las pruebas en 4 bases a la vez (antes de test:db, no después).
+  assert.ok(db.indexOf("fsync = off") > 0 && db.indexOf("fsync = off") < db.indexOf("npm run test:db"));
+  assert.match(db, /synchronous_commit = off/);
+  assert.match(db, /full_page_writes = off/);
+  assert.match(db, /pg_reload_conf\(\)/);
+  assert.match(db, /TEST_DB_JOBS: 4\n {8}run: npm run test:db/);
   assert.match(db, /needs: version\n/);
   assert.match(db, /if: github\.event_name == 'push' \|\| github\.ref == 'refs\/heads\/main'\n/);
   assert.match(db, /permissions:\n {6}contents: read\n/);
