@@ -43,7 +43,7 @@ Lo aprendido en las pruebas (sirve para todos los prompts):
   `RAILWAY_DEPLOYMENT_DRAINING_SECONDS=${{shared.RAILWAY_DEPLOYMENT_DRAINING_SECONDS}}` (una compartida sola no llega al
   servicio).
 
-Estado tras la ronda 69 (v1.73.0):
+Estado tras la ronda 70 (v1.73.1):
 
 - Hecho: revisión de Cloudflare y R2 (ronda 60), instalación desde cero en Railway con la web (ronda 60), copias en R2 y
   primera regla de bloqueo (ronda 61), pruebas en real de la v1.64/v1.65 y auditoría como usuario (ronda 62),
@@ -64,10 +64,12 @@ Estado tras la ronda 69 (v1.73.0):
 - Lo aprendido en esa sesión: los avisos de mover tarjetas **no llevan «Deshacer» por diseño** (solo los de asignación
   lo llevan; para lo demás está la flecha ↶ y Ctrl/Cmd+Z), y en «Casa y familia» **todos los tipos tienen plantilla** de
   descripción: para probar el cambio de tipo que quita la plantilla hace falta un proyecto con un tipo sin ella.
-- Pendientes, en este orden: 1 (pruebas en real de la v1.73.0, con lo que el propietario tiene que hacer a mano),
-  2 (auditoría como usuario de la v1.73.0), 3 (primeros informes DMARC; solo mirar) y 4 (WhatsApp en la instalación
-  real, con el propietario delante). Antes del 1, el propietario lanza **Actions → Release** de la v1.73.0 (quedó
-  pendiente) y se comprueba en Railway que la instalación de prueba despliega la v1.73.0 desde `stable`.
+- Ronda 70 (v1.73.1): sesión local; una vuelta en Claude in Chrome sobre la instalación local (no la de Railway) sin hallazgos
+  nuevos. Los prompts siguen sin pasarse en la instalación de prueba: el 1 cubre ya la v1.73.0 y la v1.73.1 (pasos 21-25).
+- Pendientes, en este orden: 1 (pruebas en real de la v1.73.0 y la v1.73.1, con lo que el propietario tiene que hacer a mano),
+  2 (auditoría como usuario de la v1.73.1), 3 (primeros informes DMARC; solo mirar) y 4 (WhatsApp en la instalación
+  real, con el propietario delante). Antes del 1, el propietario lanza **Actions → Release** de la v1.73.1 (lleva también la
+  v1.73.0, que quedó pendiente) y se comprueba en Railway que la instalación de prueba despliega la v1.73.1 desde `stable`.
 - Pendiente para el propietario (Claude in Chrome no puede), ya incluido en el prompt 1: ventana privada y móvil sobre la
   web de «Compartir fuera» (la columna «Fontanero» de «Casa R69» o una nueva), Ctrl+V real de una captura en la
   descripción (y pegar con el foco en el título y arrastrar un archivo), dos avisos de asignación seguidos (el primero se
@@ -76,15 +78,15 @@ Estado tras la ronda 69 (v1.73.0):
 - Lo creado en la instalación de prueba por esas sesiones (no se ha borrado nada; preguntar antes): proyecto «Casa R69»
   y, en «Proyecto de prueba», la columna «Proveedor», Persona Prueba como miembro y la etiqueta «informes».
 
-## 1. Pruebas en real de la v1.73.0 (instalación de prueba)
+## 1. Pruebas en real de la v1.73.0 y la v1.73.1 (instalación de prueba)
 
 Los puntos con ventana privada, Ctrl+V de una imagen de verdad, una ventana muy ancha o el móvil los hace el
 propietario: el prompt le pide que los haga y apunta lo que le diga.
 
 ```text
-Quiero que compruebes en real las novedades de Pizarro v1.73.0 y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves, enlaces de «Compartir fuera» ni datos personales en el informe. Las descargas (PDF, CSV, ZIP) léelas interceptando el Blob con javascript_tool; si no hay Blob, apunta el nombre del fichero. Los textos que salen al pasar el ratón, con read_page. No puedes arrastrar, abrir ventanas privadas, cambiar el tamaño de la ventana ni pegar una imagen de verdad: esos pasos me los pides a mí, esperas a que te diga «listo» y apuntas lo que te cuente.
+Quiero que compruebes en real las novedades de Pizarro v1.73.0 y v1.73.1 y me des un informe. Usa la instalación de PRUEBA (proyecto `pizarro-prueba-instalacion` de Railway, administrador `admin-prueba@example.com`); no toques la real. Si no recuerdas la contraseña, para y pídeme que entre yo. Si algo no coincide con lo que te describo, para y pregúntame. Antes de cualquier paso que cueste dinero, para y pregúntame. No copies claves, enlaces de «Compartir fuera» ni datos personales en el informe. Las descargas (PDF, CSV, ZIP) léelas interceptando el Blob con javascript_tool; si no hay Blob, apunta el nombre del fichero. Los textos que salen al pasar el ratón, con read_page. No puedes arrastrar, abrir ventanas privadas, cambiar el tamaño de la ventana ni pegar una imagen de verdad: esos pasos me los pides a mí, esperas a que te diga «listo» y apuntas lo que te cuente.
 
-0. «Historial de versiones» debe decir v1.73.0. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine.
+0. «Historial de versiones» debe decir v1.73.1. Si no: en Railway, servicio de Pizarro, comprueba que la rama sea `stable` y pulsa «Deploy»; espera a que termine.
 1. Compartir fuera, el pie: en «Proyecto de prueba», activa «Compartir fuera» (Ajustes del proyecto → Tablero) si hace falta y prepara una columna con tres tareas: una con una imagen en la descripción y con un encabezado vacío de plantilla (un apartado sin rellenar), otra con un adjunto que sea una imagen y un comentario, y otra asignada a «Persona Prueba». Rol de la columna › «Compartir fuera». Con la columna sin generar, el pie dice «Se publica todo el contenido de las tareas.» (lee con read_page su descripción al pasar el ratón), hay un botón «Generar web» y la caducidad es un botón con un reloj, «Caduca tras 1 mes sin uso»: púlsalo tres veces (3 meses, 7 días, 1 mes). Pulsa «Generar web»: el botón «Link» sale con el mismo color que «Actualizar web» y su nombre accesible es «Link: enlace de la web»; «Actualizar web» y «Link» caben en una línea.
 2. Compartir fuera, el diálogo: tras generar, el diálogo «Web de «…»» dice «Se han publicado 3 tareas.», enseña la dirección destacada (un clic la copia), y debajo «Copiar», «Abrir» (se abre en otra pestaña), «Enviar por email», qué puede hacer quien tenga el enlace, hasta cuándo vale como línea secundaria y «Revocar enlace» apartado del resto. Cierra el diálogo. Lee con read_page el globo de la cabecera: «Compartir fuera: Enlace activo hasta el …».
 3. Compartir fuera, la página: con «Abrir», en la pestaña nueva comprueba: arriba, «Compartida por <nombre de pila del administrador> desde Pizarro»; las tres tareas con descripción, la imagen de la descripción como bloque (no pegada al texto), subtareas, adjuntos y comentarios; el adjunto que es imagen con su miniatura (pulsarla descarga el fichero: apunta el nombre); sin el apartado vacío de la plantilla; y al pie «Este enlace deja de funcionar si nadie lo usa hasta el …». Apunta si se ve algo del proyecto que no sean esas tareas.
@@ -105,6 +107,12 @@ Quiero que compruebes en real las novedades de Pizarro v1.73.0 y me des un infor
 18. Errata «Respuesta»: crea una tarea con el tipo «Respuesta»: la descripción empieza por «Respondo a las preguntas y lo que necesitas de mí:» (con tilde). Si el tipo estaba personalizado, en Ajustes → Tipos el texto de serie ya no dice «de mi».
 19. Menú «PDF de la semana» (lo hago yo): con la ventana maximizada en una pantalla muy ancha, el menú se abre justo debajo de su botón, sin salir de lado a lado.
 20. Verificación en dos pasos (lo hago yo en parte): cierra sesión y pídeme que entre con la contraseña; en la pantalla del código, «Reenviar código» y «Volver a iniciar sesión» deben ir centrados y subrayados. Pídeme que entre del todo.
+
+21. Varias tareas pregunta al cerrar (v1.73.1): en «Proyecto de prueba», abre «Varias tareas», escribe dos líneas y ciérralo con Esc: debe preguntar antes de descartar (con «Seguir editando» y «Descartar»); «Seguir editando» conserva el texto. Con el cuadro vacío, Esc lo cierra sin preguntar.
+22. Ctrl+Z con una sola recarga (v1.73.1): con el tablero abierto, mueve una tarjeta cambiando «Columna» en su detalle, cierra el detalle y pulsa Ctrl+Z. Con read_network_requests cuenta las cargas del tablero tras el Ctrl+Z: debe ser una, no dos. Pulsa Ctrl+Shift+Z (rehacer) y comprueba lo mismo. Si una tarea la cambió alguien desde la web de «Compartir fuera» (haz un comentario desde la página del paso 4) y luego pulsas Ctrl+Z sobre ella, el aviso debe decir que hay cambios hechos desde fuera.
+23. Etiquetas desde el detalle (v1.73.1): abre una tarea en dos pestañas; en la A añade la etiqueta «informes» y en la B (sin recargar) otra distinta, y guarda las dos. Recarga: la tarea debe tener las dos etiquetas, no solo la última.
+24. Mis tareas, «Columna:» (v1.73.1): en «Mis tareas asignadas», la pastilla de la columna de cada tarea dice «Columna: <nombre>» (léelo con read_page) y no parece una persona. En el calendario, una tarea vencida enseña su raya roja con la explicación al pasar el ratón.
+25. Móvil (lo hago yo, v1.73.1): en el iPhone (o un móvil táctil), tocar el título, un campo de «Nueva tarea» y el buscador no amplía la página; la web de «Compartir fuera» con una tarea con una tabla o un bloque de código largo no se sale de la pantalla; el título del detalle no encoge al editarlo. Apunta lo que diga.
 
 Informe en español: para cada punto, «bien», «mal» o «no se pudo», con el texto exacto de los avisos y, si algo falla, una captura descrita. Al final, lo que te haya parecido confuso. No borres nada de lo creado: pregúntame.
 ```
