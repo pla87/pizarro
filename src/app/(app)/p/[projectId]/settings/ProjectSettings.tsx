@@ -174,7 +174,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
         <Section id="members" title="Visibilidad">
           <div className="space-y-2">
             <label className="flex items-start gap-2 text-sm">
-              <input type="radio" className="mt-1" checked={visibility === "TEAM"} onChange={() => setVisibility("TEAM")} />
+              <input type="radio" name="visibility" className="mt-1" checked={visibility === "TEAM"} onChange={() => setVisibility("TEAM")} />
               <UsersIcon size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Equipo")}
@@ -182,7 +182,7 @@ export function ProjectSettings({ isAdmin, currentUserId, project, deliverables,
               </span>
             </label>
             <label className="flex items-start gap-2 text-sm">
-              <input type="radio" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
+              <input type="radio" name="visibility" className="mt-1" checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
               <EyeOff size={15} className="mt-0.5 shrink-0" />
               <span>
                 {t("Privado: solo sus miembros")}

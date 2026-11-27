@@ -323,8 +323,15 @@ export function insertImageBlocks(tr: Transaction, images: readonly PMNode[]): T
     cursor = at + size + 1;
   } else {
     // En medio: se parte el párrafo; el segundo trozo empieza en pos + 2 (su apertura va en pos + 1).
-    const at = $from.pos + 1;
-    tr.split($from.pos);
+    // Los espacios y tabuladores del borde de cada trozo se quitan: salían en el Markdown («Antes » y « Despues»).
+    const before = tr.doc.textBetween($from.start(), $from.pos, undefined, "\u{fffc}");
+    const after = tr.doc.textBetween($from.pos, $from.end(), undefined, "\u{fffc}");
+    const lead = /^[ \t]*/.exec(after)![0].length;
+    const trail = /[ \t]*$/.exec(before)![0].length;
+    const pos = $from.pos - trail;
+    if (lead + trail) tr.delete(pos, $from.pos + lead);
+    const at = pos + 1;
+    tr.split(pos);
     tr.insert(at, blocks);
     cursor = at + size + 1;
   }

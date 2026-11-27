@@ -189,6 +189,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
   const [kindId, setKindId] = useState(init.kindId);
   // Se eligió el tipo a mano: cambiar de columna ya no lo sustituye por el tipo por defecto de la columna. El de un borrador
   // recuperado cuenta como elegido: antes, al cambiar de columna, pasaba en silencio al de la columna (y su prefijo).
+  // El tipo actual no puso su prefijo en el título (vino de «el último usado»): al cambiarlo luego no se quita como si lo hubiera puesto Pizarro.
+  const prefixSkipped = useRef(!foreignInit && !d && !columnDefaultKind(board, initialColumnId ?? board.columns[0]?.id ?? ""));
   const kindPicked = useRef(!foreignInit && !!d && board.kindById.has(d.kindId));
   const [columnId, setColumnId] = useState(!foreignInit && d && board.columns.some((c) => c.id === d.columnId) ? d.columnId : foreignInit ? "" : (initialColumnId ?? board.columns[0]?.id ?? ""));
   const [assigneeId, setAssigneeId] = useState(foreignInit ? "" : (d?.assigneeId ?? columnPerson(board, columnId)?.id ?? ""));
@@ -254,6 +256,8 @@ export function NewTaskDialog({ initialColumnId, initialEvergreen, initialFiles,
    */
   const applyKind = (id: string, kinds: ProjectFormData["kinds"], prev: ProjectFormData["kinds"][number] | undefined = form.kinds.find((k) => k.id === kindId), noPrefix = false) => {
     const pristine = !isDirty();
+    if (prefixSkipped.current && prev) prev = { ...prev, titleTemplate: "" };
+    prefixSkipped.current = noPrefix;
     setKindId(id);
     const found = kinds.find((k) => k.id === id);
     if (!found) return;
