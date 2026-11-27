@@ -85,6 +85,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   selector de responsable y lo demás). El diálogo cuenta con `project.peopleIds`, que la página del tablero calcula con
   la misma función (una consulta, solo en proyectos de equipo de «Casa y familia»): lo que ve y lo que crea
   `createPersonColumns` deben coincidir.
+- (Ronda 70) Etiquetas desde el detalle: se manda el cambio (`addLabelIds`/`removeLabelIds`), no la lista final, y se
+  aplica con la fila de la tarea bloqueada; no mezclarlo con `labelIds` (lo pisaría la etiqueta de otra persona).
+- (Ronda 70) `moveTasks` (`src/actions/tasks.ts`) vuelve a leer las archivadas después de bloquear las filas y solo mueve
+  las que siguen sin archivar (el aviso cuenta las que se movieron de verdad).
+- (Ronda 70) Tablero en vivo: `uncoveredChanges` (`remoteChange.ts`) descarta los avisos anteriores a la última recarga
+  completa (`refreshAt` en `Board.tsx`, `performance.now()`); sin eso, Ctrl+Z recargaba dos veces (su aviso `undo.*` llega
+  sin `cid`, como uno ajeno). Cada aviso lleva `at` al llegar; sin `at` cuenta como no cubierto.
 
 ## Navegador e interfaz
 
@@ -134,6 +141,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 69) Imágenes en el editor: pegar o soltar una imagen pasa por `insertImageBlocks` (`src/lib/editor-extensions.ts`),
   que la deja en su propio párrafo y parte el texto si el cursor estaba en medio; el nodo `markdownImage` sigue siendo
   inline (lo guardado antes se ve igual) y el modo Markdown no cambia.
+- (Ronda 70) Móvil: `globals.css` fuerza 16 px en inputs, selects, textareas y editor (`max-width: 639px` y `pointer:
+  coarse`) para que iOS no haga zoom. Va fuera de las capas de Tailwind, así que gana a `text-sm`/`text-xs`: no poner
+  `text-sm` esperando que se aplique en móvil. Excluye lo que ya mide 16 px o más (`text-base`, `text-lg`, `text-xl`…), como
+  el título del detalle. Tabletas y móviles en horizontal quedan fuera (opcional pendiente).
 
 ## Logs
 
@@ -201,6 +212,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   `search-accents.ts`) con índices trigram si `pg_trgm` se pudo crear; `wipeDatabase` la borra y la migración la recrea.
 - Fechas en SQL propio: nada de `NOW()`/`CURRENT_TIMESTAMP` sobre columnas `timestamp(3)` (quedan en la hora de la
   sesión); pasa `${new Date()}` o usa `CURRENT_TIMESTAMP AT TIME ZONE 'UTC'` (`tests/db/db-timezone.test.ts`).
+- (Ronda 70) `@default(now())` de Prisma lo pone la app, no la base: para comparar con `createdAt` usa `Date.now()`, nunca
+  `now()` de SQL (la ventana de 30 s del comentario repetido de «Compartir fuera» va con el reloj de la app).
 
 ## PDF y descargas
 
@@ -255,6 +268,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
   huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
   (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
+- (Ronda 70) Exportar lleva las imágenes del histórico de releases y el import reescribe sus referencias. Un tipo propio
+  con el nombre de un tipo general entra como «Nombre (2)» (aviso) y las columnas y tareas que lo usaban lo conservan;
+  una columna con el tipo por defecto renombrado queda con el tipo del proyecto.
 
 ## i18n
 
@@ -328,6 +344,10 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   periódico se devuelve si llega un apagado antes de empezar a enviar (`pendingReports` en periodic-mail.ts).
 - (Ronda 66) Orden de los proyectos: `ProjectVisit` se escribe con `after()` y como mucho una vez cada 5 min por persona y
   proyecto (al cambiar de proyecto, enseguida, como mucho cada 30 s); la preferencia viaja en la sesión (`projectOrder`).
+- (Ronda 70) El Dockerfile ya no copia `static` ni `public`: los mete `scripts/postbuild.mjs` dentro de `standalone`
+  (copiarlos otra vez costaba ~1,2 MB por imagen); `tests/docker-build.test.ts` lo vigila.
+- (Ronda 70) El canal en vivo (`/api/projects/[projectId]/events`) comprueba el acceso SIN la caché de acceso (decisión):
+  una vía que no la vaciase dejaría ver cambios hasta 5 min. Es una consulta barata y solo al abrir el canal.
 
 ## Seguridad y límites
 
@@ -381,6 +401,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - (Ronda 63) Copia diaria: `estimateDumpBytes` + `assertDiskRoom` antes de volcar; nombres únicos con `freshBackupName`; `S3Destination.put`
   da por subido un objeto que ya existe con su tamaño cuando el bloqueo de R2 rechaza el reintento.
 - Las copias de seguridad cifradas suben a un almacenamiento S3 compatible configurado por el propietario.
+- (Ronda 70) `runJob` guarda `lastStartedAt` anterior cuando una tarea con `everyMs` falla, para que el reintento no espere
+  su periodo (se reintenta en la pasada siguiente); Administración enseña `lastFinishedAt` si falló (`BackupsAdmin.tsx`).
 
 ## Plantillas y tipos
 
@@ -401,6 +423,8 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   el texto viejo como la plantilla actual (errata «de mi» → «de mí» en «Respuesta»); la migración
   `20261204110000_respuesta_errata` solo corrige las filas que nadie tocó. «Nueva tarea» solo pone el prefijo del tipo si es
   el de la columna o se elige a mano, no si viene de «el último usado» (`NewTaskDialog.tsx`).
+- (Ronda 70) `template-apply.ts` bloquea al principio, una vez y en orden (`lockColumns`), todas las columnas que reciben o
+  ceden tareas; bloquear dentro del bucle, con filas ya tomadas, se cruzaba con «Mover a…» (40P01).
 
 ## Deshacer
 
@@ -423,6 +447,9 @@ Una guarda nueva va a su tema, con «(Ronda N)».
   el formato, prefijo nuevo y el mismo trato para el anterior. Al quitar una tarea al deshacer o rehacer (`task.remove` en `mirrorOps`) y al
   borrarla, `dependentLinkOps` guarda las que dependían de ella como `task.set` con `relink`: al volver, recuperan la
   dependencia solo si siguen sin bloqueo y no cierra un ciclo (`blockProblem`).
+- (Ronda 70) Conflictos de deshacer (`undo-conflicts.ts`): lo de fuera es `userId`/`authorId: null` (web de «Compartir
+  fuera», siempre otra persona; el nombre sale de `userName`/`authorName`), así que el filtro es `OR: [{ campo: null }, {
+  campo: { not: userId } }]`, nunca `not: null`. Prueba: `tests/db/undo-conflicts.test.ts`.
 
 ## Pruebas y código sin uso
 

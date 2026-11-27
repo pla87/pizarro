@@ -1,6 +1,71 @@
 {
   "versions": [
     {
+      "version": "1.73.1",
+      "date": "2026-11-27",
+      "releasedAt": "2026-11-27T04:51:57+01:00",
+      "summary": "Revisión operativa y caza de bugs: Ctrl+Z sin doble recarga, móvil sin zoom, exportar con imágenes de releases, concurrencia y avisos de deshacer con lo hecho desde fuera",
+      "changes": {
+        "nuevas": [],
+        "mejoras": [
+          "«Varias tareas» pregunta antes de cerrar si hay texto escrito, en vez de perder la lista sin avisar.",
+          "En el móvil, el iPhone ya no amplía la página al tocar un campo, y la web de «Compartir fuera» no se sale de la pantalla con tablas, bloques de código o nombres largos.",
+          "Al deshacer (Ctrl+Z), el aviso también cuenta lo que se hizo desde «Compartir fuera», incluidos los comentarios de fuera.",
+          "La página «Dejar de recibir estos emails» sale en el idioma de la persona.",
+          "En Administración, si una tarea diaria falla, se ve cuándo falló y se reintenta en la pasada siguiente.",
+          "«Mis tareas» dice «Columna:» en la pastilla de la columna, y el calendario explica la raya roja de las tareas vencidas.",
+          "Ajustes → Visibilidad se maneja bien con teclado y lector de pantalla."
+        ],
+        "correcciones": [
+          "Ctrl+Z y rehacer recargaban el tablero dos veces; ahora una.",
+          "Un doble clic en «Comentar» en la web de fuera publicaba el comentario dos veces.",
+          "Exportar e importar un proyecto ya conserva las imágenes del histórico de releases.",
+          "Al importar, un tipo propio con el nombre de un tipo general entra como «Nombre (2)» con aviso, y sus columnas y tareas lo conservan.",
+          "«Mover a…» ya no mueve una tarea que otra persona acaba de archivar.",
+          "Si dos personas cambiaban las etiquetas de una tarea casi a la vez, se perdía la de una.",
+          "«Aplicar plantilla» ya no se queda bloqueada si a la vez alguien usa «Mover a…».",
+          "«Nueva tarea» ya no quita un prefijo que escribió la persona al cambiar de tipo.",
+          "Los clics rápidos en la caducidad de «Compartir fuera» ya no desordenan lo guardado.",
+          "El título del detalle ya no encoge al editarlo en el móvil.",
+          "Una imagen pegada en medio de un párrafo ya no deja espacios sobrantes en los bordes."
+        ],
+        "tecnicos": [
+          "Imagen Docker más pequeña (static y public ya no se copian dos veces) y restauración de la copia con el rol de la aplicación, explicada en INSTALL."
+        ]
+      },
+      "en": {
+        "summary": "Operational review and bug hunt: Ctrl+Z without a double reload, no zoom on mobile, export with release images, concurrency fixes and undo notices that include what was done from outside",
+        "changes": {
+          "nuevas": [],
+          "mejoras": [
+            "\"Several tasks\" asks before closing if there is text typed, instead of silently losing the list.",
+            "On mobile, iPhone no longer zooms the page when you tap a field, and the \"Share outside\" web page no longer overflows the screen with tables, code blocks or long names.",
+            "When you undo (Ctrl+Z), the notice also counts what was done from \"Share outside\", including outside comments.",
+            "The \"Stop receiving these emails\" page appears in the person's language.",
+            "In Administration, when a daily task fails you can see when it failed, and it is retried on the next pass.",
+            "\"My tasks\" says \"Column:\" on the column pill, and the calendar explains the red stripe on overdue tasks.",
+            "Settings → Visibility works properly with keyboard and screen reader."
+          ],
+          "correcciones": [
+            "Ctrl+Z and redo reloaded the board twice; now once.",
+            "Double-clicking \"Comment\" on the outside web page posted the comment twice.",
+            "Exporting and importing a project now keeps the images in the release history.",
+            "When importing, a custom type named like a general type comes in as \"Name (2)\" with a notice, and its columns and tasks keep it.",
+            "\"Move to…\" no longer moves a task that someone else has just archived.",
+            "If two people changed a task's labels almost at the same time, one person's label was lost.",
+            "\"Apply template\" no longer gets stuck when someone uses \"Move to…\" at the same time.",
+            "\"New task\" no longer drops a prefix the person typed when changing the type.",
+            "Fast clicks on the expiry of \"Share outside\" no longer scramble what is saved.",
+            "The task title in the detail no longer shrinks when edited on mobile.",
+            "An image pasted in the middle of a paragraph no longer leaves extra spaces at its edges."
+          ],
+          "tecnicos": [
+            "Smaller Docker image (static and public are no longer copied twice) and backup restore with the application role, explained in INSTALL."
+          ]
+        }
+      }
+    },
+    {
       "version": "1.73.0",
       "date": "2026-11-27",
       "releasedAt": "2026-11-27T01:15:08+01:00",

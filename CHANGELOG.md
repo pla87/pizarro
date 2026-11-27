@@ -2,6 +2,38 @@
 
 Historial de versiones de Pizarro. Fuente: `changelog.json`.
 
+## v1.73.1 — 2026-11-27 04:51
+
+Revisión operativa y caza de bugs: Ctrl+Z sin doble recarga, móvil sin zoom, exportar con imágenes de releases, concurrencia y avisos de deshacer con lo hecho desde fuera
+
+### Mejoras
+
+- «Varias tareas» pregunta antes de cerrar si hay texto escrito, en vez de perder la lista sin avisar.
+- En el móvil, el iPhone ya no amplía la página al tocar un campo, y la web de «Compartir fuera» no se sale de la pantalla con tablas, bloques de código o nombres largos.
+- Al deshacer (Ctrl+Z), el aviso también cuenta lo que se hizo desde «Compartir fuera», incluidos los comentarios de fuera.
+- La página «Dejar de recibir estos emails» sale en el idioma de la persona.
+- En Administración, si una tarea diaria falla, se ve cuándo falló y se reintenta en la pasada siguiente.
+- «Mis tareas» dice «Columna:» en la pastilla de la columna, y el calendario explica la raya roja de las tareas vencidas.
+- Ajustes → Visibilidad se maneja bien con teclado y lector de pantalla.
+
+### Correcciones
+
+- Ctrl+Z y rehacer recargaban el tablero dos veces; ahora una.
+- Un doble clic en «Comentar» en la web de fuera publicaba el comentario dos veces.
+- Exportar e importar un proyecto ya conserva las imágenes del histórico de releases.
+- Al importar, un tipo propio con el nombre de un tipo general entra como «Nombre (2)» con aviso, y sus columnas y tareas lo conservan.
+- «Mover a…» ya no mueve una tarea que otra persona acaba de archivar.
+- Si dos personas cambiaban las etiquetas de una tarea casi a la vez, se perdía la de una.
+- «Aplicar plantilla» ya no se queda bloqueada si a la vez alguien usa «Mover a…».
+- «Nueva tarea» ya no quita un prefijo que escribió la persona al cambiar de tipo.
+- Los clics rápidos en la caducidad de «Compartir fuera» ya no desordenan lo guardado.
+- El título del detalle ya no encoge al editarlo en el móvil.
+- Una imagen pegada en medio de un párrafo ya no deja espacios sobrantes en los bordes.
+
+### Cambios técnicos / DB
+
+- Imagen Docker más pequeña (static y public ya no se copian dos veces) y restauración de la copia con el rol de la aplicación, explicada en INSTALL.
+
 ## v1.73.0 — 2026-11-27 01:15
 
 Compartir fuera más claro (diálogo, pie, quién revocó, web con autor y miniaturas), imágenes pegadas como bloque propio, «Guardar y cerrar», avisos informativos, arreglos de Nueva tarea, Deshacer, Miembros y plantillas, y npm start con menos memoria
