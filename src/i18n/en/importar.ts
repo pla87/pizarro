@@ -97,4 +97,7 @@ export const importar: Record<string, string> = {
   "mes/día": "month/day",
   // Ronda 70: tipos repetidos al importar
   "El tipo «{from}» ya existe como tipo general aquí y se ha importado como «{to}».": "The type “{from}” already exists here as a general type and has been imported as “{to}”.",
+  // Ronda 71: importar tareas
+  "Descartar la importación": "Discard the import",
+  "Hay tareas sin importar. ¿Descartarlas?": "Some tasks are not imported yet. Discard them?",
 };

@@ -121,6 +121,8 @@ export interface BoardData {
     suggestedRoles?: ColumnRoleChoice[] | null;
     /** «Compartir fuera» activada en el proyecto (Ajustes del proyecto, solo administradores). Solo en el tablero. */
     shareOut?: boolean;
+    /** Tiene alguna release hecha (con una columna «Siguiente salto» decide si se enseña «Releases»). Solo en el tablero. */
+    hasReleases?: boolean;
   };
   columns: BoardColumn[];
   tasks: BoardTask[];

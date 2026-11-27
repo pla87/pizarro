@@ -56,7 +56,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
   // Todas las consultas en paralelo: una sola ida y vuelta efectiva.
   // «Organizar por personas» en un proyecto de equipo: quiénes tienen columna (en uno privado, todos los de `users`).
   const peopleTeam = !project.isPrivate && project.templateKey === PEOPLE_TEMPLATE;
-  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, people] = await Promise.all([
+  const [columns, tasks, users, labels, me, deliverables, kinds, templates, projectTemplates, people, firstRelease] = await Promise.all([
     db.column.findMany({
       where: { projectId }, orderBy: COLUMN_ORDER,
       select: {
@@ -81,6 +81,8 @@ export default async function BoardPage({ params, searchParams }: Params) {
     userTemplates(user.id),
     projectReleaseTemplates(projectId),
     peopleTeam ? projectPeople(projectId, project) : null,
+    // Solo si hay alguna (no se cuentan): decide si el menú y la selección enseñan «Releases».
+    db.release.findFirst({ where: { projectId }, select: { id: true } }),
   ]);
 
   const data: BoardPageData = {
@@ -90,6 +92,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
       suggestedRoles: suggestedColumnRoles(project.templateKey, columns),
       peopleIds: people?.map((p) => p.id) ?? null,
       ...(project.shareOutEnabled ? { shareOut: true } : {}),
+      ...(firstRelease ? { hasReleases: true } : {}),
     },
     columns,
     // Sin los campos que valen lo de por defecto: el navegador lee bastante menos (el tablero los completa al llegar).

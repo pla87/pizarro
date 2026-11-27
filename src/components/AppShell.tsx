@@ -47,6 +47,7 @@ import { useSafeRefresh } from "@/components/useSafeRefresh";
 import { loadWhenOnline } from "@/lib/connection";
 import { useActionTransition } from "@/components/useActionTransition";
 import { showProjectIntroOnce } from "@/components/board/ProjectIntroNotice";
+import { useReleaseNav } from "@/components/board/releaseNav";
 
 interface Props {
   user: CurrentUser;
@@ -58,6 +59,8 @@ interface Props {
   lastProjectId?: string | null;
   /** Administrador en un proyecto de equipo que no está en su lista (al cargar la página en /p/…): se muestra igualmente. */
   outsideProject?: { id: string; name: string } | null;
+  /** El proyecto de la página cargada usa releases (columna «Siguiente salto» o alguna hecha); sin dato, se enseña «Releases». */
+  releaseNav?: { id: string; show: boolean } | null;
   /** Copia de seguridad atrasada ("shrunk": mucho menor que la última buena): punto de aviso junto a «Administración» (solo admins). */
   backupAlert?: boolean | "shrunk";
   /** Versión nueva de Pizarro sin descartar: punto de aviso junto a «Administración» (solo admins). */
@@ -85,7 +88,7 @@ export function AppShell(props: Props) {
   );
 }
 
-function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
+function Shell({ user, projects: listed, version, unread: serverUnread, lastProjectId = null, outsideProject = null, releaseNav = null, backupAlert = false, updateAvailable = false, diskLow = false, licenseNudge = null, feedback = null, children }: Props) {
   useFocusRingScroll();
   const t = useT();
   const pathname = usePathname();
@@ -140,7 +143,7 @@ function Shell({ user, projects: listed, version, unread: serverUnread, lastProj
   if (licenseNudge && licenseNudge !== nudgeHref) setNudgeHref(licenseNudge);
 
   const sidebar = (
-    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} />
+    <Sidebar user={user} projects={projects} current={current} version={version} pathname={pathname} unread={unread} backupAlert={backupAlert} updateAvailable={updateAvailable} diskLow={diskLow} releaseNav={releaseNav} />
   );
 
   return (
@@ -310,7 +313,8 @@ function DocsNavLink({ projectId, active }: { projectId: string; active: boolean
   return <NavLink href={`/p/${projectId}/docs`} icon={FileText} active={active} extra={extra} highlight={over}>{t("Documentación")}</NavLink>;
 }
 
-function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable, diskLow }: {
+function Sidebar({ user, projects, current, version, pathname, unread, backupAlert, updateAvailable, diskLow, releaseNav }: {
+  releaseNav: Props["releaseNav"];
   unread: number;
   backupAlert: boolean | "shrunk";
   updateAvailable: boolean;
@@ -323,6 +327,8 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
 }) {
   const t = useT();
   const isAdmin = user.role === "ADMIN";
+  // «Releases» solo en proyectos con columna «Siguiente salto» o con alguna release (y siempre si se está en esa sección).
+  const usesReleases = useReleaseNav(current?.id ?? "", releaseNav && releaseNav.id === current?.id ? releaseNav.show : undefined);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-2 px-4">
@@ -338,7 +344,7 @@ function Sidebar({ user, projects, current, version, pathname, unread, backupAle
         {current && (
           <>
             <NavLink href={`/p/${current.id}`} icon={LayoutDashboard} active={pathname === `/p/${current.id}`}>{t("Tablero")}</NavLink>
-            <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>
+            {(usesReleases || pathname.startsWith(`/p/${current.id}/releases`)) && <NavLink href={`/p/${current.id}/releases`} icon={Rocket} active={pathname.startsWith(`/p/${current.id}/releases`)}>{t("Releases")}</NavLink>}
             <DocsNavLink projectId={current.id} active={pathname.startsWith(`/p/${current.id}/docs`)} />
             <ReportButton projectId={current.id} />
             <NavLink href={`/p/${current.id}/settings`} icon={SlidersHorizontal} active={pathname.startsWith(`/p/${current.id}/settings`)}>{t("Ajustes del proyecto")}</NavLink>
