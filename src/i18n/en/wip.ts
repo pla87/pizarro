@@ -11,8 +11,8 @@ export const wip: Record<string, string> = {
   "Límite de tarjetas: {limit}…": "Card limit: {limit}…",
   "Límite de tarjetas…": "Card limit…",
   "Indica un número entero de tarjetas.": "Enter a whole number of cards.",
-  "Quitó el límite de tarjetas de la columna «{name}»": "Removed the card limit of the column «{name}»",
-  "Puso un límite de {n} tarjetas a la columna «{name}»": "Set a limit of {n} cards on the column «{name}»",
+  "Quitó el límite de tarjetas de la columna «{name}»": "Removed the card limit of the column “{name}”",
+  "Puso un límite de {n} tarjetas a la columna «{name}»": "Set a limit of {n} cards on the column “{name}”",
   // Tareas bloqueadas
   "Bloqueada por": "Blocked by",
   "Bloqueada por: {title}": "Blocked by: {title}",
@@ -29,7 +29,7 @@ export const wip: Record<string, string> = {
   "Esa tarea ya está bloqueada por esta: no se pueden crear bloqueos en círculo.": "That task is already blocked by this one: circular blocks are not allowed.",
   "La tarea que bloquea no existe en este proyecto.": "The blocking task does not exist in this project.",
   "El archivo tiene tareas bloqueadas en círculo.": "The file has tasks blocked in a circle.",
-  "Marcó la tarea como bloqueada por «{title}»": "Marked the task as blocked by «{title}»",
+  "Marcó la tarea como bloqueada por «{title}»": "Marked the task as blocked by “{title}”",
   "Quitó el bloqueo de la tarea": "Removed the block from the task",
   "bloqueo": "block",
 

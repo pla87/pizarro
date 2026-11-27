@@ -11,6 +11,7 @@ export const aplicarPlantilla: Record<string, string> = {
   "Las columnas, tipos y etiquetas vuelven a como estaban antes de aplicar «{name}» y las tareas movidas vuelven a su sitio. Lo que haya recibido tareas después se conserva.":
     "Columns, types and labels go back to how they were before applying “{name}” and the moved tasks return to their place. Anything that has received tasks since then is kept.",
   "Cambio de plantilla deshecho": "Template change undone",
+  "Cambio de plantilla deshecho. Se conserva 1 columna o tipo nuevo porque ya tiene tareas.": "Template change undone. 1 new column or type is kept because it already has tasks.",
   "Cambio de plantilla deshecho. Se conservan {n} columnas o tipos nuevos porque ya tienen tareas.": "Template change undone. {n} new columns or types are kept because they already have tasks.",
   "Se añadió lo que faltaba de «{name}»": "What was missing from “{name}” was added",
   "Se cambió el proyecto a «{name}»": "The project was switched to “{name}”",

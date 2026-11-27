@@ -341,7 +341,7 @@ export const board: Record<string, string> = {
   "Negrita (editor con barra)": "Bold (editor with toolbar)",
   "Cursiva (editor con barra)": "Italic (editor with toolbar)",
   "Subrayado (editor con barra)": "Underline (editor with toolbar)",
-  "Elegir persona o comando en la lista de «@» (también Tab)": "Pick a person or command in the «@» list (Tab also works)",
+  "Elegir persona o comando en la lista de «@» (también Tab)": "Pick a person or command in the “@” list (Tab also works)",
   "Editar la subtarea con el foco": "Edit the focused subtask",
   "Añadir la subtarea o guardar la que editas": "Add the subtask or save the one you are editing",
   "Guardar el comentario que editas": "Save the comment you are editing",

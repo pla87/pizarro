@@ -115,9 +115,9 @@ main{max-width:760px;margin:0 auto;padding:16px}h1{font-size:1.35rem;margin:8px 
 .muted{color:var(--muted);font-size:.85rem}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
 .head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;justify-content:space-between}.badge{font-size:.75rem;font-weight:600;border-radius:999px;padding:2px 8px;border:1px solid currentColor}
 .done{color:var(--ok)}.notice{border-left:4px solid var(--brand);padding:8px 12px;background:var(--card);border-radius:8px;margin:12px 0}.notice.err{border-color:var(--warn)}
-.desc img{display:block;max-width:100%;height:auto;margin:10px 0;border-radius:6px}.desc{overflow-wrap:anywhere}ul.sub{list-style:none;padding:0;margin:6px 0}ul.sub li{margin:2px 0}
+.desc img{display:block;max-width:100%;height:auto;margin:10px 0;border-radius:6px}.desc{overflow-wrap:anywhere}.card{overflow-wrap:anywhere}.desc pre{overflow-x:auto;white-space:pre}.desc table{display:block;overflow-x:auto;border-collapse:collapse}ul.sub{list-style:none;padding:0;margin:6px 0}ul.sub li{margin:2px 0}
 ul.files{padding-left:18px;margin:6px 0}ul.files li.img{list-style:none;margin-left:-18px;margin-bottom:8px}ul.files li.img img{display:block;max-width:200px;max-height:140px;width:auto;height:auto;border:1px solid var(--line);border-radius:6px;margin-bottom:2px}.by{margin:0}a{color:var(--brand)}form{margin:8px 0 0}.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-input,textarea,button{font:inherit;color:inherit}input[type=date],textarea{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+input,textarea,button{font:inherit;color:inherit}input,textarea{font-size:16px}input[type=date],textarea{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 textarea{width:100%;min-height:70px}button{background:var(--btn);color:#fff;border:0;border-radius:8px;padding:7px 14px;cursor:pointer}
 button.secondary{background:transparent;color:var(--brand);border:1px solid var(--brand)}.comment{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}
 h3{font-size:.85rem;margin:14px 0 4px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
