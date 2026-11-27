@@ -200,6 +200,37 @@ describe("acciones en bloque: filas bloqueadas en orden de id", () => {
     assert.equal(await locksHigherFirst(archiving, (ids) => archiveTasks(ids)), false, "archiveTasks");
     assert.equal(await db.task.count({ where: { id: { in: archiving }, archivedAt: { not: null } } }), 2);
   });
+
+  test("moveTasks no mueve la que otra persona archivó mientras esperaba su fila", async () => {
+    const user = await makeUser();
+    const f = await makeProject({ members: [user] });
+    await loginAs(user);
+    const [low, high] = await pair(f);
+    const holder = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const probe = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await holder.connect();
+    await probe.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query(`SELECT 1 FROM "Task" WHERE "id" = $1 FOR UPDATE`, [low]);
+      const pending = moveTasks([low, high], f.columns.doing);
+      await waitRowLock(probe, "moveTasks debería esperar a la fila bloqueada");
+      await holder.query(`UPDATE "Task" SET "archivedAt" = now() WHERE "id" = $1`, [low]);
+      await holder.query("COMMIT");
+      const res = await pending;
+      assert.ok(res.ok, "moveTasks debe terminar bien");
+      if (res.ok) assert.deepEqual(res.data.moved.map((m) => m.id), [high]);
+    } finally {
+      await holder.end();
+      await probe.end();
+    }
+    const archived = await db.task.findUniqueOrThrow({ where: { id: low }, select: { columnId: true, archivedAt: true } });
+    assert.equal(archived.columnId, f.columns.todo, "la archivada se queda en su columna");
+    assert.ok(archived.archivedAt);
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: high } })).columnId, f.columns.doing);
+    const entries = await db.undoEntry.findMany({ where: { projectId: f.project.id }, select: { ops: true } });
+    assert.ok(!JSON.stringify(entries.map((e) => e.ops)).includes(low), "el deshacer no toca la archivada");
+  });
 });
 
 describe("lockTaskRows", () => {

@@ -938,13 +938,20 @@ export async function moveTasks(taskIds: string[], columnId: string, at?: { prev
       select: { id: true, columnId: true, column: { select: { isDone: true } } },
     });
     // En bloque entre dos vecinas también se recolocan las que ya estaban en la columna.
-    const toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
+    let toMove = place ? tasks : tasks.filter((t) => t.columnId !== column.id);
     noteTasks(toMove.map((t) => t.id));
-    const undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
+    let undo = await captureTasks(toMove.map((t) => t.id), ["columnId", "position", "evergreen", "evergreenEvery"]);
     const { moved, assigned } = await db.$transaction(async (tx) => {
       await lockColumns(tx, [column.id]);
       // Columna → tareas (en orden de id), como moveTask y el despliegue de una release.
       await lockTaskRows(tx, toMove.map((t) => t.id));
+      // Con las filas bloqueadas se vuelve a mirar cuáles siguen activas: otra persona pudo archivar alguna desde la
+      // lectura de arriba, y moverla la dejaría archivada en la columna nueva (como moveTask, que mueve solo si archivedAt es null).
+      const alive = new Set((await tx.task.findMany({ where: { id: { in: toMove.map((t) => t.id) }, archivedAt: null }, select: { id: true } })).map((r) => r.id));
+      if (alive.size < toMove.length) {
+        toMove = toMove.filter((t) => alive.has(t.id));
+        undo = undo.filter((op) => op.t !== "task.set" || alive.has(op.id));
+      }
       // Todo o nada: si no caben todas las que llegan de otras columnas, no se mueve ninguna.
       const room = await assertColumnRoom(tx, column.id, toMove.map((t) => t.id));
       let list: { id: string; position: number }[];
