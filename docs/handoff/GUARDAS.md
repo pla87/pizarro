@@ -298,6 +298,13 @@ Una guarda nueva va a su tema, con «(Ronda N)».
 - Exportar un proyecto (`project-export/export.ts`): `readSnapshot` lee en una transacción corta y `assembleExport` hace
   huellas, ficheros y ZIP fuera. No vuelvas a leer ficheros dentro de la transacción
   (`tests/db/project-export.test.ts` lo comprueba con `LOCK TABLE "Task"`).
+- (Ronda 73, v1.76) Notas de Documentación: un `ProjectDocument` con `noteContent` no nulo es una nota (MARKDOWN, sin
+  fichero en `UPLOAD_DIR/documents/`; `size` = bytes del texto, cuenta en la cuota). Todo lo que lea el fichero de un
+  documento mira antes `noteContent` (la ruta `/api/documents/[id]` sirve el texto; exportar lo mete en el ZIP como un
+  fichero más con `note: true` y las refs de menciones y de `/api/documents/<ref>`; importar lo devuelve a la fila). Borrar
+  y purgar llaman a `removeDocumentFiles`, que no falla sin fichero. Guardar va por `saveNoteRow` con la versión que
+  conocía el editor (`noteVersion`, nunca `updatedAt`, que cambian también renombrar o fijar); `documents.saveNote` no se
+  registra cuando sale bien ni avisa a las pestañas del tablero (`UNLOGGED_READS`, `UNPUBLISHED_ACTIONS`).
 - (Ronda 70) Exportar lleva las imágenes del histórico de releases y el import reescribe sus referencias. Un tipo propio
   con el nombre de un tipo general entra como «Nombre (2)» (aviso) y las columnas y tareas que lo usaban lo conservan;
   una columna con el tipo por defecto renombrado queda con el tipo del proyecto.

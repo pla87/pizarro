@@ -220,6 +220,14 @@ const documentSchema = z.object({
   createdAt: iso,
   updatedAt: iso,
   file: sha,
+  /**
+   * Nota escrita en la app (v1.76): el fichero es su texto Markdown, con las menciones y las imágenes con refs (las de la
+   * Documentación, `/api/documents/<ref del documento>`). Al importar vuelve a ser una nota. Opcional: los archivos
+   * anteriores no la traen, y una versión anterior la ignora (la importa como un Markdown subido).
+   */
+  note: z.boolean().optional(),
+  /** Fijado arriba en la lista de Documentación (v1.76). Opcional, como `note`. */
+  pinnedAt: iso.optional(),
 });
 
 /** Documento en la papelera de Documentación: cuándo y quién lo borró (se purga a los DOCUMENT_TRASH_DAYS días de borrarlo). */

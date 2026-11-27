@@ -9,6 +9,10 @@ export const DOCUMENTS_MAX_PER_PROJECT = 200;
 export const DOCUMENT_TRASH_DAYS = 7;
 /** Máximo de bytes de un texto/Markdown/HTML que el visor descarga para mostrarlo (más grande: solo descarga). */
 export const DOCUMENT_PREVIEW_MAX_BYTES = 1024 * 1024;
+/** Máximo de caracteres del texto de una nota escrita en la app (Documentación → «Nueva nota»). */
+export const NOTE_MAX_CHARS = 200_000;
+/** Bytes que ocupa el texto de una nota (lo que cuenta en la cuota, como el tamaño de un fichero). */
+export const noteBytes = (text: string): number => new TextEncoder().encode(text).length;
 
 const TEXT_EXT = new Set(["txt", "text", "log", "csv", "tsv", "json", "yml", "yaml", "ini", "cfg", "conf", "toml", "xml", "env"]);
 const MARKDOWN_EXT = new Set(["md", "markdown"]);

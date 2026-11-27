@@ -13,7 +13,7 @@ import { appTimeZone } from "../format";
 import { slugify } from "../search-accents";
 import { attachmentPath, documentPath, releaseAttachmentStream } from "../uploads";
 import { streamZipSize, type StreamZipEntry } from "../zip-stream";
-import { remapAttachmentRefs } from "../attachment-refs";
+import { remapAttachmentRefs, remapDocumentRefs } from "../attachment-refs";
 import { mapMentions } from "./mentions";
 import {
   EXPORT_EXTENSION, EXPORT_FORMAT, EXPORT_FORMAT_VERSION, LIMITS, projectDataSchema, TRASH_EXPORT_MAX,
@@ -83,6 +83,8 @@ async function hashSource(open: () => AsyncIterable<Buffer>): Promise<{ sha: str
 
 /** Lee un fichero del disco por trozos (Buffer). */
 const diskStream = (file: string) => () => createReadStream(file) as unknown as AsyncIterable<Buffer>;
+/** El texto de una nota, como si fuera un fichero (de un solo trozo). */
+const bufferStream = (buf: Buffer) => () => (async function* () { yield buf; })();
 
 /** Registra un fichero y devuelve su huella; null si ya no está en disco. `tick` avisa de cada fichero examinado (progreso). */
 async function addFile(files: Map<string, FileInfo>, open: () => AsyncIterable<Buffer>, exists: () => Promise<boolean>, tick?: () => void | Promise<void>): Promise<FileInfo | null> {
@@ -263,7 +265,10 @@ async function readSnapshot(db: Prisma.TransactionClient, projectId: string, opt
   for (const r of releaseRows) addUser(r.createdById);
   // La persona de cada columna «Asignación a persona».
   for (const c of project.columns) addUser(c.assigneeId);
-  for (const d of documentRows) for (const id of [d.createdById, d.deletedById]) addUser(id);
+  for (const d of documentRows) {
+    for (const id of [d.createdById, d.deletedById]) addUser(id);
+    if (d.noteContent !== null) addMentions(d.noteContent);
+  }
   for (const e of eventRows) addUser(e.userId);
   const userRows = userIds.size ? await db.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true, email: true } }) : [];
 
@@ -411,22 +416,6 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
     });
   }
 
-  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
-  const documents: ProjectExportData["documents"] = [];
-  const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
-  let docSeq = 0;
-  for (const d of documentRows) {
-    const file = documentPath(d.id);
-    const info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
-    if (!info) {
-      missingFiles++;
-      continue;
-    }
-    const row = { ref: `x${++docSeq}`, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha };
-    if (d.deletedAt) documentsTrash.push({ ...row, deletedAt: iso(d.deletedAt), deletedBy: users.ref(d.deletedById) });
-    else documents.push(row);
-  }
-
   // Historial de cambios de las tareas (solo con el histórico completo).
   const events: ProjectExportData["events"] = eventRows.map((e) => ({ taskRef: taskRef.get(e.taskId)!, user: users.ref(e.userId), userName: e.userName, code: e.code, label: e.label, createdAt: iso(e.createdAt) }));
 
@@ -441,6 +430,35 @@ async function assembleExport(snapshot: Snapshot, options: ExportOptions, export
   }
   // Las imágenes del histórico de releases también apuntan a adjuntos de tareas.
   for (const r of releases) r.content = remapAttachmentRefs(r.content, attachmentRefs);
+
+  // Documentación y su papelera (con quién y cuándo borró cada documento). Sin ficheros no tiene sentido: solo con adjuntos.
+  // Una nota (texto en la base, sin fichero) viaja como un fichero .md más, marcada con `note`: una versión anterior que
+  // no conoce la marca la importa como un Markdown subido. Su texto lleva las menciones y las imágenes con refs, como las
+  // descripciones; las imágenes de la propia Documentación (`/api/documents/<id>`) con la ref del documento (`x3`).
+  const documents: ProjectExportData["documents"] = [];
+  const documentsTrash: NonNullable<ProjectExportData["documentsTrash"]> = [];
+  const documentRefs = new Map(documentRows.map((d, i) => [d.id, `x${i + 1}`]));
+  for (const d of documentRows) {
+    let info: FileInfo | null;
+    if (d.noteContent !== null) {
+      const body = Buffer.from(remapDocumentRefs(fixMentions(d.noteContent), documentRefs), "utf8");
+      info = await addFile(files, bufferStream(body), async () => true, onFile);
+    } else {
+      const file = documentPath(d.id);
+      info = await addFile(files, diskStream(file), async () => (await stat(file)).isFile(), onFile);
+    }
+    if (!info) {
+      missingFiles++;
+      continue;
+    }
+    const row = {
+      ref: documentRefs.get(d.id)!, name: d.name, mimeType: d.mimeType, size: info.size, kind: d.kind, createdBy: users.ref(d.createdById), createdAt: iso(d.createdAt), updatedAt: iso(d.updatedAt), file: info.sha,
+      ...(d.noteContent !== null ? { note: true } : {}),
+      ...(d.pinnedAt && !d.deletedAt ? { pinnedAt: iso(d.pinnedAt) } : {}),
+    };
+    if (d.deletedAt) documentsTrash.push({ ...row, deletedAt: iso(d.deletedAt), deletedBy: users.ref(d.deletedById) });
+    else documents.push(row);
+  }
   const userList = users.entries().flatMap(([id, ref]) => {
     const u = userById.get(id);
     // Los emails ajenos solo si exporta un administrador (los demás no los ven en la aplicación). La clave se mantiene

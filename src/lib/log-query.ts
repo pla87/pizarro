@@ -67,6 +67,8 @@ export const READ_ACTIONS = [
   "templateApply.listApplicableTemplates",
   "templateApply.previewTemplateChange",
   "calendarFeed.suggestedScope",
+  "documents.getNote",
+  "documents.searchNotes",
 ];
 
 type Params = Record<string, string | string[] | undefined>;
