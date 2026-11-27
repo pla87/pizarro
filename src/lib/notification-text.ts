@@ -17,11 +17,11 @@ export function projectNoticePath(kind: NotificationKind, projectId: string): st
 
 const REVOKED_SEP = "";
 
-/** Extracto del aviso SHARE_REVOKED: quién revocó el enlace y de qué columna («quien␞columna»). */
-export const shareRevokedExcerpt = (who: string, column: string): string => `${who.replaceAll(REVOKED_SEP, " ")}${REVOKED_SEP}${column.replaceAll(REVOKED_SEP, " ")}`;
+// Extracto del aviso SHARE_REVOKED: «quien␞columna» (los dos con el separador U+001E cambiado por un espacio). Lo
+// escribirá la v1.75 al revocar el enlace (`${who}${REVOKED_SEP}${column}`); la v1.74 ya sabe pintarlo.
 
 /** Quién y qué columna de un aviso SHARE_REVOKED. */
-export function shareRevokedParts(excerpt: string): { who: string; column: string } {
+function shareRevokedParts(excerpt: string): { who: string; column: string } {
   const [who = "", ...rest] = excerpt.split(REVOKED_SEP);
   return { who, column: rest.join(" ") };
 }
