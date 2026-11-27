@@ -128,8 +128,9 @@ describe("copias completas", () => {
     const ext2 = await syncExternal();
     assert.deepEqual(ext2.map((r) => [r.ok, r.uploaded, r.skipped]), [[true, 1, 5], [true, 1, 5]]);
     const expected = await fingerprint(baseUrl);
-    // Lo único que no vuelve igual: las sesiones (se cierran todas al restaurar).
-    const noSessions = (fp: Record<string, string>) => ({ ...fp, Session: "0:" });
+    // Lo único que no vuelve igual: las sesiones, los dispositivos de confianza y los segundos pasos a medias (se cierran
+    // todos al restaurar; otras pruebas de la misma base pueden haber dejado filas en ellas).
+    const noSessions = (fp: Record<string, string>) => ({ ...fp, Session: "0:", KnownDevice: "0:", LoginChallenge: "0:" });
     const sessionsLeft = async (u: string) => {
       const c = await connectPg(u);
       try {
