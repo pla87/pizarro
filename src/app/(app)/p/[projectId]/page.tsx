@@ -13,6 +13,7 @@ import { liveCursor } from "@/lib/realtime";
 import { revokerNames } from "@/lib/share-out";
 import { boardShareOf, SHARE_BOARD_SELECT } from "@/lib/share-out-board";
 import { db } from "@/lib/db";
+import { releaseUse } from "@/lib/release-nav";
 import { noteProjectVisit } from "@/lib/project-visit";
 import { COLUMN_ORDER } from "@/lib/task-positions";
 import { getCurrentUser, requireUserPage } from "@/lib/session";
@@ -81,8 +82,9 @@ export default async function BoardPage({ params, searchParams }: Params) {
     userTemplates(user.id),
     projectReleaseTemplates(projectId),
     peopleTeam ? projectPeople(projectId, project) : null,
-    // Solo si hay alguna (no se cuentan): decide si el menú y la selección enseñan «Releases».
-    db.release.findFirst({ where: { projectId }, select: { id: true } }),
+    // Solo si hay alguna (no se cuentan): decide si el menú y la selección enseñan «Releases» (la misma consulta que el
+    // layout, `cache`: una sola ida).
+    releaseUse(projectId),
   ]);
 
   const data: BoardPageData = {
@@ -92,7 +94,7 @@ export default async function BoardPage({ params, searchParams }: Params) {
       suggestedRoles: suggestedColumnRoles(project.templateKey, columns),
       peopleIds: people?.map((p) => p.id) ?? null,
       ...(project.shareOutEnabled ? { shareOut: true } : {}),
-      ...(firstRelease ? { hasReleases: true } : {}),
+      ...(firstRelease.release ? { hasReleases: true } : {}),
     },
     columns,
     // Sin los campos que valen lo de por defecto: el navegador lee bastante menos (el tablero los completa al llegar).

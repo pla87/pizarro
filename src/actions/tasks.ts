@@ -1208,8 +1208,10 @@ export async function getTaskDetail(taskId: string) {
     const loadedAt = new Date().toISOString();
     const user = await requireUser();
     const id = v.id.parse(taskId);
-    // El acceso va dentro de la propia consulta (mismo filtro que assertTaskAccess); el recuento de comentarios, en paralelo.
-    const [task, commentCount] = await Promise.all([db.task.findFirst({
+    // El acceso va dentro de la propia consulta (mismo filtro que assertTaskAccess); los comentarios y su recuento, en
+    // paralelo (se descartan si la tarea no se ve). Los comentarios van aparte y no anidados: Prisma no pone LIMIT a un
+    // `take` anidado (los leería todos y recortaría en memoria), y una tarea puede tener cientos.
+    const [task, firstComments, commentCount] = await Promise.all([db.task.findFirst({
       where: { id, project: visibleProjectsWhere(user) },
       select: {
         id: true,
@@ -1225,15 +1227,16 @@ export async function getTaskDetail(taskId: string) {
         subtasks: { orderBy: { position: "asc" }, select: { id: true, title: true, done: true, position: true } },
         attachments: { orderBy: { createdAt: "asc" }, select: { id: true, originalName: true, mimeType: true, isImage: true, size: true, width: true, height: true } },
         links: { orderBy: { createdAt: "asc" }, select: linkSelect },
-        // Solo los más recientes; los anteriores se piden con getOlderComments.
-        comments: { orderBy: COMMENT_ORDER, take: COMMENTS_FIRST_PAGE, select: commentSelect },
       },
-    }), db.taskComment.count({ where: { taskId: id, deletedAt: null } })]);
+    }),
+    // Solo los más recientes; los anteriores se piden con getOlderComments.
+    db.taskComment.findMany({ where: { taskId: id }, orderBy: COMMENT_ORDER, take: COMMENTS_FIRST_PAGE, select: commentSelect }),
+    db.taskComment.count({ where: { taskId: id, deletedAt: null } })]);
     if (!task) throw notFound();
     noteProject(task.projectId);
     noteTask(id);
-    const oldest = task.comments.at(-1);
-    const olderComments = oldest && task.comments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
+    const oldest = firstComments.at(-1);
+    const olderComments = oldest && firstComments.length === COMMENTS_FIRST_PAGE ? await db.taskComment.count({ where: olderThan(task.id, oldest) }) : 0;
     return {
       id: task.id,
       description: task.description,
@@ -1243,7 +1246,7 @@ export async function getTaskDetail(taskId: string) {
       subtasks: task.subtasks,
       attachments: task.attachments,
       links: task.links,
-      comments: task.comments.reverse().map(toCommentInfo),
+      comments: firstComments.reverse().map(toCommentInfo),
       olderComments,
       commentCount,
       following: isFollowing(user.id, { createdById: task.createdById, assigneeId: task.assigneeId, rows: task.followers }),
