@@ -386,17 +386,21 @@ export function Board({ data: page, initialTaskId = null }: { data: BoardPageDat
   // cada uno llega al abrirlo. El editor con barra (TipTap, unos 170 KB gz) solo para quien lo usa: con el editor
   // Markdown no se abre nunca.
   const richEditor = data.editorMode === "WYSIWYG";
+  // El diálogo de la release solo se abre con una columna «Siguiente salto» («Generar release») o con releases hechas
+  // («Release con selección», ver usesReleases): si no, no se precarga (llega al abrirlo si se crea la columna).
+  const releasable = columns.some((c) => c.role === "NEXT_RELEASE") || Boolean(page.project.hasReleases);
   useEffect(() => {
     if (saveDataOn()) return;
     const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));
     const cancel = window.cancelIdleCallback ?? window.clearTimeout;
     const id = idle(() => {
-      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadReleaseDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      const loads: (() => Promise<unknown>)[] = [loadTaskDialog, loadNewTaskDialog, loadArchivedDialog, loadBulkTaskDialog, loadImportTasksDialog];
+      if (releasable) loads.push(loadReleaseDialog);
       if (richEditor) loads.push(() => import("@/components/ui/RichTextEditor"));
       for (const load of loads) load().catch(() => {});
     });
     return () => cancel(id);
-  }, [richEditor]);
+  }, [richEditor, releasable]);
 
   // Borradores locales: si la página se cerró con una tarea abierta o a medio crear, se reabre.
   useEffect(() => {

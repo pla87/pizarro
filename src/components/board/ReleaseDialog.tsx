@@ -72,6 +72,12 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   const [zipFiles, setZipFiles] = useState<ReadonlyMap<string, string>>(new Map());
   /** Número que tendrá la release (prefijo R32 de los códigos) y con cuál se generó el texto. */
   const [releaseNumber, setReleaseNumber] = useState<number | null>(null);
+  /**
+   * Sin el número no se genera: las notas saldrían sin «R{n}» mientras las tarjetas sí lo llevan al desplegar, y las
+   * fijas a las que no les toca seguirían marcadas. Si la consulta falla se dice y se puede volver a pedir (`numberTry`).
+   */
+  const [numberFailed, setNumberFailed] = useState(false);
+  const [numberTry, setNumberTry] = useState(0);
   /** Cuándo le toca a una tarea fija respecto a la release que se genera: «ahora», «en la siguiente», «dentro de 2»… */
   const dueHint = (n: number) => (n === 0 ? t("ahora") : n === 1 ? t("en la siguiente") : t("dentro de {n}", { n }));
   const [generatedNumber, setGeneratedNumber] = useState<number | null>(null);
@@ -114,8 +120,13 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
     // Mismo día que usa el servidor (zona horaria de la app) para contar las releases.
     const day = board.today;
     // Sin red se pide al volver la conexión (antes el fallo quedaba sin atender y el título no llevaba el ordinal).
+    const failed = (error: string) => {
+      setNumberFailed(true);
+      toast(error, "error");
+    };
     return loadWhenOnline(() => countReleasesOn({ projectId: board.project.id, dayIso: day }), (res) => {
-      if (!res.ok) return;
+      if (!res.ok) return failed(res.error);
+      setNumberFailed(false);
       setReleaseNumber(res.data.nextNumber);
       // Tareas fijas con cadencia: solo vienen marcadas si a esta release le toca (se pueden marcar a mano).
       if (!selectionTouched.current) {
@@ -123,10 +134,16 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         if (notDue.length) setChosen((prev) => new Set([...prev].filter((id) => !notDue.includes(id))));
       }
       if (!titleEdited.current) setTitle(defaultReleaseTitle(day, board.project.name, res.data.today, intlLocale));
-    }, () => {});
-  }, [board.project.id, board.project.name, board.today, initialTasks, intlLocale]);
+    }, (e) => failed(actionThrowResult(e, t).error));
+  }, [board.project.id, board.project.name, board.today, initialTasks, intlLocale, numberTry, t, toast]);
+
+  const retryNumber = () => {
+    setNumberFailed(false);
+    setNumberTry((n) => n + 1);
+  };
 
   const generate = async () => {
+    if (releaseNumber == null) return;
     // Descripción y adjuntos no viajan con el tablero: se piden al generar.
     setLoadingDetails(true);
     const res = await getReleaseTaskDetails({ projectId: board.project.id, taskIds: selectedTasks.map((t) => t.id) }).catch((e: unknown) => (isNetworkError(e) ? (reportOffline(), null) : actionThrowResult(e, t)));
@@ -223,6 +240,8 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
   };
 
   const deploy = async () => {
+    // Un texto sin número (no debería poder generarse) no se despliega: los códigos de las tarjetas no coincidirían.
+    if (generatedNumber == null) return toast(t("Vuelve a generar el texto: falta el número de la release."), "error");
     const n = generatedTasks.length;
     const name = inProduction?.name ?? "";
     const message = destination === "IN_PRODUCTION"
@@ -241,7 +260,7 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
         kinds: generatedTasks.map(({ taskId, kindId }) => ({ taskId, kindId })),
         destination,
         attachments: zipItems.map(({ taskId, code }) => ({ taskId, code })),
-        number: generatedNumber ?? undefined,
+        number: generatedNumber,
       }),
     ).catch((e) => actionThrowResult(e, t));
     setBusy(false);
@@ -270,12 +289,17 @@ export function ReleaseDialog({ tasks, preselected, templates, projectTemplates,
           <>
             {tooMany ? (
               <span className="mr-auto text-xs text-red-600 dark:text-red-400" role="alert">{t("Una release admite como mucho 500 tareas: quita alguna de la selección.")}</span>
+            ) : numberFailed ? (
+              <span className="mr-auto flex items-center gap-2 text-xs text-red-600 dark:text-red-400" role="alert">
+                {t("No se ha podido saber el número de la release.")}
+                <button type="button" className="btn-ghost text-xs" onClick={retryNumber}>{t("Reintentar")}</button>
+              </span>
             ) : (
               <TemplateSourceNote projectId={board.project.id} projectTab="releases" />
             )}
             <button className="btn-secondary" onClick={() => void requestClose()}>{t("Cancelar")}</button>
-            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails}>
-              {loadingDetails && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
+            <button className="btn-primary" onClick={generate} disabled={selectedTasks.length === 0 || tooMany || loadingDetails || releaseNumber == null} data-release-number={releaseNumber != null ? "ready" : numberFailed ? "failed" : "loading"}>
+              {(loadingDetails || (releaseNumber == null && !numberFailed)) && <Loader2 size={15} className="animate-spin" />} {selectedTasks.length === 1 ? t("Generar con 1 tarea") : t("Generar con {n} tareas", { n: selectedTasks.length })}
             </button>
           </>
         ) : (

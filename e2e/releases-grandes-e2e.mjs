@@ -56,6 +56,8 @@ if (only.includes("release")) {
   const dlg = releaseDialog(page);
   const gen = dlg.getByRole("button", { name: /^\s*Generar con \d+ tarea/ });
   await gen.waitFor({ timeout: 10000 });
+  // «Generar» espera al número de la release (sin él estaría desactivado por eso y no por el tope).
+  await dlg.locator("[data-release-number=ready]").waitFor({ timeout: 10000 });
   await sleep(800);
   L.eq("REL: con 501 marcadas, «Generar» desactivado", await gen.isDisabled(), true);
   L.eq("REL: con el motivo", (await dlg.getByRole("alert").innerText()).trim(), "Una release admite como mucho 500 tareas: quita alguna de la selección.");
@@ -99,6 +101,8 @@ if (only.includes("adjuntos")) {
   const dlg = releaseDialog(page);
   const gen = dlg.getByRole("button", { name: /^\s*Generar con \d+ tarea/ });
   await gen.waitFor({ timeout: 10000 });
+  // «Generar» espera al número de la release (sin él estaría desactivado por eso y no por el tope).
+  await dlg.locator("[data-release-number=ready]").waitFor({ timeout: 10000 });
   await sleep(800);
   L.eq("ADJ: 201 tareas sí se pueden generar", await gen.isDisabled(), false);
   await gen.click();
