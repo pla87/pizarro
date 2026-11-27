@@ -105,9 +105,10 @@ export async function createProject(name: string, options?: { templateId?: strin
           position: (last?.position ?? 0) + POSITION_STEP,
           isPrivate: !!options?.isPrivate,
           privateOwnerId: options?.isPrivate ? user.id : null,
-          // El creador es el primer miembro del proyecto privado.
-          // Si es de equipo, el admin que lo crea lo marca como proyecto en el que trabaja.
-          ...(options?.isPrivate ? { members: { create: { userId: user.id } } } : { adminPicks: { create: { userId: user.id } } }),
+          // Quien lo crea es su primer miembro (privado o de equipo; decisión del propietario, ronda 71). En uno de equipo,
+          // el admin que lo crea además lo marca como proyecto en el que trabaja.
+          members: { create: { userId: user.id } },
+          ...(options?.isPrivate ? {} : { adminPicks: { create: { userId: user.id } } }),
           ...(template ? {} : { columns: { create: defaultColumns(locale).map((c, i) => ({ ...c, position: (i + 1) * POSITION_STEP })) } }),
         },
         select: { id: true },

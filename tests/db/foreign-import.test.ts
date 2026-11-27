@@ -73,9 +73,10 @@ describe("Trello JSON", () => {
     assert.deepEqual(p.tasks.filter((x) => x.archivedAt).map((x) => x.title).sort(), ["Chat en vivo", "Contratar el hosting"]);
     assert.ok(p.tasks.every((x) => !x.archivedAt || x.archivedFromColumnId === x.columnId));
 
-    // Responsables: Ana existe (por nombre) y se asigna y se hace miembro; Luis no existe: a la descripción y a «sin emparejar».
+    // Responsables: Ana existe (por nombre) y se asigna y se hace miembro (junto a quien importa); Luis no existe: a la
+    // descripción y a «sin emparejar».
     assert.equal(textos.assigneeId, ana.id);
-    assert.deepEqual(p.members.map((m) => m.userId), [ana.id]);
+    assert.deepEqual(p.members.map((m) => m.userId).sort(), [admin.id, ana.id].sort());
     assert.match(textos.description, /Responsable en el archivo original: Luis Muestra\./);
     assert.deepEqual(s.unmappedUsers, [{ name: "Luis Muestra", email: "" }]);
     assert.equal(s.addedMembers, 1);
@@ -144,7 +145,7 @@ describe("CSV", () => {
     assert.match(docs.description, /Responsable en el archivo original: nadie@example\.com\./);
     // Solo con el email: sin nombre (el resumen no lo repite, «nadie@example.com · nadie@example.com»).
     assert.deepEqual(s.unmappedUsers, [{ name: "", email: "nadie@example.com" }]);
-    assert.deepEqual(p.members.map((m) => m.userId), [dev.id]);
+    assert.deepEqual(p.members.map((m) => m.userId).sort(), [admin.id, dev.id].sort());
   });
 
   test("una columna terminada que aparece primero («Hecho») queda al final, marcada como terminada, con sus tareas", async () => {

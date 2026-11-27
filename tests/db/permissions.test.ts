@@ -261,13 +261,15 @@ describe("crear y cambiar la visibilidad de proyectos", () => {
     assert.deepEqual(row.members.map((m) => m.userId), [u.id]);
   });
 
-  test("un administrador crea proyectos de equipo (los marca como suyos); setProjectVisibility es solo de administradores", async () => {
+  test("un administrador crea proyectos de equipo (es su miembro y los marca como suyos); setProjectVisibility es solo de administradores", async () => {
     const admin = await makeUser({ role: "ADMIN" });
     const member = await makeUser();
     await loginAs(admin);
     const created = expectOk(await createProject("Equipo admin"));
     assert.equal((await db.project.findUniqueOrThrow({ where: { id: created.id } })).isPrivate, false);
     assert.equal(await db.adminProjectPick.count({ where: { projectId: created.id, userId: admin.id } }), 1);
+    // Quien lo crea es miembro (ronda 71): sale en «Miembros» y en las personas del proyecto.
+    assert.equal(await db.projectMember.count({ where: { projectId: created.id, userId: admin.id } }), 1);
     expectOk(await addProjectMember(created.id, member.id));
     await loginAs(member);
     expectFail(await setProjectVisibility(created.id, "PRIVATE"), FORBIDDEN);

@@ -613,7 +613,7 @@ function MemberManager({ projectId, currentUserId, members, users, isPrivate, ca
           );
         })}
       </ul>
-      {/* De equipo: quien lo creó (un administrador) no es miembro y aun así lo ve; un «Sin miembros.» seco no lo explicaba. */}
+      {/* De equipo sin miembros (de antes de la v1.74, o si quien lo creó salió): los administradores lo ven igual; un «Sin miembros.» seco no lo explicaba. */}
       {members.length === 0 && <p className="text-sm text-slate-500">{isPrivate ? t("Sin miembros.") : t("Sin miembros. Los administradores lo ven sin ser miembros.")}</p>}
       {canInvite && members.some((m) => m.invitePending && m.active) && (
         <p className="text-xs text-slate-500" data-testid="invite-pending-hint">
