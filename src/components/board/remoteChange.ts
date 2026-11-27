@@ -35,6 +35,17 @@ export interface IncomingChange {
   cid: string | null;
   change: unknown;
   announced: boolean;
+  /** `performance.now()` al llegar el aviso (se publica tras confirmar el cambio). */
+  at?: number;
+}
+
+/**
+ * Los avisos que llegaron antes de la última recarga completa pedida (`coveredBefore`) ya vienen en ella: el servidor
+ * los publica tras confirmar el cambio, y esa recarga se pidió después. Evita el segundo refresco de Ctrl+Z (su aviso
+ * `undo.*` llega sin `cid`, como uno ajeno, después de que la propia pestaña recargara).
+ */
+export function uncoveredChanges(queue: IncomingChange[], coveredBefore: number): IncomingChange[] {
+  return queue.filter(({ at }) => at === undefined || !(at < coveredBefore));
 }
 
 /**
@@ -52,10 +63,12 @@ export function announceOnArrival(change: unknown, currentUserId: string): boole
  * esos avisos, para decidir si basta con pedir sus tarjetas, livePatch.ts) y, si no se reenvió al llegar, se reenvía
  * ahora. Retira de `own` los ids ya vistos.
  */
-export function settleIncoming(queue: IncomingChange[], own: Set<string>): { announce: unknown[]; refresh: boolean; changes: unknown[] } {
+export function settleIncoming(queue: IncomingChange[], own: Set<string>, coveredBefore = 0): { announce: unknown[]; refresh: boolean; changes: unknown[] } {
   const foreign = queue.filter(({ cid }) => !cid || !own.has(cid));
   for (const { cid } of queue) if (cid) own.delete(cid);
-  return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: foreign.length > 0, changes: foreign.map((c) => c.change) };
+  // Se reenvían todos a la página; solo los no cubiertos por una recarga posterior piden otra.
+  const needRefresh = uncoveredChanges(foreign, coveredBefore);
+  return { announce: foreign.filter((c) => !c.announced).map((c) => c.change), refresh: needRefresh.length > 0, changes: needRefresh.map((c) => c.change) };
 }
 
 /** Retardo máximo por defecto antes de refrescar el tablero por un cambio de otra persona (LIVE_REFRESH_JITTER_MS). */

@@ -27,6 +27,18 @@ describe("canal en vivo con acciones propias en vuelo (una subida larga)", () =>
   });
 });
 
+describe("avisos cubiertos por una recarga posterior (Ctrl+Z recargaba dos veces)", () => {
+  const undo = { action: "undo.undoLast", taskId: null, userId: "ana" };
+  test("un aviso anterior a la recarga pedida se reenvía pero no pide otra", () => {
+    const queue: IncomingChange[] = [{ cid: null, change: undo, announced: false, at: 100 }];
+    assert.deepEqual(settleIncoming(queue, new Set(), 150), { announce: [undo], refresh: false, changes: [] });
+  });
+  test("uno posterior a la recarga, o sin hora, sí la pide", () => {
+    assert.equal(settleIncoming([{ cid: null, change: undo, announced: false, at: 200 }], new Set(), 150).refresh, true);
+    assert.equal(settleIncoming([{ cid: null, change: undo, announced: false }], new Set(), 150).refresh, true);
+  });
+});
+
 describe("canal cerrado mientras la pestaña está oculta (HTTP/1.1: 6 conexiones por servidor)", () => {
   const hello = (boot: string, seq: number) => JSON.stringify({ boot, seq });
   test("al reabrir, refresca solo si se perdió algún aviso", () => {
