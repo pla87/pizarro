@@ -125,4 +125,11 @@ export const compartirFuera: Record<string, string> = {
   "Enlace no disponible": "Link not available",
   "Esta lista de tareas ya no está disponible. Contacta con la persona que te ha dado el enlace.": "This task list is no longer available. Contact the person who gave you the link.",
   "Link: enlace de la web": "Link: page link",
+  // Ronda 71: aviso de enlace revocado (v1.75 lo escribirá) y mejoras de la web pública
+  "La fecha no puede ser anterior al {date}.": "The date can't be earlier than {date}.",
+  "La fecha no ha cambiado.": "The date hasn't changed.",
+  "Copia tu texto antes de volver a intentarlo.": "Copy your text before trying again.",
+  "Vista de «{name}» desde la web de «Compartir fuera»": "View of “{name}” from the “Share outside” page",
+  "{actor} ha revocado el enlace de la web de «{column}»": "{actor} revoked the link to the web page of «{column}»",
+  "Esa web ya no está disponible. Puedes generar otra desde la columna.": "That web page is no longer available. You can generate another one from the column.",
 };

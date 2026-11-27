@@ -16,7 +16,7 @@ import { appUrl } from "./mail";
 import { excerpt as makeExcerpt, mentionRegex, mentionsToPlain } from "./mentions";
 import { dueChangeExcerpt, externalExcerpt } from "./notification-text";
 import { notifyTask, taskFollowerIds } from "./notify";
-import { rateLimit, rateIp } from "./rate-limit";
+import { rateLimit, rateIp, releaseRateLimit } from "./rate-limit";
 import { publishChange } from "./realtime";
 import { spawnRecurrences } from "./recurrence";
 import {
@@ -206,6 +206,17 @@ export async function noteShareUse(share: ActiveShare, now: Date = new Date()): 
 export const shareIpAllowed = (ip: string): boolean => rateLimit(shareIpKey(rateIp(ip)), SHARE_LIMITS.ip.limit, SHARE_LIMITS.ip.windowMs);
 export const shareDownloadAllowed = (share: ActiveShare): boolean => rateLimit(`share-out:dl:${share.key}`, SHARE_LIMITS.downloads.limit, SHARE_LIMITS.downloads.windowMs);
 
+/**
+ * Tope de bytes servidos por enlace y hora: suma el tamaño de lo que se va a servir (la miniatura, el suyo, no el del
+ * original). Si no cabe, no se cuenta (el siguiente, más pequeño, aún puede pasar).
+ */
+export function shareBytesAllowed(share: ActiveShare, size: number): boolean {
+  const key = `share-out:bytes:${share.key}`;
+  if (rateLimit(key, SHARE_LIMITS.bytes.limit, SHARE_LIMITS.bytes.windowMs, size)) return true;
+  releaseRateLimit(key, size);
+  return false;
+}
+
 /** Idioma de la página: el de la instalación (no hay nadie identificado). */
 export async function shareLocale(): Promise<{ locale: Locale; t: T }> {
   const locale = (await getInstanceSettings()).locale;
@@ -221,7 +232,7 @@ async function liveSharedTasks(share: ActiveShare) {
   const rows = await db.task.findMany({
     where: { id: { in: share.taskIds }, projectId: share.projectId, archivedAt: null },
     select: {
-      id: true, title: true, description: true, dueDate: true,
+      id: true, title: true, description: true, dueDate: true, startDate: true,
       column: { select: { isDone: true } },
       assignee: { select: { name: true } },
       subtasks: { orderBy: [{ position: "asc" }, { id: "asc" }], select: { title: true, done: true } },
@@ -239,7 +250,7 @@ async function liveSharedTasks(share: ActiveShare) {
 const firstDoneColumn = (projectId: string) => db.column.findFirst({ where: { projectId, isDone: true }, orderBy: COLUMN_ORDER, select: { id: true, name: true } });
 
 /** Datos de la página (sin el token: lo pone la ruta). */
-export async function loadSharePage(share: ActiveShare, token: string, notice: ShareNotice | null, noticeTaskId: string | null = null): Promise<{ data: SharePageData; t: T }> {
+export async function loadSharePage(share: ActiveShare, token: string, notice: ShareNotice | null, noticeTaskId: string | null = null, noticeFromComment = false): Promise<{ data: SharePageData; t: T }> {
   const [{ locale, t }, tasks, done, by] = await Promise.all([
     shareLocale(), liveSharedTasks(share), firstDoneColumn(share.projectId),
     // Quien generó la web, por el nombre de su cuenta: solo si sigue activa y con acceso al proyecto (la misma regla que para
@@ -255,6 +266,7 @@ export async function loadSharePage(share: ActiveShare, token: string, notice: S
       expiresAt: share.expiresAt.toISOString(),
       notice,
       noticeTaskId: noticeTaskId && tasks.some((x) => x.id === noticeTaskId) ? noticeTaskId : null,
+      noticeFromComment,
       sharedBy: by ? firstName(by.name) : null,
       locale: intlLocale(locale),
       lang: locale,
@@ -265,6 +277,7 @@ export async function loadSharePage(share: ActiveShare, token: string, notice: S
         title: task.title,
         description: task.description,
         dueDate: dateToIso(task.dueDate),
+        startDate: dateToIso(task.startDate),
         assignee: task.assignee ? firstName(task.assignee.name) : null,
         done: task.column.isDone,
         subtasks: task.subtasks,
@@ -373,9 +386,10 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
         const due = parseShareDate(input.due ?? "");
         if (due === undefined) return { notice: "invalid", label: { k: "" } };
         const before = dateToIso(task.dueDate);
-        if (due === before) return null;
+        // Sin cambio no hay historial, ni deshacer, ni aviso: la página dice que la fecha no ha cambiado.
+        if (due === before) return { notice: "same", label: { k: "" } };
         const startIso = dateToIso(task.startDate);
-        if (due && startIso && due < startIso) return { notice: "invalid", label: { k: "" } };
+        if (due && startIso && due < startIso) return { notice: "early", label: { k: "" } };
         // Solo si sigue en el proyecto y sin archivar (pudo cambiar desde que se leyó).
         const { count } = await db.task.updateMany({ where: { id: taskId, projectId: share.projectId, archivedAt: null }, data: { dueDate: due ? isoToDate(due) : null } });
         if (!count) throw new ShareTaskGone();
@@ -407,8 +421,8 @@ export async function applyShareChange(share: ActiveShare, taskId: string, input
       });
       return { notice: "comment", label: { k: SHARE_UNDO_KEYS.comment, p: { who: author, title } } };
     });
-    // Nada que cambiar (ya estaba hecha, la misma fecha): se dice igual que salió bien.
-    if (!out) return op === "done" ? "done" : "due";
+    // Nada que cambiar (ya estaba hecha): se dice igual que salió bien.
+    if (!out) return "done";
     notice = out.notice;
     label = out.label;
     if (!label.k) return notice;

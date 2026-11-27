@@ -11,7 +11,7 @@ import { ellipsize } from "./graphemes";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { noticeActorName, notificationHeadline, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
+import { noticeActorName, notificationHeadline, projectNoticeActor, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
   CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, quoteIntro, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
@@ -73,7 +73,7 @@ function projectNoticeMessage(n: { type: NotificationKind; excerpt: string; proj
   return {
     type: n.type,
     locale: intlLocale(locale),
-    actorName: n.excerpt || t("Usuario eliminado"),
+    actorName: projectNoticeActor(n.type, n.excerpt) || t("Usuario eliminado"),
     taskTitle: n.project.name,
     projectName: n.project.name,
     excerpt: n.excerpt,

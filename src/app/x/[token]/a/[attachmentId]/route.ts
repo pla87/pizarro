@@ -6,15 +6,17 @@ import { clientIp } from "@/lib/request";
 import { DECLARED_LENGTH_HEADER } from "@/lib/response-length";
 import { isRowId } from "@/lib/row-id";
 import { SHARE_FILE_CSP, shareResponseHeaders } from "@/lib/share-out-core";
-import { resolveShareToken, shareAttachment, shareAuthorName, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
+import { resolveShareToken, shareAttachment, shareAuthorName, shareBytesAllowed, shareDownloadAllowed, shareIpAllowed } from "@/lib/share-out";
 import { attachmentPath, safeDownloadMime } from "@/lib/uploads";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Adjuntos de la página de «Compartir fuera»: solo de una tarea publicada y viva de ESE enlace (si no, 404, igual que
-// un adjunto que no existe). Se descargan siempre (`attachment`); las imágenes (las de la descripción y las miniaturas de los
-// adjuntos, con `?inline=thumb`, que usa la miniatura y se guarda una hora en el navegador), con `?inline=1`, se pueden ver en línea (con nosniff y una CSP con sandbox). Topes por IP y por enlace; las descargas quedan en Logs sin
+// un adjunto que no existe). Se descargan siempre (`attachment`); las imágenes (`?inline=1`, las de la descripción; `?inline=thumb`,
+// la miniatura de un adjunto, que se guarda una hora en el navegador; `?inline=open`, el original al pulsar la miniatura,
+// que cuenta como una descarga) se pueden ver en línea (con nosniff y una CSP con sandbox). Topes por IP y por enlace
+// (descargas y vistas por hora, y bytes servidos por hora de todas las variantes); las descargas quedan en Logs sin
 // el token. HEAD propio (ver abajo).
 
 const fail = (status: number, text: string) => new Response(text, { status, headers: { ...shareResponseHeaders(), "Content-Type": "text/plain; charset=utf-8" } });
@@ -45,8 +47,10 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
   const inlineParam = new URL(req.url).searchParams.get("inline");
   const inline = meta.isImage && inlineParam !== null;
   const thumbWanted = inline && inlineParam === "thumb";
-  // Las descargas cuentan para el tope del enlace; ver las imágenes de la descripción no (ya cuentan por IP).
-  if (!inline && !head && !shareDownloadAllowed(share)) return fail(429, "Too many requests");
+  // «Abrir» el original desde la miniatura es una vista del fichero entero: cuenta como una descarga (tope y Logs).
+  const open = inline && inlineParam === "open";
+  // Las descargas y vistas cuentan para el tope del enlace; las imágenes de la descripción y las miniaturas no (ya cuentan por IP).
+  if ((!inline || open) && !head && !shareDownloadAllowed(share)) return fail(429, "Too many requests");
   let variant: "full" | "thumb" | "file" = meta.isImage ? "full" : "file";
   let size: number | undefined;
   // La miniatura, si existe; si no (imágenes antiguas o sin miniatura), la normal.
@@ -65,8 +69,10 @@ async function serve(req: Request, ctx: Ctx, head: boolean): Promise<Response> {
       return fail(404, "Not found");
     }
   }
-  if (!inline && !head) {
-    logEvent({ category: "api", action: "shareOut.download", label: { k: "Descarga de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } }, userName: await shareAuthorName(share), projectId: share.projectId, path: "/x/…", ip, details: { attachmentId: meta.id, taskId: meta.taskId, shareId: share.id, size } });
+  // Los bytes cuentan en todas las variantes (HEAD no sirve nada).
+  if (!head && !shareBytesAllowed(share, size)) return fail(429, "Too many requests");
+  if ((!inline || open) && !head) {
+    logEvent({ category: "api", action: open ? "shareOut.view" : "shareOut.download", label: open ? { k: "Vista de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } } : { k: "Descarga de «{name}» desde la web de «Compartir fuera»", p: { name: meta.originalName } }, userName: await shareAuthorName(share), projectId: share.projectId, path: "/x/…", ip, details: { attachmentId: meta.id, taskId: meta.taskId, shareId: share.id, size } });
   }
   const name = meta.isImage ? meta.originalName.replace(/\.[^.]+$/, "") + ".webp" : meta.originalName;
   const filename = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);

@@ -44,7 +44,7 @@ export const SHARE_USE_WRITE_MS = 60 * 60_000;
  * muchas imágenes en las descripciones pide una por imagen), con el prefijo `shareout-ip:`, que va al mapa general: se
  * cuenta antes de mirar el token, así que un aluvión de direcciones inventadas desde muchas IP no puede echar del mapa de
  * seguridad los bloqueos de inicio de sesión. Por enlace (solo con un token válido, mapa de seguridad: `share-out:`), los
- * cambios por hora (marcar hecha, fecha, comentar) y las descargas de adjuntos por hora (sin las imágenes en línea). Los
+ * cambios por hora (marcar hecha, fecha, comentar) y las descargas y vistas de adjuntos por hora (sin las imágenes de la descripción ni las miniaturas) y los bytes servidos por hora (todas las variantes). Los
  * envíos externos (email, Telegram, WhatsApp) de los avisos de lo hecho desde fuera, con su propio tope por enlace
  * (`notify:share:<id>`, ver notify.ts): no gastan el de los avisos del sistema; lo que pasa del tope se queda en la campana.
  */
@@ -52,6 +52,8 @@ export const SHARE_LIMITS = {
   ip: { limit: 600, windowMs: 10 * 60_000 },
   changes: { limit: 60, windowMs: 60 * 60_000 },
   downloads: { limit: 300, windowMs: 60 * 60_000 },
+  /** Bytes servidos por enlace y hora, de todas las variantes (descarga, vista, imagen de la descripción, miniatura). */
+  bytes: { limit: 2 * 1024 ** 3, windowMs: 60 * 60_000 },
   notify: { limit: 10, windowMs: 60 * 60_000 },
 } as const;
 /** Clave del tope por IP (mapa general del limitador, ver SHARE_LIMITS). */
@@ -127,7 +129,7 @@ export function externalUndoWhere(): Prisma.UndoEntryWhereInput {
 }
 
 /** Códigos del aviso que enseña la página tras un formulario (`?m=`): solo estos se pintan. */
-const SHARE_NOTICES = ["done", "due", "comment", "rate", "invalid", "full", "gone"] as const;
+const SHARE_NOTICES = ["done", "due", "comment", "rate", "invalid", "full", "gone", "early", "same"] as const;
 export type ShareNotice = (typeof SHARE_NOTICES)[number];
 export const isShareNotice = (s: unknown): s is ShareNotice => SHARE_NOTICES.includes(s as ShareNotice);
 
