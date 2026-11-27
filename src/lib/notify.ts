@@ -11,7 +11,7 @@ import { ellipsize } from "./graphemes";
 import { logEvent, logText } from "./log";
 import { maskEmail, maskEmailsIn } from "./mask-email";
 import { excerpt as makeExcerpt, mentionsToPlain } from "./mentions";
-import { noticeActorName, notificationHeadline, projectNoticeActor, projectNoticePath, quotesWriting, type NotificationKind } from "./notification-text";
+import { noticeActorName, notificationHeadline, projectNoticeActor, projectNoticePath, quotesWriting, shareRevokedExcerpt, shareRevokedParts, type NotificationKind } from "./notification-text";
 import { loadMessagingConfig, type MessagingConfig } from "./messaging-config";
 import {
   CHANNEL_LIMIT_PER_HOUR, channelUsable, channelWants, classifyFailure, maskPhone, noticeBody, noticeLinkLabel, quoteIntro, scrubSecrets, telegramNoticeText, type ChannelPrefs, type NoticeMessage,
@@ -55,7 +55,9 @@ export function mentionEmail(m: MentionMessage, t: T = makeT("es"), opts: { unsu
   const intro = quoted ? quoteIntro(m, t) : "";
   const bodyText = !body ? "" : quoted ? `\n\n${intro}\n${body.split("\n").map((l) => `> ${l}`).join("\n")}` : `:\n\n${body}`;
   const text = `${subject} (${m.projectName})${bodyText}\n\n${open}: ${m.url}\n\n${optOut}\n${unsub.text}${noReply}\n`;
-  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt });
+  // Todo lo que viene de una persona va escapado en el HTML, también la columna de SHARE_REVOKED (sale del extracto).
+  const column = type === "SHARE_REVOKED" ? escapeHtml(shareRevokedParts(m.excerpt).column) : undefined;
+  const headline = notificationHeadline(type, t, { actor: `<strong>${escapeHtml(m.actorName)}</strong>`, task: `<strong>${escapeHtml(task)}</strong>`, excerpt: m.excerpt, column });
   const quote = `<blockquote style="margin:${quoted ? "4px" : "12px"} 0 12px;padding:8px 12px;border-left:4px solid #6366f1;background:#f8fafc;color:#334155">${escapeHtml(body)}</blockquote>`;
   const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
 <p>${headline} · ${escapeHtml(m.projectName)}</p>
@@ -426,29 +428,54 @@ export async function notifyProjectsToTeam(projects: readonly { id: string }[], 
 /**
  * Aviso a quien configuró el informe semanal (la última persona que lo guardó, `createdById`) de que su destinatario se
  * ha dado de baja con el enlace del email: el informe ya no sale y solo esa persona puede volver a activarlo para sí
- * misma. En la campana siempre; por email, Telegram y WhatsApp según sus preferencias de las menciones, como los demás
- * avisos de administración (emailWanted, channelWants). Solo si sigue activa y viendo el proyecto. `who`: el nombre de la
- * persona que se dio de baja o, si no tiene cuenta, su dirección enmascarada (queda en el extracto).
+ * misma. `who`: el nombre de la persona que se dio de baja o, si no tiene cuenta, su dirección enmascarada (queda en el
+ * extracto). Ver notifyProjectPerson.
  */
 export async function notifyReportUnsubscribed(projectId: string, setterId: string, who: string): Promise<string | null> {
+  return notifyProjectPerson("REPORT_UNSUBSCRIBED", projectId, setterId, who.slice(0, 200), {
+    action: "notify.report_unsubscribed",
+    label: "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja",
+    labelExternal: "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja (con envío externo)",
+  });
+}
+
+/**
+ * Aviso a quien generó la web de «Compartir fuera» (`generatedById`) de que otra persona del proyecto ha revocado su
+ * enlace a mano (revokeShareLink). Las revocaciones automáticas (apagar la función, quitar el rol, borrar la columna,
+ * caducar) no avisan. Ver notifyProjectPerson; `who` y `column` van en el extracto (shareRevokedExcerpt).
+ */
+export async function notifyShareRevoked(projectId: string, generatorId: string, who: string, column: string): Promise<string | null> {
+  return notifyProjectPerson("SHARE_REVOKED", projectId, generatorId, shareRevokedExcerpt(who, column), {
+    action: "notify.share_revoked",
+    label: "Aviso a quien generó la web: otra persona ha revocado su enlace",
+    labelExternal: "Aviso a quien generó la web: otra persona ha revocado su enlace (con envío externo)",
+  });
+}
+
+/**
+ * Aviso de proyecto a una sola persona (REPORT_UNSUBSCRIBED, SHARE_REVOKED). En la campana siempre; por email, Telegram
+ * y WhatsApp según sus preferencias de las menciones, como los demás avisos de administración (emailWanted,
+ * channelWants), con el tope por hora de los avisos del sistema. Solo si sigue activa y viendo el proyecto.
+ */
+async function notifyProjectPerson(type: "REPORT_UNSUBSCRIBED" | "SHARE_REVOKED", projectId: string, userId: string, excerpt: string, log: { action: string; label: string; labelExternal: string }): Promise<string | null> {
   const project = await db.project.findUnique({ where: { id: projectId }, select: { isPrivate: true } });
   if (!project) return null;
-  const setter = await db.user.findFirst({
-    where: mentionRecipientsWhere(project, [setterId], projectId),
+  const person = await db.user.findFirst({
+    where: mentionRecipientsWhere(project, [userId], projectId),
     select: { id: true, notifyEmail: true, notifyAssignedEmail: true, notifyDueEmail: true, notifyCommentEmail: true, channels: { select: CHANNEL_SELECT } },
   });
-  if (!setter) return null;
+  if (!person) return null;
   const created = await db.notification.create({
-    data: { userId: setter.id, actorId: null, projectId, type: "REPORT_UNSUBSCRIBED", excerpt: who.slice(0, 200) },
+    data: { userId: person.id, actorId: null, projectId, type, excerpt },
     select: { id: true },
   });
   const messaging = await loadMessagingConfig();
-  const wanted = externalWanted("REPORT_UNSUBSCRIBED", setter, messaging);
+  const wanted = externalWanted(type, person, messaging);
   // Mismo tope por hora que los avisos del sistema, por destinatario.
-  const external = wanted && rateLimit(`notify:system:${setter.id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000);
+  const external = wanted && rateLimit(`notify:system:${person.id}`, MAX_EXTERNAL_PER_HOUR, 60 * 60_000);
   logEvent({
-    category: "notify", action: "notify.report_unsubscribed", label: { k: external ? "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja (con envío externo)" : "Aviso a quien configuró el informe semanal: su destinatario se ha dado de baja" },
-    projectId, details: { recipients: [setter.id], externalRecipients: external ? [setter.id] : [] },
+    category: "notify", action: log.action, label: { k: external ? log.labelExternal : log.label },
+    projectId, details: { recipients: [person.id], externalRecipients: external ? [person.id] : [] },
   });
   if (external) {
     const send = () => deliver([created.id]).catch((err) => console.error("[notify] envío", err));

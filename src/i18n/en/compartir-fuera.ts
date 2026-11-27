@@ -132,4 +132,7 @@ export const compartirFuera: Record<string, string> = {
   "Vista de «{name}» desde la web de «Compartir fuera»": "View of “{name}” from the “Share outside” page",
   "{actor} ha revocado el enlace de la web de «{column}»": "{actor} revoked the link to the web page of «{column}»",
   "Esa web ya no está disponible. Puedes generar otra desde la columna.": "That web page is no longer available. You can generate another one from the column.",
+  // Ronda 72: aviso de enlace revocado (registro)
+  "Aviso a quien generó la web: otra persona ha revocado su enlace": "Notice to whoever generated the web page: someone else revoked its link",
+  "Aviso a quien generó la web: otra persona ha revocado su enlace (con envío externo)": "Notice to whoever generated the web page: someone else revoked its link (with external delivery)",
 };

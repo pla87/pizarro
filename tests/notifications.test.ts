@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { announceUnreadCount, latestOnly, onUnreadCount, restoreUnread, UNREAD_COUNT_CAP } from "../src/lib/unread-core";
 import { readFileSync } from "node:fs";
-import { isProjectNotice, notificationBody, notificationHeadline, projectNoticePath } from "../src/lib/notification-text";
+import { isProjectNotice, notificationBody, notificationHeadline, projectNoticeActor, projectNoticePath, shareRevokedExcerpt } from "../src/lib/notification-text";
 import { channelWants, DEFAULT_CHANNEL_PREFS, noticeLinkLabel } from "../src/lib/messaging-core";
 import { makeT } from "../src/i18n/core";
 
@@ -63,6 +63,19 @@ test("aviso de baja del informe semanal: de proyecto, lleva a Ajustes → Inform
   assert.equal(noticeLinkLabel({ type: "REPORT_UNSUBSCRIBED" }, es), "Abrir los informes del proyecto");
   assert.equal(channelWants("REPORT_UNSUBSCRIBED", DEFAULT_CHANNEL_PREFS), true);
   assert.equal(channelWants("REPORT_UNSUBSCRIBED", { ...DEFAULT_CHANNEL_PREFS, notifyMention: false }), false);
+});
+
+test("aviso de enlace revocado: quién y qué columna van en el extracto, sin que el separador venga de un nombre", () => {
+  const ex = shareRevokedExcerpt("AnaL", "Fuerauno");
+  assert.equal(projectNoticeActor("SHARE_REVOKED", ex), "Ana L");
+  assert.equal(notificationHeadline("SHARE_REVOKED", makeT("es"), { actor: "Ana L", task: "«P»", excerpt: ex }), "Ana L ha revocado el enlace de la web de «Fuera uno»");
+  // Recortados por separado: un nombre larguísimo no se come la columna.
+  const long = shareRevokedExcerpt("x".repeat(300), "Col");
+  assert.equal(projectNoticeActor("SHARE_REVOKED", long).length, 80);
+  assert.match(notificationHeadline("SHARE_REVOKED", makeT("es"), { actor: "x", task: "", excerpt: long }), /«Col»$/);
+  assert.equal(isProjectNotice("SHARE_REVOKED"), true);
+  assert.equal(projectNoticePath("SHARE_REVOKED", "p1"), "/p/p1");
+  assert.equal(channelWants("SHARE_REVOKED", DEFAULT_CHANNEL_PREFS), true);
 });
 
 test("deshacer «Marcar todo como leído»: sobre la lista de ahora (tras un refresco) y sin tocar los leídos uno a uno", () => {

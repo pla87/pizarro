@@ -52,6 +52,16 @@ test("email de aviso: las comillas del título siguen el idioma", () => {
   assert.ok(mentionEmail({ ...msg, taskTitle: "<b>x</b>" }, makeT("en")).html.includes("“&lt;b&gt;x&lt;/b&gt;”"));
 });
 
+test("email de enlace revocado: quién y la columna salen del extracto, escapados en el HTML", async () => {
+  const { shareRevokedExcerpt } = await import("../src/lib/notification-text");
+  const msg = { type: "SHARE_REVOKED" as const, actorName: "Ana <i>", taskTitle: "Web", projectName: "Web", excerpt: shareRevokedExcerpt("Ana <i>", "<b>Fuera</b>"), url: "https://example.com/p/1" };
+  const es = mentionEmail(msg, makeT("es"));
+  assert.equal(es.subject, "Ana <i> ha revocado el enlace de la web de «<b>Fuera</b>»");
+  assert.ok(es.html.includes("<strong>Ana &lt;i&gt;</strong> ha revocado el enlace de la web de «&lt;b&gt;Fuera&lt;/b&gt;»"), es.html);
+  assert.ok(!es.html.includes("<b>Fuera"));
+  assert.ok(es.text.includes("Esa web ya no está disponible.") && es.text.includes("Abrir el proyecto: https://example.com/p/1"));
+});
+
 test("resumen diario en inglés: títulos con comillas inglesas", () => {
   const empty = { assigned: [], overdue: [], dueToday: [], created: [], done: [], comments: [] };
   const digest = buildDigest({ ...empty, assigned: [{ taskId: "t", title: "Portada", projectId: "p", projectName: "Web" }] });

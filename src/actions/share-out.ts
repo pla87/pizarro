@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { AppError, notFound } from "@/lib/errors";
 import { encryptSecret } from "@/lib/crypto";
 import { appUrl } from "@/lib/mail";
+import { notifyShareRevoked } from "@/lib/notify";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { activeShareUrl, revokeProjectShares, shareInfoOf } from "@/lib/share-out";
 import { isShareColumn, isShareExpiry, MAX_SHARE_TASKS, shareLinkState, type BoardShareInfo } from "@/lib/share-out-board";
@@ -133,13 +134,26 @@ export async function setShareExpiry(columnId: string, days: number) {
   });
 }
 
-/** «Revocar enlace»: deja de funcionar al momento; la columna sigue compartiéndose (con «Generar web» se crea otro). */
+/**
+ * «Revocar enlace»: deja de funcionar al momento; la columna sigue compartiéndose (con «Generar web» se crea otro). Si lo
+ * revoca otra persona, quien generó la web recibe un aviso SHARE_REVOKED (solo aquí: las revocaciones automáticas no
+ * avisan). Solo revoca el enlace que se ha leído y sin revocar aún: dos «Revocar» a la vez no dan dos avisos.
+ */
 export async function revokeShareLink(columnId: string) {
   return runAction({ name: "shareOut.revoke", args: [columnId] }, async (): Promise<BoardShareInfo> => {
     const { user, column, share } = await findShareColumn(columnId);
     if (shareLinkState(share).state !== "active") return shareInfoOf(share);
-    const row = await db.columnShare.update({ where: { id: share.id }, data: { revokedAt: new Date(), revokedById: user.id, tokenEnc: null } });
+    const { count } = await db.columnShare.updateMany({
+      where: { id: share.id, tokenHash: share.tokenHash, revokedAt: null },
+      data: { revokedAt: new Date(), revokedById: user.id, tokenEnc: null },
+    });
+    const row = await db.columnShare.findUniqueOrThrow({ where: { id: share.id } });
+    if (!count) return shareInfoOf(row);
     describeAction("Revocó el enlace de la web de «{col}»", { col: column.name });
+    if (share.generatedById && share.generatedById !== user.id) {
+      // Ya revocado: un fallo al avisar no puede convertirse en un error de la acción.
+      await notifyShareRevoked(column.projectId, share.generatedById, user.name, column.name).catch((err) => console.error("[share-out] aviso de revocación", err));
+    }
     return shareInfoOf(row);
   });
 }
