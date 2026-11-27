@@ -29,6 +29,17 @@ describe("deshacer con cambios ajenos posteriores", () => {
     assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).title, "Uno (Ana)");
   });
 
+  test("un cambio hecho desde la web de «Compartir fuera» (sin usuario) también avisa, con el nombre de la columna", async () => {
+    const { me, f } = await team();
+    const task = await makeTask(f, { title: "Fuera" });
+    await loginAs(me);
+    expectOk(await updateTask(task.id, { title: "Fuera (yo)" }));
+    await db.taskEvent.create({ data: { taskId: task.id, projectId: f.project.id, userId: null, userName: "Cliente (fuera)", code: "title", label: "" } });
+    const res = expectOk(await undoChecked(f.project.id));
+    assert.ok(res.conflict, "debe pedir confirmación");
+    assert.match(res.conflict.message, /^Cliente (fuera) cambió esta tarea después/);
+  });
+
   test("mis propios cambios posteriores no cuentan", async () => {
     const { me, f } = await team();
     const task = await makeTask(f, { title: "Propia" });
